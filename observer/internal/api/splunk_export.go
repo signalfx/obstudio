@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -26,19 +27,23 @@ import (
 )
 
 const (
-	maxSplunkExportRequestBytes = 32 * 1024
-	maxSplunkAccessTokenBytes   = 4096
-	splunkConnectionTestTimeout = 10 * time.Second
-	splunkExportEnvFileSource   = "env-file"
-	splunkMetricsOTLPTestPath   = "/v2/datapoint/otlp"
-	splunkBrowserRequestHeader  = "X-Obstudio-Browser-Request"
-	splunkBrowserTokenHeader    = "X-Obstudio-Browser-Token"
-	splunkRollbackTokenHeader   = "X-Obstudio-Cloud-Rollback-Token"
-	splunkBrowserCookiePrefix   = "obstudio_cloud_browser_session_"
-	splunkBrowserLaunchEnv      = "OBSTUDIO_CLOUD_BROWSER_LAUNCH_TOKEN"
+	maxSplunkExportRequestBytes  = 32 * 1024
+	maxSplunkAccessTokenBytes    = 4096
+	maxSplunkDestinationBytes    = 2048
+	maxSplunkRealmPageBytes      = 512 * 1024
+	splunkConnectionTestTimeout  = 10 * time.Second
+	splunkRealmResolutionTimeout = 8 * time.Second
+	splunkExportEnvFileSource    = "env-file"
+	splunkMetricsOTLPTestPath    = "/v2/datapoint/otlp"
+	splunkBrowserRequestHeader   = "X-Obstudio-Browser-Request"
+	splunkBrowserTokenHeader     = "X-Obstudio-Browser-Token"
+	splunkRollbackTokenHeader    = "X-Obstudio-Cloud-Rollback-Token"
+	splunkBrowserCookiePrefix    = "obstudio_cloud_browser_session_"
+	splunkBrowserLaunchEnv       = "OBSTUDIO_CLOUD_BROWSER_LAUNCH_TOKEN"
 )
 
 var splunkRealmPattern = regexp.MustCompile(`^[a-z]{2,12}[0-9]+$`)
+var splunkSignalviewConfigPattern = regexp.MustCompile(`window\.signalviewConfig\s*=\s*`)
 var splunkBrowserLaunchTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 var splunkBrowserTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 var splunkRollbackTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
@@ -46,6 +51,11 @@ var splunkStateVersionPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 var errSplunkAccessTokenRejected = errors.New("Splunk rejected the access token for this realm.")
 var errSplunkExportQuiesced = errors.New("Observer is shutting down; cloud configuration changes are unavailable.")
 var splunkConnectionHTTPClient = &http.Client{
+	CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
+var splunkRealmHTTPClient = &http.Client{
 	CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	},
@@ -63,6 +73,7 @@ type splunkExportService struct {
 	traces               *otlp.SplunkTracesExportController
 	refresh              SplunkExportConfigurationRefresher
 	verifyConnection     splunkConnectionVerifier
+	resolveRealmClient   *http.Client
 	controlToken         string
 	browserLaunch        string
 	browserSessionIssued bool
@@ -133,6 +144,15 @@ type splunkExportBrowserSessionRequest struct {
 	LaunchToken string `json:"launchToken"`
 }
 
+type splunkExportRealmRequest struct {
+	Destination string `json:"destination"`
+}
+
+type splunkSignalviewConfig struct {
+	AppDomain string `json:"appDomain"`
+	Realm     string `json:"realm"`
+}
+
 func newSplunkExportService(
 	metrics *otlp.SplunkMetricsExportController,
 	traces *otlp.SplunkTracesExportController,
@@ -145,8 +165,9 @@ func newSplunkExportService(
 		verifyConnection: func(ctx context.Context, realm, accessToken string) error {
 			return verifySplunkCloudConnection(ctx, splunkConnectionHTTPClient, realm, accessToken)
 		},
-		controlToken:  strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")),
-		browserLaunch: strings.TrimSpace(os.Getenv(splunkBrowserLaunchEnv)),
+		resolveRealmClient: splunkRealmHTTPClient,
+		controlToken:       strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")),
+		browserLaunch:      strings.TrimSpace(os.Getenv(splunkBrowserLaunchEnv)),
 	}
 	if _, err := rand.Read(service.stateVersionKey[:]); err != nil {
 		service.stateVersionKey = sha256.Sum256([]byte(fmt.Sprintf(
@@ -164,6 +185,7 @@ func (s *splunkExportService) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/splunk/export/configuration", s.authorizeControlToken(s.serializeRecoveryMutation(s.configuration)))
 	mux.HandleFunc("POST /api/splunk/export/shutdown-snapshot", s.authorizeControlToken(s.serializeShutdownSnapshot(s.shutdownSnapshot)))
 	mux.HandleFunc("POST /api/splunk/export", s.authorizeMutation(s.serializeMutation(s.configure)))
+	mux.HandleFunc("POST /api/splunk/export/realm", s.authorizeMutation(s.resolveRealm))
 	mux.HandleFunc("POST /api/splunk/export/rollback", s.authorizeControlToken(s.serializeRecoveryMutation(s.rollback)))
 	mux.HandleFunc("POST /api/splunk/export/browser/session", s.issueBrowserSession)
 	mux.HandleFunc("POST /api/splunk/export/enabled", s.authorizeMutation(s.serializeMutation(s.setEnabled)))
@@ -171,6 +193,34 @@ func (s *splunkExportService) register(mux *http.ServeMux) {
 	if s.refresh != nil {
 		mux.HandleFunc("POST /api/splunk/export/refresh", s.authorizeControlToken(s.serializeMutation(s.refreshConfiguration)))
 	}
+}
+
+func (s *splunkExportService) resolveRealm(w http.ResponseWriter, r *http.Request) {
+	var request splunkExportRealmRequest
+	if err := decodeStrictJSON(w, r, &request); err != nil {
+		writeSplunkExportError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), splunkRealmResolutionTimeout)
+	defer cancel()
+	realm, err := resolveSplunkRealm(ctx, s.resolveRealmClient, request.Destination)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			writeSplunkExportError(w, http.StatusGatewayTimeout, "Splunk Observability Cloud realm lookup timed out.")
+			return
+		}
+		var validationError *splunkRealmDestinationError
+		if errors.As(err, &validationError) {
+			writeSplunkExportError(w, http.StatusBadRequest, validationError.Error())
+			return
+		}
+		writeSplunkExportError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, map[string]string{"realm": realm})
 }
 
 func (s *splunkExportService) status(w http.ResponseWriter, _ *http.Request) {
@@ -420,7 +470,7 @@ func (s *splunkExportService) forget(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.source == splunkExportEnvFileSource {
-		writeSplunkExportError(w, http.StatusConflict, "remove SPLUNK_ACCESS_TOKEN from the env file before forgetting this connection")
+		writeSplunkExportError(w, http.StatusConflict, "remove SPLUNK_ACCESS_TOKEN from the env file before removing this connection")
 		return
 	}
 	rollbackToken, err := s.beginRollbackLocked(issueRollback, requestedRollbackToken)
@@ -429,7 +479,7 @@ func (s *splunkExportService) forget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.apply(otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}); err != nil {
-		writeSplunkExportError(w, http.StatusInternalServerError, "could not forget Splunk Observability Cloud destination")
+		writeSplunkExportError(w, http.StatusInternalServerError, "could not remove Splunk Observability Cloud connection")
 		return
 	}
 	s.source = ""
@@ -964,9 +1014,228 @@ func sameSplunkCloudRealm(
 func validateSplunkRealm(value string) (string, error) {
 	realm := strings.ToLower(strings.TrimSpace(value))
 	if !splunkRealmPattern.MatchString(realm) {
-		return "", errors.New("region is not valid")
+		return "", errors.New("realm is not valid")
 	}
 	return realm, nil
+}
+
+type splunkRealmDestinationError struct {
+	message string
+}
+
+func (e *splunkRealmDestinationError) Error() string {
+	return e.message
+}
+
+func invalidSplunkRealmDestination(message string) error {
+	return &splunkRealmDestinationError{message: message}
+}
+
+func resolveSplunkRealm(ctx context.Context, client *http.Client, value string) (string, error) {
+	destination := strings.TrimSpace(value)
+	if destination == "" {
+		return "", invalidSplunkRealmDestination("Observability Cloud URL or realm is required")
+	}
+	if len(destination) > maxSplunkDestinationBytes {
+		return "", invalidSplunkRealmDestination("Observability Cloud URL or realm is too long")
+	}
+	if strings.EqualFold(destination, "realm") {
+		return "", invalidSplunkRealmDestination("replace the placeholder with your Observability Cloud realm")
+	}
+	if realm, err := validateSplunkRealm(destination); err == nil {
+		return realm, nil
+	}
+
+	parsed, err := url.Parse(destination)
+	if err != nil || parsed.Opaque != "" || !strings.EqualFold(parsed.Scheme, "https") || parsed.Host == "" {
+		return "", invalidSplunkRealmDestination("destination must be a realm or HTTPS Splunk Observability Cloud URL")
+	}
+	if parsed.User != nil {
+		return "", invalidSplunkRealmDestination("destination URL must not contain user information")
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if parsed.Port() != "" || !strings.EqualFold(parsed.Host, host) {
+		return "", invalidSplunkRealmDestination("destination URL must not contain a port")
+	}
+	if net.ParseIP(host) != nil {
+		return "", invalidSplunkRealmDestination("destination URL must use a Splunk hostname")
+	}
+	if !validDNSHostname(host) || !isSplunkObservabilityHostname(host) {
+		return "", invalidSplunkRealmDestination("destination is not a Splunk Observability Cloud hostname")
+	}
+	if realm, standard, err := realmFromStandardSplunkHostname(host); standard {
+		if err != nil {
+			return "", invalidSplunkRealmDestination("destination URL does not contain a valid Observability Cloud realm")
+		}
+		return realm, nil
+	}
+	prefix, _, ok := splunkHostnamePrefix(host)
+	if !ok || strings.Contains(prefix, ".") {
+		return "", invalidSplunkRealmDestination("destination URL is not a supported Observability Cloud endpoint")
+	}
+	if strings.EqualFold(prefix, "realm") {
+		return "", invalidSplunkRealmDestination("replace the placeholder with your Observability Cloud realm")
+	}
+	if isRealmLessSplunkService(prefix) {
+		return "", invalidSplunkRealmDestination("destination URL does not identify an organization realm")
+	}
+
+	return fetchSplunkRealm(ctx, client, host)
+}
+
+func validDNSHostname(host string) bool {
+	if host == "" || len(host) > 253 || strings.HasPrefix(host, ".") || strings.HasSuffix(host, ".") {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, character := range label {
+			if (character < 'a' || character > 'z') &&
+				(character < '0' || character > '9') && character != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isSplunkObservabilityHostname(host string) bool {
+	return strings.HasSuffix(host, ".signalfx.com") ||
+		strings.HasSuffix(host, ".observability.splunkcloud.com")
+}
+
+func realmFromStandardSplunkHostname(host string) (string, bool, error) {
+	prefix, domain, ok := splunkHostnamePrefix(host)
+	if !ok {
+		return "", false, nil
+	}
+	parts := strings.Split(prefix, ".")
+	if len(parts) == 1 {
+		return "", false, nil
+	}
+	if len(parts) != 2 || !isSplunkRealmService(parts[0], domain) {
+		return "", true, errors.New("unsupported Splunk Observability Cloud endpoint")
+	}
+	realm, err := validateSplunkRealm(parts[1])
+	return realm, true, err
+}
+
+type splunkHostnameDomain uint8
+
+const (
+	splunkSignalFxDomain splunkHostnameDomain = iota + 1
+	splunkObservabilityDomain
+)
+
+func splunkHostnamePrefix(host string) (string, splunkHostnameDomain, bool) {
+	switch {
+	case strings.HasSuffix(host, ".observability.splunkcloud.com"):
+		return strings.TrimSuffix(host, ".observability.splunkcloud.com"), splunkObservabilityDomain, true
+	case strings.HasSuffix(host, ".signalfx.com"):
+		return strings.TrimSuffix(host, ".signalfx.com"), splunkSignalFxDomain, true
+	default:
+		return "", 0, false
+	}
+}
+
+func isSplunkRealmService(value string, domain splunkHostnameDomain) bool {
+	switch value {
+	case "app", "api", "ingest", "rum-ingest", "stream", "backfill", "runner":
+		return true
+	case "private-api", "private-ingest", "private-stream":
+		return domain == splunkSignalFxDomain
+	case "customer-api":
+		return domain == splunkObservabilityDomain
+	default:
+		return false
+	}
+}
+
+func isRealmLessSplunkService(value string) bool {
+	if value == "login" || value == "cdn" {
+		return true
+	}
+	return isSplunkRealmService(value, splunkSignalFxDomain) ||
+		isSplunkRealmService(value, splunkObservabilityDomain)
+}
+
+func fetchSplunkRealm(ctx context.Context, client *http.Client, host string) (string, error) {
+	if client == nil {
+		client = splunkRealmHTTPClient
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/", http.NoBody)
+	if err != nil {
+		return "", errors.New("could not prepare the Splunk Observability Cloud realm lookup")
+	}
+
+	lookupClient := *client
+	lookupClient.Jar = nil
+	lookupClient.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	response, err := lookupClient.Do(request)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "", context.DeadlineExceeded
+		}
+		return "", errors.New("could not reach the Splunk Observability Cloud URL")
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4*1024))
+		return "", fmt.Errorf("Splunk Observability Cloud URL returned HTTP %d", response.StatusCode)
+	}
+	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	if err != nil || !strings.EqualFold(mediaType, "text/html") {
+		return "", errors.New("Splunk Observability Cloud URL did not return an HTML page")
+	}
+	page, err := io.ReadAll(io.LimitReader(response.Body, maxSplunkRealmPageBytes+1))
+	if err != nil {
+		return "", errors.New("could not read the Splunk Observability Cloud page")
+	}
+	if len(page) > maxSplunkRealmPageBytes {
+		return "", errors.New("Splunk Observability Cloud page is too large")
+	}
+
+	config, err := parseSplunkSignalviewConfig(page)
+	if err != nil {
+		return "", err
+	}
+	realm, err := validateSplunkRealm(config.Realm)
+	if err != nil {
+		return "", errors.New("Splunk Observability Cloud page did not contain a valid realm")
+	}
+	if !splunkAppDomainMatchesRealm(config.AppDomain, realm) {
+		return "", errors.New("Splunk Observability Cloud page realm did not match its application domain")
+	}
+	return realm, nil
+}
+
+func parseSplunkSignalviewConfig(page []byte) (splunkSignalviewConfig, error) {
+	match := splunkSignalviewConfigPattern.FindIndex(page)
+	if match == nil {
+		return splunkSignalviewConfig{}, errors.New("Splunk Observability Cloud page did not contain signalview configuration")
+	}
+	var config splunkSignalviewConfig
+	decoder := json.NewDecoder(strings.NewReader(string(page[match[1]:])))
+	if err := decoder.Decode(&config); err != nil {
+		return splunkSignalviewConfig{}, errors.New("Splunk Observability Cloud page contained invalid signalview configuration")
+	}
+	return config, nil
+}
+
+func splunkAppDomainMatchesRealm(value, realm string) bool {
+	host := strings.ToLower(strings.TrimSpace(value))
+	if !validDNSHostname(host) {
+		return false
+	}
+	domainRealm, standard, err := realmFromStandardSplunkHostname(host)
+	if err != nil || !standard || !strings.HasPrefix(host, "app.") {
+		return false
+	}
+	return domainRealm == realm
 }
 
 func validateSplunkAccessToken(value string) (string, error) {

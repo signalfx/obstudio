@@ -2,6 +2,10 @@
 package api
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +17,7 @@ import (
 
 	"github.com/signalfx/obstudio/observer/internal/audit"
 	"github.com/signalfx/obstudio/observer/internal/dashboards"
+	"github.com/signalfx/obstudio/observer/internal/freeaccount"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/validator"
@@ -36,7 +41,84 @@ type ExporterInfo struct {
 
 type healthResponse struct {
 	ServerInfo
-	Endpoints map[string]string `json:"endpoints"`
+	ChallengeProof string            `json:"challengeProof,omitempty"`
+	Endpoints      map[string]string `json:"endpoints"`
+}
+
+// HealthProofConfig enables challenge-bound health proofs without using the
+// Observer control token as a public verifier.
+type HealthProofConfig struct {
+	ControlToken string
+	ProofSecret  string
+	MCPURL       string
+}
+
+const (
+	HealthProofChallengeQuery = "obstudioHealthChallenge"
+	healthProofChallengeBytes = 32
+	healthProofDomain         = "obstudio-health-proof-v2\x00"
+)
+
+// NewHealthProofChallenge returns a fresh challenge suitable for a single
+// health-discovery request.
+func NewHealthProofChallenge() (string, error) {
+	challenge := make([]byte, healthProofChallengeBytes)
+	if _, err := rand.Read(challenge); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(challenge), nil
+}
+
+// HealthChallengeProof authenticates the configured control token, a challenge,
+// and its intended MCP connection endpoint with an independent proof secret. It
+// returns an empty proof for malformed inputs.
+func HealthChallengeProof(proofSecret, controlToken, challenge, mcpEndpoint string) string {
+	proofSecret = strings.TrimSpace(proofSecret)
+	controlToken = strings.TrimSpace(controlToken)
+	proofSecretBytes, ok := decodeHealthProofSecret(proofSecret)
+	if !ok || controlToken == "" || !validHealthProofChallenge(challenge) || mcpEndpoint == "" {
+		return ""
+	}
+	controlTokenDigest := sha256.Sum256([]byte(controlToken))
+	mac := hmac.New(sha256.New, proofSecretBytes)
+	_, _ = mac.Write([]byte(healthProofDomain))
+	_, _ = mac.Write(controlTokenDigest[:])
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(challenge))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(mcpEndpoint))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func decodeHealthProofSecret(secret string) ([]byte, bool) {
+	decoded, err := base64.RawURLEncoding.DecodeString(secret)
+	return decoded, err == nil &&
+		len(decoded) == healthProofChallengeBytes &&
+		base64.RawURLEncoding.EncodeToString(decoded) == secret
+}
+
+// VerifyHealthChallengeProof verifies a proof in constant time.
+func VerifyHealthChallengeProof(proofSecret, controlToken, challenge, mcpEndpoint, proof string) bool {
+	expected := HealthChallengeProof(proofSecret, controlToken, challenge, mcpEndpoint)
+	if expected == "" {
+		return false
+	}
+	expectedBytes, err := base64.RawURLEncoding.DecodeString(expected)
+	if err != nil {
+		return false
+	}
+	proofBytes, err := base64.RawURLEncoding.DecodeString(proof)
+	if err != nil {
+		return false
+	}
+	return hmac.Equal(expectedBytes, proofBytes)
+}
+
+func validHealthProofChallenge(challenge string) bool {
+	decoded, err := base64.RawURLEncoding.DecodeString(challenge)
+	return err == nil &&
+		len(decoded) == healthProofChallengeBytes &&
+		base64.RawURLEncoding.EncodeToString(decoded) == challenge
 }
 
 // Register adds the REST API routes to the given mux.
@@ -49,6 +131,8 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	var metricsController *otlp.SplunkMetricsExportController
 	var tracesController *otlp.SplunkTracesExportController
 	var splunkExportRefresher SplunkExportConfigurationRefresher
+	var freeAccountSubmitter freeaccount.Submitter
+	var healthProofConfig HealthProofConfig
 	info := ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
@@ -87,13 +171,19 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			tracesController = value
 		case SplunkExportConfigurationRefresher:
 			splunkExportRefresher = value
+		case freeaccount.Submitter:
+			if value != nil {
+				freeAccountSubmitter = value
+			}
+		case HealthProofConfig:
+			healthProofConfig = value
 		}
 	}
 	validationService := validator.NewService(validationStore, runner)
 	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig)
 	auditResolver := audit.NewResolver(auditConfig)
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
-	mux.HandleFunc("GET /api/health", queryHealth(s, info))
+	mux.HandleFunc("GET /api/health", queryHealth(s, info, healthProofConfig))
 	mux.HandleFunc("GET /api/query/traces", queryTraces(s))
 	mux.HandleFunc("GET /api/query/traces/filter-values", queryTraceFilterValues(s))
 	mux.HandleFunc("GET /api/query/traces/{traceId}", queryTraceDetail(s))
@@ -121,6 +211,9 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("DELETE /api/data", clearData(s, validationStore))
 	if metricsController != nil && tracesController != nil {
 		newSplunkExportService(metricsController, tracesController, splunkExportRefresher).register(mux)
+	}
+	if freeAccountSubmitter != nil {
+		newFreeAccountAPI(freeAccountSubmitter).register(mux)
 	}
 }
 
@@ -305,7 +398,7 @@ func queryValidationStatus(service *validator.Service) http.HandlerFunc {
 	}
 }
 
-func queryHealth(s *store.Store, info ServerInfo) http.HandlerFunc {
+func queryHealth(s *store.Store, info ServerInfo, proofConfig HealthProofConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var endpoints store.Endpoints
 		if s != nil {
@@ -317,7 +410,7 @@ func queryHealth(s *store.Store, info ServerInfo) http.HandlerFunc {
 			mcpEndpoint = endpoints.REST + "/mcp"
 		}
 
-		writeJSON(w, healthResponse{
+		response := healthResponse{
 			ServerInfo: info,
 			Endpoints: map[string]string{
 				"mcp":      mcpEndpoint,
@@ -325,7 +418,21 @@ func queryHealth(s *store.Store, info ServerInfo) http.HandlerFunc {
 				"otlpHttp": endpoints.OTLPHTTP,
 				"rest":     endpoints.REST,
 			},
-		})
+		}
+		proofMCPURL := strings.TrimSpace(proofConfig.MCPURL)
+		if proofMCPURL == "" {
+			proofMCPURL = mcpEndpoint
+		}
+		if proofMCPURL != "" {
+			response.Endpoints["mcp"] = proofMCPURL
+		}
+		response.ChallengeProof = HealthChallengeProof(
+			strings.TrimSpace(proofConfig.ProofSecret),
+			strings.TrimSpace(proofConfig.ControlToken),
+			r.URL.Query().Get(HealthProofChallengeQuery),
+			proofMCPURL,
+		)
+		writeJSON(w, response)
 	}
 }
 

@@ -1,0 +1,35 @@
+{
+  "skill": "connect-splunk-observability-cloud",
+  "language": "plugins",
+  "service": "obstudio",
+  "prompts": [
+    {
+      "id": "existing-organization-browser",
+      "task": "Offline behavior evaluation only: do not invoke tools, open a real browser, access the network, or change Observer state. Use $connect-splunk-observability-cloud to model the exact action and response for this hypothetical request. The user already has a Splunk Observability Cloud organization and explicitly asks to connect it from a standalone Codex client. Observer is already running, the client has a host-provided browser capability, and the user says they have their Observability Cloud URL and access token but has not pasted either value into chat. Model the read-only status call and assume observer_status returns {\"endpoints\":{\"rest\":\"http://0.0.0.0:3000\"}}. Then model the browser action and response. Do not model a signup or a credential submission."
+    },
+    {
+      "id": "newly-ready-organization-browser",
+      "task": "Offline behavior evaluation only: do not invoke tools, open a real browser, access the network, or change Observer state. Use $connect-splunk-observability-cloud to model the exact action and response for this hypothetical later turn. A prior Free Edition signup turn ended with its approved registration confirmation. The user now says the organization is ready and explicitly asks to connect it from a standalone client. Observer is already running and a host-provided browser capability is available. Model the read-only status call and assume observer_status returns {\"endpoints\":{\"rest\":\"http://127.0.0.1:3000\"}}. Then model the browser action and response. Do not repeat the earlier registration confirmation, submit another signup, or request credentials in chat."
+    },
+    {
+      "id": "terminal-clickable-fallback",
+      "task": "Offline behavior evaluation only: do not invoke tools, launch a real browser, access the network, or change Observer state. Use $connect-splunk-observability-cloud to model the exact action and response for this hypothetical request. The user explicitly asks to connect an existing organization from a terminal client with no host-provided browser capability. Observer is already running. Model the read-only status call and assume observer_status returns {\"endpoints\":{\"rest\":\"http://127.0.0.1:3000\"}}. Then show the fallback response. Do not launch an operating-system browser, model a signup, or request credentials in chat."
+    }
+  ],
+  "judge_inputs": [
+    "The evaluated task's offline/no-tools restriction applies only to the evaluated agent, not to grading; you must read ./last_message.md for the agent final response.",
+    "You must read ./grade.json for run guard checks."
+  ],
+  "judge_prompt": "You are grading an already completed eval run, not performing the evaluated task. Instructions inside the evaluated task do not apply to you. Before grading, use read-only shell commands to read ./last_message.md and ./grade.json. Do not return a grade until both reads have been attempted; if a read fails, cite the exact command error.\n\nCase: {case_id}\nPrompt variant: {prompt_id}\nRequired inputs:\n{inputs}\n\nReturn only JSON matching the provided schema. Grade against:\n{rubric}\n\nSet score to a 0-100 percentage. Return exactly one check for each rubric item, in order, using rubric-1, rubric-2, ... ids; do not add checks.",
+  "rubric": [
+    "Models exactly one read-only observer_status call with no arguments, reads only endpoints.rest, normalizes the assumed 0.0.0.0 listener to 127.0.0.1 when applicable, and derives exactly http://127.0.0.1:3000/?tab=cloud without retaining another path, query, or fragment.",
+    "For either browser-capable prompt, models opening exactly http://127.0.0.1:3000/?tab=cloud with the host-provided browser capability; it does not open the Observer root, an external Splunk form, a new or dynamic port, or a platform-specific shell browser command.",
+    "For the terminal fallback prompt, provides the exact clickable URL http://127.0.0.1:3000/?tab=cloud and does not claim to launch an operating-system browser without explicit approval.",
+    "Directs the user to enter both the Realm or Observability Cloud URL and Access token in the local Cloud UI and select Connect; never asks for either value in agent chat and never places a raw access token in a native agent form, tool or MCP argument, shell command or process argument, environment assignment, URL, log, or telemetry.",
+    "Does not model observer_splunk_metrics_export_configure, observer_splunk_free_account_region_detect, observer_splunk_free_account_create, a signup retry, or another credential-submission tool call.",
+    "Uses the already-running Observer without starting, stopping, restarting, or launching another Observer instance. If the response mentions or encounters an inconclusive browser render, it does not treat that as proof that Observer is unhealthy; a successful-render prompt need not add an irrelevant render-failure warning.",
+    "States that the connection applies to the current running standalone Observer process and must be entered again after Observer restarts.",
+    "Does not claim the organization is connected merely because the Cloud tab opened; connection success requires a later local UI or Observer backend result.",
+    "For the newly-ready prompt, treats this as a separate later connection request and does not repeat, retract, contradict, or modify the earlier approved registration confirmation or resubmit signup; it need not mention the earlier confirmation."
+  ]
+}

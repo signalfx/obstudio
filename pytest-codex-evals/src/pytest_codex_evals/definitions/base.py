@@ -242,7 +242,14 @@ class ValidationResult(BaseModel):
     definition_path: str
     fixture_dir: str
     skill_path: str
+    config_path: str = ""
     eval_kind: EvalRole
+    selected_eval_inputs: list[str] | None = None
     sanity_check_count: int = 0
     rubric_check_count: int = 0
     runtime_check_count: int = 0
+    source_files: dict[str, str] = Field(default_factory=dict)
+
+    _validate_selected_eval_inputs = field_validator("selected_eval_inputs")(
+        validate_eval_input_paths
+    )

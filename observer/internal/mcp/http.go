@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -17,14 +19,18 @@ import (
 )
 
 type httpHandler struct {
-	dispatcher *Dispatcher
+	dispatcher   *Dispatcher
+	controlToken string
 	// TODO: expire abandoned sessions if we see real accumulation in long-lived use.
 	sessions sync.Map
 }
 
 // Register adds the MCP HTTP endpoints to the given ServeMux.
 func Register(mux *http.ServeMux, s *store.Store, params ...any) {
-	h := &httpHandler{dispatcher: NewDispatcher(s, params...)}
+	h := &httpHandler{
+		dispatcher:   NewDispatcher(s, params...),
+		controlToken: strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")),
+	}
 	mux.HandleFunc("GET /mcp", h.handleStream)
 	mux.HandleFunc("POST /mcp", h.handle)
 	mux.HandleFunc("DELETE /mcp", h.handleDelete)
@@ -42,6 +48,10 @@ func (h *httpHandler) handleStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "origin not allowed", http.StatusForbidden)
 		return
 	}
+	setCORSHeaders(w)
+	if !h.authorize(w, r) {
+		return
+	}
 
 	sessionID := strings.TrimSpace(r.Header.Get("Mcp-Session-Id"))
 	// Streamable HTTP clients may establish the SSE stream before sending
@@ -51,7 +61,6 @@ func (h *httpHandler) handleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setCORSHeaders(w)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -88,11 +97,19 @@ func (h *httpHandler) handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setCORSHeaders(w)
+	if !h.authorize(w, r) {
+		return
+	}
 
 	var req jsonRPCRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(rpcError(nil, -32700, "Parse error"))
+		return
+	}
+	if !validJSONRPCRequestID(req.ID) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(rpcError(nil, -32600, "Invalid Request"))
 		return
 	}
 
@@ -104,7 +121,7 @@ func (h *httpHandler) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, handled := h.dispatcher.Dispatch(req)
+	resp, handled := h.dispatcher.DispatchContext(r.Context(), req)
 	if !handled {
 		w.WriteHeader(http.StatusAccepted)
 		return
@@ -127,6 +144,9 @@ func (h *httpHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setCORSHeaders(w)
+	if !h.authorize(w, r) {
+		return
+	}
 	sessionID := strings.TrimSpace(r.Header.Get("Mcp-Session-Id"))
 	if sessionID == "" {
 		http.Error(w, "missing Mcp-Session-Id header", http.StatusBadRequest)
@@ -152,8 +172,25 @@ func (h *httpHandler) sessionExists(sessionID string) bool {
 func setCORSHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id")
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Mcp-Session-Id")
 	w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
+}
+
+func (h *httpHandler) authorize(w http.ResponseWriter, r *http.Request) bool {
+	if bearerTokenMatches(r.Header.Get("Authorization"), h.controlToken) {
+		return true
+	}
+	w.Header().Set("WWW-Authenticate", `Bearer realm="obstudio"`)
+	http.Error(w, "unauthorized", http.StatusUnauthorized)
+	return false
+}
+
+func bearerTokenMatches(authorization, expected string) bool {
+	if expected == "" || !strings.HasPrefix(authorization, "Bearer ") {
+		return false
+	}
+	provided := strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))
+	return len(provided) == len(expected) && subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
 }
 
 func originAllowed(r *http.Request) bool {

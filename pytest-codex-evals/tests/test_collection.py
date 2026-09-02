@@ -9,6 +9,7 @@ from pytest_codex_evals.definitions.runtime import (
     RuntimeExpectations,
     ServiceLogExpectation,
 )
+from pytest_codex_evals.eval_files import iter_eval_files
 from pytest_codex_evals.schema_resources import schema_validator
 
 
@@ -91,6 +92,12 @@ def test_eval_json_files_collect_as_pytest_items(pytester: pytest.Pytester):
 def test_eval_json_files_validate_without_running_codex(pytester: pytest.Pytester):
     write_eval_repo(pytester)
     skill_dir = pytester.path / "skills" / "sample-skill"
+    generated_target = pytester.path.parent / f"{pytester.path.name}-generated"
+    generated_target.mkdir()
+    (pytester.path / "evals" / "sample" / "service" / ".venv").symlink_to(
+        generated_target,
+        target_is_directory=True,
+    )
 
     result = pytester.runpytest("--skill", str(skill_dir))
 
@@ -100,8 +107,118 @@ def test_eval_json_files_validate_without_running_codex(pytester: pytest.Pyteste
     payload = json.loads(raw_runs[0].read_text(encoding="utf-8"))
     assert payload["metadata"]["mode"] == "validation"
     assert payload["metadata"]["eval_kind"] == "validation"
+    assert payload["metadata"]["validation_scope"] == "full"
     assert len(payload["results"]) == 2
     assert not (pytester.path / "eval-reports" / "sample-skill" / "validation" / "report.md").exists()
+
+
+def test_validation_scope_tracks_pytest_deselect(pytester: pytest.Pytester):
+    write_eval_repo(pytester)
+    skill_dir = pytester.path / "skills" / "sample-skill"
+
+    result = pytester.runpytest(
+        "--skill",
+        str(skill_dir),
+        "--deselect",
+        "evals/sample/service/eval/qual/sample.json::sample-skill::sample/service::direct",
+    )
+
+    result.assert_outcomes(passed=1, deselected=1)
+    raw_runs = list(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/validation.json"))
+    assert len(raw_runs) == 1
+    payload = json.loads(raw_runs[0].read_text(encoding="utf-8"))
+    assert payload["metadata"]["validation_scope"] == "filtered"
+    assert [item["prompt_id"] for item in payload["results"]] == ["runtime-preserving"]
+
+
+@pytest.mark.parametrize("invalid_definition", ["{", "null"])
+def test_validation_scope_tracks_pytest_ignore(
+    pytester: pytest.Pytester,
+    invalid_definition: str,
+):
+    write_eval_repo(pytester)
+    skill_dir = pytester.path / "skills" / "sample-skill"
+    ignored_eval = pytester.path / "evals" / "sample" / "service" / "eval" / "qual" / "sample.json"
+    ignored_eval.write_text(invalid_definition, encoding="utf-8")
+    secondary_dir = pytester.path / "evals" / "sample" / "secondary"
+    secondary_dir.mkdir(parents=True)
+    (secondary_dir / "app.py").write_text("print('secondary')\n", encoding="utf-8")
+    secondary_eval_dir = secondary_dir / "eval" / "qual"
+    secondary_eval_dir.mkdir(parents=True)
+    (secondary_eval_dir / "secondary.json").write_text(
+        json.dumps(
+            {
+                "skill": "sample-skill",
+                "prompts": [{"id": "direct", "task": "Scan the secondary service."}],
+                "rubric": ["The answer cites concrete evidence."],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest(
+        "--skill",
+        str(skill_dir),
+        "--ignore=evals/sample/service/eval/qual/sample.json",
+    )
+
+    result.assert_outcomes(passed=1)
+    raw_runs = list(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/validation.json"))
+    assert len(raw_runs) == 1
+    payload = json.loads(raw_runs[0].read_text(encoding="utf-8"))
+    assert payload["metadata"]["validation_scope"] == "filtered"
+    assert [item["service"] for item in payload["results"]] == ["secondary"]
+
+
+@pytest.mark.parametrize("symlink_kind", ["file", "directory"])
+def test_validation_scope_rejects_ignored_symlinked_definition(
+    pytester: pytest.Pytester,
+    symlink_kind: str,
+):
+    write_eval_repo(pytester)
+    skill_dir = pytester.path / "skills" / "sample-skill"
+    ignored_eval = pytester.path / "evals" / "sample" / "service" / "eval" / "qual" / "sample.json"
+    outside_root = pytester.path.parent / f"{pytester.path.name}-outside"
+    outside_root.mkdir()
+    outside = outside_root / "sample.json"
+    outside.write_text("null", encoding="utf-8")
+    ignored_eval.unlink()
+    if symlink_kind == "file":
+        ignored_eval.symlink_to(outside)
+    else:
+        ignored_eval.parent.rmdir()
+        ignored_eval.parent.symlink_to(outside_root, target_is_directory=True)
+    with pytest.raises(ValueError, match="symlink"):
+        iter_eval_files(pytester.path / "evals")
+    secondary_dir = pytester.path / "evals" / "sample" / "secondary"
+    secondary_dir.mkdir(parents=True)
+    (secondary_dir / "app.py").write_text("print('secondary')\n", encoding="utf-8")
+    secondary_eval_dir = secondary_dir / "eval" / "qual"
+    secondary_eval_dir.mkdir(parents=True)
+    (secondary_eval_dir / "secondary.json").write_text(
+        json.dumps(
+            {
+                "skill": "sample-skill",
+                "prompts": [{"id": "direct", "task": "Scan the secondary service."}],
+                "rubric": ["The answer cites concrete evidence."],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest(
+        "--skill",
+        str(skill_dir),
+        "--ignore=evals/sample/service/eval/qual/sample.json",
+    )
+
+    result.assert_outcomes(passed=1)
+    raw_runs = list(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/validation.json"))
+    assert len(raw_runs) == 1
+    payload = json.loads(raw_runs[0].read_text(encoding="utf-8"))
+    assert payload["metadata"]["validation_scope"] == "filtered"
 
 
 def test_eval_json_can_declare_a_plugin_local_skill_source(pytester: pytest.Pytester):
@@ -187,7 +304,53 @@ def test_xdist_workers_merge_validation_reports(pytester: pytest.Pytester):
     assert len(raw_runs) == 1
     payload = json.loads(raw_runs[0].read_text(encoding="utf-8"))
     assert payload["metadata"]["mode"] == "validation"
+    assert payload["metadata"]["validation_scope"] == "full"
     assert len(payload["results"]) == 2
+
+
+def test_xdist_filtered_scope_is_computed_after_worker_merge(
+    pytester: pytest.Pytester,
+):
+    write_eval_repo(pytester)
+    skill_dir = pytester.path / "skills" / "sample-skill"
+
+    result = pytester.runpytest(
+        "-n",
+        "2",
+        "--skill",
+        str(skill_dir),
+        "--deselect",
+        "evals/sample/service/eval/qual/sample.json::sample-skill::sample/service::direct",
+    )
+
+    result.assert_outcomes(passed=1)
+    raw_runs = list(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/validation.json"))
+    assert len(raw_runs) == 1
+    payload = json.loads(raw_runs[0].read_text(encoding="utf-8"))
+    assert payload["metadata"]["validation_scope"] == "filtered"
+    assert [item["prompt_id"] for item in payload["results"]] == ["runtime-preserving"]
+
+
+def test_xdist_each_full_scope_uses_unique_selection_coverage(
+    pytester: pytest.Pytester,
+):
+    write_eval_repo(pytester)
+    skill_dir = pytester.path / "skills" / "sample-skill"
+
+    result = pytester.runpytest(
+        "-n",
+        "2",
+        "--dist=each",
+        "--skill",
+        str(skill_dir),
+    )
+
+    result.assert_outcomes(passed=4)
+    raw_runs = list(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/validation.json"))
+    assert len(raw_runs) == 1
+    payload = json.loads(raw_runs[0].read_text(encoding="utf-8"))
+    assert payload["metadata"]["validation_scope"] == "full"
+    assert len(payload["results"]) == 4
 
 
 def test_eval_kind_filters_collection_by_file_role(pytester: pytest.Pytester):

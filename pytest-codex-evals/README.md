@@ -295,6 +295,17 @@ The report step writes `<kind>/report.md` and `<kind>/benchmark.json` in the
 timestamped run directory and copies the latest summary to
 `eval-reports/<skill>/<kind>/`.
 
+Report benchmarks include a SHA-256 manifest of the canonical skill tree, the
+collected eval definitions, their staged fixtures and prompt-selected inputs,
+eval configuration, harness package code and schemas, and locked harness
+dependencies. Filtered runs remain scoped to their collected cases; full
+validation also detects newly added matching definitions. Verify tracked
+manifests without invoking an agent or judge with:
+
+```bash
+uv run codex-eval-harness verify-reports --repo-root .
+```
+
 Each `benchmark.json` is kind-specific. Sanity reports contain only sanity
 check fields, rubric reports contain only rubric judge fields, and runtime
 reports contain only runtime check fields. Baseline columns are empty when a

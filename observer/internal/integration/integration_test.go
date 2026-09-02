@@ -19,6 +19,8 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/buildutil"
 )
 
+const integrationControlToken = "observer-integration-control-token"
+
 var (
 	binaryPath   string
 	restPort     string
@@ -69,6 +71,7 @@ func TestMain(m *testing.M) {
 		"OTLP_HTTP_PORT="+otlpHTTPPort,
 		"OTLP_GRPC_PORT="+otlpGRPCPort,
 		"HOST=127.0.0.1",
+		"OBSTUDIO_CONTROL_TOKEN="+integrationControlToken,
 	)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -381,7 +384,13 @@ func TestMCPToolsList(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(req)
-	resp, err := http.Post(baseURL+"/mcp", "application/json", bytes.NewReader(data))
+	request, err := http.NewRequest(http.MethodPost, baseURL+"/mcp", bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("failed to create /mcp request: %v", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+integrationControlToken)
+	request.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatalf("failed to POST to /mcp: %v", err)
 	}

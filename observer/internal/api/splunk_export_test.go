@@ -2075,6 +2075,307 @@ func TestSplunkExportForgetRefusesEnvManagedConfiguration(t *testing.T) {
 	}
 }
 
+func TestSplunkExportRealmResolvesCanonicalDestinationsWithoutNetwork(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
+	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	service := newTestSplunkExportService(metrics, traces, nil)
+	service.resolveRealmClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("canonical destination caused a network request")
+		return nil, errors.New("unexpected network request")
+	})}
+	mux := http.NewServeMux()
+	service.register(mux)
+
+	tests := []struct {
+		destination string
+		want        string
+	}{
+		{destination: " US1 ", want: "us1"},
+		{destination: "https://app.eu0.observability.splunkcloud.com/#/signin", want: "eu0"},
+		{destination: "https://api.us2.signalfx.com/v2?ignored=yes#fragment", want: "us2"},
+		{destination: "https://ingest.au0.observability.splunkcloud.com", want: "au0"},
+		{destination: "https://rum-ingest.us1.signalfx.com/v1/rum", want: "us1"},
+		{destination: "https://stream.jp0.signalfx.com", want: "jp0"},
+		{destination: "https://backfill.us0.observability.splunkcloud.com", want: "us0"},
+		{destination: "https://runner.us2.observability.splunkcloud.com", want: "us2"},
+		{destination: "https://customer-api.eu0.observability.splunkcloud.com", want: "eu0"},
+		{destination: "https://private-api.us1.signalfx.com", want: "us1"},
+		{destination: "https://private-ingest.us1.signalfx.com", want: "us1"},
+		{destination: "https://private-stream.us1.signalfx.com", want: "us1"},
+	}
+	for _, test := range tests {
+		t.Run(test.destination, func(t *testing.T) {
+			body, _ := json.Marshal(splunkExportRealmRequest{Destination: test.destination})
+			response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
+				string(body), testObserverControlToken)
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+			}
+			if response.Header().Get("Cache-Control") != "no-store" {
+				t.Fatalf("cache control = %q", response.Header().Get("Cache-Control"))
+			}
+			var result map[string]string
+			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result["realm"] != test.want {
+				t.Fatalf("realm = %q, want %q", result["realm"], test.want)
+			}
+		})
+	}
+}
+
+func TestSplunkExportRealmFetchesOnlyNormalizedCustomSplunkPage(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
+	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	service := newTestSplunkExportService(metrics, traces, nil)
+	requests := 0
+	service.resolveRealmClient = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests++
+		if request.Method != http.MethodGet {
+			t.Fatalf("method = %s", request.Method)
+		}
+		if request.URL.String() != "https://pov-rexel-webshop.observability.splunkcloud.com/" {
+			t.Fatalf("URL = %s", request.URL)
+		}
+		for _, name := range []string{"Authorization", "Cookie", "X-SF-Token", splunkBrowserTokenHeader} {
+			if value := request.Header.Get(name); value != "" {
+				t.Fatalf("%s header = %q", name, value)
+			}
+		}
+		return splunkRealmPageResponse(request, http.StatusOK, "text/html; charset=utf-8",
+			`<html><script>window.signalviewConfig = {"realm":"EU0","appDomain":"app.eu0.observability.splunkcloud.com"};</script></html>`), nil
+	})}
+	mux := http.NewServeMux()
+	service.register(mux)
+
+	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
+		`{"destination":"https://pov-rexel-webshop.observability.splunkcloud.com/supplied/path?secret=value#/signin"}`,
+		testObserverControlToken)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if requests != 1 {
+		t.Fatalf("requests = %d, want 1", requests)
+	}
+	var result map[string]string
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["realm"] != "eu0" {
+		t.Fatalf("realm = %q, want eu0", result["realm"])
+	}
+}
+
+func TestSplunkExportRealmSupportsControlAndBrowserAuthorizationWithoutSerialization(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
+	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	service := newTestSplunkExportService(metrics, traces, nil)
+	mux := http.NewServeMux()
+	service.register(mux)
+
+	unauthorized := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
+		`{"destination":"us1"}`, "")
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized status = %d", unauthorized.Code)
+	}
+
+	session := splunkBrowserExportRequest(t, mux, http.MethodPost, "/api/splunk/export/browser/session",
+		splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "")
+	if session.Code != http.StatusOK {
+		t.Fatalf("session status = %d, body = %s", session.Code, session.Body.String())
+	}
+	var sessionResult map[string]string
+	if err := json.Unmarshal(session.Body.Bytes(), &sessionResult); err != nil {
+		t.Fatal(err)
+	}
+	browser := splunkBrowserExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
+		`{"destination":"EU0"}`, sessionResult["browserToken"])
+	if browser.Code != http.StatusOK {
+		t.Fatalf("browser status = %d, body = %s", browser.Code, browser.Body.String())
+	}
+
+	service.mutationMu.Lock()
+	result := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		result <- splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
+			`{"destination":"us1"}`, testObserverControlToken)
+	}()
+	select {
+	case response := <-result:
+		if response.Code != http.StatusOK {
+			t.Fatalf("non-serialized status = %d, body = %s", response.Code, response.Body.String())
+		}
+	case <-time.After(time.Second):
+		service.mutationMu.Unlock()
+		t.Fatal("realm resolution waited for the cloud mutation lock")
+	}
+	service.mutationMu.Unlock()
+}
+
+func TestSplunkExportRealmRejectsInvalidDestinationsWithoutNetwork(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
+	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	service := newTestSplunkExportService(metrics, traces, nil)
+	service.resolveRealmClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("invalid destination caused a network request")
+		return nil, errors.New("unexpected network request")
+	})}
+	mux := http.NewServeMux()
+	service.register(mux)
+
+	destinations := []string{
+		"realm",
+		strings.Repeat("a", maxSplunkDestinationBytes+1),
+		"http://app.us1.observability.splunkcloud.com",
+		"https://user:password@app.us1.observability.splunkcloud.com",
+		"https://app.us1.observability.splunkcloud.com:443",
+		"https://127.0.0.1",
+		"https://app.us1.observability.splunkcloud.com.example.com",
+		"https://customer.evilobservability.splunkcloud.com",
+		"https://-invalid.observability.splunkcloud.com",
+		"https://bad_name.observability.splunkcloud.com",
+		"https://rum-ingest.signalfx.com",
+		"https://login.signalfx.com",
+		"https://cdn.observability.splunkcloud.com",
+		"https://ingest.realm.signalfx.com",
+		"https://ingest.realm.observability.splunkcloud.com",
+		"https://unknown.us1.signalfx.com",
+		"https://too.many.labels.observability.splunkcloud.com",
+		"https://private-api.us1.observability.splunkcloud.com",
+		"https://customer-api.us1.signalfx.com",
+	}
+	for _, destination := range destinations {
+		t.Run(destination, func(t *testing.T) {
+			body, _ := json.Marshal(splunkExportRealmRequest{Destination: destination})
+			response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
+				string(body), testObserverControlToken)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d, body = %s", response.Code, http.StatusBadRequest, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestSplunkExportRealmRejectsUnsafeOrUnverifiableCustomPages(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
+	tests := []struct {
+		contentType string
+		body        string
+		name        string
+		status      int
+	}{
+		{
+			name:        "redirect",
+			status:      http.StatusFound,
+			contentType: "text/html",
+			body:        `<script>window.signalviewConfig={"realm":"eu0"}</script>`,
+		},
+		{
+			name:        "oversize",
+			status:      http.StatusOK,
+			contentType: "text/html",
+			body:        strings.Repeat("x", maxSplunkRealmPageBytes+1),
+		},
+		{
+			name:        "non HTML",
+			status:      http.StatusOK,
+			contentType: "application/json",
+			body:        `{"realm":"eu0"}`,
+		},
+		{
+			name:        "missing config",
+			status:      http.StatusOK,
+			contentType: "text/html",
+			body:        `<script>window.otherConfig={"realm":"eu0"}</script>`,
+		},
+		{
+			name:        "missing app domain",
+			status:      http.StatusOK,
+			contentType: "text/html",
+			body:        `<script>window.signalviewConfig={"realm":"eu0"}</script>`,
+		},
+		{
+			name:        "mismatched app domain",
+			status:      http.StatusOK,
+			contentType: "text/html",
+			body:        `<script>window.signalviewConfig={"realm":"eu0","appDomain":"app.us1.observability.splunkcloud.com"}</script>`,
+		},
+		{
+			name:        "invalid realm",
+			status:      http.StatusOK,
+			contentType: "text/html",
+			body:        `<script>window.signalviewConfig={"realm":"realm","appDomain":"app.eu0.observability.splunkcloud.com"}</script>`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+			traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+			service := newTestSplunkExportService(metrics, traces, nil)
+			requests := 0
+			service.resolveRealmClient = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				requests++
+				response := splunkRealmPageResponse(request, test.status, test.contentType, test.body)
+				if test.status == http.StatusFound {
+					response.Header.Set("Location", "https://other.observability.splunkcloud.com/")
+				}
+				return response, nil
+			})}
+			mux := http.NewServeMux()
+			service.register(mux)
+
+			response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
+				`{"destination":"https://customer.observability.splunkcloud.com"}`, testObserverControlToken)
+			if response.Code != http.StatusBadGateway {
+				t.Fatalf("status = %d, want %d, body = %s", response.Code, http.StatusBadGateway, response.Body.String())
+			}
+			if requests != 1 {
+				t.Fatalf("requests = %d, want 1", requests)
+			}
+		})
+	}
+}
+
+func TestSplunkExportConfigurationRemainsRealmOnly(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
+	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	service := newTestSplunkExportService(metrics, traces, nil)
+	verifyCalls := 0
+	service.verifyConnection = func(context.Context, string, string) error {
+		verifyCalls++
+		return nil
+	}
+	mux := http.NewServeMux()
+	service.register(mux)
+
+	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
+		`{"realm":"https://app.us1.observability.splunkcloud.com","accessToken":"token"}`,
+		testObserverControlToken)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d, body = %s", response.Code, http.StatusBadRequest, response.Body.String())
+	}
+	if verifyCalls != 0 {
+		t.Fatalf("connection verifier calls = %d, want 0", verifyCalls)
+	}
+}
+
+func splunkRealmPageResponse(request *http.Request, status int, contentType, body string) *http.Response {
+	header := make(http.Header)
+	header.Set("Content-Type", contentType)
+	return &http.Response{
+		StatusCode: status,
+		Header:     header,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Request:    request,
+	}
+}
+
 func splunkExportRequest(
 	t *testing.T,
 	handler http.Handler,

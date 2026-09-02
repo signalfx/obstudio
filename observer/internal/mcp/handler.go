@@ -2,6 +2,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/freeaccount"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/validator"
@@ -21,6 +23,65 @@ type jsonRPCRequest struct {
 	JSONRPC string `json:"jsonrpc"`
 	Method  string `json:"method"`
 	Params  any    `json:"params,omitempty"`
+}
+
+// UnmarshalJSON preserves protocol identifiers as json.Number without changing
+// the long-standing float64 decoding used by numeric tool arguments.
+func (r *jsonRPCRequest) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		ID      json.RawMessage `json:"id"`
+		JSONRPC string          `json:"jsonrpc"`
+		Method  string          `json:"method"`
+		Params  json.RawMessage `json:"params"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+
+	id, err := decodeJSONRPCRequestValue(wire.ID, true)
+	if err != nil {
+		return err
+	}
+	params, err := decodeJSONRPCRequestValue(wire.Params, wire.Method == "notifications/cancelled")
+	if err != nil {
+		return err
+	}
+
+	*r = jsonRPCRequest{
+		ID:      id,
+		JSONRPC: wire.JSONRPC,
+		Method:  wire.Method,
+		Params:  params,
+	}
+	return nil
+}
+
+func decodeJSONRPCRequestValue(raw json.RawMessage, preserveNumbers bool) (any, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var value any
+	if !preserveNumbers {
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return nil, err
+		}
+		return value, nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+func validJSONRPCRequestID(id any) bool {
+	switch id.(type) {
+	case nil, string, json.Number:
+		return true
+	default:
+		return false
+	}
 }
 
 type jsonRPCResponse struct {
@@ -58,6 +119,7 @@ type jsonSchema struct {
 	Enum                 []string              `json:"enum,omitempty"`
 	Minimum              *int                  `json:"minimum,omitempty"`
 	Maximum              *int                  `json:"maximum,omitempty"`
+	MaxLength            *int                  `json:"maxLength,omitempty"`
 	Default              any                   `json:"default,omitempty"`
 }
 
@@ -90,6 +152,7 @@ type Dispatcher struct {
 	splunkMetricsCtrl                 *otlp.SplunkMetricsExportController
 	splunkTracesCtrl                  *otlp.SplunkTracesExportController
 	repositoryCorrelationModeResolver RepositoryCorrelationModeResolver
+	freeAccount                       freeaccount.Submitter
 	tools                             []toolDef
 }
 
@@ -100,6 +163,7 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 	var splunkMetricsCtrl *otlp.SplunkMetricsExportController
 	var splunkTracesCtrl *otlp.SplunkTracesExportController
 	var repositoryCorrelationModeResolver RepositoryCorrelationModeResolver
+	var freeAccountSubmitter freeaccount.Submitter
 	for _, param := range params {
 		switch value := param.(type) {
 		case *validator.Store:
@@ -118,6 +182,10 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 			if value != nil {
 				splunkTracesCtrl = value
 			}
+		case freeaccount.Submitter:
+			if value != nil {
+				freeAccountSubmitter = value
+			}
 		case RepositoryCorrelationModeResolver:
 			if value != nil {
 				repositoryCorrelationModeResolver = value
@@ -133,7 +201,8 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 		splunkMetricsCtrl:                 splunkMetricsCtrl,
 		splunkTracesCtrl:                  splunkTracesCtrl,
 		repositoryCorrelationModeResolver: repositoryCorrelationModeResolver,
-		tools:                             buildToolDefs(splunkMetricsCtrl != nil),
+		freeAccount:                       freeAccountSubmitter,
+		tools:                             buildToolDefs(splunkMetricsCtrl != nil, freeAccountSubmitter != nil),
 	}
 }
 
@@ -141,6 +210,12 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 // It returns (response, handled). When handled is false the caller should
 // send an HTTP 202 or similar acknowledgement (e.g. for notifications).
 func (d *Dispatcher) Dispatch(req jsonRPCRequest) (jsonRPCResponse, bool) {
+	return d.DispatchContext(context.Background(), req)
+}
+
+// DispatchContext processes a single JSON-RPC request using the transport's
+// lifecycle context. Callers without one should use Dispatch.
+func (d *Dispatcher) DispatchContext(ctx context.Context, req jsonRPCRequest) (jsonRPCResponse, bool) {
 	switch req.Method {
 	case "initialize":
 		return d.handleInitialize(req), true
@@ -149,7 +224,7 @@ func (d *Dispatcher) Dispatch(req jsonRPCRequest) (jsonRPCResponse, bool) {
 	case "tools/list":
 		return d.handleToolsList(req), true
 	case "tools/call":
-		return d.handleToolsCall(req), true
+		return d.handleToolsCall(ctx, req), true
 	default:
 		return rpcError(req.ID, -32601, fmt.Sprintf("Method not found: %s", req.Method)), true
 	}
@@ -174,7 +249,7 @@ func (d *Dispatcher) handleToolsList(req jsonRPCRequest) jsonRPCResponse {
 	return rpcResult(req.ID, map[string]any{"tools": d.tools})
 }
 
-func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
+func (d *Dispatcher) handleToolsCall(ctx context.Context, req jsonRPCRequest) jsonRPCResponse {
 	params, ok := toMap(req.Params)
 	if !ok {
 		params = make(map[string]any)
@@ -203,9 +278,19 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 	case "observer_validation_status":
 		result = d.validationStatus()
 	case "observer_validation_analyze":
-		result = d.validationAnalyze(args)
+		result = d.validationAnalyze(ctx, args)
 	case "observer_validation_refresh":
-		result = d.validationRefresh(args)
+		result = d.validationRefresh(ctx, args)
+	case "observer_splunk_free_account_create":
+		if d.freeAccount == nil {
+			return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
+		}
+		result = d.splunkFreeAccountCreate(ctx, args)
+	case "observer_splunk_free_account_region_detect":
+		if d.freeAccount == nil {
+			return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
+		}
+		result = d.splunkFreeAccountRegionDetect(ctx, args)
 	case "observer_splunk_connection_realm",
 		"observer_splunk_metrics_export_status",
 		"observer_splunk_metrics_export_configure",
@@ -224,7 +309,7 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 		case "observer_splunk_metrics_export_configure":
 			result = d.splunkMetricsExportConfigure(args)
 		case "observer_splunk_metrics_export_test":
-			result = d.splunkMetricsExportTest(args)
+			result = d.splunkMetricsExportTest(ctx, args)
 		}
 	default:
 		return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
@@ -322,11 +407,11 @@ func (d *Dispatcher) validationStatus() toolResult {
 	return jsonToolResult(d.validationService.Summary())
 }
 
-func (d *Dispatcher) validationAnalyze(args map[string]any) toolResult {
+func (d *Dispatcher) validationAnalyze(ctx context.Context, args map[string]any) toolResult {
 	query := validationQueryFromArgs(args)
 	timeout := durationArgSeconds(args, "timeoutSeconds", 90*time.Second, 5*time.Second, 5*time.Minute)
 	freshness := freshnessArg(args, "freshness", validator.FreshnessAuto)
-	analysis, err := d.validationService.Analyze(context.Background(), query, freshness, timeout)
+	analysis, err := d.validationService.Analyze(ctx, query, freshness, timeout)
 	if err != nil {
 		suggestedTool := "observer_validation_analyze"
 		if freshness == validator.FreshnessLatestOK {
@@ -337,9 +422,9 @@ func (d *Dispatcher) validationAnalyze(args map[string]any) toolResult {
 	return jsonToolResult(analysis)
 }
 
-func (d *Dispatcher) validationRefresh(args map[string]any) toolResult {
+func (d *Dispatcher) validationRefresh(ctx context.Context, args map[string]any) toolResult {
 	timeout := durationArgSeconds(args, "timeoutSeconds", 90*time.Second, 5*time.Second, 5*time.Minute)
-	analysis, err := d.validationService.Refresh(context.Background(), validationQueryFromArgs(args), timeout)
+	analysis, err := d.validationService.Refresh(ctx, validationQueryFromArgs(args), timeout)
 	if err != nil {
 		return jsonValidationErrorResult(err, "observer_validation_status")
 	}
@@ -411,17 +496,82 @@ func (d *Dispatcher) splunkMetricsExportConfigure(args map[string]any) toolResul
 	return jsonToolResult(d.splunkMetricsCtrl.Status())
 }
 
-func (d *Dispatcher) splunkMetricsExportTest(args map[string]any) toolResult {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+func (d *Dispatcher) splunkMetricsExportTest(ctx context.Context, args map[string]any) toolResult {
+	testCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	status, err := d.splunkMetricsCtrl.TestConnection(ctx, strArg(args, "metricName"))
+	status, err := d.splunkMetricsCtrl.TestConnection(testCtx, strArg(args, "metricName"))
 	if err != nil {
 		return jsonErrorResult(map[string]any{"error": err.Error(), "status": status})
 	}
 	return jsonToolResult(status)
 }
 
-func buildToolDefs(withSplunk bool) []toolDef {
+func (d *Dispatcher) splunkFreeAccountCreate(ctx context.Context, args map[string]any) toolResult {
+	if !hasExactFreeAccountArgs(args) {
+		return jsonErrorResult(map[string]any{
+			"code":      freeaccount.ErrorCodeValidation,
+			"error":     "Free Edition signup requires firstName, lastName, email, and termsAccepted, with only an optional region override.",
+			"retrySafe": true,
+		})
+	}
+	result, err := d.freeAccount.Submit(ctx, freeaccount.Request{
+		FirstName:     strArg(args, "firstName"),
+		LastName:      strArg(args, "lastName"),
+		Email:         strArg(args, "email"),
+		Region:        strArg(args, "region"),
+		TermsAccepted: boolArg(args, "termsAccepted", false),
+	})
+	if err == nil {
+		return jsonToolResult(result)
+	}
+	var signupErr *freeaccount.Error
+	if errors.As(err, &signupErr) {
+		return jsonErrorResult(map[string]any{
+			"code":      signupErr.Code,
+			"error":     signupErr.Message,
+			"retrySafe": signupErr.RetrySafe,
+		})
+	}
+	return jsonErrorResult(map[string]any{
+		"code":      "internal_error",
+		"error":     "Could not submit the Free Edition signup.",
+		"retrySafe": false,
+	})
+}
+
+func (d *Dispatcher) splunkFreeAccountRegionDetect(ctx context.Context, args map[string]any) toolResult {
+	if len(args) != 0 {
+		return jsonErrorResult(map[string]any{
+			"code":      freeaccount.ErrorCodeValidation,
+			"error":     "Free Edition region detection does not accept arguments.",
+			"retrySafe": true,
+		})
+	}
+	return jsonToolResult(d.freeAccount.DetectRegion(ctx))
+}
+
+func hasExactFreeAccountArgs(args map[string]any) bool {
+	if len(args) != 4 && len(args) != 5 {
+		return false
+	}
+	for _, key := range [...]string{"firstName", "lastName", "email", "termsAccepted"} {
+		if _, ok := args[key]; !ok {
+			return false
+		}
+	}
+	if len(args) == 5 {
+		region, ok := args["region"]
+		if !ok {
+			return false
+		}
+		if _, ok := region.(string); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 	f := false
 	tools := []toolDef{
 		{
@@ -588,6 +738,41 @@ func buildToolDefs(withSplunk bool) []toolDef {
 			},
 			Annotations: toolAnnot{Title: "Observer Status", ReadOnlyHint: true, IdempotentHint: true},
 		},
+	}
+	if len(freeAccountEnabled) > 0 && freeAccountEnabled[0] {
+		tools = append(tools, toolDef{
+			Name:        "observer_splunk_free_account_region_detect",
+			Description: "Detect a supported Splunk Observability Cloud Free Edition signup region from Splunk's coarse GeoIP response. Returns one of the exact region values used by Splunk's public signup form: us, Europe (Ireland), or apac-au. Lookup or mapping failures return us. Call this before collecting signup fields so the user can review or replace the preselected region. This performs no signup and retains no location data.",
+			InputSchema: jsonSchema{Type: "object", AdditionalProperties: &f},
+			Annotations: toolAnnot{
+				Title:           "Detect Splunk Free Edition Region",
+				ReadOnlyHint:    true,
+				DestructiveHint: false,
+				IdempotentHint:  true,
+				OpenWorldHint:   true,
+			},
+		}, toolDef{
+			Name:        "observer_splunk_free_account_create",
+			Description: "Submit one Splunk Observability Cloud Free Edition signup after the user explicitly accepts the Free Edition Terms of Use at https://www.splunk.com/en_us/legal/splunk-observability-free-edition-terms.html. Splunk derives coarse GeoIP country, state, city, postal code, and market region from Observer's request source; Observer supplies those matching form fields and maps the market to a supported signup region with a United States fallback. The optional region field lets the user override only the destination using the exact value from Splunk's public signup form. The result returns both that public-form region value and the corresponding technical realm. Ask for only the user's first name, last name, and email address, set termsAccepted only from explicit consent, and never call this tool speculatively or automatically retry it. Explicit acceptance is sent upstream as privacyPolicyCheck=1. A successful result confirms only that Splunk acknowledged intake; Observer cannot verify provisioning or email delivery.",
+			InputSchema: jsonSchema{
+				Type: "object", AdditionalProperties: &f,
+				Required: []string{"firstName", "lastName", "email", "termsAccepted"},
+				Properties: map[string]jsonSchema{
+					"firstName":     {Type: "string", MaxLength: intPtr(40), Description: "The user's first name."},
+					"lastName":      {Type: "string", MaxLength: intPtr(40), Description: "The user's last name."},
+					"email":         {Type: "string", MaxLength: intPtr(80), Description: "The email address supplied with the Free Edition signup intake request."},
+					"region":        {Type: "string", Enum: []string{"us", "Europe (Ireland)", "apac-au"}, Description: "Optional exact region value from Splunk's public Free Edition signup form."},
+					"termsAccepted": {Type: "boolean", Description: "True only after the user explicitly accepts the Splunk Observability Cloud Free Edition Terms of Use."},
+				},
+			},
+			Annotations: toolAnnot{
+				Title:           "Create Splunk Free Edition Account",
+				ReadOnlyHint:    false,
+				DestructiveHint: false,
+				IdempotentHint:  false,
+				OpenWorldHint:   true,
+			},
+		})
 	}
 	if withSplunk {
 		tools = append(tools,

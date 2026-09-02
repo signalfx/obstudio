@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -68,6 +70,153 @@ func (f *fakeValidationRunner) Run(ctx context.Context) validator.Summary {
 		return f.onRun(ctx)
 	}
 	return f.summary
+}
+
+func TestDispatchContextCancelsValidationTools(t *testing.T) {
+	for _, toolName := range []string{
+		"observer_validation_analyze",
+		"observer_validation_refresh",
+	} {
+		t.Run(toolName, func(t *testing.T) {
+			started := make(chan struct{})
+			canceled := make(chan struct{})
+			runner := &fakeValidationRunner{
+				onRun: func(ctx context.Context) validator.Summary {
+					close(started)
+					<-ctx.Done()
+					close(canceled)
+					return validator.Summary{}
+				},
+			}
+			d := NewDispatcher(store.New(), validator.NewStore(), runner)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			done := make(chan jsonRPCResponse, 1)
+			go func() {
+				resp, _ := d.DispatchContext(ctx, jsonRPCRequest{
+					ID:      1,
+					JSONRPC: "2.0",
+					Method:  "tools/call",
+					Params: map[string]any{
+						"name": toolName,
+						"arguments": map[string]any{
+							"timeoutSeconds": 300,
+						},
+					},
+				})
+				done <- resp
+			}()
+
+			select {
+			case <-started:
+			case <-time.After(time.Second):
+				t.Fatal("validation runner did not start")
+			}
+			cancel()
+			select {
+			case <-canceled:
+			case <-time.After(time.Second):
+				t.Fatal("validation runner did not receive request cancellation")
+			}
+			select {
+			case resp := <-done:
+				if resp.Error != nil {
+					t.Fatalf("unexpected JSON-RPC error: %+v", resp.Error)
+				}
+				result, ok := resp.Result.(toolResult)
+				if !ok || !result.IsError {
+					t.Fatalf("canceled validation result = %#v, want tool error", resp.Result)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("validation dispatch did not return after cancellation")
+			}
+		})
+	}
+}
+
+func TestDispatchContextCancelsSplunkMetricsExportTest(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		close(started)
+		<-release
+	}))
+
+	controller, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
+		Enabled:     true,
+		Endpoint:    server.URL,
+		AccessToken: "test-token",
+	})
+	if err != nil {
+		close(release)
+		server.Close()
+		t.Fatalf("create metrics export controller: %v", err)
+	}
+	defer func() {
+		close(release)
+		controller.Shutdown(context.Background())
+		server.Close()
+	}()
+
+	d := NewDispatcher(store.New(), controller)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan jsonRPCResponse, 1)
+	go func() {
+		resp, _ := d.DispatchContext(ctx, jsonRPCRequest{
+			ID:      1,
+			JSONRPC: "2.0",
+			Method:  "tools/call",
+			Params: map[string]any{
+				"name":      "observer_splunk_metrics_export_test",
+				"arguments": map[string]any{},
+			},
+		})
+		done <- resp
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("metrics export test request did not start")
+	}
+	cancel()
+	select {
+	case resp := <-done:
+		if resp.Error != nil {
+			t.Fatalf("unexpected JSON-RPC error: %+v", resp.Error)
+		}
+		result, ok := resp.Result.(toolResult)
+		if !ok || !result.IsError {
+			t.Fatalf("canceled metrics export result = %#v, want tool error", resp.Result)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("metrics export dispatch did not return after cancellation")
+	}
+}
+
+func TestJSONRPCRequestUnmarshalPreservesOnlyProtocolIdentifiers(t *testing.T) {
+	var request jsonRPCRequest
+	if err := json.Unmarshal([]byte(`{"jsonrpc":"2.0","id":9007199254740993,"method":"tools/call","params":{"name":"observer_metrics_overview","arguments":{"limit":7}}}`), &request); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	if request.ID != json.Number("9007199254740993") {
+		t.Fatalf("request ID = %#v, want exact json.Number", request.ID)
+	}
+	params := toMapAny(request.Params)
+	arguments := toMapAny(params["arguments"])
+	if limit, ok := arguments["limit"].(float64); !ok || limit != 7 {
+		t.Fatalf("limit = %#v, want unchanged float64(7)", arguments["limit"])
+	}
+
+	if err := json.Unmarshal([]byte(`{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":9007199254740993}}`), &request); err != nil {
+		t.Fatalf("unmarshal cancellation: %v", err)
+	}
+	cancellationParams := toMapAny(request.Params)
+	if cancellationParams["requestId"] != json.Number("9007199254740993") {
+		t.Fatalf("cancellation requestId = %#v, want exact json.Number", cancellationParams["requestId"])
+	}
 }
 
 // Test 1: Dispatch Initialize - returns server info, negotiated protocol version, capabilities

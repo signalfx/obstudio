@@ -1,11 +1,31 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from pathlib import Path
 from typing import Any
 
-from .definitions import CaseResult, GradeCheckResult, SideResult, TokenUsage, ValidationResult
+from .definitions import (
+    CaseResult,
+    GradeCheckResult,
+    SideResult,
+    TokenUsage,
+    ValidationResult,
+)
+from .eval_files import (
+    eval_file_layout,
+    fixture_eval_input_sources,
+    iter_eval_files,
+    regular_source_file,
+    runtime_definition_asset_files,
+    runtime_repository_source_files,
+    shared_runtime_source_files,
+    shared_skill_reference_source_files,
+    staged_fixture_source_files,
+    staged_skill_source_files,
+    source_tree_files,
+)
 from .reports import ReportTemplate, template_for_kind
 
 
@@ -24,6 +44,7 @@ TOKEN_USAGE_FIELDS = (
     "provider_total_tokens",
     "derived_total_tokens",
 )
+SOURCE_MANIFEST_DIGEST_VERSION = 2
 
 
 def write_session_results(runs: list[dict[str, Any]]) -> None:
@@ -170,7 +191,14 @@ def kind_benchmark_from_payloads(
     ]
     if not live_payloads:
         raise ValueError(f"no {kind} live results found in {run_root}")
-    return build_kind_benchmark(repo_root, run_root, skill, kind, live_payloads)
+    validation_results = [
+        ValidationResult.model_validate(item)
+        for payload in payloads
+        if payload.get("mode") == "validation"
+        for item in payload.get("results", [])
+        if item.get("eval_kind") == kind
+    ]
+    return build_kind_benchmark(repo_root, run_root, skill, kind, live_payloads, validation_results)
 
 
 def build_kind_benchmark(
@@ -179,14 +207,19 @@ def build_kind_benchmark(
     skill: str,
     kind: str,
     live_payloads: list[dict[str, Any]],
+    validation_results: list[ValidationResult] | None = None,
 ) -> dict[str, Any]:
     evals = []
     failures = []
     metadata_sources = []
+    live_selection_keys: set[tuple[str, str, str]] = set()
     for payload in sorted(live_payloads, key=lambda item: str(item.get("mode", ""))):
         mode = str(payload["mode"])
         metadata_sources.append(payload.get("metadata", {}))
         results = [CaseResult.model_validate(item) for item in payload.get("results", [])]
+        live_selection_keys.update(
+            (result.id, result.base_id, result.prompt_id) for result in results
+        )
         result_paths = payload.get("result_paths", {})
         for base_id, group in grouped_case_results(results).items():
             item = aggregate_kind_case_group(kind, group)
@@ -196,7 +229,7 @@ def build_kind_benchmark(
         failures.extend(collect_kind_failures(results, kind, mode))
 
     metadata = kind_report_metadata(skill, run_root, kind, metadata_sources)
-    return {
+    benchmark = {
         "schema_version": 1,
         "kind": kind,
         "mode": metadata["mode"],
@@ -212,6 +245,718 @@ def build_kind_benchmark(
         "evals": evals,
         "failures": failures,
     }
+    provenance_results = validation_results or []
+    if provenance_results:
+        validation_selection_keys = {
+            (result.id, result.base_id, result.prompt_id)
+            for result in provenance_results
+        }
+        if validation_selection_keys != live_selection_keys:
+            raise ValueError(
+                "live report results do not match validation provenance selections"
+            )
+    provenance = source_provenance(repo_root, provenance_results)
+    if provenance:
+        benchmark["source"] = provenance
+    return benchmark
+
+
+def source_input_digests(
+    repo_root: Path,
+    skill: str,
+    kind: str,
+    skill_path: Path,
+    config_path: Path | None = None,
+    *,
+    definition_path: Path | None = None,
+    fixture_dir: Path | None = None,
+    prompt_id: str | None = None,
+    eval_inputs: list[str] | None = None,
+) -> dict[str, str]:
+    root = repo_root.resolve()
+    resolved_skill = skill_path.resolve()
+    try:
+        resolved_skill.relative_to(root)
+    except ValueError:
+        return {}
+
+    paths = staged_skill_source_files(resolved_skill)
+    paths.extend(shared_skill_reference_source_files(root))
+    eval_roles = {
+        "rubric": {"rubric"},
+        "sanity": {"sanity"},
+        "runtime": {"runtime"},
+        "validation": {"rubric", "runtime", "sanity"},
+    }.get(kind, set())
+    eval_root = root / "evals"
+    has_runtime_definition = False
+    if definition_path is not None:
+        if fixture_dir is None or prompt_id is None:
+            raise ValueError(
+                "selected eval provenance requires a fixture directory and prompt ID"
+            )
+        selected_paths, has_runtime_definition = selected_eval_source_files(
+            root,
+            skill,
+            eval_roles,
+            definition_path,
+            fixture_dir,
+            prompt_id,
+            eval_inputs,
+        )
+        paths.extend(selected_paths)
+    elif fixture_dir is not None or prompt_id is not None or eval_inputs is not None:
+        raise ValueError("selected eval provenance requires a definition path")
+    elif eval_roles and eval_root.is_dir():
+        for path in iter_eval_files(eval_root):
+            layout = eval_file_layout(path)
+            if layout is None or layout.role not in eval_roles:
+                continue
+            try:
+                definition = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError(f"cannot read eval definition: {path}: {exc}") from exc
+            if not isinstance(definition, dict):
+                raise ValueError(f"eval definition must be an object: {path}")
+            if definition.get("skill") == skill:
+                paths.append(path)
+                paths.extend(staged_fixture_source_files(layout.fixture_dir))
+                prompts = definition.get("prompts", [])
+                if not isinstance(prompts, list):
+                    raise ValueError(f"eval definition prompts must be a list: {path}")
+                for prompt in prompts:
+                    if not isinstance(prompt, dict):
+                        raise ValueError(
+                            f"eval definition prompt must be an object: {path}"
+                        )
+                    eval_inputs = prompt.get("eval_inputs")
+                    if eval_inputs is not None and (
+                        not isinstance(eval_inputs, list)
+                        or any(not isinstance(value, str) for value in eval_inputs)
+                    ):
+                        raise ValueError(
+                            f"eval definition eval_inputs must be a string list: {path}"
+                        )
+                    paths.extend(
+                        source
+                        for _relative, source in fixture_eval_input_sources(
+                            layout.fixture_dir,
+                            eval_inputs,
+                        )
+                    )
+                if layout.role == "runtime":
+                    has_runtime_definition = True
+                    paths.extend(runtime_definition_asset_files(path))
+    if has_runtime_definition:
+        paths.extend(shared_runtime_source_files(eval_root))
+        paths.extend(runtime_repository_source_files(root))
+
+    harness_root = root / "pytest-codex-evals"
+    harness_package_root = harness_root / "src" / "pytest_codex_evals"
+    if harness_package_root.is_dir():
+        paths.extend(
+            source_tree_files(
+                harness_package_root,
+                ("__pycache__", ".pytest_cache", ".DS_Store", "*.pyc"),
+            )
+        )
+    for name in ("pyproject.toml", "uv.lock"):
+        harness_metadata = harness_root / name
+        if source := regular_source_file(harness_metadata):
+            paths.append(source)
+    if config_path is not None:
+        config_source = regular_source_file(config_path)
+        if config_source is None:
+            raise ValueError(f"eval config input is missing: {config_path}")
+        try:
+            config_source.resolve().relative_to(root)
+        except ValueError as exc:
+            raise ValueError(
+                f"eval config input must stay within the repository: {config_path}"
+            ) from exc
+        paths.append(config_source)
+    elif eval_root.is_dir():
+        for path in sorted(eval_root.glob("codex-evals*.toml")):
+            if source := regular_source_file(path):
+                paths.append(source)
+    if eval_root.is_dir():
+        for name in ("pyproject.toml", "uv.lock"):
+            eval_metadata = eval_root / name
+            if source := regular_source_file(eval_metadata):
+                paths.append(source)
+
+    digests: dict[str, str] = {}
+    for path in sorted(set(paths)):
+        relative = path.resolve().relative_to(root).as_posix()
+        digests[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return digests
+
+
+def selected_eval_source_files(
+    repo_root: Path,
+    skill: str,
+    eval_roles: set[str],
+    definition_path: Path,
+    fixture_dir: Path,
+    prompt_id: str,
+    eval_inputs: list[str] | None,
+) -> tuple[list[Path], bool]:
+    definition_source = regular_source_file(definition_path)
+    if definition_source is None:
+        raise ValueError(f"selected eval definition is missing: {definition_path}")
+    try:
+        definition_source.resolve().relative_to(repo_root)
+        resolved_fixture = fixture_dir.resolve()
+        resolved_fixture.relative_to(repo_root)
+    except ValueError as exc:
+        raise ValueError("selected eval source must stay within the repository") from exc
+
+    layout = eval_file_layout(definition_source)
+    if layout is None or layout.role not in eval_roles:
+        raise ValueError(
+            f"selected eval definition does not match {sorted(eval_roles)}: "
+            f"{definition_path}"
+        )
+    if layout.fixture_dir.resolve() != resolved_fixture:
+        raise ValueError(
+            f"selected eval fixture does not match its definition: {fixture_dir}"
+        )
+    try:
+        definition = json.loads(definition_source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"cannot read eval definition: {definition_source}: {exc}"
+        ) from exc
+    if not isinstance(definition, dict):
+        raise ValueError(f"eval definition must be an object: {definition_source}")
+    if definition.get("skill") != skill:
+        raise ValueError(
+            f"selected eval definition does not target skill {skill}: "
+            f"{definition_source}"
+        )
+    prompts = definition.get("prompts", [])
+    if not isinstance(prompts, list):
+        raise ValueError(f"eval definition prompts must be a list: {definition_source}")
+    matching_prompts = [
+        prompt
+        for prompt in prompts
+        if isinstance(prompt, dict) and prompt.get("id") == prompt_id
+    ]
+    if len(matching_prompts) != 1:
+        raise ValueError(
+            f"selected eval prompt {prompt_id!r} is missing or duplicated: "
+            f"{definition_source}"
+        )
+    selected_inputs = matching_prompts[0].get("eval_inputs")
+    if selected_inputs is None:
+        selected_inputs = []
+    if (
+        not isinstance(selected_inputs, list)
+        or any(not isinstance(value, str) for value in selected_inputs)
+    ):
+        raise ValueError(
+            f"eval definition eval_inputs must be a string list: {definition_source}"
+        )
+    recorded_inputs = list(eval_inputs or [])
+    if selected_inputs != recorded_inputs:
+        raise ValueError(
+            f"selected eval inputs do not match prompt {prompt_id!r}: "
+            f"{definition_source}"
+        )
+
+    paths = [definition_source, *staged_fixture_source_files(resolved_fixture)]
+    paths.extend(
+        source
+        for _relative, source in fixture_eval_input_sources(
+            resolved_fixture,
+            recorded_inputs,
+        )
+    )
+    is_runtime = layout.role == "runtime"
+    if is_runtime:
+        paths.extend(runtime_definition_asset_files(definition_source))
+    return paths, is_runtime
+
+
+def source_input_digests_for_kinds(
+    repo_root: Path,
+    skill: str,
+    kinds: list[str],
+    skill_path: Path,
+    config_path: Path | None = None,
+) -> dict[str, str]:
+    files: dict[str, str] = {}
+    for kind in sorted(set(kinds)):
+        for path, digest in source_input_digests(
+            repo_root,
+            skill,
+            kind,
+            skill_path,
+            config_path,
+        ).items():
+            existing = files.get(path)
+            if existing is not None and existing != digest:
+                raise ValueError(f"source input changed while building manifest: {path}")
+            files[path] = digest
+    return files
+
+
+def source_input_digests_for_selections(
+    repo_root: Path,
+    skill: str,
+    selections: list[dict[str, Any]],
+    skill_path: Path,
+    config_path: Path | None = None,
+) -> dict[str, str]:
+    files: dict[str, str] = {}
+    for selection in selections:
+        manifest = source_input_digests(
+            repo_root,
+            skill,
+            selection["eval_kind"],
+            skill_path,
+            config_path,
+            definition_path=repo_root / selection["definition_path"],
+            fixture_dir=repo_root / selection["fixture_dir"],
+            prompt_id=selection["prompt_id"],
+            eval_inputs=selection["eval_inputs"],
+        )
+        for path, digest in manifest.items():
+            existing = files.get(path)
+            if existing is not None and existing != digest:
+                raise ValueError(f"source input changed while building manifest: {path}")
+            files[path] = digest
+    return files
+
+
+def source_provenance(
+    repo_root: Path,
+    results: list[ValidationResult],
+    *,
+    selection_scope: str | None = None,
+) -> dict[str, Any] | None:
+    manifest_results = [result for result in results if result.source_files]
+    manifests = [result.source_files for result in manifest_results]
+    if not manifests:
+        return None
+    files: dict[str, str] = {}
+    for manifest in manifests:
+        for path, digest in manifest.items():
+            existing = files.get(path)
+            if existing is not None and existing != digest:
+                raise ValueError(f"source input changed during eval run: {path}")
+            files[path] = digest
+    skill_paths = {
+        Path(result.skill_path).resolve().relative_to(repo_root.resolve()).as_posix()
+        for result in results
+        if result.source_files
+    }
+    if len(skill_paths) != 1:
+        raise ValueError("eval run contains inconsistent skill source paths")
+    config_paths = {
+        Path(result.config_path)
+        .resolve()
+        .relative_to(repo_root.resolve())
+        .as_posix()
+        for result in results
+        if result.source_files and result.config_path
+    }
+    if len(config_paths) > 1:
+        raise ValueError("eval run contains inconsistent config source paths")
+    eval_kinds = sorted({result.eval_kind for result in results if result.source_files})
+    selections: list[dict[str, Any]] | None = None
+    if manifest_results and all(
+        result.selected_eval_inputs is not None for result in manifest_results
+    ):
+        selections_by_key: dict[
+            tuple[str, str, str, str, tuple[str, ...]], dict[str, Any]
+        ] = {}
+        root = repo_root.resolve()
+        for result in manifest_results:
+            try:
+                definition_path = (
+                    Path(result.definition_path).resolve().relative_to(root).as_posix()
+                )
+                fixture_dir = (
+                    Path(result.fixture_dir).resolve().relative_to(root).as_posix()
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    "selected eval source path escapes the repository"
+                ) from exc
+            selected_inputs = tuple(result.selected_eval_inputs or [])
+            key = (
+                definition_path,
+                fixture_dir,
+                result.prompt_id,
+                result.eval_kind,
+                selected_inputs,
+            )
+            selections_by_key[key] = {
+                "definition_path": definition_path,
+                "fixture_dir": fixture_dir,
+                "prompt_id": result.prompt_id,
+                "eval_kind": result.eval_kind,
+                "eval_inputs": list(selected_inputs),
+            }
+        selections = [selections_by_key[key] for key in sorted(selections_by_key)]
+    skill_path = skill_paths.pop()
+    source_config_path = config_paths.pop() if config_paths else None
+    provenance: dict[str, Any] = {
+        "digest_version": SOURCE_MANIFEST_DIGEST_VERSION,
+        "digest": source_manifest_digest(
+            files,
+            digest_version=SOURCE_MANIFEST_DIGEST_VERSION,
+            eval_kinds=eval_kinds,
+            skill_path=skill_path,
+            config_path=source_config_path,
+            selections=selections,
+            selection_scope=selection_scope,
+        ),
+        "eval_kinds": eval_kinds,
+        "files": files,
+        "skill_path": skill_path,
+    }
+    if selections is not None:
+        provenance["selections"] = selections
+    if source_config_path is not None:
+        provenance["config_path"] = source_config_path
+    if selection_scope is not None:
+        provenance["selection_scope"] = selection_scope
+    return provenance
+
+
+def source_manifest_digest(
+    files: dict[str, str],
+    *,
+    digest_version: int,
+    eval_kinds: list[str] | None = None,
+    skill_path: str | None = None,
+    config_path: str | None = None,
+    selections: list[dict[str, Any]] | None = None,
+    selection_scope: str | None = None,
+) -> str:
+    digest = hashlib.sha256()
+    if digest_version == 1:
+        for path, file_digest in sorted(files.items()):
+            digest.update(path.encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(file_digest.encode("ascii"))
+            digest.update(b"\n")
+        return digest.hexdigest()
+    if digest_version != SOURCE_MANIFEST_DIGEST_VERSION:
+        raise ValueError(f"unsupported source manifest digest version: {digest_version}")
+    if eval_kinds is None or skill_path is None:
+        raise ValueError("source manifest v2 requires eval kinds and a skill path")
+    identity: dict[str, Any] = {
+        "digest_version": digest_version,
+        "eval_kinds": sorted(set(eval_kinds)),
+        "files": {path: files[path] for path in sorted(files)},
+        "skill_path": skill_path,
+    }
+    if config_path is not None:
+        identity["config_path"] = config_path
+    if selections is not None:
+        identity["selections"] = sorted(
+            selections,
+            key=lambda selection: (
+                selection["definition_path"],
+                selection["fixture_dir"],
+                selection["prompt_id"],
+                selection["eval_kind"],
+                tuple(selection["eval_inputs"]),
+            ),
+        )
+    if selection_scope is not None:
+        identity["selection_scope"] = selection_scope
+    digest.update(b"obstudio-source-manifest\0")
+    digest.update(
+        json.dumps(
+            identity,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    )
+    return digest.hexdigest()
+
+
+def source_selection_key(
+    selection: dict[str, Any],
+) -> tuple[str, str, str, str, tuple[str, ...]]:
+    return (
+        selection["definition_path"],
+        selection["fixture_dir"],
+        selection["prompt_id"],
+        selection["eval_kind"],
+        tuple(selection["eval_inputs"]),
+    )
+
+
+def full_validation_source_selections(
+    repo_root: Path,
+    skill: str,
+) -> list[dict[str, Any]]:
+    root = repo_root.resolve()
+    eval_root = root / "evals" if (root / "evals").is_dir() else root
+    selections: list[dict[str, Any]] = []
+    for path in iter_eval_files(eval_root):
+        layout = eval_file_layout(path)
+        if layout is None or layout.role is None:
+            continue
+        try:
+            definition = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"cannot read eval definition: {path}: {exc}") from exc
+        if not isinstance(definition, dict):
+            raise ValueError(f"eval definition must be an object: {path}")
+        if definition.get("skill") != skill:
+            continue
+        prompts = definition.get("prompts")
+        if not isinstance(prompts, list):
+            raise ValueError(f"eval definition prompts must be a list: {path}")
+        for prompt in prompts:
+            if not isinstance(prompt, dict):
+                raise ValueError(f"eval definition prompt must be an object: {path}")
+            prompt_id = prompt.get("id")
+            eval_inputs = prompt.get("eval_inputs", [])
+            if (
+                not isinstance(prompt_id, str)
+                or not prompt_id
+                or not isinstance(eval_inputs, list)
+                or any(not isinstance(value, str) for value in eval_inputs)
+            ):
+                raise ValueError(f"eval definition prompt selection is malformed: {path}")
+            selections.append(
+                {
+                    "definition_path": path.resolve().relative_to(root).as_posix(),
+                    "fixture_dir": layout.fixture_dir.resolve().relative_to(root).as_posix(),
+                    "prompt_id": prompt_id,
+                    "eval_kind": layout.role,
+                    "eval_inputs": eval_inputs,
+                }
+            )
+    return sorted(selections, key=source_selection_key)
+
+
+def source_manifest_selections(
+    source: dict[str, Any],
+    benchmark_path: Path,
+) -> list[dict[str, Any]] | None:
+    raw_selections = source.get("selections")
+    if raw_selections is None:
+        return None
+    if not isinstance(raw_selections, list) or not raw_selections:
+        raise ValueError(f"{benchmark_path}: source selections are malformed")
+
+    selections: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str, tuple[str, ...]]] = set()
+    for raw in raw_selections:
+        if not isinstance(raw, dict):
+            raise ValueError(f"{benchmark_path}: source selections are malformed")
+        definition_path = raw.get("definition_path")
+        fixture_dir = raw.get("fixture_dir")
+        prompt_id = raw.get("prompt_id")
+        eval_kind = raw.get("eval_kind")
+        eval_inputs = raw.get("eval_inputs")
+        if (
+            not isinstance(definition_path, str)
+            or not isinstance(fixture_dir, str)
+            or not isinstance(prompt_id, str)
+            or not prompt_id
+            or not isinstance(eval_kind, str)
+            or eval_kind not in {"rubric", "runtime", "sanity"}
+            or not isinstance(eval_inputs, list)
+            or any(not isinstance(value, str) for value in eval_inputs)
+        ):
+            raise ValueError(f"{benchmark_path}: source selections are malformed")
+        for relative in (definition_path, fixture_dir):
+            path = Path(relative)
+            if (
+                not relative
+                or path.is_absolute()
+                or path.as_posix() != relative
+                or any(part in {"", ".", ".."} for part in path.parts)
+            ):
+                raise ValueError(
+                    f"{benchmark_path}: source selection path is malformed"
+                )
+        key = source_selection_key(raw)
+        if key in seen:
+            raise ValueError(f"{benchmark_path}: source selections are duplicated")
+        seen.add(key)
+        selections.append(
+            {
+                "definition_path": definition_path,
+                "fixture_dir": fixture_dir,
+                "prompt_id": prompt_id,
+                "eval_kind": eval_kind,
+                "eval_inputs": eval_inputs,
+            }
+        )
+    return selections
+
+
+def verify_published_report_sources(repo_root: Path) -> list[Path]:
+    verified: list[Path] = []
+    root = repo_root.resolve()
+    benchmark_paths = sorted((root / "eval-reports").glob("*/*/benchmark.json"))
+    provenance_skills = {
+        path.parent.parent.name
+        for path in benchmark_paths
+        if isinstance(json.loads(path.read_text(encoding="utf-8")).get("source"), dict)
+    }
+    for benchmark_path in benchmark_paths:
+        benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+        source = benchmark.get("source")
+        if not isinstance(source, dict):
+            if benchmark_path.parent.parent.name in provenance_skills:
+                raise ValueError(f"{benchmark_path}: source manifest is missing; rerun the owning eval")
+            continue
+        files = source.get("files")
+        if not isinstance(files, dict) or not files:
+            raise ValueError(f"{benchmark_path}: source manifest is empty")
+        raw_digest_version = source.get("digest_version")
+        if raw_digest_version is None:
+            digest_version = 1
+        elif (
+            type(raw_digest_version) is not int
+            or raw_digest_version != SOURCE_MANIFEST_DIGEST_VERSION
+        ):
+            raise ValueError(
+                f"{benchmark_path}: source manifest digest version is malformed"
+            )
+        else:
+            digest_version = raw_digest_version
+        skill = benchmark.get("skill")
+        kind = benchmark.get("kind")
+        skill_path = source.get("skill_path")
+        if not isinstance(skill, str) or not isinstance(kind, str) or not isinstance(skill_path, str):
+            raise ValueError(f"{benchmark_path}: source identity is malformed")
+        eval_kinds = source.get("eval_kinds")
+        if eval_kinds is None:
+            if digest_version == SOURCE_MANIFEST_DIGEST_VERSION:
+                raise ValueError(f"{benchmark_path}: source eval kinds are malformed")
+            eval_kinds = [kind]
+        if (
+            not isinstance(eval_kinds, list)
+            or not eval_kinds
+            or any(
+                not isinstance(eval_kind, str)
+                or eval_kind not in {"rubric", "runtime", "sanity"}
+                for eval_kind in eval_kinds
+            )
+        ):
+            raise ValueError(f"{benchmark_path}: source eval kinds are malformed")
+        declared_eval_kinds = sorted(set(eval_kinds))
+        if kind != "validation" and declared_eval_kinds != [kind]:
+            raise ValueError(f"{benchmark_path}: source eval kinds do not match report kind")
+        selections = source_manifest_selections(source, benchmark_path)
+        if selections is not None and sorted(
+            {selection["eval_kind"] for selection in selections}
+        ) != declared_eval_kinds:
+            raise ValueError(
+                f"{benchmark_path}: source selections do not match eval kinds"
+            )
+        selection_scope = None
+        reconstruction_eval_kinds = declared_eval_kinds
+        if kind == "validation":
+            selection_scope = source.get("selection_scope")
+            if selection_scope == "full":
+                reconstruction_eval_kinds = ["rubric", "runtime", "sanity"]
+            elif selection_scope != "filtered":
+                raise ValueError(f"{benchmark_path}: validation source selection scope is malformed")
+        elif source.get("selection_scope") is not None:
+            raise ValueError(f"{benchmark_path}: source selection scope is malformed")
+        if (
+            digest_version == SOURCE_MANIFEST_DIGEST_VERSION
+            and kind == "validation"
+            and selection_scope == "full"
+        ):
+            if selections is None:
+                raise ValueError(
+                    f"{benchmark_path}: full validation source selections are missing"
+                )
+            try:
+                expected_selections = full_validation_source_selections(root, skill)
+            except (OSError, ValueError) as exc:
+                raise ValueError(
+                    f"{benchmark_path}: eval report inputs are stale; rerun the owning eval"
+                ) from exc
+            if sorted(selections, key=source_selection_key) != expected_selections:
+                raise ValueError(
+                    f"{benchmark_path}: eval report inputs are stale; rerun the owning eval"
+                )
+        resolved_skill_path = (root / skill_path).resolve()
+        try:
+            resolved_skill_path.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(f"{benchmark_path}: skill path escapes the repository: {skill_path}") from exc
+        source_config_path = source.get("config_path")
+        resolved_config_path = None
+        if source_config_path is not None:
+            if not isinstance(source_config_path, str) or not source_config_path:
+                raise ValueError(f"{benchmark_path}: source config path is malformed")
+            resolved_config_path = root / source_config_path
+            try:
+                resolved_config_path.resolve().relative_to(root)
+            except ValueError as exc:
+                raise ValueError(
+                    f"{benchmark_path}: config path escapes the repository: {source_config_path}"
+                ) from exc
+            metadata = benchmark.get("metadata")
+            if (
+                not isinstance(metadata, dict)
+                or metadata.get("config_path") != source_config_path
+            ):
+                raise ValueError(
+                    f"{benchmark_path}: source config path does not match report metadata"
+                )
+        try:
+            if selections is not None and selection_scope != "full":
+                current = source_input_digests_for_selections(
+                    root,
+                    skill,
+                    selections,
+                    resolved_skill_path,
+                    resolved_config_path,
+                )
+            else:
+                current = source_input_digests_for_kinds(
+                    root,
+                    skill,
+                    reconstruction_eval_kinds,
+                    resolved_skill_path,
+                    resolved_config_path,
+                )
+        except ValueError as exc:
+            raise ValueError(
+                f"{benchmark_path}: eval report inputs are stale; rerun the owning eval"
+            ) from exc
+        for relative, expected in files.items():
+            if not isinstance(relative, str) or not isinstance(expected, str):
+                raise ValueError(f"{benchmark_path}: source manifest is malformed")
+            path = (root / relative).resolve()
+            try:
+                path.relative_to(root)
+            except ValueError as exc:
+                raise ValueError(f"{benchmark_path}: source path escapes the repository: {relative}") from exc
+            if not path.is_file():
+                raise ValueError(f"{benchmark_path}: source input is missing: {relative}")
+        expected_digest = source.get("digest")
+        current_digest = source_manifest_digest(
+            current,
+            digest_version=digest_version,
+            eval_kinds=declared_eval_kinds,
+            skill_path=skill_path,
+            config_path=source_config_path,
+            selections=selections,
+            selection_scope=selection_scope,
+        )
+        if current != files or current_digest != expected_digest:
+            raise ValueError(f"{benchmark_path}: eval report inputs are stale; rerun the owning eval")
+        verified.append(benchmark_path)
+    return verified
 
 
 def aggregate_kind_case_group(kind: str, group: list[CaseResult]) -> dict[str, Any]:
@@ -994,7 +1739,9 @@ def build_validation_benchmark(
             }
         )
 
-    return {
+    benchmark = {
+        "schema_version": 1,
+        "kind": "validation",
         "mode": "validation",
         "skill": skill,
         "metadata": metadata,
@@ -1008,6 +1755,13 @@ def build_validation_benchmark(
             "runtime_check_count": sum(result.runtime_check_count for result in results),
         },
     }
+    selection_scope = metadata.get("validation_scope")
+    if selection_scope not in {"filtered", "full"}:
+        raise ValueError("validation report metadata is missing its selection scope")
+    provenance = source_provenance(repo_root, results, selection_scope=selection_scope)
+    if provenance:
+        benchmark["source"] = provenance
+    return benchmark
 
 
 def render_validation_report(skill: str, benchmark: dict[str, Any]) -> str:
@@ -1050,6 +1804,10 @@ def report_metadata(
     metadata: dict[str, Any] | None,
 ) -> dict[str, Any]:
     normalized = dict(metadata or {})
+    # Raw run manifests need the repository root to locate artifacts, but the
+    # published benchmark is portable and must not expose a developer's local
+    # account name or workspace layout.
+    normalized.pop("repo_root", None)
     normalized.setdefault("mode", mode)
     normalized.setdefault("eval_kind", "validation" if mode == "validation" else "standard")
     normalized.setdefault("skill", skill)

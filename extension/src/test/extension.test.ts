@@ -1,4 +1,5 @@
 import * as assert from 'node:assert/strict';
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -6,15 +7,28 @@ import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import WebSocket from 'ws';
 import {
+	authorizationHeadersMatchControlToken,
+	caseInsensitiveHeaderValue,
+	codexObstudioAuthorizationMatchesControlToken,
+	getCodexObstudioAuthorization,
+	getCodexObstudioSection,
+	getCodexObstudioUrl,
+} from '../agent-integration-config';
+import {
 	buildObserverHealthUrl,
 	buildObserverValidatorSummaryUrl,
 	isLocalObserverControlHost,
+	isLoopbackObserverHost,
 	normalizeObserverBaseUrl,
 	normalizeSharedObserverBaseUrl,
+	normalizeSharedObserverHealthUrl,
+	normalizeSharedObserverMCPUrl,
 	observerPortFromUrl,
+	observerHealthProofChallengeQuery,
 	readSharedObserverDiscovery,
-	resolveSharedObserverControlToken,
 	resolveBackend,
+	verifiedSharedObserverMCPUrl,
+	verifySharedObserverControlToken,
 } from '../backend';
 import {
 	auditReportPath,
@@ -23,10 +37,14 @@ import {
 	cloudBridgeActionRequiresLifecycleSerialization,
 	cloudControlRemainsAvailableAfterInitializationError,
 	connectSplunkCloudWithStorage,
+	freeAccountSubmissionFailureIsOutcomeUnknown,
 	forgetSplunkCloudWithStorage,
 	initializeSplunkCloudStatus,
 	isSkillDocsId,
+	isSupportedFreeAccountRegion,
 	ObserverCloudResponseError,
+	observerCloudResponseError,
+	parseFreeAccountSubmissionResult,
 	parseObserverCloudResponseBody,
 	persistSplunkCloudStateWithRollback,
 	skillDocsIds,
@@ -89,6 +107,31 @@ function withTempExtensionRoot(run: (extensionRoot: string) => void) {
 	}
 }
 
+function canonicalTestSecret(fill: number): string {
+	return Buffer.alloc(32, fill).toString('base64url');
+}
+
+function observerHealthChallengeProof(
+	proofSecret: string,
+	controlToken: string,
+	challenge: string,
+	mcpUrl: string,
+): string {
+	return crypto.createHmac('sha256', Buffer.from(proofSecret, 'base64url'))
+		.update('obstudio-health-proof-v2\0', 'utf8')
+		.update(crypto.createHash('sha256').update(controlToken, 'utf8').digest())
+		.update(Buffer.from([0]))
+		.update(challenge, 'utf8')
+		.update(Buffer.from([0]))
+		.update(mcpUrl, 'utf8')
+		.digest('base64url');
+}
+
+function writePrivateSharedObserverState(statePath: string, state: Record<string, unknown>): void {
+	fs.writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });
+	fs.chmodSync(statePath, 0o600);
+}
+
 test('IDE host transport accepts only bounded known cloud requests', () => {
 	const expectedVersion = 'V'.repeat(43);
 	const cloudRequest = (action: string, payload?: Record<string, unknown>) => ({
@@ -129,8 +172,76 @@ test('IDE host transport accepts only bounded known cloud requests', () => {
 	})), false);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('forget', { expectedVersion })), true);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('forget')), false);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('resolve-realm', {
+		destination: 'https://pov-rexel-webshop.observability.splunkcloud.com/#/signin',
+	})), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('resolve-realm', {
+		destination: 'é'.repeat(1024),
+	})), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('resolve-realm', {
+		destination: 'é'.repeat(1025),
+	})), false);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('resolve-realm', {
+		destination: '   ',
+	})), false);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('resolve-realm', {
+		accessToken: 'must-not-pass',
+		destination: 'https://ingest.eu0.observability.splunkcloud.com',
+	})), false);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-free-edition')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-free-edition-terms')), true);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-ingest-token-help')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-realm-help')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-realm-help', {
+		destination: 'https://example.test',
+	})), false);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-observability-cloud-demo')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-observability-data-course')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-observability-docs')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('detect-free-account-region')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('detect-free-account-region', {
+		region: 'Europe (Ireland)',
+	})), false);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('create-free-account', {
+		email: 'person@example.com',
+		firstName: 'Example',
+		lastName: 'Person',
+		region: 'Europe (Ireland)',
+		termsAccepted: true,
+	})), true);
+	for (const invalidPayload of [
+		{
+			email: 'person@example.com',
+			firstName: 'Example',
+			lastName: 'Person',
+			region: 'eu0',
+			termsAccepted: true,
+		},
+		{
+			email: 'person@example.com',
+			firstName: 'Example',
+			lastName: 'Person',
+			region: 'us',
+			termsAccepted: false,
+		},
+		{
+			email: 'person@example.com',
+			firstName: 'Example',
+			lastName: 'Person',
+			publicIp: '203.0.113.10',
+			region: 'us',
+			termsAccepted: true,
+		},
+		{
+			email: `${'e'.repeat(69)}@example.com`,
+			firstName: 'Example',
+			lastName: 'Person',
+			region: 'us',
+			termsAccepted: true,
+		},
+	]) {
+		assert.equal(isObserverHostRequestEnvelope(cloudRequest('create-free-account', invalidPayload)), false);
+	}
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('unsupported')), false);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-skill-docs', {
 		skill: 'otel-instrument',
@@ -154,15 +265,322 @@ test('IDE host transport accepts only bounded known cloud requests', () => {
 	})), false);
 });
 
+test('free account region contract matches the public Splunk form values', () => {
+	for (const region of [
+		'us',
+		'Europe (Ireland)',
+		'apac-au',
+	]) {
+		assert.equal(isSupportedFreeAccountRegion(region), true, region);
+	}
+	for (const removedRegion of [
+		'Europe (Frankfurt)',
+		'Europe (London)',
+		'apac-jp',
+		'Asia Pacific (Singapore)',
+	]) {
+		assert.equal(isSupportedFreeAccountRegion(removedRegion), false, removedRegion);
+	}
+	for (const realm of ['us0', 'us1', 'eu0', 'eu1', 'eu2', 'au0', 'jp0', 'sg0']) {
+		assert.equal(isSupportedFreeAccountRegion(realm), false, realm);
+	}
+});
+
+test('Observer cloud errors expose only allowlisted signup metadata', () => {
+	const error = observerCloudResponseError(502, {
+		code: 'outcome_unknown',
+		error: 'The signup outcome is unknown.',
+		retrySafe: false,
+		secret: 'must-not-pass',
+	});
+	assert.equal(error.message, 'The signup outcome is unknown.');
+	assert.equal(error.code, 'outcome_unknown');
+	assert.equal(error.retrySafe, false);
+	assert.equal('secret' in error, false);
+});
+
+test('Free Edition proxy 5xx responses are treated as unknown submission outcomes', () => {
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(502, 'Bad Gateway')),
+		true,
+	);
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(
+			503,
+			'Observer control unavailable',
+			'observer_control_unavailable',
+			true,
+		)),
+		false,
+	);
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(
+			502,
+			'Bad Gateway',
+			'bad_gateway',
+		)),
+		true,
+	);
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(
+			500,
+			'Retryable before submission',
+			'future_pre_submit_error',
+			true,
+		)),
+		false,
+	);
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(
+			503,
+			'Observer control unavailable',
+			'observer_control_unavailable',
+		)),
+		false,
+	);
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(
+			409,
+			'Outcome unknown',
+			'outcome_unknown',
+			false,
+		)),
+		true,
+	);
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(422, 'Invalid request')),
+		false,
+	);
+	assert.equal(freeAccountSubmissionFailureIsOutcomeUnknown(new Error('network failure')), false);
+});
+
+test('Free Edition success requires a complete acknowledged Observer result', () => {
+	for (const [region, realm] of [
+		['us', 'us1'],
+		['Europe (Ireland)', 'eu0'],
+		['apac-au', 'au0'],
+	] as const) {
+		assert.deepEqual(parseFreeAccountSubmissionResult({
+			intakeAcknowledged: true,
+			realm: realm.toUpperCase(),
+			region,
+		}), {
+			intakeAcknowledged: true,
+			realm,
+			region,
+		});
+	}
+	assert.deepEqual(parseFreeAccountSubmissionResult({
+		intakeAcknowledged: false,
+		realm: 'us1',
+		region: 'us',
+	}), {
+		intakeAcknowledged: false,
+		realm: 'us1',
+		region: 'us',
+	});
+	for (const invalid of [
+		{},
+		{ intakeAcknowledged: true, realm: 'us1', region: 'us0' },
+		{ intakeAcknowledged: true, realm: '../us1', region: 'us' },
+		{ intakeAcknowledged: true, realm: 'us-', region: 'us' },
+		{ intakeAcknowledged: true, realm: 'us1', region: 'Europe (Ireland)' },
+	]) {
+		assert.equal(parseFreeAccountSubmissionResult(invalid), undefined);
+	}
+});
+
+test('agent integration authorization matching follows HTTP header semantics', () => {
+	assert.equal(
+		caseInsensitiveHeaderValue({ authorization: 'Bearer current-token' }, 'Authorization'),
+		'Bearer current-token',
+	);
+	assert.equal(
+		caseInsensitiveHeaderValue({
+			Authorization: 'Bearer current-token',
+			authorization: 'Bearer stale-token',
+		}, 'Authorization'),
+		undefined,
+	);
+	assert.equal(authorizationHeadersMatchControlToken(undefined, ''), true);
+	assert.equal(authorizationHeadersMatchControlToken({}, ''), true);
+	assert.equal(authorizationHeadersMatchControlToken({ Authorization: 'Bearer stale-token' }, ''), false);
+	assert.equal(authorizationHeadersMatchControlToken({ authorization: 'Bearer current-token' }, 'current-token'), true);
+	assert.equal(authorizationHeadersMatchControlToken({ Authorization: 'Bearer stale-token' }, 'current-token'), false);
+	assert.equal(authorizationHeadersMatchControlToken({}, 'current-token'), false);
+	assert.equal(authorizationHeadersMatchControlToken({
+		Authorization: 'Bearer current-token',
+		authorization: 'Bearer current-token',
+	}, 'current-token'), false);
+
+	const inline = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'"http_headers" = { "authorization" = "Bearer inline-token" }',
+		'[mcp_servers.other]',
+		'url = "https://example.test/mcp"',
+	].join('\n'));
+	assert.notEqual(inline, undefined);
+	assert.equal(getCodexObstudioAuthorization(inline ?? ''), 'Bearer inline-token');
+	assert.equal(codexObstudioAuthorizationMatchesControlToken(inline ?? '', 'inline-token'), true);
+	assert.equal(codexObstudioAuthorizationMatchesControlToken(inline ?? '', ''), false);
+
+	const nested = getCodexObstudioSection([
+		'[mcp_servers.obstudio] # configured by Obstudio',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'[mcp_servers.obstudio.http_headers] # HTTP is case-insensitive',
+		'"Authorization" = \'Bearer nested-token\'',
+		'[mcp_servers.other]',
+		'url = "https://example.test/mcp"',
+	].join('\n'));
+	assert.notEqual(nested, undefined);
+	assert.equal(getCodexObstudioAuthorization(nested ?? ''), 'Bearer nested-token');
+	assert.doesNotMatch(nested ?? '', /example\.test/);
+
+	for (const equivalentHeader of [
+		'[mcp_servers."obstudio"]',
+		'[mcp_servers . obstudio]',
+	]) {
+		const equivalent = getCodexObstudioSection([
+			equivalentHeader,
+			'url = "http://127.0.0.1:3000/mcp"',
+			'http_headers = { Authorization = "Bearer equivalent-token" }',
+			'[mcp_servers.other]',
+			'url = "https://example.test/mcp"',
+		].join('\n'));
+		assert.notEqual(equivalent, undefined, equivalentHeader);
+		assert.equal(getCodexObstudioUrl(equivalent ?? ''), 'http://127.0.0.1:3000/mcp');
+		assert.equal(getCodexObstudioAuthorization(equivalent ?? ''), 'Bearer equivalent-token');
+	}
+
+	const equivalentNested = getCodexObstudioSection([
+		'[mcp_servers . "obstudio"]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'[mcp_servers . "obstudio" . http_headers]',
+		'Authorization = "Bearer equivalent-nested-token"',
+	].join('\n'));
+	assert.notEqual(equivalentNested, undefined);
+	assert.equal(getCodexObstudioAuthorization(equivalentNested ?? ''), 'Bearer equivalent-nested-token');
+
+	assert.equal(getCodexObstudioSection([
+		'[mcp_servers.Obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'[mcp_servers.Obstudio.http_headers]',
+		'Authorization = "Bearer different-server"',
+	].join('\n')), undefined);
+
+	const wrongPropertyCase = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'HTTP_HEADERS = { Authorization = "Bearer ignored-token" }',
+	].join('\n'));
+	assert.equal(getCodexObstudioAuthorization(wrongPropertyCase ?? ''), undefined);
+
+	const nestedElsewhere = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'[mcp_servers.obstudio.env]',
+		'http_headers = { Authorization = "Bearer ignored-token" }',
+	].join('\n'));
+	assert.equal(getCodexObstudioAuthorization(nestedElsewhere ?? ''), undefined);
+
+	const duplicateInline = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'http_headers = { Authorization = "Bearer current-token", authorization = "Bearer stale-token" }',
+	].join('\n'));
+	assert.equal(getCodexObstudioAuthorization(duplicateInline ?? ''), undefined);
+	assert.equal(codexObstudioAuthorizationMatchesControlToken(duplicateInline ?? '', ''), false);
+
+	const duplicateNested = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'[mcp_servers.obstudio.http_headers]',
+		'Authorization = "Bearer current-token"',
+		'"authorization" = "Bearer stale-token"',
+	].join('\n'));
+	assert.equal(getCodexObstudioAuthorization(duplicateNested ?? ''), undefined);
+	assert.equal(codexObstudioAuthorizationMatchesControlToken(duplicateNested ?? '', ''), false);
+
+	const duplicateContainers = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'http_headers = { Authorization = "Bearer inline-token" }',
+		'[mcp_servers.obstudio.http_headers]',
+		'Authorization = "Bearer nested-token"',
+	].join('\n'));
+	assert.equal(getCodexObstudioAuthorization(duplicateContainers ?? ''), undefined);
+	assert.equal(codexObstudioAuthorizationMatchesControlToken(duplicateContainers ?? '', ''), false);
+
+	const noAuthorization = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+	].join('\n'));
+	assert.notEqual(noAuthorization, undefined);
+	assert.equal(codexObstudioAuthorizationMatchesControlToken(noAuthorization ?? '', ''), true);
+	assert.equal(codexObstudioAuthorizationMatchesControlToken(noAuthorization ?? '', 'current-token'), false);
+
+	const nestedURLDecoy = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "https://wrong.example.test/mcp"',
+		'[mcp_servers.obstudio.env]',
+		'note = \'url = "http://127.0.0.1:3000/mcp"\'',
+		'[mcp_servers.obstudio.http_headers]',
+		'Authorization = "Bearer current-token"',
+	].join('\n'));
+	assert.equal(getCodexObstudioUrl(nestedURLDecoy ?? ''), 'https://wrong.example.test/mcp');
+
+	const duplicateURLs = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'"url" = "https://wrong.example.test/mcp"',
+	].join('\n'));
+	assert.equal(getCodexObstudioUrl(duplicateURLs ?? ''), undefined);
+});
+
+test('Codex TOML parsing treats array tables as distinct scope boundaries', () => {
+	const adjacentArray = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'[[profiles.entries]]',
+		'url = "https://wrong.example.test/mcp"',
+	].join('\n'));
+	assert.equal(adjacentArray, [
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+	].join('\n'));
+	assert.equal(getCodexObstudioUrl(adjacentArray ?? ''), 'http://127.0.0.1:3000/mcp');
+
+	const nestedArray = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'[[mcp_servers.obstudio.metadata]]',
+		'url = "https://array.example.test/mcp"',
+		'http_headers = { Authorization = "Bearer wrong-token" }',
+		'[mcp_servers.obstudio.http_headers]',
+		'Authorization = "Bearer current-token"',
+		'[mcp_servers.other]',
+		'url = "https://other.example.test/mcp"',
+	].join('\n'));
+	assert.notEqual(nestedArray, undefined);
+	assert.match(nestedArray ?? '', /\[\[mcp_servers\.obstudio\.metadata\]\]/);
+	assert.doesNotMatch(nestedArray ?? '', /other\.example\.test/);
+	assert.equal(getCodexObstudioUrl(nestedArray ?? ''), 'http://127.0.0.1:3000/mcp');
+	assert.equal(getCodexObstudioAuthorization(nestedArray ?? ''), 'Bearer current-token');
+	assert.equal(codexObstudioAuthorizationMatchesControlToken(nestedArray ?? '', 'current-token'), true);
+});
+
 test('Observer-mutating Cloud actions serialize with lifecycle transitions', () => {
-	for (const action of ['connect', 'forget', 'initialize', 'set-enabled'] as const) {
+	for (const action of ['connect', 'create-free-account', 'forget', 'initialize', 'set-enabled'] as const) {
 		assert.equal(cloudBridgeActionRequiresLifecycleSerialization(action), true, action);
 	}
 	for (const action of [
 		'open-audit-report',
 		'open-free-edition',
 		'open-ingest-token-help',
+		'open-realm-help',
 		'open-skill-docs',
+		'resolve-realm',
 	] as const) {
 		assert.equal(cloudBridgeActionRequiresLifecycleSerialization(action), false, action);
 	}
@@ -177,6 +595,71 @@ test('Observer-mutating Cloud actions serialize with lifecycle transitions', () 
 		source,
 		/cloudBridgeActionRequiresLifecycleSerialization\(request\.action\)[\s\S]*?observerCloudLifecycleOperations\.run\([\s\S]*?performCloudBridgeActionExclusive/,
 	);
+});
+
+test('Free Edition actions use the generic IDE host transport and fixed Observer routes', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+	const hostSource = fs.readFileSync(
+		path.join(extensionRoot, 'src', 'observer-webview-host.ts'),
+		'utf-8',
+	);
+
+	assert.match(
+		source,
+		/case 'detect-free-account-region':[\s\S]*?requestObserverFreeAccountJSON\(\s*'\/api\/splunk\/free-account\/region',\s*undefined,/,
+	);
+	assert.match(
+		source,
+		/case 'resolve-realm':[\s\S]*?postObserverCloudJSON\(\s*'\/api\/splunk\/export\/realm',\s*\{ destination \}/,
+	);
+	assert.match(
+		source,
+		/case 'resolve-realm':[\s\S]*?return \{[\s\S]*?realm: splunkRealmFromResponse/,
+	);
+	assert.match(
+		source,
+		/const splunkRealmHelpUrl = 'https:\/\/help\.splunk\.com\/en\/splunk-observability-cloud\/administer\/org-reference-info\/view-your-realm-api-endpoints-and-organization'/,
+	);
+	assert.match(
+		source,
+		/const splunkIngestTokenHelpUrl = 'https:\/\/help\.splunk\.com\/en\/splunk-observability-cloud\/administer\/authentication-and-security\/authentication-tokens\/org-access-tokens'/,
+	);
+	assert.match(
+		source,
+		/case 'open-realm-help':[\s\S]*?openCloudExternalUrl\(splunkRealmHelpUrl\)/,
+	);
+	assert.match(
+		source,
+		/case 'open-ingest-token-help':[\s\S]*?openCloudExternalUrl\(splunkIngestTokenHelpUrl\)/,
+	);
+	assert.match(
+		source,
+		/case 'create-free-account':[\s\S]*?requestObserverFreeAccountJSON\(\s*'\/api\/splunk\/free-account',[\s\S]*?email: payload\.email,[\s\S]*?firstName: payload\.firstName,[\s\S]*?lastName: payload\.lastName,[\s\S]*?region: payload\.region,[\s\S]*?termsAccepted: true,/,
+	);
+	assert.match(
+		source,
+		/const freeAccount = parseFreeAccountSubmissionResult\([\s\S]*?freeAccount === undefined[\s\S]*?'outcome_unknown'[\s\S]*?!freeAccount\.intakeAcknowledged[\s\S]*?'signup_not_acknowledged'/,
+	);
+	assert.match(
+		source,
+		/postObserverHostResponse\([\s\S]*?cloudBridgeErrorMetadata\(error\)[\s\S]*?type: 'obstudio\.host\.response'/,
+	);
+	assert.match(
+		source,
+		/isFreeAccountSignupRequest\(message\.request\)[\s\S]*?showInformationMessage\([\s\S]*?within 10 minutes/,
+	);
+	assert.match(
+		source,
+		/delivered = await postObserverHostResponse\([\s\S]*?\.catch\(\(\) => false\)[\s\S]*?!delivered[\s\S]*?freeAccountSignup/,
+	);
+	assert.match(
+		source,
+		/metadata\.code === 'outcome_unknown' \|\| metadata\.retrySafe === false[\s\S]*?showWarningMessage/,
+	);
+	assert.match(hostSource, /case 'create-free-account':[\s\S]*?value\.termsAccepted === true/);
+	assert.doesNotMatch(source, /obstudio\.cloud\.(?:bridge|ready|request|response)/);
+	assert.doesNotMatch(hostSource, /publicIp|clientIpLookupAttempted|opendns/i);
 });
 
 test('observer cloud response parsing preserves non-JSON route errors for compatibility fallback', () => {
@@ -1665,6 +2148,22 @@ test('IDE cloud host retries a rotated control token before returning the respon
 	assert.equal(result, status);
 });
 
+test('shared Observer credential errors name both verification secrets', async () => {
+	await assert.rejects(
+		requestObserverCloudMutationWithTokenRefresh({
+			currentToken: () => '',
+			send: async () => ({ body: {}, statusCode: 200 }),
+		}),
+		/Cloud connection changes require OBSTUDIO_CONTROL_TOKEN and OBSTUDIO_HEALTH_PROOF_SECRET/,
+	);
+
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	assert.match(
+		source,
+		/Free Edition signup requires OBSTUDIO_CONTROL_TOKEN and OBSTUDIO_HEALTH_PROOF_SECRET when using a shared Observer\./,
+	);
+});
+
 test('extension unload paths clean up observer state', () => {
 	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
 	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
@@ -1714,7 +2213,11 @@ test('managed Observer state capture stays within the extension unload budget', 
 	);
 	assert.match(
 		source,
-		/async\s+function\s+requestObserverCloudJSON\([\s\S]*?timeoutMs\s*=\s*observerCloudRequestTimeoutMs[\s\S]*?setTimeout\(\(\)\s*=>\s*\{[\s\S]*?request\.destroy\([\s\S]*?\},\s*timeoutMs\)/,
+		/async\s+function\s+requestObserverCloudJSON\([\s\S]*?collectObserverHostHTTPResponse\(response,\s*request,\s*1024\s*\*\s*1024\)/,
+	);
+	assert.match(
+		source,
+		/async\s+function\s+requestObserverCloudJSON\([\s\S]*?setTimeout\(\(\)\s*=>\s*\{[\s\S]*?request\.destroy\(error\);[\s\S]*?finish\(\(\)\s*=>\s*reject\(error\)\);[\s\S]*?\},\s*timeoutMs\)/,
 	);
 });
 
@@ -1730,6 +2233,48 @@ test('normalizeObserverBaseUrl accepts base URLs and /mcp URLs', () => {
 	assert.equal(normalizeObserverBaseUrl('http://127.0.0.1:3000/mcp'), 'http://127.0.0.1:3000');
 	assert.equal(normalizeObserverBaseUrl('http://[::]:3000/mcp'), 'http://[::1]:3000');
 	assert.equal(normalizeObserverBaseUrl('https://example.com/observer/mcp'), 'https://example.com/observer');
+});
+
+test('normalizeObserverBaseUrl permits HTTP only for normalized loopback hosts', () => {
+	for (const raw of [
+		'http://localhost:3000',
+		'http://LOCALHOST.:3000',
+		'http://127.0.0.1:3000',
+		'http://127.42.0.9:3000',
+		'http://[::1]:3000',
+		'http://0.0.0.0:3000',
+		'http://[::]:3000',
+	]) {
+		assert.doesNotThrow(() => normalizeObserverBaseUrl(raw), raw);
+	}
+
+	for (const raw of [
+		'http://example.com:3000',
+		'http://10.0.0.1:3000',
+		'http://localhost.example.com:3000',
+		'http://127.0.0.1.example.com:3000',
+		'http://[::2]:3000',
+	]) {
+		assert.throws(() => normalizeObserverBaseUrl(raw), /must use HTTPS unless the host is loopback/, raw);
+	}
+});
+
+test('isLoopbackObserverHost recognizes only supported loopback host forms', () => {
+	for (const hostname of ['localhost', 'LOCALHOST.', '127.0.0.1', '127.42.0.9', '::1', '[::1]']) {
+		assert.equal(isLoopbackObserverHost(hostname), true, hostname);
+	}
+	for (const hostname of ['localhost.example.com', '127.0.0.1.example.com', '::2', '192.168.1.2']) {
+		assert.equal(isLoopbackObserverHost(hostname), false, hostname);
+	}
+});
+
+test('normalizeObserverBaseUrl rejects URL credentials and fragments', () => {
+	for (const raw of ['https://user:password@example.com/observer', 'https://@example.com/observer']) {
+		assert.throws(() => normalizeObserverBaseUrl(raw), /must not include user information/, raw);
+	}
+	for (const raw of ['https://example.com/observer#fragment', 'https://example.com/observer#']) {
+		assert.throws(() => normalizeObserverBaseUrl(raw), /must not include a fragment/, raw);
+	}
 });
 
 test('buildObserverValidatorSummaryUrl uses normalized observer base URL', () => {
@@ -1757,29 +2302,91 @@ test('buildObserverHealthUrl uses normalized observer base URL', () => {
 test('observerPortFromUrl returns explicit and default ports', () => {
 	assert.equal(observerPortFromUrl('http://127.0.0.1:3000'), 3000);
 	assert.equal(observerPortFromUrl('https://example.com'), 443);
-	assert.equal(observerPortFromUrl('http://example.com/service/mcp'), 80);
+	assert.equal(observerPortFromUrl('http://127.0.0.2/service/mcp'), 80);
 });
 
-test('readSharedObserverDiscovery reads the CLI shared observer state', () => {
+test('readSharedObserverDiscovery keeps trusted local health separate from an advertised public MCP endpoint', () => {
 	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
 	try {
 		const stateDir = path.join(homeDir, '.obstudio');
 		fs.mkdirSync(stateDir, { recursive: true });
-		fs.writeFileSync(
+		const controlToken = canonicalTestSecret(1);
+		const healthProofSecret = canonicalTestSecret(2);
+		writePrivateSharedObserverState(
 			path.join(stateDir, 'shared-observer.json'),
-			JSON.stringify({
+			{
 				baseUrl: 'http://127.0.0.1:3001/',
-				controlToken: 'shared-control-token',
+				controlToken,
+				healthProofSecret,
+				healthUrl: 'http://127.0.0.1:3001/api/health',
+				mcpUrl: 'https://observer.example.test/team/mcp',
 				updatedAt: '2026-07-28T07:08:55.652888Z',
-			}),
+			},
 		);
 
 		assert.deepEqual(readSharedObserverDiscovery(homeDir), {
 			baseUrl: 'http://127.0.0.1:3001',
-			controlToken: 'shared-control-token',
+			controlToken,
+			healthProofSecret,
+			healthUrl: 'http://127.0.0.1:3001/api/health',
+			mcpUrl: 'https://observer.example.test/team/mcp',
 			updatedAtMs: Date.parse('2026-07-28T07:08:55.652888Z'),
 		});
 	} finally {
+		fs.rmSync(homeDir, { force: true, recursive: true });
+	}
+});
+
+test('readSharedObserverDiscovery rejects state that is not owner-only', () => {
+	if (process.platform === 'win32') {
+		return;
+	}
+	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+	try {
+		const stateDir = path.join(homeDir, '.obstudio');
+		fs.mkdirSync(stateDir, { recursive: true });
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		fs.writeFileSync(statePath, JSON.stringify({ baseUrl: 'http://127.0.0.1:3001' }), { mode: 0o644 });
+		fs.chmodSync(statePath, 0o644);
+		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
+	} finally {
+		fs.rmSync(homeDir, { force: true, recursive: true });
+	}
+});
+
+test('readSharedObserverDiscovery rejects a symlinked state file', () => {
+	if (process.platform === 'win32') {
+		return;
+	}
+	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+	try {
+		const stateDir = path.join(homeDir, '.obstudio');
+		fs.mkdirSync(stateDir, { recursive: true });
+		const victimPath = path.join(stateDir, 'victim.json');
+		writePrivateSharedObserverState(victimPath, { baseUrl: 'http://127.0.0.1:3001' });
+		fs.symlinkSync(victimPath, path.join(stateDir, 'shared-observer.json'));
+		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
+	} finally {
+		fs.rmSync(homeDir, { force: true, recursive: true });
+	}
+});
+
+test('readSharedObserverDiscovery rejects a group-writable parent', () => {
+	if (process.platform === 'win32') {
+		return;
+	}
+	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+	const stateDir = path.join(homeDir, '.obstudio');
+	try {
+		fs.mkdirSync(stateDir, { recursive: true });
+		writePrivateSharedObserverState(
+			path.join(stateDir, 'shared-observer.json'),
+			{ baseUrl: 'http://127.0.0.1:3001' },
+		);
+		fs.chmodSync(stateDir, 0o770);
+		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
+	} finally {
+		fs.chmodSync(stateDir, 0o700);
 		fs.rmSync(homeDir, { force: true, recursive: true });
 	}
 });
@@ -1789,12 +2396,14 @@ test('readSharedObserverDiscovery rejects plaintext non-local shared observer st
 	try {
 		const stateDir = path.join(homeDir, '.obstudio');
 		fs.mkdirSync(stateDir, { recursive: true });
-		fs.writeFileSync(
+		writePrivateSharedObserverState(
 			path.join(stateDir, 'shared-observer.json'),
-			JSON.stringify({
+			{
 				baseUrl: 'http://observer.example.test:3001',
-				controlToken: 'must-not-be-sent-over-plaintext',
-			}),
+				controlToken: canonicalTestSecret(2),
+				healthUrl: 'http://observer.example.test:3001/api/health',
+				mcpUrl: 'http://observer.example.test:3001/mcp',
+			},
 		);
 
 		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
@@ -1829,10 +2438,19 @@ test('cloud control permits plaintext bearer requests only to loopback hosts', (
 test('shared Observer URLs normalize wildcard listeners and reject non-local plaintext transport', () => {
 	assert.equal(normalizeSharedObserverBaseUrl('http://0.0.0.0:3001'), 'http://127.0.0.1:3001');
 	assert.equal(normalizeSharedObserverBaseUrl('http://[::]:3001/mcp'), 'http://[::1]:3001');
+	assert.equal(normalizeSharedObserverBaseUrl('http://LOCALHOST.:3001/mcp'), 'http://localhost:3001');
 	assert.equal(normalizeSharedObserverBaseUrl('http://127.0.0.2:3001'), 'http://127.0.0.2:3001');
 	assert.equal(
 		normalizeSharedObserverBaseUrl('https://observer.example.test:3001/mcp'),
 		'https://observer.example.test:3001',
+	);
+	assert.equal(
+		normalizeSharedObserverHealthUrl('http://0.0.0.0:3001/api/health'),
+		'http://127.0.0.1:3001/api/health',
+	);
+	assert.equal(
+		normalizeSharedObserverMCPUrl('https://observer.example.test/team/mcp'),
+		'https://observer.example.test/team/mcp',
 	);
 	assert.throws(
 		() => normalizeSharedObserverBaseUrl('http://observer.example.test:3001'),
@@ -1840,30 +2458,77 @@ test('shared Observer URLs normalize wildcard listeners and reject non-local pla
 	);
 });
 
-test('shared observer token matching still treats wildcard bind URLs as local aliases', () => {
+test('shared observer proof matching uses canonical endpoints for wildcard bind state', () => {
 	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
 	try {
 		const stateDir = path.join(homeDir, '.obstudio');
 		fs.mkdirSync(stateDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(stateDir, 'shared-observer.json'),
-			JSON.stringify({ baseUrl: 'http://0.0.0.0:3001', controlToken: 'wildcard-state-token' }),
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const challenge = canonicalTestSecret(3);
+		const ipv4Token = canonicalTestSecret(4);
+		const ipv4ProofSecret = canonicalTestSecret(19);
+		const ipv4MCPURL = 'http://127.0.0.1:3001/mcp';
+		writePrivateSharedObserverState(statePath, {
+			baseUrl: 'http://0.0.0.0:3001',
+			controlToken: ipv4Token,
+			healthProofSecret: ipv4ProofSecret,
+			healthUrl: 'http://0.0.0.0:3001/api/health',
+			mcpUrl: ipv4MCPURL,
+		});
+		const ipv4Discovery = readSharedObserverDiscovery(homeDir);
+		assert.notEqual(ipv4Discovery, undefined);
+		assert.equal(ipv4Discovery!.baseUrl, 'http://127.0.0.1:3001');
+		assert.equal(
+			verifySharedObserverControlToken(
+				'http://127.0.0.1:3001',
+				ipv4Discovery!,
+				challenge,
+				{
+					challengeProof: observerHealthChallengeProof(
+						ipv4ProofSecret,
+						ipv4Token,
+						challenge,
+						ipv4MCPURL,
+					),
+					endpoints: { mcp: ipv4MCPURL },
+				},
+			),
+			ipv4Token,
 		);
 
+		const ipv6Token = canonicalTestSecret(5);
+		const ipv6ProofSecret = canonicalTestSecret(20);
+		const ipv6MCPURL = 'http://[::1]:3001/mcp';
+		writePrivateSharedObserverState(statePath, {
+			baseUrl: 'http://[::]:3001',
+			controlToken: ipv6Token,
+			healthProofSecret: ipv6ProofSecret,
+			healthUrl: 'http://[::]:3001/api/health',
+			mcpUrl: ipv6MCPURL,
+		});
+		const ipv6Discovery = readSharedObserverDiscovery(homeDir);
+		assert.notEqual(ipv6Discovery, undefined);
+		assert.equal(ipv6Discovery!.baseUrl, 'http://[::1]:3001');
+		const ipv6Health = {
+			challengeProof: observerHealthChallengeProof(ipv6ProofSecret, ipv6Token, challenge, ipv6MCPURL),
+			endpoints: { mcp: ipv6MCPURL },
+		};
 		assert.equal(
-			resolveSharedObserverControlToken('http://127.0.0.1:3001', homeDir, undefined),
-			'wildcard-state-token',
-		);
-		fs.writeFileSync(
-			path.join(stateDir, 'shared-observer.json'),
-			JSON.stringify({ baseUrl: 'http://[::]:3001', controlToken: 'ipv6-wildcard-state-token' }),
-		);
-		assert.equal(
-			resolveSharedObserverControlToken('http://[::1]:3001', homeDir, undefined),
-			'ipv6-wildcard-state-token',
+			verifySharedObserverControlToken(
+				'http://[::1]:3001',
+				ipv6Discovery!,
+				challenge,
+				ipv6Health,
+			),
+			ipv6Token,
 		);
 		assert.equal(
-			resolveSharedObserverControlToken('http://127.0.0.1:3001', homeDir, undefined),
+			verifySharedObserverControlToken(
+				'http://127.0.0.1:3001',
+				ipv6Discovery!,
+				challenge,
+				ipv6Health,
+			),
 			undefined,
 		);
 	} finally {
@@ -1871,74 +2536,142 @@ test('shared observer token matching still treats wildcard bind URLs as local al
 	}
 });
 
-test('matching shared observer state wins while mismatched state preserves the inherited token', () => {
+test('managed startup authenticates a fresh child control token before enabling protected actions', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const launchTokenStart = source.indexOf('const managedLaunchControlToken = crypto.randomBytes(32)');
+	const controlStateStart = source.indexOf('const managedLaunchDiscovery:', launchTokenStart);
+	const observerReady = source.indexOf(
+		'logObserverLifecycle(`Run ${runId}: observer is accepting connections',
+		controlStateStart,
+	);
+	assert.notEqual(launchTokenStart, -1);
+	assert.notEqual(controlStateStart, -1);
+	assert.notEqual(observerReady, -1);
+	const launchHandling = source.slice(launchTokenStart, controlStateStart);
+	assert.match(
+		launchHandling,
+		/OBSTUDIO_CONTROL_TOKEN: managedLaunchControlToken/,
+	);
+	assert.match(
+		launchHandling,
+		/const managedLaunchHealthProofSecret = crypto\.randomBytes\(32\)[\s\S]*?OBSTUDIO_HEALTH_PROOF_SECRET: managedLaunchHealthProofSecret/,
+	);
+	const controlStateHandling = source.slice(controlStateStart, observerReady);
+	assert.match(
+		controlStateHandling,
+		/sharedDiscovery: managedLaunchDiscovery/,
+	);
+	assert.match(controlStateHandling, /healthProofSecret: managedLaunchHealthProofSecret/);
+	assert.match(
+		controlStateHandling,
+		/managedProof\.status === 'ready'[\s\S]*?managedProof\.verifiedControlToken \?\? ''[\s\S]*?: ''/,
+	);
+	assert.match(
+		controlStateHandling,
+		/managedObserverHealthProofSecret = managedProof\.status === 'ready'[\s\S]*?managedProof\.verifiedHealthProofSecret \?\? ''[\s\S]*?: ''/,
+	);
+	assert.match(
+		controlStateHandling,
+		/managedObserverControlToken === ''[\s\S]*?protected cloud actions are disabled/,
+	);
+	assert.doesNotMatch(controlStateHandling, /throw |terminateObserverProcess\(/);
+});
+
+test('managed startup isolates the child from shared public endpoint configuration', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	assert.match(
+		source,
+		/delete managedObserverEnvironment\.OBSTUDIO_CONTROL_TOKEN;[\s\S]*?delete managedObserverEnvironment\.OBSTUDIO_HEALTH_PROOF_SECRET;[\s\S]*?delete managedObserverEnvironment\.OBSTUDIO_PUBLIC_MCP_URL;[\s\S]*?cp\.spawn/,
+	);
+});
+
+test('agent integration install passes both active Observer control credentials', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const configureStart = source.indexOf('async function configureAgentMCP(');
+	const configureEnd = source.indexOf('\nfunction execFile(', configureStart);
+	assert.notEqual(configureStart, -1);
+	assert.notEqual(configureEnd, -1);
+	const configureHandling = source.slice(configureStart, configureEnd);
+	assert.match(
+		configureHandling,
+		/OBSTUDIO_CONTROL_TOKEN: activeObserverControlToken\(\)[\s\S]*?OBSTUDIO_HEALTH_PROOF_SECRET: activeObserverHealthProofSecret\(\)/,
+	);
+});
+
+test('shared startup probes health separately from the intended control endpoint', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	assert.match(
+		source,
+		/waitForObserverReady\(configuredEndpoints,[\s\S]*?sharedDiscovery: configuredDiscovery/,
+	);
+	assert.match(
+		source,
+		/probeObserver\([\s\S]*?discoveredEndpoints,[\s\S]*?sharedDiscovery: discoveredObserver/,
+	);
+	assert.match(
+		source,
+		/const target = new URL\(endpoints\.healthUrl\)/,
+	);
+	assert.match(
+		source,
+		/proofChallenge !== undefined && verifiedControlToken === undefined[\s\S]*?status: 'mismatch'[\s\S]*?Observer control proof could not be verified/,
+	);
+	assert.match(
+		source,
+		/setObserverEndpoints\(\{[\s\S]*?\.\.\.observerEndpoints,[\s\S]*?mcpUrl: probe\.verifiedMCPUrl/,
+	);
+	assert.match(
+		source,
+		/const mcpUrl = observerEndpoints\.mcpUrl/,
+	);
+});
+
+test('shared observer control token is released only for an authentic matching proof', () => {
 	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
 	try {
 		const stateDir = path.join(homeDir, '.obstudio');
 		fs.mkdirSync(stateDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(stateDir, 'shared-observer.json'),
-			JSON.stringify({ baseUrl: 'http://127.0.0.1:3001', controlToken: 'current-state-token' }),
-		);
-
+		const controlToken = canonicalTestSecret(6);
+		const healthProofSecret = canonicalTestSecret(21);
+		const challenge = canonicalTestSecret(7);
+		const mcpUrl = 'http://127.0.0.1:3001/mcp';
+		writePrivateSharedObserverState(path.join(stateDir, 'shared-observer.json'), {
+			baseUrl: 'http://127.0.0.1:3001',
+			controlToken,
+			healthProofSecret,
+			healthUrl: 'http://127.0.0.1:3001/api/health',
+			mcpUrl,
+		});
+		const discovered = readSharedObserverDiscovery(homeDir);
+		assert.notEqual(discovered, undefined);
+		const health = {
+			challengeProof: observerHealthChallengeProof(healthProofSecret, controlToken, challenge, mcpUrl),
+			endpoints: { mcp: mcpUrl },
+		};
 		assert.equal(
-			resolveSharedObserverControlToken(
+			verifySharedObserverControlToken(
 				'http://127.0.0.1:3001',
-				homeDir,
-				'stale-inherited-token',
+				discovered!,
+				challenge,
+				health,
 			),
-			'current-state-token',
+			controlToken,
 		);
 		assert.equal(
-			resolveSharedObserverControlToken(
+			verifySharedObserverControlToken(
 				'http://127.0.0.1:3002',
-				homeDir,
-				'inherited-token',
+				discovered!,
+				challenge,
+				health,
 			),
-			'inherited-token',
-		);
-	} finally {
-		fs.rmSync(homeDir, { force: true, recursive: true });
-	}
-});
-
-test('shared observer token resolution falls back after either matching token is rejected', () => {
-	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
-	try {
-		const stateDir = path.join(homeDir, '.obstudio');
-		fs.mkdirSync(stateDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(stateDir, 'shared-observer.json'),
-			JSON.stringify({ baseUrl: 'http://127.0.0.1:3001', controlToken: 'state-token' }),
-		);
-
-		assert.equal(
-			resolveSharedObserverControlToken(
-				'http://127.0.0.1:3001',
-				homeDir,
-				'explicit-token',
-				undefined,
-				'state-token',
-			),
-			'explicit-token',
+			undefined,
 		);
 		assert.equal(
-			resolveSharedObserverControlToken(
+			verifySharedObserverControlToken(
 				'http://127.0.0.1:3001',
-				homeDir,
-				'explicit-token',
-				undefined,
-				'explicit-token',
-			),
-			'state-token',
-		);
-		assert.equal(
-			resolveSharedObserverControlToken(
-				'http://127.0.0.1:3001',
-				homeDir,
-				'state-token',
-				undefined,
-				'state-token',
+				discovered!,
+				challenge,
+				{ challengeProof: canonicalTestSecret(8), endpoints: { mcp: mcpUrl } },
 			),
 			undefined,
 		);
@@ -1947,20 +2680,189 @@ test('shared observer token resolution falls back after either matching token is
 	}
 });
 
-test('inherited shared observer token remains available when no discovery state exists', () => {
+test('shared observer proof does not release a rejected control token', () => {
 	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
 	try {
+		const stateDir = path.join(homeDir, '.obstudio');
+		fs.mkdirSync(stateDir, { recursive: true });
+		const controlToken = canonicalTestSecret(9);
+		const healthProofSecret = canonicalTestSecret(22);
+		const challenge = canonicalTestSecret(10);
+		const mcpUrl = 'http://127.0.0.1:3001/mcp';
+		writePrivateSharedObserverState(path.join(stateDir, 'shared-observer.json'), {
+			baseUrl: 'http://127.0.0.1:3001',
+			controlToken,
+			healthProofSecret,
+			healthUrl: 'http://127.0.0.1:3001/api/health',
+			mcpUrl,
+		});
+		const discovered = readSharedObserverDiscovery(homeDir);
+		assert.notEqual(discovered, undefined);
+		const health = {
+			challengeProof: observerHealthChallengeProof(healthProofSecret, controlToken, challenge, mcpUrl),
+			endpoints: { mcp: mcpUrl },
+		};
 		assert.equal(
-			resolveSharedObserverControlToken(
+			verifySharedObserverControlToken(
 				'http://127.0.0.1:3001',
-				homeDir,
-				'configured-inherited-token',
+				discovered!,
+				challenge,
+				health,
+				controlToken,
 			),
-			'configured-inherited-token',
+			undefined,
+		);
+		assert.equal(
+			verifySharedObserverControlToken(
+				'http://127.0.0.1:3001',
+				discovered!,
+				challenge,
+				health,
+				canonicalTestSecret(11),
+			),
+			controlToken,
 		);
 	} finally {
 		fs.rmSync(homeDir, { force: true, recursive: true });
 	}
+});
+
+test('configured shared environment token requires an authentic endpoint proof without changing its format', () => {
+	const controlToken = canonicalTestSecret(12);
+	const healthProofSecret = canonicalTestSecret(23);
+	const challenge = canonicalTestSecret(13);
+	const mcpUrl = 'http://127.0.0.1:3001/mcp';
+	const discovery = {
+		baseUrl: 'http://127.0.0.1:3001',
+		controlToken,
+		healthProofSecret,
+		mcpUrl,
+	};
+	assert.equal(
+		verifySharedObserverControlToken(
+			'http://127.0.0.1:3001',
+			discovery,
+			challenge,
+			{
+				challengeProof: observerHealthChallengeProof(
+					healthProofSecret,
+					controlToken,
+					challenge,
+					mcpUrl,
+				),
+				endpoints: { mcp: mcpUrl },
+			},
+		),
+		controlToken,
+	);
+	assert.equal(
+		verifySharedObserverControlToken(
+			'http://127.0.0.1:3001',
+			discovery,
+			challenge,
+			{
+				challengeProof: observerHealthChallengeProof(
+					canonicalTestSecret(14),
+					controlToken,
+					challenge,
+					mcpUrl,
+				),
+				endpoints: { mcp: mcpUrl },
+			},
+		),
+		undefined,
+	);
+	const configuredToken = 'configured-control-token';
+	assert.equal(
+		verifySharedObserverControlToken(
+			'http://127.0.0.1:3001',
+			{ ...discovery, controlToken: configuredToken },
+			challenge,
+			{
+				challengeProof: observerHealthChallengeProof(
+					healthProofSecret,
+					configuredToken,
+					challenge,
+					mcpUrl,
+				),
+				endpoints: { mcp: mcpUrl },
+			},
+		),
+		configuredToken,
+	);
+});
+
+test('shared observer proof adopts a signed localhost IPv4 alias', () => {
+	const controlToken = canonicalTestSecret(15);
+	const healthProofSecret = canonicalTestSecret(24);
+	const challenge = canonicalTestSecret(16);
+	const intendedMCPUrl = 'http://localhost:3001/mcp';
+	const advertisedMCPUrl = 'http://127.0.0.1:3001/mcp';
+	const health = {
+		challengeProof: observerHealthChallengeProof(
+			healthProofSecret,
+			controlToken,
+			challenge,
+			advertisedMCPUrl,
+		),
+		endpoints: { mcp: advertisedMCPUrl },
+	};
+	assert.equal(
+		verifySharedObserverControlToken(
+			'http://localhost:3001',
+			{ baseUrl: 'http://localhost:3001', controlToken, healthProofSecret, mcpUrl: intendedMCPUrl },
+			challenge,
+			health,
+			undefined,
+			intendedMCPUrl,
+		),
+		controlToken,
+	);
+	assert.equal(
+		verifiedSharedObserverMCPUrl('http://localhost:3001', health, intendedMCPUrl),
+		'http://127.0.0.1:3001/mcp',
+	);
+});
+
+test('shared observer proof uses the trusted public MCP URL separately from the health URL', () => {
+	const controlToken = canonicalTestSecret(17);
+	const healthProofSecret = canonicalTestSecret(25);
+	const challenge = canonicalTestSecret(18);
+	const healthBaseUrl = 'http://127.0.0.1:3001';
+	const publicMCPUrl = 'https://observer.example.test/team/mcp';
+	const health = {
+		challengeProof: observerHealthChallengeProof(healthProofSecret, controlToken, challenge, publicMCPUrl),
+		endpoints: { mcp: publicMCPUrl },
+	};
+	const discovery = { baseUrl: healthBaseUrl, controlToken, healthProofSecret, mcpUrl: publicMCPUrl };
+	assert.equal(
+		verifySharedObserverControlToken(
+			healthBaseUrl,
+			discovery,
+			challenge,
+			health,
+			undefined,
+			publicMCPUrl,
+		),
+		controlToken,
+	);
+	assert.equal(
+		verifiedSharedObserverMCPUrl(healthBaseUrl, health, publicMCPUrl),
+		publicMCPUrl,
+	);
+
+	const unadvertisedPublicMCPUrl = 'https://other.example.test/team/mcp';
+	assert.equal(
+		verifySharedObserverControlToken(
+			healthBaseUrl,
+			discovery,
+			challenge,
+			health,
+			undefined,
+			unadvertisedPublicMCPUrl,
+		),
+		undefined,
+	);
 });
 
 test('readSharedObserverDiscovery ignores missing, malformed, and incomplete state', () => {
@@ -1971,10 +2873,11 @@ test('readSharedObserverDiscovery ignores missing, malformed, and incomplete sta
 		const stateDir = path.join(homeDir, '.obstudio');
 		fs.mkdirSync(stateDir, { recursive: true });
 		const statePath = path.join(stateDir, 'shared-observer.json');
-		fs.writeFileSync(statePath, '{');
+		fs.writeFileSync(statePath, '{', { mode: 0o600 });
+		fs.chmodSync(statePath, 0o600);
 		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
 
-		fs.writeFileSync(statePath, JSON.stringify({ healthUrl: 'http://127.0.0.1:3001/api/health' }));
+		writePrivateSharedObserverState(statePath, { healthUrl: 'http://127.0.0.1:3001/api/health' });
 		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
 	} finally {
 		fs.rmSync(homeDir, { force: true, recursive: true });

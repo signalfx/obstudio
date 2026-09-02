@@ -8,16 +8,28 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
+	authorizationHeadersMatchControlToken,
+	codexObstudioAuthorizationMatchesControlToken,
+	getCodexObstudioSection,
+	getCodexObstudioUrl,
+} from './agent-integration-config';
+import {
 	buildObserverHealthUrl,
 	buildObserverValidatorSummaryUrl,
+	createObserverHealthProofChallenge,
 	isLocalObserverControlHost,
 	type ObserverHealth,
+	type SharedObserverDiscovery,
 	normalizeObserverBaseUrl,
 	normalizeSharedObserverBaseUrl,
+	normalizeSharedObserverHealthUrl,
+	normalizeSharedObserverMCPUrl,
 	observerPortFromUrl,
+	observerHealthProofChallengeQuery,
 	readSharedObserverDiscovery,
-	resolveSharedObserverControlToken,
 	resolveBackend,
+	verifiedSharedObserverMCPUrl,
+	verifySharedObserverControlToken,
 } from './backend';
 import {
 	AsyncOperationQueue,
@@ -59,15 +71,20 @@ import {
 	cloudStatusConnected,
 	connectSplunkCloudWithStorage,
 	forgetSplunkCloudWithStorage,
+	freeAccountSubmissionFailureIsOutcomeUnknown,
 	initializeSplunkCloudStatus,
+	isSupportedFreeAccountRegion,
+	maxCloudDestinationBytes,
 	observerCloudResponseError,
+	parseFreeAccountSubmissionResult,
 	parseObserverCloudResponseBody,
 	persistSplunkCloudStateWithRollback,
 	requestObserverCloudMutationWithTokenRefresh,
-	skillDocsUrl,
 	parseStoredSplunkCloudConnection,
 	restoreSplunkCloudConnectionFromStorage,
 	setSplunkCloudExportEnabledWithStorage,
+	skillDocsUrl,
+	ObserverCloudResponseError,
 	SplunkCloudConnectionStore,
 	SplunkCloudExportPreferenceStore,
 	splunkCloudConnectionSecretKey,
@@ -84,6 +101,7 @@ import {
 	observerHostResponseByteLimit,
 	type ObserverHostCloudPayload,
 	type ObserverHostRequest,
+	type ObserverHostResponseEnvelope,
 } from './observer-webview-host';
 import { ObserverWebviewTelemetry } from './observer-webview-telemetry';
 
@@ -92,6 +110,7 @@ import { ObserverWebviewTelemetry } from './observer-webview-telemetry';
 let observerProcess: cp.ChildProcess | undefined;
 let observerOutputChannel: vscode.OutputChannel | undefined;
 let observerPanel: vscode.WebviewPanel | undefined;
+let observerEndpoints: ObserverEndpointRoles | undefined;
 let observerBaseUrl: string | undefined;
 let observerStartupPromise: Promise<void> | undefined;
 const observerStopOperation = new AsyncSingleFlight();
@@ -101,6 +120,7 @@ const splunkCloudExportPreferenceStore = new SplunkCloudExportPreferenceStore();
 let observerStatusBarItem: vscode.StatusBarItem | undefined;
 let observerUsesSharedServer = false;
 let observerSharedControlToken: string | undefined;
+let observerSharedHealthProofSecret: string | undefined;
 let observerWebviewRootUri: vscode.Uri | undefined;
 let observerPanelTelemetry: ObserverWebviewTelemetry | undefined;
 let activeExtensionContext: vscode.ExtensionContext | undefined;
@@ -118,7 +138,8 @@ const managedObserverHost = '127.0.0.1';
 const defaultManagedObserverPort = 3000;
 const observerKind = 'obstudio';
 const observerAPIVersion = 'v1';
-const managedObserverControlToken = crypto.randomBytes(32).toString('base64url');
+let managedObserverControlToken = '';
+let managedObserverHealthProofSecret = '';
 const sharedObserverStartupWindowMs = 15_000;
 const observerCloudRequestTimeoutMs = 15_000;
 const observerCloudRollbackTokenHeader = 'X-Obstudio-Cloud-Rollback-Token';
@@ -129,6 +150,7 @@ const observerExtensionUnloadDeadlineMs = 4_500;
 const agentIntegrationPromptDismissedPrefix = 'agentIntegrationPromptDismissed.';
 const agentSkillsBundleVersionPrefix = 'agentSkillsBundleVersion.';
 const splunkCloudExportEnabledStateKey = 'splunkCloudExportEnabled.v1';
+const freeAccountRequestTimeoutMs = 30_000;
 
 // The extension exposes a stable OTLP endpoint so instrumented apps can target a
 // predictable localhost port.
@@ -137,7 +159,12 @@ const observerOtlpGrpcPort = 4317;
 const observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHttpPort}`;
 const observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
 const splunkFreeEditionUrl = 'https://www.splunk.com/en_us/download/observability-cloud-free-edition.html';
+const splunkFreeEditionTermsUrl = 'https://www.splunk.com/en_us/legal/splunk-observability-free-edition-terms.html';
+const splunkRealmHelpUrl = 'https://help.splunk.com/en/splunk-observability-cloud/administer/org-reference-info/view-your-realm-api-endpoints-and-organization';
 const splunkIngestTokenHelpUrl = 'https://help.splunk.com/en/splunk-observability-cloud/administer/authentication-and-security/authentication-tokens/org-access-tokens';
+const splunkObservabilityDocsUrl = 'https://docs.splunk.com/Observability/get-started/welcome.html#nav-Welcome-to-Splunk-Observability-Cloud';
+const splunkObservabilityCloudDemoUrl = 'https://www.splunk.com/en_us/resources/videos/watch-splunks-observability-cloud-demo.html';
+const splunkObservabilityDataCourseUrl = 'https://education.splunk.com/elearning/getting-data-into-splunk-observability-cloud-elearning';
 
 type InternalRuntimeState = {
 	observerPort?: number;
@@ -168,12 +195,72 @@ type AgentIntegrationSpec = {
 
 type AgentIntegrationConfigState = 'different' | 'matching' | 'missing';
 
+type ObserverEndpointRoles = {
+	healthUrl: string;
+	mcpUrl: string;
+	restBaseUrl: string;
+};
+
+function observerEndpointRolesForBase(baseUrl: string): ObserverEndpointRoles {
+	const restBaseUrl = normalizeSharedObserverBaseUrl(baseUrl);
+	return {
+		restBaseUrl,
+		healthUrl: normalizeSharedObserverHealthUrl(buildObserverHealthUrl(restBaseUrl)),
+		mcpUrl: normalizeSharedObserverMCPUrl(`${restBaseUrl}/mcp`),
+	};
+}
+
+function observerEndpointRolesForDiscovery(
+	discovery: SharedObserverDiscovery,
+	restBaseUrl = discovery.baseUrl,
+): ObserverEndpointRoles {
+	const defaults = observerEndpointRolesForBase(restBaseUrl);
+	return {
+		...defaults,
+		...(discovery.healthUrl === undefined ? {} : { healthUrl: discovery.healthUrl }),
+		...(discovery.mcpUrl === undefined ? {} : { mcpUrl: discovery.mcpUrl }),
+	};
+}
+
+function sharedDiscoveryMatchesRestBase(
+	discovery: SharedObserverDiscovery,
+	restBaseUrl: string,
+): boolean {
+	const discoveredBaseUrl = normalizeSharedObserverBaseUrl(discovery.baseUrl);
+	const intendedBaseUrl = normalizeSharedObserverBaseUrl(restBaseUrl);
+	if (discoveredBaseUrl === intendedBaseUrl) {
+		return true;
+	}
+	const discovered = new URL(discoveredBaseUrl);
+	const intended = new URL(intendedBaseUrl);
+	const localAlias = (hostname: string) => hostname === 'localhost' || hostname === '127.0.0.1';
+	const effectivePort = (value: URL) => value.port || (value.protocol === 'https:' ? '443' : '80');
+	return localAlias(discovered.hostname)
+		&& localAlias(intended.hostname)
+		&& discovered.protocol === intended.protocol
+		&& effectivePort(discovered) === effectivePort(intended)
+		&& discovered.pathname === intended.pathname;
+}
+
+function setObserverEndpoints(endpoints: ObserverEndpointRoles | undefined): void {
+	observerEndpoints = endpoints;
+	observerBaseUrl = endpoints?.restBaseUrl;
+}
+
 type ObserverProbeOptions = {
 	requireStableOtlp: boolean;
+	sharedDiscovery?: SharedObserverDiscovery;
+	rejectedControlToken?: string;
 };
 
 type ObserverProbeResult =
-	| { health: ObserverHealth; status: 'ready' }
+	| {
+		health: ObserverHealth;
+		status: 'ready';
+		verifiedControlToken?: string;
+		verifiedHealthProofSecret?: string;
+		verifiedMCPUrl?: string;
+	}
 	| { error: Error; status: 'unavailable' }
 	| { reason: string; status: 'mismatch' };
 
@@ -537,12 +624,36 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		const sharedObserverUrl = getConfiguredSharedObserverUrl();
 		if (sharedObserverUrl !== undefined) {
 			observerUsesSharedServer = true;
-			observerBaseUrl = sharedObserverUrl;
 			appendObserverOutputLine(`Using configured shared observer at ${sharedObserverUrl}`);
+			const discoveredState = readSharedObserverDiscovery(
+				os.homedir(),
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
+			);
+			const configuredDiscovery = discoveredState !== undefined
+				&& sharedDiscoveryMatchesRestBase(discoveredState, sharedObserverUrl)
+				? discoveredState
+				: undefined;
+			const configuredEndpoints = configuredDiscovery === undefined
+				? observerEndpointRolesForBase(sharedObserverUrl)
+				: observerEndpointRolesForDiscovery(configuredDiscovery, sharedObserverUrl);
+			setObserverEndpoints(configuredEndpoints);
 			syncObserverUi();
-			await waitForObserverReady(sharedObserverUrl, { requireStableOtlp: false }, runId);
-			observerSharedControlToken = sharedObserverControlTokenForUrl(sharedObserverUrl);
-			const sharedPort = observerPortFromUrl(sharedObserverUrl);
+			const readyProbe = await waitForObserverReady(configuredEndpoints, {
+				requireStableOtlp: false,
+				...(configuredDiscovery === undefined ? {} : { sharedDiscovery: configuredDiscovery }),
+			}, runId);
+			if (readyProbe.verifiedControlToken !== undefined) {
+				adoptVerifiedObserverMCPEndpoint(readyProbe);
+			}
+			const environmentControl = readyProbe.verifiedControlToken === undefined
+				? await verifyEnvironmentControlToken(configuredEndpoints)
+				: undefined;
+			observerSharedControlToken = readyProbe.verifiedControlToken
+				?? environmentControl?.controlToken
+				?? '';
+			observerSharedHealthProofSecret = readyProbe.verifiedHealthProofSecret
+				?? environmentControl?.healthProofSecret;
+			const sharedPort = observerPortFromUrl(configuredEndpoints.restBaseUrl);
 			if (sharedPort === undefined) {
 				throw new Error(`Observer URL does not resolve to a usable port: ${sharedObserverUrl}`);
 			}
@@ -557,10 +668,14 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
 		);
 		if (discoveredObserver !== undefined) {
+			const discoveredEndpoints = observerEndpointRolesForDiscovery(discoveredObserver);
 			let discoveryProbe = await probeObserver(
-				discoveredObserver.baseUrl,
+				discoveredEndpoints,
 				500,
-				{ requireStableOtlp: true },
+				{
+					requireStableOtlp: true,
+					sharedDiscovery: discoveredObserver,
+				},
 			);
 			assertObserverRunCurrent(observerLifecycleState, runId);
 			while (
@@ -572,19 +687,26 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				await delay(100);
 				assertObserverRunCurrent(observerLifecycleState, runId);
 				discoveryProbe = await probeObserver(
-					discoveredObserver.baseUrl,
+					discoveredEndpoints,
 					500,
-					{ requireStableOtlp: true },
+					{
+						requireStableOtlp: true,
+						sharedDiscovery: discoveredObserver,
+					},
 				);
 				assertObserverRunCurrent(observerLifecycleState, runId);
 			}
 			let discoveryDetail: string;
 			if (discoveryProbe.status === 'ready') {
-				const discoveredPort = observerPortFromUrl(discoveredObserver.baseUrl);
+				setObserverEndpoints(discoveredEndpoints);
+				if (discoveryProbe.verifiedControlToken !== undefined) {
+					adoptVerifiedObserverMCPEndpoint(discoveryProbe);
+				}
+				const discoveredPort = observerPortFromUrl(discoveredEndpoints.restBaseUrl);
 				if (discoveredPort !== undefined) {
 					observerUsesSharedServer = true;
-					observerBaseUrl = discoveredObserver.baseUrl;
-					observerSharedControlToken = sharedObserverControlTokenForUrl(discoveredObserver.baseUrl);
+					observerSharedControlToken = discoveryProbe.verifiedControlToken ?? '';
+					observerSharedHealthProofSecret = discoveryProbe.verifiedHealthProofSecret;
 					appendObserverOutputLine(`Reusing discovered shared observer at ${discoveredObserver.baseUrl}`);
 					if (completeObserverStart(observerLifecycleState, runId, discoveredPort)) {
 						syncObserverUi();
@@ -604,13 +726,15 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 
 		const managedPort = getConfiguredManagedObserverPort();
 		const managedObserverBaseUrl = buildManagedObserverBaseUrl(managedPort);
-		const existingObserver = await probeObserver(managedObserverBaseUrl, 500, { requireStableOtlp: true });
+		const managedEndpoints = observerEndpointRolesForBase(managedObserverBaseUrl);
+		const existingObserver = await probeObserver(managedEndpoints, 500, { requireStableOtlp: true });
 		assertObserverRunCurrent(observerLifecycleState, runId);
 
 		if (existingObserver.status === 'ready') {
 			observerUsesSharedServer = true;
-			observerSharedControlToken = sharedObserverControlTokenForUrl(managedObserverBaseUrl);
-			observerBaseUrl = managedObserverBaseUrl;
+			observerSharedControlToken = '';
+			observerSharedHealthProofSecret = undefined;
+			setObserverEndpoints(managedEndpoints);
 			appendObserverOutputLine(`Reusing shared observer at ${managedObserverBaseUrl}`);
 			if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
 				syncObserverUi();
@@ -665,17 +789,26 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		logObserverLifecycle(`Run ${runId}: OTLP ports ready (HTTP ${otlpHttpPort}, gRPC ${otlpGrpcPort}).`);
 		observerUsesSharedServer = false;
 		observerSharedControlToken = undefined;
-		observerBaseUrl = managedObserverBaseUrl;
+		observerSharedHealthProofSecret = undefined;
+		managedObserverControlToken = '';
+		managedObserverHealthProofSecret = '';
+		setObserverEndpoints(managedEndpoints);
 
 		appendObserverOutputLine(`Starting ${backend.label} on ${managedObserverBaseUrl}`);
 		appendObserverOutputLine(`OTLP/HTTP receiver listening on ${observerOtlpHttpEndpoint}`);
 		appendObserverOutputLine(`OTLP/gRPC receiver listening on ${observerOtlpGrpcEndpoint}`);
+		const managedObserverEnvironment = { ...process.env };
+		const managedLaunchControlToken = crypto.randomBytes(32).toString('base64url');
+		const managedLaunchHealthProofSecret = crypto.randomBytes(32).toString('base64url');
+		delete managedObserverEnvironment.OBSTUDIO_CONTROL_TOKEN;
+		delete managedObserverEnvironment.OBSTUDIO_HEALTH_PROOF_SECRET;
+		delete managedObserverEnvironment.OBSTUDIO_PUBLIC_MCP_URL;
 
 		try {
 			startedProcess = cp.spawn(backend.command, backend.args, {
 				cwd: backend.cwd,
 				env: {
-					...process.env,
+					...managedObserverEnvironment,
 					...backend.env,
 					HOST: managedObserverHost,
 					OTLP_HOST: managedObserverHost,
@@ -683,7 +816,8 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 					OTLP_HTTP_PORT: String(otlpHttpPort),
 					OTLP_GRPC_PORT: String(otlpGrpcPort),
 					PORT: String(observerPort),
-					OBSTUDIO_CONTROL_TOKEN: managedObserverControlToken,
+					OBSTUDIO_CONTROL_TOKEN: managedLaunchControlToken,
+					OBSTUDIO_HEALTH_PROOF_SECRET: managedLaunchHealthProofSecret,
 					OBSTUDIO_HIDE_CLOUD_BROWSER_LAUNCH_TOKEN: 'true',
 					// Pass the workspace root so the preview resolver locates
 					// .observe/dashboards.preview.json relative to the open
@@ -724,9 +858,12 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				observerProcess = undefined;
 			}
 			if (finishObserverRun(observerLifecycleState, runId)) {
-				observerBaseUrl = undefined;
+				setObserverEndpoints(undefined);
 				observerUsesSharedServer = false;
 				observerSharedControlToken = undefined;
+				observerSharedHealthProofSecret = undefined;
+				managedObserverControlToken = '';
+				managedObserverHealthProofSecret = '';
 				syncObserverUi();
 			}
 		});
@@ -744,15 +881,41 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				observerProcess = undefined;
 			}
 			if (failObserverStart(observerLifecycleState, runId, startupMessage, startupFailure.hint)) {
-				observerBaseUrl = undefined;
+				setObserverEndpoints(undefined);
 				observerUsesSharedServer = false;
 				observerSharedControlToken = undefined;
+				observerSharedHealthProofSecret = undefined;
+				managedObserverControlToken = '';
+				managedObserverHealthProofSecret = '';
 				syncObserverUi();
 				void vscode.window.showErrorMessage(`Splunk Observability Studio failed to start observer: ${startupMessage}`);
 			}
 		});
 
-		await waitForObserverReady(managedObserverBaseUrl, { requireStableOtlp: true }, runId);
+		await waitForObserverReady(managedEndpoints, { requireStableOtlp: true }, runId);
+		const managedLaunchDiscovery: SharedObserverDiscovery = {
+			baseUrl: managedEndpoints.restBaseUrl,
+			controlToken: managedLaunchControlToken,
+			healthProofSecret: managedLaunchHealthProofSecret,
+			healthUrl: managedEndpoints.healthUrl,
+			mcpUrl: managedEndpoints.mcpUrl,
+		};
+		const managedProof = await probeObserver(managedEndpoints, 500, {
+			requireStableOtlp: true,
+			sharedDiscovery: managedLaunchDiscovery,
+		});
+		managedObserverControlToken = managedProof.status === 'ready'
+			? managedProof.verifiedControlToken ?? ''
+			: '';
+		managedObserverHealthProofSecret = managedProof.status === 'ready'
+			? managedProof.verifiedHealthProofSecret ?? ''
+			: '';
+		if (managedProof.status === 'ready' && managedProof.verifiedControlToken !== undefined) {
+			adoptVerifiedObserverMCPEndpoint(managedProof);
+		}
+		if (managedObserverControlToken === '') {
+			appendObserverOutputLine('Observer launch control could not be authenticated; protected cloud actions are disabled.');
+		}
 		logObserverLifecycle(`Run ${runId}: observer is accepting connections at ${managedObserverBaseUrl}.`);
 		const startupCompleted = await observerCloudLifecycleOperations.run(async () => {
 			if (!completeObserverStart(observerLifecycleState, runId, observerPort)) {
@@ -793,9 +956,12 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			? (error as { startupHint: string }).startupHint
 			: getObserverStartupHint('generic');
 		if (failObserverStart(observerLifecycleState, runId, startupMessage, startupHint)) {
-			observerBaseUrl = undefined;
+			setObserverEndpoints(undefined);
 			observerUsesSharedServer = false;
 			observerSharedControlToken = undefined;
+			observerSharedHealthProofSecret = undefined;
+			managedObserverControlToken = '';
+			managedObserverHealthProofSecret = '';
 			logObserverLifecycle(`Run ${runId}: startup failed: ${startupMessage}`);
 			syncObserverUi();
 		}
@@ -832,9 +998,12 @@ async function stopObserver(context?: vscode.ExtensionContext): Promise<void> {
 		stopObserverRun(observerLifecycleState);
 		observerProcess = undefined;
 		observerStartupPromise = undefined;
-		observerBaseUrl = undefined;
+		setObserverEndpoints(undefined);
 		observerUsesSharedServer = false;
 		observerSharedControlToken = undefined;
+		observerSharedHealthProofSecret = undefined;
+		managedObserverControlToken = '';
+		managedObserverHealthProofSecret = '';
 		syncObserverUi();
 
 		if (proc === undefined) {
@@ -897,9 +1066,12 @@ function forceDisposeObserverForExtensionUnload(
 	observerProcess = undefined;
 	observerStartupPromise = undefined;
 	observerStopOperation.clear();
-	observerBaseUrl = undefined;
+	setObserverEndpoints(undefined);
 	observerUsesSharedServer = false;
 	observerSharedControlToken = undefined;
+	observerSharedHealthProofSecret = undefined;
+	managedObserverControlToken = '';
+	managedObserverHealthProofSecret = '';
 	syncObserverUi();
 	terminateObserverProcess(proc, signal);
 }
@@ -1036,9 +1208,23 @@ function refreshObserverPanel(): void {
 }
 
 type CloudActionResult = {
+	freeAccount?: unknown;
+	realm?: string;
+	region?: string;
 	status?: unknown;
 	warning?: string;
 };
+
+class ObserverCloudRequestError extends Error {
+	constructor(
+		message: string,
+		readonly code?: string,
+		readonly retrySafe?: boolean,
+	) {
+		super(message);
+		this.name = 'ObserverCloudRequestError';
+	}
+}
 
 async function handleObserverWebviewMessage(
 	panel: vscode.WebviewPanel,
@@ -1064,6 +1250,7 @@ async function handleObserverWebviewMessage(
 		return;
 	}
 
+	const freeAccountSignup = isFreeAccountSignupRequest(message.request);
 	const controller = new AbortController();
 	let cancelled = false;
 	observerHostRequestCancellations.set(message.requestId, () => {
@@ -1077,22 +1264,43 @@ async function handleObserverWebviewMessage(
 	});
 	try {
 		const result = await performObserverHostRequest(context, message.request, controller.signal);
+		let delivered = false;
 		if (!cancelled && panel === observerPanel) {
-			await postObserverHostResponse(panel, message.requestId, true, result);
+			delivered = await postObserverHostResponse(panel, message.requestId, true, result).catch(() => false);
+		}
+		if (!delivered && !observerDeactivationStarted && freeAccountSignup) {
+			void vscode.window.showInformationMessage(
+				'Thank you for registering. Your free edition account is on its way. ' +
+				'You will receive an email within 10 minutes; check your spam folder if it does not arrive.',
+			);
 		}
 	} catch (error) {
+		let delivered = false;
 		if (!cancelled && panel === observerPanel) {
-			await postObserverHostResponse(
+			delivered = await postObserverHostResponse(
 				panel,
 				message.requestId,
 				false,
 				undefined,
 				getErrorMessage(error),
-			);
+				cloudBridgeErrorMetadata(error),
+			).catch(() => false);
+		}
+		if (!delivered && !observerDeactivationStarted && freeAccountSignup) {
+			const metadata = cloudBridgeErrorMetadata(error);
+			if (metadata.code === 'outcome_unknown' || metadata.retrySafe === false) {
+				void vscode.window.showWarningMessage(getErrorMessage(error));
+			} else {
+				void vscode.window.showErrorMessage(`Free Edition signup failed: ${getErrorMessage(error)}`);
+			}
 		}
 	} finally {
 		observerHostRequestCancellations.delete(message.requestId);
 	}
+}
+
+function isFreeAccountSignupRequest(request: ObserverHostRequest): boolean {
+	return request.kind === 'cloud' && request.action === 'create-free-account';
 }
 
 async function performObserverHostRequest(
@@ -1112,14 +1320,16 @@ async function postObserverHostResponse(
 	ok: boolean,
 	result?: unknown,
 	error?: string,
-): Promise<void> {
-	await panel.webview.postMessage({
+	errorMetadata: { code?: string; retrySafe?: boolean } = {},
+): Promise<boolean> {
+	return panel.webview.postMessage({
+		...errorMetadata,
 		error,
 		ok,
 		requestId,
 		result,
 		type: 'obstudio.host.response',
-	});
+	} satisfies ObserverHostResponseEnvelope);
 }
 
 async function performCloudBridgeAction(
@@ -1154,9 +1364,80 @@ async function performCloudBridgeActionExclusive(
 		case 'open-free-edition':
 			await openCloudExternalUrl(splunkFreeEditionUrl);
 			return {};
+		case 'open-free-edition-terms':
+			await openCloudExternalUrl(splunkFreeEditionTermsUrl);
+			return {};
 		case 'open-ingest-token-help':
 			await openCloudExternalUrl(splunkIngestTokenHelpUrl);
 			return {};
+		case 'open-realm-help':
+			await openCloudExternalUrl(splunkRealmHelpUrl);
+			return {};
+		case 'open-observability-cloud-demo':
+			await openCloudExternalUrl(splunkObservabilityCloudDemoUrl);
+			return {};
+		case 'open-observability-data-course':
+			await openCloudExternalUrl(splunkObservabilityDataCourseUrl);
+			return {};
+		case 'open-observability-docs':
+			await openCloudExternalUrl(splunkObservabilityDocsUrl);
+			return {};
+		case 'detect-free-account-region':
+			return {
+				region: freeAccountRegionFromResponse(
+					await requestObserverFreeAccountJSON(
+						'/api/splunk/free-account/region',
+						undefined,
+						observerCloudRequestTimeoutMs,
+					),
+				),
+			};
+		case 'create-free-account': {
+			const payload = request.payload;
+			if (
+				payload === undefined
+				|| typeof payload.firstName !== 'string'
+				|| typeof payload.lastName !== 'string'
+				|| typeof payload.email !== 'string'
+				|| typeof payload.region !== 'string'
+				|| !isSupportedFreeAccountRegion(payload.region)
+				|| payload.termsAccepted !== true
+			) {
+				throw new ObserverCloudRequestError(
+					'Free Edition signup details are missing.',
+					'validation',
+					true,
+				);
+			}
+			const freeAccount = parseFreeAccountSubmissionResult(
+				await requestObserverFreeAccountJSON(
+					'/api/splunk/free-account',
+					{
+						email: payload.email,
+						firstName: payload.firstName,
+						lastName: payload.lastName,
+						region: payload.region,
+						termsAccepted: true,
+					},
+					freeAccountRequestTimeoutMs,
+				),
+			);
+			if (freeAccount === undefined) {
+				throw new ObserverCloudRequestError(
+					'The signup outcome is unknown. Check your email before trying again.',
+					'outcome_unknown',
+					false,
+				);
+			}
+			if (!freeAccount.intakeAcknowledged) {
+				throw new ObserverCloudRequestError(
+					'Splunk did not acknowledge the Free Edition signup intake.',
+					'signup_not_acknowledged',
+					true,
+				);
+			}
+			return { freeAccount };
+		}
 		case 'open-skill-docs': {
 			const url = skillDocsUrl(request.payload?.skill);
 			if (url === undefined) {
@@ -1174,6 +1455,17 @@ async function performCloudBridgeActionExclusive(
 			}
 			await openCloudExternalUrl(url);
 			return {};
+		}
+		case 'resolve-realm': {
+			const destination = request.payload?.destination?.trim() ?? '';
+			if (destination === '' || Buffer.byteLength(destination, 'utf8') > maxCloudDestinationBytes) {
+				throw new Error('Enter a valid Splunk Observability Cloud URL.');
+			}
+			return {
+				realm: splunkRealmFromResponse(
+					await postObserverCloudJSON('/api/splunk/export/realm', { destination }),
+				),
+			};
 		}
 		case 'connect': {
 			const connection = cloudConnectionFromRequest(request);
@@ -1255,7 +1547,7 @@ function cloudConnectionFromRequest(
 	const realm = request.payload?.realm?.trim().toLowerCase() ?? '';
 	const parsed = parseStoredSplunkCloudConnection(JSON.stringify({ accessToken, realm }));
 	if (parsed === undefined) {
-		throw new Error('Enter a valid Splunk Observability Cloud region and access token.');
+		throw new Error('Enter a valid Splunk Observability Cloud realm and access token.');
 	}
 	return parsed;
 }
@@ -1526,7 +1818,7 @@ async function postObserverControlledCloudJSON(
 
 async function requestObserverControlledCloudJSON(
 	pathname: string,
-	body: Record<string, unknown>,
+	body: Record<string, unknown> | undefined,
 	timeoutMs: number,
 ): Promise<unknown> {
 	if (observerBaseUrl === undefined || observerLifecycleState.status !== 'running') {
@@ -1540,8 +1832,12 @@ async function requestObserverControlledCloudJSON(
 	return requestObserverCloudMutationWithTokenRefresh({
 		currentToken: activeObserverControlToken,
 		refreshToken: sharedObserverUrl !== undefined
-			? (usedToken) => {
-				const refreshedToken = sharedObserverControlTokenForUrl(sharedObserverUrl, usedToken);
+			? async (usedToken) => {
+				const refreshedToken = await refreshSharedObserverControlToken(
+					sharedObserverUrl,
+					usedToken,
+					getConfiguredSharedObserverUrl() !== undefined,
+				);
 				if (refreshedToken !== undefined) {
 					observerSharedControlToken = refreshedToken;
 				}
@@ -1549,12 +1845,66 @@ async function requestObserverControlledCloudJSON(
 			}
 			: undefined,
 		send: (controlToken) => requestObserverCloudJSON(
-			url,
+			buildObserverApiUrl(pathname),
 			body,
 			controlToken,
 			timeoutMs,
 		),
 	});
+}
+
+async function requestObserverFreeAccountJSON(
+	pathname: string,
+	body: Record<string, unknown> | undefined,
+	timeoutMs: number,
+): Promise<unknown> {
+	if (observerBaseUrl === undefined || observerLifecycleState.status !== 'running') {
+		throw new ObserverCloudRequestError(
+			'Observer is not running.',
+			'observer_unavailable',
+			true,
+		);
+	}
+	const url = buildObserverApiUrl(pathname);
+	if (url.protocol === 'http:' && !isLocalObserverControlHost(url.hostname)) {
+		throw new ObserverCloudRequestError(
+			'Free Edition signup requires HTTPS for a non-local Observer.',
+			'insecure_observer',
+			true,
+		);
+	}
+	if (activeObserverControlToken() === '') {
+		throw new ObserverCloudRequestError(
+			'Free Edition signup requires OBSTUDIO_CONTROL_TOKEN and OBSTUDIO_HEALTH_PROOF_SECRET when using a shared Observer.',
+			'control_token_missing',
+			true,
+		);
+	}
+
+	try {
+		return await requestObserverControlledCloudJSON(pathname, body, timeoutMs);
+	} catch (error) {
+		if (error instanceof ObserverCloudRequestError) {
+			throw error;
+		}
+		if (error instanceof ObserverCloudResponseError) {
+			if (body === undefined || !freeAccountSubmissionFailureIsOutcomeUnknown(error)) {
+				throw error;
+			}
+			throw new ObserverCloudRequestError(
+				'The signup outcome is unknown. Check your email before trying again.',
+				'outcome_unknown',
+				false,
+			);
+		}
+		throw new ObserverCloudRequestError(
+			body === undefined
+				? getErrorMessage(error)
+				: 'The signup outcome is unknown. Check your inbox before submitting again.',
+			body === undefined ? 'region_detection_failed' : 'outcome_unknown',
+			body === undefined,
+		);
+	}
 }
 
 async function postObserverCloudJSON(
@@ -1578,16 +1928,20 @@ async function postObserverCloudJSON(
 	return requestObserverCloudMutationWithTokenRefresh({
 		currentToken: activeObserverControlToken,
 		refreshToken: sharedObserverUrl !== undefined
-			? (usedToken) => {
-				const refreshedToken = sharedObserverControlTokenForUrl(sharedObserverUrl, usedToken);
+			? async (usedToken) => {
+				const refreshedToken = await refreshSharedObserverControlToken(
+					sharedObserverUrl,
+					usedToken,
+					getConfiguredSharedObserverUrl() !== undefined,
+				);
 				if (refreshedToken !== undefined) {
 					observerSharedControlToken = refreshedToken;
 				}
 				return refreshedToken;
 			}
-			: undefined,
+				: undefined,
 		send: (controlToken) => requestObserverCloudJSON(
-			url,
+			buildObserverApiUrl(pathname),
 			body,
 			controlToken,
 			observerCloudRequestTimeoutMs,
@@ -1635,51 +1989,68 @@ async function requestObserverCloudJSON(
 			headers,
 			method: payload === undefined ? 'GET' : 'POST',
 		}, (response) => {
-			const chunks: Buffer[] = [];
-			let size = 0;
-			response.on('data', (chunk: Buffer | string) => {
-				const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-				size += buffer.length;
-				if (size > 1024 * 1024) {
-					request.destroy(new Error('Observer cloud response exceeded 1 MiB.'));
-					return;
-				}
-				chunks.push(buffer);
-			});
-			response.on('end', () => {
-				const responseBody = Buffer.concat(chunks).toString('utf8');
-				const statusCode = response.statusCode ?? 0;
+			void collectObserverHostHTTPResponse(response, request, 1024 * 1024).then((result) => {
 				try {
-					const parsedBody = parseObserverCloudResponseBody(statusCode, responseBody);
-					finish(() => resolve({ body: parsedBody, statusCode }));
+					const parsedBody = parseObserverCloudResponseBody(result.status, result.body);
+					finish(() => resolve({ body: parsedBody, statusCode: result.status }));
 				} catch (error) {
 					finish(() => reject(error));
 				}
-			});
+			}, (error: Error) => finish(() => reject(error)));
 		});
 		timeout = setTimeout(() => {
-			request.destroy(new Error('Observer cloud request timed out.'));
+			const error = new Error('Observer cloud request timed out.');
+			request.destroy(error);
+			finish(() => reject(error));
 		}, timeoutMs);
-		request.on('error', (error) => finish(() => reject(error)));
+		request.once('error', (error) => finish(() => reject(error)));
 		request.end(payload);
 	});
+}
+
+function freeAccountRegionFromResponse(value: unknown): string {
+	const region = typeof value === 'object' && value !== null
+		? (value as Record<string, unknown>).region
+		: undefined;
+	if (typeof region !== 'string' || !isSupportedFreeAccountRegion(region)) {
+		throw new ObserverCloudRequestError(
+			'Observer returned an invalid Free Edition region.',
+			'invalid_response',
+			true,
+		);
+	}
+	return region;
+}
+
+function splunkRealmFromResponse(value: unknown): string {
+	const realm = typeof value === 'object' && value !== null
+		? (value as Record<string, unknown>).realm
+		: undefined;
+	if (typeof realm !== 'string' || !/^[a-z]{2,12}[0-9]+$/.test(realm)) {
+		throw new Error('Observer returned an invalid Splunk Observability Cloud realm.');
+	}
+	return realm;
+}
+
+function cloudBridgeErrorMetadata(error: unknown): { code?: string; retrySafe?: boolean } {
+	if (error instanceof ObserverCloudRequestError || error instanceof ObserverCloudResponseError) {
+		return { code: error.code, retrySafe: error.retrySafe };
+	}
+	return {};
 }
 
 function activeObserverControlToken(): string {
 	if (!observerUsesSharedServer) {
 		return managedObserverControlToken;
 	}
-	if (observerSharedControlToken !== undefined) {
-		return observerSharedControlToken;
-	}
-	if (observerBaseUrl !== undefined) {
-		const currentToken = sharedObserverControlTokenForUrl(observerBaseUrl);
-		if (currentToken !== undefined) {
-			observerSharedControlToken = currentToken;
-			return currentToken;
-		}
-	}
 	return observerSharedControlToken ?? '';
+}
+
+function activeObserverHealthProofSecret(): string {
+	if (!observerUsesSharedServer) {
+		return managedObserverHealthProofSecret;
+	}
+	return observerSharedHealthProofSecret ?? '';
 }
 
 function sharedObserverControlTokenFromEnv(): string | undefined {
@@ -1687,17 +2058,98 @@ function sharedObserverControlTokenFromEnv(): string | undefined {
 	return token === '' || token === undefined ? undefined : token;
 }
 
-function sharedObserverControlTokenForUrl(
-	observerUrl: string,
+function sharedObserverHealthProofSecretFromEnv(): string | undefined {
+	const secret = process.env.OBSTUDIO_HEALTH_PROOF_SECRET?.trim();
+	return secret === '' || secret === undefined ? undefined : secret;
+}
+
+async function verifyEnvironmentControlToken(
+	endpoints: ObserverEndpointRoles,
 	rejectedToken?: string,
-): string | undefined {
-	return resolveSharedObserverControlToken(
-		observerUrl,
+): Promise<{ controlToken: string; healthProofSecret: string } | undefined> {
+	const controlToken = sharedObserverControlTokenFromEnv();
+	const healthProofSecret = sharedObserverHealthProofSecretFromEnv();
+	if (controlToken === undefined || healthProofSecret === undefined || controlToken === rejectedToken) {
+		return undefined;
+	}
+	const probe = await probeObserver(endpoints, 500, {
+		requireStableOtlp: false,
+		rejectedControlToken: rejectedToken,
+		sharedDiscovery: {
+			baseUrl: endpoints.restBaseUrl,
+			controlToken,
+			healthProofSecret,
+			healthUrl: endpoints.healthUrl,
+			mcpUrl: endpoints.mcpUrl,
+		},
+	});
+	if (probe.status !== 'ready' || probe.verifiedControlToken === undefined) {
+		return undefined;
+	}
+	adoptVerifiedObserverMCPEndpoint(probe);
+	return {
+		controlToken: probe.verifiedControlToken,
+		healthProofSecret,
+	};
+}
+
+async function refreshSharedObserverControlToken(
+	observerUrl: string,
+	rejectedToken: string,
+	allowEnvironmentToken: boolean,
+): Promise<string | undefined> {
+	const currentEndpoints = observerEndpoints !== undefined
+		&& observerEndpoints.restBaseUrl === normalizeObserverBaseUrl(observerUrl)
+		? observerEndpoints
+		: observerEndpointRolesForBase(observerUrl);
+	const discovery = readSharedObserverDiscovery(
 		os.homedir(),
-		sharedObserverControlTokenFromEnv(),
 		process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
-		rejectedToken,
 	);
+	if (
+		discovery?.controlToken !== undefined
+		&& discovery.controlToken !== rejectedToken
+		&& sharedDiscoveryMatchesRestBase(discovery, currentEndpoints.restBaseUrl)
+	) {
+		const refreshedEndpoints = observerEndpointRolesForDiscovery(
+			discovery,
+			currentEndpoints.restBaseUrl,
+		);
+		const probe = await probeObserver(refreshedEndpoints, 500, {
+			requireStableOtlp: false,
+			rejectedControlToken: rejectedToken,
+			sharedDiscovery: discovery,
+		});
+		if (probe.status === 'ready' && probe.verifiedControlToken !== undefined) {
+			adoptVerifiedObserverMCPEndpoint(probe);
+			observerSharedHealthProofSecret = probe.verifiedHealthProofSecret;
+			return probe.verifiedControlToken;
+		}
+	}
+	if (!allowEnvironmentToken) {
+		return undefined;
+	}
+	const environmentControl = await verifyEnvironmentControlToken(currentEndpoints, rejectedToken);
+	if (environmentControl === undefined) {
+		return undefined;
+	}
+	observerSharedHealthProofSecret = environmentControl.healthProofSecret;
+	return environmentControl.controlToken;
+}
+
+function adoptVerifiedObserverMCPEndpoint(
+	probe: Extract<ObserverProbeResult, { status: 'ready' }>,
+): void {
+	if (
+		probe.verifiedControlToken !== undefined
+		&& probe.verifiedMCPUrl !== undefined
+		&& observerEndpoints !== undefined
+	) {
+		setObserverEndpoints({
+			...observerEndpoints,
+			mcpUrl: probe.verifiedMCPUrl,
+		});
+	}
 }
 
 function buildObserverApiUrl(pathname: string): URL {
@@ -1759,27 +2211,27 @@ async function identifyPortOwner(port: number): Promise<string | undefined> {
 }
 
 async function waitForObserverReady(
-	baseUrl: string,
+	endpoints: ObserverEndpointRoles,
 	options: ObserverProbeOptions,
 	runId: number,
-): Promise<void> {
+): Promise<Extract<ObserverProbeResult, { status: 'ready' }>> {
 	const startupDeadline = Date.now() + 15_000;
 	let lastError: Error | undefined;
 
 	while (Date.now() < startupDeadline) {
 		assertObserverRunCurrent(observerLifecycleState, runId);
 
-		const probe = await probeObserver(baseUrl, 500, options);
+		const probe = await probeObserver(endpoints, 500, options);
 		assertObserverRunCurrent(observerLifecycleState, runId);
 
 		switch (probe.status) {
 			case 'ready':
-				return;
+				return probe;
 			case 'mismatch': {
-				appendObserverOutputLine(`Observer health probe mismatch at ${baseUrl}: ${probe.reason}`);
-				logObserverLifecycle(`Run ${runId}: observer health probe mismatch at ${baseUrl}: ${probe.reason}`);
+				appendObserverOutputLine(`Observer health probe mismatch at ${endpoints.healthUrl}: ${probe.reason}`);
+				logObserverLifecycle(`Run ${runId}: observer health probe mismatch at ${endpoints.healthUrl}: ${probe.reason}`);
 				const mismatchContext = observerUsesSharedServer ? 'shared-reuse' : 'startup-reuse';
-				const wrappedError = new Error(formatObserverProbeMismatchMessage(baseUrl, mismatchContext));
+				const wrappedError = new Error(formatObserverProbeMismatchMessage(endpoints.restBaseUrl, mismatchContext));
 				Object.assign(wrappedError, { startupHint: getObserverProbeMismatchHint(mismatchContext) });
 				throw wrappedError;
 			}
@@ -1794,28 +2246,35 @@ async function waitForObserverReady(
 
 	if (lastError !== undefined) {
 		const rawProbeDetail = getErrorMessage(lastError);
-		appendObserverOutputLine(`Observer health probe unavailable at ${baseUrl}: ${rawProbeDetail}`);
-		logObserverLifecycle(`Run ${runId}: observer readiness failed for ${baseUrl}: ${rawProbeDetail}`);
+		appendObserverOutputLine(`Observer health probe unavailable at ${endpoints.healthUrl}: ${rawProbeDetail}`);
+		logObserverLifecycle(`Run ${runId}: observer readiness failed for ${endpoints.healthUrl}: ${rawProbeDetail}`);
 		const unavailableContext = observerUsesSharedServer ? 'shared-reuse' : 'startup';
-		const wrappedError = new Error(formatObserverProbeUnavailableMessage(baseUrl, unavailableContext));
+		const wrappedError = new Error(formatObserverProbeUnavailableMessage(endpoints.restBaseUrl, unavailableContext));
 		Object.assign(wrappedError, { startupHint: getObserverProbeUnavailableHint(unavailableContext) });
 		throw wrappedError;
 	}
 	const unavailableContext = observerUsesSharedServer ? 'shared-reuse' : 'startup';
-	logObserverLifecycle(`Run ${runId}: observer readiness ended without a probe result at ${baseUrl}.`);
-	const wrappedError = new Error(formatObserverProbeUnavailableMessage(baseUrl, unavailableContext));
+	logObserverLifecycle(`Run ${runId}: observer readiness ended without a probe result at ${endpoints.healthUrl}.`);
+	const wrappedError = new Error(formatObserverProbeUnavailableMessage(endpoints.restBaseUrl, unavailableContext));
 	Object.assign(wrappedError, { startupHint: getObserverProbeUnavailableHint(unavailableContext) });
 	throw wrappedError;
 }
 
 async function probeObserver(
-	baseUrl: string,
+	endpoints: ObserverEndpointRoles,
 	timeoutMs: number,
 	options: ObserverProbeOptions,
 ): Promise<ObserverProbeResult> {
 	return new Promise((resolve) => {
-		const observerUrl = normalizeObserverBaseUrl(baseUrl);
-		const target = new URL(buildObserverHealthUrl(observerUrl));
+		const observerUrl = endpoints.restBaseUrl;
+		const proofChallenge = options.sharedDiscovery?.controlToken !== undefined
+			&& options.sharedDiscovery.healthProofSecret !== undefined
+			? createObserverHealthProofChallenge()
+			: undefined;
+		const target = new URL(endpoints.healthUrl);
+		if (proofChallenge !== undefined) {
+			target.searchParams.set(observerHealthProofChallengeQuery, proofChallenge);
+		}
 		const client = target.protocol === 'https:' ? https : http;
 		let settled = false;
 
@@ -1859,7 +2318,38 @@ async function probeObserver(
 					return;
 				}
 
-				finish(() => resolve({ status: 'ready', health: parsed as ObserverHealth }));
+				const health = parsed as ObserverHealth;
+				const verifiedControlToken = proofChallenge === undefined
+					|| options.sharedDiscovery === undefined
+					? undefined
+					: verifySharedObserverControlToken(
+						observerUrl,
+						options.sharedDiscovery,
+						proofChallenge,
+						health,
+						options.rejectedControlToken,
+						endpoints.mcpUrl,
+					);
+				if (proofChallenge !== undefined && verifiedControlToken === undefined) {
+					finish(() => resolve({
+						status: 'mismatch',
+						reason: 'Observer control proof could not be verified',
+					}));
+					return;
+				}
+				const verifiedMCPUrl = verifiedControlToken === undefined
+					? undefined
+					: verifiedSharedObserverMCPUrl(observerUrl, health, endpoints.mcpUrl);
+				const verifiedHealthProofSecret = verifiedControlToken === undefined
+					? undefined
+					: options.sharedDiscovery?.healthProofSecret?.trim();
+				finish(() => resolve({
+					status: 'ready',
+					health,
+					...(verifiedControlToken === undefined ? {} : { verifiedControlToken }),
+					...(verifiedHealthProofSecret === undefined ? {} : { verifiedHealthProofSecret }),
+					...(verifiedMCPUrl === undefined ? {} : { verifiedMCPUrl }),
+				}));
 			});
 		});
 
@@ -2041,6 +2531,7 @@ function getAgentIntegrationConfigState(spec: AgentIntegrationSpec, mcpUrl: stri
 				mcpServers?: Record<string, {
 					args?: unknown;
 					command?: unknown;
+					headers?: Record<string, unknown>;
 					type?: string;
 					url?: string;
 				}>;
@@ -2055,7 +2546,13 @@ function getAgentIntegrationConfigState(spec: AgentIntegrationSpec, mcpUrl: stri
 			const hasIncompatibleRemoteFields = spec.jsonRemoteIncompatibleFields?.some(
 				(field) => server[field] !== undefined,
 			) ?? false;
-			return remoteTypeMatches && server.url === mcpUrl && !hasIncompatibleRemoteFields
+			return remoteTypeMatches
+				&& server.url === mcpUrl
+				&& !hasIncompatibleRemoteFields
+				&& authorizationHeadersMatchControlToken(
+					server.headers,
+					activeObserverControlToken(),
+				)
 				? 'matching'
 				: 'different';
 		}
@@ -2065,31 +2562,16 @@ function getAgentIntegrationConfigState(spec: AgentIntegrationSpec, mcpUrl: stri
 		if (section === undefined) {
 			return 'missing';
 		}
-		return section.includes(`url = "${mcpUrl}"`) ? 'matching' : 'different';
+		return getCodexObstudioUrl(section) === mcpUrl
+			&& codexObstudioAuthorizationMatchesControlToken(
+				section,
+				activeObserverControlToken(),
+			)
+			? 'matching'
+			: 'different';
 	} catch {
 		return 'different';
 	}
-}
-
-function getCodexObstudioSection(content: string): string | undefined {
-	const lines = content.split(/\r?\n/);
-	let section: string[] | undefined;
-	for (const line of lines) {
-		const trimmed = line.trim();
-		if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-			if (trimmed === '[mcp_servers.obstudio]') {
-				section = [line];
-				continue;
-			}
-			if (section !== undefined) {
-				break;
-			}
-		}
-		if (section !== undefined) {
-			section.push(line);
-		}
-	}
-	return section?.join('\n');
 }
 
 function hasInstalledAgentSkills(spec: AgentIntegrationSpec): boolean {
@@ -2144,11 +2626,11 @@ async function configureDetectedAgentIntegrations(
 	forceAll = false,
 ): Promise<string[]> {
 	await ensureObserverRunning(context);
-	if (observerBaseUrl === undefined) {
-		throw new Error('Observer URL is not available.');
+	if (observerEndpoints === undefined) {
+		throw new Error('Observer MCP URL is not available.');
 	}
 
-	const mcpUrl = `${normalizeObserverBaseUrl(observerBaseUrl)}/mcp`;
+	const mcpUrl = observerEndpoints.mcpUrl;
 	const configured: string[] = [];
 	for (const spec of specs) {
 		if (!forceAll && !needsAgentIntegrationUpdate(spec, mcpUrl, context)) {
@@ -2179,11 +2661,11 @@ async function maybeOfferDetectedAgentIntegrations(context: vscode.ExtensionCont
 	}
 
 	const promptPromise = (async () => {
-		if (observerBaseUrl === undefined) {
+		if (observerEndpoints === undefined) {
 			return;
 		}
 
-		const mcpUrl = `${normalizeObserverBaseUrl(observerBaseUrl)}/mcp`;
+		const mcpUrl = observerEndpoints.mcpUrl;
 		const shownSpecs = getDetectedAgentIntegrations().filter((spec) => {
 			const dismissed = context.globalState.get<boolean>(integrationPromptDismissalKey(spec.target)) === true;
 			if (!dismissed) {
@@ -2251,17 +2733,21 @@ async function configureAgentMCP(
 
 	try {
 		await ensureObserverRunning(context);
-		if (observerBaseUrl === undefined) {
-			throw new Error('Observer URL is not available.');
+		if (observerEndpoints === undefined) {
+			throw new Error('Observer MCP URL is not available.');
 		}
 
-		const mcpUrl = `${normalizeObserverBaseUrl(observerBaseUrl)}/mcp`;
+		const mcpUrl = observerEndpoints.mcpUrl;
 		const backend = resolveBackend(context.extensionPath);
 		observerOutputChannel.appendLine(`Enabling ${label} integration for ${mcpUrl}`);
 		const installOutput = await execFile(
 			backend.command,
 			['install', '--target', target, '--shared-url', mcpUrl],
 			backend.cwd,
+			{
+				OBSTUDIO_CONTROL_TOKEN: activeObserverControlToken(),
+				OBSTUDIO_HEALTH_PROOF_SECRET: activeObserverHealthProofSecret(),
+			},
 		);
 		if (installOutput.length > 0) {
 			observerOutputChannel.append(installOutput);
@@ -2288,9 +2774,18 @@ async function configureAgentMCP(
 	}
 }
 
-function execFile(command: string, args: string[], cwd: string): Promise<string> {
+function execFile(
+	command: string,
+	args: string[],
+	cwd: string,
+	envOverrides: NodeJS.ProcessEnv = {},
+): Promise<string> {
 	return new Promise((resolve, reject) => {
-		cp.execFile(command, args, { cwd, encoding: 'utf8', env: { ...process.env } }, (error, stdout) => {
+		cp.execFile(command, args, {
+			cwd,
+			encoding: 'utf8',
+			env: { ...process.env, ...envOverrides },
+		}, (error, stdout) => {
 			if (error) {
 				reject(error);
 				return;

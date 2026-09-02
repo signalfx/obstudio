@@ -5,10 +5,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from jsonschema.exceptions import ValidationError as JSONSchemaValidationError
 
 from .backends import AgentBackend, create_backend
 from .config import CodexEvalSettings, load_settings
-from .eval_files import eval_file_layout, is_eval_file
+from .eval_files import eval_file_layout, is_eval_file, iter_eval_files
 from .definitions import (
     CaseResult,
     EvalCase,
@@ -22,7 +23,7 @@ from .definitions import (
     SanityEvalDefinition,
     ValidationResult,
 )
-from .report import write_session_results
+from .report import source_input_digests, write_session_results
 from .runner import new_run_id, new_run_root, run_case
 from .schema_resources import schema_validator
 
@@ -111,6 +112,14 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
 
 def write_grouped_results(runs: list[dict[str, Any]]) -> None:
+    for run in runs:
+        if run.get("mode") != "validation" or not run.get("results"):
+            continue
+        run.setdefault("metadata", {})["validation_scope"] = validation_selection_scope(
+            Path(run["repo_root"]),
+            str(run["skill"]),
+            run["results"],
+        )
     write_session_results(runs)
 
 
@@ -228,7 +237,14 @@ class CodexEvalItem(pytest.Item):
         validate_case(self.case, repo_root, skill_dir)
 
         validation_run = session_run(self.config, repo_root, self.case.skill, "validation", "validation")
-        validation_run["results"].append(validation_result(self.case, repo_root, skill_dir))
+        validation_run["results"].append(
+            validation_result(
+                self.case,
+                repo_root,
+                skill_dir,
+                config_path(self.config),
+            )
+        )
 
         if mode == "validation":
             return
@@ -448,7 +464,7 @@ def config_path(config: pytest.Config) -> Path | None:
     path = Path(value).expanduser()
     if not path.is_absolute():
         path = config.rootpath / path
-    return path
+    return path if path.exists() or path.is_symlink() else None
 
 
 def validate_case(case: EvalCase, repo_root: Path, skill_dir: Path | None = None) -> None:
@@ -499,6 +515,74 @@ def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) 
     }
 
 
+def validation_selection_scope(
+    repo_root: Path,
+    skill: str,
+    results: list[ValidationResult],
+) -> str:
+    root = repo_root.resolve()
+    eval_root = root / "evals" if (root / "evals").is_dir() else root
+    expected = []
+    try:
+        eval_paths = iter_eval_files(eval_root)
+    except (OSError, ValueError):
+        return "filtered"
+    for path in eval_paths:
+        try:
+            definition = load_eval_definition(path)
+            if definition.skill != skill:
+                continue
+            for prompt in definition.prompts:
+                expected.append(validation_selection_key(
+                    path,
+                    eval_fixture_dir(path),
+                    prompt.id,
+                    definition.kind,
+                    prompt.eval_inputs,
+                ))
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+            JSONSchemaValidationError,
+        ):
+            return "filtered"
+    try:
+        selected = [
+            validation_selection_key(
+                Path(result.definition_path),
+                Path(result.fixture_dir),
+                result.prompt_id,
+                result.eval_kind,
+                result.selected_eval_inputs,
+            )
+            for result in results
+            if result.skill == skill
+        ]
+    except OSError:
+        return "filtered"
+    expected_keys = set(expected)
+    if len(expected_keys) != len(expected):
+        return "filtered"
+    return "full" if set(selected) == expected_keys else "filtered"
+
+
+def validation_selection_key(
+    definition_path: Path,
+    fixture_dir: Path,
+    prompt_id: str,
+    eval_kind_value: str,
+    eval_inputs: list[str] | None,
+) -> tuple[str, str, str, str, tuple[str, ...]]:
+    return (
+        str(definition_path.resolve()),
+        str(fixture_dir.resolve()),
+        prompt_id,
+        eval_kind_value,
+        tuple(eval_inputs or []),
+    )
+
+
 def progress_label(config: pytest.Config) -> str:
     kind = eval_kind(config)
     mode = run_mode(config)
@@ -512,8 +596,15 @@ def display_path(path: Path, repo_root: Path) -> str:
         return str(path)
 
 
-def validation_result(case: EvalCase, repo_root: Path, skill_dir: Path | None) -> ValidationResult:
+def validation_result(
+    case: EvalCase,
+    repo_root: Path,
+    skill_dir: Path | None,
+    selected_config_path: Path | None,
+) -> ValidationResult:
     resolved_skill_dir = resolve_skill_source(repo_root, case.skill, case.skill_source, skill_dir)
+    if case.definition_path is None or case.fixture_dir is None:
+        raise ValueError(f"case {case.id} is missing its source location")
     sanity_count = len(case.checks) if isinstance(case, SanityEvalCase) else 0
     rubric_count = len(case.rubric) if isinstance(case, RubricEvalCase) else 0
     runtime_count = len(case.checks) if isinstance(case, RuntimeEvalCase) else 0
@@ -524,13 +615,26 @@ def validation_result(case: EvalCase, repo_root: Path, skill_dir: Path | None) -
         skill=case.skill,
         language=case.language,
         service=case.service,
-        definition_path=str((case.definition_path or Path()).resolve()),
-        fixture_dir=str((case.fixture_dir or Path()).resolve()),
+        definition_path=str(case.definition_path.resolve()),
+        fixture_dir=str(case.fixture_dir.resolve()),
         skill_path=str(resolved_skill_dir.resolve()),
+        config_path=str(selected_config_path or ""),
         eval_kind=case.kind,
+        selected_eval_inputs=list(case.eval_inputs or []),
         sanity_check_count=sanity_count,
         rubric_check_count=rubric_count,
         runtime_check_count=runtime_count,
+        source_files=source_input_digests(
+            repo_root,
+            case.skill,
+            case.kind,
+            resolved_skill_dir,
+            selected_config_path,
+            definition_path=case.definition_path,
+            fixture_dir=case.fixture_dir,
+            prompt_id=case.prompt_id,
+            eval_inputs=case.eval_inputs,
+        ),
     )
 
 
@@ -552,8 +656,28 @@ def validate_live_result(result: CaseResult) -> None:
         failures.append(f"baseline exited {result.baseline.exit_code}")
     if result.with_skill is not None and result.with_skill.grade.total == 0:
         failures.append("with_skill produced no checks")
+    if result.with_skill is not None:
+        required_guards = {"final-message-present", "skills-loaded", "skill-instructions-read"}
+        guards = {check.id: check for check in result.with_skill.grade.checks if check.id in required_guards}
+        failed_guards = sorted(
+            guard_id
+            for guard_id in required_guards
+            if guard_id not in guards or not guards[guard_id].passed or guards[guard_id].skipped
+        )
+        if failed_guards:
+            failures.append("with_skill guard failed: " + ", ".join(failed_guards))
     if result.baseline is not None and result.baseline.grade.total == 0:
         failures.append("baseline produced no checks")
+    if result.baseline is not None:
+        required_guards = {"baseline-skill-isolation", "final-message-present", "skills-not-loaded"}
+        guards = {check.id: check for check in result.baseline.grade.checks if check.id in required_guards}
+        failed_guards = sorted(
+            guard_id
+            for guard_id in required_guards
+            if guard_id not in guards or not guards[guard_id].passed or guards[guard_id].skipped
+        )
+        if failed_guards:
+            failures.append("baseline guard failed: " + ", ".join(failed_guards))
     if result.with_skill is None and result.baseline is None:
         failures.append("no Codex side result was produced")
     if failures:

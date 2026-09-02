@@ -344,6 +344,25 @@ func TestCurrentManagedEnvironmentCanonicalizesRelativeWeaverPath(t *testing.T) 
 	}
 }
 
+func TestManagedEnvironmentPreservesPublicMCPURLForRestart(t *testing.T) {
+	const publicMCPURL = "https://observer.example.test/team/mcp"
+	t.Setenv(observerPublicMCPURLEnv, publicMCPURL)
+
+	environment := currentManagedEnvironment()
+	if got := managedEnvironmentValue(environment, observerPublicMCPURLEnv); got != publicMCPURL {
+		t.Fatalf("managed public MCP URL = %q, want %q", got, publicMCPURL)
+	}
+
+	t.Setenv(observerPublicMCPURLEnv, "")
+	resolved := resolveManagedRunConfig(runConfig{}, environment)
+	if resolved.publicMCPURL != publicMCPURL {
+		t.Fatalf("restored public MCP URL = %q, want %q", resolved.publicMCPURL, publicMCPURL)
+	}
+	if err := validateRunConfig(resolved); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestStageManagedRuntimeIsBundleVersioned(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -800,6 +819,13 @@ func TestManagedUpgradeActivatesOnlyAfterRestart(t *testing.T) {
 		if output, err := command.CombinedOutput(); err != nil {
 			t.Fatalf("build %s lifecycle binary: %v\n%s", version, err, output)
 		}
+		weaver := filepath.Join(filepath.Dir(binary), installedWeaverName(binary))
+		if err := copyFile(binary, weaver); err != nil {
+			t.Fatalf("bundle %s lifecycle Weaver: %v", version, err)
+		}
+		if err := os.Chmod(weaver, 0o755); err != nil {
+			t.Fatalf("chmod %s lifecycle Weaver: %v", version, err)
+		}
 		return binary
 	}
 	v1, v2 := buildBinary("upgrade-v1"), buildBinary("upgrade-v2")
@@ -814,7 +840,7 @@ func TestManagedUpgradeActivatesOnlyAfterRestart(t *testing.T) {
 		return string(output), err
 	}
 	sharedMCP := fmt.Sprintf("http://127.0.0.1:%d/mcp", httpPort)
-	if output, err := run(v1, "install", "--target", "codex", "--shared-url", sharedMCP); err != nil {
+	if output, err := run(v1, "install", "--target", "codex"); err != nil {
 		t.Fatalf("install v1: %v\n%s", err, output)
 	}
 	installed := filepath.Join(home, ".codex", "skills", "obstudio", smokeBinaryName())

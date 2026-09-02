@@ -1,0 +1,4 @@
+interface:
+  display_name: "Connect Splunk Observability Cloud"
+  short_description: "Open Observer for secure Cloud credential entry"
+  default_prompt: "Use $connect-splunk-observability-cloud to open the local Observer Cloud tab and connect my Splunk Observability Cloud organization."

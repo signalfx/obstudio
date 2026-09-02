@@ -16,13 +16,16 @@ host-specific SessionStart hook manifests for first-run bootstrap.
    | --- | --- | --- |
    | Open the local Observer | `$observer-open` | `/obstudio:observer-open` |
    | Check Observer health | `$observer-status` | `/obstudio:observer-status` |
+   | Get started with Observability Cloud Free Edition | `$create-splunk-free-account` | `/obstudio:create-splunk-free-account` |
+   | Connect Observability Cloud | `$connect-splunk-observability-cloud` | `/obstudio:connect-splunk-observability-cloud` |
    | Audit observability gaps | `$otel-audit` | `/obstudio:otel-audit` |
    | Add instrumentation | `$otel-instrument` | `/obstudio:otel-instrument` |
    | Verify emitted telemetry | `$otel-verify` | `/obstudio:otel-verify` |
 
 Current scope:
 
-- bundled skills for audit, instrumentation, verification, and Splunk publish workflows
+- bundled skills for Free Edition signup, secure Cloud connection handoff,
+  audit, instrumentation, verification, and Splunk publish workflows
 - bundled observer control skills:
   - `observer-open`
   - `observer-status`

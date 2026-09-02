@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from .trace import TraceSummary, parse_trace
+from .trace import ActionEvent, CommandEvent, TraceSummary, parse_events, parse_trace
 
 
 @dataclass
@@ -125,9 +125,15 @@ def _pump_stream(pipe: Any, output_path: Path, chunks: list[str]) -> None:
 
 def _codex_subprocess_env(exec_dir: Path | None = None) -> dict[str, str]:
     env = os.environ.copy()
-    clean_package_config = env.get("CODEX_EVAL_CLEAN_PACKAGE_CONFIG", "1").strip().lower()
+    clean_package_config = (
+        env.get("CODEX_EVAL_CLEAN_PACKAGE_CONFIG", "1").strip().lower()
+    )
     if clean_package_config in {"1", "true", "yes", "on"}:
-        default_index = env.get("UV_DEFAULT_INDEX") or env.get("PIP_INDEX_URL") or "https://pypi.org/simple"
+        default_index = (
+            env.get("UV_DEFAULT_INDEX")
+            or env.get("PIP_INDEX_URL")
+            or "https://pypi.org/simple"
+        )
         env["UV_NO_CONFIG"] = "1"
         env["UV_DEFAULT_INDEX"] = default_index
         env["PIP_CONFIG_FILE"] = os.devnull
@@ -139,7 +145,9 @@ def _codex_subprocess_env(exec_dir: Path | None = None) -> dict[str, str]:
     return env
 
 
-def _judge_subprocess_env(env: dict[str, str], *, claude: bool = False) -> dict[str, str]:
+def _judge_subprocess_env(
+    env: dict[str, str], *, claude: bool = False
+) -> dict[str, str]:
     scoped = env.copy()
     scoped["OTEL_SDK_DISABLED"] = "true"
     scoped["OTEL_LOGS_EXPORTER"] = "none"
@@ -440,7 +448,8 @@ class ClaudeBackend:
             "-p",
             prompt,
             "--output-format",
-            "json",
+            "stream-json",
+            "--verbose",
             "--max-turns",
             "50",
             *self.extra_args,
@@ -481,7 +490,9 @@ class ClaudeBackend:
         judge_prompt = prompt
         if schema_path:
             schema_text = schema_path.read_text(encoding="utf-8")
-            judge_prompt = f"{prompt}\n\nOutput must conform to this JSON schema:\n{schema_text}"
+            judge_prompt = (
+                f"{prompt}\n\nOutput must conform to this JSON schema:\n{schema_text}"
+            )
 
         cmd = [
             self.command,
@@ -550,38 +561,145 @@ def _extract_claude_final_message(trace_path: Path, output_path: Path) -> None:
     """Extract the last assistant text from Claude JSON output."""
     try:
         raw = trace_path.read_text(encoding="utf-8", errors="replace")
-        data = json.loads(raw, parse_int=str) if raw.strip() else {}
+        events = _claude_json_events(raw)
         result_text = ""
-        if isinstance(data, dict):
-            result_text = data.get("result", "") or ""
-        elif isinstance(data, list) and data:
-            last = data[-1]
-            if isinstance(last, dict):
-                result_text = last.get("content", "") or last.get("result", "") or ""
+        for event in events:
+            result = event.get("result")
+            if isinstance(result, str) and result:
+                result_text = result
+                continue
+            content = event.get("content")
+            if isinstance(content, str) and content:
+                result_text = content
+                continue
+            message = event.get("message")
+            if not isinstance(message, dict) or message.get("role") != "assistant":
+                continue
+            content = message.get("content")
+            if not isinstance(content, list):
+                continue
+            text_blocks = [
+                block.get("text", "")
+                for block in content
+                if isinstance(block, dict) and block.get("type") == "text"
+            ]
+            assistant_text = "\n".join(
+                text for text in text_blocks if isinstance(text, str) and text
+            )
+            if assistant_text:
+                result_text = assistant_text
         output_path.write_text(result_text, encoding="utf-8")
-    except (json.JSONDecodeError, OSError):
+    except OSError:
         output_path.write_text("", encoding="utf-8")
+
+
+def _claude_json_events(raw: str) -> list[dict[str, Any]]:
+    return parse_events(raw)
 
 
 def _parse_claude_trace(trace_path: Path) -> TraceSummary:
     """Parse Claude Code JSON output into TraceSummary (best-effort)."""
-    from .trace import CommandEvent, TraceSummary, parse_events
-
     raw = trace_path.read_text(encoding="utf-8", errors="replace")
-    events = parse_events(raw)
+    events = _claude_json_events(raw)
 
-    commands: list[CommandEvent] = []
-    for event in events:
-        if event.get("type") == "tool_use" and event.get("name") in {"bash", "execute_command"}:
-            cmd_text = ""
-            inp = event.get("input", {})
-            if isinstance(inp, dict):
-                cmd_text = inp.get("command", "")
-            if cmd_text:
-                commands.append(CommandEvent(command=cmd_text))
+    actions: list[ActionEvent] = []
+    actions_by_tool_id: dict[str, ActionEvent] = {}
+    for order, event in enumerate(events):
+        _append_claude_tool_use(event, actions, actions_by_tool_id, order)
+        _complete_claude_tool_results(event, actions_by_tool_id, order)
+
     summary = TraceSummary(events, raw, provider="claude")
-    summary.commands = commands
+    summary.actions = actions
+    summary.commands = [
+        CommandEvent(command=command, status=action.status)
+        for action in actions
+        if (command := _claude_command_text(action)) is not None
+    ]
     return summary
+
+
+def _append_claude_tool_use(
+    event: dict[str, Any],
+    actions: list[ActionEvent],
+    actions_by_tool_id: dict[str, ActionEvent],
+    order: int,
+) -> None:
+    blocks: list[dict[str, Any]] = []
+    if event.get("type") == "tool_use":
+        blocks.append(event)
+    message = event.get("message")
+    if isinstance(message, dict) and isinstance(message.get("content"), list):
+        blocks.extend(
+            block
+            for block in message["content"]
+            if isinstance(block, dict) and block.get("type") == "tool_use"
+        )
+    for block in blocks:
+        name = str(block.get("name") or "").lower()
+        tool_input = block.get("input")
+        normalized_input = dict(tool_input) if isinstance(tool_input, dict) else {}
+        action = ActionEvent(
+            kind="command" if name in {"bash", "execute_command"} else "tool",
+            name=name or "unknown_tool",
+            status="started",
+            input=normalized_input,
+            start_order=order,
+        )
+        actions.append(action)
+        tool_id = block.get("id")
+        if isinstance(tool_id, str) and tool_id:
+            actions_by_tool_id[tool_id] = action
+
+
+def _complete_claude_tool_results(
+    event: dict[str, Any],
+    actions_by_tool_id: dict[str, ActionEvent],
+    order: int,
+) -> None:
+    blocks: list[dict[str, Any]] = []
+    if event.get("type") == "tool_result":
+        blocks.append(event)
+    message = event.get("message")
+    if isinstance(message, dict) and isinstance(message.get("content"), list):
+        blocks.extend(
+            block
+            for block in message["content"]
+            if isinstance(block, dict) and block.get("type") == "tool_result"
+        )
+    for block in blocks:
+        tool_id = block.get("tool_use_id")
+        if not isinstance(tool_id, str):
+            continue
+        action = actions_by_tool_id.get(tool_id)
+        if action is not None:
+            action.status = "failed" if block.get("is_error") is True else "completed"
+            action.result = block.get("content")
+            action.output = _claude_tool_result_text(action.result)
+            action.completion_order = order
+
+
+def _claude_command_text(action: ActionEvent) -> str | None:
+    if action.name in {"bash", "execute_command"}:
+        command = action.input.get("command")
+        return command if isinstance(command, str) else None
+    if action.name in {"read", "read_file"}:
+        path = action.input.get("file_path") or action.input.get("path")
+        return f"read {path}" if isinstance(path, str) else None
+    return None
+
+
+def _claude_tool_result_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    values: list[str] = []
+    for block in content:
+        if isinstance(block, str):
+            values.append(block)
+        elif isinstance(block, dict) and isinstance(block.get("text"), str):
+            values.append(block["text"])
+    return "\n".join(values)
 
 
 # ---------------------------------------------------------------------------
@@ -602,7 +720,9 @@ def create_backend(
 ) -> AgentBackend:
     cls = BACKEND_REGISTRY.get(name)
     if cls is None:
-        raise ValueError(f"unknown agent backend: {name!r}; available: {', '.join(BACKEND_REGISTRY)}")
+        raise ValueError(
+            f"unknown agent backend: {name!r}; available: {', '.join(BACKEND_REGISTRY)}"
+        )
     kwargs: dict[str, Any] = {}
     if command is not None:
         kwargs["command"] = command

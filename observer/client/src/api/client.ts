@@ -385,6 +385,27 @@ export async function runSplunkExportBrowserAction(
   return postSplunkExportBrowserJSON(path, payload, browserToken) as Promise<SplunkExportStatus>;
 }
 
+/** Resolve a pasted Splunk URL to its canonical realm without sending an access token. */
+export async function resolveSplunkCloudRealm(
+  destination: string,
+  browserToken: string,
+): Promise<string> {
+  const response = await postSplunkExportBrowserJSON(
+    "/api/splunk/export/realm",
+    { destination },
+    browserToken,
+  );
+  const realm = typeof response === "object"
+    && response !== null
+    && typeof (response as Record<string, unknown>).realm === "string"
+    ? (response as Record<string, string>).realm
+    : "";
+  if (!/^[a-z]{2,12}[0-9]+$/.test(realm)) {
+    throw new Error("Observer returned an invalid Splunk Observability Cloud realm.");
+  }
+  return realm;
+}
+
 async function postSplunkExportBrowserJSON(
   path: string,
   body: object,

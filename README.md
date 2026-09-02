@@ -9,6 +9,8 @@ auditing, adding, and verifying OpenTelemetry instrumentation.
 
 | Skill | Purpose |
 |---|---|
+| `$create-splunk-free-account` | Submit one consent-gated Splunk Observability Cloud Free Edition signup in a GeoIP-selected region through Observer |
+| `$connect-splunk-observability-cloud` | Open the existing local Observer Cloud tab for secure URL and access-token entry |
 | `$otel-audit` | Scan a service for observability coverage gaps without modifying code |
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation, default local application logs, and optional custom spans or metrics |
 | `$otel-verify` | Prove existing instrumentation with app-code tests and optional local OTLP evidence |
