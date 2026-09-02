@@ -1564,6 +1564,21 @@ func TestQueryLogsWithServerSideFilters(t *testing.T) {
 	}
 }
 
+func TestLogRecordFilterFromRequestSeparatesDisplayMessageAndRawBody(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet,
+		"/api/query/logs?filter%5BmessageContains%5D%5Beq%5D=api_request&filter%5BmessageContains%5D%5Bneq%5D=debug&filter%5BbodyContains%5D%5Beq%5D=raw&filter%5BbodyContains%5D%5Bneq%5D=secret",
+		nil,
+	)
+
+	filter := logRecordFilterFromRequest(request)
+	if filter.MessageContains != "api_request" || filter.ExcludeMessageContains != "debug" {
+		t.Fatalf("display-message filters = %q/%q", filter.MessageContains, filter.ExcludeMessageContains)
+	}
+	if filter.BodyContains != "raw" || filter.ExcludeBodyContains != "secret" {
+		t.Fatalf("raw-body filters = %q/%q", filter.BodyContains, filter.ExcludeBodyContains)
+	}
+}
+
 func TestQueryLogsWithNegatedServerSideFilters(t *testing.T) {
 	s := store.New()
 	now := time.Now()

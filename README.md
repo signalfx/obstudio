@@ -320,6 +320,9 @@ report locations.
 |---|---|
 | `obstudio` | Start the collector, web UI, REST API, OTLP receivers, and MCP server |
 | `obstudio install --target=<agent>[,<agent>...]` | Install skills and configure MCP for one or more supported agents |
+| `obstudio token-telemetry enable --target=codex[,claude-code] [--repository-correlation=off\|name\|path]` | Explicitly opt supported providers into local token logs and traces, plus Claude token metrics, without replacing user-owned OTLP settings; new targets default repository correlation to `path` |
+| `obstudio token-telemetry status --target=codex[,claude-code]` | Show whether matching telemetry is Obstudio-managed, user-owned, partial, disabled, or conflicting |
+| `obstudio token-telemetry disable --target=codex[,claude-code]` | Remove only unchanged settings added by Obstudio |
 | `obstudio --version` | Print version |
 
 ## Contributing

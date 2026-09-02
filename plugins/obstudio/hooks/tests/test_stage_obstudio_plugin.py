@@ -56,7 +56,7 @@ class StageObstudioPluginTest(unittest.TestCase):
             STAGE.stage_plugin(output, host="claude")
 
             manifest = json.loads((output / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["version"], "0.0.16")
+            self.assertEqual(manifest["version"], "0.0.18")
 
     def test_release_tag_stamps_and_enforces_both_plugin_manifest_versions(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -122,7 +122,11 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertEqual(marketplace["name"], "obstudio")
         self.assertEqual(marketplace["plugins"][0]["name"], "obstudio")
         self.assertEqual(marketplace["plugins"][0]["source"], "./plugins/obstudio")
-        self.assertEqual(marketplace["plugins"][0]["displayName"], "Splunk Observability Studio")
+        self.assertNotIn("displayName", marketplace["plugins"][0])
+        self.assertEqual(
+            set(marketplace["plugins"][0]),
+            {"name", "source", "description"},
+        )
 
     def test_plugin_manifest_uses_committed_skills(self):
         plugin_root = Path(__file__).resolve().parents[2]
@@ -149,8 +153,8 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertEqual(claude_manifest["hooks"], "./hooks/claude-hooks.json")
         self.assertEqual(claude_manifest["name"], "obstudio")
         self.assertNotIn("$schema", claude_manifest)
-        self.assertEqual(claude_manifest["displayName"], "Splunk Observability Studio")
-        self.assertEqual(claude_manifest["version"], "0.0.16")
+        self.assertNotIn("displayName", claude_manifest)
+        self.assertEqual(claude_manifest["version"], "0.0.18")
 
         codex_hook = json.loads((plugin_root / "hooks" / "codex-hooks.json").read_text(encoding="utf-8"))
         codex_command = codex_hook["hooks"]["SessionStart"][0]["hooks"][0]["command"]
@@ -162,8 +166,11 @@ class StageObstudioPluginTest(unittest.TestCase):
 
         claude_hook = json.loads((plugin_root / "hooks" / "claude-hooks.json").read_text(encoding="utf-8"))
         claude_command = claude_hook["hooks"]["SessionStart"][0]["hooks"][0]
-        self.assertEqual(claude_command["command"], "node")
-        self.assertEqual(claude_command["args"], ["${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap_claude.cjs"])
+        self.assertEqual(
+            claude_command["command"],
+            'node "${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap_claude.cjs"',
+        )
+        self.assertNotIn("args", claude_command)
         self.assertEqual(claude_command["statusMessage"], "Bootstrapping Splunk Observability Studio for Claude Code")
         self.assertNotIn("commandWindows", claude_command)
 

@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from .definitions import CaseResult, GradeCheckResult, SideResult, ValidationResult
+from .definitions import CaseResult, GradeCheckResult, SideResult, TokenUsage, ValidationResult
 from .reports import ReportTemplate, template_for_kind
 
 
@@ -15,6 +15,15 @@ SIDE_ATTRS = {
     "with_baseline": "baseline",
 }
 RAW_RUNS_DIR = "runs"
+TOKEN_USAGE_FIELDS = (
+    "input_tokens",
+    "cached_input_tokens",
+    "cache_creation_input_tokens",
+    "output_tokens",
+    "reasoning_output_tokens",
+    "provider_total_tokens",
+    "derived_total_tokens",
+)
 
 
 def write_session_results(runs: list[dict[str, Any]]) -> None:
@@ -231,6 +240,9 @@ def aggregate_kind_side(kind: str, results: list[CaseResult], side_key: str) -> 
         "tokens": sum(side.tokens for side in sides),
         "agent_tokens": sum(side.agent_tokens for side in sides),
         "error_count": sum(len(side.errors) for side in sides),
+        "agent_usage": aggregate_usage(
+            [side.agent_usage for side in sides], expected_records=len(sides)
+        ),
     }
     if kind == "rubric":
         rubric = [grade for side in sides if (grade := load_rubric_grade(side)) is not None]
@@ -240,6 +252,9 @@ def aggregate_kind_side(kind: str, results: list[CaseResult], side_key: str) -> 
         summary["rubric"] = None if not rubric else {"passed": rubric_passed, "total": rubric_total, "average_score": average(scores) if scores else None}
         summary["rubric_tokens"] = sum(side.rubric_tokens for side in sides)
         summary["rubric_duration_seconds"] = round(sum(side.rubric_duration_seconds for side in sides), 3)
+        summary["rubric_usage"] = aggregate_usage(
+            [side.rubric_usage for side in sides], expected_records=len(sides)
+        )
     else:
         summary["checks"] = aggregate_check_category(sides, kind)
     return summary
@@ -257,6 +272,10 @@ def aggregate_kind_evals(evals: list[dict[str, Any]], side_key: str, kind: str) 
         "tokens": sum(int(side["tokens"]) for side in sides),
         "agent_tokens": sum(int(side["agent_tokens"]) for side in sides),
         "error_count": sum(int(side["error_count"]) for side in sides),
+        "agent_usage": aggregate_usage(
+            [side.get("agent_usage") for side in sides],
+            expected_records=sum(int(side["prompt_count"]) for side in sides),
+        ),
     }
     if kind == "rubric":
         rubric_summaries = [side["rubric"] for side in sides if side.get("rubric") is not None]
@@ -268,6 +287,10 @@ def aggregate_kind_evals(evals: list[dict[str, Any]], side_key: str, kind: str) 
         }
         summary["rubric_tokens"] = sum(int(side.get("rubric_tokens") or 0) for side in sides)
         summary["rubric_duration_seconds"] = round(sum(float(side.get("rubric_duration_seconds") or 0.0) for side in sides), 3)
+        summary["rubric_usage"] = aggregate_usage(
+            [side.get("rubric_usage") for side in sides],
+            expected_records=sum(int(side["prompt_count"]) for side in sides),
+        )
     else:
         checks = [side["checks"] for side in sides]
         summary["checks"] = {
@@ -314,6 +337,7 @@ def render_kind_report(skill: str, benchmark: dict[str, Any]) -> str:
     lines = [f"# {skill} {template.summary_title.replace(' Summary', '')} Codex Eval Report"]
     lines.extend(render_environment_table(benchmark["metadata"], "Mode"))
     lines.extend(render_kind_summary_section(template, benchmark["evals"]))
+    lines.extend(render_kind_usage_sections(kind, benchmark["evals"]))
     lines.extend(render_kind_failure_section(template, benchmark["failures"]))
     if template.evidence_title:
         lines.extend(["", f"## {template.evidence_title}", ""])
@@ -350,6 +374,305 @@ def render_kind_summary_section(template: ReportTemplate, evals: list[dict[str, 
             )
         )
     return lines
+
+
+def render_kind_usage_sections(kind: str, evals: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    agent_rows = usage_rows(evals, "agent_usage")
+    if agent_rows:
+        lines.extend(render_usage_table("Agent Token Usage", agent_rows))
+    if kind == "rubric":
+        judge_rows = usage_rows(evals, "rubric_usage")
+        if judge_rows:
+            lines.extend(render_usage_table("Judge Token Usage", judge_rows))
+    return lines
+
+
+def render_usage_table(title: str, rows: list[dict[str, Any]]) -> list[str]:
+    lines = [
+        "",
+        f"## {title}",
+        "",
+        "| Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |",
+        "|---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        lines.append(
+            "| {mode} | {eval_id} | {service} | {side} | {provider} | {source} | {status} | {coverage} | {input} | {cached} | {creation} | {output} | {reasoning} | {provider_total} | {derived_total} |".format(
+                mode=markdown_cell(row["mode"]),
+                eval_id=markdown_cell(row["eval_id"]),
+                service=markdown_cell(row["service"]),
+                side=markdown_cell(row["side"]),
+                provider=markdown_cell(row["provider"]),
+                source=markdown_cell(row["source"]),
+                status=markdown_cell(row["status"]),
+                coverage=markdown_cell(row["coverage"]),
+                input=markdown_cell(row["input_tokens"]),
+                cached=markdown_cell(row["cached_input_tokens"]),
+                creation=markdown_cell(row["cache_creation_input_tokens"]),
+                output=markdown_cell(row["output_tokens"]),
+                reasoning=markdown_cell(row["reasoning_output_tokens"]),
+                provider_total=markdown_cell(row["provider_total_tokens"]),
+                derived_total=markdown_cell(row["derived_total_tokens"]),
+            )
+        )
+    return lines
+
+
+def usage_rows(evals: list[dict[str, Any]], usage_key: str) -> list[dict[str, Any]]:
+    if not any(
+        side.get(usage_key) is not None
+        for item in evals
+        for side_key in ("with_skill", "with_baseline")
+        if (side := item.get(side_key)) is not None
+    ):
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for item in evals:
+        for side_key in ("with_skill", "with_baseline"):
+            side = item.get(side_key)
+            if side is None:
+                continue
+            usage = side.get(usage_key)
+            rows.append(
+                {
+                    "mode": item.get("mode"),
+                    "eval_id": item.get("id"),
+                    "service": item.get("case"),
+                    "side": side_key,
+                    "provider": usage.get("provider", "unknown") if usage else "unknown",
+                    "source": usage.get("source", "unknown") if usage else "unknown",
+                    "status": usage_status(usage, int(side.get("prompt_count") or 0)),
+                    "coverage": usage_coverage(usage, int(side.get("prompt_count") or 0)),
+                    **{
+                        field: usage_value(usage, field, int(side.get("prompt_count") or 0))
+                        for field in TOKEN_USAGE_FIELDS
+                    },
+                }
+            )
+    return rows
+
+
+def usage_payload(value: TokenUsage | dict[str, Any] | None) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if isinstance(value, TokenUsage):
+        payload = value.model_dump(mode="json")
+        payload["effective_total_tokens"] = value.total_tokens
+        return payload
+    payload = dict(value)
+    if "effective_total_tokens" not in payload:
+        payload["effective_total_tokens"] = preferred_usage_total(payload)
+    return payload
+
+
+def preferred_usage_total(payload: dict[str, Any]) -> int | None:
+    coverage = payload.get("coverage")
+    if isinstance(coverage, dict):
+        records = int(coverage.get("record_count") or 0)
+        preferred_count = int(coverage.get("preferred_total_count") or 0)
+        if records == 0 or preferred_count != records:
+            return None
+        field_counts = coverage.get("field_counts") or {}
+        provider_count = int(field_counts.get("provider_total_tokens") or 0)
+        if (
+            provider_count == records
+            and payload.get("provider_total_tokens") is not None
+        ):
+            return int(payload["provider_total_tokens"])
+        derived_count = int(field_counts.get("derived_total_tokens") or 0)
+        if (
+            provider_count == 0
+            and derived_count == records
+            and payload.get("derived_total_tokens") is not None
+        ):
+            return int(payload["derived_total_tokens"])
+        return None
+    provider_total = payload.get("provider_total_tokens")
+    if provider_total is not None:
+        return int(provider_total)
+    derived_total = payload.get("derived_total_tokens")
+    if derived_total is not None:
+        return int(derived_total)
+    return None
+
+
+def aggregate_usage(
+    usages: list[TokenUsage | dict[str, Any] | None],
+    *,
+    expected_records: int | None = None,
+) -> dict[str, Any] | None:
+    payloads = [usage_payload(usage) for usage in usages]
+    modeled = [payload for payload in payloads if payload is not None]
+    if not modeled:
+        return None
+
+    field_counts = {field: 0 for field in TOKEN_USAGE_FIELDS}
+    field_values = {field: 0 for field in TOKEN_USAGE_FIELDS}
+    providers: list[str] = []
+    sources: list[str] = []
+    record_count = 0
+    modeled_count = 0
+    observed_count = 0
+    recognized_count = 0
+    usage_record_count = 0
+    selected_record_count = 0
+    preferred_total_count = 0
+    effective_total = 0
+    effective_total_count = 0
+
+    for payload in modeled:
+        coverage = payload.get("coverage")
+        if isinstance(coverage, dict):
+            child_records = int(coverage.get("record_count") or 0)
+            child_modeled = int(coverage.get("modeled_count") or 0)
+            child_observed = int(coverage.get("observed_count") or 0)
+            child_recognized = int(coverage.get("recognized_count") or 0)
+            child_field_counts = coverage.get("field_counts") or {}
+            child_preferred_count = coverage.get("preferred_total_count")
+            if child_preferred_count is None:
+                provider_count = int(
+                    child_field_counts.get("provider_total_tokens") or 0
+                )
+                derived_count = int(
+                    child_field_counts.get("derived_total_tokens") or 0
+                )
+                if (
+                    provider_count == child_records
+                    and payload.get("provider_total_tokens") is not None
+                ):
+                    child_preferred_count = child_records
+                elif (
+                    provider_count == 0
+                    and derived_count == child_records
+                    and payload.get("derived_total_tokens") is not None
+                ):
+                    child_preferred_count = child_records
+                else:
+                    child_preferred_count = 0
+        else:
+            child_records = 1
+            child_modeled = 1
+            child_observed = int(bool(payload.get("observed")))
+            child_recognized = int(
+                payload.get("effective_total_tokens") is not None
+                or any(payload.get(field) is not None for field in TOKEN_USAGE_FIELDS)
+            )
+            child_field_counts = {
+                field: int(payload.get(field) is not None)
+                for field in TOKEN_USAGE_FIELDS
+            }
+            child_preferred_count = int(
+                payload.get("effective_total_tokens") is not None
+            )
+
+        record_count += child_records
+        modeled_count += child_modeled
+        observed_count += child_observed
+        recognized_count += child_recognized
+        usage_record_count += int(payload.get("usage_record_count") or 0)
+        selected_record_count += int(payload.get("selected_record_count") or 0)
+        preferred_total_count += int(child_preferred_count or 0)
+        child_effective_total = payload.get("effective_total_tokens")
+        if child_effective_total is not None and int(child_preferred_count or 0) > 0:
+            effective_total += int(child_effective_total)
+            effective_total_count += int(child_preferred_count or 0)
+        providers.append(str(payload.get("provider") or "unknown"))
+        sources.append(str(payload.get("source") or "unknown"))
+
+        for field in TOKEN_USAGE_FIELDS:
+            count = int(child_field_counts.get(field) or 0)
+            field_counts[field] += count
+            if count and payload.get(field) is not None:
+                field_values[field] += int(payload[field])
+
+    record_count = max(record_count, expected_records or len(usages))
+    result: dict[str, Any] = {
+        "provider": combined_label(providers),
+        "source": combined_label(sources),
+        "observed": observed_count > 0,
+        "usage_record_count": usage_record_count,
+        "selected_record_count": selected_record_count,
+        **{
+            field: field_values[field] if field_counts[field] else None
+            for field in TOKEN_USAGE_FIELDS
+        },
+        "effective_total_tokens": (
+            effective_total if effective_total_count else None
+        ),
+        "coverage": {
+            "record_count": record_count,
+            "modeled_count": modeled_count,
+            "observed_count": observed_count,
+            "recognized_count": recognized_count,
+            "preferred_total_count": preferred_total_count,
+            "field_counts": field_counts,
+        },
+    }
+    return result
+
+
+def combined_label(values: list[str]) -> str:
+    unique = sorted(set(value or "unknown" for value in values))
+    if not unique:
+        return "unknown"
+    if len(unique) == 1:
+        return unique[0]
+    return "mixed"
+
+
+def usage_status(usage: dict[str, Any] | None, expected_records: int) -> str:
+    if usage is None:
+        return "legacy"
+    coverage = usage.get("coverage") or {}
+    records = int(coverage.get("record_count") or expected_records or 1)
+    modeled = int(coverage.get("modeled_count") or 0)
+    observed = int(coverage.get("observed_count") or 0)
+    recognized = int(coverage.get("recognized_count") or 0)
+    if modeled == 0:
+        return "legacy"
+    if observed == 0:
+        return "absent"
+    if recognized == 0:
+        return "unrecognized"
+    preferred_totals = int(coverage.get("preferred_total_count") or 0)
+    if recognized < records or preferred_totals < records:
+        return "partial"
+    return "measured"
+
+
+def usage_coverage(usage: dict[str, Any] | None, expected_records: int) -> str:
+    if usage is None:
+        return f"0/{expected_records} modeled"
+    coverage = usage.get("coverage") or {}
+    records = int(coverage.get("record_count") or expected_records or 1)
+    modeled = int(coverage.get("modeled_count") or 0)
+    observed = int(coverage.get("observed_count") or 0)
+    recognized = int(coverage.get("recognized_count") or 0)
+    parts = [f"{recognized}/{records} recognized"]
+    if observed != records or observed != recognized:
+        parts.append(f"{observed}/{records} observed")
+    if modeled != records:
+        parts.append(f"{modeled}/{records} modeled")
+    return "; ".join(parts)
+
+
+def usage_value(
+    usage: dict[str, Any] | None, field: str, expected_records: int
+) -> str:
+    if usage is None:
+        return "unknown"
+    coverage = usage.get("coverage") or {}
+    records = int(coverage.get("record_count") or expected_records or 1)
+    field_counts = coverage.get("field_counts") or {}
+    count = int(field_counts.get(field) or 0)
+    value = usage.get(field)
+    if count == 0 or value is None:
+        return "unknown"
+    if count < records:
+        return f"{int(value)} ({count}/{records})"
+    return str(int(value))
 
 
 def render_kind_failure_section(template: ReportTemplate, failures: list[dict[str, str]]) -> list[str]:
@@ -503,6 +826,8 @@ def side_summary(side: SideResult | None) -> dict[str, Any] | None:
         "tokens": side.tokens,
         "agent_tokens": side.agent_tokens,
         "rubric_tokens": side.rubric_tokens,
+        "agent_usage": usage_payload(side.agent_usage),
+        "rubric_usage": usage_payload(side.rubric_usage),
         "errors": side.errors,
         "trace_path": side.trace_path,
         "final_message_path": side.final_message_path,
@@ -579,6 +904,12 @@ def aggregate_side(results: list[CaseResult], side_key: str) -> dict[str, Any] |
         "tokens": sum(side.tokens for side in sides),
         "agent_tokens": sum(side.agent_tokens for side in sides),
         "rubric_tokens": sum(side.rubric_tokens for side in sides),
+        "agent_usage": aggregate_usage(
+            [side.agent_usage for side in sides], expected_records=len(sides)
+        ),
+        "rubric_usage": aggregate_usage(
+            [side.rubric_usage for side in sides], expected_records=len(sides)
+        ),
         "error_count": sum(len(side.errors) for side in sides),
     }
 
@@ -844,12 +1175,64 @@ def format_rubric(side: dict[str, Any] | None) -> str:
 def format_tokens(side: dict[str, Any] | None) -> str:
     if side is None:
         return "-"
-    tokens = int(side.get("tokens") or 0)
+    usage = side.get("agent_usage")
+    if usage is not None:
+        tokens = complete_usage_total(usage)
+        if tokens is None:
+            coverage = usage.get("coverage") or {}
+            records = int(coverage.get("record_count") or 1)
+            preferred_count = int(coverage.get("preferred_total_count") or 0)
+            if preferred_count != records or "agent_tokens" not in side:
+                return "unknown"
+            tokens = int(side.get("agent_tokens") or 0)
+        return compact_token_count(tokens)
+    combined_tokens = int(side.get("tokens") or 0)
+    agent_tokens = int(side.get("agent_tokens") or 0)
+    rubric_tokens = int(side.get("rubric_tokens") or 0)
+    if agent_tokens != 0 or rubric_tokens != 0 or combined_tokens == 0:
+        tokens = agent_tokens
+    else:
+        tokens = combined_tokens
+    return compact_token_count(tokens)
+
+
+def complete_usage_total(usage: dict[str, Any]) -> int | None:
+    coverage = usage.get("coverage") or {}
+    records = int(coverage.get("record_count") or 1)
+    preferred_count = int(coverage.get("preferred_total_count") or 0)
+    if "effective_total_tokens" in usage:
+        if (
+            preferred_count == records
+            and usage.get("effective_total_tokens") is not None
+        ):
+            return int(usage["effective_total_tokens"])
+        return None
+    field_counts = coverage.get("field_counts") or {}
+    provider_count = int(field_counts.get("provider_total_tokens") or 0)
+    if provider_count == records and usage.get("provider_total_tokens") is not None:
+        return int(usage["provider_total_tokens"])
+    if provider_count > 0:
+        return None
+    derived_count = int(field_counts.get("derived_total_tokens") or 0)
+    if derived_count == records and usage.get("derived_total_tokens") is not None:
+        return int(usage["derived_total_tokens"])
+    return None
+
+
+def compact_token_count(tokens: int) -> str:
     if tokens >= 1_000_000:
-        return f"{tokens / 1_000_000:.1f}M"
+        return compact_scaled_token_count(tokens, 1_000_000, "M")
     if tokens >= 1_000:
-        return f"{tokens / 1_000:.1f}K"
+        return compact_scaled_token_count(tokens, 1_000, "K")
     return str(tokens)
+
+
+def compact_scaled_token_count(tokens: int, scale: int, suffix: str) -> str:
+    tenths, remainder = divmod(tokens * 10, scale)
+    if remainder * 2 > scale or (remainder * 2 == scale and tenths % 2 == 1):
+        tenths += 1
+    whole, decimal = divmod(tenths, 10)
+    return f"{whole}.{decimal}{suffix}"
 
 
 def format_duration(side: dict[str, Any] | None) -> str:

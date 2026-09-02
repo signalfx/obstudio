@@ -86,6 +86,7 @@ export interface MetricDataPoint {
 export interface LogRecord {
   id: string;
   timeUnixNano: string;
+  observedTimeUnixNano?: string;
   severityNumber?: number;
   severityText?: string;
   body: string;

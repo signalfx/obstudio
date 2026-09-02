@@ -44,6 +44,22 @@ Editor compatibility and coding-agent integration are separate. Setup for Cursor
 3. Accept the detected integration prompt. If it does not appear, run **Splunk Observability Studio: Enable Claude Code Integration** or **Enable Codex Integration** for the agent you use.
 4. Restart Claude Code or Codex so it reloads the installed skills and local Observer connection.
 
+Agent integration does not change provider OTLP settings. To collect token usage,
+install the standalone `obstudio` CLI from the
+[latest GitHub release](https://github.com/signalfx/obstudio/releases/latest),
+then opt in and restart the selected provider:
+
+```bash
+obstudio token-telemetry enable --target=codex,claude-code
+```
+
+The command refuses conflicting OTLP routing and records only settings it adds.
+Use `obstudio token-telemetry status` or `disable` with the same `--target`
+value to inspect or remove Obstudio-owned settings. New targets default
+repository correlation to `path`, which supports exact path queries. Use
+`name` to omit filesystem paths or `off` to disable correlation. Omitting the flag
+for an already configured target preserves its recorded setting.
+
 ### Windsurf / Devin Desktop
 
 1. Install from [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) in the Extensions view.

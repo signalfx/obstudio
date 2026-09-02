@@ -9,10 +9,11 @@ from pathlib import Path
 
 from .ab import side_prompt
 from .backends import AgentBackend, CodexBackend
-from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult, resolve_skill_source
+from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult, TokenUsage, resolve_skill_source
 from .definitions.base import validate_eval_input_paths
 from .graders import grade_side
 from .graders.rubric import run_rubric_grade
+from .trace import TraceUsage, UsageProvider
 
 
 def new_run_id() -> str:
@@ -128,7 +129,8 @@ def run_side(
     agent_duration_seconds = time.monotonic() - agent_start
 
     trace = backend.parse_trace(agent_result.trace_path)
-    agent_tokens = trace.usage.total_tokens
+    agent_usage = token_usage_from_trace_usage(trace.usage)
+    agent_tokens = flat_token_total(agent_usage)
     final_message = agent_result.final_message_path.read_text(encoding="utf-8", errors="replace")
     grade = grade_side(
         case=case,
@@ -145,10 +147,12 @@ def run_side(
     rubric_path: Path | None = None
     rubric_duration_seconds = 0.0
     rubric_tokens = 0
+    rubric_usage: TokenUsage | None = None
     errors: list[str] = []
     if agent_result.returncode != 0:
         errors.append(f"{backend.name} exited with {agent_result.returncode}")
     if rubric and isinstance(case, RubricEvalCase) and case.rubric:
+        rubric_usage = TokenUsage(provider=usage_provider_for_backend(backend))
         rubric_start = time.monotonic()
         try:
             rubric_path = run_rubric_grade(
@@ -165,7 +169,10 @@ def run_side(
             rubric_trace_path = exec_dir / "rubric_trace.jsonl"
             if rubric_trace_path.exists():
                 try:
-                    rubric_tokens = backend.parse_trace(rubric_trace_path).usage.total_tokens
+                    rubric_usage = token_usage_from_trace_usage(
+                        backend.parse_trace(rubric_trace_path).usage
+                    )
+                    rubric_tokens = flat_token_total(rubric_usage)
                 except Exception as exc:  # pragma: no cover - preserved in run artifacts
                     errors.append(f"rubric trace parsing failed: {exc}")
 
@@ -193,10 +200,44 @@ def run_side(
         tokens=agent_tokens + rubric_tokens,
         agent_tokens=agent_tokens,
         rubric_tokens=rubric_tokens,
+        agent_usage=agent_usage,
+        rubric_usage=rubric_usage,
         errors=errors,
     )
     (artifact_dir / "summary.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")
     return result
+
+
+def token_usage_from_trace_usage(usage: TraceUsage) -> TokenUsage:
+    return TokenUsage(
+        provider=usage.provider,
+        source=usage.source,
+        observed=usage.observed,
+        usage_record_count=usage.usage_record_count,
+        selected_record_count=usage.selected_record_count,
+        input_tokens=usage.input_tokens,
+        cached_input_tokens=usage.cached_input_tokens,
+        cache_creation_input_tokens=usage.cache_creation_input_tokens,
+        output_tokens=usage.output_tokens,
+        reasoning_output_tokens=usage.reasoning_output_tokens,
+        provider_total_tokens=usage.provider_total_tokens,
+        derived_total_tokens=usage.derived_total_tokens,
+        effective_total_tokens=usage.total_tokens,
+    )
+
+
+def flat_token_total(usage: TokenUsage | None) -> int:
+    if usage is None or usage.total_tokens is None:
+        return 0
+    return usage.total_tokens
+
+
+def usage_provider_for_backend(backend: AgentBackend) -> UsageProvider:
+    if backend.name == "codex":
+        return "codex"
+    if backend.name == "claude":
+        return "claude"
+    return "unknown"
 
 
 def prepare_side_workspace(repo_root: Path, case: EvalCase, side: str, side_dir: Path, skill_dir: Path | None = None) -> None:

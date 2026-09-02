@@ -18,7 +18,8 @@ type SeverityFilterValue = "" | "trace" | "debug" | "info" | "warn" | "error" | 
 const LOG_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "serviceName", label: "Service", kind: "text", placeholder: "payments" },
   { key: "severityDisplay", label: "Severity", kind: "text", placeholder: "TRACE2" },
-  { key: "bodyContains", label: "Message", kind: "text", placeholder: "payment failed", chipLabel: "Message" },
+  { key: "messageContains", label: "Message", kind: "text", placeholder: "payment failed", chipLabel: "Message" },
+  { key: "bodyContains", label: "Body", kind: "text", placeholder: "payment failed", chipLabel: "Body" },
   { key: "traceId", label: "Trace ID", kind: "text", placeholder: "22222222222222222222222222222222" },
   { key: "spanId", label: "Span ID", kind: "text", placeholder: "bbbbbbbbbbbbbbbb" },
   { key: "scopeName", label: "Scope", kind: "text", placeholder: "demo.logs" },
@@ -36,6 +37,7 @@ function buildLogsQuery(clauses: FilterClause[]): LogsQuery {
     switch (clause.key) {
       case "serviceName":
       case "severityDisplay":
+      case "messageContains":
       case "bodyContains":
       case "traceId":
       case "spanId":
@@ -130,6 +132,25 @@ function displaySeverity(record: LogRecord): string {
 
 function logKey(r: LogRecord): string {
   return r.id || `${r.timeUnixNano}|${r.resource?.serviceName ?? ""}|${r.severityText ?? ""}|${r.severityNumber ?? ""}|${r.body}`;
+}
+
+function displayMessage(record: LogRecord): string {
+  const body = record.body?.trim();
+  if (body) return record.body;
+  const eventName = record.attributes?.["event.name"];
+  return typeof eventName === "string" && eventName.trim() ? eventName.trim() : "";
+}
+
+function displayTimestamp(record: LogRecord): string {
+  const eventTimestamp = record.attributes?.["event.timestamp"];
+  const timestamp = record.attributes?.timestamp;
+  const candidates = [
+    record.timeUnixNano,
+    typeof eventTimestamp === "string" ? eventTimestamp : "",
+    record.observedTimeUnixNano ?? "",
+    typeof timestamp === "string" ? timestamp : "",
+  ];
+  return candidates.find((candidate) => parseTimestamp(candidate) !== null) ?? "";
 }
 
 // Tokenizes a pretty-printed JSON string for syntax highlighting.
@@ -304,6 +325,8 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                 const active = selectedKey !== null && logKey(r) === selectedKey;
                 const severity = displaySeverity(r);
                 const cls = severityBucket(r);
+                const message = displayMessage(r);
+                const timestamp = displayTimestamp(r);
                 return (
                   <button
                     key={logKey(r)}
@@ -333,16 +356,16 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                     <span className="data-table__td data-table__td--timestamp">
                       <span
                         className="explorer-row__secondary"
-                        title={formatTimestampFull(r.timeUnixNano)}
+                        title={formatTimestampFull(timestamp)}
                       >
-                        {formatTimestamp(r.timeUnixNano)}
+                        {formatTimestamp(timestamp)}
                       </span>
                     </span>
                     <span className="data-table__td data-table__td--service">
                       <span className="explorer-row__secondary">{r.resource?.serviceName ?? "unknown"}</span>
                     </span>
                     <span className="data-table__td data-table__td--message">
-                      <span className="explorer-row__primary">{r.body}</span>
+                      <span className="explorer-row__primary">{message || "--"}</span>
                     </span>
                   </button>
                 );
@@ -357,7 +380,7 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
         {selectedLog ? (
           <ResizablePanel className={`signal-view__panel${panelExiting ? " signal-view__panel--exiting" : ""}`} resizeLabel="Resize logs panel">
             <DetailPanel
-              title={truncateMessage(selectedLog.body) || displaySeverity(selectedLog) || "Log"}
+              title={truncateMessage(displayMessage(selectedLog)) || displaySeverity(selectedLog) || "Log"}
               subtitle={[displaySeverity(selectedLog), selectedLog.resource?.serviceName].filter(Boolean).join(" · ")}
               onClose={closeLogPanel}
             >
@@ -409,9 +432,9 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                   <div className="log-detail__section">
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px", marginBottom: "6px" }}>
                       <h4 className="log-detail__heading" style={{ margin: 0 }}>Message</h4>
-                      {selectedLog.body ? <CopyTextButton text={selectedLog.body} label="Message" /> : null}
+                      {displayMessage(selectedLog) ? <CopyTextButton text={displayMessage(selectedLog)} label="Message" /> : null}
                     </div>
-                    <pre className="log-detail__body">{selectedLog.body}</pre>
+                    <pre className="log-detail__body">{displayMessage(selectedLog) || "--"}</pre>
                   </div>
 
                   {selectedLog.traceId ? (
@@ -478,20 +501,26 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
  * The full ISO date is available via {@link formatTimestampFull}.
  */
 function formatTimestamp(ts: string): string {
-  if (!ts) return "--";
+  const timestamp = parseTimestamp(ts);
+  return timestamp ? timestamp.toISOString().slice(11, 23) : "--";
+}
+
+function parseTimestamp(ts: string): Date | null {
+  if (!ts) return null;
   try {
-    let d: Date;
-    // Numeric-only strings are nanosecond Unix epoch values.
     if (/^\d+$/.test(ts)) {
-      const ms = Number(BigInt(ts) / BigInt(1_000_000));
-      d = new Date(ms);
-    } else {
-      d = new Date(ts);
+      const nanos = BigInt(ts);
+      if (nanos <= BigInt(0)) return null;
+      const timestamp = new Date(Number(nanos / BigInt(1_000_000)));
+      return !isNaN(timestamp.getTime()) ? timestamp : null;
     }
-    if (isNaN(d.getTime())) return "--";
-    return d.toISOString().slice(11, 23);
+    const timestamp = new Date(ts);
+    if (isNaN(timestamp.getTime()) || timestamp.getTime() < 0) return null;
+    if (timestamp.getTime() > 0) return timestamp;
+    const epochFraction = /^1970-01-01T00:00:00\.(\d+)(?:Z|\+00:00)$/.exec(ts);
+    return epochFraction?.[1] && /[1-9]/.test(epochFraction[1]) ? timestamp : null;
   } catch {
-    return "--";
+    return null;
   }
 }
 
@@ -512,18 +541,5 @@ function truncateMessage(body: string | undefined): string {
 
 /** Returns the full ISO timestamp for use in title/tooltip attributes. */
 function formatTimestampFull(ts: string): string {
-  if (!ts) return "";
-  try {
-    let d: Date;
-    if (/^\d+$/.test(ts)) {
-      const ms = Number(BigInt(ts) / BigInt(1_000_000));
-      d = new Date(ms);
-    } else {
-      d = new Date(ts);
-    }
-    if (isNaN(d.getTime())) return "";
-    return d.toISOString();
-  } catch {
-    return "";
-  }
+  return parseTimestamp(ts)?.toISOString() ?? "";
 }

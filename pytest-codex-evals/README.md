@@ -300,6 +300,34 @@ check fields, rubric reports contain only rubric judge fields, and runtime
 reports contain only runtime check fields. Baseline columns are empty when a
 baseline side was not run.
 
+### Token usage
+
+Live run artifacts retain the backward-compatible `tokens`, `agent_tokens`,
+and `rubric_tokens` fields and also include optional `agent_usage` and
+`rubric_usage` objects. The normalized objects report input, cached input,
+cache-creation input, output, reasoning output, the provider-reported total,
+and an independently derived input-plus-output total.
+
+Codex input and output counts remain provider-inclusive totals; cached input,
+cache creation, and reasoning output are breakdowns and are not subtracted.
+Claude input is normalized from uncached input plus cache-read and
+cache-creation input, while output remains the provider's inclusive output
+count. A cumulative provider record takes precedence over per-turn records so
+the same work is not counted twice. If no cumulative record is recognized,
+complete incremental records are summed.
+
+Markdown and benchmark reports include measurement coverage. `unknown` means a
+field was absent or could not be recognized and is distinct from an explicitly
+reported `0`; partial aggregates include the number of prompts that measured
+each field. A row is measured only when every prompt has a provider-reported
+total or a complete independently derived total; recognized fragments without
+a preferred total remain partial and the aggregate total remains unknown.
+Agent/task usage and rubric/judge usage remain separate, and judge usage is
+rendered only in rubric reports. Codex and Claude judge subprocesses disable
+OTel export, so globally configured provider telemetry cannot put grading usage
+into Observer's agent/task ring; judge usage is still parsed from the subprocess
+trace for the rubric report.
+
 ## Publish
 
 The package is versioned independently from consuming projects and can be

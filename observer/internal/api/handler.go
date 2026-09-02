@@ -574,6 +574,8 @@ func logRecordFilterFromRequest(r *http.Request) store.LogRecordFilter {
 		ExcludeSeverityDisplay: queryNeqString(q, "severityDisplay"),
 		SeverityText:           queryEqString(q, "severityText", "severityText"),
 		ExcludeSeverityText:    queryNeqString(q, "severityText"),
+		MessageContains:        firstNonEmpty(q.Get("filter[messageContains][eq]"), q.Get("filter[messageContains]")),
+		ExcludeMessageContains: q.Get("filter[messageContains][neq]"),
 		BodyContains:           firstNonEmpty(q.Get("filter[bodyContains][eq]"), q.Get("filter[bodyContains]"), q.Get("body")),
 		ExcludeBodyContains:    q.Get("filter[bodyContains][neq]"),
 		TraceID:                queryEqString(q, "traceId", "traceId"),

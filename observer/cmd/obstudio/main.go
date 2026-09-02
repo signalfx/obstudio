@@ -105,6 +105,7 @@ func newRootCmd(config *runConfig) *cobra.Command {
 
 	root.AddCommand(newInstallCmd())
 	root.AddCommand(newLifecycleCommands()...)
+	root.AddCommand(newTokenTelemetryCommand())
 	return root
 }
 
@@ -210,7 +211,10 @@ func run(config runConfig) error {
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
 		registerManagedStop(mux, strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")), stopManaged)
 	}
-	mcp.Register(mux, s, v, validatorManager, splunkExportController, splunkTracesController)
+	repositoryCorrelationModeResolver := mcp.RepositoryCorrelationModeResolver(func(provider string) string {
+		return providerRepositoryCorrelationMode(tokenTelemetryStatePath(), provider)
+	})
+	mcp.Register(mux, s, v, validatorManager, splunkExportController, splunkTracesController, repositoryCorrelationModeResolver)
 	webCleanup := web.Register(mux, s, v)
 
 	srv := &http.Server{Addr: mainAddr, Handler: mux}
@@ -259,7 +263,16 @@ func run(config runConfig) error {
 
 	fmt.Fprint(os.Stderr, renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr))
 
-	go mcp.RunStdio(s, os.Stdin, os.Stdout, v, validatorManager, splunkExportController, splunkTracesController)
+	go mcp.RunStdio(
+		s,
+		os.Stdin,
+		os.Stdout,
+		v,
+		validatorManager,
+		splunkExportController,
+		splunkTracesController,
+		repositoryCorrelationModeResolver,
+	)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)

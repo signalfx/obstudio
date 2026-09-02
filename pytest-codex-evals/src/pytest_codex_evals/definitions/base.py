@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 EvalRole = Literal["sanity", "rubric", "runtime"]
@@ -152,6 +152,55 @@ class GradeResult(BaseModel):
         return self.passed / self.total
 
 
+class TokenUsage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["codex", "claude", "unknown"] = "unknown"
+    source: Literal["cumulative", "incremental", "unknown"] = "unknown"
+    observed: bool = False
+    usage_record_count: int = Field(default=0, ge=0)
+    selected_record_count: int = Field(default=0, ge=0)
+    input_tokens: int | None = Field(default=None, ge=0)
+    cached_input_tokens: int | None = Field(default=None, ge=0)
+    cache_creation_input_tokens: int | None = Field(default=None, ge=0)
+    output_tokens: int | None = Field(default=None, ge=0)
+    reasoning_output_tokens: int | None = Field(default=None, ge=0)
+    provider_total_tokens: int | None = Field(default=None, ge=0)
+    derived_total_tokens: int | None = Field(default=None, ge=0)
+    effective_total_tokens: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_missing_effective_total(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or "effective_total_tokens" in value:
+            return value
+        normalized = dict(value)
+        effective_total = normalized.get("provider_total_tokens")
+        if effective_total is None:
+            effective_total = normalized.get("derived_total_tokens")
+        normalized["effective_total_tokens"] = effective_total
+        return normalized
+
+    @property
+    def recognized(self) -> bool:
+        return self.effective_total_tokens is not None or any(
+            value is not None
+            for value in (
+                self.input_tokens,
+                self.cached_input_tokens,
+                self.cache_creation_input_tokens,
+                self.output_tokens,
+                self.reasoning_output_tokens,
+                self.provider_total_tokens,
+                self.derived_total_tokens,
+            )
+        )
+
+    @property
+    def total_tokens(self) -> int | None:
+        return self.effective_total_tokens
+
+
 class SideResult(BaseModel):
     side: Literal["with_skill", "baseline"]
     exit_code: int
@@ -167,6 +216,8 @@ class SideResult(BaseModel):
     tokens: int = 0
     agent_tokens: int = 0
     rubric_tokens: int = 0
+    agent_usage: TokenUsage | None = None
+    rubric_usage: TokenUsage | None = None
     errors: list[str] = Field(default_factory=list)
 
 

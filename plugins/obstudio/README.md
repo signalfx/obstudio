@@ -42,6 +42,24 @@ Current scope:
 - the bootstrapper expects the release pipeline to publish a `checksums.txt`
   asset alongside the zip archives and validates the archive before extraction
 
+The bootstrap starts or reuses Observer but does not edit Codex or Claude Code
+OTLP settings. Provider token collection is a separate user opt-in. With the
+standalone release CLI installed, enable either provider and restart it:
+
+```bash
+obstudio token-telemetry enable --target=codex,claude-code
+```
+
+The command leaves matching settings user-owned, refuses conflicting OTLP
+routing, and records only values it adds so `token-telemetry disable` can remove
+those values without deleting later user changes. New targets default
+repository correlation to `path`, which sends the repository name plus canonical
+repository and active workspace paths. Use `name` to omit filesystem paths, or
+`off` to disable correlation. Omitting the flag for an already configured target
+preserves its recorded mode. When enabled, the trusted SessionStart hook sends
+a content-free correlation event to the same loopback Observer; prompt and tool
+content are not included.
+
 Shared workflow skill sources are canonical in the top-level `skills/`
 directory. Their copies under `plugins/obstudio/skills/` are materialized so a
 repo-local marketplace install works from a fresh checkout without
