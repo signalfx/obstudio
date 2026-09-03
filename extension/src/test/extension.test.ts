@@ -1086,7 +1086,7 @@ test('package metadata includes the extension-host WebSocket runtime', () => {
 	const packageJSON = JSON.parse(
 		fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf-8'),
 	) as { dependencies?: Record<string, string> };
-	assert.equal(packageJSON.dependencies?.ws, '8.18.3');
+	assert.equal(packageJSON.dependencies?.ws, '8.21.0');
 });
 
 test('package metadata declares marketplace categories, tags, and resource links', () => {
