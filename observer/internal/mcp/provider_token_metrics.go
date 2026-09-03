@@ -12,9 +12,17 @@ import (
 )
 
 type claudeMetricSeries struct {
-	tokenType    string
-	dimensionKey string
-	points       []store.MetricDataPoint
+	tokenType           string
+	dimensionKey        string
+	logicalDimensionKey string
+	points              []store.MetricDataPoint
+}
+
+type claudeMetricCoverage struct {
+	start       time.Time
+	latest      time.Time
+	startKnown  bool
+	latestKnown bool
 }
 
 type claudeMetricPointValue struct {
@@ -161,8 +169,9 @@ func buildClaudeMetricTask(points []store.MetricDataPoint, unavailableThrough ti
 		series := seriesByKey[seriesKey]
 		if series == nil {
 			series = &claudeMetricSeries{
-				tokenType:    tokenType,
-				dimensionKey: claudeMetricDimensionKey(point),
+				tokenType:           tokenType,
+				dimensionKey:        claudeMetricDimensionKey(point),
+				logicalDimensionKey: claudeMetricLogicalDimensionKey(point),
 			}
 			seriesByKey[seriesKey] = series
 			seriesOrder = append(seriesOrder, seriesKey)
@@ -175,8 +184,15 @@ func buildClaudeMetricTask(points []store.MetricDataPoint, unavailableThrough ti
 	dimensionSeen := make(map[string]map[string]bool)
 	allSeriesCumulative := len(seriesOrder) > 0
 	seriesHistoryTruncated := false
+	coverageByComponent := make(map[string]*claudeMetricCoverage)
 	for _, seriesKey := range seriesOrder {
 		series := seriesByKey[seriesKey]
+		coverageKey := series.logicalDimensionKey + "\x00" + series.tokenType
+		coverage := coverageByComponent[coverageKey]
+		if coverage == nil {
+			coverage = &claudeMetricCoverage{startKnown: true, latestKnown: true}
+			coverageByComponent[coverageKey] = coverage
+		}
 		if len(series.points) == 0 || !strings.EqualFold(strings.TrimSpace(series.points[0].Temporality), "cumulative") {
 			allSeriesCumulative = false
 		}
@@ -187,7 +203,21 @@ func buildClaudeMetricTask(points []store.MetricDataPoint, unavailableThrough ti
 		value, ok := aggregateClaudeMetricSeries(series.points)
 		if !ok {
 			unrecognized++
+			coverage.startKnown = false
+			coverage.latestKnown = false
 			continue
+		}
+		seriesStart := latestClaudeMetricSeriesStart(series.points)
+		if seriesStart.IsZero() {
+			coverage.startKnown = false
+		} else if coverage.start.IsZero() || seriesStart.Before(coverage.start) {
+			coverage.start = seriesStart
+		}
+		seriesLatest := latestClaudeMetricSeriesTime(series.points)
+		if seriesLatest.IsZero() {
+			coverage.latestKnown = false
+		} else if seriesLatest.After(coverage.latest) {
+			coverage.latest = seriesLatest
 		}
 		current := componentSums[series.tokenType]
 		if value > math.MaxInt64-current {
@@ -200,6 +230,22 @@ func buildClaudeMetricTask(points []store.MetricDataPoint, unavailableThrough ti
 			dimensionSeen[series.dimensionKey] = make(map[string]bool)
 		}
 		dimensionSeen[series.dimensionKey][series.tokenType] = true
+	}
+	coverageStart := time.Time{}
+	coverageStartKnown := len(coverageByComponent) > 0
+	coverageLatest := time.Time{}
+	coverageLatestKnown := len(coverageByComponent) > 0
+	for _, coverage := range coverageByComponent {
+		if !coverage.startKnown || coverage.start.IsZero() {
+			coverageStartKnown = false
+		} else if coverage.start.After(coverageStart) {
+			coverageStart = coverage.start
+		}
+		if !coverage.latestKnown || coverage.latest.IsZero() {
+			coverageLatestKnown = false
+		} else if coverageLatest.IsZero() || coverage.latest.Before(coverageLatest) {
+			coverageLatest = coverage.latest
+		}
 	}
 	allDimensionsComplete := len(dimensionObserved) > 0
 	for dimensionKey, observed := range dimensionObserved {
@@ -269,6 +315,12 @@ func buildClaudeMetricTask(points []store.MetricDataPoint, unavailableThrough ti
 		startTime = metricPointTime(first)
 	}
 	endTime := metricPointTime(points[len(points)-1])
+	if !coverageStartKnown {
+		coverageStart = time.Time{}
+	}
+	if !coverageLatestKnown {
+		coverageLatest = time.Time{}
+	}
 	serviceName := first.Resource.ServiceName
 	if serviceName == "" {
 		serviceName = "claude-code"
@@ -299,8 +351,34 @@ func buildClaudeMetricTask(points []store.MetricDataPoint, unavailableThrough ti
 		},
 		records:                  records,
 		latest:                   endTime,
+		metricCoverageStart:      &coverageStart,
+		metricCoverageLatest:     &coverageLatest,
 		sessionHistoryIncomplete: seriesHistoryTruncated,
 	}
+}
+
+func latestClaudeMetricSeriesStart(points []store.MetricDataPoint) time.Time {
+	latest := time.Time{}
+	for _, point := range points {
+		if point.StartTime.IsZero() {
+			return time.Time{}
+		}
+		if point.StartTime.After(latest) {
+			latest = point.StartTime
+		}
+	}
+	return latest
+}
+
+func latestClaudeMetricSeriesTime(points []store.MetricDataPoint) time.Time {
+	latest := time.Time{}
+	for _, point := range points {
+		pointTime := metricPointTime(point)
+		if pointTime.After(latest) {
+			latest = pointTime
+		}
+	}
+	return latest
 }
 
 func claudeMetricSeriesTruncated(points []store.MetricDataPoint, unavailableThrough time.Time) bool {
@@ -391,6 +469,14 @@ func claudeMetricSeriesKey(point store.MetricDataPoint, tokenType string) string
 }
 
 func claudeMetricDimensionKey(point store.MetricDataPoint) string {
+	return claudeMetricDimensionKeyWithStartTime(point, true)
+}
+
+func claudeMetricLogicalDimensionKey(point store.MetricDataPoint) string {
+	return claudeMetricDimensionKeyWithStartTime(point, false)
+}
+
+func claudeMetricDimensionKeyWithStartTime(point store.MetricDataPoint, includeStartTime bool) string {
 	attributes := make(map[string]any, len(point.Attributes))
 	for key, value := range point.Attributes {
 		if strings.EqualFold(key, "type") {
@@ -400,16 +486,19 @@ func claudeMetricDimensionKey(point store.MetricDataPoint) string {
 	}
 	encodedAttributes := claudeMetricAttributesKey(attributes)
 	encodedResourceAttributes := claudeMetricAttributesKey(point.Resource.Attributes)
-	return strings.Join([]string{
+	parts := []string{
 		strings.TrimSpace(point.Resource.ServiceName),
 		strings.TrimSpace(point.Resource.SchemaURL),
 		encodedResourceAttributes,
 		strings.TrimSpace(point.Scope.Name),
 		strings.TrimSpace(point.Scope.Version),
 		strings.TrimSpace(point.Scope.SchemaURL),
-		point.StartTime.UTC().Format(time.RFC3339Nano),
-		encodedAttributes,
-	}, "\x00")
+	}
+	if includeStartTime {
+		parts = append(parts, point.StartTime.UTC().Format(time.RFC3339Nano))
+	}
+	parts = append(parts, encodedAttributes)
+	return strings.Join(parts, "\x00")
 }
 
 func claudeMetricAttributesKey(attributes map[string]any) string {

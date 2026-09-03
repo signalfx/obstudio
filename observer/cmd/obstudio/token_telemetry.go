@@ -14,12 +14,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
 )
 
 const (
 	codexTokenTelemetryBlockStart = "# BEGIN OBSTUDIO TOKEN TELEMETRY"
 	codexTokenTelemetryBlockEnd   = "# END OBSTUDIO TOKEN TELEMETRY"
+	codexTokenTelemetryLineMarker = "# OBSTUDIO TOKEN TELEMETRY"
 	defaultRepositoryCorrelation  = "path"
 	defaultTokenTelemetryEndpoint = "http://127.0.0.1:4318/v1/logs"
 	tokenTelemetryStateFileName   = "token-telemetry.json"
@@ -40,9 +42,15 @@ type codexTelemetryExporter struct {
 }
 
 type codexTelemetryTableExporter struct {
-	found    bool
-	endpoint string
-	protocol string
+	found              bool
+	otlpHTTPFound      bool
+	otlpHTTPSectionEnd int
+	endpoint           string
+	endpointIndex      int
+	endpointSet        bool
+	protocol           string
+	protocolIndex      int
+	protocolSet        bool
 }
 
 type tokenTelemetryResult struct {
@@ -65,12 +73,20 @@ type tokenTelemetryRepositoryCorrelation struct {
 }
 
 type tokenTelemetryTargetOwnership struct {
-	ConfigPath  string            `json:"configPath"`
-	Endpoint    string            `json:"endpoint"`
-	Env         map[string]string `json:"env,omitempty"`
-	Settings    map[string]string `json:"settings,omitempty"`
-	SectionLine string            `json:"sectionLine,omitempty"`
-	UpdatedAt   time.Time         `json:"updatedAt"`
+	ConfigPath    string            `json:"configPath"`
+	Endpoint      string            `json:"endpoint"`
+	Env           map[string]string `json:"env,omitempty"`
+	Settings      map[string]string `json:"settings,omitempty"`
+	TableSettings map[string]string `json:"tableSettings,omitempty"`
+	SectionLine   string            `json:"sectionLine,omitempty"`
+	UpdatedAt     time.Time         `json:"updatedAt"`
+}
+
+type codexTelemetryTableAddition struct {
+	index   int
+	key     string
+	line    string
+	replace bool
 }
 
 type tokenTelemetryOwnershipMutation func(*tokenTelemetryOwnership)
@@ -85,7 +101,7 @@ type codexManagedTelemetryBlock struct {
 func newTokenTelemetryCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "token-telemetry",
-		Short: "Manage opt-in Codex and Claude token telemetry without replacing user-owned OTLP routing",
+		Short: "Manage opt-in Codex and Claude token telemetry routed through Observer",
 	}
 	cmd.AddCommand(newTokenTelemetryEnableCommand())
 	cmd.AddCommand(newTokenTelemetryDisableCommand())
@@ -99,7 +115,7 @@ func newTokenTelemetryEnableCommand() *cobra.Command {
 	var repositoryCorrelation string
 	cmd := &cobra.Command{
 		Use:   "enable",
-		Short: "Opt in to provider token telemetry for Codex or Claude Code",
+		Short: "Opt in and route provider token telemetry through Observer",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			targets, err := normalizeTokenTelemetryTargets(requestedTargets)
 			if err != nil {
@@ -160,7 +176,7 @@ func newTokenTelemetryDisableCommand() *cobra.Command {
 	var requestedTargets []string
 	cmd := &cobra.Command{
 		Use:   "disable",
-		Short: "Remove only token telemetry configuration owned by Obstudio",
+		Short: "Remove unchanged OTLP routing managed by Obstudio",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			targets, err := normalizeTokenTelemetryTargets(requestedTargets)
 			if err != nil {
@@ -632,68 +648,52 @@ func enableCodexTokenTelemetryWithOwnershipMutation(
 	}
 
 	original, readErr := os.ReadFile(path)
+	renderInput := original
 	existed := readErr == nil
 	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
 		return tokenTelemetryResult{}, fmt.Errorf("read Codex config %q: %w", path, readErr)
 	}
-	block, found, err := parseCodexManagedTelemetryBlock(string(original))
+	_, found, err := parseCodexManagedTelemetryBlock(string(original))
 	if err != nil {
 		return tokenTelemetryResult{}, fmt.Errorf("read managed token telemetry in %q: %w", path, err)
 	}
 	if found && !priorExists {
-		result, inspectErr := inspectUnownedMarkedCodexTokenTelemetry(path, endpoint)
-		if inspectErr != nil {
-			return tokenTelemetryResult{}, inspectErr
+		unwrapped, unwrapErr := unwrapCodexTokenTelemetryBlock(string(original))
+		if unwrapErr != nil {
+			return tokenTelemetryResult{}, fmt.Errorf("unwrap unmanaged token telemetry in %q: %w", path, unwrapErr)
 		}
-		if result.State == "enabled-existing" {
-			if err := commitTokenTelemetryOwnershipMutation(statePath, ownership, mutation, writeOwnership); err != nil {
-				return tokenTelemetryResult{}, fmt.Errorf("write ownership state: %w", err)
-			}
-			return result, nil
-		}
-		return tokenTelemetryResult{}, fmt.Errorf(
-			"Codex config %q contains an Obstudio marker without matching ownership state and is not fully configured for Observer (%s: %s); existing configuration was preserved",
-			path,
-			result.State,
-			result.Detail,
-		)
+		renderInput = []byte(unwrapped)
 	}
-	if found && priorExists {
-		if mismatch := codexManagedBlockMismatch(block, prior); mismatch != "" {
-			return tokenTelemetryResult{}, fmt.Errorf(
-				"Obstudio-owned Codex token telemetry in %q was modified (%s); existing configuration was preserved",
-				path,
-				mismatch,
-			)
-		}
-		if endpoint == prior.Endpoint && codexManagedBlockUnchanged(block, prior) {
-			result, inspectErr := inspectOwnedCodexTokenTelemetry(path, statePath, endpoint)
-			if inspectErr != nil {
-				return tokenTelemetryResult{}, inspectErr
+	if priorExists {
+		cleaned := string(original)
+		if found {
+			var removeErr error
+			cleaned, _, _, _, removeErr = removeOwnedCodexTelemetry(cleaned, prior)
+			if removeErr != nil {
+				return tokenTelemetryResult{}, fmt.Errorf("read managed token telemetry in %q: %w", path, removeErr)
 			}
-			if err := commitTokenTelemetryOwnershipMutation(statePath, ownership, mutation, writeOwnership); err != nil {
-				return tokenTelemetryResult{}, fmt.Errorf("write ownership state: %w", err)
-			}
-			return result, nil
 		}
+		renderInput = []byte(cleaned)
 	}
 
-	configured, configChanged, err := renderCodexTokenTelemetry(path, original, endpoint)
+	configured, _, tableSettings, err := renderCodexTokenTelemetry(path, renderInput, endpoint, true)
 	if err != nil {
 		return tokenTelemetryResult{}, err
 	}
+	configChanged := !bytes.Equal(original, configured)
 	managed, managedFound, err := parseCodexManagedTelemetryBlock(string(configured))
 	if err != nil {
 		return tokenTelemetryResult{}, fmt.Errorf("read configured token telemetry in %q: %w", path, err)
 	}
 	beforeOwnership := cloneTokenTelemetryOwnership(ownership)
-	if managedFound {
+	if managedFound || len(tableSettings) > 0 {
 		ownership.Targets["codex"] = tokenTelemetryTargetOwnership{
-			ConfigPath:  path,
-			Endpoint:    endpoint,
-			Settings:    managed.settings,
-			SectionLine: managed.sectionLine,
-			UpdatedAt:   time.Now().UTC(),
+			ConfigPath:    path,
+			Endpoint:      endpoint,
+			Settings:      managed.settings,
+			TableSettings: tableSettings,
+			SectionLine:   managed.sectionLine,
+			UpdatedAt:     time.Now().UTC(),
 		}
 	} else {
 		delete(ownership.Targets, "codex")
@@ -783,10 +783,18 @@ func disableOwnedCodexTokenTelemetryWithOwnershipMutation(
 	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
 		return tokenTelemetryResult{}, fmt.Errorf("read Codex config %q: %w", path, readErr)
 	}
-	cleaned, found, removed, preserved, err := removeOwnedCodexTelemetry(string(original), owned)
+	cleaned, tableFound, tableRemoved, tablePreserved, err := removeOwnedCodexTableSettings(string(original), owned)
 	if err != nil {
 		return tokenTelemetryResult{}, fmt.Errorf("read managed token telemetry in %q: %w", path, err)
 	}
+	cleaned, blockFound, blockRemoved, blockPreserved, err := removeOwnedCodexTelemetry(cleaned, owned)
+	if err != nil {
+		return tokenTelemetryResult{}, fmt.Errorf("read managed token telemetry in %q: %w", path, err)
+	}
+	found := tableFound || blockFound
+	removed := tableRemoved + blockRemoved
+	preserved := append(tablePreserved, blockPreserved...)
+	sort.Strings(preserved)
 	configChanged := found && cleaned != string(original)
 	beforeOwnership := cloneTokenTelemetryOwnership(ownership)
 	delete(ownership.Targets, "codex")
@@ -856,19 +864,44 @@ func inspectOwnedCodexTokenTelemetry(path, statePath, endpoint string) (tokenTel
 	if err != nil {
 		return tokenTelemetryResult{}, fmt.Errorf("read managed token telemetry in %q: %w", path, err)
 	}
-	if !found {
-		return result, nil
-	}
 	if !ownedPathMatches {
-		return inspectUnownedMarkedCodexTokenTelemetry(path, endpoint)
-	}
-	if mismatch := codexManagedBlockMismatch(block, owned); mismatch != "" {
-		result.State = "modified"
-		result.Detail = "owned configuration changed and will be preserved on disable: " + mismatch
+		if found {
+			return inspectUnownedMarkedCodexTokenTelemetry(path, endpoint)
+		}
 		return result, nil
 	}
-	if result.State == "enabled-managed" {
-		result.Detail = "Obstudio owns only the unchanged assignments recorded in its ownership state"
+	if found {
+		if mismatch := codexManagedBlockMismatch(block, owned); mismatch != "" {
+			result.State = "modified"
+			result.Detail = "owned configuration changed and will be preserved on disable: " + mismatch
+			return result, nil
+		}
+	} else if len(owned.Settings) > 0 || owned.SectionLine != "" {
+		result.State = "modified"
+		result.Detail = "owned configuration changed and will be preserved on disable: the managed block is missing"
+		return result, nil
+	}
+	tableMismatch, mismatchErr := codexOwnedTableSettingMismatch(string(data), owned)
+	if mismatchErr != nil {
+		return tokenTelemetryResult{}, fmt.Errorf("read managed token telemetry in %q: %w", path, mismatchErr)
+	}
+	if tableMismatch != "" {
+		result.State = "modified"
+		result.Detail = "owned configuration changed and will be preserved on disable: " + tableMismatch
+		return result, nil
+	}
+	if (result.State == "enabled-existing" || result.State == "enabled-managed") &&
+		(len(owned.Settings) > 0 || len(owned.TableSettings) > 0) {
+		suffix := ""
+		if separator := strings.Index(result.Detail, "; "); separator >= 0 {
+			suffix = result.Detail[separator:]
+		}
+		result.State = "enabled-managed"
+		result.Detail = fmt.Sprintf(
+			"Obstudio owns %d unchanged Codex exporter settings; Codex logs, traces, and metrics target Observer%s",
+			len(owned.Settings)+len(owned.TableSettings),
+			suffix,
+		)
 	}
 	return result, nil
 }
@@ -880,7 +913,12 @@ func inspectUnownedMarkedCodexTokenTelemetry(path, endpoint string) (tokenTeleme
 	}
 	if result.State == "enabled-managed" {
 		result.State = "enabled-existing"
-		result.Detail = "matching exporters are active; marker content has no ownership record and remains user-owned"
+		result.Detail = strings.Replace(
+			result.Detail,
+			"Obstudio owns only the assignments inside its managed block",
+			"matching exporters are active; marker content has no ownership record and remains user-owned",
+			1,
+		)
 		return result, nil
 	}
 	if result.Detail == "" {
@@ -896,78 +934,271 @@ func configureCodexTokenTelemetry(path, endpoint string) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read Codex config %q: %w", path, err)
 	}
-	configured, changed, err := renderCodexTokenTelemetry(path, data, endpoint)
+	configured, changed, _, err := renderCodexTokenTelemetry(path, data, endpoint, false)
 	if err != nil || !changed {
 		return err
 	}
 	return writeAgentConfig(path, configured)
 }
 
-func renderCodexTokenTelemetry(path string, data []byte, endpoint string) ([]byte, bool, error) {
+func renderCodexTokenTelemetry(
+	path string,
+	data []byte,
+	endpoint string,
+	takeOverMatching bool,
+) ([]byte, bool, map[string]string, error) {
+	inputCodeLines, lexErr := codexTOMLCodeLines(strings.Split(string(data), "\n"))
+	if lexErr != nil {
+		return nil, false, nil, fmt.Errorf("parse Codex config %q: %w", path, lexErr)
+	}
+	if definition := unsupportedCodexOTelExporterDefinition(inputCodeLines); definition != "" {
+		return nil, false, nil, fmt.Errorf("Codex OTel exporter in %q uses unsupported %s syntax; existing value was preserved", path, definition)
+	}
+	if err := validateCodexTOML(data); err != nil {
+		return nil, false, nil, fmt.Errorf("parse Codex config %q: %w", path, err)
+	}
 	traceEndpoint, err := tokenTelemetryTraceEndpoint(endpoint)
 	if err != nil {
-		return nil, false, err
+		return nil, false, nil, err
+	}
+	metricEndpoint, err := tokenTelemetryMetricEndpoint(endpoint)
+	if err != nil {
+		return nil, false, nil, err
 	}
 	content, _, err := removeCodexTokenTelemetryBlock(string(data))
 	if err != nil {
-		return nil, false, fmt.Errorf("read managed token telemetry in %q: %w", path, err)
+		return nil, false, nil, fmt.Errorf("read managed token telemetry in %q: %w", path, err)
 	}
 	lines := strings.Split(content, "\n")
 	codeLines, lexErr := codexTOMLCodeLines(lines)
 	if lexErr != nil {
-		return nil, false, fmt.Errorf("parse Codex config %q: %w", path, lexErr)
+		return nil, false, nil, fmt.Errorf("parse Codex config %q: %w", path, lexErr)
 	}
 	sectionStart, sectionEnd := findCodexOTelSection(codeLines)
 	if definition := unsupportedCodexOTelExporterDefinition(codeLines); definition != "" {
-		return nil, false, fmt.Errorf("Codex OTel exporter in %q uses unsupported %s syntax; existing value was preserved", path, definition)
+		return nil, false, nil, fmt.Errorf("Codex OTel exporter in %q uses unsupported %s syntax; existing value was preserved", path, definition)
 	}
 	exporters := []codexTelemetryExporter{
 		{key: "exporter", label: "log", endpoint: endpoint},
 		{key: "trace_exporter", label: "trace", endpoint: traceEndpoint},
+		{key: "metrics_exporter", label: "metrics", endpoint: metricEndpoint},
 	}
 	managedAssignments := make([]string, 0, len(exporters))
+	tableAdditions := make([]codexTelemetryTableAddition, 0)
+	tableSettings := make(map[string]string)
 	for _, exporter := range exporters {
 		state, stateErr := codexExporterConfigurationState(codeLines, sectionStart, sectionEnd, exporter)
 		if stateErr != nil {
-			return nil, false, fmt.Errorf("inspect Codex OTel %s exporter in %q: %w", exporter.label, path, stateErr)
+			return nil, false, nil, fmt.Errorf("inspect Codex OTel %s exporter in %q: %w", exporter.label, path, stateErr)
 		}
-		if state == "matching" {
+		switch state {
+		case "matching":
+			if !takeOverMatching {
+				continue
+			}
+		case "incomplete":
+		case "conflict":
+		default:
+			managedAssignments = append(managedAssignments,
+				fmt.Sprintf("%s = { otlp-http = { endpoint = %q, protocol = \"binary\" } }", exporter.key, exporter.endpoint))
 			continue
 		}
-		if state == "conflict" {
-			return nil, false, fmt.Errorf("Codex OTel %s exporter in %q already has a user-owned value; existing configuration was preserved", exporter.label, path)
+		additions, additionErr := codexExporterOverrideChanges(
+			lines,
+			codeLines,
+			sectionStart,
+			sectionEnd,
+			exporter,
+			takeOverMatching,
+		)
+		if additionErr != nil {
+			return nil, false, nil, fmt.Errorf("override Codex OTel %s exporter in %q: %w", exporter.label, path, additionErr)
 		}
-		managedAssignments = append(managedAssignments,
-			fmt.Sprintf("%s = { otlp-http = { endpoint = %q, protocol = \"binary\" } }", exporter.key, exporter.endpoint))
+		tableAdditions = append(tableAdditions, additions...)
+		for _, addition := range additions {
+			tableSettings[addition.key] = addition.line
+		}
 	}
-	if len(managedAssignments) == 0 {
-		return data, false, nil
+	if len(managedAssignments) == 0 && len(tableAdditions) == 0 {
+		return data, false, nil, nil
 	}
 
-	managedLines := append([]string{codexTokenTelemetryBlockStart}, managedAssignments...)
-	managedLines = append(managedLines, codexTokenTelemetryBlockEnd)
-	if sectionStart >= 0 {
-		insertAt := sectionStart + 1
-		lines = insertStrings(lines, insertAt, managedLines)
-	} else {
-		insertAt := firstCodexOTelChildSection(codeLines)
-		newSection := append([]string{codexTokenTelemetryBlockStart, "[otel]"}, managedAssignments...)
-		newSection = append(newSection, codexTokenTelemetryBlockEnd)
-		if insertAt >= 0 {
-			lines = insertStrings(lines, insertAt, newSection)
+	lines = insertCodexTelemetryTableAdditions(lines, tableAdditions)
+	codeLines, lexErr = codexTOMLCodeLines(lines)
+	if lexErr != nil {
+		return nil, false, nil, fmt.Errorf("parse completed Codex config %q: %w", path, lexErr)
+	}
+	sectionStart, _ = findCodexOTelSection(codeLines)
+
+	if len(managedAssignments) > 0 {
+		managedLines := append([]string{codexTokenTelemetryBlockStart}, managedAssignments...)
+		managedLines = append(managedLines, codexTokenTelemetryBlockEnd)
+		if sectionStart >= 0 {
+			insertAt := sectionStart + 1
+			lines = insertStrings(lines, insertAt, managedLines)
 		} else {
-			if content != "" && !strings.HasSuffix(content, "\n") {
-				content += "\n"
+			insertAt := firstCodexOTelChildSection(codeLines)
+			newSection := append([]string{codexTokenTelemetryBlockStart, "[otel]"}, managedAssignments...)
+			newSection = append(newSection, codexTokenTelemetryBlockEnd)
+			if insertAt >= 0 {
+				lines = insertStrings(lines, insertAt, newSection)
+			} else {
+				content = strings.Join(lines, "\n")
+				if content != "" && !strings.HasSuffix(content, "\n") {
+					content += "\n"
+				}
+				content += strings.Join(newSection, "\n") + "\n"
+				configured := []byte(content)
+				if err := validateCodexTOML(configured); err != nil {
+					return nil, false, nil, fmt.Errorf("validate completed Codex config %q: %w", path, err)
+				}
+				return configured, !bytes.Equal(data, configured), tableSettings, nil
 			}
-			content += strings.Join(newSection, "\n") + "\n"
-			configured := []byte(content)
-			return configured, !bytes.Equal(data, configured), nil
 		}
 	}
 
 	content = strings.Join(lines, "\n")
 	configured := []byte(content)
-	return configured, !bytes.Equal(data, configured), nil
+	if err := validateCodexTOML(configured); err != nil {
+		return nil, false, nil, fmt.Errorf("validate completed Codex config %q: %w", path, err)
+	}
+	return configured, !bytes.Equal(data, configured), tableSettings, nil
+}
+
+func validateCodexTOML(data []byte) error {
+	var config map[string]any
+	_, err := toml.Decode(string(data), &config)
+	return err
+}
+
+func codexExporterOverrideChanges(
+	lines, codeLines []string,
+	sectionStart, sectionEnd int,
+	exporter codexTelemetryExporter,
+	takeOverMatching bool,
+) ([]codexTelemetryTableAddition, error) {
+	assignmentIndexes := make([]int, 0, 1)
+	if sectionStart >= 0 {
+		for index := sectionStart + 1; index < sectionEnd; index++ {
+			key, _, ok := tomlAssignment(codeLines[index])
+			if ok && key == exporter.key {
+				assignmentIndexes = append(assignmentIndexes, index)
+			}
+		}
+	}
+	table, err := codexExporterTable(codeLines, exporter.key)
+	if err != nil {
+		return nil, err
+	}
+	if len(assignmentIndexes) > 1 || (len(assignmentIndexes) == 1 && table.found) {
+		return nil, errors.New("exporter is defined more than once")
+	}
+	if len(assignmentIndexes) == 1 {
+		index := assignmentIndexes[0]
+		line := ""
+		_, value, _ := tomlAssignment(codeLines[index])
+		if takeOverMatching && codexExporterTargetsEndpoint(value, exporter.endpoint) {
+			line = markCodexTokenTelemetryLine(lines[index])
+		} else {
+			indent := lines[index][:len(lines[index])-len(strings.TrimLeft(lines[index], " \t"))]
+			line = fmt.Sprintf("%s%s = { otlp-http = { endpoint = %q, protocol = \"binary\" } } %s", indent, exporter.key, exporter.endpoint, codexTokenTelemetryLineMarker)
+		}
+		return []codexTelemetryTableAddition{{
+			index:   index,
+			key:     exporter.key + ".assignment",
+			line:    line,
+			replace: true,
+		}}, nil
+	}
+	if !table.found {
+		return nil, errors.New("exporter definition is missing")
+	}
+
+	changes := make([]codexTelemetryTableAddition, 0, 2)
+	if !table.endpointSet {
+		changes = append(changes, codexTelemetryTableAddition{
+			index: table.otlpHTTPSectionEnd,
+			key:   exporter.key + ".endpoint",
+			line:  fmt.Sprintf("endpoint = %q %s", exporter.endpoint, codexTokenTelemetryLineMarker),
+		})
+	} else if table.endpoint != exporter.endpoint || takeOverMatching {
+		indent := lines[table.endpointIndex][:len(lines[table.endpointIndex])-len(strings.TrimLeft(lines[table.endpointIndex], " \t"))]
+		line := fmt.Sprintf("%sendpoint = %q %s", indent, exporter.endpoint, codexTokenTelemetryLineMarker)
+		if table.endpoint == exporter.endpoint {
+			line = markCodexTokenTelemetryLine(lines[table.endpointIndex])
+		}
+		changes = append(changes, codexTelemetryTableAddition{
+			index:   table.endpointIndex,
+			key:     exporter.key + ".endpoint",
+			line:    line,
+			replace: true,
+		})
+	}
+	if !table.protocolSet {
+		changes = append(changes, codexTelemetryTableAddition{
+			index: table.otlpHTTPSectionEnd,
+			key:   exporter.key + ".protocol",
+			line:  "protocol = \"binary\" " + codexTokenTelemetryLineMarker,
+		})
+	} else if !strings.EqualFold(table.protocol, "binary") || takeOverMatching {
+		indent := lines[table.protocolIndex][:len(lines[table.protocolIndex])-len(strings.TrimLeft(lines[table.protocolIndex], " \t"))]
+		line := indent + "protocol = \"binary\" " + codexTokenTelemetryLineMarker
+		if strings.EqualFold(table.protocol, "binary") {
+			line = markCodexTokenTelemetryLine(lines[table.protocolIndex])
+		}
+		changes = append(changes, codexTelemetryTableAddition{
+			index:   table.protocolIndex,
+			key:     exporter.key + ".protocol",
+			line:    line,
+			replace: true,
+		})
+	}
+	if len(changes) == 0 {
+		return nil, errors.New("exporter conflict could not be resolved")
+	}
+	return changes, nil
+}
+
+func markCodexTokenTelemetryLine(line string) string {
+	line = strings.TrimSuffix(line, "\r")
+	if strings.HasSuffix(strings.TrimSpace(line), codexTokenTelemetryLineMarker) {
+		return line
+	}
+	return line + " " + codexTokenTelemetryLineMarker
+}
+
+func insertCodexTelemetryTableAdditions(
+	lines []string,
+	additions []codexTelemetryTableAddition,
+) []string {
+	insertions := make([]codexTelemetryTableAddition, 0, len(additions))
+	for _, addition := range additions {
+		if addition.replace {
+			lineEnding := ""
+			if strings.HasSuffix(lines[addition.index], "\r") {
+				lineEnding = "\r"
+			}
+			lines[addition.index] = addition.line + lineEnding
+			continue
+		}
+		insertions = append(insertions, addition)
+	}
+	sort.SliceStable(insertions, func(i, j int) bool {
+		return insertions[i].index > insertions[j].index
+	})
+	for start := 0; start < len(insertions); {
+		end := start + 1
+		for end < len(insertions) && insertions[end].index == insertions[start].index {
+			end++
+		}
+		inserted := make([]string, 0, end-start)
+		for _, addition := range insertions[start:end] {
+			inserted = append(inserted, addition.line)
+		}
+		lines = insertStrings(lines, insertions[start].index, inserted)
+		start = end
+	}
+	return lines
 }
 
 func disableCodexTokenTelemetry(path string) (bool, error) {
@@ -1004,15 +1235,15 @@ func codexTokenTelemetryConfigured(path string) (bool, error) {
 	sectionStart, sectionEnd := findCodexOTelSection(codeLines)
 	if sectionStart >= 0 {
 		for i := sectionStart + 1; i < sectionEnd; i++ {
-			key, _, ok := tomlAssignment(codeLines[i])
-			if ok && (key == "exporter" || key == "trace_exporter") {
+			key, _, ok := codexTOMLSimpleAssignment(codeLines[i])
+			if ok && (key == "exporter" || key == "trace_exporter" || key == "metrics_exporter") {
 				return true, nil
 			}
 		}
 	}
-	for _, key := range []string{"exporter", "trace_exporter"} {
+	for _, key := range []string{"exporter", "trace_exporter", "metrics_exporter"} {
 		table, tableErr := codexExporterTable(codeLines, key)
-		if tableErr != nil || table.found {
+		if tableErr != nil || table.endpointSet {
 			return true, nil
 		}
 	}
@@ -1022,6 +1253,10 @@ func codexTokenTelemetryConfigured(path string) (bool, error) {
 func inspectCodexTokenTelemetry(path, endpoint string) (tokenTelemetryResult, error) {
 	result := tokenTelemetryResult{Target: "codex", ConfigPath: path, State: "disabled"}
 	traceEndpoint, err := tokenTelemetryTraceEndpoint(endpoint)
+	if err != nil {
+		return tokenTelemetryResult{}, err
+	}
+	metricEndpoint, err := tokenTelemetryMetricEndpoint(endpoint)
 	if err != nil {
 		return tokenTelemetryResult{}, err
 	}
@@ -1051,6 +1286,7 @@ func inspectCodexTokenTelemetry(path, endpoint string) (tokenTelemetryResult, er
 	exporters := []codexTelemetryExporter{
 		{key: "exporter", label: "log", endpoint: endpoint},
 		{key: "trace_exporter", label: "trace", endpoint: traceEndpoint},
+		{key: "metrics_exporter", label: "metrics", endpoint: metricEndpoint},
 	}
 	matching := 0
 	missing := 0
@@ -1064,11 +1300,11 @@ func inspectCodexTokenTelemetry(path, endpoint string) (tokenTelemetryResult, er
 		switch state {
 		case "matching":
 			matching++
-		case "missing":
+		case "missing", "incomplete":
 			missing++
 		default:
 			result.State = "conflict"
-			result.Detail = exporter.label + " exporter has a user-owned value"
+			result.Detail = exporter.label + " exporter does not target Observer; enable replaces it and disable removes the managed route"
 			return result, nil
 		}
 	}
@@ -1076,18 +1312,18 @@ func inspectCodexTokenTelemetry(path, endpoint string) (tokenTelemetryResult, er
 		result.State = "enabled-existing"
 		if managed {
 			result.State = "enabled-managed"
-			result.Detail = "Obstudio owns only the assignments inside its managed block"
+			result.Detail = "all Codex signal exporters target Observer; Obstudio owns only its managed assignments"
 		} else {
-			result.Detail = "matching exporters already existed and remain user-owned"
+			result.Detail = "all Codex signal exporters already targeted Observer and remain user-owned"
 		}
 		return result, nil
 	}
 	if missing == len(exporters) {
-		result.Detail = "no Codex log or trace exporter is configured for Observer"
+		result.Detail = "no Codex log, trace, or metrics exporter is configured for Observer"
 		return result, nil
 	}
 	result.State = "partial"
-	result.Detail = fmt.Sprintf("%d of %d required exporters target Observer", matching, len(exporters))
+	result.Detail = fmt.Sprintf("%d of %d required signal exporters target Observer", matching, len(exporters))
 	return result, nil
 }
 
@@ -1121,8 +1357,13 @@ func codexExporterConfigurationState(
 		return "conflict", nil
 	}
 	if tableExporter.found {
-		if tableExporter.endpoint == exporter.endpoint && strings.EqualFold(tableExporter.protocol, "binary") {
+		endpointMatches := !tableExporter.endpointSet || tableExporter.endpoint == exporter.endpoint
+		protocolMatches := !tableExporter.protocolSet || strings.EqualFold(tableExporter.protocol, "binary")
+		if tableExporter.endpointSet && tableExporter.protocolSet && endpointMatches && protocolMatches {
 			return "matching", nil
+		}
+		if endpointMatches && protocolMatches {
+			return "incomplete", nil
 		}
 		return "conflict", nil
 	}
@@ -1165,49 +1406,18 @@ func enableClaudeTokenTelemetryWithOwnershipMutation(
 	if err != nil {
 		return tokenTelemetryResult{}, err
 	}
+	required = append(required, claudeTokenTelemetryTakeoverSettings(env, endpoint, lookupEnv)...)
 
 	managed := make(map[string]string)
-	if priorExists {
-		for key, value := range prior.Env {
-			if current, ok := env[key].(string); ok && current == value {
-				managed[key] = value
-			}
-		}
-	}
-	if conflict := claudeOTLPRoutingConflict(config, env, required, endpoint, managed, lookupEnv); conflict != "" {
-		return tokenTelemetryResult{}, fmt.Errorf("%s; existing Claude OTLP configuration was preserved", conflict)
-	}
-
 	changed := false
 	for _, setting := range required {
 		if existing, exists := env[setting.key]; exists {
 			existingString, ok := existing.(string)
-			ownedValue, owned := managed[setting.key]
-			if owned && ok && existingString == ownedValue {
-				if existingString != setting.value {
-					env[setting.key] = setting.value
-					managed[setting.key] = setting.value
-					changed = true
-				}
-				continue
-			}
+			env[setting.key] = setting.value
+			managed[setting.key] = setting.value
 			if !ok || existingString != setting.value {
-				return tokenTelemetryResult{}, fmt.Errorf(
-					"Claude setting %s in %q already has a user-owned value; existing configuration was preserved",
-					setting.key,
-					path,
-				)
+				changed = true
 			}
-			continue
-		}
-		if inherited, ok := lookupEnvironment(lookupEnv, setting.key); ok {
-			if inherited != setting.value {
-				return tokenTelemetryResult{}, fmt.Errorf(
-					"inherited environment setting %s already has a user-owned value; Claude settings were preserved",
-					setting.key,
-				)
-			}
-			delete(managed, setting.key)
 			continue
 		}
 		env[setting.key] = setting.value
@@ -1216,21 +1426,18 @@ func enableClaudeTokenTelemetryWithOwnershipMutation(
 	}
 	for _, setting := range defaults {
 		if existing, exists := env[setting.key]; exists {
-			managedValue, owned := managed[setting.key]
+			managedValue, owned := prior.Env[setting.key]
 			existingString, stringValue := existing.(string)
-			if owned && stringValue && existingString == managedValue {
+			if priorExists && owned && stringValue && existingString == managedValue {
 				if existingString != setting.value {
 					env[setting.key] = setting.value
-					managed[setting.key] = setting.value
 					changed = true
 				}
-			} else {
-				delete(managed, setting.key)
+				managed[setting.key] = setting.value
 			}
 			continue
 		}
 		if _, inherited := lookupEnvironment(lookupEnv, setting.key); inherited {
-			delete(managed, setting.key)
 			continue
 		}
 		env[setting.key] = setting.value
@@ -1304,7 +1511,10 @@ func disableClaudeTokenTelemetryWithOwnershipMutation(
 		if readErr != nil {
 			return tokenTelemetryResult{}, readErr
 		}
-		if claudeTokenTelemetryConfigured(env, lookupEnv) {
+		if claudeDetailedBetaTelemetryConfigured(env, lookupEnv) {
+			result.State = "unmanaged"
+			result.Detail = "no Obstudio ownership record exists; an active user-owned detailed-beta telemetry route was retained"
+		} else if claudeTokenTelemetryConfigured(env, lookupEnv) {
 			result.State = "unmanaged"
 			result.Detail = "no Obstudio ownership record exists; user-owned Claude telemetry settings were retained"
 		} else {
@@ -1345,11 +1555,12 @@ func disableClaudeTokenTelemetryWithOwnershipMutation(
 			if currentString, stringValue := current.(string); stringValue && currentString == owned.Env[key] {
 				delete(env, key)
 				removed = append(removed, key)
+				configChanged = true
 				continue
 			}
 			preserved = append(preserved, key)
 		}
-		if len(removed) > 0 {
+		if configChanged {
 			if len(env) == 0 {
 				delete(config, "env")
 			} else {
@@ -1360,7 +1571,6 @@ func disableClaudeTokenTelemetryWithOwnershipMutation(
 				return tokenTelemetryResult{}, fmt.Errorf("marshal Claude settings %q: %w", path, marshalErr)
 			}
 			afterConfig = tokenTelemetryConfigSnapshot{Data: append(out, '\n'), Exists: true}
-			configChanged = true
 		}
 	}
 	beforeOwnership := cloneTokenTelemetryOwnership(ownership)
@@ -1383,10 +1593,13 @@ func disableClaudeTokenTelemetryWithOwnershipMutation(
 	); err != nil {
 		return tokenTelemetryResult{}, fmt.Errorf("write ownership state: %w", err)
 	}
-	result.Detail = fmt.Sprintf("removed %d unchanged Obstudio-owned settings", len(removed))
+	result.Detail = fmt.Sprintf("removed %d unchanged Obstudio-managed settings", len(removed))
 	if len(preserved) > 0 {
 		result.State = "disabled-with-user-changes"
 		result.Detail += "; preserved modified settings: " + strings.Join(preserved, ", ")
+	} else if claudeDetailedBetaTelemetryConfigured(env, lookupEnv) {
+		result.State = "unmanaged"
+		result.Detail += "; active user-owned detailed-beta telemetry routing remains configured"
 	} else if claudeTokenTelemetryConfigured(env, lookupEnv) {
 		result.State = "unmanaged"
 		result.Detail += "; user-owned Claude telemetry settings remain configured"
@@ -1397,8 +1610,16 @@ func disableClaudeTokenTelemetryWithOwnershipMutation(
 func inspectClaudeTokenTelemetry(
 	path, statePath, endpoint string,
 	lookupEnv func(string) (string, bool),
-) (tokenTelemetryResult, error) {
-	result := tokenTelemetryResult{Target: "claude-code", ConfigPath: path, State: "disabled"}
+) (result tokenTelemetryResult, err error) {
+	result = tokenTelemetryResult{Target: "claude-code", ConfigPath: path, State: "disabled"}
+	defer func() {
+		if err == nil {
+			result.Detail = appendTokenTelemetryDetail(
+				result.Detail,
+				"result covers user-level Claude Code settings only; higher-precedence managed settings, including Claude Desktop Setup profiles, can override them",
+			)
+		}
+	}()
 	ownership, err := readTokenTelemetryOwnership(statePath)
 	if err != nil {
 		return tokenTelemetryResult{}, err
@@ -1420,6 +1641,7 @@ func inspectClaudeTokenTelemetry(
 		result.Detail = conflict
 		return result, nil
 	}
+	detailedBetaAtObserver := claudeDetailedBetaRoutesToObserver(env, endpoint, lookupEnv)
 	matching := 0
 	missing := 0
 	for _, setting := range required {
@@ -1440,12 +1662,15 @@ func inspectClaudeTokenTelemetry(
 		result.Detail = "matching settings are user-owned"
 		if owned, ok := ownership.Targets["claude-code"]; ok && sameTokenTelemetryConfigPath(owned.ConfigPath, path) && len(owned.Env) > 0 {
 			result.State = "enabled-managed"
-			result.Detail = fmt.Sprintf("Obstudio owns %d settings; matching pre-existing settings remain user-owned", len(owned.Env))
+			result.Detail = fmt.Sprintf("Obstudio owns %d settings; Claude logs, traces, and metrics target Observer", len(owned.Env))
 		}
 		return result, nil
 	}
 	if missing == len(required) {
-		if existed {
+		if detailedBetaAtObserver {
+			result.State = "unmanaged"
+			result.Detail = "a user-owned detailed-beta route targets Observer for logs and traces; metrics are not configured by that route"
+		} else if existed {
 			result.Detail = "provider token telemetry is not configured"
 		} else {
 			result.Detail = "Claude settings do not exist and no matching inherited telemetry is configured"
@@ -1454,6 +1679,9 @@ func inspectClaudeTokenTelemetry(
 	}
 	result.State = "partial"
 	result.Detail = fmt.Sprintf("%d of %d required settings match Observer", matching, len(required))
+	if detailedBetaAtObserver {
+		result.Detail += "; a user-owned detailed-beta route also targets Observer for logs and traces"
+	}
 	return result, nil
 }
 
@@ -1488,22 +1716,66 @@ func claudeTokenTelemetrySettings(endpoint string) ([]claudeTelemetrySetting, []
 	return required, defaults, nil
 }
 
+func claudeTokenTelemetryTakeoverSettings(
+	env map[string]any,
+	endpoint string,
+	lookupEnv func(string) (string, bool),
+) []claudeTelemetrySetting {
+	settings := make([]claudeTelemetrySetting, 0, 6)
+	for _, setting := range []claudeTelemetrySetting{
+		{key: "OTEL_EXPORTER_OTLP_ENDPOINT", value: strings.TrimSuffix(endpoint, "/v1/logs")},
+		{key: "OTEL_EXPORTER_OTLP_PROTOCOL", value: "http/protobuf"},
+	} {
+		if _, exists, _ := claudeConfiguredOrInheritedValue(env, setting.key, lookupEnv); exists {
+			settings = append(settings, setting)
+		}
+	}
+	if raw, exists := env["OTEL_SDK_DISABLED"]; exists {
+		value, stringValue := raw.(string)
+		if !stringValue || tokenTelemetryBooleanEnabled(value) {
+			settings = append(settings, claudeTelemetrySetting{key: "OTEL_SDK_DISABLED", value: "false"})
+		}
+	} else if inherited, exists := lookupEnvironment(lookupEnv, "OTEL_SDK_DISABLED"); exists && tokenTelemetryBooleanEnabled(inherited) {
+		settings = append(settings, claudeTelemetrySetting{key: "OTEL_SDK_DISABLED", value: "false"})
+	}
+	if _, active := claudeDetailedBetaEndpoint(env, lookupEnv); active {
+		settings = append(settings,
+			claudeTelemetrySetting{key: "ENABLE_BETA_TRACING_DETAILED", value: "1"},
+			claudeTelemetrySetting{
+				key:   "BETA_TRACING_ENDPOINT",
+				value: strings.TrimSuffix(endpoint, "/v1/logs"),
+			},
+		)
+	}
+	return settings
+}
+
 func claudeOTLPRoutingConflict(
-	config map[string]any,
+	_ map[string]any,
 	env map[string]any,
 	required []claudeTelemetrySetting,
 	endpoint string,
-	managed map[string]string,
+	_ map[string]string,
 	lookupEnv func(string) (string, bool),
 ) string {
-	if helper, exists := config["otelHeadersHelper"]; exists {
-		value, stringValue := helper.(string)
-		if !stringValue || strings.TrimSpace(value) != "" {
-			return "Claude setting otelHeadersHelper is already configured; Obstudio will not redirect dynamically authenticated OTLP traffic"
+	if raw, exists := env["OTEL_SDK_DISABLED"]; exists {
+		value, stringValue := raw.(string)
+		if !stringValue || tokenTelemetryBooleanEnabled(value) {
+			return "Claude setting OTEL_SDK_DISABLED disables provider token telemetry; enable replaces it and disable removes the managed override"
 		}
+	} else if value, exists := lookupEnvironment(lookupEnv, "OTEL_SDK_DISABLED"); exists && tokenTelemetryBooleanEnabled(value) {
+		return "inherited environment OTEL_SDK_DISABLED disables provider token telemetry; enable adds a local override"
 	}
-	if value, exists, source := claudeConfiguredOrInheritedValue(env, "OTEL_SDK_DISABLED", lookupEnv); exists && tokenTelemetryBooleanEnabled(value) {
-		return fmt.Sprintf("%s OTEL_SDK_DISABLED disables provider token telemetry", source)
+	if conflict := claudeDetailedBetaRoutingConflict(env, endpoint, lookupEnv); conflict != "" {
+		return conflict + "; enable replaces BETA_TRACING_ENDPOINT and disable removes the managed route"
+	}
+	for _, setting := range []claudeTelemetrySetting{
+		{key: "OTEL_EXPORTER_OTLP_ENDPOINT", value: strings.TrimSuffix(endpoint, "/v1/logs")},
+		{key: "OTEL_EXPORTER_OTLP_PROTOCOL", value: "http/protobuf"},
+	} {
+		if value, exists, source := claudeConfiguredOrInheritedValue(env, setting.key, lookupEnv); exists && value != setting.value {
+			return fmt.Sprintf("%s %s does not match Observer; enable replaces it and disable removes the managed route", source, setting.key)
+		}
 	}
 
 	expected := make(map[string]string, len(required))
@@ -1513,108 +1785,86 @@ func claudeOTLPRoutingConflict(
 	for key, wanted := range expected {
 		if existing, exists := env[key]; exists {
 			value, stringValue := existing.(string)
-			if ownedValue, owned := managed[key]; owned && stringValue && value == ownedValue {
-				continue
-			}
 			if !stringValue || value != wanted {
-				return fmt.Sprintf("Claude setting %s already has another value", key)
+				return fmt.Sprintf("Claude setting %s does not match Observer; enable replaces it and disable removes the managed route", key)
 			}
 			continue
 		}
 		if inherited, ok := lookupEnvironment(lookupEnv, key); ok && inherited != wanted {
-			return fmt.Sprintf("inherited environment setting %s already has another value", key)
-		}
-	}
-
-	baseEndpoint := strings.TrimSuffix(endpoint, "/v1/logs")
-	genericExpected := map[string]struct {
-		value     string
-		overrides []string
-	}{
-		"OTEL_EXPORTER_OTLP_ENDPOINT": {
-			value: baseEndpoint,
-			overrides: []string{
-				"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
-				"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-				"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
-			},
-		},
-		"OTEL_EXPORTER_OTLP_PROTOCOL": {
-			value: "http/protobuf",
-			overrides: []string{
-				"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
-				"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL",
-				"OTEL_EXPORTER_OTLP_METRICS_PROTOCOL",
-			},
-		},
-	}
-	for key, generic := range genericExpected {
-		value, exists, source := claudeConfiguredOrInheritedValue(env, key, lookupEnv)
-		if !exists || strings.TrimSpace(value) == "" {
-			continue
-		}
-		if claudeSpecificSettingsOverrideGeneric(env, expected, managed, generic.overrides, lookupEnv) {
-			continue
-		}
-		if key == "OTEL_EXPORTER_OTLP_ENDPOINT" {
-			if strings.TrimRight(value, "/") != strings.TrimRight(generic.value, "/") {
-				return fmt.Sprintf("%s %s already routes OTLP to another destination", source, key)
-			}
-			continue
-		}
-		if !strings.EqualFold(value, generic.value) {
-			return fmt.Sprintf("%s %s already selects another OTLP protocol", source, key)
-		}
-	}
-
-	sensitiveRoutingKeys := []string{
-		"CLAUDE_CODE_CLIENT_CERT",
-		"CLAUDE_CODE_CLIENT_KEY",
-		"CLAUDE_CODE_CLIENT_KEY_PASSPHRASE",
-		"OTEL_EXPORTER_OTLP_HEADERS",
-		"OTEL_EXPORTER_OTLP_CERTIFICATE",
-		"OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE",
-		"OTEL_EXPORTER_OTLP_CLIENT_KEY",
-		"OTEL_EXPORTER_OTLP_LOGS_HEADERS",
-		"OTEL_EXPORTER_OTLP_LOGS_CERTIFICATE",
-		"OTEL_EXPORTER_OTLP_LOGS_CLIENT_CERTIFICATE",
-		"OTEL_EXPORTER_OTLP_LOGS_CLIENT_KEY",
-		"OTEL_EXPORTER_OTLP_TRACES_HEADERS",
-		"OTEL_EXPORTER_OTLP_TRACES_CERTIFICATE",
-		"OTEL_EXPORTER_OTLP_TRACES_CLIENT_CERTIFICATE",
-		"OTEL_EXPORTER_OTLP_TRACES_CLIENT_KEY",
-		"OTEL_EXPORTER_OTLP_METRICS_HEADERS",
-		"OTEL_EXPORTER_OTLP_METRICS_CERTIFICATE",
-		"OTEL_EXPORTER_OTLP_METRICS_CLIENT_CERTIFICATE",
-		"OTEL_EXPORTER_OTLP_METRICS_CLIENT_KEY",
-	}
-	for _, key := range sensitiveRoutingKeys {
-		if value, exists, source := claudeConfiguredOrInheritedValue(env, key, lookupEnv); exists && strings.TrimSpace(value) != "" {
-			return fmt.Sprintf("%s %s is already configured; Obstudio will not redirect authenticated OTLP traffic", source, key)
+			return fmt.Sprintf("inherited environment setting %s does not match Observer; enable adds a local override", key)
 		}
 	}
 	return ""
 }
 
-func claudeSpecificSettingsOverrideGeneric(
+func claudeDetailedBetaRoutingConflict(
 	env map[string]any,
-	expected, managed map[string]string,
-	keys []string,
+	observerLogsEndpoint string,
+	lookupEnv func(string) (string, bool),
+) string {
+	enabled, exists, enabledSource := claudeConfiguredOrInheritedValue(
+		env,
+		"ENABLE_BETA_TRACING_DETAILED",
+		lookupEnv,
+	)
+	if !exists || !tokenTelemetryBooleanEnabled(enabled) {
+		return ""
+	}
+	detailedEndpoint, exists, endpointSource := claudeConfiguredOrInheritedValue(
+		env,
+		"BETA_TRACING_ENDPOINT",
+		lookupEnv,
+	)
+	if !exists || detailedEndpoint == "" {
+		return ""
+	}
+	if claudeDetailedBetaEndpointMatchesObserver(detailedEndpoint, observerLogsEndpoint) {
+		return ""
+	}
+	return fmt.Sprintf(
+		"%s ENABLE_BETA_TRACING_DETAILED and %s BETA_TRACING_ENDPOINT override the standard OTLP logs and traces endpoints",
+		enabledSource,
+		endpointSource,
+	)
+}
+
+func claudeDetailedBetaTelemetryConfigured(env map[string]any, lookupEnv func(string) (string, bool)) bool {
+	_, active := claudeDetailedBetaEndpoint(env, lookupEnv)
+	return active
+}
+
+func claudeDetailedBetaRoutesToObserver(
+	env map[string]any,
+	observerLogsEndpoint string,
 	lookupEnv func(string) (string, bool),
 ) bool {
-	for _, key := range keys {
-		value, exists, _ := claudeConfiguredOrInheritedValue(env, key, lookupEnv)
-		if !exists {
-			return false
-		}
-		if ownedValue, owned := managed[key]; owned && value == ownedValue {
-			continue
-		}
-		if value != expected[key] {
-			return false
-		}
+	endpoint, active := claudeDetailedBetaEndpoint(env, lookupEnv)
+	return active && claudeDetailedBetaEndpointMatchesObserver(endpoint, observerLogsEndpoint)
+}
+
+func claudeDetailedBetaEndpoint(env map[string]any, lookupEnv func(string) (string, bool)) (string, bool) {
+	enabled, exists, _ := claudeConfiguredOrInheritedValue(env, "ENABLE_BETA_TRACING_DETAILED", lookupEnv)
+	if !exists || !tokenTelemetryBooleanEnabled(enabled) {
+		return "", false
 	}
-	return true
+	endpoint, exists, _ := claudeConfiguredOrInheritedValue(env, "BETA_TRACING_ENDPOINT", lookupEnv)
+	return strings.TrimSpace(endpoint), exists && endpoint != ""
+}
+
+func claudeDetailedBetaEndpointMatchesObserver(detailedEndpoint, observerLogsEndpoint string) bool {
+	detailed, err := url.Parse(strings.TrimSpace(detailedEndpoint))
+	if err != nil || detailed.User != nil || detailed.RawQuery != "" || detailed.Fragment != "" {
+		return false
+	}
+	observer, err := url.Parse(observerLogsEndpoint)
+	if err != nil || observer.Path != "/v1/logs" {
+		return false
+	}
+	observer.Path = ""
+	return detailed.Scheme == observer.Scheme &&
+		sameSharedObserverHostname(detailed.Hostname(), observer.Hostname()) &&
+		effectiveURLPort(detailed) == effectiveURLPort(observer) &&
+		detailed.EscapedPath() == observer.EscapedPath()
 }
 
 func tokenTelemetryBooleanEnabled(value string) bool {
@@ -1626,6 +1876,9 @@ func claudeTokenTelemetryConfigured(
 	env map[string]any,
 	lookupEnv func(string) (string, bool),
 ) bool {
+	if claudeDetailedBetaTelemetryConfigured(env, lookupEnv) {
+		return true
+	}
 	keys := []string{
 		"CLAUDE_CODE_ENABLE_TELEMETRY",
 		"CLAUDE_CODE_ENHANCED_TELEMETRY_BETA",
@@ -1859,7 +2112,7 @@ func parseCodexManagedTelemetryBlock(content string) (codexManagedTelemetryBlock
 			continue
 		}
 		key, _, assignment := tomlAssignment(codeLine)
-		if assignment && (key == "exporter" || key == "trace_exporter") {
+		if assignment && (key == "exporter" || key == "trace_exporter" || key == "metrics_exporter") {
 			if _, duplicate := block.settings[key]; duplicate {
 				return block, found, fmt.Errorf("managed block contains more than one %s assignment", key)
 			}
@@ -1890,11 +2143,162 @@ func codexManagedBlockMismatch(block codexManagedTelemetryBlock, owned tokenTele
 			return key + " changed"
 		}
 	}
+	for key := range owned.Settings {
+		if _, ok := block.settings[key]; !ok {
+			return key + " is missing"
+		}
+	}
 	return ""
 }
 
 func codexManagedBlockUnchanged(block codexManagedTelemetryBlock, owned tokenTelemetryTargetOwnership) bool {
 	return codexManagedBlockMismatch(block, owned) == "" && len(block.settings) == len(owned.Settings)
+}
+
+func codexOwnedTableSettingMismatch(
+	content string,
+	owned tokenTelemetryTargetOwnership,
+) (string, error) {
+	if len(owned.TableSettings) == 0 {
+		return "", nil
+	}
+	current, err := codexOwnedTableSettingLines(content, owned.TableSettings)
+	if err != nil {
+		return "", err
+	}
+	keys := make([]string, 0, len(owned.TableSettings))
+	for key := range owned.TableSettings {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		line, exists := current[key]
+		if !exists {
+			return key + " is missing", nil
+		}
+		if line != owned.TableSettings[key] {
+			return key + " changed", nil
+		}
+	}
+	return "", nil
+}
+
+func codexOwnedTableSettingLines(
+	content string,
+	owned map[string]string,
+) (map[string]string, error) {
+	wanted := make(map[string]string, len(owned))
+	for key, line := range owned {
+		section, setting, ok := codexOwnedTableSettingLocation(key)
+		lineKey, _, assignment := codexTOMLSimpleAssignment(tomlStructuralLine(line))
+		if !ok || !assignment || lineKey != setting ||
+			!strings.HasSuffix(strings.TrimSpace(line), " "+codexTokenTelemetryLineMarker) {
+			return nil, fmt.Errorf("ownership contains unsupported Codex table setting %q", key)
+		}
+		wanted[section+"\x00"+setting] = key
+	}
+	lines := strings.Split(content, "\n")
+	codeLines, err := codexTOMLCodeLines(lines)
+	if err != nil {
+		return nil, err
+	}
+	current := make(map[string]string, len(owned))
+	section := ""
+	for index, codeLine := range codeLines {
+		structural := tomlStructuralLine(codeLine)
+		if isTOMLTableHeader(structural) {
+			section = structural
+			continue
+		}
+		setting, _, ok := codexTOMLSimpleAssignment(structural)
+		if !ok {
+			continue
+		}
+		key, wantedSetting := wanted[section+"\x00"+setting]
+		if !wantedSetting {
+			continue
+		}
+		if _, duplicate := current[key]; duplicate {
+			return nil, fmt.Errorf("%s is defined more than once", key)
+		}
+		current[key] = strings.TrimSuffix(lines[index], "\r")
+	}
+	return current, nil
+}
+
+func codexOwnedTableSettingLocation(key string) (string, string, bool) {
+	exporter, setting, ok := strings.Cut(key, ".")
+	if !ok {
+		return "", "", false
+	}
+	switch exporter {
+	case "exporter", "trace_exporter", "metrics_exporter":
+		if setting == "assignment" {
+			return "[otel]", exporter, true
+		}
+		if setting == "endpoint" || setting == "protocol" {
+			return "[otel." + exporter + ".otlp-http]", setting, true
+		}
+		return "", "", false
+	default:
+		return "", "", false
+	}
+}
+
+func removeOwnedCodexTableSettings(
+	content string,
+	owned tokenTelemetryTargetOwnership,
+) (string, bool, int, []string, error) {
+	if len(owned.TableSettings) == 0 {
+		return content, false, 0, nil, nil
+	}
+	if _, err := codexOwnedTableSettingLines(content, owned.TableSettings); err != nil {
+		return content, false, 0, nil, err
+	}
+	wanted := make(map[string]string, len(owned.TableSettings))
+	for key := range owned.TableSettings {
+		section, setting, ok := codexOwnedTableSettingLocation(key)
+		if !ok {
+			return content, false, 0, nil, fmt.Errorf("ownership contains unsupported Codex table setting %q", key)
+		}
+		wanted[section+"\x00"+setting] = key
+	}
+	lines := splitLines(content)
+	codeLines, err := codexTOMLCodeLines(lines)
+	if err != nil {
+		return content, false, 0, nil, err
+	}
+	out := strings.Builder{}
+	section := ""
+	removed := 0
+	preservedSet := make(map[string]struct{})
+	for index, line := range lines {
+		structural := tomlStructuralLine(codeLines[index])
+		if isTOMLTableHeader(structural) {
+			section = structural
+			out.WriteString(line)
+			continue
+		}
+		setting, _, assignment := codexTOMLSimpleAssignment(structural)
+		key, tracked := wanted[section+"\x00"+setting]
+		if !assignment || !tracked {
+			out.WriteString(line)
+			continue
+		}
+		current := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+		if current == owned.TableSettings[key] {
+			removed++
+			continue
+		}
+		preservedSet[key] = struct{}{}
+		out.WriteString(line)
+	}
+	preserved := make([]string, 0, len(preservedSet))
+	for key := range preservedSet {
+		preserved = append(preserved, key)
+	}
+	sort.Strings(preserved)
+	return out.String(), true, removed, preserved, nil
 }
 
 func removeOwnedCodexTelemetry(
@@ -2011,6 +2415,28 @@ func removeCodexTokenTelemetryBlock(content string) (string, bool, error) {
 	return out.String(), found, nil
 }
 
+func unwrapCodexTokenTelemetryBlock(content string) (string, error) {
+	_, found, err := parseCodexManagedTelemetryBlock(content)
+	if err != nil || !found {
+		return content, err
+	}
+	lines := splitLines(content)
+	codeLines, err := codexTOMLCodeLines(lines)
+	if err != nil {
+		return content, err
+	}
+	out := strings.Builder{}
+	for index, line := range lines {
+		switch strings.TrimSpace(codeLines[index]) {
+		case codexTokenTelemetryBlockStart, codexTokenTelemetryBlockEnd:
+			continue
+		default:
+			out.WriteString(line)
+		}
+	}
+	return out.String(), nil
+}
+
 func codexManagedSectionHasExternalContent(lines, codeLines []string) bool {
 	inBlock := false
 	createdSection := false
@@ -2096,7 +2522,7 @@ func unsupportedCodexOTelExporterDefinition(lines []string) string {
 				(strings.Contains(compact, "\"exporter\"") || strings.Contains(compact, "'exporter'")) {
 				return "quoted exporter table"
 			}
-			for _, key := range []string{"exporter", "trace_exporter"} {
+			for _, key := range []string{"exporter", "trace_exporter", "metrics_exporter"} {
 				prefix := "[otel." + key
 				if strings.HasPrefix(structural, prefix+".") &&
 					structural != prefix+".otlp-http]" &&
@@ -2115,22 +2541,26 @@ func unsupportedCodexOTelExporterDefinition(lines []string) string {
 			normalizedKey = unquoted
 		}
 		if section == "" {
-			for _, exporterKey := range []string{"exporter", "trace_exporter"} {
+			path, pathErr := parseCodexTOMLDottedKey(key)
+			if pathErr == nil && len(path) > 0 && path[0] == "otel" {
+				return "root dotted-key"
+			}
+			for _, exporterKey := range []string{"exporter", "trace_exporter", "metrics_exporter"} {
 				prefix := "otel." + exporterKey
-				if key == "otel" || key == prefix || strings.HasPrefix(key, prefix+".") ||
+				if key == prefix || strings.HasPrefix(key, prefix+".") ||
 					(strings.Contains(key, "otel") && strings.Contains(key, exporterKey)) {
 					return "root dotted-key"
 				}
 			}
 		}
 		if section == "[otel]" {
-			if normalizedKey == "exporter" || normalizedKey == "trace_exporter" {
+			if normalizedKey == "exporter" || normalizedKey == "trace_exporter" || normalizedKey == "metrics_exporter" {
 				if normalizedKey != key {
 					return "quoted exporter key"
 				}
 				continue
 			}
-			if strings.HasPrefix(key, "exporter.") || strings.HasPrefix(key, "trace_exporter.") ||
+			if strings.HasPrefix(key, "exporter.") || strings.HasPrefix(key, "trace_exporter.") || strings.HasPrefix(key, "metrics_exporter.") ||
 				(strings.Contains(key, "exporter") && strings.ContainsAny(key, "'\"")) {
 				return "dotted-key"
 			}
@@ -2162,7 +2592,11 @@ func compactTOMLStructuralLine(value string) string {
 }
 
 func codexExporterTable(lines []string, exporterKey string) (codexTelemetryTableExporter, error) {
-	result := codexTelemetryTableExporter{}
+	result := codexTelemetryTableExporter{
+		otlpHTTPSectionEnd: -1,
+		endpointIndex:      -1,
+		protocolIndex:      -1,
+	}
 	rootSection := "[otel." + exporterKey + "]"
 	otlpSection := "[otel." + exporterKey + ".otlp-http]"
 	headersSection := "[otel." + exporterKey + ".otlp-http.headers]"
@@ -2170,9 +2604,12 @@ func codexExporterTable(lines []string, exporterKey string) (codexTelemetryTable
 	sectionCounts := make(map[string]int)
 	endpointCount := 0
 	protocolCount := 0
-	for _, line := range lines {
+	for index, line := range lines {
 		structural := tomlStructuralLine(line)
 		if isTOMLTableHeader(structural) {
+			if section == otlpSection && result.otlpHTTPSectionEnd < 0 {
+				result.otlpHTTPSectionEnd = index
+			}
 			section = structural
 			if structural == rootSection || structural == otlpSection || structural == headersSection {
 				result.found = true
@@ -2180,23 +2617,36 @@ func codexExporterTable(lines []string, exporterKey string) (codexTelemetryTable
 				if sectionCounts[structural] > 1 {
 					return result, fmt.Errorf("%s is defined more than once", structural)
 				}
+				if structural == otlpSection {
+					result.otlpHTTPFound = true
+				}
 			}
 			continue
 		}
 		if section != otlpSection {
 			continue
 		}
-		key, value, ok := tomlAssignment(structural)
+		key, value, ok, assignmentErr := codexTOMLSimpleAssignmentStrict(structural)
+		if assignmentErr != nil {
+			return result, fmt.Errorf("unsupported assignment in %s: %w", otlpSection, assignmentErr)
+		}
 		if !ok {
+			if structural != "" {
+				return result, fmt.Errorf("unsupported non-assignment in %s", otlpSection)
+			}
 			continue
 		}
 		switch key {
 		case "endpoint":
 			endpointCount++
 			result.endpoint, ok = tomlStringValue(value)
+			result.endpointIndex = index
+			result.endpointSet = true
 		case "protocol":
 			protocolCount++
 			result.protocol, ok = tomlStringValue(value)
+			result.protocolIndex = index
+			result.protocolSet = true
 		default:
 			continue
 		}
@@ -2207,8 +2657,17 @@ func codexExporterTable(lines []string, exporterKey string) (codexTelemetryTable
 	if !result.found {
 		return result, nil
 	}
-	if endpointCount != 1 || protocolCount != 1 {
-		return result, errors.New("otlp-http must define exactly one endpoint and protocol")
+	if result.otlpHTTPFound && result.otlpHTTPSectionEnd < 0 {
+		result.otlpHTTPSectionEnd = len(lines)
+		if len(lines) > 0 && lines[len(lines)-1] == "" {
+			result.otlpHTTPSectionEnd--
+		}
+	}
+	if !result.otlpHTTPFound {
+		return result, errors.New("otlp-http table is missing")
+	}
+	if endpointCount > 1 || protocolCount > 1 {
+		return result, errors.New("otlp-http must not define endpoint or protocol more than once")
 	}
 	return result, nil
 }
@@ -2363,8 +2822,38 @@ func tomlAssignment(line string) (string, string, bool) {
 	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), true
 }
 
+func codexTOMLSimpleAssignment(line string) (string, string, bool) {
+	key, value, ok := tomlAssignment(line)
+	if !ok {
+		return "", "", false
+	}
+	path, err := parseCodexTOMLDottedKey(key)
+	if err != nil || len(path) != 1 {
+		return key, value, true
+	}
+	return path[0], value, true
+}
+
+func codexTOMLSimpleAssignmentStrict(line string) (string, string, bool, error) {
+	key, value, ok := tomlAssignment(line)
+	if !ok {
+		return "", "", false, nil
+	}
+	path, err := parseCodexTOMLDottedKey(key)
+	if err != nil {
+		return "", "", false, err
+	}
+	if len(path) != 1 {
+		if len(path) > 0 && (path[0] == "endpoint" || path[0] == "protocol") {
+			return "", "", false, fmt.Errorf("%s must be a simple key", path[0])
+		}
+		return key, value, true, nil
+	}
+	return path[0], value, true, nil
+}
+
 func codexExporterTargetsEndpoint(value, endpoint string) bool {
-	withoutComment := strings.TrimSpace(strings.SplitN(value, "#", 2)[0])
+	withoutComment := tomlStructuralLine(value)
 	if tomlInlineAssignmentCount(withoutComment, "otlp-http") != 1 {
 		return false
 	}
@@ -2385,34 +2874,9 @@ func codexExporterTargetsEndpoint(value, endpoint string) bool {
 
 func tomlInlineAssignmentCount(value, key string) int {
 	count := 0
-	quote := byte(0)
-	escaped := false
 	for index := 0; index < len(value); index++ {
-		char := value[index]
-		if quote == '"' && escaped {
-			escaped = false
-			continue
-		}
-		if quote == '"' && char == '\\' {
-			escaped = true
-			continue
-		}
-		if char == '\'' || char == '"' {
-			if quote == 0 {
-				quote = char
-			} else if quote == char {
-				quote = 0
-			}
-			continue
-		}
-		if quote == 0 && strings.HasPrefix(value[index:], key) && tomlInlineKeyBoundary(value, index, len(key)) {
-			cursor := index + len(key)
-			for cursor < len(value) && (value[cursor] == ' ' || value[cursor] == '\t') {
-				cursor++
-			}
-			if cursor < len(value) && value[cursor] == '=' {
-				count++
-			}
+		if _, ok := tomlInlineAssignmentValueStart(value, key, index); ok {
+			count++
 		}
 	}
 	return count
@@ -2420,19 +2884,9 @@ func tomlInlineAssignmentCount(value, key string) int {
 
 func tomlInlineAssignmentValue(value, key string) (string, bool) {
 	for index := 0; index < len(value); index++ {
-		if !strings.HasPrefix(value[index:], key) || !tomlInlineKeyBoundary(value, index, len(key)) {
+		cursor, ok := tomlInlineAssignmentValueStart(value, key, index)
+		if !ok {
 			continue
-		}
-		cursor := index + len(key)
-		for cursor < len(value) && (value[cursor] == ' ' || value[cursor] == '\t') {
-			cursor++
-		}
-		if cursor >= len(value) || value[cursor] != '=' {
-			continue
-		}
-		cursor++
-		for cursor < len(value) && (value[cursor] == ' ' || value[cursor] == '\t') {
-			cursor++
 		}
 		if cursor >= len(value) {
 			return "", false
@@ -2510,6 +2964,66 @@ func tomlInlineAssignmentValue(value, key string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func tomlInlineAssignmentValueStart(value, key string, start int) (int, bool) {
+	if start >= len(value) || !tomlInlineKeyStartBoundary(value, start) {
+		return 0, false
+	}
+	cursor := start
+	if value[cursor] == '\'' || value[cursor] == '"' {
+		quote := value[cursor]
+		cursor++
+		escaped := false
+		for cursor < len(value) {
+			char := value[cursor]
+			if quote == '"' && escaped {
+				escaped = false
+				cursor++
+				continue
+			}
+			if quote == '"' && char == '\\' {
+				escaped = true
+				cursor++
+				continue
+			}
+			cursor++
+			if char == quote {
+				break
+			}
+		}
+		if cursor > len(value) || cursor == 0 || value[cursor-1] != quote {
+			return 0, false
+		}
+		parsed, ok := tomlStringValue(value[start:cursor])
+		if !ok || parsed != key {
+			return 0, false
+		}
+	} else {
+		if !strings.HasPrefix(value[start:], key) || !tomlInlineKeyBoundary(value, start, len(key)) {
+			return 0, false
+		}
+		cursor += len(key)
+	}
+	for cursor < len(value) && (value[cursor] == ' ' || value[cursor] == '\t') {
+		cursor++
+	}
+	if cursor >= len(value) || value[cursor] != '=' {
+		return 0, false
+	}
+	cursor++
+	for cursor < len(value) && (value[cursor] == ' ' || value[cursor] == '\t') {
+		cursor++
+	}
+	return cursor, true
+}
+
+func tomlInlineKeyStartBoundary(value string, start int) bool {
+	if start == 0 {
+		return true
+	}
+	previous := value[start-1]
+	return previous == '{' || previous == ',' || previous == ' ' || previous == '\t'
 }
 
 func tomlInlineKeyBoundary(value string, start, length int) bool {

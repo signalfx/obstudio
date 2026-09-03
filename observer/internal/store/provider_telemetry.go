@@ -46,6 +46,25 @@ type providerTaskTrace struct {
 	retentionTruncated bool
 }
 
+type providerTraceContributor struct {
+	span     Span
+	sequence uint64
+}
+
+// Observation owner details are bounded independently from distinct-span
+// observations. Contributor records have a separate global budget so every
+// retained trace can still be removed exactly when its last producer exits.
+type providerTraceObservation struct {
+	spanIDs                       map[string]struct{}
+	spanOwners                    map[string]map[string]struct{}
+	spanOwnerOverflow             map[string]struct{}
+	overflowOwners                map[string]struct{}
+	overflowOwnerTrackingOverflow bool
+	overflow                      bool
+	historyUnavailable            bool
+	lastRevision                  uint64
+}
+
 // ClassifyProviderUsageLog recognizes the raw Codex and Claude events retained
 // for exact token accounting. Token fields are interpreted by the MCP layer.
 func ClassifyProviderUsageLog(record LogRecord) ProviderUsageLogKind {
@@ -138,20 +157,14 @@ func ProviderRepositoryCorrelationFromLog(record LogRecord) (ProviderRepositoryC
 	return correlation, true
 }
 
-func retainedProviderTraceIDs(spans []Span) map[string]struct{} {
-	traceIDs := make(map[string]struct{})
-	for _, span := range spans {
-		if span.TraceID != "" && isProviderAgentSpan(span) {
-			traceIDs[span.TraceID] = struct{}{}
-		}
-	}
-	return traceIDs
+func isProviderAgentSpan(span Span) bool {
+	return providerAgentSpanProvider(span) != ""
 }
 
-func isProviderAgentSpan(span Span) bool {
+func providerAgentSpanProvider(span Span) string {
 	name := strings.ToLower(strings.TrimSpace(span.Name))
-	if ProviderTaskBoundaryProvider(span) != "" {
-		return true
+	if provider := ProviderTaskBoundaryProvider(span); provider != "" {
+		return provider
 	}
 	identity := strings.ToLower(strings.Join([]string{
 		span.Resource.ServiceName,
@@ -160,42 +173,714 @@ func isProviderAgentSpan(span Span) bool {
 		providerTelemetryAttributeString(span.Attributes, "model"),
 	}, " "))
 	if strings.Contains(identity, "claude") {
-		return strings.HasPrefix(name, "claude_code.") ||
+		if strings.HasPrefix(name, "claude_code.") ||
 			providerTelemetryAttributeString(span.Attributes, "prompt.id") != "" ||
-			providerTelemetryAttributeString(span.Attributes, "session.id") != ""
+			providerTelemetryAttributeString(span.Attributes, "session.id") != "" {
+			return "claude"
+		}
 	}
-	if strings.Contains(identity, "codex") || strings.Contains(identity, "openai") {
-		return name == "session_task" || strings.HasPrefix(name, "session_task.") ||
+	if strings.Contains(identity, "codex") {
+		if name == "session_task" || strings.HasPrefix(name, "session_task.") ||
 			providerTelemetryAttributeString(span.Attributes, "turn.id") != "" ||
 			providerTelemetryAttributeString(span.Attributes, "thread.id") != "" ||
-			providerTelemetryAttributeString(span.Attributes, "conversation.id") != ""
+			providerTelemetryAttributeString(span.Attributes, "conversation.id") != "" {
+			return "codex"
+		}
 	}
-	return false
+	// OpenAI is a provider identity, not proof that an arbitrary application
+	// span came from Codex. The native task name remains safe when a Codex
+	// service or scope name is unavailable.
+	if strings.Contains(identity, "openai") && (name == "session_task" || strings.HasPrefix(name, "session_task.")) {
+		return "codex"
+	}
+	return ""
 }
 
-func retainedProviderSpans(spans []Span) []Span {
-	traceIDs := retainedProviderTraceIDs(spans)
-	retained := make([]Span, 0)
-	for _, span := range spans {
-		if _, ok := traceIDs[span.TraceID]; !ok {
+func providerTraceSpanKey(span Span) (string, bool) {
+	if span.TraceID == "" || span.SpanID == "" {
+		return "", false
+	}
+	return span.TraceID + "\x00" + span.SpanID, true
+}
+
+const providerTraceSpanLimitPerTrace = 8
+const providerTraceObservedSpanIDLimit = DefaultProviderTraceSpanCap * 4
+const providerTraceOwnerTrackingLimit = 64
+const defaultProviderTraceContributorCap = DefaultProviderTraceSpanCap * providerTraceSpanLimitPerTrace
+
+// captureProviderTraceSpans protects recent native Codex and Claude traces
+// from unrelated traffic in the generic span ring. One shared bounded ring and
+// a per-trace projection limit retention without separating providers. Must be
+// called with s.mu held after incoming spans have been added to the generic
+// ring.
+func (s *Store) captureProviderTraceSpans(incoming []Span) {
+	traceProviders := make(map[string]string)
+	for _, span := range incoming {
+		if span.TraceID == "" {
 			continue
 		}
-		span.ownerConnID = ""
+		if _, suppressed := s.providerTraceSuppressedIDs[span.TraceID]; suppressed {
+			continue
+		}
+		if provider := providerAgentSpanProvider(span); provider != "" {
+			traceProviders[span.TraceID] = provider
+			continue
+		}
+		if _, retained := s.providerTraceIDs[span.TraceID]; retained {
+			traceProviders[span.TraceID] = "retained"
+		}
+	}
+	if len(traceProviders) == 0 {
+		return
+	}
+	taskHistory := s.providerTaskSpansForIncomingOwners(incoming, traceProviders)
+	generic := s.spans.snapshot()
+	// A provider boundary can arrive after earlier spans from the same trace.
+	// Attribute every still-live recovered span before recording the incoming
+	// batch, whose early entries may already have rolled out of the generic ring.
+	for _, span := range generic {
+		if traceProviders[span.TraceID] != "" {
+			s.recordProviderTraceObservation(span)
+		}
+	}
+	for _, span := range taskHistory {
+		s.recordProviderTraceObservation(span)
+	}
+	for _, span := range incoming {
+		if traceProviders[span.TraceID] != "" {
+			s.recordProviderTraceObservation(span)
+		}
+	}
+
+	ring := &s.providerTraceSpans
+	retained := ring.snapshot()
+	for _, span := range retained {
+		s.seedProviderTraceContributor(span)
+	}
+	for _, span := range taskHistory {
+		s.seedProviderTraceContributor(span)
+	}
+	for _, span := range generic {
+		if traceProviders[span.TraceID] != "" {
+			s.seedProviderTraceContributor(span)
+		}
+	}
+	for _, span := range incoming {
+		if traceProviders[span.TraceID] != "" {
+			s.recordProviderTraceContributor(span)
+		}
+	}
+	for traceID := range traceProviders {
+		if _, suppressed := s.providerTraceSuppressedIDs[traceID]; suppressed {
+			delete(traceProviders, traceID)
+		}
+	}
+	retained = s.filterSuppressedProviderTraceSpans(retained)
+
+	indexes := make(map[string]int, len(retained))
+	for i, span := range retained {
+		if key, ok := providerTraceSpanKey(span); ok {
+			indexes[key] = i
+		}
+	}
+	upsert := func(span Span) {
+		if traceProviders[span.TraceID] == "" {
+			return
+		}
+		key, ok := providerTraceSpanKey(span)
+		if !ok {
+			return
+		}
+		if winner, exists := s.latestProviderTraceContributor(key); exists {
+			span = winner
+		}
+		span = s.withProviderTraceObservation(span)
+		if index, exists := indexes[key]; exists {
+			span.providerTraceRetentionTruncated = span.providerTraceRetentionTruncated || retained[index].providerTraceRetentionTruncated
+			span.providerTraceObservedSpanCount = max(span.providerTraceObservedSpanCount, retained[index].providerTraceObservedSpanCount)
+			span.providerTraceObservationOverflow = span.providerTraceObservationOverflow || retained[index].providerTraceObservationOverflow
+			span.providerTraceObservationUnavailable = span.providerTraceObservationUnavailable || retained[index].providerTraceObservationUnavailable
+			retained[index] = span
+			return
+		}
+		indexes[key] = len(retained)
 		retained = append(retained, span)
 	}
+	// Recover same-owner task context after the live provider projection rolls
+	// over, without reintroducing history from a disconnected process.
+	for _, span := range taskHistory {
+		upsert(span)
+	}
+	// Recover earlier spans in a provider trace that arrived in another batch.
+	for _, span := range generic {
+		upsert(span)
+	}
+	// Incoming spans win and remain available even when one oversized batch
+	// overwrote its own early entries in the generic ring.
+	for _, span := range incoming {
+		upsert(span)
+	}
+	perTraceLimit := min(providerTraceSpanLimitPerTrace, ring.cap)
+	retained = compactProviderTraceSpans(retained, perTraceLimit)
+	retained = moveProviderTracesToTail(retained, traceProviders)
+	retained = retainNewestWholeProviderTraces(retained, ring.cap)
+	// Reduce distinct-span contributors to the projection before enforcing the
+	// live-owner budget. Otherwise one oversized trace can evict itself even
+	// though its compact representation fits comfortably within the bound.
+	s.pruneProviderTraceContributorKeys(retained)
+	s.pruneProviderTraceContributorCapacity()
+	retained = s.filterSuppressedProviderTraceSpans(retained)
+	ring.clear()
+	ring.push(retained)
+	s.rebuildProviderTraceIndex(retained)
+	s.pruneProviderTraceContributors(retained)
+}
+
+func (s *Store) providerTaskSpansForIncomingOwners(incoming []Span, touched map[string]string) []Span {
+	ownersByTrace := make(map[string]map[string]struct{})
+	for _, span := range incoming {
+		if touched[span.TraceID] == "" {
+			continue
+		}
+		owners := ownersByTrace[span.TraceID]
+		if owners == nil {
+			owners = make(map[string]struct{})
+			ownersByTrace[span.TraceID] = owners
+		}
+		owners[span.ownerConnID] = struct{}{}
+	}
+	spans := make([]Span, 0)
+	for _, task := range s.providerTasks.snapshot() {
+		owners := ownersByTrace[task.traceID]
+		if len(owners) == 0 {
+			continue
+		}
+		for _, span := range task.spans {
+			if _, sameOwner := owners[span.ownerConnID]; sameOwner {
+				spans = append(spans, span)
+			}
+		}
+	}
+	return spans
+}
+
+func (s *Store) seedProviderTraceContributor(span Span) {
+	s.upsertProviderTraceContributor(span)
+}
+
+func (s *Store) recordProviderTraceContributor(span Span) {
+	s.upsertProviderTraceContributor(span)
+}
+
+func (s *Store) upsertProviderTraceContributor(span Span) {
+	key, ok := providerTraceSpanKey(span)
+	if !ok {
+		return
+	}
+	contributors := s.providerTraceContributors[key]
+	if contributors == nil {
+		contributors = make(map[string]providerTraceContributor)
+		s.providerTraceContributors[key] = contributors
+	}
+	sequence := s.providerTraceContributorSequence(span)
+	previous, exists := contributors[span.ownerConnID]
+	if exists && previous.sequence >= sequence {
+		return
+	}
+	contributors[span.ownerConnID] = providerTraceContributor{span: span, sequence: sequence}
+}
+
+func (s *Store) pruneProviderTraceContributorCapacity() {
+	total := 0
+	latestByTrace := make(map[string]uint64)
+	for key, contributors := range s.providerTraceContributors {
+		traceID, _, ok := strings.Cut(key, "\x00")
+		if !ok {
+			continue
+		}
+		total += len(contributors)
+		for _, contributor := range contributors {
+			latestByTrace[traceID] = max(latestByTrace[traceID], contributor.sequence)
+		}
+	}
+	for total > s.providerTraceContributorCap && len(latestByTrace) > 0 {
+		oldestTraceID := ""
+		var oldestSequence uint64
+		for traceID, sequence := range latestByTrace {
+			if oldestTraceID == "" || sequence < oldestSequence ||
+				(sequence == oldestSequence && traceID < oldestTraceID) {
+				oldestTraceID = traceID
+				oldestSequence = sequence
+			}
+		}
+		s.suppressProviderTrace(oldestTraceID)
+		delete(latestByTrace, oldestTraceID)
+		for key, contributors := range s.providerTraceContributors {
+			traceID, _, _ := strings.Cut(key, "\x00")
+			if traceID != oldestTraceID {
+				continue
+			}
+			total -= len(contributors)
+			delete(s.providerTraceContributors, key)
+		}
+	}
+}
+
+func (s *Store) suppressProviderTrace(traceID string) {
+	if traceID == "" {
+		return
+	}
+	if _, exists := s.providerTraceSuppressedIDs[traceID]; exists {
+		return
+	}
+	for _, evicted := range s.providerTraceSuppressed.pushWithEvicted([]string{traceID}) {
+		delete(s.providerTraceSuppressedIDs, evicted)
+	}
+	s.providerTraceSuppressedIDs[traceID] = struct{}{}
+}
+
+func (s *Store) filterSuppressedProviderTraceSpans(spans []Span) []Span {
+	filtered := spans[:0]
+	for _, span := range spans {
+		if _, suppressed := s.providerTraceSuppressedIDs[span.TraceID]; !suppressed {
+			filtered = append(filtered, span)
+		}
+	}
+	return filtered
+}
+
+func (s *Store) providerTraceContributorSequence(span Span) uint64 {
+	if span.ingestRevision > 0 {
+		if span.ingestRevision > s.providerTraceContributorSeq {
+			s.providerTraceContributorSeq = span.ingestRevision
+		}
+		return span.ingestRevision
+	}
+	s.providerTraceContributorSeq++
+	return s.providerTraceContributorSeq
+}
+
+func (s *Store) latestProviderTraceContributor(key string) (Span, bool) {
+	contributors := s.providerTraceContributors[key]
+	var selected providerTraceContributor
+	found := false
+	for _, contributor := range contributors {
+		if !found || contributor.sequence > selected.sequence {
+			selected = contributor
+			found = true
+		}
+	}
+	return selected.span, found
+}
+
+func (s *Store) pruneProviderTraceContributorKeys(spans []Span) {
+	retainedKeys := make(map[string]struct{}, len(spans))
+	for _, span := range spans {
+		if key, ok := providerTraceSpanKey(span); ok {
+			retainedKeys[key] = struct{}{}
+		}
+	}
+	for key := range s.providerTraceContributors {
+		if _, retained := retainedKeys[key]; !retained {
+			delete(s.providerTraceContributors, key)
+		}
+	}
+}
+
+func (s *Store) pruneProviderTraceContributors(spans []Span) {
+	s.pruneProviderTraceContributorKeys(spans)
+	s.pruneProviderTraceObservations()
+}
+
+func (s *Store) recordProviderTraceObservation(span Span) {
+	if span.TraceID == "" || span.SpanID == "" {
+		return
+	}
+	observation := s.providerTraceObservations[span.TraceID]
+	if observation == nil {
+		observation = &providerTraceObservation{
+			spanIDs:           make(map[string]struct{}),
+			spanOwners:        make(map[string]map[string]struct{}),
+			spanOwnerOverflow: make(map[string]struct{}),
+			overflowOwners:    make(map[string]struct{}),
+		}
+		s.providerTraceObservations[span.TraceID] = observation
+	}
+	observation.lastRevision = max(observation.lastRevision, span.ingestRevision)
+	if observation.overflow || observation.historyUnavailable {
+		observation.addOverflowOwner(span.ownerConnID)
+		return
+	}
+	if _, exists := observation.spanIDs[span.SpanID]; exists {
+		observation.addSpanOwner(span.SpanID, span.ownerConnID)
+		return
+	}
+	if s.providerTraceObservedSpanIDs >= providerTraceObservedSpanIDLimit {
+		s.reclaimProviderTraceObservationCapacity(span.TraceID)
+		if s.providerTraceObservedSpanIDs >= providerTraceObservedSpanIDLimit {
+			observation.overflow = true
+			observation.addOverflowOwner(span.ownerConnID)
+			return
+		}
+	}
+	observation.spanIDs[span.SpanID] = struct{}{}
+	observation.addSpanOwner(span.SpanID, span.ownerConnID)
+	s.providerTraceObservedSpanIDs++
+}
+
+func (observation *providerTraceObservation) addSpanOwner(spanID, connectionID string) {
+	owners := observation.spanOwners[spanID]
+	if owners == nil {
+		owners = make(map[string]struct{})
+		observation.spanOwners[spanID] = owners
+	}
+	if _, exists := owners[connectionID]; exists {
+		return
+	}
+	if len(owners) >= providerTraceOwnerTrackingLimit {
+		observation.spanOwnerOverflow[spanID] = struct{}{}
+		return
+	}
+	owners[connectionID] = struct{}{}
+}
+
+func (observation *providerTraceObservation) addOverflowOwner(connectionID string) {
+	if observation.overflowOwners == nil {
+		observation.overflowOwners = make(map[string]struct{})
+	}
+	if _, exists := observation.overflowOwners[connectionID]; exists {
+		return
+	}
+	if len(observation.overflowOwners) >= providerTraceOwnerTrackingLimit {
+		observation.overflowOwnerTrackingOverflow = true
+		return
+	}
+	observation.overflowOwners[connectionID] = struct{}{}
+}
+
+// reclaimProviderTraceObservationCapacity sacrifices the least recently
+// updated older trace before degrading a current trace. The evicted trace
+// remains conservatively marked as having unavailable history through its
+// observation entry, without claiming that an omitted span was observed.
+func (s *Store) reclaimProviderTraceObservationCapacity(currentTraceID string) {
+	oldestTraceID := ""
+	var oldestRevision uint64
+	for traceID, observation := range s.providerTraceObservations {
+		if traceID == currentTraceID || len(observation.spanIDs) == 0 {
+			continue
+		}
+		if oldestTraceID == "" || observation.lastRevision < oldestRevision {
+			oldestTraceID = traceID
+			oldestRevision = observation.lastRevision
+		}
+	}
+	if oldestTraceID == "" {
+		return
+	}
+	observation := s.providerTraceObservations[oldestTraceID]
+	for _, owners := range observation.spanOwners {
+		for connectionID := range owners {
+			observation.addOverflowOwner(connectionID)
+		}
+	}
+	if len(observation.spanOwnerOverflow) > 0 {
+		observation.overflowOwnerTrackingOverflow = true
+	}
+	s.providerTraceObservedSpanIDs -= len(observation.spanIDs)
+	clear(observation.spanIDs)
+	clear(observation.spanOwners)
+	clear(observation.spanOwnerOverflow)
+	observation.historyUnavailable = true
+}
+
+func (s *Store) evictProviderTraceObservationConnection(connectionID string) map[string]struct{} {
+	changedTraceIDs := make(map[string]struct{})
+	for traceID, observation := range s.providerTraceObservations {
+		for spanID, owners := range observation.spanOwners {
+			if _, exists := owners[connectionID]; !exists {
+				continue
+			}
+			delete(owners, connectionID)
+			changedTraceIDs[traceID] = struct{}{}
+			if len(owners) == 0 {
+				delete(observation.spanOwners, spanID)
+				if _, ownershipUnknown := observation.spanOwnerOverflow[spanID]; !ownershipUnknown {
+					delete(observation.spanIDs, spanID)
+					s.providerTraceObservedSpanIDs--
+				}
+			}
+		}
+		if _, exists := observation.overflowOwners[connectionID]; exists {
+			delete(observation.overflowOwners, connectionID)
+			changedTraceIDs[traceID] = struct{}{}
+		}
+		if (observation.overflow || observation.historyUnavailable) && len(observation.overflowOwners) == 0 &&
+			!observation.overflowOwnerTrackingOverflow {
+			observation.overflow = false
+			observation.historyUnavailable = false
+			changedTraceIDs[traceID] = struct{}{}
+		}
+		if len(observation.spanIDs) == 0 && !observation.overflow && !observation.historyUnavailable {
+			delete(s.providerTraceObservations, traceID)
+		}
+	}
+	return changedTraceIDs
+}
+
+func (s *Store) refreshProviderTraceObservationState(
+	spans []Span,
+	resetKnownOmissionTraceIDs map[string]struct{},
+) []Span {
+	retainedIDs := make(map[string]map[string]struct{})
+	for _, span := range spans {
+		if retainedIDs[span.TraceID] == nil {
+			retainedIDs[span.TraceID] = make(map[string]struct{})
+		}
+		if span.SpanID != "" {
+			retainedIDs[span.TraceID][span.SpanID] = struct{}{}
+		}
+	}
+	for index := range spans {
+		span := spans[index]
+		_, resetKnownOmission := resetKnownOmissionTraceIDs[span.TraceID]
+		knownOmission := span.providerTraceRetentionTruncated && !resetKnownOmission
+		span.providerTraceRetentionTruncated = knownOmission
+		span.providerTraceObservedSpanCount = 0
+		span.providerTraceObservationOverflow = false
+		span.providerTraceObservationUnavailable = false
+		observation := s.providerTraceObservations[span.TraceID]
+		if observation != nil {
+			span.providerTraceObservedSpanCount = len(observation.spanIDs)
+			span.providerTraceObservationOverflow = observation.overflow
+			span.providerTraceObservationUnavailable = observation.historyUnavailable
+			span.providerTraceRetentionTruncated = knownOmission || observation.overflow ||
+				len(observation.spanIDs) > len(retainedIDs[span.TraceID])
+		}
+		spans[index] = span
+	}
+	return spans
+}
+
+func (s *Store) withProviderTraceObservation(span Span) Span {
+	observation := s.providerTraceObservations[span.TraceID]
+	if observation == nil {
+		return span
+	}
+	span.providerTraceObservedSpanCount = max(span.providerTraceObservedSpanCount, len(observation.spanIDs))
+	span.providerTraceObservationOverflow = span.providerTraceObservationOverflow || observation.overflow
+	span.providerTraceObservationUnavailable = span.providerTraceObservationUnavailable || observation.historyUnavailable
+	return span
+}
+
+func (s *Store) pruneProviderTraceObservations() {
+	for traceID, observation := range s.providerTraceObservations {
+		if _, retained := s.providerTraceIDs[traceID]; retained {
+			continue
+		}
+		s.providerTraceObservedSpanIDs -= len(observation.spanIDs)
+		delete(s.providerTraceObservations, traceID)
+	}
+}
+
+func (s *Store) rebuildProviderTraceIndex(spans []Span) {
+	if s.providerTraceIDs == nil {
+		s.providerTraceIDs = make(map[string]struct{})
+	} else {
+		clear(s.providerTraceIDs)
+	}
+	for _, span := range spans {
+		if span.TraceID != "" && span.SpanID != "" {
+			s.providerTraceIDs[span.TraceID] = struct{}{}
+		}
+	}
+}
+
+func retainNewestWholeProviderTraces(spans []Span, capacity int) []Span {
+	if capacity <= 0 {
+		return nil
+	}
+	if len(spans) <= capacity {
+		return spans
+	}
+
+	counts := make(map[string]int)
+	order := make([]string, 0)
+	for _, span := range spans {
+		if counts[span.TraceID] == 0 {
+			order = append(order, span.TraceID)
+		}
+		counts[span.TraceID]++
+	}
+	dropped := make(map[string]struct{})
+	remaining := len(spans)
+	for _, traceID := range order {
+		if remaining <= capacity {
+			break
+		}
+		dropped[traceID] = struct{}{}
+		remaining -= counts[traceID]
+	}
+	retained := make([]Span, 0, remaining)
+	for _, span := range spans {
+		if _, drop := dropped[span.TraceID]; !drop {
+			retained = append(retained, span)
+		}
+	}
 	return retained
 }
 
-func retainedProviderLogs(logs []LogRecord) []LogRecord {
-	retained := make([]LogRecord, 0)
-	for _, record := range logs {
-		if ClassifyProviderUsageLog(record) == ProviderUsageLogUnknown {
+func moveProviderTracesToTail(spans []Span, touched map[string]string) []Span {
+	if len(spans) == 0 || len(touched) == 0 {
+		return spans
+	}
+	ordered := make([]Span, 0, len(spans))
+	for _, span := range spans {
+		if touched[span.TraceID] == "" {
+			ordered = append(ordered, span)
+		}
+	}
+	for _, span := range spans {
+		if touched[span.TraceID] != "" {
+			ordered = append(ordered, span)
+		}
+	}
+	return ordered
+}
+
+func compactProviderTraceSpans(spans []Span, limit int) []Span {
+	if limit <= 0 {
+		return spans
+	}
+	byTrace := make(map[string][]int)
+	observedSpanCounts := make(map[string]int)
+	for index, span := range spans {
+		byTrace[span.TraceID] = append(byTrace[span.TraceID], index)
+		observedSpanCounts[span.TraceID] = max(observedSpanCounts[span.TraceID], span.providerTraceObservedSpanCount)
+	}
+	selected := make(map[int]struct{}, len(spans))
+	truncatedTraceIDs := make(map[string]struct{})
+	for traceID, indexes := range byTrace {
+		observedSpanCounts[traceID] = max(observedSpanCounts[traceID], len(indexes))
+		if len(indexes) <= limit {
+			for _, index := range indexes {
+				selected[index] = struct{}{}
+			}
 			continue
 		}
-		record.ownerConnID = ""
-		retained = append(retained, record)
+		truncatedTraceIDs[traceID] = struct{}{}
+		sort.SliceStable(indexes, func(i, j int) bool {
+			left := spans[indexes[i]]
+			right := spans[indexes[j]]
+			leftPriority := providerTraceSpanRetentionPriority(left)
+			rightPriority := providerTraceSpanRetentionPriority(right)
+			if leftPriority != rightPriority {
+				return leftPriority > rightPriority
+			}
+			leftTime := providerTraceSpanTime(left)
+			rightTime := providerTraceSpanTime(right)
+			if !leftTime.Equal(rightTime) {
+				return leftTime.After(rightTime)
+			}
+			return indexes[i] > indexes[j]
+		})
+		selectedForTrace := 0
+		// Status remains an exact trace property even when only representative
+		// spans are retained. Reserve one representative for every status that
+		// affects the aggregate before filling the remaining projection slots.
+		for _, statusCode := range []string{"ERROR", "OK"} {
+			for _, index := range indexes {
+				if spans[index].Status.Code != statusCode {
+					continue
+				}
+				if _, exists := selected[index]; !exists {
+					selected[index] = struct{}{}
+					selectedForTrace++
+				}
+				break
+			}
+		}
+		for _, index := range indexes {
+			if selectedForTrace == limit {
+				break
+			}
+			if _, exists := selected[index]; exists {
+				continue
+			}
+			selected[index] = struct{}{}
+			selectedForTrace++
+		}
 	}
-	return retained
+	compacted := make([]Span, 0, len(selected))
+	for index, span := range spans {
+		if _, ok := selected[index]; ok {
+			if _, truncated := truncatedTraceIDs[span.TraceID]; truncated {
+				span.providerTraceRetentionTruncated = true
+			}
+			span.providerTraceObservedSpanCount = observedSpanCounts[span.TraceID]
+			compacted = append(compacted, span)
+		}
+	}
+	return compacted
+}
+
+func providerTraceSpansRetentionTruncated(spans []Span) bool {
+	observedSpanCount := 0
+	retainedSpanIDs := make(map[string]struct{}, len(spans))
+	markedTruncated := false
+	for _, span := range spans {
+		if span.providerTraceRetentionTruncated {
+			markedTruncated = true
+		}
+		if span.providerTraceObservationUnavailable {
+			return true
+		}
+		if span.providerTraceObservationOverflow {
+			return true
+		}
+		observedSpanCount = max(observedSpanCount, span.providerTraceObservedSpanCount)
+		if span.SpanID != "" {
+			retainedSpanIDs[span.SpanID] = struct{}{}
+		}
+	}
+	if !markedTruncated {
+		return false
+	}
+	return observedSpanCount == 0 || len(retainedSpanIDs) < observedSpanCount
+}
+
+func providerTraceSpansRetentionUnknown(spans []Span) bool {
+	historyUnavailable := false
+	knownOmission := false
+	for _, span := range spans {
+		if span.providerTraceObservationOverflow {
+			return false
+		}
+		historyUnavailable = historyUnavailable || span.providerTraceObservationUnavailable
+		knownOmission = knownOmission || span.providerTraceRetentionTruncated
+	}
+	return historyUnavailable && !knownOmission
+}
+
+func providerTraceSpanRetentionPriority(span Span) int {
+	priority := 0
+	if span.ParentSpanID == "" {
+		priority += 4
+	}
+	if ProviderTaskBoundaryProvider(span) != "" {
+		priority += 2
+	}
+	name := strings.ToLower(strings.TrimSpace(span.Name))
+	if ClassifyGenAISpan(span) == GenAISpanLLM || name == "claude_code.llm_request" {
+		priority++
+	}
+	return priority
+}
+
+func providerTraceSpanTime(span Span) time.Time {
+	if !span.EndTime.IsZero() {
+		return span.EndTime
+	}
+	return span.StartTime
 }
 
 func retainedProviderUsageMetrics(metrics []MetricDataPoint) []MetricDataPoint {
@@ -461,7 +1146,6 @@ func compactProviderTaskSpansByBoundary(spans []Span) map[string][]Span {
 		if boundarySpanID == "" {
 			continue
 		}
-		span.ownerConnID = ""
 		compactByBoundary[boundarySpanID] = append(compactByBoundary[boundarySpanID], span)
 	}
 	return compactByBoundary

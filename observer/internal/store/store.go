@@ -27,6 +27,7 @@ const (
 	DefaultSpanCap                          = 10_000
 	DefaultMetricCap                        = 10_000
 	DefaultLogCap                           = 10_000
+	DefaultProviderTraceSpanCap             = 1_000
 	DefaultProviderTaskCap                  = 1_000
 	DefaultProviderTaskSpanCap              = DefaultSpanCap
 	DefaultProviderUsageLogCap              = 10_000
@@ -87,8 +88,13 @@ type Span struct {
 	Resource     Resource       `json:"resource"`
 	Scope        Scope          `json:"scope"`
 
-	ownerConnID                    string `json:"-"`
-	providerTaskRetentionTruncated bool   `json:"-"`
+	ownerConnID                         string `json:"-"`
+	providerTaskRetentionTruncated      bool   `json:"-"`
+	providerTraceRetentionTruncated     bool   `json:"-"`
+	providerTraceObservedSpanCount      int    `json:"-"`
+	providerTraceObservationOverflow    bool   `json:"-"`
+	providerTraceObservationUnavailable bool   `json:"-"`
+	ingestRevision                      uint64 `json:"-"`
 }
 
 // QuantileValue represents a quantile value in summary metrics.
@@ -173,14 +179,17 @@ type LogRecordFilter struct {
 
 // TraceSummary represents a summary of a single trace.
 type TraceSummary struct {
-	TraceID      string        `json:"traceId"`
-	RootSpanName string        `json:"rootSpanName"`
-	ServiceName  string        `json:"serviceName,omitempty"`
-	SpanCount    int           `json:"spanCount"`
-	DurationMs   float64       `json:"durationMs"`
-	Status       string        `json:"status"`
-	IsGenAI      bool          `json:"isGenAI,omitempty"`
-	Spans        []SpanPreview `json:"spans,omitempty"`
+	TraceID            string        `json:"traceId"`
+	RootSpanName       string        `json:"rootSpanName"`
+	ServiceName        string        `json:"serviceName,omitempty"`
+	SpanCount          int           `json:"spanCount"`
+	DurationMs         float64       `json:"durationMs"`
+	Status             string        `json:"status"`
+	IsGenAI            bool          `json:"isGenAI,omitempty"`
+	RetentionTruncated bool          `json:"retentionTruncated,omitempty"`
+	RetentionUnknown   bool          `json:"retentionUnknown,omitempty"`
+	Revision           uint64        `json:"revision,omitempty"`
+	Spans              []SpanPreview `json:"spans,omitempty"`
 }
 
 // TraceSummaryFilter narrows trace summary queries using fields already present
@@ -225,14 +234,17 @@ type SpanPreview struct {
 
 // TraceDetail represents the full details of a trace.
 type TraceDetail struct {
-	TraceID      string             `json:"traceId"`
-	RootSpanName string             `json:"rootSpanName"`
-	ServiceName  string             `json:"serviceName,omitempty"`
-	SpanCount    int                `json:"spanCount"`
-	DurationMs   float64            `json:"durationMs"`
-	Status       string             `json:"status"`
-	Spans        []Span             `json:"spans"`
-	GenAI        *GenAITraceSummary `json:"genAI,omitempty"`
+	TraceID            string             `json:"traceId"`
+	RootSpanName       string             `json:"rootSpanName"`
+	ServiceName        string             `json:"serviceName,omitempty"`
+	SpanCount          int                `json:"spanCount"`
+	DurationMs         float64            `json:"durationMs"`
+	Status             string             `json:"status"`
+	RetentionTruncated bool               `json:"retentionTruncated,omitempty"`
+	RetentionUnknown   bool               `json:"retentionUnknown,omitempty"`
+	Revision           uint64             `json:"revision,omitempty"`
+	Spans              []Span             `json:"spans"`
+	GenAI              *GenAITraceSummary `json:"genAI,omitempty"`
 }
 
 // MetricGroup represents a group of metric data points with the same name.
@@ -323,6 +335,16 @@ type Store struct {
 	spans                          ringBuffer[Span]
 	metrics                        ringBuffer[MetricDataPoint]
 	logs                           ringBuffer[LogRecord]
+	providerTraceSpans             ringBuffer[Span]
+	providerTraceIDs               map[string]struct{}
+	providerTraceContributors      map[string]map[string]providerTraceContributor
+	providerTraceContributorSeq    uint64
+	providerTraceContributorCap    int
+	providerTraceSuppressed        ringBuffer[string]
+	providerTraceSuppressedIDs     map[string]struct{}
+	providerTraceObservations      map[string]*providerTraceObservation
+	providerTraceObservedSpanIDs   int
+	spanIngestRevision             uint64
 	providerTasks                  ringBuffer[providerTaskTrace]
 	providerUsageLogs              ringBuffer[LogRecord]
 	providerUsageMetrics           ringBuffer[MetricDataPoint]
@@ -469,6 +491,13 @@ func New() *Store {
 		spans:                                 newRingBuffer[Span](DefaultSpanCap),
 		metrics:                               newRingBuffer[MetricDataPoint](DefaultMetricCap),
 		logs:                                  newRingBuffer[LogRecord](DefaultLogCap),
+		providerTraceSpans:                    newRingBuffer[Span](DefaultProviderTraceSpanCap),
+		providerTraceIDs:                      make(map[string]struct{}),
+		providerTraceContributors:             make(map[string]map[string]providerTraceContributor),
+		providerTraceContributorCap:           defaultProviderTraceContributorCap,
+		providerTraceSuppressed:               newRingBuffer[string](DefaultProviderTraceSpanCap),
+		providerTraceSuppressedIDs:            make(map[string]struct{}),
+		providerTraceObservations:             make(map[string]*providerTraceObservation),
 		providerTasks:                         newRingBuffer[providerTaskTrace](DefaultProviderTaskCap),
 		providerUsageLogs:                     newRingBuffer[LogRecord](DefaultProviderUsageLogCap),
 		providerUsageMetrics:                  newRingBuffer[MetricDataPoint](DefaultProviderUsageMetricCap),
@@ -485,12 +514,15 @@ func New() *Store {
 func (s *Store) AddSpansForConnection(connID string, spans []Span) {
 	s.mu.Lock()
 	reset := s.checkSessionReset()
-	if connID != "" {
-		for i := range spans {
+	for i := range spans {
+		s.spanIngestRevision++
+		spans[i].ingestRevision = s.spanIngestRevision
+		if connID != "" {
 			spans[i].ownerConnID = connID
 		}
 	}
 	s.spans.push(spans)
+	s.captureProviderTraceSpans(spans)
 	s.captureCompletedProviderTasks(spans)
 	changedAt := time.Now()
 	s.lastIngest = changedAt
@@ -612,6 +644,13 @@ func (s *Store) Clear() {
 	s.spans.clear()
 	s.metrics.clear()
 	s.logs.clear()
+	s.providerTraceSpans.clear()
+	clear(s.providerTraceIDs)
+	clear(s.providerTraceContributors)
+	s.providerTraceSuppressed.clear()
+	clear(s.providerTraceSuppressedIDs)
+	clear(s.providerTraceObservations)
+	s.providerTraceObservedSpanIDs = 0
 	s.providerTasks.clear()
 	s.providerUsageLogs.clear()
 	s.providerUsageMetrics.clear()
@@ -639,11 +678,12 @@ func (s *Store) EvictConnection(connID string) {
 
 	s.mu.Lock()
 	hasSpans := s.rebuildSpansWithoutConnection(connID)
+	hasSpans = s.rebuildProviderTraceSpansWithoutConnection(connID) || hasSpans
 	hasMetrics := s.rebuildMetricsWithoutConnection(connID)
 	hasLogs := s.rebuildLogsWithoutConnection(connID)
 
 	// If the store is now empty, reset the ingest clock.
-	if s.spans.size() == 0 && s.metrics.size() == 0 && s.logs.size() == 0 {
+	if s.spans.size() == 0 && s.providerTraceSpans.size() == 0 && s.metrics.size() == 0 && s.logs.size() == 0 {
 		s.lastIngest = time.Time{}
 	}
 	s.mu.Unlock()
@@ -667,31 +707,64 @@ func (s *Store) EvictConnection(connID string) {
 // telemetry owned by the given connection.
 // Must be called with s.mu held.
 func (s *Store) rebuildSpansWithoutConnection(connID string) bool {
-	all := s.spans.snapshot()
-	retainedTraceIDs := retainedProviderTraceIDs(all)
-	kept := make([]Span, 0, len(all))
+	kept := make([]Span, 0, s.spans.size())
 	removed := false
-	changedOwnership := false
-	for _, sp := range all {
+	s.spans.iterate(func(sp Span) {
 		if sp.ownerConnID == connID {
-			if _, retain := retainedTraceIDs[sp.TraceID]; retain {
-				sp.ownerConnID = ""
-				changedOwnership = true
-				kept = append(kept, sp)
-				continue
-			}
 			removed = true
-			continue
+			return
 		}
 		kept = append(kept, sp)
-	}
-	if !removed && !changedOwnership {
+	})
+	if !removed {
 		return false
 	}
 	s.spans.clear()
 	if len(kept) > 0 {
 		s.spans.push(kept)
 	}
+	return true
+}
+
+// rebuildProviderTraceSpansWithoutConnection applies the same ownership
+// eviction to the shared provider trace projection used by trace queries.
+// Must be called with s.mu held.
+func (s *Store) rebuildProviderTraceSpansWithoutConnection(connID string) bool {
+	for key, contributors := range s.providerTraceContributors {
+		delete(contributors, connID)
+		if len(contributors) == 0 {
+			delete(s.providerTraceContributors, key)
+		}
+	}
+	changedTraceIDs := s.evictProviderTraceObservationConnection(connID)
+
+	kept := make([]Span, 0, s.providerTraceSpans.size())
+	removed := false
+	s.providerTraceSpans.iterate(func(sp Span) {
+		if sp.ownerConnID != connID {
+			kept = append(kept, sp)
+			return
+		}
+		removed = true
+		changedTraceIDs[sp.TraceID] = struct{}{}
+		key, ok := providerTraceSpanKey(sp)
+		if !ok {
+			return
+		}
+		if replacement, ok := s.latestProviderTraceContributor(key); ok {
+			kept = append(kept, replacement)
+		}
+	})
+	if !removed && len(changedTraceIDs) == 0 {
+		return false
+	}
+	kept = s.refreshProviderTraceObservationState(kept, changedTraceIDs)
+	s.providerTraceSpans.clear()
+	if len(kept) > 0 {
+		s.providerTraceSpans.push(kept)
+	}
+	s.rebuildProviderTraceIndex(kept)
+	s.pruneProviderTraceContributors(kept)
 	return true
 }
 
@@ -724,21 +797,14 @@ func (s *Store) rebuildMetricsWithoutConnection(connID string) bool {
 func (s *Store) rebuildLogsWithoutConnection(connID string) bool {
 	kept := make([]LogRecord, 0, s.logs.size())
 	removed := false
-	changedOwnership := false
 	s.logs.iterate(func(l LogRecord) {
 		if l.ownerConnID == connID {
-			if ClassifyProviderUsageLog(l) != ProviderUsageLogUnknown {
-				l.ownerConnID = ""
-				changedOwnership = true
-				kept = append(kept, l)
-				return
-			}
 			removed = true
 			return
 		}
 		kept = append(kept, l)
 	})
-	if !removed && !changedOwnership {
+	if !removed {
 		return false
 	}
 	s.logs.clear()
@@ -756,15 +822,16 @@ func (s *Store) checkSessionReset() bool {
 		return false
 	}
 	if time.Since(s.lastIngest) > s.sessionGap {
-		providerSpans := retainedProviderSpans(s.spans.snapshot())
-		providerMetrics := retainedProviderUsageMetrics(s.metrics.snapshot())
-		providerLogs := retainedProviderLogs(s.logs.snapshot())
 		s.spans.clear()
 		s.metrics.clear()
 		s.logs.clear()
-		s.spans.push(providerSpans)
-		s.metrics.push(providerMetrics)
-		s.logs.push(providerLogs)
+		s.providerTraceSpans.clear()
+		clear(s.providerTraceIDs)
+		clear(s.providerTraceContributors)
+		s.providerTraceSuppressed.clear()
+		clear(s.providerTraceSuppressedIDs)
+		clear(s.providerTraceObservations)
+		s.providerTraceObservedSpanIDs = 0
 		return true
 	}
 	return false
@@ -786,7 +853,7 @@ func (s *Store) QueryTraceSummariesFiltered(filter TraceSummaryFilter) []TraceSu
 	}
 
 	s.mu.RLock()
-	allSpans := s.spans.snapshot()
+	allSpans := s.traceQuerySpansLocked()
 	s.mu.RUnlock()
 
 	grouped := groupSpansByTrace(allSpans)
@@ -798,6 +865,25 @@ func (s *Store) QueryTraceSummariesFiltered(filter TraceSummaryFilter) []TraceSu
 	results := make([]TraceSummary, 0, minInt(len(grouped), filter.Limit))
 	for traceID, spans := range grouped {
 		startTime := getTraceStartTime(spans)
+		root := findRootSpan(spans)
+		dur := computeTraceDuration(spans)
+		retentionTruncated := providerTraceSpansRetentionTruncated(spans)
+		summary := TraceSummary{
+			TraceID:            traceID,
+			RootSpanName:       root.Name,
+			ServiceName:        root.Resource.ServiceName,
+			SpanCount:          len(spans),
+			DurationMs:         dur,
+			Status:             computeTraceStatus(spans),
+			IsGenAI:            traceHasGenAISignal(spans),
+			RetentionTruncated: retentionTruncated,
+			RetentionUnknown:   retentionTruncated && providerTraceSpansRetentionUnknown(spans),
+			Revision:           traceRevision(spans),
+			Spans:              makeSpanPreviews(spans, filter.SpanPreviewCap),
+		}
+		if summary.RetentionTruncated && traceSummaryHasTimeFilter(filter) {
+			continue
+		}
 		if filter.TimeAfter != nil && !startTime.After(*filter.TimeAfter) {
 			continue
 		}
@@ -809,18 +895,6 @@ func (s *Store) QueryTraceSummariesFiltered(filter TraceSummaryFilter) []TraceSu
 		}
 		if filter.TimeTo != nil && startTime.After(*filter.TimeTo) {
 			continue
-		}
-		root := findRootSpan(spans)
-		dur := computeTraceDuration(spans)
-		summary := TraceSummary{
-			TraceID:      traceID,
-			RootSpanName: root.Name,
-			ServiceName:  root.Resource.ServiceName,
-			SpanCount:    len(spans),
-			DurationMs:   dur,
-			Status:       computeTraceStatus(spans),
-			IsGenAI:      traceHasGenAISignal(spans),
-			Spans:        makeSpanPreviews(spans, filter.SpanPreviewCap),
 		}
 		if !matchesTraceSummaryFilter(summary, filter) {
 			continue
@@ -846,7 +920,7 @@ func (s *Store) Trace(traceID string, eventLimit int) *TraceDetail {
 	}
 
 	s.mu.RLock()
-	allSpans := s.spans.snapshot()
+	allSpans := s.traceQuerySpansLocked()
 	s.mu.RUnlock()
 
 	grouped := groupSpansByTrace(allSpans)
@@ -865,15 +939,19 @@ func (s *Store) Trace(traceID string, eventLimit int) *TraceDetail {
 		}
 	}
 
+	retentionTruncated := providerTraceSpansRetentionTruncated(spans)
 	return &TraceDetail{
-		TraceID:      traceID,
-		RootSpanName: root.Name,
-		ServiceName:  root.Resource.ServiceName,
-		SpanCount:    len(spans),
-		DurationMs:   computeTraceDuration(spans),
-		Status:       computeTraceStatus(spans),
-		Spans:        truncated,
-		GenAI:        buildGenAITraceSummary(spans),
+		TraceID:            traceID,
+		RootSpanName:       root.Name,
+		ServiceName:        root.Resource.ServiceName,
+		SpanCount:          len(spans),
+		DurationMs:         computeTraceDuration(spans),
+		Status:             computeTraceStatus(spans),
+		RetentionTruncated: retentionTruncated,
+		RetentionUnknown:   retentionTruncated && providerTraceSpansRetentionUnknown(spans),
+		Revision:           traceRevision(spans),
+		Spans:              truncated,
+		GenAI:              buildGenAITraceSummary(spans),
 	}
 }
 
@@ -883,6 +961,56 @@ func (s *Store) SnapshotSpans() []Span {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.spans.snapshot()
+}
+
+// SnapshotTraceQuerySpans returns the de-duplicated span view used by trace
+// queries, including the compact shared provider projection.
+func (s *Store) SnapshotTraceQuerySpans() []Span {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]Span(nil), s.traceQuerySpansLocked()...)
+}
+
+// traceQuerySpansLocked merges provider spans retained outside the generic
+// ring without returning the same trace/span pair twice. Must be called with
+// s.mu held for reading or writing.
+func (s *Store) traceQuerySpansLocked() []Span {
+	genericSpans := s.spans.snapshot()
+	providerSpans := s.providerTraceSpans.snapshot()
+	spans := make([]Span, 0, len(genericSpans)+len(providerSpans))
+	providerTraceIDs := make(map[string]struct{}, len(providerSpans))
+	for _, span := range providerSpans {
+		if span.TraceID != "" {
+			providerTraceIDs[span.TraceID] = struct{}{}
+		}
+	}
+	indexes := make(map[string]int, len(providerSpans))
+	upsert := func(span Span, retainMalformed bool) {
+		key, ok := providerTraceSpanKey(span)
+		if !ok {
+			if retainMalformed {
+				spans = append(spans, span)
+			}
+			return
+		}
+		if index, exists := indexes[key]; exists {
+			spans[index] = span
+			return
+		}
+		indexes[key] = len(spans)
+		spans = append(spans, span)
+	}
+	for _, span := range genericSpans {
+		if _, providerTrace := providerTraceIDs[span.TraceID]; !providerTrace {
+			spans = append(spans, span)
+			continue
+		}
+		upsert(span, true)
+	}
+	for _, span := range providerSpans {
+		upsert(s.withProviderTraceObservation(span), false)
+	}
+	return spans
 }
 
 // SnapshotProviderTaskSpansByTraceID returns compact completed provider tasks
@@ -981,9 +1109,9 @@ func (s *Store) ProviderRepositoryCorrelationUnavailableThrough() time.Time {
 	return s.providerRepositoryCorrelationUnavailableThrough
 }
 
-// SnapshotSpansByTraceIDs returns retained spans for the requested trace IDs
-// from one ring-buffer snapshot. Callers must treat nested maps and slices as
-// read-only.
+// SnapshotSpansByTraceIDs returns retained generic and provider spans for the
+// requested trace IDs from one locked snapshot. Callers must treat nested maps
+// and slices as read-only.
 func (s *Store) SnapshotSpansByTraceIDs(traceIDs []string) map[string][]Span {
 	wanted := make(map[string]struct{}, len(traceIDs))
 	for _, traceID := range traceIDs {
@@ -995,7 +1123,7 @@ func (s *Store) SnapshotSpansByTraceIDs(traceIDs []string) map[string][]Span {
 	}
 
 	s.mu.RLock()
-	allSpans := s.spans.snapshot()
+	allSpans := s.traceQuerySpansLocked()
 	s.mu.RUnlock()
 	for _, span := range allSpans {
 		if _, ok := wanted[span.TraceID]; ok {
@@ -1116,7 +1244,7 @@ func (s *Store) QueryLogs(limit int) []LogRecord {
 
 func (s *Store) QueryTraceSummaryFieldValues(field, prefix string, filter TraceSummaryFilter, limit int) []string {
 	s.mu.RLock()
-	count := s.spans.size()
+	count := s.spans.size() + s.providerTraceSpans.size()
 	s.mu.RUnlock()
 	if count == 0 {
 		return []string{}
@@ -1221,18 +1349,21 @@ func (s *Store) Stats() Stats {
 	svcSet := make(map[string]struct{})
 	metricNames := make(map[string]struct{})
 
-	s.spans.iterate(func(sp Span) {
+	rawSpans := s.spans.snapshot()
+	allSpans := s.traceQuerySpansLocked()
+	allMetrics := s.metrics.snapshot()
+	for _, sp := range allSpans {
 		traceIDs[sp.TraceID] = struct{}{}
 		if sp.Resource.ServiceName != "" {
 			svcSet[sp.Resource.ServiceName] = struct{}{}
 		}
-	})
-	s.metrics.iterate(func(m MetricDataPoint) {
+	}
+	for _, m := range allMetrics {
 		metricNames[m.Name] = struct{}{}
 		if m.Resource.ServiceName != "" {
 			svcSet[m.Resource.ServiceName] = struct{}{}
 		}
-	})
+	}
 	s.logs.iterate(func(l LogRecord) {
 		if l.Resource.ServiceName != "" {
 			svcSet[l.Resource.ServiceName] = struct{}{}
@@ -1246,8 +1377,8 @@ func (s *Store) Stats() Stats {
 	sort.Strings(svcs)
 
 	return Stats{
-		SpanCount:       s.spans.size(),
-		DataPointCount:  s.metrics.size(),
+		SpanCount:       len(rawSpans),
+		DataPointCount:  len(allMetrics),
 		MetricNameCount: len(metricNames),
 		LogCount:        s.logs.size(),
 		TraceCount:      len(traceIDs),
@@ -1262,18 +1393,26 @@ func (s *Store) Stats() Stats {
 func (s *Store) ServiceStatsAll() []ServiceStats {
 	s.mu.RLock()
 	allSpans := s.spans.snapshot()
-	// Collect service names from metrics and logs while holding the read lock.
+	allMetrics := s.metrics.snapshot()
+	providerSpans := s.providerTraceSpans.snapshot()
+	// Compact provider projections contribute service presence only. Their
+	// representative spans must not skew full-fidelity service aggregates.
 	metricLogSvcs := make(map[string]struct{})
-	s.metrics.iterate(func(m MetricDataPoint) {
+	for _, m := range allMetrics {
 		if m.Resource.ServiceName != "" {
 			metricLogSvcs[m.Resource.ServiceName] = struct{}{}
 		}
-	})
+	}
 	s.logs.iterate(func(l LogRecord) {
 		if l.Resource.ServiceName != "" {
 			metricLogSvcs[l.Resource.ServiceName] = struct{}{}
 		}
 	})
+	for _, span := range providerSpans {
+		if span.Resource.ServiceName != "" {
+			metricLogSvcs[span.Resource.ServiceName] = struct{}{}
+		}
+	}
 	s.mu.RUnlock()
 
 	grouped := groupSpansByTrace(allSpans)
@@ -1469,7 +1608,7 @@ func (s *Store) queryTracesFiltered(serviceName, spanName, status, traceIDPrefix
 	}
 
 	s.mu.RLock()
-	allSpans := s.spans.snapshot()
+	allSpans := s.traceQuerySpansLocked()
 	s.mu.RUnlock()
 
 	grouped := groupSpansByTrace(allSpans)
@@ -1500,15 +1639,19 @@ func (s *Store) queryTracesFiltered(serviceName, spanName, status, traceIDPrefix
 		dur := computeTraceDuration(spans)
 		previews := makeSpanPreviews(spans, spanPreviewCount)
 
+		retentionTruncated := providerTraceSpansRetentionTruncated(spans)
 		results = append(results, TraceSummary{
-			TraceID:      traceID,
-			RootSpanName: root.Name,
-			ServiceName:  svcName,
-			SpanCount:    len(spans),
-			DurationMs:   dur,
-			Status:       st,
-			IsGenAI:      isGenAI,
-			Spans:        previews,
+			TraceID:            traceID,
+			RootSpanName:       root.Name,
+			ServiceName:        svcName,
+			SpanCount:          len(spans),
+			DurationMs:         dur,
+			Status:             st,
+			IsGenAI:            isGenAI,
+			RetentionTruncated: retentionTruncated,
+			RetentionUnknown:   retentionTruncated && providerTraceSpansRetentionUnknown(spans),
+			Revision:           traceRevision(spans),
+			Spans:              previews,
 		})
 	}
 
@@ -1795,16 +1938,23 @@ func matchesTraceSummaryFilter(summary TraceSummary, filter TraceSummaryFilter) 
 	if filter.ExcludeStatus != "" && strings.EqualFold(summary.Status, filter.ExcludeStatus) {
 		return false
 	}
+	if summary.RetentionTruncated && traceSummaryHasUnsafeNumericFilter(filter) {
+		return false
+	}
 	if filter.SpanCount != nil && summary.SpanCount != *filter.SpanCount {
 		return false
 	}
-	if filter.SpanCountGT != nil && summary.SpanCount <= *filter.SpanCountGT {
+	provenSpanCount := summary.SpanCount
+	if summary.RetentionTruncated && !summary.RetentionUnknown {
+		provenSpanCount++
+	}
+	if filter.SpanCountGT != nil && provenSpanCount <= *filter.SpanCountGT {
 		return false
 	}
 	if filter.SpanCountLT != nil && summary.SpanCount >= *filter.SpanCountLT {
 		return false
 	}
-	if filter.MinSpanCount != nil && summary.SpanCount < *filter.MinSpanCount {
+	if filter.MinSpanCount != nil && provenSpanCount < *filter.MinSpanCount {
 		return false
 	}
 	if filter.MaxSpanCount != nil && summary.SpanCount > *filter.MaxSpanCount {
@@ -1826,6 +1976,27 @@ func matchesTraceSummaryFilter(summary TraceSummary, filter TraceSummaryFilter) 
 		return false
 	}
 	return true
+}
+
+func traceSummaryHasUnsafeNumericFilter(filter TraceSummaryFilter) bool {
+	// A retained count is a lower bound, so greater-than and minimum-count
+	// predicates remain valid. Exact/upper-bound counts and every duration
+	// predicate require a complete trace.
+	return filter.SpanCount != nil || filter.SpanCountLT != nil || filter.MaxSpanCount != nil || filter.DurationMs != nil ||
+		filter.DurationMsGT != nil || filter.DurationMsLT != nil || filter.MinDurationMs != nil ||
+		filter.MaxDurationMs != nil
+}
+
+func traceSummaryHasTimeFilter(filter TraceSummaryFilter) bool {
+	return filter.TimeAfter != nil || filter.TimeBefore != nil || filter.TimeFrom != nil || filter.TimeTo != nil
+}
+
+func traceRevision(spans []Span) uint64 {
+	var revision uint64
+	for _, span := range spans {
+		revision = max(revision, span.ingestRevision)
+	}
+	return revision
 }
 
 func matchesMetricGroupFilter(group MetricGroup, filter MetricGroupFilter) bool {

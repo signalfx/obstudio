@@ -8,6 +8,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { suite, test } from 'mocha';
 import * as vscode from 'vscode';
+import {
+	caseInsensitiveHeaderValue,
+	getCodexObstudioAuthorization,
+	getCodexObstudioSection,
+} from '../agent-integration-config';
 
 type RuntimeState = {
 	observerPort?: number;
@@ -27,6 +32,18 @@ type SharedObserverHandle = {
 	healthProofSecret?: string;
 	dispose: () => Promise<void>;
 	statePath?: string;
+};
+
+type SharedObserverPorts = {
+	grpc?: number;
+	http?: number;
+	ui?: number;
+};
+
+type ResolvedSharedObserverPorts = {
+	grpc: number;
+	http: number;
+	ui: number;
 };
 
 type FileSnapshot = {
@@ -80,7 +97,13 @@ async function waitFor<T>(load: () => Promise<T>, ready: (value: T) => boolean, 
 	if (lastError instanceof Error) {
 		throw lastError;
 	}
-	throw new Error('Timed out waiting for condition');
+	let lastDescription: string;
+	try {
+		lastDescription = JSON.stringify(last);
+	} catch {
+		lastDescription = String(last);
+	}
+	throw new Error(`Timed out waiting for condition; last value: ${lastDescription}`);
 }
 
 async function getExtension() {
@@ -111,6 +134,33 @@ async function getAvailablePort(): Promise<number> {
 			});
 		});
 	});
+}
+
+async function resolveSharedObserverPorts(ports: SharedObserverPorts): Promise<ResolvedSharedObserverPorts> {
+	const used = new Set<number>();
+	const resolvePort = async (name: keyof SharedObserverPorts): Promise<number> => {
+		const configured = ports[name];
+		if (configured !== undefined) {
+			if (used.has(configured)) {
+				throw new Error(`Shared Observer test port ${configured} is configured more than once.`);
+			}
+			used.add(configured);
+			return configured;
+		}
+		for (let attempt = 0; attempt < 20; attempt += 1) {
+			const candidate = await getAvailablePort();
+			if (!used.has(candidate)) {
+				used.add(candidate);
+				return candidate;
+			}
+		}
+		throw new Error(`Unable to allocate a distinct ${name} test port.`);
+	};
+	return {
+		ui: await resolvePort('ui'),
+		grpc: await resolvePort('grpc'),
+		http: await resolvePort('http'),
+	};
 }
 
 function isRetryableSharedObserverStartupFailure(stderr: string): boolean {
@@ -172,6 +222,7 @@ async function waitForHttpOrExit(url: string, child: cp.ChildProcess, timeoutMs:
 async function startSharedObserver(
 	binaryPath: string,
 	envOverrides: Record<string, string> = {},
+	ports: SharedObserverPorts = {},
 ): Promise<SharedObserverHandle> {
 	let lastFailure: Error | undefined;
 	const controlToken = envOverrides.OBSTUDIO_CONTROL_TOKEN ?? crypto.randomBytes(32).toString('base64url');
@@ -181,9 +232,10 @@ async function startSharedObserver(
 	const statePath = path.join(stateDirectory, 'shared-observer.json');
 
 	for (let attempt = 1; attempt <= sharedObserverStartupRetries; attempt += 1) {
-		const port = await getAvailablePort();
-		const grpcPort = await getAvailablePort();
-		const httpPort = await getAvailablePort();
+		const resolvedPorts = await resolveSharedObserverPorts(ports);
+		const port = resolvedPorts.ui;
+		const grpcPort = resolvedPorts.grpc;
+		const httpPort = resolvedPorts.http;
 		const baseUrl = `http://127.0.0.1:${port}`;
 		const child = cp.spawn(binaryPath, [], {
 			env: {
@@ -450,6 +502,18 @@ async function assertJSONMCPConfigured(
 	throw new Error(`Missing JSON MCP config in any expected path: ${filePaths.join(', ')}`);
 }
 
+function readCodexObstudioAuthorization(filePath: string): string | undefined {
+	const section = getCodexObstudioSection(fs.readFileSync(filePath, 'utf8'));
+	return section === undefined ? undefined : getCodexObstudioAuthorization(section);
+}
+
+function readJSONObstudioAuthorization(filePath: string): unknown {
+	const config = JSON.parse(fs.readFileSync(filePath, 'utf8')) as {
+		mcpServers?: { obstudio?: { headers?: Record<string, unknown> } };
+	};
+	return caseInsensitiveHeaderValue(config.mcpServers?.obstudio?.headers, 'Authorization');
+}
+
 async function assertJSONMCPPreservesExistingServer(
 	filePaths: string[],
 	serverName: string,
@@ -600,6 +664,17 @@ suite('VS Code Host', () => {
 		assert.equal(
 			isRetryableSharedObserverStartupFailure('shared observer failed to start: connect ECONNREFUSED 127.0.0.1:36715'),
 			false,
+		);
+	});
+
+	test('shared observer startup allocates distinct configured and dynamic ports', async () => {
+		const ui = await getAvailablePort();
+		const resolved = await resolveSharedObserverPorts({ ui });
+		assert.equal(resolved.ui, ui);
+		assert.equal(new Set([resolved.ui, resolved.grpc, resolved.http]).size, 3);
+		await assert.rejects(
+			resolveSharedObserverPorts({ ui, grpc: ui }),
+			/configured more than once/,
 		);
 	});
 
@@ -1516,7 +1591,160 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('second activation detects and refreshes stale Observer authorization for every agent config format', async function () {
+	test('Observer restart refreshes owned agent authorization and isolates target failures', async function () {
+		this.timeout(90_000);
+
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const extension = await getExtension();
+		const binaryPath = path.join(extension.extensionPath, 'dist', 'observer', 'obstudio');
+		const observerPort = await getAvailablePort();
+		const firstControlToken = crypto.randomBytes(32).toString('base64url');
+		const firstHealthProofSecret = crypto.randomBytes(32).toString('base64url');
+		const secondControlToken = crypto.randomBytes(32).toString('base64url');
+		const secondHealthProofSecret = crypto.randomBytes(32).toString('base64url');
+		const thirdControlToken = crypto.randomBytes(32).toString('base64url');
+		const thirdHealthProofSecret = crypto.randomBytes(32).toString('base64url');
+		const sharedMcpUrl = `http://127.0.0.1:${observerPort}/mcp`;
+		const codexConfigPath = path.join(tempHome, '.codex', 'config.toml');
+		const claudeConfigPath = path.join(tempHome, '.claude.json');
+		const cursorConfigPath = path.join(tempHome, '.cursor', 'mcp.json');
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		let firstObserver: SharedObserverHandle | undefined;
+		let secondObserver: SharedObserverHandle | undefined;
+		let thirdObserver: SharedObserverHandle | undefined;
+		let restoreControlEnvironment: (() => void) | undefined;
+
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+		await vscode.commands.executeCommand('observability-studio.internal.waitForAgentIntegrationRefresh');
+		await vscode.commands.executeCommand('observability-studio.internal.resetAgentIntegrationPromptState');
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+
+		try {
+			fs.mkdirSync(path.dirname(codexConfigPath), { recursive: true });
+			fs.mkdirSync(path.join(tempHome, '.claude'), { recursive: true });
+			fs.mkdirSync(path.dirname(cursorConfigPath), { recursive: true });
+			firstObserver = await startSharedObserver(
+				binaryPath,
+				{
+					OBSTUDIO_CONTROL_TOKEN: firstControlToken,
+					OBSTUDIO_HEALTH_PROOF_SECRET: firstHealthProofSecret,
+				},
+				{ ui: observerPort },
+			);
+			restoreControlEnvironment = setTestObserverControlEnvironment(
+				firstControlToken,
+				firstHealthProofSecret,
+			);
+			await config.update('sharedObserverUrl', sharedMcpUrl, vscode.ConfigurationTarget.Global);
+			await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(value && value.sharedMode && value.observerUrl === firstObserver?.baseUrl),
+				20_000,
+			);
+
+			await vscode.commands.executeCommand('observability-studio.configureCodexMCP');
+			await vscode.commands.executeCommand('observability-studio.configureClaudeCodeMCP');
+			await vscode.commands.executeCommand('observability-studio.configureCursorMCP');
+			assert.equal(readCodexObstudioAuthorization(codexConfigPath), `Bearer ${firstControlToken}`);
+			assert.equal(readJSONObstudioAuthorization(claudeConfigPath), `Bearer ${firstControlToken}`);
+			assert.equal(readJSONObstudioAuthorization(cursorConfigPath), `Bearer ${firstControlToken}`);
+			await vscode.commands.executeCommand('observability-studio.internal.clearAgentIntegrationPrompts');
+
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await firstObserver.dispose();
+			firstObserver = undefined;
+			restoreControlEnvironment();
+			restoreControlEnvironment = undefined;
+
+			secondObserver = await startSharedObserver(
+				binaryPath,
+				{
+					OBSTUDIO_CONTROL_TOKEN: secondControlToken,
+					OBSTUDIO_HEALTH_PROOF_SECRET: secondHealthProofSecret,
+				},
+				{ ui: observerPort },
+			);
+			restoreControlEnvironment = setTestObserverControlEnvironment(
+				secondControlToken,
+				secondHealthProofSecret,
+			);
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+			await waitFor(
+				() => Promise.resolve({
+					claude: readJSONObstudioAuthorization(claudeConfigPath),
+					codex: readCodexObstudioAuthorization(codexConfigPath),
+					cursor: readJSONObstudioAuthorization(cursorConfigPath),
+				}),
+				(value) => value.codex === `Bearer ${secondControlToken}`
+					&& value.claude === `Bearer ${secondControlToken}`
+					&& value.cursor === `Bearer ${secondControlToken}`,
+				20_000,
+			);
+			await vscode.commands.executeCommand('observability-studio.internal.waitForAgentIntegrationRefresh');
+
+			const prompts = await vscode.commands.executeCommand<Array<{ detail?: string; message: string }>>(
+				'observability-studio.internal.getAgentIntegrationPrompts',
+			);
+			assert.equal(prompts.some((item) => item.message.startsWith('Enable ')), false);
+
+			const claudeSkillsPath = path.join(tempHome, '.claude', 'skills');
+			fs.rmSync(claudeSkillsPath, { force: true, recursive: true });
+			fs.writeFileSync(claudeSkillsPath, 'block Claude skill installation', 'utf8');
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await secondObserver.dispose();
+			secondObserver = undefined;
+			restoreControlEnvironment();
+			restoreControlEnvironment = undefined;
+
+			thirdObserver = await startSharedObserver(
+				binaryPath,
+				{
+					OBSTUDIO_CONTROL_TOKEN: thirdControlToken,
+					OBSTUDIO_HEALTH_PROOF_SECRET: thirdHealthProofSecret,
+				},
+				{ ui: observerPort },
+			);
+			restoreControlEnvironment = setTestObserverControlEnvironment(
+				thirdControlToken,
+				thirdHealthProofSecret,
+			);
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+			await waitFor(
+				() => Promise.resolve({
+					claude: readJSONObstudioAuthorization(claudeConfigPath),
+					codex: readCodexObstudioAuthorization(codexConfigPath),
+					cursor: readJSONObstudioAuthorization(cursorConfigPath),
+				}),
+				(value) => value.codex === `Bearer ${thirdControlToken}`
+					&& value.cursor === `Bearer ${thirdControlToken}`
+					&& value.claude === `Bearer ${secondControlToken}`,
+				20_000,
+			);
+			await vscode.commands.executeCommand('observability-studio.internal.waitForAgentIntegrationRefresh');
+			assert.equal(readCodexObstudioAuthorization(codexConfigPath), `Bearer ${thirdControlToken}`);
+			assert.equal(readJSONObstudioAuthorization(cursorConfigPath), `Bearer ${thirdControlToken}`);
+			assert.equal(readJSONObstudioAuthorization(claudeConfigPath), `Bearer ${secondControlToken}`);
+			const runtimeState = await vscode.commands.executeCommand<RuntimeState>(
+				'observability-studio.internal.getRuntimeState',
+			);
+			assert.equal(runtimeState.observerUrl, thirdObserver.baseUrl);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await firstObserver?.dispose();
+			await secondObserver?.dispose();
+			await thirdObserver?.dispose();
+			restoreControlEnvironment?.();
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			cleanupTempDir(tempHome);
+		}
+	});
+
+	test('unowned stale authorization prompts before refreshing every agent config format', async function () {
 		this.timeout(60_000);
 
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
@@ -1648,6 +1876,10 @@ suite('VS Code Host', () => {
 			const promptText = JSON.stringify(prompts);
 			assert.equal(promptText.includes(staleAuthorization), false);
 			assert.equal(promptText.includes(currentControlToken), false);
+			assert.equal(readCodexObstudioAuthorization(codexConfigPath), staleAuthorization);
+			for (const configPath of [claudeConfigPath, cursorConfigPath, kiroConfigPath]) {
+				assert.equal(readJSONObstudioAuthorization(configPath), staleAuthorization);
+			}
 
 			const configured = await vscode.commands.executeCommand<string[]>(
 				'observability-studio.internal.configureDetectedAgentIntegrations',

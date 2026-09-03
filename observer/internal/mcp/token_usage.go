@@ -259,7 +259,7 @@ func (d *Dispatcher) tokenUsageOverview(args map[string]any) toolResult {
 
 	logs := d.store.SnapshotProviderUsageLogs()
 	providerSpansByTraceID := mergeProviderSpanGroups(
-		groupProviderSpansByTraceID(d.store.SnapshotSpans()),
+		groupProviderSpansByTraceID(d.store.SnapshotTraceQuerySpans()),
 		d.store.SnapshotProviderTaskSpansByTraceID(),
 	)
 	logTasks := buildProviderLogTasks(
@@ -280,13 +280,27 @@ func (d *Dispatcher) tokenUsageOverview(args map[string]any) toolResult {
 		args,
 		d.store.ProviderUsageMetricUnavailableThrough(),
 	)
+	correlations := d.store.SnapshotProviderRepositoryCorrelations()
+	correlationWatermark := d.store.ProviderRepositoryCorrelationUnavailableThrough()
+	modeResolver := memoizedRepositoryCorrelationModeResolver(d.repositoryCorrelationModeResolver)
+	if repositoryFilter != nil {
+		logTasks, _ = correlateAndFilterProviderTasksWithResolverAndWatermark(
+			logTasks, correlations, nil, modeResolver, correlationWatermark,
+		)
+		spanTasks, _ = correlateAndFilterProviderTasksWithResolverAndWatermark(
+			spanTasks, correlations, nil, modeResolver, correlationWatermark,
+		)
+		metricTasks, _ = correlateAndFilterProviderTasksWithResolverAndWatermark(
+			metricTasks, correlations, nil, modeResolver, correlationWatermark,
+		)
+	}
 	providerTasks := combineProviderTaskBuilds(logTasks, spanTasks, metricTasks, args)
 	providerTasks, result.RepositoryCoverage = correlateAndFilterProviderTasksWithResolverAndWatermark(
 		providerTasks,
-		d.store.SnapshotProviderRepositoryCorrelations(),
+		correlations,
 		repositoryFilter,
-		d.repositoryCorrelationModeResolver,
-		d.store.ProviderRepositoryCorrelationUnavailableThrough(),
+		modeResolver,
+		correlationWatermark,
 	)
 	result.RepositoryCorrelationStatus = repositoryCorrelationStatus(result.RepositoryCoverage)
 	if len(providerTasks) > 0 {
@@ -361,6 +375,23 @@ func (d *Dispatcher) tokenUsageOverview(args map[string]any) toolResult {
 	result.Status = aggregate.status()
 	result.AccountingStatus = spanAccountingStatus(result.Status)
 	return jsonToolResult(result)
+}
+
+func memoizedRepositoryCorrelationModeResolver(
+	resolver RepositoryCorrelationModeResolver,
+) RepositoryCorrelationModeResolver {
+	if resolver == nil {
+		return nil
+	}
+	resolved := make(map[string]string)
+	return func(provider string) string {
+		if mode, ok := resolved[provider]; ok {
+			return mode
+		}
+		mode := resolver(provider)
+		resolved[provider] = mode
+		return mode
+	}
 }
 
 func highestMeasuredProviderTask(tasks []providerLogTaskBuild) *tokenUsageTask {

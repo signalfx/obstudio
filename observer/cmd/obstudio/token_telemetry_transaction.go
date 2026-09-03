@@ -227,6 +227,7 @@ func tokenTelemetryTargetOwnershipSnapshot(state tokenTelemetryOwnership, target
 	}
 	owned.Env = cloneStringMap(owned.Env)
 	owned.Settings = cloneStringMap(owned.Settings)
+	owned.TableSettings = cloneStringMap(owned.TableSettings)
 	return &owned
 }
 
@@ -253,6 +254,7 @@ func applyTokenTelemetryOwnershipDelta(
 		cloned := *owned
 		cloned.Env = cloneStringMap(owned.Env)
 		cloned.Settings = cloneStringMap(owned.Settings)
+		cloned.TableSettings = cloneStringMap(owned.TableSettings)
 		state.Targets[target] = cloned
 	}
 	if correlation == nil {
@@ -324,6 +326,7 @@ func cloneTokenTelemetryOwnership(state tokenTelemetryOwnership) tokenTelemetryO
 	for target, owned := range state.Targets {
 		owned.Env = cloneStringMap(owned.Env)
 		owned.Settings = cloneStringMap(owned.Settings)
+		owned.TableSettings = cloneStringMap(owned.TableSettings)
 		cloned.Targets[target] = owned
 	}
 	return cloned

@@ -45,6 +45,43 @@ const TRACE_DETAIL_PANEL_DEFAULT_WIDTH = "min(1600px, calc(100vw - 320px))";
 const TRACE_DETAIL_PANEL_MIN_WIDTH = 560;
 const TRACE_DETAIL_PANEL_MAX_WIDTH = 1600;
 
+function spanCountLabel(spanCount: number, retentionTruncated?: boolean, retentionUnknown?: boolean): string {
+  const spans = `${spanCount} retained span${spanCount === 1 ? "" : "s"}`;
+  if (retentionUnknown) return `${spans}; full count unknown`;
+  return retentionTruncated ? `at least ${spans}` : `${spanCount} span${spanCount === 1 ? "" : "s"}`;
+}
+
+function traceDurationLabel(durationMs: number | undefined, retentionTruncated?: boolean, retentionUnknown?: boolean): string {
+  const duration = formatTraceDuration(durationMs);
+  if (retentionUnknown) return `${duration} retained duration; full duration unknown`;
+  return retentionTruncated ? `at least ${duration} retained duration` : duration;
+}
+
+function traceDetailNeedsRefresh(summary: TraceSummary, detail: TraceDetail): boolean {
+  if (summary.spanCount !== detail.spanCount) return true;
+  if (Boolean(summary.retentionTruncated) !== Boolean(detail.retentionTruncated)) return true;
+  if (Boolean(summary.retentionUnknown) !== Boolean(detail.retentionUnknown)) return true;
+  if (summary.revision !== undefined && summary.revision !== detail.revision) return true;
+  if (!summary.spans?.length) return false;
+
+  const detailBySpanId = new Map<string, TraceDetail["spans"]>();
+  for (const span of detail.spans) {
+    const matches = detailBySpanId.get(span.spanId) ?? [];
+    matches.push(span);
+    detailBySpanId.set(span.spanId, matches);
+  }
+  return summary.spans.some((preview) => {
+    const matches = detailBySpanId.get(preview.spanId);
+    return !matches?.some((span) =>
+      span.name === preview.name &&
+      span.kind === preview.kind &&
+      span.durationMs === preview.durationMs &&
+      span.status.code === preview.statusCode &&
+      span.resource.serviceName === preview.serviceName,
+    );
+  });
+}
+
 function assignQueryFilter(query: TracesQuery, clause: FilterClause): void {
   const targetKey = clause.op === "neq" ? "notFilters" : "filters";
   query[targetKey] = { ...(query[targetKey] ?? {}), [clause.key]: clause.value };
@@ -125,6 +162,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
 
   const { exiting: panelExiting, triggerExit, cancelExit } = useAnimatedPanel();
   const fetchIdRef = useRef(0);
+  const backgroundRefreshRef = useRef<{ traceId: string; dirty: boolean; cancelled: boolean } | null>(null);
   const traceDetailRef = useRef(traceDetail);
   traceDetailRef.current = traceDetail;
   const selectedTraceIdRef = useRef(selectedTraceId);
@@ -144,26 +182,49 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
   const visibleTraces = hasActiveFilter ? serverTraces : liveTraces;
 
   const loadTraceDetail = useCallback(async (traceId: string, mode: "panel" | "background" = "panel") => {
-    const fetchId = ++fetchIdRef.current;
+    let backgroundState: { traceId: string; dirty: boolean; cancelled: boolean } | null = null;
+    let lastFetchId = 0;
+    if (mode === "background") {
+      const active = backgroundRefreshRef.current;
+      if (active?.traceId === traceId && !active.cancelled) {
+        active.dirty = true;
+        return;
+      }
+      if (active) active.cancelled = true;
+      backgroundState = { traceId, dirty: false, cancelled: false };
+      backgroundRefreshRef.current = backgroundState;
+    } else if (backgroundRefreshRef.current) {
+      backgroundRefreshRef.current.cancelled = true;
+    }
     if (mode === "panel") {
       setDetailLoading(true);
       setDetailError(null);
     }
 
     try {
-      const detail = await fetchTraceDetail(traceId);
-      if (fetchIdRef.current !== fetchId) return;
-      setTraceDetail(detail);
-      setDetailError(null);
-    } catch {
-      if (fetchIdRef.current !== fetchId) return;
-      if (mode === "panel") {
-        setSelectedTraceId(null);
-        setTraceDetail(null);
-        setDetailError(null);
-      }
+      do {
+        if (backgroundState) backgroundState.dirty = false;
+        const fetchId = ++fetchIdRef.current;
+        lastFetchId = fetchId;
+        try {
+          const detail = await fetchTraceDetail(traceId);
+          if (fetchIdRef.current !== fetchId || backgroundState?.cancelled) return;
+          setTraceDetail(detail);
+          setDetailError(null);
+        } catch {
+          if (fetchIdRef.current !== fetchId || backgroundState?.cancelled) return;
+          if (mode === "panel") {
+            setSelectedTraceId(null);
+            setTraceDetail(null);
+            setDetailError(null);
+          }
+        }
+      } while (backgroundState?.dirty && selectedTraceIdRef.current === traceId);
     } finally {
-      if (mode === "panel" && fetchIdRef.current === fetchId) {
+      if (backgroundState && backgroundRefreshRef.current === backgroundState) {
+        backgroundRefreshRef.current = null;
+      }
+      if (mode === "panel" && fetchIdRef.current === lastFetchId) {
         setDetailLoading(false);
       }
     }
@@ -249,8 +310,9 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
       setDetailLoading(false);
       return;
     }
-    // Trace still present — refresh detail if span count changed.
-    if (traceDetailRef.current && selectedSummary.spanCount !== traceDetailRef.current.spanCount) {
+    // Retransmissions and compact provider traces can replace spans while the
+    // count remains fixed, so compare the live previews too.
+    if (traceDetailRef.current && traceDetailNeedsRefresh(selectedSummary, traceDetailRef.current)) {
       void loadTraceDetail(selectedTraceId, "background");
     }
   }, [loadTraceDetail, selectedTraceId, selectedSummary, liveTraces]);
@@ -275,6 +337,9 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
     [selectedSpan, validationIndex],
   );
   const errorSpanCount = traceDetail?.spans.filter((s) => s.status.code === "ERROR").length ?? 0;
+  const detailSpanCount = traceDetail ? spanCountLabel(traceDetail.spanCount, traceDetail.retentionTruncated, traceDetail.retentionUnknown) : "";
+  const detailDuration = traceDetail ? traceDurationLabel(traceDetail.durationMs, traceDetail.retentionTruncated, traceDetail.retentionUnknown) : "";
+  const detailErrorLabel = traceDetail?.retentionTruncated ? "retained error" : "error";
 
   const hasDetail = Boolean(selectedTraceId && (traceDetail || detailLoading || detailError));
 
@@ -338,6 +403,10 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
                 const t = visibleTraces[vi.index];
                 if (!t) return null;
                 const active = t.traceId === selectedTraceId;
+                const duration = formatTraceDuration(t.durationMs);
+                const durationLabel = traceDurationLabel(t.durationMs, t.retentionTruncated, t.retentionUnknown);
+                const countLabel = spanCountLabel(t.spanCount, t.retentionTruncated, t.retentionUnknown);
+                const retentionSuffix = t.retentionUnknown ? "?" : t.retentionTruncated ? "+" : "";
                 return (
                   <button
                     key={t.traceId}
@@ -376,10 +445,22 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
                       </span>
                     </span>
                     <span className="data-table__td data-table__td--duration data-table__td--numeric">
-                      <span className="explorer-row__numeric">{formatTraceDuration(t.durationMs)}</span>
+                      <span
+                        className="explorer-row__numeric"
+                        aria-label={t.retentionTruncated ? durationLabel : undefined}
+                        title={t.retentionTruncated ? durationLabel : undefined}
+                      >
+                        {duration}{retentionSuffix}
+                      </span>
                     </span>
                     <span className="data-table__td data-table__td--spans data-table__td--numeric">
-                      <span className="explorer-row__numeric">{t.spanCount}</span>
+                      <span
+                        className="explorer-row__numeric"
+                        aria-label={t.retentionTruncated ? countLabel : undefined}
+                        title={t.retentionTruncated ? countLabel : undefined}
+                      >
+                        {t.spanCount}{retentionSuffix}
+                      </span>
                     </span>
                   </button>
                 );
@@ -401,7 +482,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
           >
             <DetailPanel
               title={traceDetail.rootSpanName}
-              subtitle={`${traceDetail.spanCount} spans${errorSpanCount > 0 ? ` \u00B7 ${errorSpanCount} error${errorSpanCount > 1 ? "s" : ""}` : ""} \u00B7 ${formatTraceDuration(traceDetail.durationMs)}`}
+              subtitle={`${detailSpanCount}${errorSpanCount > 0 ? ` \u00B7 ${errorSpanCount} ${detailErrorLabel}${errorSpanCount > 1 ? "s" : ""}` : ""} \u00B7 ${detailDuration}`}
               onClose={() => selectTrace(null)}
               footer={selectedSpan ? <SpanDetailsPanel span={selectedSpan} validationFindings={selectedSpanValidation} onClose={() => setSelectedSpanId(null)} /> : null}
             >

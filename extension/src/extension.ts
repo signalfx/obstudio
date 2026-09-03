@@ -8,10 +8,16 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
+	createAgentIntegrationConfigFingerprint,
 	authorizationHeadersMatchControlToken,
 	codexObstudioAuthorizationMatchesControlToken,
 	getCodexObstudioSection,
 	getCodexObstudioUrl,
+	installAgentIntegrationWithStableCredentials,
+	shouldRefreshOwnedAgentIntegrationConfig,
+	type AgentIntegrationConfigFingerprint,
+	type AgentIntegrationInstallCredentials,
+	type AgentIntegrationManagedConfig,
 } from './agent-integration-config';
 import {
 	buildObserverHealthUrl,
@@ -113,6 +119,7 @@ let observerPanel: vscode.WebviewPanel | undefined;
 let observerEndpoints: ObserverEndpointRoles | undefined;
 let observerBaseUrl: string | undefined;
 let observerStartupPromise: Promise<void> | undefined;
+let observerConfigurationRestartOperation: Promise<void> | undefined;
 const observerStopOperation = new AsyncSingleFlight();
 const observerCloudLifecycleOperations = new AsyncOperationQueue();
 const splunkCloudConnectionStore = new SplunkCloudConnectionStore();
@@ -127,6 +134,13 @@ let activeExtensionContext: vscode.ExtensionContext | undefined;
 let observerDeactivationStarted = false;
 const observerHostRequestCancellations = new Map<string, () => void>();
 let agentIntegrationPromptPromise: Promise<void> | undefined;
+let agentIntegrationPromptGeneration = 0;
+const agentIntegrationPromptInstallOperations = new Set<Promise<string[]>>();
+const agentIntegrationConfigurationQueue = new AsyncOperationQueue();
+const agentIntegrationConfigurationOperations = new Set<Promise<boolean>>();
+const agentIntegrationConfigFingerprints = new Map<AgentIntegrationTarget, AgentIntegrationConfigFingerprint>();
+let agentIntegrationPromptMcpUrl: string | undefined;
+let agentIntegrationRefreshOperation: { key: string; promise: Promise<string[]> } | undefined;
 let recentAgentIntegrationPrompts: Array<{ detail?: string; message: string }> = [];
 const observerLifecycleState = createObserverLifecycleState();
 let lastObserverPanelRenderKey: string | undefined;
@@ -149,6 +163,7 @@ const observerShutdownPostExitDelayMs = 300;
 const observerExtensionUnloadDeadlineMs = 4_500;
 const agentIntegrationPromptDismissedPrefix = 'agentIntegrationPromptDismissed.';
 const agentSkillsBundleVersionPrefix = 'agentSkillsBundleVersion.';
+const agentIntegrationConfigFingerprintPrefix = 'agentIntegrationConfigFingerprint.v1.';
 const splunkCloudExportEnabledStateKey = 'splunkCloudExportEnabled.v1';
 const freeAccountRequestTimeoutMs = 30_000;
 
@@ -343,7 +358,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		) {
 			return;
 		}
-		void restartObserver(context);
+		void enqueueObserverConfigurationRestart(context).catch((error) => {
+			logObserverLifecycle(`Observer configuration restart failed: ${getErrorMessage(error)}`);
+		});
 	}));
 
 	// Status bar item reflects observer state and opens the observer menu.
@@ -438,11 +455,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	const startDisposable = vscode.commands.registerCommand('observability-studio.startObserver', async () => {
 		if (observerLifecycleState.status === 'running') {
 			void vscode.window.showInformationMessage('Observer is already running.');
-			return;
 		}
 		if (observerLifecycleState.status === 'starting') {
 			void vscode.window.showInformationMessage('Observer is already starting.');
-			return;
 		}
 		try {
 			await ensureObserverRunning(context);
@@ -521,12 +536,34 @@ export async function activate(context: vscode.ExtensionContext) {
 	const internalResetAgentIntegrationPromptStateDisposable = vscode.commands.registerCommand(
 		'observability-studio.internal.resetAgentIntegrationPromptState',
 		async () => {
+			agentIntegrationPromptGeneration += 1;
+			while (agentIntegrationPromptInstallOperations.size > 0) {
+				await Promise.allSettled([...agentIntegrationPromptInstallOperations]);
+			}
+			await waitForAgentIntegrationConfigurationCompletion();
+			await waitForObserverConfigurationRestartCompletion().catch(() => undefined);
+			agentIntegrationPromptGeneration += 1;
+			while (agentIntegrationPromptInstallOperations.size > 0) {
+				await Promise.allSettled([...agentIntegrationPromptInstallOperations]);
+			}
+			await waitForAgentIntegrationConfigurationCompletion();
+			await waitForAgentIntegrationRefreshCompletion().catch(() => undefined);
+			await waitForAgentIntegrationConfigurationCompletion();
 			agentIntegrationPromptPromise = undefined;
+			agentIntegrationPromptMcpUrl = undefined;
 			recentAgentIntegrationPrompts = [];
+			agentIntegrationConfigFingerprints.clear();
 			for (const spec of agentIntegrationSpecs) {
 				await context.globalState.update(integrationPromptDismissalKey(spec.target), undefined);
 				await context.globalState.update(`${agentSkillsBundleVersionPrefix}${spec.target}`, undefined);
+				await context.globalState.update(agentIntegrationConfigFingerprintKey(spec.target), undefined);
 			}
+		},
+	);
+	const internalWaitForAgentIntegrationRefreshDisposable = vscode.commands.registerCommand(
+		'observability-studio.internal.waitForAgentIntegrationRefresh',
+		async () => {
+			await waitForAgentIntegrationRefreshCompletion();
 		},
 	);
 	const internalStateDisposable = vscode.commands.registerCommand(
@@ -559,6 +596,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(internalGetAgentIntegrationPromptsDisposable);
 	context.subscriptions.push(internalClearAgentIntegrationPromptsDisposable);
 	context.subscriptions.push(internalResetAgentIntegrationPromptStateDisposable);
+	context.subscriptions.push(internalWaitForAgentIntegrationRefreshDisposable);
 	context.subscriptions.push(internalStateDisposable);
 	context.subscriptions.push(observerStatusBarItem);
 	context.subscriptions.push({
@@ -2398,6 +2436,39 @@ function validateObserverHealth(raw: unknown, options: ObserverProbeOptions): st
 	return undefined;
 }
 
+function enqueueObserverConfigurationRestart(context: vscode.ExtensionContext): Promise<void> {
+	const previousRestart = observerConfigurationRestartOperation;
+	let restartOperation: Promise<void>;
+	restartOperation = (previousRestart === undefined
+		? restartObserver(context)
+		: previousRestart.catch(() => undefined).then(() => restartObserver(context))
+	).finally(() => {
+		if (observerConfigurationRestartOperation === restartOperation) {
+			observerConfigurationRestartOperation = undefined;
+		}
+	});
+	observerConfigurationRestartOperation = restartOperation;
+	return restartOperation;
+}
+
+async function waitForObserverConfigurationRestartCompletion(): Promise<void> {
+	let firstError: unknown;
+	while (observerConfigurationRestartOperation !== undefined) {
+		const operation = observerConfigurationRestartOperation;
+		try {
+			await operation;
+		} catch (error) {
+			firstError ??= error;
+		}
+		if (observerConfigurationRestartOperation === operation) {
+			observerConfigurationRestartOperation = undefined;
+		}
+	}
+	if (firstError !== undefined) {
+		throw firstError;
+	}
+}
+
 async function restartObserver(context: vscode.ExtensionContext): Promise<void> {
 	await stopObserver(context);
 	try {
@@ -2506,6 +2577,10 @@ function integrationPromptDismissalKey(target: AgentIntegrationTarget): string {
 	return `${agentIntegrationPromptDismissedPrefix}${target}`;
 }
 
+function agentIntegrationConfigFingerprintKey(target: AgentIntegrationTarget): string {
+	return `${agentIntegrationConfigFingerprintPrefix}${target}`;
+}
+
 function formatAgentLabelList(labels: string[]): string {
 	if (labels.length === 0) {
 		return '';
@@ -2519,7 +2594,101 @@ function formatAgentLabelList(labels: string[]): string {
 	return `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`;
 }
 
-function getAgentIntegrationConfigState(spec: AgentIntegrationSpec, mcpUrl: string): AgentIntegrationConfigState {
+async function waitForAgentIntegrationRefreshCompletion(): Promise<void> {
+	let firstError: unknown;
+	while (agentIntegrationRefreshOperation !== undefined) {
+		const operation = agentIntegrationRefreshOperation;
+		try {
+			await operation.promise;
+		} catch (error) {
+			firstError ??= error;
+		}
+		if (agentIntegrationRefreshOperation?.promise === operation.promise) {
+			agentIntegrationRefreshOperation = undefined;
+		}
+	}
+	if (firstError !== undefined) {
+		throw firstError;
+	}
+}
+
+async function waitForAgentIntegrationConfigurationCompletion(): Promise<void> {
+	while (agentIntegrationConfigurationOperations.size > 0) {
+		await Promise.allSettled([...agentIntegrationConfigurationOperations]);
+	}
+}
+
+function getStoredAgentIntegrationConfigFingerprint(
+	context: vscode.ExtensionContext,
+	target: AgentIntegrationTarget,
+): unknown {
+	return agentIntegrationConfigFingerprints.get(target)
+		?? context.globalState.get<unknown>(agentIntegrationConfigFingerprintKey(target));
+}
+
+function sortJSONValue(value: unknown): unknown {
+	if (Array.isArray(value)) {
+		return value.map(sortJSONValue);
+	}
+	if (typeof value !== 'object' || value === null) {
+		return value;
+	}
+	return Object.fromEntries(
+		Object.entries(value as Record<string, unknown>)
+			.sort(([left], [right]) => left.localeCompare(right))
+			.map(([key, child]) => [key, sortJSONValue(child)]),
+	);
+}
+
+function readAgentIntegrationManagedConfig(spec: AgentIntegrationSpec): AgentIntegrationManagedConfig | undefined {
+	const configPath = spec.configPath(os.homedir());
+	if (!fs.existsSync(configPath)) {
+		return undefined;
+	}
+
+	try {
+		if (spec.configFormat === 'json') {
+			const parsed: unknown = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+			if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+				return undefined;
+			}
+			const servers = (parsed as Record<string, unknown>).mcpServers;
+			if (typeof servers !== 'object' || servers === null || Array.isArray(servers)) {
+				return undefined;
+			}
+			const server = (servers as Record<string, unknown>).obstudio;
+			if (typeof server !== 'object' || server === null || Array.isArray(server)) {
+				return undefined;
+			}
+			const mcpUrl = (server as Record<string, unknown>).url;
+			if (typeof mcpUrl !== 'string') {
+				return undefined;
+			}
+			return {
+				fingerprintMaterial: JSON.stringify(sortJSONValue(server)),
+				mcpUrl,
+			};
+		}
+
+		const section = getCodexObstudioSection(fs.readFileSync(configPath, 'utf8'));
+		if (section === undefined) {
+			return undefined;
+		}
+		const mcpUrl = getCodexObstudioUrl(section);
+		if (mcpUrl === undefined) {
+			return undefined;
+		}
+		return { fingerprintMaterial: section, mcpUrl };
+	} catch {
+		return undefined;
+	}
+}
+
+function getAgentIntegrationConfigState(
+	spec: AgentIntegrationSpec,
+	mcpUrl: string,
+	controlToken = activeObserverControlToken(),
+): AgentIntegrationConfigState {
 	const configPath = spec.configPath(os.homedir());
 	if (!fs.existsSync(configPath)) {
 		return 'missing';
@@ -2551,7 +2720,7 @@ function getAgentIntegrationConfigState(spec: AgentIntegrationSpec, mcpUrl: stri
 				&& !hasIncompatibleRemoteFields
 				&& authorizationHeadersMatchControlToken(
 					server.headers,
-					activeObserverControlToken(),
+					controlToken,
 				)
 				? 'matching'
 				: 'different';
@@ -2565,7 +2734,7 @@ function getAgentIntegrationConfigState(spec: AgentIntegrationSpec, mcpUrl: stri
 		return getCodexObstudioUrl(section) === mcpUrl
 			&& codexObstudioAuthorizationMatchesControlToken(
 				section,
-				activeObserverControlToken(),
+				controlToken,
 			)
 			? 'matching'
 			: 'different';
@@ -2619,11 +2788,42 @@ function needsAgentIntegrationUpdate(spec: AgentIntegrationSpec, mcpUrl: string,
 	return false;
 }
 
+async function recordAgentIntegrationConfigFingerprint(
+	context: vscode.ExtensionContext,
+	spec: AgentIntegrationSpec,
+	credentials: AgentIntegrationInstallCredentials,
+	expectedConfig: AgentIntegrationManagedConfig,
+): Promise<void> {
+	if (getAgentIntegrationConfigState(
+		spec,
+		credentials.mcpUrl,
+		credentials.controlToken,
+	) !== 'matching') {
+		throw new Error(`${spec.label} MCP configuration could not be verified after installation.`);
+	}
+	const managedConfig = readAgentIntegrationManagedConfig(spec);
+	if (managedConfig === undefined) {
+		throw new Error(`${spec.label} MCP configuration could not be fingerprinted after installation.`);
+	}
+	if (managedConfig.mcpUrl !== expectedConfig.mcpUrl
+		|| managedConfig.fingerprintMaterial !== expectedConfig.fingerprintMaterial) {
+		throw new Error(`${spec.label} MCP configuration changed before installation could be recorded.`);
+	}
+	const fingerprint = createAgentIntegrationConfigFingerprint(managedConfig);
+	await context.globalState.update(
+		agentIntegrationConfigFingerprintKey(spec.target),
+		fingerprint,
+	);
+	agentIntegrationConfigFingerprints.set(spec.target, fingerprint);
+}
+
 async function configureDetectedAgentIntegrations(
 	context: vscode.ExtensionContext,
 	specs = getDetectedAgentIntegrations(),
 	showSuccessMessage = true,
 	forceAll = false,
+	shouldContinue: () => boolean = () => true,
+	shouldConfigure: (spec: AgentIntegrationSpec) => boolean = () => true,
 ): Promise<string[]> {
 	await ensureObserverRunning(context);
 	if (observerEndpoints === undefined) {
@@ -2633,13 +2833,29 @@ async function configureDetectedAgentIntegrations(
 	const mcpUrl = observerEndpoints.mcpUrl;
 	const configured: string[] = [];
 	for (const spec of specs) {
+		if (!shouldContinue()) {
+			break;
+		}
+		if (!shouldConfigure(spec)) {
+			continue;
+		}
 		if (!forceAll && !needsAgentIntegrationUpdate(spec, mcpUrl, context)) {
 			continue;
 		}
 
 		try {
-			await configureAgentMCP(context, spec.target, spec.label, false);
-			configured.push(spec.label);
+			const completed = await configureAgentMCP(
+				context,
+				spec.target,
+				spec.label,
+				false,
+				() => shouldContinue()
+					&& observerEndpoints?.mcpUrl === mcpUrl
+					&& shouldConfigure(spec),
+			);
+			if (completed) {
+				configured.push(spec.label);
+			}
 		} catch {
 			continue;
 		}
@@ -2655,18 +2871,106 @@ async function configureDetectedAgentIntegrations(
 	return configured;
 }
 
-async function maybeOfferDetectedAgentIntegrations(context: vscode.ExtensionContext): Promise<void> {
-	if (agentIntegrationPromptPromise !== undefined) {
-		return agentIntegrationPromptPromise;
+function refreshOwnedAgentIntegrationCredentials(
+	context: vscode.ExtensionContext,
+	specs: AgentIntegrationSpec[],
+	mcpUrl: string,
+): Promise<string[]> {
+	const controlToken = activeObserverControlToken().trim();
+	const operationKey = crypto.createHash('sha256')
+		.update(`${mcpUrl}\0${controlToken}\0${specs.map((spec) => spec.target).join(',')}`)
+		.digest('hex');
+	if (agentIntegrationRefreshOperation !== undefined) {
+		if (agentIntegrationRefreshOperation.key === operationKey) {
+			return agentIntegrationRefreshOperation.promise;
+		}
 	}
 
-	const promptPromise = (async () => {
-		if (observerEndpoints === undefined) {
-			return;
+	const previousRefresh = agentIntegrationRefreshOperation?.promise;
+	const runRefresh = async (): Promise<string[]> => {
+		if (
+			controlToken === ''
+			|| observerEndpoints?.mcpUrl !== mcpUrl
+			|| activeObserverControlToken().trim() !== controlToken
+		) {
+			return [];
+		}
+		const shouldRefresh = (spec: AgentIntegrationSpec): boolean => (
+			getAgentIntegrationConfigState(spec, mcpUrl) === 'different'
+			&& shouldRefreshOwnedAgentIntegrationConfig(
+				getStoredAgentIntegrationConfigFingerprint(context, spec.target),
+				readAgentIntegrationManagedConfig(spec),
+				mcpUrl,
+			)
+		);
+		const refreshable = specs.filter(shouldRefresh);
+		if (refreshable.length === 0) {
+			return [];
 		}
 
-		const mcpUrl = observerEndpoints.mcpUrl;
-		const shownSpecs = getDetectedAgentIntegrations().filter((spec) => {
+		const refreshed = await configureDetectedAgentIntegrations(
+			context,
+			refreshable,
+			false,
+			true,
+			() => observerEndpoints?.mcpUrl === mcpUrl
+				&& activeObserverControlToken().trim() === controlToken,
+			shouldRefresh,
+		);
+		if (refreshed.length > 0) {
+			const labelList = formatAgentLabelList(refreshed);
+			void vscode.window.showInformationMessage(
+				`${labelList} Observer credentials refreshed. Restart ${labelList} before starting a new task.`,
+			);
+		}
+		return refreshed;
+	};
+	let refreshPromise: Promise<string[]>;
+	refreshPromise = (previousRefresh === undefined
+		? runRefresh()
+		: previousRefresh.catch(() => []).then(runRefresh)
+	).finally(() => {
+		if (agentIntegrationRefreshOperation?.promise === refreshPromise) {
+			agentIntegrationRefreshOperation = undefined;
+		}
+	});
+
+	agentIntegrationRefreshOperation = { key: operationKey, promise: refreshPromise };
+	return refreshPromise;
+}
+
+async function maybeOfferDetectedAgentIntegrations(context: vscode.ExtensionContext): Promise<void> {
+	if (observerEndpoints === undefined) {
+		return;
+	}
+
+	const offerGeneration = agentIntegrationPromptGeneration;
+	const mcpUrl = observerEndpoints.mcpUrl;
+	const detectedSpecs = getDetectedAgentIntegrations();
+	try {
+		await refreshOwnedAgentIntegrationCredentials(context, detectedSpecs, mcpUrl);
+	} catch (error) {
+		appendObserverOutputLine(`Automatic agent credential refresh failed: ${getErrorMessage(error)}`);
+	}
+	if (
+		offerGeneration !== agentIntegrationPromptGeneration
+		|| observerEndpoints?.mcpUrl !== mcpUrl
+	) {
+		return;
+	}
+	if (agentIntegrationPromptPromise !== undefined) {
+		if (agentIntegrationPromptMcpUrl === mcpUrl) {
+			return agentIntegrationPromptPromise;
+		}
+		agentIntegrationPromptGeneration += 1;
+		agentIntegrationPromptPromise = undefined;
+		agentIntegrationPromptMcpUrl = undefined;
+	}
+
+	const promptGeneration = agentIntegrationPromptGeneration + 1;
+	agentIntegrationPromptGeneration = promptGeneration;
+	const promptPromise = (async () => {
+		const shownSpecs = detectedSpecs.filter((spec) => {
 			const dismissed = context.globalState.get<boolean>(integrationPromptDismissalKey(spec.target)) === true;
 			if (!dismissed) {
 				return true;
@@ -2699,8 +3003,26 @@ async function maybeOfferDetectedAgentIntegrations(context: vscode.ExtensionCont
 			'Enable',
 			'Not Now',
 		);
+		if (
+			promptGeneration !== agentIntegrationPromptGeneration
+			|| observerEndpoints?.mcpUrl !== mcpUrl
+		) {
+			return;
+		}
 		if (choice === 'Enable') {
-			await configureDetectedAgentIntegrations(context, shownSpecs, true, true);
+			let promptInstall: Promise<string[]>;
+			promptInstall = configureDetectedAgentIntegrations(
+				context,
+				shownSpecs,
+				true,
+				true,
+				() => promptGeneration === agentIntegrationPromptGeneration
+					&& observerEndpoints?.mcpUrl === mcpUrl,
+			).finally(() => {
+				agentIntegrationPromptInstallOperations.delete(promptInstall);
+			});
+			agentIntegrationPromptInstallOperations.add(promptInstall);
+			await promptInstall;
 			return;
 		}
 		if (choice === 'Not Now') {
@@ -2714,10 +3036,12 @@ async function maybeOfferDetectedAgentIntegrations(context: vscode.ExtensionCont
 	}).finally(() => {
 		if (agentIntegrationPromptPromise === promptPromise) {
 			agentIntegrationPromptPromise = undefined;
+			agentIntegrationPromptMcpUrl = undefined;
 		}
 	});
 
 	agentIntegrationPromptPromise = promptPromise;
+	agentIntegrationPromptMcpUrl = mcpUrl;
 	return promptPromise;
 }
 
@@ -2726,47 +3050,117 @@ async function configureAgentMCP(
 	target: AgentIntegrationTarget,
 	label: string,
 	showSuccessMessage = true,
-): Promise<void> {
-	if (observerOutputChannel === undefined) {
+	shouldContinue: () => boolean = () => true,
+): Promise<boolean> {
+	const operation = agentIntegrationConfigurationQueue.run(async () => {
+		if (!shouldContinue()) {
+			return false;
+		}
+		return configureAgentMCPNow(context, target, label, showSuccessMessage, shouldContinue);
+	});
+	agentIntegrationConfigurationOperations.add(operation);
+	try {
+		return await operation;
+	} finally {
+		agentIntegrationConfigurationOperations.delete(operation);
+	}
+}
+
+async function configureAgentMCPNow(
+	context: vscode.ExtensionContext,
+	target: AgentIntegrationTarget,
+	label: string,
+	showSuccessMessage: boolean,
+	shouldContinue: () => boolean = () => true,
+): Promise<boolean> {
+	const outputChannel = observerOutputChannel;
+	if (outputChannel === undefined) {
 		throw new Error('Observer output channel is not initialized.');
 	}
 
 	try {
 		await ensureObserverRunning(context);
+		if (!shouldContinue()) {
+			return false;
+		}
 		if (observerEndpoints === undefined) {
 			throw new Error('Observer MCP URL is not available.');
 		}
 
-		const mcpUrl = observerEndpoints.mcpUrl;
-		const backend = resolveBackend(context.extensionPath);
-		observerOutputChannel.appendLine(`Enabling ${label} integration for ${mcpUrl}`);
-		const installOutput = await execFile(
-			backend.command,
-			['install', '--target', target, '--shared-url', mcpUrl],
-			backend.cwd,
-			{
-				OBSTUDIO_CONTROL_TOKEN: activeObserverControlToken(),
-				OBSTUDIO_HEALTH_PROOF_SECRET: activeObserverHealthProofSecret(),
-			},
-		);
-		if (installOutput.length > 0) {
-			observerOutputChannel.append(installOutput);
-			if (!installOutput.endsWith('\n')) {
-				observerOutputChannel.appendLine('');
-			}
+		const spec = agentIntegrationSpecs.find((candidate) => candidate.target === target);
+		if (spec === undefined) {
+			throw new Error(`Unsupported agent integration target: ${target}`);
 		}
+		const backend = resolveBackend(context.extensionPath);
+		if (!shouldContinue()) {
+			return false;
+		}
+		const installedCredentials = await installAgentIntegrationWithStableCredentials({
+			readCredentials: async () => {
+				await ensureObserverRunning(context);
+				if (observerEndpoints === undefined) {
+					throw new Error('Observer MCP URL is not available.');
+				}
+				return {
+					controlToken: activeObserverControlToken(),
+					healthProofSecret: activeObserverHealthProofSecret(),
+					mcpUrl: observerEndpoints.mcpUrl,
+				};
+			},
+			install: async (credentials) => {
+				outputChannel.appendLine(`Enabling ${label} integration for ${credentials.mcpUrl}`);
+				const installOutput = await execFile(
+					backend.command,
+					['install', '--target', target, '--shared-url', credentials.mcpUrl],
+					backend.cwd,
+					{
+						OBSTUDIO_CONTROL_TOKEN: credentials.controlToken,
+						OBSTUDIO_HEALTH_PROOF_SECRET: credentials.healthProofSecret,
+					},
+				);
+				if (installOutput.length > 0) {
+					outputChannel.append(installOutput);
+					if (!installOutput.endsWith('\n')) {
+						outputChannel.appendLine('');
+					}
+				}
+			},
+			captureInstalledConfig: (credentials) => {
+				if (getAgentIntegrationConfigState(
+					spec,
+					credentials.mcpUrl,
+					credentials.controlToken,
+				) !== 'matching') {
+					throw new Error(`${spec.label} MCP configuration could not be verified after installation.`);
+				}
+				const installedConfig = readAgentIntegrationManagedConfig(spec);
+				if (installedConfig === undefined) {
+					throw new Error(`${spec.label} MCP configuration could not be fingerprinted after installation.`);
+				}
+				return installedConfig;
+			},
+			isManagedConfigUnchanged: (expectedConfig) => {
+				const currentConfig = readAgentIntegrationManagedConfig(spec);
+				return currentConfig?.mcpUrl === expectedConfig.mcpUrl
+					&& currentConfig.fingerprintMaterial === expectedConfig.fingerprintMaterial;
+			},
+			recordInstalledConfig: (installedConfig, credentials) => (
+				recordAgentIntegrationConfigFingerprint(context, spec, credentials, installedConfig)
+			),
+		});
 		await context.globalState.update(integrationPromptDismissalKey(target), undefined);
 		// Record the bundle version so that future version changes trigger a re-install.
 		await recordSkillsBundleVersion(context, target);
-		observerOutputChannel.appendLine(`${label} integration enabled for ${mcpUrl}`);
+		outputChannel.appendLine(`${label} integration enabled for ${installedCredentials.mcpUrl}`);
 		if (showSuccessMessage) {
 			void vscode.window.showInformationMessage(
 				`${label} integration enabled. Restart ${label} to load the bundled skills.`,
 			);
 		}
+		return true;
 	} catch (error) {
 		const message = `${label} integration failed: ${getErrorMessage(error)}`;
-		observerOutputChannel.appendLine(message);
+		outputChannel.appendLine(message);
 		if (showSuccessMessage) {
 			void vscode.window.showErrorMessage(message);
 		}
