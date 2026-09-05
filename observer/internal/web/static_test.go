@@ -36,7 +36,7 @@ func TestStaticIndexReferencesObserverIcon(t *testing.T) {
 
 func TestStaticAssetsAreRevalidated(t *testing.T) {
 	mux := http.NewServeMux()
-	cleanup := Register(mux, store.New(), validator.NewStore())
+	cleanup := Register(mux, store.New(), validator.NewStore(), "")
 	defer cleanup()
 
 	recorder := httptest.NewRecorder()
@@ -53,7 +53,7 @@ func TestStaticAssetsAreRevalidated(t *testing.T) {
 
 func TestStaticIndexCannotBeFramedByAnotherSite(t *testing.T) {
 	mux := http.NewServeMux()
-	cleanup := Register(mux, store.New(), validator.NewStore())
+	cleanup := Register(mux, store.New(), validator.NewStore(), "")
 	defer cleanup()
 
 	recorder := httptest.NewRecorder()
@@ -68,5 +68,98 @@ func TestStaticIndexCannotBeFramedByAnotherSite(t *testing.T) {
 	}
 	if frameOptions := recorder.Header().Get("X-Frame-Options"); frameOptions != "DENY" {
 		t.Fatalf("X-Frame-Options = %q, want DENY", frameOptions)
+	}
+}
+
+func TestIndexInjectsControlTokenForOwnPageOnly(t *testing.T) {
+	mux := http.NewServeMux()
+	cleanup := Register(mux, store.New(), validator.NewStore(), "test-control-token")
+	defer cleanup()
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.RemoteAddr = "127.0.0.1:54321"
+	request.Host = "127.0.0.1:3000"
+	mux.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected index response status 200, got %d", recorder.Code)
+	}
+	if cache := recorder.Header().Get("Cache-Control"); cache != "no-store" {
+		t.Fatalf("expected Cache-Control no-store on index, got %q", cache)
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, `window.__OBSTUDIO_CONTROL_TOKEN__ = "test-control-token";`) {
+		t.Fatalf("expected index to inject the control token, got body: %s", body)
+	}
+	// injectControlToken has no access-control headers of its own: the token must not
+	// also be readable from a route any cross-origin page can fetch.
+	if strings.Contains(recorder.Header().Get("Access-Control-Allow-Origin"), "*") {
+		t.Fatal("index response must not carry a wildcard CORS header alongside the control token")
+	}
+}
+
+func TestIndexOmitsControlTokenForNonLoopbackRequest(t *testing.T) {
+	mux := http.NewServeMux()
+	cleanup := Register(mux, store.New(), validator.NewStore(), "test-control-token")
+	defer cleanup()
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.RemoteAddr = "192.0.2.1:1234"
+	request.Host = "127.0.0.1:3000"
+	mux.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected index response status 200, got %d", recorder.Code)
+	}
+	if strings.Contains(recorder.Body.String(), "__OBSTUDIO_CONTROL_TOKEN__") {
+		t.Fatal("index must not inject the control token for a non-loopback remote address, " +
+			"e.g. when the Observer is bound to 0.0.0.0 or a LAN address")
+	}
+}
+
+func TestIndexOmitsControlTokenForNonLoopbackHost(t *testing.T) {
+	mux := http.NewServeMux()
+	cleanup := Register(mux, store.New(), validator.NewStore(), "test-control-token")
+	defer cleanup()
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	// Simulates a DNS-rebinding attack: an attacker-controlled hostname's DNS record has
+	// been flipped to point at the Observer's loopback bind, so the TCP peer is loopback
+	// even though the request's Host -- and therefore the browser's same-origin identity
+	// for this page -- is still the attacker's.
+	request.RemoteAddr = "127.0.0.1:54321"
+	request.Host = "attacker.example.test:3000"
+	mux.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected index response status 200, got %d", recorder.Code)
+	}
+	if strings.Contains(recorder.Body.String(), "__OBSTUDIO_CONTROL_TOKEN__") {
+		t.Fatal("index must not inject the control token for a non-loopback Host, even with a loopback RemoteAddr")
+	}
+}
+
+func TestIndexOmitsInjectionWithoutAControlToken(t *testing.T) {
+	mux := http.NewServeMux()
+	cleanup := Register(mux, store.New(), validator.NewStore(), "")
+	defer cleanup()
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	mux.ServeHTTP(recorder, request)
+
+	if strings.Contains(recorder.Body.String(), "__OBSTUDIO_CONTROL_TOKEN__") {
+		t.Fatal("index should not inject a control token when none is configured")
+	}
+}
+
+func TestInjectControlTokenEscapesUntrustedCharacters(t *testing.T) {
+	index := []byte("<html><head></head><body></body></html>")
+	injected := injectControlToken(index, `token"; alert(1); //`)
+	if !strings.Contains(string(injected), `window.__OBSTUDIO_CONTROL_TOKEN__ = "token\"; alert(1); //";`) {
+		t.Fatalf("expected the token to be JSON-escaped, got: %s", injected)
 	}
 }

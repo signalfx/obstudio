@@ -69,27 +69,28 @@ type splunkConnectionVerifier func(context.Context, string, string) error
 type SplunkExportConfigurationRefresher func() (bool, error)
 
 type splunkExportService struct {
-	metrics              *otlp.SplunkMetricsExportController
-	traces               *otlp.SplunkTracesExportController
-	refresh              SplunkExportConfigurationRefresher
-	verifyConnection     splunkConnectionVerifier
-	resolveRealmClient   *http.Client
-	controlToken         string
-	browserLaunch        string
-	browserSessionIssued bool
-	browserToken         string
-	rollbackToken        string
-	rollbackMetrics      otlp.SplunkMetricsExporterConfig
-	rollbackChanged      bool
-	rollbackTraces       otlp.SplunkTracesExporterConfig
-	rollbackSource       string
-	source               string
-	configurationChanged bool
-	mutationsQuiesced    atomic.Bool
-	stateVersionKey      [32]byte
-	browserMu            sync.Mutex
-	mutationMu           sync.Mutex
-	mu                   sync.Mutex
+	metrics                 *otlp.SplunkMetricsExportController
+	traces                  *otlp.SplunkTracesExportController
+	refresh                 SplunkExportConfigurationRefresher
+	verifyConnection        splunkConnectionVerifier
+	resolveRealmClient      *http.Client
+	controlToken            string
+	browserLaunch           string
+	browserSessionIssued    bool
+	browserToken            string
+	rollbackToken           string
+	rollbackMetrics         otlp.SplunkMetricsExporterConfig
+	rollbackChanged         bool
+	rollbackTraces          otlp.SplunkTracesExporterConfig
+	rollbackSource          string
+	source                  string
+	cimdRegistrationEnabled bool
+	configurationChanged    bool
+	mutationsQuiesced       atomic.Bool
+	stateVersionKey         [32]byte
+	browserMu               sync.Mutex
+	mutationMu              sync.Mutex
+	mu                      sync.Mutex
 }
 
 type splunkExportSignalStatus struct {
@@ -102,13 +103,14 @@ type splunkExportSignalStatus struct {
 }
 
 type splunkExportStatusResponse struct {
-	Connected     bool                     `json:"connected"`
-	Enabled       bool                     `json:"enabled"`
-	Realm         string                   `json:"realm,omitempty"`
-	RollbackToken string                   `json:"rollbackToken,omitempty"`
-	Version       string                   `json:"version"`
-	Metrics       splunkExportSignalStatus `json:"metrics"`
-	Traces        splunkExportSignalStatus `json:"traces"`
+	Connected               bool                     `json:"connected"`
+	Enabled                 bool                     `json:"enabled"`
+	Realm                   string                   `json:"realm,omitempty"`
+	RollbackToken           string                   `json:"rollbackToken,omitempty"`
+	Version                 string                   `json:"version"`
+	Metrics                 splunkExportSignalStatus `json:"metrics"`
+	Traces                  splunkExportSignalStatus `json:"traces"`
+	CIMDRegistrationEnabled bool                     `json:"cimdRegistrationEnabled"`
 }
 
 type splunkExportConfigurationResponse struct {
@@ -168,6 +170,12 @@ func newSplunkExportService(
 		resolveRealmClient: splunkRealmHTTPClient,
 		controlToken:       strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")),
 		browserLaunch:      strings.TrimSpace(os.Getenv(splunkBrowserLaunchEnv)),
+		// TODO(CIMD PoC): standalone-binary source of truth for the CIMD registration
+		// feature flag, independent of the VS Code "sisCimdRegistrationEnabled" setting
+		// used when Observer runs inside the extension. The IDE setting is the source of
+		// truth whenever it is present; this env var only matters for direct-browser dev
+		// (`go run ./cmd/obstudio` + `make dev`), where no VS Code settings exist.
+		cimdRegistrationEnabled: envFlagEnabled("OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED"),
 	}
 	if _, err := rand.Read(service.stateVersionKey[:]); err != nil {
 		service.stateVersionKey = sha256.Sum256([]byte(fmt.Sprintf(
@@ -178,6 +186,11 @@ func newSplunkExportService(
 		)))
 	}
 	return service
+}
+
+func envFlagEnabled(name string) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	return value == "1" || value == "true"
 }
 
 func (s *splunkExportService) register(mux *http.ServeMux) {
@@ -728,17 +741,33 @@ func (s *splunkExportService) refreshConfigurationState() error {
 }
 
 func (s *splunkExportService) authorizeControlToken(next http.HandlerFunc) http.HandlerFunc {
+	return requireObserverControlToken(s.controlToken, next, writeSplunkExportError)
+}
+
+// requireObserverControlToken gates a mutating route behind the Bearer
+// OBSTUDIO_CONTROL_TOKEN, shared by the /api/splunk/export mutating routes and the SIS
+// CIMD sign-in routes -- both mint or use a real credential the calling page must prove
+// it has permission to trigger, unlike the CIMD registration probe.
+func requireObserverControlToken(
+	controlToken string,
+	next http.HandlerFunc,
+	writeError func(w http.ResponseWriter, status int, message string),
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.controlToken == "" {
-			writeSplunkExportError(w, http.StatusServiceUnavailable, "Observer control is not configured")
+		if controlToken == "" {
+			writeError(w, http.StatusServiceUnavailable, "Observer control is not configured")
 			return
 		}
-		if !hasBearerAuthorization(r) {
-			writeSplunkExportError(w, http.StatusUnauthorized, "missing Observer control token")
+		const bearerPrefix = "Bearer "
+		authorization := r.Header.Get("Authorization")
+		if !strings.HasPrefix(authorization, bearerPrefix) {
+			writeError(w, http.StatusUnauthorized, "missing Observer control token")
 			return
 		}
-		if !s.hasValidControlToken(r) {
-			writeSplunkExportError(w, http.StatusUnauthorized, "invalid Observer control token")
+		provided := strings.TrimSpace(strings.TrimPrefix(authorization, bearerPrefix))
+		if len(provided) != len(controlToken) ||
+			subtle.ConstantTimeCompare([]byte(provided), []byte(controlToken)) != 1 {
+			writeError(w, http.StatusUnauthorized, "invalid Observer control token")
 			return
 		}
 		next(w, r)
@@ -918,10 +947,11 @@ func (s *splunkExportService) snapshotLocked() splunkExportStatusResponse {
 	}
 
 	return splunkExportStatusResponse{
-		Connected: connected,
-		Enabled:   connected && metrics.Enabled && traces.Enabled,
-		Realm:     realm,
-		Version:   s.stateVersionLocked(metricsConfig, tracesConfig),
+		Connected:               connected,
+		Enabled:                 connected && metrics.Enabled && traces.Enabled,
+		Realm:                   realm,
+		Version:                 s.stateVersionLocked(metricsConfig, tracesConfig),
+		CIMDRegistrationEnabled: s.cimdRegistrationEnabled,
 		Metrics: splunkExportSignalStatus{
 			Configured:      splunkSignalConfigured(metricsConfig.Realm, metrics.AccessTokenConfigured, metricsConfig.Endpoint),
 			Enabled:         metrics.Enabled,

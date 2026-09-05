@@ -24,8 +24,10 @@ export const cloudBridgeActions = [
 	'connect',
 	'create-free-account',
 	'detect-free-account-region',
+	'disconnect-cimd',
 	'forget',
 	'initialize',
+	'login-cimd',
 	'open-audit-report',
 	'open-free-edition',
 	'open-free-edition-terms',
@@ -37,6 +39,7 @@ export const cloudBridgeActions = [
 	'open-skill-docs',
 	'resolve-realm',
 	'set-enabled',
+	'setup-cimd',
 ] as const;
 
 export type CloudBridgeAction = typeof cloudBridgeActions[number];

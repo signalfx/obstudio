@@ -59,7 +59,8 @@ export function isSplunkExportStatus(value: unknown): value is SplunkExportStatu
     && typeof status.version === "string"
     && /^[A-Za-z0-9_-]{43}$/.test(status.version)
     && isSplunkExportSignalStatus(status.metrics)
-    && isSplunkExportSignalStatus(status.traces);
+    && isSplunkExportSignalStatus(status.traces)
+    && typeof status.cimdRegistrationEnabled === "boolean";
 }
 
 function isSplunkExportSignalStatus(value: unknown): value is SplunkExportSignalStatus {

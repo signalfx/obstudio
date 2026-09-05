@@ -1,11 +1,13 @@
-import type { SplunkExportStatus } from "../api/types";
+import type { SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 
 export const observerHostCloudActions = [
   "connect",
   "create-free-account",
   "detect-free-account-region",
+  "disconnect-cimd",
   "forget",
   "initialize",
+  "login-cimd",
   "open-audit-report",
   "open-free-edition",
   "open-free-edition-terms",
@@ -17,9 +19,15 @@ export const observerHostCloudActions = [
   "open-skill-docs",
   "resolve-realm",
   "set-enabled",
+  "setup-cimd",
 ] as const;
 
 export type ObserverHostCloudAction = typeof observerHostCloudActions[number];
+
+// login-cimd/setup-cimd block on a human completing an out-of-band browser sign-in
+// (or a slower SIS round trip), which can easily exceed the default cloud-action
+// timeout below -- give them a much longer allowance.
+const cimdCloudActions: ReadonlySet<ObserverHostCloudAction> = new Set(['login-cimd', 'setup-cimd']);
 
 export const observerHostSkillIds = [
   "otel-audit",
@@ -47,7 +55,11 @@ export interface ObserverHostCloudPayload {
 }
 
 export interface ObserverHostCloudResponse {
+  cimdRegistrationEnabled?: boolean;
+  cimdRegistrationVerified?: boolean;
+  cimdSession?: SISCIMDSessionStatus;
   freeAccount?: unknown;
+  message?: string;
   realm?: string;
   region?: string;
   status?: SplunkExportStatus;
@@ -112,6 +124,12 @@ interface PendingHostRequest {
 
 const hostRequestTimeoutMs = 15_000;
 const hostCloudRequestTimeoutMs = 60_000;
+const cimdCloudRequestTimeoutMs = 6 * 60_000;
+
+function requestTimeoutMs(request: ObserverHostRequest): number {
+  if (request.kind === "http") return hostRequestTimeoutMs;
+  return cimdCloudActions.has(request.action) ? cimdCloudRequestTimeoutMs : hostCloudRequestTimeoutMs;
+}
 const pendingHostRequests = new Map<string, PendingHostRequest>();
 const telemetryListeners = new Set<(message: ObserverHostTelemetryMessage) => void>();
 let acquiredFrom: (() => VSCodeWebviewAPI) | undefined;
@@ -287,7 +305,7 @@ function callObserverHost(request: ObserverHostRequest, signal?: AbortSignal): P
         // synchronizing Observer state and secure storage. The caller fails
         // closed until reload instead of permitting an uncertain retry.
         reject(new ObserverHostCloudTimeoutError());
-      }, request.kind === "http" ? hostRequestTimeoutMs : hostCloudRequestTimeoutMs);
+      }, requestTimeoutMs(request));
     const abort = signal
       ? () => {
         const pending = pendingHostRequests.get(requestId);
@@ -353,7 +371,23 @@ function isObserverHostCloudResponse(value: unknown): value is ObserverHostCloud
       || (typeof response.freeAccount === "object" && response.freeAccount !== null))
     && (response.region === undefined || typeof response.region === "string")
     && (response.status === undefined || isSplunkExportStatus(response.status))
-    && (response.warning === undefined || typeof response.warning === "string");
+    && (response.warning === undefined || typeof response.warning === "string")
+    && (response.message === undefined || typeof response.message === "string")
+    && (response.cimdRegistrationEnabled === undefined || typeof response.cimdRegistrationEnabled === "boolean")
+    && (response.cimdRegistrationVerified === undefined || typeof response.cimdRegistrationVerified === "boolean")
+    && (response.cimdSession === undefined || isSISCIMDSessionStatus(response.cimdSession));
+}
+
+function isSISCIMDSessionStatus(value: unknown): value is SISCIMDSessionStatus {
+  if (typeof value !== "object" || value === null) return false;
+  const status = value as Record<string, unknown>;
+  return (status.phase === "disconnected" || status.phase === "pending"
+    || status.phase === "connected" || status.phase === "error")
+    && (status.error === undefined || typeof status.error === "string")
+    && (status.issuer === undefined || typeof status.issuer === "string")
+    && (status.scope === undefined || typeof status.scope === "string")
+    && (status.connectedAt === undefined || typeof status.connectedAt === "string")
+    && (status.expiresAt === undefined || typeof status.expiresAt === "string");
 }
 
 function isSplunkExportStatus(value: unknown): value is SplunkExportStatus {
@@ -365,7 +399,8 @@ function isSplunkExportStatus(value: unknown): value is SplunkExportStatus {
     && typeof status.version === "string"
     && /^[A-Za-z0-9_-]{43}$/.test(status.version)
     && isSplunkExportSignalStatus(status.metrics)
-    && isSplunkExportSignalStatus(status.traces);
+    && isSplunkExportSignalStatus(status.traces)
+    && typeof status.cimdRegistrationEnabled === "boolean";
 }
 
 function isSplunkExportSignalStatus(value: unknown): boolean {

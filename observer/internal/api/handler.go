@@ -215,6 +215,9 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	if freeAccountSubmitter != nil {
 		newFreeAccountAPI(freeAccountSubmitter).register(mux)
 	}
+	// Registration, login, and session routes are all gated by OBSTUDIO_CONTROL_TOKEN --
+	// see requireObserverControlToken and registerSISCIMDLoginRoutes's doc comment.
+	registerSISCIMDLoginRoutes(mux)
 }
 
 func queryTraces(s *store.Store) http.HandlerFunc {

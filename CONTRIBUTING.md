@@ -59,6 +59,104 @@ npm run lint          # eslint
 npm test              # vscode-test
 ```
 
+#### Debugging in the Extension Development Host
+
+Use **Run > Start Without Debugging** (`Cmd+F5` / `Ctrl+F5`), not `F5`, whenever
+you need the managed Observer to actually start. VS Code's JavaScript debugger,
+when attached to the Extension Development Host (which `F5` always does), can
+silently drop the body of HTTP responses inside that process. We hit this as
+the managed Observer's post-spawn `/api/health` probe getting a `200` with an
+empty body -- the extension misdiagnosed it as "a different service" already
+on the port and killed its own healthy, just-spawned process. Confirmed via
+`tcpdump` on `lo0`: the wire always carried the correct, complete response;
+only the debugged process's own `response.on('data', ...)` never fired.
+Reserve `F5` for setting breakpoints in code paths that don't depend on the
+Observer starting.
+
+Two more gotchas that look unrelated but block the same workflow:
+- `preLaunchTask 'watch' terminated with exit code 1` / `invalid
+  problemMatcher reference: $esbuild-watch` -- install the recommended
+  `connor4312.esbuild-problem-matchers` extension (`.vscode/extensions.json`).
+- Before trusting a test result, confirm `dist/extension.js` is newer than
+  `src/extension.ts`. The `watch` task's npm-type subtasks need
+  `"path": "extension"` in `.vscode/tasks.json` or VS Code can resolve them
+  against the wrong `package.json` (the repo-root one, which has no matching
+  script) and silently keep serving a stale, un-rebuilt bundle across many
+  Dev Host sessions without ever reporting an error.
+
+#### Local CIMD development against SIS
+
+**The CIMD control in the Cloud tab is off by default**
+(`observability-studio.sisCimdRegistrationEnabled`, default `false` -- it's an
+opt-in PoC feature flag, not a bug). To see it, set that setting to `true` in
+User settings. It only shows up in the *Extension Development Host* window's
+Settings UI (search `sisCimd`) -- the window your extension source is open in
+never loads the extension itself, so the setting won't appear there at all,
+and editing the default in `package.json` locally isn't the right way to
+override it either, since that's a tracked file.
+
+The CIMD (Client ID Metadata Document) OAuth flow talks to a real SIS
+instance. SIS's dev-mode server (`SIS_DEV_MODE=1`) auto-generates its own
+self-signed TLS certificate per checkout (`sis-core/cmd/sis/dev.go`, written to
+`sis-core/.sis/sis_dev_tls.pem`), so both the Observer binary and the
+extension's own native CIMD code need to be told to trust it -- **each on your
+own machine; never in a workspace setting or committed to the repo**:
+
+- **Observer (Go binary):** copy/export the SIS dev CA to a local file (e.g.
+  `~/.obstudio/sis-cimd-dev-ca.pem`) and set
+  `OBSTUDIO_SIS_CIMD_OAUTH_DEVELOPMENT_CA_BUNDLE_PATH=/path/to/that/file` in
+  `~/.obstudio/env` (or your shell environment). The Go side augments the
+  system cert pool with it (`internal/api/sis_cimd_register.go`) rather than
+  disabling verification.
+- **Extension (VS Code bridge/native path):** set the *user* setting
+  `observability-studio.sisCimdOAuthDevelopmentCaBundlePath` to the same file.
+  It's declared `"scope": "machine"` on purpose, so it can only be set in User
+  settings -- never per-workspace, never synced, never committable. It only
+  ever takes effect when both `sisCimdOAuthIssuer` and `sisCimdOAuthClientId`
+  resolve to loopback hosts; pointing either at a real deployment makes
+  `loadLocalDevelopmentCA` (`extension/src/sis-cimd-oauth.ts`) throw rather
+  than silently trust the dev cert.
+
+**SIS's dev cert must have `CA:TRUE` set, or CIMD will fail inside VS Code
+specifically.** `sis-core`'s `loadOrCreateDevTLSCert` generates a bare
+self-signed leaf with no CA basic constraint. Go's `crypto/x509` and vanilla
+Node.js (OpenSSL) both trust a self-signed cert placed directly in the root
+list even without `CA:TRUE` -- but VS Code's Electron bundles a Node built
+against **BoringSSL**, not OpenSSL (`process.versions.openssl` reads `0.0.0`
+as the tell), and BoringSSL refuses to treat a certificate as a trust anchor
+without `CA:TRUE`, producing `UNABLE_TO_VERIFY_LEAF_SIGNATURE` /
+`unable to verify the first certificate` specifically inside the Extension
+Development Host, even though the identical cert bundle verifies fine from a
+plain `node` script, from `curl`, and from the Go binary. Since
+`loadOrCreateDevTLSCert` reuses `sis-core/.sis/sis_dev_tls.pem`/`.key` if they
+already exist rather than always regenerating, the fix is to replace those two
+files with a self-signed cert that adds `CA:TRUE` and `keyCertSign` (same
+`CN=SIS Dev TLS`, same `localhost`/`127.0.0.1`/`::1` SANs) and restart SIS --
+no `sis-core` code changes needed. This is required only for the VS Code
+bridge path; the browser-only ("no-bridge") flow never touches SIS's TLS from
+Node at all -- it's all server-side Go (`internal/api/sis_cimd_register.go`),
+which already worked fine with either cert shape.
+
+**Test/staging/production need none of this.** A real SIS deployment presents
+a certificate already signed by a CA in the OS/Node trust store, so leave both
+settings unset -- `loadLocalDevelopmentCA` returns `undefined` and standard TLS
+verification applies with no extra configuration.
+
+**Sign-in also needs `sis-core`'s Vault container running**, separately from
+TLS/CA setup. SIS's OIDC callback reads federated-IDP signing keys from Vault
+(`localhost:8200`); without it, sign-in (not registration -- registration
+doesn't touch Vault) fails server-side with `Failed to read secret from Vault`
+/ `connection refused` in SIS's own logs, which has nothing to do with CIMD or
+certs. Bring it up from `sis-core/`:
+```sh
+export SIS_IMAGE=x SIS_MIGRATION_IMAGE=x SIS_SMOKE_IMAGE=x  # only needed so
+  # docker compose can parse unrelated service definitions in the same file
+docker compose up -d vault
+```
+Vault uses persistent storage, so `sis-core/.env`'s existing `VAULT_TOKEN` 
+should still be valid after a restart -- no token rotation needed unless the 
+volume was wiped.
+
 ## Testing
 
 ### CI

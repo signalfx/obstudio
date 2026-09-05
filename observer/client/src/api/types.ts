@@ -310,4 +310,26 @@ export interface SplunkExportStatus {
   version: string;
   metrics: SplunkExportSignalStatus;
   traces: SplunkExportSignalStatus;
+  cimdRegistrationEnabled: boolean;
+}
+
+export interface SISCIMDRegistrationResult {
+  authorizationUrl: string;
+  location: string;
+  cookieMaxAgeSeconds: number;
+}
+
+export interface SISCIMDLoginStartResult {
+  authorizationUrl: string;
+}
+
+export type SISCIMDSessionPhase = "disconnected" | "pending" | "connected" | "error";
+
+export interface SISCIMDSessionStatus {
+  phase: SISCIMDSessionPhase;
+  error?: string;
+  issuer?: string;
+  scope?: string;
+  connectedAt?: string;
+  expiresAt?: string;
 }

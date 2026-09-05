@@ -287,6 +287,15 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 			return isObserverHostCloudPayload(value)
 				&& hasOnlyCloudPayloadKeys(value, ['expectedVersion'])
 				&& typeof value.expectedVersion === 'string';
+		case 'disconnect-cimd':
+		case 'login-cimd':
+		case 'setup-cimd':
+			// Unlike the other mutating actions above, these carry no CIMD-specific
+			// payload of their own -- only the expectedVersion runAction() always
+			// attaches for optimistic-concurrency checks.
+			return isObserverHostCloudPayload(value)
+				&& hasOnlyCloudPayloadKeys(value, ['expectedVersion'])
+				&& typeof value.expectedVersion === 'string';
 		case 'detect-free-account-region':
 		case 'initialize':
 		case 'open-audit-report':

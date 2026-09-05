@@ -20,6 +20,7 @@
         {
             "type": "npm",
             "script": "watch:esbuild",
+            "path": "extension",
             "group": "build",
             "problemMatcher": "$esbuild-watch",
             "isBackground": true,
@@ -32,6 +33,7 @@
 		{
             "type": "npm",
             "script": "watch:tsc",
+            "path": "extension",
             "group": "build",
             "problemMatcher": "$tsc-watch",
             "isBackground": true,
@@ -44,6 +46,7 @@
 		{
 			"type": "npm",
 			"script": "watch-tests",
+			"path": "extension",
 			"problemMatcher": "$tsc-watch",
 			"isBackground": true,
 			"presentation": {
