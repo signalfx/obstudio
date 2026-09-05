@@ -10,9 +10,12 @@ import {
 	authorizationHeadersMatchControlToken,
 	caseInsensitiveHeaderValue,
 	codexObstudioAuthorizationMatchesControlToken,
+	createAgentIntegrationConfigFingerprint,
 	getCodexObstudioAuthorization,
 	getCodexObstudioSection,
 	getCodexObstudioUrl,
+	installAgentIntegrationWithStableCredentials,
+	shouldRefreshOwnedAgentIntegrationConfig,
 } from '../agent-integration-config';
 import {
 	buildObserverHealthUrl,
@@ -536,6 +539,190 @@ test('agent integration authorization matching follows HTTP header semantics', (
 		'"url" = "https://wrong.example.test/mcp"',
 	].join('\n'));
 	assert.equal(getCodexObstudioUrl(duplicateURLs ?? ''), undefined);
+});
+
+test('agent integration fingerprints refresh only an unchanged extension-owned endpoint', () => {
+	const desiredMcpUrl = 'http://127.0.0.1:3000/mcp';
+	const original = {
+		fingerprintMaterial: JSON.stringify({
+			headers: { Authorization: 'Bearer prior-control-token' },
+			type: 'http',
+			url: desiredMcpUrl,
+		}),
+		mcpUrl: desiredMcpUrl,
+	};
+	const fingerprint = createAgentIntegrationConfigFingerprint(original);
+
+	assert.equal(JSON.stringify(fingerprint).includes('prior-control-token'), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, original, desiredMcpUrl), true);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, {
+		...original,
+		fingerprintMaterial: original.fingerprintMaterial.replace('prior-control-token', 'user-control-token'),
+	}, desiredMcpUrl), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, {
+		...original,
+		fingerprintMaterial: original.fingerprintMaterial.replace('"type":"http"', '"disabled":true,"type":"http"'),
+	}, desiredMcpUrl), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, {
+		...original,
+		mcpUrl: 'http://127.0.0.1:4000/mcp',
+	}, desiredMcpUrl), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, original, 'http://127.0.0.1:4000/mcp'), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(undefined, original, desiredMcpUrl), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig({
+		...fingerprint,
+		configurationDigest: 'not-a-digest',
+	}, original, desiredMcpUrl), false);
+});
+
+test('agent integration install retries a rotated Observer token and records recoverable ownership', async () => {
+	const oldCredentials = {
+		controlToken: 'old-token',
+		healthProofSecret: 'old-proof',
+		mcpUrl: 'http://127.0.0.1:3000/mcp',
+	};
+	const newCredentials = {
+		...oldCredentials,
+		controlToken: 'new-token',
+		healthProofSecret: 'new-proof',
+	};
+	let activeCredentials = oldCredentials;
+	let managedConfig: { fingerprintMaterial: string; mcpUrl: string } | undefined;
+	const installedTokens: string[] = [];
+	const recordedTokens: string[] = [];
+
+	const result = await installAgentIntegrationWithStableCredentials({
+		readCredentials: () => ({ ...activeCredentials }),
+		install: async (credentials) => {
+			installedTokens.push(credentials.controlToken);
+			managedConfig = {
+				fingerprintMaterial: `Bearer ${credentials.controlToken}`,
+				mcpUrl: credentials.mcpUrl,
+			};
+			if (installedTokens.length === 1) {
+				activeCredentials = newCredentials;
+			}
+		},
+		captureInstalledConfig: () => {
+			assert.notEqual(managedConfig, undefined);
+			return { ...managedConfig! };
+		},
+		isManagedConfigUnchanged: (expected) => (
+			managedConfig?.fingerprintMaterial === expected.fingerprintMaterial
+			&& managedConfig.mcpUrl === expected.mcpUrl
+		),
+		recordInstalledConfig: async (_config, credentials) => {
+			recordedTokens.push(credentials.controlToken);
+		},
+	});
+
+	assert.deepEqual(installedTokens, ['old-token', 'new-token']);
+	assert.deepEqual(recordedTokens, ['old-token', 'new-token']);
+	assert.deepEqual(result, newCredentials);
+});
+
+test('agent integration install leaves bounded credential rotation recoverable', async () => {
+	let activeCredential = 1;
+	let managedConfig: { fingerprintMaterial: string; mcpUrl: string } | undefined;
+	const installedTokens: string[] = [];
+	const recordedTokens: string[] = [];
+	const options = {
+		readCredentials: () => ({
+			controlToken: `token-${activeCredential}`,
+			healthProofSecret: `proof-${activeCredential}`,
+			mcpUrl: 'http://127.0.0.1:3000/mcp',
+		}),
+		install: async (credentials: {
+			controlToken: string;
+			healthProofSecret: string;
+			mcpUrl: string;
+		}) => {
+			installedTokens.push(credentials.controlToken);
+			managedConfig = {
+				fingerprintMaterial: `Bearer ${credentials.controlToken}`,
+				mcpUrl: credentials.mcpUrl,
+			};
+			activeCredential += 1;
+		},
+		captureInstalledConfig: () => {
+			assert.notEqual(managedConfig, undefined);
+			return { ...managedConfig! };
+		},
+		isManagedConfigUnchanged: (expected: { fingerprintMaterial: string; mcpUrl: string }) => (
+			managedConfig?.fingerprintMaterial === expected.fingerprintMaterial
+			&& managedConfig.mcpUrl === expected.mcpUrl
+		),
+		recordInstalledConfig: async (
+			_config: { fingerprintMaterial: string; mcpUrl: string },
+			credentials: { controlToken: string },
+		) => {
+			recordedTokens.push(credentials.controlToken);
+		},
+	};
+
+	await assert.rejects(
+		installAgentIntegrationWithStableCredentials(options),
+		/credentials changed during three consecutive.*retry after Observer startup stabilizes/,
+	);
+	assert.deepEqual(installedTokens, ['token-1', 'token-2', 'token-3']);
+	assert.deepEqual(recordedTokens, ['token-1', 'token-2', 'token-3']);
+	assert.equal(managedConfig?.fingerprintMaterial, 'Bearer token-3');
+
+	options.install = async (credentials) => {
+		installedTokens.push(credentials.controlToken);
+		managedConfig = {
+			fingerprintMaterial: `Bearer ${credentials.controlToken}`,
+			mcpUrl: credentials.mcpUrl,
+		};
+	};
+	const recovered = await installAgentIntegrationWithStableCredentials(options);
+	assert.equal(recovered.controlToken, 'token-4');
+	assert.equal(managedConfig.fingerprintMaterial, 'Bearer token-4');
+	assert.equal(recordedTokens.at(-1), 'token-4');
+});
+
+test('agent integration install preserves a concurrent config edit instead of retrying', async () => {
+	const oldCredentials = {
+		controlToken: 'old-token',
+		healthProofSecret: 'old-proof',
+		mcpUrl: 'http://127.0.0.1:3000/mcp',
+	};
+	const newCredentials = { ...oldCredentials, controlToken: 'new-token' };
+	let credentialReads = 0;
+	let managedConfig = {
+		fingerprintMaterial: '',
+		mcpUrl: oldCredentials.mcpUrl,
+	};
+	let installs = 0;
+
+	await assert.rejects(
+		installAgentIntegrationWithStableCredentials({
+			readCredentials: () => {
+				credentialReads += 1;
+				if (credentialReads === 2) {
+					managedConfig = { ...managedConfig, fingerprintMaterial: 'user-edited' };
+					return newCredentials;
+				}
+				return oldCredentials;
+			},
+			install: async (credentials) => {
+				installs += 1;
+				managedConfig = {
+					fingerprintMaterial: `Bearer ${credentials.controlToken}`,
+					mcpUrl: credentials.mcpUrl,
+				};
+			},
+			captureInstalledConfig: () => ({ ...managedConfig }),
+			isManagedConfigUnchanged: (expected) => (
+				managedConfig.fingerprintMaterial === expected.fingerprintMaterial
+				&& managedConfig.mcpUrl === expected.mcpUrl
+			),
+			recordInstalledConfig: async () => undefined,
+		}),
+		/configuration changed.*newer configuration was preserved/,
+	);
+	assert.equal(installs, 1);
+	assert.equal(managedConfig.fingerprintMaterial, 'user-edited');
 });
 
 test('Codex TOML parsing treats array tables as distinct scope boundaries', () => {
@@ -2594,7 +2781,77 @@ test('agent integration install passes both active Observer control credentials'
 	const configureHandling = source.slice(configureStart, configureEnd);
 	assert.match(
 		configureHandling,
-		/OBSTUDIO_CONTROL_TOKEN: activeObserverControlToken\(\)[\s\S]*?OBSTUDIO_HEALTH_PROOF_SECRET: activeObserverHealthProofSecret\(\)/,
+		/controlToken: activeObserverControlToken\(\)[\s\S]*?healthProofSecret: activeObserverHealthProofSecret\(\)[\s\S]*?OBSTUDIO_CONTROL_TOKEN: credentials\.controlToken[\s\S]*?OBSTUDIO_HEALTH_PROOF_SECRET: credentials\.healthProofSecret/,
+	);
+	assert.match(configureHandling, /agentIntegrationConfigurationQueue\.run\(/);
+	assert.match(
+		configureHandling,
+		/if \(!shouldContinue\(\)\)[\s\S]*?return configureAgentMCPNow\(context, target, label, showSuccessMessage, shouldContinue\)/,
+	);
+	assert.match(
+		configureHandling,
+		/await ensureObserverRunning\(context\);[\s\S]*?if \(!shouldContinue\(\)\)[\s\S]*?const backend = resolveBackend\(context\.extensionPath\);[\s\S]*?if \(!shouldContinue\(\)\)[\s\S]*?await execFile\(/,
+	);
+	assert.match(
+		configureHandling,
+		/agentIntegrationConfigurationOperations\.add\(operation\)[\s\S]*?agentIntegrationConfigurationOperations\.delete\(operation\)/,
+	);
+	assert.match(configureHandling, /installAgentIntegrationWithStableCredentials\(\{/);
+	assert.match(
+		configureHandling,
+		/getAgentIntegrationConfigState\([\s\S]*?credentials\.controlToken[\s\S]*?recordAgentIntegrationConfigFingerprint\(context, spec, credentials, installedConfig\)/,
+	);
+	assert.match(source, /agentIntegrationConfigFingerprints\.set\(spec\.target, fingerprint\)/);
+
+	const resetStart = source.indexOf("'observability-studio.internal.resetAgentIntegrationPromptState'");
+	const resetEnd = source.indexOf("'observability-studio.internal.waitForAgentIntegrationRefresh'", resetStart);
+	assert.notEqual(resetStart, -1);
+	assert.notEqual(resetEnd, -1);
+	const resetHandling = source.slice(resetStart, resetEnd);
+	assert.match(resetHandling, /await waitForAgentIntegrationConfigurationCompletion\(\)/);
+	assert.match(resetHandling, /agentIntegrationConfigFingerprints\.clear\(\)/);
+});
+
+test('automatic agent credential refresh precedes prompting and reuses isolated target configuration', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const offerStart = source.indexOf('async function maybeOfferDetectedAgentIntegrations(');
+	const offerEnd = source.indexOf('\nasync function configureAgentMCP(', offerStart);
+	assert.notEqual(offerStart, -1);
+	assert.notEqual(offerEnd, -1);
+	const offerHandling = source.slice(offerStart, offerEnd);
+	assert.match(
+		offerHandling,
+		/await refreshOwnedAgentIntegrationCredentials\(context, detectedSpecs, mcpUrl\)[\s\S]*?showInformationMessage\(/,
+	);
+
+	const refreshStart = source.indexOf('function refreshOwnedAgentIntegrationCredentials(');
+	const refreshEnd = source.indexOf('\nasync function maybeOfferDetectedAgentIntegrations(', refreshStart);
+	assert.notEqual(refreshStart, -1);
+	assert.notEqual(refreshEnd, -1);
+	const refreshHandling = source.slice(refreshStart, refreshEnd);
+	assert.match(refreshHandling, /const controlToken = activeObserverControlToken\(\)\.trim\(\);/);
+	assert.match(
+		refreshHandling,
+		/controlToken === ''[\s\S]*?observerEndpoints\?\.mcpUrl !== mcpUrl[\s\S]*?activeObserverControlToken\(\)\.trim\(\) !== controlToken[\s\S]*?return \[\];/,
+	);
+	assert.match(refreshHandling, /getAgentIntegrationConfigState\(spec, mcpUrl\) === 'different'/);
+	assert.match(refreshHandling, /shouldRefreshOwnedAgentIntegrationConfig\(/);
+	assert.match(refreshHandling, /getStoredAgentIntegrationConfigFingerprint\(context, spec\.target\)/);
+	assert.match(
+		refreshHandling,
+		/const shouldRefresh = \(spec: AgentIntegrationSpec\): boolean =>[\s\S]*?const refreshable = specs\.filter\(shouldRefresh\)/,
+	);
+	assert.match(
+		refreshHandling,
+		/await configureDetectedAgentIntegrations\([\s\S]*?activeObserverControlToken\(\)\.trim\(\) === controlToken,[\s\S]*?shouldRefresh,[\s\S]*?\)/,
+	);
+	assert.match(
+		refreshHandling,
+		/const previousRefresh = agentIntegrationRefreshOperation\?\.promise;[\s\S]*?previousRefresh\.catch\(\(\) => \[\]\)\.then\(runRefresh\)[\s\S]*?agentIntegrationRefreshOperation = \{ key: operationKey, promise: refreshPromise \};/,
+	);
+	assert.match(
+		offerHandling,
+		/promptGeneration !== agentIntegrationPromptGeneration[\s\S]*?observerEndpoints\?\.mcpUrl !== mcpUrl[\s\S]*?return;/,
 	);
 });
 

@@ -42,7 +42,15 @@ Editor compatibility and coding-agent integration are separate. Setup for Cursor
 1. Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Splunk.observability-studio).
 2. Run **Splunk Observability Studio: Open Observer**.
 3. Accept the detected integration prompt. If it does not appear, run **Splunk Observability Studio: Enable Claude Code Integration** or **Enable Codex Integration** for the agent you use.
-4. Restart Claude Code or Codex so it reloads the installed skills and local Observer connection.
+4. Fully restart Claude Code or Codex, then start a fresh task so it reloads the installed skills, local Observer connection, and telemetry routing. An already-open task does not acquire newly configured MCP tools when its URL is reopened.
+
+The enable command records a non-secret fingerprint of the MCP entry it writes.
+When an extension-managed Observer restarts and rotates its control token, the
+extension refreshes the credential only if that endpoint and complete MCP entry
+are unchanged. User-edited, malformed, differently routed, and unowned entries
+are never replaced automatically; the extension offers the enable prompt
+instead. Run the enable command once after upgrading from an older build so an
+existing entry can participate in guarded automatic refresh.
 
 Agent integration does not change provider OTLP settings. To collect token usage,
 install the standalone `obstudio` CLI from the
@@ -53,12 +61,65 @@ then opt in and restart the selected provider:
 obstudio token-telemetry enable --target=codex,claude-code
 ```
 
-The command refuses conflicting OTLP routing and records only settings it adds.
-Use `obstudio token-telemetry status` or `disable` with the same `--target`
-value to inspect or remove Obstudio-owned settings. New targets default
+The explicit enable command always takes over recognized provider OTLP routing;
+there is no separate force flag. Use `obstudio token-telemetry status` or
+`disable` with the same `--target` value to inspect the route or remove unchanged
+Obstudio-managed values. Replaced prior destinations are not retained for later
+disable or restored; values edited after enable are preserved. New targets default
 repository correlation to `path`, which supports exact path queries. Use
 `name` to omit filesystem paths or `off` to disable correlation. Omitting the flag
 for an already configured target preserves its recorded setting.
+Claude's `ENABLE_BETA_TRACING_DETAILED` and `BETA_TRACING_ENDPOINT` pair
+overrides the standard logs and traces exporters. Setup owns and normalizes an
+active pair to Observer. Existing generic Claude
+OTLP endpoint/protocol values are also redirected and owned, and required
+signal-specific routes are written locally even when matching values are
+inherited. A local override re-enables an inherited or configured disabled OTel
+SDK. Existing interval, temporality, TLS, header, and unrelated settings remain
+unchanged. Removing a local Claude override can expose an unchanged inherited or
+higher-precedence route again; Obstudio does not restore that route. For Codex,
+setup owns matching or nonmatching inline exporter
+assignments and canonical table endpoint/protocol values. When an exporter is
+absent, setup adds an Obstudio-owned local exporter. When a canonical
+`[otel.exporter.otlp-http]`, `[otel.trace_exporter.otlp-http]`, or
+`[otel.metrics_exporter.otlp-http]` table exists with no endpoint and uses the
+compatible `binary` protocol (or has no protocol), setup fills only its missing
+endpoint and protocol values. Unsupported, malformed, or multiply defined Codex
+exporter shapes fail closed instead of risking an invalid config.
+Codex uses the same `~/.codex/config.toml` for CLI, IDE, and Desktop processes,
+and each process must be restarted to load an exporter change. While enabled,
+its single log, trace, and metrics exporters point to Observer; disable removes
+the managed routes when their values are unchanged and does not recover prior destinations.
+Claude Desktop launches embedded Code sessions with its active Setup profile as
+higher-precedence managed settings. `--target=claude-code` does not inspect or
+edit that profile. If it routes OTLP to another collector or disables trace
+export, the running Desktop process will not appear in local Observer even when
+the user-level status is enabled. Services lists received telemetry producers,
+not running processes; a locally routed Desktop session appears under its
+reported resource name, commonly `claude-code` or `claude-code-desktop`.
+
+For a non-destructive Desktop test, keep any required organization profile and
+use an intentionally local, editable Setup profile that enables Claude
+telemetry and enhanced traces and routes OTLP/HTTP protobuf logs, traces, and
+metrics to `http://127.0.0.1:4318`. Fully restart the Desktop Code session after
+switching profiles. If the active profile is organization-locked or must keep a
+corporate OTLP destination, use a separately started Claude Code CLI process or
+ask the organization or profile administrator to route through Observer; only
+that administrator can change an organization-locked destination. Obstudio
+cannot override and does not silently replace that destination.
+Codex token histograms are visible in Metrics Explorer, but current points lack
+a stable thread or turn identifier and are not added to correlated task totals;
+the token-usage tool uses richer Codex logs and task spans instead.
+Observer retains recent native Codex and Claude traces in one shared bounded
+provider ring outside the generic span ring and de-duplicates them into trace
+views. A compacted trace is labeled as a retained lower bound such as `8+`; its
+representative spans do not alter raw service aggregates or validation input.
+The projection protects recent provider traces from unrelated ring pressure
+while the producer is connected; process disconnect removes its live traces,
+logs, and metrics from Observer views. Keep the provider process running while
+demonstrating those views. Completed token accounting is retained in a separate
+bounded history and remains queryable through `observer_token_usage_overview`
+after disconnect until Observer is cleared, exits, or overwrites that history.
 
 ### Windsurf / Devin Desktop
 
@@ -231,7 +292,7 @@ For an extension-managed Observer, the OTLP receivers remain fixed at `4318` and
 
 - If the extension-managed Observer cannot start, check its configured UI/MCP port (`managedObserverPort`, `3000` by default) and the fixed receiver ports `4318` and `4317`. Choose another `managedObserverPort` if its UI/MCP port is already used.
 - If the extension cannot connect to a shared Observer, verify `sharedObserverUrl`. If its UI loads but telemetry does not arrive, use the OTLP receiver endpoints configured by that Observer.
-- Restart your coding agent after enabling an integration so it reloads the skills and MCP settings.
+- Fully restart your coding agent after enabling an integration or after the extension reports that it refreshed Observer credentials. Then use a fresh task so it reloads the skills, MCP settings, and telemetry routing. Existing tasks keep their startup tool set.
 - Use **Observer Status** to restart the extension-managed runtime, reconnect a shared Observer, or open the extension logs.
 
 ## Requirements and links

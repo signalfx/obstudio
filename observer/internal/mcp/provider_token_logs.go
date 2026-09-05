@@ -89,6 +89,8 @@ type providerLogTaskBuild struct {
 	task                     tokenUsageTask
 	records                  []tokenUsageRecord
 	latest                   time.Time
+	metricCoverageStart      *time.Time
+	metricCoverageLatest     *time.Time
 	sessionHistoryIncomplete bool
 }
 
@@ -101,6 +103,7 @@ type providerTraceMetadata struct {
 	taskTotal                   *int64
 	taskRecord                  *tokenUsageRecord
 	taskRecords                 []tokenUsageRecord
+	taskRecordSpanIDs           []string
 	taskRequestCount            int
 	taskUsageSource             string
 	taskNormalization           string
@@ -257,7 +260,10 @@ func buildProviderLogTasks(
 		first := events[0]
 		last := events[len(events)-1]
 		status := aggregate.status()
-		correlationStatus := providerTaskCorrelationStatus(first, metadata, usageReconciled)
+		measurementSource, normalization := providerTaskEventProvenance(events)
+		correlationEvent := first
+		correlationEvent.source = measurementSource
+		correlationStatus := providerTaskCorrelationStatus(correlationEvent, metadata, usageReconciled)
 		startTime := first.timestamp
 		endTime := last.timestamp
 		if correlationStatus == "trace_correlated" {
@@ -272,8 +278,7 @@ func buildProviderLogTasks(
 		if service == "" {
 			service = metadata.serviceName
 		}
-		normalization := first.normalization
-		if first.source == "claude_request_spans" {
+		if metadata.taskUsageSource == "claude_request_spans" {
 			normalization += "; a completed interaction boundary does not prove that every child request span has arrived"
 		}
 		built = append(built, providerLogTaskBuild{
@@ -293,7 +298,7 @@ func buildProviderLogTasks(
 				RepositoryCorrelationSource: metadata.repositoryCorrelationSource,
 				StartTime:                   formatTokenUsageTime(startTime),
 				EndTime:                     formatTokenUsageTime(endTime),
-				MeasurementSource:           first.source,
+				MeasurementSource:           measurementSource,
 				Normalization:               normalization,
 				Status:                      status,
 				AccountingStatus:            providerTaskAccountingStatus(status, correlationStatus),
@@ -501,7 +506,15 @@ func providerSpanTaskIdentity(metadata providerTraceMetadata) (string, string) {
 }
 
 func combineProviderTaskBuilds(logTasks, spanTasks, metricTasks []providerLogTaskBuild, args map[string]any) []providerLogTaskBuild {
-	logTasks, spanTasks, metricTasks = selectClaudeMetricFallbacks(logTasks, spanTasks, metricTasks)
+	if conversationIDArg(args) != "" {
+		logTasks, spanTasks = omitInProgressRicherTasks(logTasks, spanTasks)
+	}
+	logTasks, spanTasks, metricTasks = selectClaudeMetricFallbacksForQuery(
+		logTasks,
+		spanTasks,
+		metricTasks,
+		hasRepositoryFilter(args),
+	)
 	combined := make([]providerLogTaskBuild, 0, len(logTasks)+len(spanTasks)+len(metricTasks))
 	combined = append(combined, logTasks...)
 	combined = append(combined, spanTasks...)
@@ -526,6 +539,11 @@ func combineProviderTaskBuilds(logTasks, spanTasks, metricTasks []providerLogTas
 		if !built.task.TraceComplete && built.task.ConversationID != "" {
 			key := providerTraceKey(built.task.Provider, built.task.ConversationID)
 			if _, hasCompletedTask := completedConversations[key]; hasCompletedTask {
+				if hasRepositoryFilter(args) && built.task.MeasurementSource == "claude_token_metrics" &&
+					!providerTaskHasRepositoryIdentity(built.task) {
+					filtered = append(filtered, built)
+					continue
+				}
 				continue
 			}
 		}
@@ -534,11 +552,57 @@ func combineProviderTaskBuilds(logTasks, spanTasks, metricTasks []providerLogTas
 	return sortProviderTaskBuilds(filtered)
 }
 
+func omitInProgressRicherTasks(
+	logTasks, spanTasks []providerLogTaskBuild,
+) ([]providerLogTaskBuild, []providerLogTaskBuild) {
+	completedConversations := make(map[string]struct{})
+	for _, tasks := range [][]providerLogTaskBuild{logTasks, spanTasks} {
+		for _, built := range tasks {
+			if built.task.TraceComplete && built.task.ConversationID != "" {
+				completedConversations[providerTraceKey(built.task.Provider, built.task.ConversationID)] = struct{}{}
+			}
+		}
+	}
+	filter := func(tasks []providerLogTaskBuild) []providerLogTaskBuild {
+		filtered := make([]providerLogTaskBuild, 0, len(tasks))
+		for _, built := range tasks {
+			key := providerTraceKey(built.task.Provider, built.task.ConversationID)
+			if !built.task.TraceComplete && built.task.ConversationID != "" {
+				if _, completed := completedConversations[key]; completed {
+					continue
+				}
+			}
+			filtered = append(filtered, built)
+		}
+		return filtered
+	}
+	return filter(logTasks), filter(spanTasks)
+}
+
 func selectClaudeMetricFallbacks(
 	logTasks, spanTasks, metricTasks []providerLogTaskBuild,
 ) ([]providerLogTaskBuild, []providerLogTaskBuild, []providerLogTaskBuild) {
+	return selectClaudeMetricFallbacksForQuery(logTasks, spanTasks, metricTasks, false)
+}
+
+func selectClaudeMetricFallbacksForQuery(
+	logTasks, spanTasks, metricTasks []providerLogTaskBuild,
+	requireRepositoryCorrelation bool,
+) ([]providerLogTaskBuild, []providerLogTaskBuild, []providerLogTaskBuild) {
 	type richerSessionState struct {
-		allExact bool
+		allExact                   bool
+		effectiveTotal             int64
+		totalKnown                 bool
+		earliest                   time.Time
+		latest                     time.Time
+		repositoryIdentityComplete bool
+		repositoryIdentities       []providerRepositoryIdentity
+	}
+	type metricSessionState struct {
+		effectiveTotal int64
+		totalKnown     bool
+		start          time.Time
+		latest         time.Time
 	}
 	richerSessions := make(map[string]richerSessionState)
 	for _, tasks := range [][]providerLogTaskBuild{logTasks, spanTasks} {
@@ -550,12 +614,55 @@ func selectClaudeMetricFallbacks(
 			state, exists := richerSessions[key]
 			if !exists {
 				state.allExact = true
+				state.totalKnown = true
+				state.repositoryIdentityComplete = true
 			}
 			state.allExact = state.allExact && built.task.AccountingStatus == "exact"
+			if total := built.task.Usage.EffectiveTotalTokens; state.totalKnown && total != nil {
+				state.effectiveTotal, state.totalKnown = addTokenCounts(state.effectiveTotal, *total)
+			} else {
+				state.totalKnown = false
+			}
+			start := providerTaskCoverageStart(built)
+			if !start.IsZero() && (state.earliest.IsZero() || start.Before(state.earliest)) {
+				state.earliest = start
+			}
+			if built.latest.After(state.latest) {
+				state.latest = built.latest
+			}
+			if providerTaskHasRepositoryIdentity(built.task) {
+				state.repositoryIdentities = appendUniqueProviderRepositoryIdentity(
+					state.repositoryIdentities,
+					providerRepositoryIdentity{
+						repositoryName: built.task.RepositoryName,
+						repositoryPath: built.task.RepositoryPath,
+						workspacePath:  built.task.WorkspacePath,
+					},
+				)
+			} else {
+				state.repositoryIdentityComplete = false
+			}
 			richerSessions[key] = state
 		}
 	}
-	exactMetricSessions := make(map[string]struct{})
+	metricMatchesRicherRepositories := func(metric tokenUsageTask, richer richerSessionState) bool {
+		if !providerTaskHasRepositoryIdentity(metric) || !richer.repositoryIdentityComplete ||
+			len(richer.repositoryIdentities) == 0 {
+			return false
+		}
+		metricIdentity := providerRepositoryIdentity{
+			repositoryName: metric.RepositoryName,
+			repositoryPath: metric.RepositoryPath,
+			workspacePath:  metric.WorkspacePath,
+		}
+		for _, richerIdentity := range richer.repositoryIdentities {
+			if !sameProviderRepositoryIdentity(metricIdentity, richerIdentity) {
+				return false
+			}
+		}
+		return true
+	}
+	exactMetricSessions := make(map[string]metricSessionState)
 	incompleteMetricSessions := make(map[string]struct{})
 	for _, built := range metricTasks {
 		if built.task.Provider != "claude" || built.task.ConversationID == "" {
@@ -563,7 +670,22 @@ func selectClaudeMetricFallbacks(
 		}
 		key := providerTraceKey("claude", built.task.ConversationID)
 		if built.task.AccountingStatus == "exact" {
-			exactMetricSessions[key] = struct{}{}
+			if requireRepositoryCorrelation && !providerTaskHasRepositoryIdentity(built.task) {
+				continue
+			}
+			if richer, exists := richerSessions[key]; requireRepositoryCorrelation && exists &&
+				!metricMatchesRicherRepositories(built.task, richer) {
+				continue
+			}
+			state := metricSessionState{
+				start:  providerMetricCoverageStart(built),
+				latest: providerMetricCoverageLatest(built),
+			}
+			if total := built.task.Usage.EffectiveTotalTokens; total != nil {
+				state.effectiveTotal = *total
+				state.totalKnown = true
+			}
+			exactMetricSessions[key] = state
 		}
 		if built.sessionHistoryIncomplete {
 			incompleteMetricSessions[key] = struct{}{}
@@ -574,9 +696,16 @@ func selectClaudeMetricFallbacks(
 		for _, built := range tasks {
 			key := providerTraceKey(built.task.Provider, built.task.ConversationID)
 			if built.task.Provider == "claude" && built.task.ConversationID != "" {
-				if _, exactMetric := exactMetricSessions[key]; exactMetric {
-					if state := richerSessions[key]; !state.allExact {
+				if metric, exactMetric := exactMetricSessions[key]; exactMetric {
+					state := richerSessions[key]
+					totalsEqual := providerSessionTotalsEqual(state.effectiveTotal, state.totalKnown, metric.effectiveTotal, metric.totalKnown)
+					metricCovers := providerMetricCoversRicherTasks(metric.start, metric.latest, state.earliest, state.latest)
+					if metricCovers && (!state.allExact || !totalsEqual) {
 						continue
+					}
+					if !metricCovers && (!state.allExact || !totalsEqual) {
+						built.task.AccountingStatus = "partial"
+						built.task.Normalization += providerMetricCoverageGapDetail(metric.start, metric.latest, state.earliest, state.latest)
 					}
 				}
 				if _, incompleteHistory := incompleteMetricSessions[key]; incompleteHistory {
@@ -592,15 +721,102 @@ func selectClaudeMetricFallbacks(
 	for _, built := range metricTasks {
 		key := providerTraceKey(built.task.Provider, built.task.ConversationID)
 		if built.task.Provider == "claude" && built.task.ConversationID != "" {
+			if requireRepositoryCorrelation && !providerTaskHasRepositoryIdentity(built.task) {
+				filteredMetrics = append(filteredMetrics, built)
+				continue
+			}
 			if richer, exists := richerSessions[key]; exists {
-				if built.task.AccountingStatus != "exact" || richer.allExact {
+				if requireRepositoryCorrelation && !metricMatchesRicherRepositories(built.task, richer) {
+					built.task.RepositoryName = ""
+					built.task.RepositoryPath = ""
+					built.task.WorkspacePath = ""
+					built.task.RepositoryCorrelationStatus = "ambiguous"
+					built.task.RepositoryCorrelationSource = ""
+					built.task.Normalization += "; cumulative session metrics span repository evidence that does not match the retained request subtotal, so the metric was not attributed or substituted"
+					filteredMetrics = append(filteredMetrics, built)
 					continue
+				}
+				metricTotal := built.task.Usage.EffectiveTotalTokens
+				metricTotalKnown := metricTotal != nil
+				if built.task.AccountingStatus != "exact" ||
+					(richer.allExact && providerSessionTotalsEqual(
+						richer.effectiveTotal,
+						richer.totalKnown,
+						valueOrZero(metricTotal),
+						metricTotalKnown,
+					)) {
+					continue
+				}
+				if !providerMetricCoversRicherTasks(
+					providerMetricCoverageStart(built),
+					providerMetricCoverageLatest(built),
+					richer.earliest,
+					richer.latest,
+				) {
+					continue
+				}
+				if richer.allExact {
+					built.task.Normalization += "; complete cumulative session metrics disagreed with the retained per-request subtotal and were selected without adding overlapping sources"
 				}
 			}
 		}
 		filteredMetrics = append(filteredMetrics, built)
 	}
 	return filterRicher(logTasks), filterRicher(spanTasks), filteredMetrics
+}
+
+func providerTaskHasRepositoryIdentity(task tokenUsageTask) bool {
+	return strings.TrimSpace(task.RepositoryName) != "" &&
+		task.RepositoryCorrelationStatus != "unknown" &&
+		task.RepositoryCorrelationStatus != "ambiguous"
+}
+
+func providerMetricCoversRicherTasks(metricStart, metricLatest, richerStart, richerLatest time.Time) bool {
+	return !metricStart.IsZero() && !metricLatest.IsZero() &&
+		!richerStart.IsZero() && !richerLatest.IsZero() &&
+		!metricStart.After(richerStart) && !metricLatest.Before(richerLatest)
+}
+
+func providerTaskCoverageStart(built providerLogTaskBuild) time.Time {
+	if parsed, err := time.Parse(time.RFC3339Nano, built.task.StartTime); err == nil {
+		return parsed
+	}
+	return built.latest
+}
+
+func providerMetricCoverageStart(built providerLogTaskBuild) time.Time {
+	if built.metricCoverageStart != nil {
+		return *built.metricCoverageStart
+	}
+	return providerTaskCoverageStart(built)
+}
+
+func providerMetricCoverageLatest(built providerLogTaskBuild) time.Time {
+	if built.metricCoverageLatest != nil {
+		return *built.metricCoverageLatest
+	}
+	return built.latest
+}
+
+func providerMetricCoverageGapDetail(metricStart, metricLatest, richerStart, richerLatest time.Time) string {
+	if metricStart.IsZero() || metricLatest.IsZero() || richerStart.IsZero() || richerLatest.IsZero() {
+		return "; cumulative metric evidence could not be ordered against the retained request and was not substituted or added"
+	}
+	if metricStart.After(richerStart) {
+		return "; cumulative metric evidence starts after the earliest request and was not substituted or added"
+	}
+	return "; cumulative metric evidence predates the latest request and was not substituted or added"
+}
+
+func providerSessionTotalsEqual(left int64, leftKnown bool, right int64, rightKnown bool) bool {
+	return leftKnown && rightKnown && left == right
+}
+
+func valueOrZero(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func providerTasksMeasurementSource(tasks []providerLogTaskBuild) string {
@@ -786,6 +1002,7 @@ func buildProviderTraceMetadata(traceID string, spans []store.Span) providerTrac
 			record.provider = provider
 			metadata.taskRecord = &record
 			metadata.taskRecords = []tokenUsageRecord{record}
+			metadata.taskRecordSpanIDs = []string{span.SpanID}
 			metadata.taskRequestCount = 1
 			if record.observed || record.recognized {
 				switch provider {
@@ -868,10 +1085,12 @@ func buildProviderTraceMetadata(traceID string, spans []store.Span) providerTrac
 		}
 		selected, _ := selectTokenUsageSpans(agentSpans)
 		records := make([]tokenUsageRecord, 0, len(selected))
+		spanIDs := make([]string, 0, len(selected))
 		for _, span := range selected {
 			record := tokenUsageFromSpan(span)
 			record.provider = "claude"
 			records = append(records, record)
+			spanIDs = append(spanIDs, span.SpanID)
 		}
 		if len(records) > 0 {
 			var aggregate tokenUsageAccumulator
@@ -884,6 +1103,7 @@ func buildProviderTraceMetadata(traceID string, spans []store.Span) providerTrac
 			}
 			metadata.taskRecord = &aggregatedRecord
 			metadata.taskRecords = records
+			metadata.taskRecordSpanIDs = spanIDs
 			metadata.taskRequestCount = len(records)
 			metadata.taskUsageSource = "claude_request_spans"
 			metadata.taskNormalization = "completed Claude interaction boundary with de-duplicated request-span usage; input includes provider cache components"
@@ -933,6 +1153,7 @@ func clearProviderTaskMetadata(metadata *providerTraceMetadata) {
 	metadata.taskTotal = nil
 	metadata.taskRecord = nil
 	metadata.taskRecords = nil
+	metadata.taskRecordSpanIDs = nil
 	metadata.taskRequestCount = 0
 	metadata.taskUsageSource = ""
 	metadata.taskNormalization = ""
@@ -1254,7 +1475,7 @@ func reconcileProviderTaskEvents(
 		totals = append(totals, event.record.usage.EffectiveTotalTokens)
 	}
 	if summed := addKnownTokens(totals...); summed != nil && *summed == *metadata.taskTotal {
-		return events, true
+		return preferRicherCorrelatedUsage(events, metadata)
 	}
 	for index := len(events) - 1; index >= 0; index-- {
 		total := events[index].record.usage.EffectiveTotalTokens
@@ -1313,7 +1534,7 @@ func reconcileClaudeTaskEvents(
 	spanTotal := spanAggregate.values().EffectiveTotalTokens
 	requestCountMatches := metadata.taskUsageSource != "claude_request_spans" || len(events) == metadata.taskRequestCount
 	if eventTotal != nil && spanTotal != nil && *eventTotal == *spanTotal && requestCountMatches && stableIdentities {
-		return events, true
+		return preferRicherCorrelatedUsage(events, metadata)
 	}
 	if spanTotal == nil {
 		reconciled := logWindowComplete
@@ -1336,6 +1557,255 @@ func reconcileClaudeTaskEvents(
 		reconciled = append(reconciled, selected)
 	}
 	return reconciled, true
+}
+
+// preferRicherCorrelatedUsage chooses one normalized accounting record per
+// request and uses the other source only for compatible missing fields. It is
+// called only after the independently derived effective totals agree, and it
+// never adds overlapping log and span totals.
+func preferRicherCorrelatedUsage(
+	events []providerLogTokenEvent,
+	metadata providerTraceMetadata,
+) ([]providerLogTokenEvent, bool) {
+	if len(events) == 0 || len(metadata.taskRecords) == 0 {
+		return events, true
+	}
+
+	if len(events) == len(metadata.taskRecords) {
+		if spanRecords, matched := taskRecordsOrderedForEvents(events, metadata); matched {
+			merged := append([]providerLogTokenEvent(nil), events...)
+			changed := false
+			for index := range merged {
+				logRecord := merged[index].record
+				spanRecord := spanRecords[index]
+				if !sameEffectiveTokenTotal(logRecord.usage, spanRecord.usage) || tokenUsageFieldsConflict(logRecord.usage, spanRecord.usage) {
+					merged[0].normalization += "; correlated provider log and span token fields disagreed, so no cross-source fields were combined"
+					return merged, false
+				}
+				if tokenUsageInformationScore(spanRecord.usage) > tokenUsageInformationScore(logRecord.usage) {
+					combined, filled := fillMissingTokenUsage(spanRecord.usage, logRecord.usage)
+					if filled && tokenUsageMergeIntroducedTotalMismatch(spanRecord.usage, logRecord.usage, combined) {
+						merged[0].normalization += "; correlated provider fields would contradict the shared provider total, so no cross-source fields were combined"
+						return merged, false
+					}
+					spanRecord.usage = combined
+					spanRecord.observed = spanRecord.observed || logRecord.observed
+					spanRecord.recognized = hasRecognizedTokenValue(combined)
+					merged[index].record = spanRecord
+					merged[index].source = combinedMeasurementSource(metadata.taskUsageSource, merged[index].source)
+					merged[index].normalization = metadata.taskNormalization + "; selected the richer correlated span usage without adding the overlapping provider log total"
+					if filled {
+						merged[index].normalization += "; compatible missing fields were filled from the provider log"
+					}
+					changed = true
+					continue
+				}
+				combined, filled := fillMissingTokenUsage(logRecord.usage, spanRecord.usage)
+				if !filled {
+					continue
+				}
+				if tokenUsageMergeIntroducedTotalMismatch(logRecord.usage, spanRecord.usage, combined) {
+					merged[0].normalization += "; correlated provider fields would contradict the shared provider total, so no cross-source fields were combined"
+					return merged, false
+				}
+				merged[index].record.usage = combined
+				merged[index].record.recognized = hasRecognizedTokenValue(combined)
+				merged[index].source = combinedMeasurementSource(merged[index].source, metadata.taskUsageSource)
+				merged[index].normalization += "; filled compatible missing fields from correlated span usage without adding the overlapping total"
+				changed = true
+			}
+			if changed {
+				return merged, true
+			}
+			return events, true
+		}
+	}
+
+	eventRecord := aggregateProviderTokenRecords(eventsToTokenUsageRecords(events))
+	spanRecord := aggregateProviderTokenRecords(metadata.taskRecords)
+	if tokenUsageFieldsConflict(eventRecord.usage, spanRecord.usage) {
+		events[0].normalization += "; correlated provider log and span token fields disagreed, so no cross-source fields were combined"
+		return events, false
+	}
+	if tokenUsageInformationScore(spanRecord.usage) <= tokenUsageInformationScore(eventRecord.usage) {
+		return events, true
+	}
+	return providerSpanUsageEvents(events, metadata, "; selected the richer correlated span usage without adding overlapping provider log totals"), true
+}
+
+func taskRecordsOrderedForEvents(events []providerLogTokenEvent, metadata providerTraceMetadata) ([]tokenUsageRecord, bool) {
+	if len(events) != len(metadata.taskRecords) || len(metadata.taskRecordSpanIDs) != len(metadata.taskRecords) {
+		return nil, false
+	}
+	bySpanID := make(map[string]int, len(metadata.taskRecordSpanIDs))
+	for index, spanID := range metadata.taskRecordSpanIDs {
+		key := strings.ToLower(strings.TrimSpace(spanID))
+		if key == "" {
+			return nil, false
+		}
+		if _, duplicate := bySpanID[key]; duplicate {
+			return nil, false
+		}
+		bySpanID[key] = index
+	}
+	ordered := make([]tokenUsageRecord, len(events))
+	used := make(map[int]struct{}, len(events))
+	for index, event := range events {
+		spanID := strings.ToLower(strings.TrimSpace(event.log.SpanID))
+		recordIndex, matched := bySpanID[spanID]
+		if !matched {
+			return nil, false
+		}
+		if _, duplicate := used[recordIndex]; duplicate {
+			return nil, false
+		}
+		used[recordIndex] = struct{}{}
+		ordered[index] = metadata.taskRecords[recordIndex]
+	}
+	return ordered, true
+}
+
+func eventsToTokenUsageRecords(events []providerLogTokenEvent) []tokenUsageRecord {
+	records := make([]tokenUsageRecord, 0, len(events))
+	for _, event := range events {
+		records = append(records, event.record)
+	}
+	return records
+}
+
+func aggregateProviderTokenRecords(records []tokenUsageRecord) tokenUsageRecord {
+	var aggregate tokenUsageAccumulator
+	aggregate.addTask(records)
+	return tokenUsageRecord{
+		observed:   aggregate.coverage.ObservedRecordCount > 0,
+		recognized: aggregate.coverage.RecognizedRecordCount > 0,
+		usage:      aggregate.values(),
+	}
+}
+
+func providerSpanUsageEvents(events []providerLogTokenEvent, metadata providerTraceMetadata, suffix string) []providerLogTokenEvent {
+	reconciled := make([]providerLogTokenEvent, 0, len(metadata.taskRecords))
+	for index, record := range metadata.taskRecords {
+		selected := events[len(events)-1]
+		selected.timestamp = metadata.endTime.Add(time.Duration(index-len(metadata.taskRecords)+1) * time.Nanosecond)
+		selected.record = record
+		selected.source = combinedMeasurementSource(metadata.taskUsageSource, selected.source)
+		selected.normalization = metadata.taskNormalization + suffix
+		if selected.model == "" && len(metadata.modelNames) > 0 {
+			selected.model = metadata.modelNames[0]
+		}
+		reconciled = append(reconciled, selected)
+	}
+	return reconciled
+}
+
+func sameEffectiveTokenTotal(left, right tokenUsageValues) bool {
+	return left.EffectiveTotalTokens != nil && right.EffectiveTotalTokens != nil &&
+		*left.EffectiveTotalTokens == *right.EffectiveTotalTokens
+}
+
+func tokenUsageInformationScore(usage tokenUsageValues) int {
+	score := 0
+	for _, value := range []*int64{
+		usage.InputTokens,
+		usage.CachedInputTokens,
+		usage.CacheCreationInputTokens,
+		usage.OutputTokens,
+		usage.ReasoningOutputTokens,
+		usage.ProviderTotalTokens,
+	} {
+		if value != nil {
+			score++
+		}
+	}
+	return score
+}
+
+func tokenUsageFieldsConflict(left, right tokenUsageValues) bool {
+	for _, pair := range [][2]*int64{
+		{left.InputTokens, right.InputTokens},
+		{left.CachedInputTokens, right.CachedInputTokens},
+		{left.CacheCreationInputTokens, right.CacheCreationInputTokens},
+		{left.OutputTokens, right.OutputTokens},
+		{left.ReasoningOutputTokens, right.ReasoningOutputTokens},
+		{left.ProviderTotalTokens, right.ProviderTotalTokens},
+	} {
+		if pair[0] != nil && pair[1] != nil && *pair[0] != *pair[1] {
+			return true
+		}
+	}
+	return false
+}
+
+func fillMissingTokenUsage(primary, fallback tokenUsageValues) (tokenUsageValues, bool) {
+	filled := false
+	fill := func(target **int64, value *int64) {
+		if *target == nil && value != nil {
+			*target = value
+			filled = true
+		}
+	}
+	fill(&primary.InputTokens, fallback.InputTokens)
+	fill(&primary.CachedInputTokens, fallback.CachedInputTokens)
+	fill(&primary.CacheCreationInputTokens, fallback.CacheCreationInputTokens)
+	fill(&primary.OutputTokens, fallback.OutputTokens)
+	fill(&primary.ReasoningOutputTokens, fallback.ReasoningOutputTokens)
+	fill(&primary.ProviderTotalTokens, fallback.ProviderTotalTokens)
+	primary.DerivedTotalTokens = addKnownTokens(primary.InputTokens, primary.OutputTokens)
+	primary.EffectiveTotalTokens = primary.ProviderTotalTokens
+	if primary.EffectiveTotalTokens == nil {
+		primary.EffectiveTotalTokens = primary.DerivedTotalTokens
+	}
+	return primary, filled
+}
+
+func tokenUsageMergeIntroducedTotalMismatch(primary, fallback, combined tokenUsageValues) bool {
+	return !tokenUsageHasTotalMismatch(primary) &&
+		!tokenUsageHasTotalMismatch(fallback) &&
+		tokenUsageHasTotalMismatch(combined)
+}
+
+func tokenUsageHasTotalMismatch(usage tokenUsageValues) bool {
+	return usage.ProviderTotalTokens != nil && usage.DerivedTotalTokens != nil &&
+		*usage.ProviderTotalTokens != *usage.DerivedTotalTokens
+}
+
+func combinedMeasurementSource(primary, fallback string) string {
+	parts := make([]string, 0, 2)
+	seen := make(map[string]struct{})
+	for _, source := range []string{primary, fallback} {
+		for _, part := range strings.Split(source, "+") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if _, exists := seen[part]; exists {
+				continue
+			}
+			seen[part] = struct{}{}
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(parts, "+")
+}
+
+func providerTaskEventProvenance(events []providerLogTokenEvent) (string, string) {
+	measurementSource := ""
+	normalizations := make([]string, 0, len(events))
+	seenNormalizations := make(map[string]struct{})
+	for _, event := range events {
+		measurementSource = combinedMeasurementSource(measurementSource, event.source)
+		normalization := strings.TrimSpace(event.normalization)
+		if normalization == "" {
+			continue
+		}
+		if _, exists := seenNormalizations[normalization]; exists {
+			continue
+		}
+		seenNormalizations[normalization] = struct{}{}
+		normalizations = append(normalizations, normalization)
+	}
+	return measurementSource, strings.Join(normalizations, "; ")
 }
 
 func providerEventsHaveStableIdentity(events []providerLogTokenEvent) bool {
@@ -1403,14 +1873,14 @@ func providerTaskCorrelationStatus(event providerLogTokenEvent, metadata provide
 		if metadata.provider != event.provider {
 			return "trace_provider_mismatch"
 		}
-		if event.source == "claude_request_spans" {
-			return "trace_request_window_incomplete"
-		}
 		if !usageReconciled {
 			if metadata.taskRetentionTruncated {
 				return "trace_retention_incomplete"
 			}
 			return "trace_usage_mismatch"
+		}
+		if metadata.provider == "claude" && metadata.taskUsageSource == "claude_request_spans" {
+			return "trace_request_window_incomplete"
 		}
 		return "trace_correlated"
 	}
@@ -1424,13 +1894,17 @@ func providerTaskCorrelationStatus(event providerLogTokenEvent, metadata provide
 }
 
 func providerTaskAccountingStatus(status, correlationStatus string) string {
-	if correlationStatus == "trace_retention_incomplete" || correlationStatus == "trace_request_window_incomplete" {
+	if correlationStatus == "trace_retention_incomplete" ||
+		correlationStatus == "trace_request_window_incomplete" {
 		return "partial"
 	}
 	switch status {
 	case "measured":
 		if correlationStatus == "trace_correlated" {
 			return "exact"
+		}
+		if correlationStatus == "trace_usage_mismatch" {
+			return "partial"
 		}
 		return "uncorrelated"
 	case "partial":

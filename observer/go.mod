@@ -3,6 +3,7 @@ module github.com/signalfx/obstudio/observer
 go 1.25.0
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/collector/component v1.55.0
 	go.opentelemetry.io/collector/consumer v1.55.0

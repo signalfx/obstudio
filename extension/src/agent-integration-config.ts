@@ -1,3 +1,104 @@
+import * as crypto from 'node:crypto';
+
+export type AgentIntegrationConfigFingerprint = {
+	configurationDigest: string;
+	mcpUrl: string;
+	version: 1;
+};
+
+export type AgentIntegrationManagedConfig = {
+	fingerprintMaterial: string;
+	mcpUrl: string;
+};
+
+export type AgentIntegrationInstallCredentials = {
+	controlToken: string;
+	healthProofSecret: string;
+	mcpUrl: string;
+};
+
+type StableAgentIntegrationInstallOptions = {
+	captureInstalledConfig: (
+		credentials: AgentIntegrationInstallCredentials,
+	) => AgentIntegrationManagedConfig | Promise<AgentIntegrationManagedConfig>;
+	install: (credentials: AgentIntegrationInstallCredentials) => Promise<void>;
+	isManagedConfigUnchanged: (
+		config: AgentIntegrationManagedConfig,
+	) => boolean | Promise<boolean>;
+	readCredentials: () => AgentIntegrationInstallCredentials | Promise<AgentIntegrationInstallCredentials>;
+	recordInstalledConfig: (
+		config: AgentIntegrationManagedConfig,
+		credentials: AgentIntegrationInstallCredentials,
+	) => Promise<void>;
+};
+
+const stableAgentIntegrationInstallAttempts = 3;
+
+function agentIntegrationInstallCredentialsEqual(
+	left: AgentIntegrationInstallCredentials,
+	right: AgentIntegrationInstallCredentials,
+): boolean {
+	return left.controlToken === right.controlToken
+		&& left.healthProofSecret === right.healthProofSecret
+		&& left.mcpUrl === right.mcpUrl;
+}
+
+export async function installAgentIntegrationWithStableCredentials(
+	options: StableAgentIntegrationInstallOptions,
+): Promise<AgentIntegrationInstallCredentials> {
+	let previousInstall: AgentIntegrationManagedConfig | undefined;
+	for (let attempt = 0; attempt < stableAgentIntegrationInstallAttempts; attempt += 1) {
+		if (previousInstall !== undefined
+			&& !await options.isManagedConfigUnchanged(previousInstall)) {
+			throw new Error('Agent integration configuration changed while Observer credentials were rotating; the newer configuration was preserved.');
+		}
+
+		const credentials = await options.readCredentials();
+		await options.install(credentials);
+		const installedConfig = await options.captureInstalledConfig(credentials);
+		// Persist ownership before checking for rotation so a bounded retry failure
+		// can be repaired by the next credential refresh.
+		await options.recordInstalledConfig(installedConfig, credentials);
+		const currentCredentials = await options.readCredentials();
+		if (agentIntegrationInstallCredentialsEqual(credentials, currentCredentials)) {
+			return credentials;
+		}
+		previousInstall = installedConfig;
+	}
+
+	throw new Error('Observer credentials changed during three consecutive agent integration install attempts; retry after Observer startup stabilizes.');
+}
+
+export function createAgentIntegrationConfigFingerprint(
+	config: AgentIntegrationManagedConfig,
+): AgentIntegrationConfigFingerprint {
+	return {
+		configurationDigest: crypto.createHash('sha256').update(config.fingerprintMaterial).digest('hex'),
+		mcpUrl: config.mcpUrl,
+		version: 1,
+	};
+}
+
+export function shouldRefreshOwnedAgentIntegrationConfig(
+	stored: unknown,
+	current: AgentIntegrationManagedConfig | undefined,
+	desiredMcpUrl: string,
+): boolean {
+	if (typeof stored !== 'object' || stored === null || current === undefined) {
+		return false;
+	}
+	const candidate = stored as Partial<AgentIntegrationConfigFingerprint>;
+	if (candidate.version !== 1
+		|| candidate.mcpUrl !== desiredMcpUrl
+		|| current.mcpUrl !== desiredMcpUrl
+		|| typeof candidate.configurationDigest !== 'string'
+		|| !/^[a-f0-9]{64}$/.test(candidate.configurationDigest)) {
+		return false;
+	}
+	return createAgentIntegrationConfigFingerprint(current).configurationDigest
+		=== candidate.configurationDigest;
+}
+
 export function caseInsensitiveHeaderValue(
 	headers: Record<string, unknown> | undefined,
 	name: string,

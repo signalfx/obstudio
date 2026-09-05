@@ -116,6 +116,9 @@ export interface TraceSummary {
   durationMs?: number;
   status: string;
   isGenAI?: boolean;
+  retentionTruncated?: boolean;
+  retentionUnknown?: boolean;
+  revision?: number;
   spans?: SpanPreview[];
 }
 
@@ -184,6 +187,9 @@ export interface TraceDetail {
   spanCount: number;
   durationMs?: number;
   status: string;
+  retentionTruncated?: boolean;
+  retentionUnknown?: boolean;
+  revision?: number;
   spans: Span[];
   genAI?: GenAITraceSummary;
 }

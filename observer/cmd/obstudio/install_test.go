@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -216,6 +215,76 @@ func TestRunTokenTelemetryTargetsContinuesAfterProviderFailure(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "claude-code: enabled-managed") {
 		t.Fatalf("successful provider output missing: %q", output.String())
+	}
+}
+
+func TestTokenTelemetryEnableTakesOverClaudeGenericRoutingAlongsideCodex(t *testing.T) {
+	home := t.TempDir()
+	statePath := filepath.Join(home, ".obstudio", tokenTelemetryStateFileName)
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("CODEX_HOME", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("OBSTUDIO_TOKEN_TELEMETRY_STATE_PATH", statePath)
+
+	claudePath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(claudePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	initialClaude := []byte("{\n  \"env\": {\n    \"OTEL_EXPORTER_OTLP_ENDPOINT\": \"https://corporate.example:4318\"\n  }\n}\n")
+	if err := os.WriteFile(claudePath, initialClaude, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	command := newTokenTelemetryCommand()
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetErr(&output)
+	command.SetArgs([]string{"enable", "--target", "codex,claude-code"})
+	err := command.Execute()
+	if err != nil {
+		t.Fatalf("enable both providers: %v", err)
+	}
+	for _, target := range []string{"codex: enabled-managed", "claude-code: enabled-managed"} {
+		if !strings.Contains(output.String(), target) {
+			t.Fatalf("successful target %q missing from output: %q", target, output.String())
+		}
+	}
+	_, enabledEnv, _, _, readErr := readClaudeSettings(claudePath)
+	if readErr != nil {
+		t.Fatalf("read configured Claude settings: %v", readErr)
+	}
+	if got := enabledEnv["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != "http://127.0.0.1:4318" {
+		t.Fatalf("generic Claude endpoint = %#v, want Observer", got)
+	}
+	if _, statErr := os.Stat(filepath.Join(home, ".codex", "config.toml")); statErr != nil {
+		t.Fatalf("Codex target was not configured: %v", statErr)
+	}
+	ownership, readErr := readTokenTelemetryOwnership(statePath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if _, ok := ownership.Targets["codex"]; !ok {
+		t.Fatalf("Codex ownership missing: %+v", ownership)
+	}
+	claudeOwned, ok := ownership.Targets["claude-code"]
+	if !ok || claudeOwned.Env["OTEL_EXPORTER_OTLP_ENDPOINT"] != "http://127.0.0.1:4318" {
+		t.Fatalf("Claude takeover ownership missing managed endpoint: %+v", ownership)
+	}
+
+	disable := newTokenTelemetryCommand()
+	disable.SetOut(&output)
+	disable.SetErr(&output)
+	disable.SetArgs([]string{"disable", "--target", "codex,claude-code"})
+	if err := disable.Execute(); err != nil {
+		t.Fatalf("disable both providers: %v", err)
+	}
+	_, disabledEnv, _, _, readErr := readClaudeSettings(claudePath)
+	if readErr != nil {
+		t.Fatalf("read disabled Claude settings: %v", readErr)
+	}
+	if len(disabledEnv) != 0 {
+		t.Fatalf("Claude managed routing was not removed: %+v", disabledEnv)
 	}
 }
 
@@ -661,6 +730,35 @@ func TestTokenTelemetryRecoversInterruptionBeforeConfigPublish(t *testing.T) {
 	}
 	if _, err := os.Stat(pendingPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("recovery retained completed pending transaction: %v", err)
+	}
+}
+
+func TestTokenTelemetryTargetOwnershipSnapshotClonesManagedSettings(t *testing.T) {
+	t.Parallel()
+
+	state := tokenTelemetryOwnership{
+		Targets: map[string]tokenTelemetryTargetOwnership{
+			"codex": {
+				Env: map[string]string{
+					"OTEL_LOGS_EXPORTER": "otlp",
+				},
+				TableSettings: map[string]string{
+					"metrics_exporter.endpoint": `endpoint = "http://127.0.0.1:4318/v1/metrics" # OBSTUDIO TOKEN TELEMETRY`,
+				},
+			},
+		},
+	}
+	snapshot := tokenTelemetryTargetOwnershipSnapshot(state, "codex")
+	if snapshot == nil {
+		t.Fatal("missing Codex ownership snapshot")
+	}
+	state.Targets["codex"].TableSettings["metrics_exporter.endpoint"] = "modified"
+	state.Targets["codex"].Env["OTEL_LOGS_EXPORTER"] = "modified"
+	if got := snapshot.TableSettings["metrics_exporter.endpoint"]; strings.Contains(got, "modified") {
+		t.Fatalf("ownership snapshot shares table settings with source: %q", got)
+	}
+	if got := snapshot.Env["OTEL_LOGS_EXPORTER"]; got != "otlp" {
+		t.Fatalf("ownership snapshot shares managed environment settings with source: %q", got)
 	}
 }
 
@@ -1165,7 +1263,7 @@ func TestTokenTelemetryStatusUsesRecordedCustomEndpoint(t *testing.T) {
 	}
 }
 
-func TestTokenTelemetryStatusUsesCorrelationEndpointForUserOwnedConfiguration(t *testing.T) {
+func TestTokenTelemetryStatusUsesCorrelationEndpointForManagedConfiguration(t *testing.T) {
 	endpoint := "http://127.0.0.1:5318/v1/logs"
 
 	t.Run("codex", func(t *testing.T) {
@@ -1190,19 +1288,23 @@ func TestTokenTelemetryStatusUsesCorrelationEndpointForUserOwnedConfiguration(t 
 			setRepositoryCorrelationMutation("codex", endpoint, "path"),
 			writeTokenTelemetryOwnership,
 		)
-		if err != nil || result.State != "enabled-existing" {
-			t.Fatalf("enable user-owned Codex telemetry = %+v, err %v", result, err)
+		if err != nil || result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Observer") {
+			t.Fatalf("enable Codex telemetry with missing metrics = %+v, err %v", result, err)
 		}
 		state, err := readTokenTelemetryOwnership(statePath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, owned := state.Targets["codex"]; owned {
-			t.Fatalf("user-owned Codex exporters were adopted: %+v", state)
+		owned, ok := state.Targets["codex"]
+		if !ok || len(owned.Settings) != 1 || len(owned.TableSettings) != 2 ||
+			owned.Settings["metrics_exporter"] == "" ||
+			owned.TableSettings["exporter.assignment"] == "" ||
+			owned.TableSettings["trace_exporter.assignment"] == "" {
+			t.Fatalf("all three Codex signal exporters should be owned: %+v", state)
 		}
 		status, err := inspectAgentTokenTelemetry("codex", home, statePath, "", nil)
-		if err != nil || status.State != "enabled-existing" {
-			t.Fatalf("status for user-owned Codex custom endpoint = %+v, err %v", status, err)
+		if err != nil || status.State != "enabled-managed" {
+			t.Fatalf("status for mixed-owned Codex custom endpoint = %+v, err %v", status, err)
 		}
 	})
 
@@ -1236,19 +1338,20 @@ func TestTokenTelemetryStatusUsesCorrelationEndpointForUserOwnedConfiguration(t 
 			setRepositoryCorrelationMutation("claude-code", endpoint, "path"),
 			writeTokenTelemetryOwnership,
 		)
-		if err != nil || result.State != "enabled-existing" {
-			t.Fatalf("enable user-owned Claude telemetry = %+v, err %v", result, err)
+		if err != nil || result.State != "enabled-managed" {
+			t.Fatalf("enable matching Claude telemetry = %+v, err %v", result, err)
 		}
 		state, err := readTokenTelemetryOwnership(statePath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, owned := state.Targets["claude-code"]; owned {
-			t.Fatalf("user-owned Claude settings were adopted: %+v", state)
+		owned, ok := state.Targets["claude-code"]
+		if !ok || len(owned.Env) != len(required) {
+			t.Fatalf("all required Claude routes should be owned: %+v", state)
 		}
 		status, err := inspectAgentTokenTelemetry("claude-code", home, statePath, "", nil)
-		if err != nil || status.State != "enabled-existing" {
-			t.Fatalf("status for user-owned Claude custom endpoint = %+v, err %v", status, err)
+		if err != nil || status.State != "enabled-managed" {
+			t.Fatalf("status for managed Claude custom endpoint = %+v, err %v", status, err)
 		}
 	})
 }
@@ -1312,10 +1415,648 @@ func TestTokenTelemetryMetricEndpoint(t *testing.T) {
 	}
 }
 
-func TestConfigureCodexTokenTelemetryIsIdempotentAndCleanupRestoresUserConfig(t *testing.T) {
+func TestConfigureCodexTokenTelemetryAddsAndOwnsMetricsWhenUnconfigured(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), ".codex", "config.toml")
+	root := t.TempDir()
+	path := filepath.Join(root, ".codex", "config.toml")
+	statePath := filepath.Join(root, ".obstudio", "token-telemetry.json")
+	endpoint := "http://127.0.0.1:4318/v1/logs"
+	result, err := enableCodexTokenTelemetry(path, statePath, endpoint)
+	if err != nil {
+		t.Fatalf("enable Codex token telemetry: %v", err)
+	}
+	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Observer") {
+		t.Fatalf("enable result = %+v, want managed logs, traces, and metrics", result)
+	}
+	configured, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read configured Codex config: %v", err)
+	}
+	for _, want := range []string{
+		`exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "binary" } }`,
+		`trace_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/traces", protocol = "binary" } }`,
+		`metrics_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/metrics", protocol = "binary" } }`,
+	} {
+		if !strings.Contains(string(configured), want) {
+			t.Fatalf("configured Codex config lacks %q:\n%s", want, configured)
+		}
+	}
+	ownership, err := readTokenTelemetryOwnership(statePath)
+	if err != nil {
+		t.Fatalf("read ownership: %v", err)
+	}
+	if got := ownership.Targets["codex"].Settings; len(got) != 3 || got["metrics_exporter"] == "" {
+		t.Fatalf("managed Codex settings = %+v, want all three exporters", got)
+	}
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disable Codex token telemetry: %v", err)
+	}
+	if cleaned, err := os.ReadFile(path); err != nil || len(cleaned) != 0 {
+		t.Fatalf("cleanup left managed Codex configuration: data=%q err=%v", cleaned, err)
+	}
+}
+
+func TestConfigureCodexTokenTelemetryCompletesEndpointlessExporterTables(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, ".codex", "config.toml")
+	statePath := filepath.Join(root, ".obstudio", "token-telemetry.json")
+	initial := strings.Join([]string{
+		`model = "gpt-5.4"`,
+		``,
+		`[otel.exporter]`,
+		`[otel.exporter.otlp-http]`,
+		`protocol = "binary"`,
+		`[otel.exporter.otlp-http.headers]`,
+		`x-observer = "preserved"`,
+		``,
+		`[otel.trace_exporter]`,
+		`[otel.trace_exporter.otlp-http]`,
+		``,
+		`[otel.metrics_exporter]`,
+		`[otel.metrics_exporter.otlp-http]`,
+		`protocol = 'binary'`,
+		`[otel.metrics_exporter.otlp-http.headers]`,
+		``,
+	}, "\n")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir Codex config parent: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+
+	firstEndpoint := "http://127.0.0.1:4318/v1/logs"
+	result, err := enableCodexTokenTelemetry(path, statePath, firstEndpoint)
+	if err != nil {
+		t.Fatalf("complete endpointless Codex exporters: %v", err)
+	}
+	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Observer") {
+		t.Fatalf("enable result = %+v, want managed logs, traces, and metrics", result)
+	}
+	configured, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read configured Codex config: %v", err)
+	}
+	for _, want := range []string{
+		`endpoint = "http://127.0.0.1:4318/v1/logs" # OBSTUDIO TOKEN TELEMETRY`,
+		`endpoint = "http://127.0.0.1:4318/v1/traces" # OBSTUDIO TOKEN TELEMETRY`,
+		`endpoint = "http://127.0.0.1:4318/v1/metrics" # OBSTUDIO TOKEN TELEMETRY`,
+		`protocol = "binary" # OBSTUDIO TOKEN TELEMETRY`,
+		`x-observer = "preserved"`,
+	} {
+		if !strings.Contains(string(configured), want) {
+			t.Fatalf("configured Codex config lacks %q:\n%s", want, configured)
+		}
+	}
+	if strings.Contains(string(configured), codexTokenTelemetryBlockStart) {
+		t.Fatalf("table completion added an unnecessary managed [otel] block:\n%s", configured)
+	}
+	ownership, err := readTokenTelemetryOwnership(statePath)
+	if err != nil {
+		t.Fatalf("read ownership: %v", err)
+	}
+	owned := ownership.Targets["codex"]
+	if len(owned.Settings) != 0 || len(owned.TableSettings) != 6 {
+		t.Fatalf("Codex ownership = %+v, want all six table settings", owned)
+	}
+
+	if _, err := enableCodexTokenTelemetry(path, statePath, firstEndpoint); err != nil {
+		t.Fatalf("repeat endpointless Codex configuration: %v", err)
+	}
+	repeated, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read repeated Codex config: %v", err)
+	}
+	if !bytes.Equal(repeated, configured) {
+		t.Fatalf("repeat enable changed Codex config:\n%s", repeated)
+	}
+	missingEndpoint := strings.Replace(
+		string(repeated),
+		`endpoint = "http://127.0.0.1:4318/v1/logs" # OBSTUDIO TOKEN TELEMETRY`+"\n",
+		"",
+		1,
+	)
+	if missingEndpoint == string(repeated) {
+		t.Fatal("fixture did not remove a completed Codex endpoint")
+	}
+	if err := os.WriteFile(path, []byte(missingEndpoint), 0o600); err != nil {
+		t.Fatalf("remove completed Codex endpoint: %v", err)
+	}
+	if _, err := enableCodexTokenTelemetry(path, statePath, firstEndpoint); err != nil {
+		t.Fatalf("repair missing owned Codex endpoint: %v", err)
+	}
+	repaired, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read repaired Codex config: %v", err)
+	}
+	if !bytes.Equal(repaired, configured) {
+		t.Fatalf("repair did not restore the completed Codex config:\n%s", repaired)
+	}
+
+	secondEndpoint := "http://127.0.0.1:5318/v1/logs"
+	if _, err := enableCodexTokenTelemetry(path, statePath, secondEndpoint); err != nil {
+		t.Fatalf("update completed Codex endpoints: %v", err)
+	}
+	updated, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read updated Codex config: %v", err)
+	}
+	for _, want := range []string{
+		`endpoint = "http://127.0.0.1:5318/v1/logs" # OBSTUDIO TOKEN TELEMETRY`,
+		`endpoint = "http://127.0.0.1:5318/v1/traces" # OBSTUDIO TOKEN TELEMETRY`,
+		`endpoint = "http://127.0.0.1:5318/v1/metrics" # OBSTUDIO TOKEN TELEMETRY`,
+	} {
+		if strings.Count(string(updated), want) != 1 {
+			t.Fatalf("updated Codex config lacks one %q:\n%s", want, updated)
+		}
+	}
+	if strings.Contains(string(updated), "127.0.0.1:4318") {
+		t.Fatalf("updated Codex config retained the old owned endpoint:\n%s", updated)
+	}
+
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disable completed Codex exporters: %v", err)
+	}
+	cleaned, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read cleaned Codex config: %v", err)
+	}
+	if strings.Contains(string(cleaned), "endpoint =") || strings.Contains(string(cleaned), "protocol =") ||
+		!strings.Contains(string(cleaned), `x-observer = "preserved"`) {
+		t.Fatalf("disable did not remove managed table routes while preserving unrelated content:\n%s", cleaned)
+	}
+}
+
+func TestConfigureCodexTokenTelemetryHandlesQuotedExporterTableKeys(t *testing.T) {
+	t.Parallel()
+
+	t.Run("explicit quoted endpoint is replaced and removed", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		path := filepath.Join(root, "config.toml")
+		statePath := filepath.Join(root, "token-telemetry.json")
+		initial := strings.Join([]string{
+			`[otel.exporter.otlp-http]`,
+			`"endpoint" = ""`,
+			`"protocol" = "binary"`,
+			``,
+		}, "\n")
+		if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+			t.Fatalf("write Codex config: %v", err)
+		}
+
+		if _, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs"); err != nil {
+			t.Fatalf("enable with quoted endpoint: %v", err)
+		}
+		configured, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read configured Codex config: %v", readErr)
+		}
+		if strings.Count(string(configured), `endpoint = "http://127.0.0.1:4318/v1/logs" # OBSTUDIO TOKEN TELEMETRY`) != 1 ||
+			strings.Contains(string(configured), `"endpoint" = ""`) {
+			t.Fatalf("quoted endpoint was not replaced exactly once:\n%s", configured)
+		}
+		if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+			t.Fatalf("disable quoted endpoint takeover: %v", err)
+		}
+		cleaned, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read disabled Codex config: %v", readErr)
+		}
+		if strings.Contains(string(cleaned), "endpoint") || strings.Contains(string(cleaned), "protocol") {
+			t.Fatalf("managed quoted endpoint route was not removed:\n%s", cleaned)
+		}
+	})
+
+	t.Run("quoted protocol allows owned endpoint completion", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		path := filepath.Join(root, "config.toml")
+		statePath := filepath.Join(root, "token-telemetry.json")
+		initial := strings.Join([]string{
+			`[otel.exporter.otlp-http]`,
+			`"protocol" = "binary"`,
+			``,
+		}, "\n")
+		if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+			t.Fatalf("write Codex config: %v", err)
+		}
+
+		if _, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs"); err != nil {
+			t.Fatalf("complete quoted-protocol Codex exporter: %v", err)
+		}
+		configured, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read configured Codex config: %v", err)
+		}
+		if strings.Count(string(configured), `"protocol" = "binary"`) != 1 ||
+			strings.Contains(string(configured), `protocol = "binary" # OBSTUDIO TOKEN TELEMETRY`) ||
+			strings.Count(string(configured), `endpoint = "http://127.0.0.1:4318/v1/logs"`) != 1 {
+			t.Fatalf("quoted protocol was duplicated or endpoint was not completed:\n%s", configured)
+		}
+		if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+			t.Fatalf("disable quoted-protocol Codex exporter: %v", err)
+		}
+		cleaned, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read cleaned Codex config: %v", err)
+		}
+		if strings.Contains(string(cleaned), "endpoint") || strings.Contains(string(cleaned), "protocol") {
+			t.Fatalf("disable did not remove quoted-protocol route:\n%s", cleaned)
+		}
+	})
+}
+
+func TestDisableCodexTokenTelemetryRemovesEndpointRetakenByRepeatedEnable(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "config.toml")
+	statePath := filepath.Join(root, "state.json")
+	endpoint := "http://127.0.0.1:4318/v1/logs"
+	initial := strings.Join([]string{
+		`[otel]`,
+		`exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "binary" } }`,
+		`trace_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/traces", protocol = "binary" } }`,
+		``,
+		`[otel.metrics_exporter.otlp-http]`,
+		`protocol = "binary"`,
+		``,
+	}, "\n")
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+	if _, err := enableCodexTokenTelemetry(path, statePath, endpoint); err != nil {
+		t.Fatalf("complete Codex metrics endpoint: %v", err)
+	}
+	configured, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read configured Codex config: %v", err)
+	}
+	modified := strings.Replace(
+		string(configured),
+		`endpoint = "http://127.0.0.1:4318/v1/metrics" # OBSTUDIO TOKEN TELEMETRY`,
+		`endpoint = "https://user.example/v1/metrics"`,
+		1,
+	)
+	if modified == string(configured) {
+		t.Fatal("fixture did not modify the completed metrics endpoint")
+	}
+	if err := os.WriteFile(path, []byte(modified), 0o600); err != nil {
+		t.Fatalf("write modified Codex config: %v", err)
+	}
+
+	status, err := inspectOwnedCodexTokenTelemetry(path, statePath, endpoint)
+	if err != nil {
+		t.Fatalf("inspect modified Codex endpoint: %v", err)
+	}
+	if status.State != "modified" || !strings.Contains(status.Detail, "metrics_exporter.endpoint changed") {
+		t.Fatalf("status = %+v, want modified completed endpoint", status)
+	}
+	if _, err := enableCodexTokenTelemetry(path, statePath, endpoint); err != nil {
+		t.Fatalf("repeat enable should take over modified endpoint: %v", err)
+	}
+	reenabled, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read re-enabled Codex config: %v", err)
+	}
+	if !strings.Contains(string(reenabled), `endpoint = "http://127.0.0.1:4318/v1/metrics" # OBSTUDIO TOKEN TELEMETRY`) ||
+		strings.Contains(string(reenabled), "https://user.example/v1/metrics") {
+		t.Fatalf("repeat enable did not retake metrics routing:\n%s", reenabled)
+	}
+	result, err := disableOwnedCodexTokenTelemetry(path, statePath)
+	if err != nil {
+		t.Fatalf("disable modified Codex endpoint: %v", err)
+	}
+	if result.State != "disabled" || !strings.Contains(result.Detail, "removed") {
+		t.Fatalf("disable result = %+v, want removed retaken endpoint", result)
+	}
+	cleaned, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read cleaned Codex config: %v", err)
+	}
+	if strings.Contains(string(cleaned), `endpoint = "https://user.example/v1/metrics"`) ||
+		strings.Contains(string(cleaned), `endpoint = "http://127.0.0.1:4318/v1/metrics"`) {
+		t.Fatalf("disable retained the retaken endpoint:\n%s", cleaned)
+	}
+}
+
+func TestDisableCodexTokenTelemetryPreservesCompletedEndpointWithoutOwnership(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "config.toml")
+	statePath := filepath.Join(root, "state.json")
+	initial := strings.Join([]string{
+		"[otel]",
+		`exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "binary" } }`,
+		`trace_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/traces", protocol = "binary" } }`,
+		"",
+		"[otel.metrics_exporter.otlp-http]",
+		`protocol = "binary"`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+	if _, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs"); err != nil {
+		t.Fatalf("enable Codex token telemetry: %v", err)
+	}
+	configured, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read configured Codex config: %v", err)
+	}
+	if err := os.Remove(statePath); err != nil {
+		t.Fatalf("remove ownership state: %v", err)
+	}
+
+	result, err := disableOwnedCodexTokenTelemetry(path, statePath)
+	if err != nil {
+		t.Fatalf("disable Codex telemetry without ownership: %v", err)
+	}
+	if result.State != "unmanaged" {
+		t.Fatalf("disable state = %+v, want unmanaged", result)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read preserved Codex config: %v", err)
+	}
+	if !bytes.Equal(after, configured) {
+		t.Fatalf("disable without ownership changed completed endpoint:\n%s", after)
+	}
+}
+
+func TestDisableCodexTokenTelemetryRejectsMalformedTableOwnership(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "config.toml")
+	statePath := filepath.Join(root, "state.json")
+	initial := strings.Join([]string{
+		"[otel]",
+		`exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "binary" } }`,
+		`trace_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/traces", protocol = "binary" } }`,
+		"",
+		"[otel.metrics_exporter.otlp-http]",
+		`protocol = "binary"`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+	if _, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs"); err != nil {
+		t.Fatalf("enable Codex token telemetry: %v", err)
+	}
+	configured, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read configured Codex config: %v", err)
+	}
+	ownership, err := readTokenTelemetryOwnership(statePath)
+	if err != nil {
+		t.Fatalf("read ownership: %v", err)
+	}
+	owned := ownership.Targets["codex"]
+	owned.TableSettings["metrics_exporter.endpoint"] = `endpoint = "http://127.0.0.1:4318/v1/metrics"`
+	ownership.Targets["codex"] = owned
+	if err := writeTokenTelemetryOwnership(statePath, ownership); err != nil {
+		t.Fatalf("write malformed ownership: %v", err)
+	}
+
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err == nil || !strings.Contains(err.Error(), "unsupported Codex table setting") {
+		t.Fatalf("disable error = %v, want malformed-ownership refusal", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read preserved Codex config: %v", err)
+	}
+	if !bytes.Equal(after, configured) {
+		t.Fatalf("malformed ownership changed Codex config:\n%s", after)
+	}
+}
+
+func TestConfigureCodexTokenTelemetryUpgradesOwnedLogAndTraceBlockWithMetrics(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, ".codex", "config.toml")
+	statePath := filepath.Join(root, ".obstudio", "token-telemetry.json")
+	endpoint := "http://127.0.0.1:4318/v1/logs"
+	if _, err := enableCodexTokenTelemetry(path, statePath, endpoint); err != nil {
+		t.Fatalf("create current Codex token telemetry: %v", err)
+	}
+
+	configured, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read current Codex config: %v", err)
+	}
+	managedMetric := `metrics_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/metrics", protocol = "binary" } }`
+	legacyConfig := strings.Replace(string(configured), managedMetric+"\n", "", 1)
+	if legacyConfig == string(configured) {
+		t.Fatal("fixture did not remove the current managed metrics exporter")
+	}
+	if err := os.WriteFile(path, []byte(legacyConfig), 0o600); err != nil {
+		t.Fatalf("write legacy Codex config: %v", err)
+	}
+	ownership, err := readTokenTelemetryOwnership(statePath)
+	if err != nil {
+		t.Fatalf("read current ownership: %v", err)
+	}
+	delete(ownership.Targets["codex"].Settings, "metrics_exporter")
+	if err := writeTokenTelemetryOwnership(statePath, ownership); err != nil {
+		t.Fatalf("write legacy ownership: %v", err)
+	}
+
+	result, err := enableCodexTokenTelemetry(path, statePath, endpoint)
+	if err != nil {
+		t.Fatalf("upgrade legacy Codex token telemetry: %v", err)
+	}
+	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Observer") {
+		t.Fatalf("upgrade result = %+v, want managed metrics routing", result)
+	}
+	upgraded, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read upgraded Codex config: %v", err)
+	}
+	if strings.Count(string(upgraded), managedMetric) != 1 {
+		t.Fatalf("legacy Codex config was not upgraded exactly once:\n%s", upgraded)
+	}
+	ownership, err = readTokenTelemetryOwnership(statePath)
+	if err != nil {
+		t.Fatalf("read upgraded ownership: %v", err)
+	}
+	if got := ownership.Targets["codex"].Settings; len(got) != 3 || got["metrics_exporter"] == "" {
+		t.Fatalf("upgraded managed settings = %+v, want all three exporters", got)
+	}
+}
+
+func TestConfigureCodexTokenTelemetryIgnoresUnrelatedMetricsExporterPrefix(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, ".codex", "config.toml")
+	statePath := filepath.Join(root, ".obstudio", "token-telemetry.json")
+	endpoint := "http://127.0.0.1:4318/v1/logs"
+	initial := strings.Join([]string{
+		"[otel]",
+		`exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "binary" } }`,
+		`trace_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/traces", protocol = "binary" } }`,
+		"metrics_exporter_timeout = 30",
+		"",
+	}, "\n")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir Codex config parent: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+
+	result, err := enableCodexTokenTelemetry(path, statePath, endpoint)
+	if err != nil {
+		t.Fatalf("enable Codex token telemetry: %v", err)
+	}
+	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Observer") {
+		t.Fatalf("enable result = %+v, want Observer-owned metrics exporter", result)
+	}
+	configured, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read configured Codex config: %v", err)
+	}
+	if !strings.Contains(string(configured), "metrics_exporter_timeout = 30") {
+		t.Fatalf("unrelated Codex setting was not preserved:\n%s", configured)
+	}
+	if !strings.Contains(string(configured), `metrics_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/metrics", protocol = "binary" } }`) {
+		t.Fatalf("local metrics exporter was not added:\n%s", configured)
+	}
+}
+
+func TestInspectCodexTokenTelemetryReportsUnsupportedMetricsRouting(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	config := strings.Join([]string{
+		"[otel]",
+		`exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "binary" } }`,
+		`trace_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/traces", protocol = "binary" } }`,
+		`metrics_exporter.otlp-http.endpoint = "http://127.0.0.1:4318/v1/metrics"`,
+		`metrics_exporter.otlp-http.protocol = "binary"`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+
+	result, err := inspectCodexTokenTelemetry(path, "http://127.0.0.1:4318/v1/logs")
+	if err != nil {
+		t.Fatalf("inspect Codex token telemetry: %v", err)
+	}
+	if result.State != "conflict" || !strings.Contains(result.Detail, "unsupported dotted-key") {
+		t.Fatalf("status did not report unsupported metrics routing: %+v", result)
+	}
+}
+
+func TestConfigureCodexTokenTelemetryRejectsRootDottedMetricsExporter(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	initial := strings.Join([]string{
+		`otel.metrics_exporter.otlp-http.endpoint = "https://metrics.example/v1/metrics"`,
+		`otel.metrics_exporter.otlp-http.protocol = "binary"`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+
+	err := configureCodexTokenTelemetry(path, "http://127.0.0.1:4318/v1/logs")
+	if err == nil || !strings.Contains(err.Error(), "root dotted-key") {
+		t.Fatalf("configureCodexTokenTelemetry() error = %v, want root dotted-key conflict", err)
+	}
+	out, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("read Codex config: %v", readErr)
+	}
+	if string(out) != initial {
+		t.Fatalf("root-dotted metrics exporter was changed:\n%s", out)
+	}
+}
+
+func TestConfigureCodexTokenTelemetryRejectsRootDottedOTelSetting(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	initial := "otel.log_user_prompt = true\n"
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+
+	err := configureCodexTokenTelemetry(path, "http://127.0.0.1:4318/v1/logs")
+	if err == nil || !strings.Contains(err.Error(), "root dotted-key") {
+		t.Fatalf("configureCodexTokenTelemetry() error = %v, want root dotted-key conflict", err)
+	}
+	out, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("read Codex config: %v", readErr)
+	}
+	if string(out) != initial {
+		t.Fatalf("root-dotted OTel setting was changed:\n%s", out)
+	}
+}
+
+func TestOwnedCodexTokenTelemetryReportsMissingManagedSetting(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, ".codex", "config.toml")
+	statePath := filepath.Join(root, ".obstudio", "token-telemetry.json")
+	endpoint := "http://127.0.0.1:4318/v1/logs"
+	initial := strings.Join([]string{
+		"[otel]",
+		`exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "binary" } }`,
+		`trace_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/traces", protocol = "binary" } }`,
+		"",
+	}, "\n")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir Codex config parent: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+	if _, err := enableCodexTokenTelemetry(path, statePath, endpoint); err != nil {
+		t.Fatalf("enable Codex token telemetry: %v", err)
+	}
+	configured, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read configured Codex config: %v", err)
+	}
+	managedMetric := `metrics_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/metrics", protocol = "binary" } }`
+	modified := strings.Replace(string(configured), managedMetric+"\n", "", 1)
+	if modified == string(configured) {
+		t.Fatal("fixture did not remove the managed Codex metrics exporter")
+	}
+	if err := os.WriteFile(path, []byte(modified), 0o600); err != nil {
+		t.Fatalf("write modified Codex config: %v", err)
+	}
+
+	result, err := inspectOwnedCodexTokenTelemetry(path, statePath, endpoint)
+	if err != nil {
+		t.Fatalf("inspect modified Codex token telemetry: %v", err)
+	}
+	if result.State != "modified" || !strings.Contains(result.Detail, "metrics_exporter is missing") {
+		t.Fatalf("status = %+v, want missing owned metrics exporter reported as modified", result)
+	}
+}
+
+func TestConfigureCodexTokenTelemetryIsIdempotentAndCleanupRemovesManagedRoutes(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, ".codex", "config.toml")
+	statePath := filepath.Join(root, ".obstudio", "token-telemetry.json")
 	initial := strings.Join([]string{
 		`model = "gpt-5.4"`,
 		``,
@@ -1323,7 +2064,9 @@ func TestConfigureCodexTokenTelemetryIsIdempotentAndCleanupRestoresUserConfig(t 
 		`log_user_prompt = false`,
 		``,
 		`[otel.metrics_exporter]`,
+		`[otel.metrics_exporter.otlp-http]`,
 		`endpoint = "https://metrics.example/v1/metrics"`,
+		`protocol = "binary"`,
 		``,
 	}, "\n")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -1335,8 +2078,8 @@ func TestConfigureCodexTokenTelemetryIsIdempotentAndCleanupRestoresUserConfig(t 
 
 	endpoint := "http://127.0.0.1:4318/v1/logs"
 	for i := 0; i < 2; i++ {
-		if err := configureCodexTokenTelemetry(path, endpoint); err != nil {
-			t.Fatalf("configureCodexTokenTelemetry run %d: %v", i+1, err)
+		if _, err := enableCodexTokenTelemetry(path, statePath, endpoint); err != nil {
+			t.Fatalf("enableCodexTokenTelemetry run %d: %v", i+1, err)
 		}
 	}
 	out, err := os.ReadFile(path)
@@ -1347,7 +2090,7 @@ func TestConfigureCodexTokenTelemetryIsIdempotentAndCleanupRestoresUserConfig(t 
 	for _, want := range []string{
 		`model = "gpt-5.4"`,
 		`log_user_prompt = false`,
-		`endpoint = "https://metrics.example/v1/metrics"`,
+		`endpoint = "http://127.0.0.1:4318/v1/metrics" # OBSTUDIO TOKEN TELEMETRY`,
 		`exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "binary" } }`,
 		`trace_exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/traces", protocol = "binary" } }`,
 	} {
@@ -1358,6 +2101,16 @@ func TestConfigureCodexTokenTelemetryIsIdempotentAndCleanupRestoresUserConfig(t 
 	if strings.Count(text, codexTokenTelemetryBlockStart) != 1 || strings.Count(text, "exporter =") != 2 {
 		t.Fatalf("Codex token telemetry was duplicated:\n%s", text)
 	}
+	if strings.Contains(text, "https://metrics.example/v1/metrics") {
+		t.Fatalf("prior metrics route remains active:\n%s", text)
+	}
+	status, err := inspectCodexTokenTelemetry(path, endpoint)
+	if err != nil {
+		t.Fatalf("inspect Codex token telemetry: %v", err)
+	}
+	if status.State != "enabled-managed" || !strings.Contains(status.Detail, "all Codex signal exporters target Observer") {
+		t.Fatalf("status = %+v, want all signals routed to Observer", status)
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("stat Codex config: %v", err)
@@ -1365,16 +2118,16 @@ func TestConfigureCodexTokenTelemetryIsIdempotentAndCleanupRestoresUserConfig(t 
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("Codex config mode = %o, want 600", info.Mode().Perm())
 	}
-	removed, err := disableCodexTokenTelemetry(path)
-	if err != nil || !removed {
-		t.Fatalf("disableCodexTokenTelemetry() = removed %v, error %v", removed, err)
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disableOwnedCodexTokenTelemetry(): %v", err)
 	}
-	restored, err := os.ReadFile(path)
+	disabled, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read restored Codex config: %v", err)
+		t.Fatalf("read disabled Codex config: %v", err)
 	}
-	if string(restored) != initial {
-		t.Fatalf("Codex cleanup did not restore the original user config:\n%s", restored)
+	if strings.Contains(string(disabled), "exporter =") || strings.Contains(string(disabled), "endpoint =") ||
+		!strings.Contains(string(disabled), `model = "gpt-5.4"`) || !strings.Contains(string(disabled), `log_user_prompt = false`) {
+		t.Fatalf("Codex cleanup did not remove managed routes while preserving unrelated settings:\n%s", disabled)
 	}
 }
 
@@ -1386,7 +2139,7 @@ func TestConfigureCodexTokenTelemetryCleanupRestoresConfigWithoutOTelParent(t *t
 		initial string
 	}{
 		{name: "append parent", initial: "model = \"gpt-5.4\"\n"},
-		{name: "insert before child", initial: "model = \"gpt-5.4\"\n\n[otel.metrics_exporter]\nendpoint = \"https://metrics.example/v1/metrics\"\n"},
+		{name: "insert before child", initial: "model = \"gpt-5.4\"\n\n[otel.unrelated]\nenabled = true\n"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1412,7 +2165,7 @@ func TestConfigureCodexTokenTelemetryCleanupRestoresConfigWithoutOTelParent(t *t
 	}
 }
 
-func TestConfigureCodexTokenTelemetryOwnsOnlyMissingExporter(t *testing.T) {
+func TestConfigureCodexTokenTelemetryOwnsOnlyMissingExporters(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "config.toml")
@@ -1427,8 +2180,10 @@ func TestConfigureCodexTokenTelemetryOwnsOnlyMissingExporter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read configured Codex config: %v", err)
 	}
-	if strings.Count(string(configured), "trace_exporter =") != 1 || strings.Count(string(configured), "exporter =") != 2 {
-		t.Fatalf("missing trace exporter was not added once:\n%s", configured)
+	if strings.Count(string(configured), "trace_exporter =") != 1 ||
+		strings.Count(string(configured), "metrics_exporter =") != 1 ||
+		strings.Count(string(configured), "exporter =") != 3 {
+		t.Fatalf("missing trace and metrics exporters were not added once:\n%s", configured)
 	}
 	removed, err := disableCodexTokenTelemetry(path)
 	if err != nil || !removed {
@@ -1443,73 +2198,95 @@ func TestConfigureCodexTokenTelemetryOwnsOnlyMissingExporter(t *testing.T) {
 	}
 }
 
-func TestConfigureCodexTokenTelemetryPreservesConflictingExporter(t *testing.T) {
+func TestEnableCodexTokenTelemetryOverridesAndRemovesConflictingExporter(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "config.toml")
+	statePath := filepath.Join(t.TempDir(), "state.json")
 	initial := "[otel]\nexporter = { otlp-http = { endpoint = \"https://existing.example/v1/logs\", protocol = \"binary\" } }\n"
 	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
 		t.Fatalf("write Codex config: %v", err)
 	}
-	err := configureCodexTokenTelemetry(path, "http://127.0.0.1:4318/v1/logs")
-	if err == nil || !strings.Contains(err.Error(), "user-owned value") {
-		t.Fatalf("expected conflicting Codex exporter error, got %v", err)
+	if _, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs"); err != nil {
+		t.Fatalf("enable conflicting Codex exporter: %v", err)
 	}
 	out, readErr := os.ReadFile(path)
 	if readErr != nil {
 		t.Fatalf("read Codex config: %v", readErr)
 	}
-	if string(out) != initial {
-		t.Fatalf("conflicting Codex exporter was changed:\n%s", out)
+	if strings.Contains(string(out), "https://existing.example/v1/logs") || !strings.Contains(string(out), codexTokenTelemetryLineMarker) {
+		t.Fatalf("conflicting Codex exporter was not taken over:\n%s", out)
+	}
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disable Codex exporter takeover: %v", err)
+	}
+	disabled, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(disabled), "exporter =") {
+		t.Fatalf("managed Codex exporter was not removed: data=%q err=%v", disabled, err)
 	}
 }
 
-func TestConfigureCodexTokenTelemetryRejectsMatchingEndpointWithWrongProtocol(t *testing.T) {
+func TestEnableCodexTokenTelemetryOverridesAndRemovesWrongProtocol(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "config.toml")
+	statePath := filepath.Join(t.TempDir(), "state.json")
 	initial := "[otel]\nexporter = { otlp-http = { endpoint = \"http://127.0.0.1:4318/v1/logs\", protocol = \"grpc\" } }\n"
 	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
 		t.Fatalf("write Codex config: %v", err)
 	}
-	err := configureCodexTokenTelemetry(path, "http://127.0.0.1:4318/v1/logs")
-	if err == nil || !strings.Contains(err.Error(), "user-owned value") {
-		t.Fatalf("expected conflicting Codex exporter protocol error, got %v", err)
+	if _, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs"); err != nil {
+		t.Fatalf("enable wrong Codex protocol: %v", err)
 	}
 	out, readErr := os.ReadFile(path)
 	if readErr != nil {
 		t.Fatalf("read Codex config: %v", readErr)
 	}
-	if string(out) != initial {
-		t.Fatalf("Codex exporter with a conflicting protocol was changed:\n%s", out)
+	if strings.Contains(string(out), `protocol = "grpc"`) || !strings.Contains(string(out), `protocol = "binary"`) {
+		t.Fatalf("Codex protocol was not taken over:\n%s", out)
+	}
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disable Codex protocol takeover: %v", err)
+	}
+	disabled, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(disabled), "exporter =") {
+		t.Fatalf("managed Codex protocol route was not removed: data=%q err=%v", disabled, err)
 	}
 }
 
-func TestConfigureCodexTokenTelemetryRejectsEndpointPrefixMatch(t *testing.T) {
+func TestEnableCodexTokenTelemetryOverridesAndRemovesEndpointPrefix(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "config.toml")
+	statePath := filepath.Join(t.TempDir(), "state.json")
 	initial := "[otel]\nexporter = { otlp-http = { endpoint = \"http://127.0.0.1:4318/v1/logs-extra\", protocol = \"binary\" } }\n"
 	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
 		t.Fatalf("write Codex config: %v", err)
 	}
-	err := configureCodexTokenTelemetry(path, "http://127.0.0.1:4318/v1/logs")
-	if err == nil || !strings.Contains(err.Error(), "user-owned value") {
-		t.Fatalf("expected endpoint-prefix conflict, got %v", err)
+	if _, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs"); err != nil {
+		t.Fatalf("enable prefix Codex endpoint: %v", err)
 	}
 	out, readErr := os.ReadFile(path)
 	if readErr != nil {
 		t.Fatalf("read Codex config: %v", readErr)
 	}
-	if string(out) != initial {
-		t.Fatalf("endpoint-prefix conflict was changed:\n%s", out)
+	if strings.Contains(string(out), "/v1/logs-extra") {
+		t.Fatalf("Codex endpoint-prefix route was not taken over:\n%s", out)
+	}
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disable Codex endpoint-prefix takeover: %v", err)
+	}
+	disabled, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(disabled), "exporter =") {
+		t.Fatalf("managed Codex endpoint-prefix route was not removed: data=%q err=%v", disabled, err)
 	}
 }
 
-func TestConfigureCodexTokenTelemetryPreservesConflictingTraceExporter(t *testing.T) {
+func TestEnableCodexTokenTelemetryOverridesAndRemovesConflictingTraceExporter(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "config.toml")
+	statePath := filepath.Join(t.TempDir(), "state.json")
 	initial := strings.Join([]string{
 		"[otel]",
 		`exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "binary" } }`,
@@ -1519,16 +2296,22 @@ func TestConfigureCodexTokenTelemetryPreservesConflictingTraceExporter(t *testin
 	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
 		t.Fatalf("write Codex config: %v", err)
 	}
-	err := configureCodexTokenTelemetry(path, "http://127.0.0.1:4318/v1/logs")
-	if err == nil || !strings.Contains(err.Error(), "trace exporter") {
-		t.Fatalf("expected conflicting Codex trace exporter error, got %v", err)
+	if _, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs"); err != nil {
+		t.Fatalf("enable conflicting Codex trace exporter: %v", err)
 	}
 	out, readErr := os.ReadFile(path)
 	if readErr != nil {
 		t.Fatalf("read Codex config: %v", readErr)
 	}
-	if string(out) != initial {
-		t.Fatalf("conflicting Codex trace exporter was changed:\n%s", out)
+	if strings.Contains(string(out), "https://existing.example/v1/traces") || !strings.Contains(string(out), `endpoint = "http://127.0.0.1:4318/v1/traces"`) {
+		t.Fatalf("conflicting Codex trace exporter was not taken over:\n%s", out)
+	}
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disable Codex trace takeover: %v", err)
+	}
+	disabled, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(disabled), "exporter =") {
+		t.Fatalf("managed Codex trace routes were not removed: data=%q err=%v", disabled, err)
 	}
 }
 
@@ -1536,7 +2319,7 @@ func TestConfigureCodexTokenTelemetryKeepsMatchingUnmanagedExporterByteForByte(t
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "config.toml")
-	initial := "[otel]\nexporter = { otlp-http = { endpoint = \"http://127.0.0.1:4318/v1/logs\", protocol = \"binary\", headers = { x-observer = \"preserved\" } } }\ntrace_exporter = { otlp-http = { endpoint = \"http://127.0.0.1:4318/v1/traces\", protocol = \"binary\", headers = { x-observer = \"preserved\" } } }\n"
+	initial := "[otel]\nexporter = { otlp-http = { endpoint = \"http://127.0.0.1:4318/v1/logs\", protocol = \"binary\", headers = { x-observer = \"preserved\" } } }\ntrace_exporter = { otlp-http = { endpoint = \"http://127.0.0.1:4318/v1/traces\", protocol = \"binary\", headers = { x-observer = \"preserved\" } } }\nmetrics_exporter = { otlp-http = { endpoint = \"http://127.0.0.1:4318/v1/metrics\", protocol = \"binary\", headers = { x-observer = \"preserved\" } } }\n"
 	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
 		t.Fatalf("write Codex config: %v", err)
 	}
@@ -1549,6 +2332,32 @@ func TestConfigureCodexTokenTelemetryKeepsMatchingUnmanagedExporterByteForByte(t
 	}
 	if string(out) != initial {
 		t.Fatalf("matching unmanaged exporter options were replaced:\n%s", out)
+	}
+}
+
+func TestConfigureCodexTokenTelemetryKeepsQuotedMatchingInlineKeysByteForByte(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	initial := strings.Join([]string{
+		"[otel]",
+		`exporter = { "otlp-http" = { "endpoint" = "http://127.0.0.1:4318/v1/logs", 'protocol' = "binary", headers = { authorization = "Bearer # preserved" } } }`,
+		`trace_exporter = { 'otlp-http' = { endpoint = "http://127.0.0.1:4318/v1/traces", protocol = "binary" } }`,
+		`metrics_exporter = { "otlp-http" = { endpoint = "http://127.0.0.1:4318/v1/metrics", protocol = "binary" } }`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+	if err := configureCodexTokenTelemetry(path, "http://127.0.0.1:4318/v1/logs"); err != nil {
+		t.Fatalf("configureCodexTokenTelemetry: %v", err)
+	}
+	out, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read Codex config: %v", err)
+	}
+	if string(out) != initial {
+		t.Fatalf("matching quoted inline keys were replaced:\n%s", out)
 	}
 }
 
@@ -1571,6 +2380,13 @@ func TestConfigureCodexTokenTelemetryKeepsMatchingTableExportersByteForByte(t *t
 		"[otel.trace_exporter.otlp-http.headers]",
 		`x-observer = "preserved"`,
 		"",
+		"[otel.metrics_exporter]",
+		"[otel.metrics_exporter.otlp-http]",
+		`endpoint = 'http://127.0.0.1:4318/v1/metrics'`,
+		`protocol = 'binary'`,
+		"[otel.metrics_exporter.otlp-http.headers]",
+		`x-observer = "preserved"`,
+		"",
 	}, "\n")
 	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
 		t.Fatalf("write Codex config: %v", err)
@@ -1587,10 +2403,68 @@ func TestConfigureCodexTokenTelemetryKeepsMatchingTableExportersByteForByte(t *t
 	}
 }
 
-func TestConfigureCodexTokenTelemetryPreservesConflictingTableExporter(t *testing.T) {
+func TestEnableCodexTokenTelemetryOwnsAndRemovesMatchingExporterShapes(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "config.toml")
+	statePath := filepath.Join(root, "state.json")
+	initial := strings.Join([]string{
+		"[otel]",
+		`exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol = "binary", headers = { x-observer = "preserved" } } }`,
+		"",
+		"[otel.trace_exporter.otlp-http]",
+		`endpoint = 'http://127.0.0.1:4318/v1/traces'`,
+		`protocol = 'binary'`,
+		"",
+		"[otel.metrics_exporter.otlp-http]",
+		`endpoint = "http://127.0.0.1:4318/v1/metrics"`,
+		`protocol = "binary"`,
+		"[otel.metrics_exporter.otlp-http.headers]",
+		`x-observer = "preserved"`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write matching Codex config: %v", err)
+	}
+
+	result, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs")
+	if err != nil || result.State != "enabled-managed" {
+		t.Fatalf("enable matching Codex exporters = %+v, err=%v", result, err)
+	}
+	configured, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read managed Codex config: %v", err)
+	}
+	if strings.Count(string(configured), codexTokenTelemetryLineMarker) != 5 ||
+		!strings.Contains(string(configured), `headers = { x-observer = "preserved" }`) ||
+		!strings.Contains(string(configured), `x-observer = "preserved"`) {
+		t.Fatalf("matching Codex routes were not fully owned without losing options:\n%s", configured)
+	}
+	ownership, err := readTokenTelemetryOwnership(statePath)
+	if err != nil {
+		t.Fatalf("read Codex ownership: %v", err)
+	}
+	owned := ownership.Targets["codex"]
+	if len(owned.TableSettings) != 5 {
+		t.Fatalf("matching Codex routes lack complete removal ownership: %+v", owned)
+	}
+
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disable matching Codex takeover: %v", err)
+	}
+	disabled, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(disabled), "endpoint =") || strings.Contains(string(disabled), "protocol =") ||
+		!strings.Contains(string(disabled), `x-observer = "preserved"`) {
+		t.Fatalf("matching Codex routes were not removed without preserving unrelated table content: data=%q err=%v", disabled, err)
+	}
+}
+
+func TestEnableCodexTokenTelemetryOverridesAndRemovesConflictingTableExporter(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "config.toml")
+	statePath := filepath.Join(t.TempDir(), "state.json")
 	initial := strings.Join([]string{
 		"[otel.exporter.otlp-http]",
 		`endpoint = "http://127.0.0.1:4318/v1/logs"`,
@@ -1604,16 +2478,88 @@ func TestConfigureCodexTokenTelemetryPreservesConflictingTableExporter(t *testin
 	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
 		t.Fatalf("write Codex config: %v", err)
 	}
-	err := configureCodexTokenTelemetry(path, "http://127.0.0.1:4318/v1/logs")
-	if err == nil || !strings.Contains(err.Error(), "trace exporter") {
-		t.Fatalf("expected conflicting table trace exporter error, got %v", err)
+	if _, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs"); err != nil {
+		t.Fatalf("enable conflicting table trace exporter: %v", err)
 	}
 	out, readErr := os.ReadFile(path)
 	if readErr != nil {
 		t.Fatalf("read Codex config: %v", readErr)
 	}
-	if string(out) != initial {
-		t.Fatalf("conflicting table exporter was changed:\n%s", out)
+	if strings.Contains(string(out), "https://existing.example/v1/traces") ||
+		!strings.Contains(string(out), `endpoint = "http://127.0.0.1:4318/v1/traces" # OBSTUDIO TOKEN TELEMETRY`) {
+		t.Fatalf("conflicting table exporter was not taken over:\n%s", out)
+	}
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disable table exporter takeover: %v", err)
+	}
+	disabled, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(disabled), "endpoint =") || strings.Contains(string(disabled), "protocol =") {
+		t.Fatalf("managed table exporters were not removed: data=%q err=%v", disabled, err)
+	}
+}
+
+func TestEnableCodexTokenTelemetryEndpointUpdateRemovesLatestManagedLines(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "config.toml")
+	statePath := filepath.Join(root, "state.json")
+	initial := strings.Join([]string{
+		"[otel.metrics_exporter.otlp-http]",
+		`endpoint = "https://corporate.example/v1/metrics" # retain this comment`,
+		`protocol = "grpc"`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+	for _, endpoint := range []string{
+		"http://127.0.0.1:4318/v1/logs",
+		"http://127.0.0.1:5318/v1/logs",
+	} {
+		if _, err := enableCodexTokenTelemetry(path, statePath, endpoint); err != nil {
+			t.Fatalf("enable Codex endpoint %s: %v", endpoint, err)
+		}
+	}
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disable updated Codex endpoint: %v", err)
+	}
+	disabled, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(disabled), "endpoint =") || strings.Contains(string(disabled), "protocol =") {
+		t.Fatalf("latest managed Codex routing was not removed: data=%q err=%v", disabled, err)
+	}
+}
+
+func TestEnableCodexTokenTelemetryRemovesOverriddenCRLFLine(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "config.toml")
+	statePath := filepath.Join(root, "state.json")
+	initial := "[otel]\r\nexporter = 'none' # user choice\r\n"
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+	result, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs")
+	if err != nil {
+		t.Fatalf("enable Codex CRLF takeover: %v", err)
+	}
+	if result.State != "enabled-managed" {
+		t.Fatalf("CRLF takeover was immediately reported as modified: %+v", result)
+	}
+	configured, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read configured Codex config: %v", err)
+	}
+	if !bytes.Contains(configured, []byte(codexTokenTelemetryLineMarker+"\r\n")) {
+		t.Fatalf("managed replacement lost its CRLF ending: %q", configured)
+	}
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disable Codex CRLF takeover: %v", err)
+	}
+	disabled, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(disabled), "exporter =") || !bytes.Contains(disabled, []byte("[otel]\r\n")) {
+		t.Fatalf("managed Codex CRLF line was not removed cleanly: data=%q err=%v", disabled, err)
 	}
 }
 
@@ -1621,7 +2567,7 @@ func TestConfigureCodexTokenTelemetryCreatesParentBeforeChildTables(t *testing.T
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "config.toml")
-	initial := "model = \"gpt-5.4\"\n\n[otel.metrics_exporter]\nendpoint = \"https://metrics.example\"\n"
+	initial := "model = \"gpt-5.4\"\n\n[otel.unrelated]\nenabled = true\n"
 	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
 		t.Fatalf("write Codex config: %v", err)
 	}
@@ -1633,7 +2579,7 @@ func TestConfigureCodexTokenTelemetryCreatesParentBeforeChildTables(t *testing.T
 		t.Fatalf("read Codex config: %v", err)
 	}
 	text := string(out)
-	if strings.Index(text, "[otel]") < 0 || strings.Index(text, "[otel]") > strings.Index(text, "[otel.metrics_exporter]") {
+	if strings.Index(text, "[otel]") < 0 || strings.Index(text, "[otel]") > strings.Index(text, "[otel.unrelated]") {
 		t.Fatalf("parent OTel table was not inserted before child table:\n%s", text)
 	}
 }
@@ -1706,23 +2652,67 @@ func TestConfigureCodexTokenTelemetryPreservesUnterminatedMultilineString(t *tes
 	}
 }
 
-func TestConfigureCodexTokenTelemetryPreservesExplicitlyDisabledExporter(t *testing.T) {
+func TestEnableCodexTokenTelemetryRejectsMalformedTOMLWithoutWriting(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		content string
+	}{
+		{name: "unterminated basic string", content: `model = "unterminated` + "\n"},
+		{name: "unterminated array", content: `features = ["one",` + "\n"},
+		{name: "duplicate ordinary key", content: "model = \"gpt-5.4\"\nmodel = \"gpt-5.5\"\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "config.toml")
+			statePath := filepath.Join(root, "token-telemetry.json")
+			if err := os.WriteFile(path, []byte(test.content), 0o600); err != nil {
+				t.Fatalf("write Codex config: %v", err)
+			}
+			_, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs")
+			if err == nil || !strings.Contains(err.Error(), "parse Codex config") {
+				t.Fatalf("enableCodexTokenTelemetry() error = %v, want TOML parse failure", err)
+			}
+			out, readErr := os.ReadFile(path)
+			if readErr != nil {
+				t.Fatalf("read Codex config: %v", readErr)
+			}
+			if string(out) != test.content {
+				t.Fatalf("malformed Codex config was modified:\n%s", out)
+			}
+			if _, statErr := os.Stat(statePath); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("ownership state exists after malformed input: %v", statErr)
+			}
+		})
+	}
+}
+
+func TestEnableCodexTokenTelemetryOverridesAndRemovesExplicitlyDisabledExporter(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "config.toml")
+	statePath := filepath.Join(t.TempDir(), "state.json")
 	initial := "[otel] # existing settings\nexporter = 'none' # disabled by default\nlog_user_prompt = false\n"
 	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
 		t.Fatalf("write Codex config: %v", err)
 	}
-	if err := configureCodexTokenTelemetry(path, "http://127.0.0.1:4318/v1/logs"); err == nil || !strings.Contains(err.Error(), "user-owned value") {
-		t.Fatalf("configureCodexTokenTelemetry() error = %v, want user-owned conflict", err)
+	if _, err := enableCodexTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs"); err != nil {
+		t.Fatalf("enable explicitly disabled Codex exporter: %v", err)
 	}
 	out, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read Codex config: %v", err)
 	}
-	if string(out) != initial {
-		t.Fatalf("explicitly disabled Codex exporter was changed:\n%s", out)
+	if strings.Contains(string(out), "exporter = 'none'") || !strings.Contains(string(out), codexTokenTelemetryLineMarker) {
+		t.Fatalf("explicitly disabled Codex exporter was not taken over:\n%s", out)
+	}
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disable explicit Codex takeover: %v", err)
+	}
+	disabled, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(disabled), "exporter =") || !strings.Contains(string(disabled), "log_user_prompt = false") {
+		t.Fatalf("managed Codex exporter was not removed cleanly: data=%q err=%v", disabled, err)
 	}
 }
 
@@ -1732,12 +2722,11 @@ func TestConfigureCodexTokenTelemetryRejectsUnsupportedExporterFormsWithoutWriti
 	tests := []struct {
 		name    string
 		content string
+		want    string
 	}{
 		{name: "root dotted key", content: `otel.exporter = "none"` + "\n"},
-		{name: "incomplete exporter table", content: "[otel.exporter.otlp-http]\nendpoint = \"https://existing.example/v1/logs\"\n"},
 		{name: "unsupported exporter table", content: "[otel.exporter.grpc]\nendpoint = \"https://existing.example\"\n"},
 		{name: "section dotted key", content: "[otel]\nexporter.otlp-http.endpoint = \"https://existing.example/v1/logs\"\n"},
-		{name: "incomplete trace exporter table", content: "[otel.trace_exporter.otlp-http]\nendpoint = \"https://existing.example/v1/traces\"\n"},
 		{name: "unsupported trace exporter table", content: "[otel.trace_exporter.grpc]\nendpoint = \"https://existing.example\"\n"},
 		{name: "trace section dotted key", content: "[otel]\ntrace_exporter.otlp-http.endpoint = \"https://existing.example/v1/traces\"\n"},
 		{name: "quoted exporter key", content: "[otel]\n\"exporter\" = \"none\"\n"},
@@ -1745,19 +2734,23 @@ func TestConfigureCodexTokenTelemetryRejectsUnsupportedExporterFormsWithoutWriti
 		{name: "spaced otel table", content: "[ otel ]\nexporter = \"none\"\n"},
 		{name: "spaced child table", content: "[otel . exporter . otlp-http]\nendpoint = \"https://existing.example/v1/logs\"\n"},
 		{name: "quoted exporter table", content: "[otel.\"exporter\"]\notlp-http = {}\n"},
-		{name: "duplicate exporter child table", content: "[otel.exporter.otlp-http]\nendpoint = \"http://127.0.0.1:4318/v1/logs\"\nprotocol = \"binary\"\n[otel.exporter.otlp-http]\nendpoint = \"http://127.0.0.1:4318/v1/logs\"\nprotocol = \"binary\"\n"},
+		{name: "duplicate exporter child table", content: "[otel.exporter.otlp-http]\nendpoint = \"http://127.0.0.1:4318/v1/logs\"\nprotocol = \"binary\"\n[otel.exporter.otlp-http]\nendpoint = \"http://127.0.0.1:4318/v1/logs\"\nprotocol = \"binary\"\n", want: "parse Codex config"},
 		{name: "duplicate otel table", content: "[otel]\nlog_user_prompt = false\n[otel]\nexporter = \"none\"\n"},
 		{name: "otel array table", content: "[[otel]]\nexporter = \"none\"\n"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			want := tc.want
+			if want == "" {
+				want = "unsupported"
+			}
 			path := filepath.Join(t.TempDir(), "config.toml")
 			if err := os.WriteFile(path, []byte(tc.content), 0o644); err != nil {
 				t.Fatalf("write Codex config: %v", err)
 			}
 			err := configureCodexTokenTelemetry(path, "http://127.0.0.1:4318/v1/logs")
-			if err == nil || !strings.Contains(err.Error(), "unsupported") {
-				t.Fatalf("configureCodexTokenTelemetry() error = %v, want unsupported syntax", err)
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("configureCodexTokenTelemetry() error = %v, want %q", err, want)
 			}
 			out, readErr := os.ReadFile(path)
 			if readErr != nil {
@@ -1770,7 +2763,33 @@ func TestConfigureCodexTokenTelemetryRejectsUnsupportedExporterFormsWithoutWriti
 	}
 }
 
-func TestOwnedCodexTokenTelemetryPreservesModifiedSetting(t *testing.T) {
+func TestConfigureCodexTokenTelemetryRejectsMalformedCanonicalTableAssignmentWithoutWriting(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	initial := strings.Join([]string{
+		"[otel.exporter.otlp-http]",
+		`"endpoint = "https://existing.example/v1/logs"`,
+		`protocol = "binary"`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Codex config: %v", err)
+	}
+	err := configureCodexTokenTelemetry(path, "http://127.0.0.1:4318/v1/logs")
+	if err == nil || !strings.Contains(err.Error(), "parse Codex config") {
+		t.Fatalf("configureCodexTokenTelemetry() error = %v, want TOML parse failure", err)
+	}
+	out, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("read Codex config: %v", readErr)
+	}
+	if string(out) != initial {
+		t.Fatalf("malformed canonical table was modified:\n%s", out)
+	}
+}
+
+func TestOwnedCodexTokenTelemetryRetakesAndRemovesModifiedSetting(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -1797,31 +2816,32 @@ func TestOwnedCodexTokenTelemetryPreservesModifiedSetting(t *testing.T) {
 		t.Fatalf("write user-modified Codex config: %v", err)
 	}
 
-	if _, err := enableCodexTokenTelemetry(path, statePath, endpoint); err == nil || !strings.Contains(err.Error(), "was modified") {
-		t.Fatalf("re-enable error = %v, want modified-owned-setting refusal", err)
+	if _, err := enableCodexTokenTelemetry(path, statePath, endpoint); err != nil {
+		t.Fatalf("re-enable modified owned setting: %v", err)
 	}
 	afterEnable, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read Codex config after refused enable: %v", err)
 	}
-	if string(afterEnable) != modified {
-		t.Fatalf("re-enable overwrote user-modified Codex config:\n%s", afterEnable)
+	if strings.Contains(string(afterEnable), "https://user.example/v1/logs") ||
+		!strings.Contains(string(afterEnable), `endpoint = "http://127.0.0.1:4318/v1/logs"`) {
+		t.Fatalf("re-enable did not retake Codex log routing:\n%s", afterEnable)
 	}
 
 	result, err := disableOwnedCodexTokenTelemetry(path, statePath)
 	if err != nil {
 		t.Fatalf("disable modified Codex telemetry: %v", err)
 	}
-	if result.State != "disabled-with-user-changes" {
-		t.Fatalf("disable state = %+v, want disabled-with-user-changes", result)
+	if result.State != "disabled" {
+		t.Fatalf("disable state = %+v, want disabled", result)
 	}
 	cleaned, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read cleaned Codex config: %v", err)
 	}
 	text := string(cleaned)
-	if !strings.Contains(text, "https://user.example/v1/logs") {
-		t.Fatalf("modified Codex exporter was removed:\n%s", text)
+	if strings.Contains(text, "https://user.example/v1/logs") || strings.Contains(text, "exporter") {
+		t.Fatalf("retaken Codex exporter was not removed:\n%s", text)
 	}
 	if strings.Contains(text, "trace_exporter") || strings.Contains(text, codexTokenTelemetryBlockStart) || strings.Contains(text, codexTokenTelemetryBlockEnd) {
 		t.Fatalf("unchanged owned setting or ownership markers remain:\n%s", text)
@@ -1879,7 +2899,7 @@ func TestOwnedCodexTokenTelemetryPreservesExternalOTelSectionContent(t *testing.
 	}
 }
 
-func TestDisableCodexTokenTelemetryReportsRetainedUserOwnedExporter(t *testing.T) {
+func TestDisableCodexTokenTelemetryRemovesMatchingManagedExporter(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -1905,15 +2925,15 @@ func TestDisableCodexTokenTelemetryReportsRetainedUserOwnedExporter(t *testing.T
 	if err != nil {
 		t.Fatalf("disable Codex token telemetry: %v", err)
 	}
-	if result.State != "unmanaged" || !strings.Contains(result.Detail, "user-owned Codex OTel configuration remains configured") {
-		t.Fatalf("disable result = %+v, want retained user-owned telemetry", result)
+	if result.State != "disabled" || !strings.Contains(result.Detail, "removed") {
+		t.Fatalf("disable result = %+v, want removed managed telemetry", result)
 	}
 	cleaned, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read cleaned Codex config: %v", err)
 	}
-	if string(cleaned) != initial {
-		t.Fatalf("user-owned Codex exporter changed:\n%s", cleaned)
+	if strings.Contains(string(cleaned), "exporter =") {
+		t.Fatalf("matching managed Codex exporter was not removed:\n%s", cleaned)
 	}
 }
 
@@ -1944,7 +2964,7 @@ func TestDisableCodexTokenTelemetryPreservesMarkerWithoutOwnershipState(t *testi
 	}
 }
 
-func TestEnableCodexTokenTelemetryReusesMatchingMarkerWithoutOwnershipState(t *testing.T) {
+func TestEnableCodexTokenTelemetryUpgradesMatchingMarkerWithoutOwnershipState(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -1971,25 +2991,88 @@ func TestEnableCodexTokenTelemetryReusesMatchingMarkerWithoutOwnershipState(t *t
 	if err != nil {
 		t.Fatalf("enable matching marked Codex telemetry: %v", err)
 	}
-	if result.State != "enabled-existing" || !strings.Contains(result.Detail, "remains user-owned") {
-		t.Fatalf("enable result = %+v, want enabled-existing user-owned telemetry", result)
+	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Observer") {
+		t.Fatalf("enable result = %+v, want an owned metrics-only upgrade", result)
 	}
 	status, err := inspectOwnedCodexTokenTelemetry(path, statePath, endpoint)
 	if err != nil {
 		t.Fatalf("inspect matching marked Codex telemetry: %v", err)
 	}
-	if status.State != "enabled-existing" {
-		t.Fatalf("status = %+v, want enabled-existing", status)
+	if status.State != "enabled-managed" {
+		t.Fatalf("status = %+v, want enabled-managed", status)
 	}
-	if _, err := os.Stat(statePath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("matching orphaned marker was incorrectly adopted as owned: %v", err)
+	ownership, err := readTokenTelemetryOwnership(statePath)
+	if err != nil {
+		t.Fatalf("read upgraded ownership state: %v", err)
+	}
+	owned := ownership.Targets["codex"]
+	if len(owned.Settings) != 1 || len(owned.TableSettings) != 3 ||
+		owned.Settings["metrics_exporter"] == "" ||
+		owned.TableSettings["exporter.assignment"] == "" ||
+		owned.TableSettings["trace_exporter.endpoint"] == "" ||
+		owned.TableSettings["trace_exporter.protocol"] == "" {
+		t.Fatalf("upgrade ownership = %+v, want all three signal exporters", owned)
 	}
 	after, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read preserved Codex config: %v", err)
+		t.Fatalf("read upgraded Codex config: %v", err)
 	}
-	if string(after) != initial {
-		t.Fatalf("matching user-owned Codex config changed:\n%s", after)
+	if strings.Count(string(after), "metrics_exporter =") != 1 ||
+		strings.Count(string(after), codexTokenTelemetryBlockStart) != 1 ||
+		!strings.Contains(string(after), `environment = "user-owned"`) {
+		t.Fatalf("matching exporters or unrelated OTel settings were lost during takeover:\n%s", after)
+	}
+	if _, err := disableOwnedCodexTokenTelemetry(path, statePath); err != nil {
+		t.Fatalf("disable upgraded Codex telemetry: %v", err)
+	}
+	cleaned, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read cleaned Codex config: %v", err)
+	}
+	for _, preserved := range []string{`[otel.trace_exporter.otlp-http]`, `environment = "user-owned"`} {
+		if !strings.Contains(string(cleaned), preserved) {
+			t.Fatalf("disable removed user-owned %q:\n%s", preserved, cleaned)
+		}
+	}
+	if strings.Contains(string(cleaned), "exporter =") || strings.Contains(string(cleaned), "endpoint =") ||
+		strings.Contains(string(cleaned), "protocol =") || strings.Contains(string(cleaned), codexTokenTelemetryBlockStart) {
+		t.Fatalf("disable retained an owned signal route:\n%s", cleaned)
+	}
+}
+
+func TestDisableCodexTokenTelemetryPreservesOTelSettingAddedAfterManagedBlock(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, ".codex", "config.toml")
+	statePath := filepath.Join(root, ".obstudio", "token-telemetry.json")
+	endpoint := "http://127.0.0.1:4318/v1/logs"
+	if _, err := enableCodexTokenTelemetry(path, statePath, endpoint); err != nil {
+		t.Fatalf("enable Codex token telemetry: %v", err)
+	}
+	configured, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read configured Codex config: %v", err)
+	}
+	configured = append(configured, []byte("metrics_exporter_timeout = 30\n")...)
+	if err := os.WriteFile(path, configured, 0o600); err != nil {
+		t.Fatalf("add user-owned OTel setting after managed block: %v", err)
+	}
+
+	result, err := disableOwnedCodexTokenTelemetry(path, statePath)
+	if err != nil {
+		t.Fatalf("disable Codex token telemetry: %v", err)
+	}
+	if result.State != "disabled-with-user-changes" || !strings.Contains(result.Detail, "[otel] settings outside managed block") {
+		t.Fatalf("disable result = %+v, want preserved user configuration", result)
+	}
+	cleaned, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read cleaned Codex config: %v", err)
+	}
+	want := "[otel]\nmetrics_exporter_timeout = 30\n"
+	if string(cleaned) != want {
+		t.Fatalf("disable re-scoped the user-owned OTel setting:\ngot:\n%s\nwant:\n%s", cleaned, want)
 	}
 }
 
@@ -2088,7 +3171,84 @@ func TestEnableClaudeTokenTelemetryPreservesSettingsAndCleanupRemovesOnlyOwnedVa
 	}
 }
 
-func TestDisableClaudeTokenTelemetryReportsRetainedUserOwnedSettings(t *testing.T) {
+func TestEnableClaudeTokenTelemetryCompletesMissingSignalEndpoints(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, ".claude", "settings.json")
+	statePath := filepath.Join(root, ".obstudio", "token-telemetry.json")
+	endpoint := "http://127.0.0.1:4318/v1/logs"
+	required, _, err := claudeTokenTelemetrySettings(endpoint)
+	if err != nil {
+		t.Fatalf("build Claude telemetry settings: %v", err)
+	}
+	userEnv := map[string]any{
+		"CLAUDE_CODE_ENABLE_TELEMETRY":        "1",
+		"CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
+		"OTEL_LOGS_EXPORTER":                  "otlp",
+		"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL":    "http/protobuf",
+		"OTEL_TRACES_EXPORTER":                "otlp",
+		"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL":  "http/protobuf",
+		"OTEL_METRICS_EXPORTER":               "otlp",
+		"OTEL_EXPORTER_OTLP_METRICS_PROTOCOL": "http/protobuf",
+		"EXISTING":                            "preserved",
+	}
+	initialConfig := map[string]any{"env": userEnv, "model": "sonnet"}
+	initial, err := json.MarshalIndent(initialConfig, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal Claude settings: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir Claude settings parent: %v", err)
+	}
+	if err := os.WriteFile(path, append(initial, '\n'), 0o600); err != nil {
+		t.Fatalf("write Claude settings: %v", err)
+	}
+
+	result, err := enableClaudeTokenTelemetry(path, statePath, endpoint, nil)
+	if err != nil {
+		t.Fatalf("complete Claude signal endpoints: %v", err)
+	}
+	if result.State != "enabled-managed" {
+		t.Fatalf("enable state = %+v, want enabled-managed", result)
+	}
+	_, configuredEnv, _, _, err := readClaudeSettings(path)
+	if err != nil {
+		t.Fatalf("read configured Claude settings: %v", err)
+	}
+	for key, want := range map[string]string{
+		"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT":    endpoint,
+		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT":  "http://127.0.0.1:4318/v1/traces",
+		"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "http://127.0.0.1:4318/v1/metrics",
+	} {
+		if configuredEnv[key] != want {
+			t.Fatalf("Claude setting %s = %#v, want %q", key, configuredEnv[key], want)
+		}
+	}
+	ownership, err := readTokenTelemetryOwnership(statePath)
+	if err != nil {
+		t.Fatalf("read Claude ownership: %v", err)
+	}
+	owned := ownership.Targets["claude-code"].Env
+	for _, setting := range required {
+		key := setting.key
+		if owned[key] == "" {
+			t.Fatalf("missing Claude route ownership for %s: %+v", key, owned)
+		}
+	}
+	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
+		t.Fatalf("disable completed Claude endpoints: %v", err)
+	}
+	config, cleanedEnv, _, _, err := readClaudeSettings(path)
+	if err != nil {
+		t.Fatalf("read cleaned Claude settings: %v", err)
+	}
+	if config["model"] != "sonnet" || len(cleanedEnv) != 1 || cleanedEnv["EXISTING"] != "preserved" {
+		t.Fatalf("disable did not remove managed Claude routes or preserve unrelated settings: config=%+v env=%+v", config, cleanedEnv)
+	}
+}
+
+func TestDisableClaudeTokenTelemetryRemovesMatchingManagedSettings(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -2117,20 +3277,88 @@ func TestDisableClaudeTokenTelemetryReportsRetainedUserOwnedSettings(t *testing.
 	if _, err := enableClaudeTokenTelemetry(path, statePath, endpoint, nil); err != nil {
 		t.Fatalf("enable Claude token telemetry: %v", err)
 	}
+	ownership, err := readTokenTelemetryOwnership(statePath)
+	if err != nil {
+		t.Fatalf("read Claude ownership: %v", err)
+	}
+	owned := ownership.Targets["claude-code"]
+	for _, setting := range required {
+		if owned.Env[setting.key] != setting.value {
+			t.Fatalf("matching Claude route %s lacks complete removal ownership: %+v", setting.key, owned)
+		}
+	}
 
 	result, err := disableClaudeTokenTelemetry(path, statePath, nil)
 	if err != nil {
 		t.Fatalf("disable Claude token telemetry: %v", err)
 	}
-	if result.State != "unmanaged" || !strings.Contains(result.Detail, "user-owned Claude telemetry settings remain configured") {
-		t.Fatalf("disable result = %+v, want retained user-owned telemetry", result)
+	if result.State != "disabled" || !strings.Contains(result.Detail, "removed") {
+		t.Fatalf("disable result = %+v, want removed managed telemetry", result)
 	}
 	_, cleanedEnv, _, _, err := readClaudeSettings(path)
 	if err != nil {
 		t.Fatalf("read cleaned Claude settings: %v", err)
 	}
-	if !reflect.DeepEqual(cleanedEnv, userEnv) {
-		t.Fatalf("user-owned Claude settings changed: got=%+v want=%+v", cleanedEnv, userEnv)
+	if len(cleanedEnv) != 0 {
+		t.Fatalf("matching managed Claude settings were not removed: %+v", cleanedEnv)
+	}
+}
+
+func TestDisableClaudeTokenTelemetryRemovesMatchingRoutesAndPreservesUnmanagedValues(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, ".claude", "settings.json")
+	statePath := filepath.Join(root, ".obstudio", "token-telemetry.json")
+	endpoint := "http://127.0.0.1:4318/v1/logs"
+	required, defaults, err := claudeTokenTelemetrySettings(endpoint)
+	if err != nil {
+		t.Fatalf("build Claude telemetry settings: %v", err)
+	}
+	env := make(map[string]any, len(required)+len(defaults)+1)
+	for _, setting := range append(required, defaults...) {
+		env[setting.key] = setting.value
+	}
+	env["EXISTING"] = "preserved"
+	encodedEnv, err := json.Marshal(env)
+	if err != nil {
+		t.Fatalf("marshal compact Claude env: %v", err)
+	}
+	initial := []byte(`{"model":"sonnet","env":` + string(encodedEnv) + `}`)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("create Claude config directory: %v", err)
+	}
+	if err := os.WriteFile(path, initial, 0o600); err != nil {
+		t.Fatalf("write compact Claude settings: %v", err)
+	}
+
+	if _, err := enableClaudeTokenTelemetry(path, statePath, endpoint, nil); err != nil {
+		t.Fatalf("enable matching Claude telemetry: %v", err)
+	}
+	afterEnable, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(afterEnable, initial) {
+		t.Fatalf("enable rewrote matching Claude settings: data=%q err=%v", afterEnable, err)
+	}
+	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
+		t.Fatalf("disable matching Claude telemetry: %v", err)
+	}
+	afterDisable, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read disabled matching Claude settings: %v", err)
+	}
+	_, disabledEnv, _, _, err := readClaudeSettings(path)
+	if err != nil || disabledEnv["EXISTING"] != "preserved" {
+		t.Fatalf("disable lost unmanaged Claude settings: data=%q env=%+v err=%v", afterDisable, disabledEnv, err)
+	}
+	for _, setting := range required {
+		if _, exists := disabledEnv[setting.key]; exists {
+			t.Fatalf("matching managed Claude route %s was not removed: %+v", setting.key, disabledEnv)
+		}
+	}
+	for _, setting := range defaults {
+		if disabledEnv[setting.key] != setting.value {
+			t.Fatalf("unmanaged Claude default %s was not preserved: %+v", setting.key, disabledEnv)
+		}
 	}
 }
 
@@ -2183,7 +3411,7 @@ func TestEnableClaudeTokenTelemetryRejectsDuplicateJSONKeysWithoutWriting(t *tes
 	}
 }
 
-func TestEnableClaudeTokenTelemetryReusesMatchingInheritedSettings(t *testing.T) {
+func TestEnableClaudeTokenTelemetryOverridesMatchingInheritedSettingsLocally(t *testing.T) {
 	t.Parallel()
 
 	endpoint := "http://127.0.0.1:4318/v1/logs"
@@ -2209,18 +3437,32 @@ func TestEnableClaudeTokenTelemetryReusesMatchingInheritedSettings(t *testing.T)
 	if err != nil {
 		t.Fatalf("enableClaudeTokenTelemetry: %v", err)
 	}
-	if result.State != "enabled-existing" {
-		t.Fatalf("enable state = %q, want enabled-existing", result.State)
+	if result.State != "enabled-managed" {
+		t.Fatalf("enable state = %q, want enabled-managed", result.State)
 	}
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("matching inherited settings were copied into Claude config: %v", err)
+	_, configuredEnv, _, _, err := readClaudeSettings(path)
+	if err != nil {
+		t.Fatalf("read local Claude override: %v", err)
 	}
-	if _, err := os.Stat(statePath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("matching inherited settings were recorded as Obstudio-owned: %v", err)
+	for _, setting := range required {
+		if configuredEnv[setting.key] != setting.value {
+			t.Fatalf("local Claude override %s = %#v, want %q", setting.key, configuredEnv[setting.key], setting.value)
+		}
+	}
+	ownership, err := readTokenTelemetryOwnership(statePath)
+	if err != nil || len(ownership.Targets["claude-code"].Env) != len(required) {
+		t.Fatalf("matching inherited routes were not recorded as owned: state=%+v err=%v", ownership, err)
+	}
+	if _, err := disableClaudeTokenTelemetry(path, statePath, lookup); err != nil {
+		t.Fatalf("disable local Claude overrides: %v", err)
+	}
+	_, disabledEnv, _, _, err := readClaudeSettings(path)
+	if err != nil || len(disabledEnv) != 0 {
+		t.Fatalf("disable retained local Claude overrides: env=%+v err=%v", disabledEnv, err)
 	}
 }
 
-func TestEnableClaudeTokenTelemetryPreservesSupersededGenericRouting(t *testing.T) {
+func TestEnableClaudeTokenTelemetryOverridesAndRemovesGenericRouting(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -2249,37 +3491,40 @@ func TestEnableClaudeTokenTelemetryPreservesSupersededGenericRouting(t *testing.
 		t.Fatalf("write Claude settings: %v", err)
 	}
 
-	result, err := enableClaudeTokenTelemetry(path, statePath, endpoint, nil)
-	if err != nil {
-		t.Fatalf("enable Claude telemetry with explicit signal overrides: %v", err)
-	}
-	if result.State != "enabled-managed" {
-		t.Fatalf("enable state = %+v, want enabled-managed for newly added values", result)
+	if _, err = enableClaudeTokenTelemetry(path, statePath, endpoint, nil); err != nil {
+		t.Fatalf("enable Claude telemetry with generic route: %v", err)
 	}
 	_, configuredEnv, _, _, err := readClaudeSettings(path)
 	if err != nil {
 		t.Fatalf("read configured Claude settings: %v", err)
 	}
-	if configuredEnv["OTEL_EXPORTER_OTLP_ENDPOINT"] != "https://corporate.example:4318" {
-		t.Fatalf("generic OTLP endpoint changed: %+v", configuredEnv)
+	if configuredEnv["OTEL_EXPORTER_OTLP_ENDPOINT"] != "http://127.0.0.1:4318" ||
+		configuredEnv["OTEL_EXPORTER_OTLP_PROTOCOL"] != "http/protobuf" {
+		t.Fatalf("generic Claude routing was not taken over: %+v", configuredEnv)
 	}
-	if configuredEnv["OTEL_EXPORTER_OTLP_PROTOCOL"] != "http/json" {
-		t.Fatalf("generic OTLP protocol changed: %+v", configuredEnv)
-	}
-
-	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
-		t.Fatalf("disable Claude token telemetry: %v", err)
-	}
-	_, cleanedEnv, _, _, err := readClaudeSettings(path)
+	ownership, err := readTokenTelemetryOwnership(statePath)
 	if err != nil {
-		t.Fatalf("read cleaned Claude settings: %v", err)
+		t.Fatalf("read Claude ownership: %v", err)
 	}
-	if _, exists := cleanedEnv["CLAUDE_CODE_ENHANCED_TELEMETRY_BETA"]; exists {
-		t.Fatalf("Obstudio-owned setting was retained: %+v", cleanedEnv)
+	managed := ownership.Targets["claude-code"].Env
+	if managed["OTEL_EXPORTER_OTLP_ENDPOINT"] != "http://127.0.0.1:4318" ||
+		managed["OTEL_EXPORTER_OTLP_PROTOCOL"] != "http/protobuf" {
+		t.Fatalf("generic Claude routing was not recorded for removal: %+v", ownership)
 	}
-	if cleanedEnv["OTEL_EXPORTER_OTLP_ENDPOINT"] != "https://corporate.example:4318" ||
-		cleanedEnv["OTEL_EXPORTER_OTLP_PROTOCOL"] != "http/json" {
-		t.Fatalf("user-owned generic routing changed during cleanup: %+v", cleanedEnv)
+	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
+		t.Fatalf("disable Claude generic takeover: %v", err)
+	}
+	_, disabledEnv, _, _, err := readClaudeSettings(path)
+	if err != nil {
+		t.Fatalf("read disabled Claude routing: %v", err)
+	}
+	for _, setting := range append(required, claudeTelemetrySetting{key: "OTEL_EXPORTER_OTLP_ENDPOINT"}, claudeTelemetrySetting{key: "OTEL_EXPORTER_OTLP_PROTOCOL"}) {
+		if _, exists := disabledEnv[setting.key]; exists {
+			t.Fatalf("managed Claude route %s was not removed: %+v", setting.key, disabledEnv)
+		}
+	}
+	if len(disabledEnv) != 0 {
+		t.Fatalf("managed Claude routing was not removed: %+v", disabledEnv)
 	}
 }
 
@@ -2462,28 +3707,35 @@ func TestDisableClaudeTokenTelemetryLeavesUnmanagedSettings(t *testing.T) {
 	}
 }
 
-func TestConfigureClaudeTokenTelemetryPreservesConflictingSettings(t *testing.T) {
+func TestConfigureClaudeTokenTelemetryOverridesAndRemovesConflictingSettings(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "settings.json")
+	statePath := filepath.Join(t.TempDir(), "state.json")
 	initial := `{"env":{"EXISTING":"preserved","OTEL_LOGS_EXPORTER":"console"}}`
 	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
 		t.Fatalf("write Claude settings: %v", err)
 	}
-	_, err := enableClaudeTokenTelemetry(path, filepath.Join(t.TempDir(), "state.json"), "http://127.0.0.1:4318/v1/logs", nil)
-	if err == nil || !strings.Contains(err.Error(), "OTEL_LOGS_EXPORTER") {
-		t.Fatalf("expected conflicting Claude setting error, got %v", err)
+	if _, err := enableClaudeTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs", nil); err != nil {
+		t.Fatalf("enable conflicting Claude log exporter: %v", err)
 	}
-	out, readErr := os.ReadFile(path)
-	if readErr != nil {
-		t.Fatalf("read Claude settings: %v", readErr)
+	_, configuredEnv, _, _, err := readClaudeSettings(path)
+	if err != nil {
+		t.Fatalf("read configured Claude settings: %v", err)
 	}
-	if string(out) != initial {
-		t.Fatalf("conflicting Claude settings were changed: %s", out)
+	if configuredEnv["OTEL_LOGS_EXPORTER"] != "otlp" || configuredEnv["EXISTING"] != "preserved" {
+		t.Fatalf("Claude log exporter was not taken over safely: %+v", configuredEnv)
+	}
+	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
+		t.Fatalf("disable Claude log takeover: %v", err)
+	}
+	_, disabledEnv, _, _, err := readClaudeSettings(path)
+	if err != nil || len(disabledEnv) != 1 || disabledEnv["EXISTING"] != "preserved" {
+		t.Fatalf("managed Claude log route was not removed cleanly: env=%+v err=%v", disabledEnv, err)
 	}
 }
 
-func TestEnableClaudeTokenTelemetryPreservesConflictingInheritedSettings(t *testing.T) {
+func TestEnableClaudeTokenTelemetryOverridesConflictingInheritedSettings(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -2495,15 +3747,19 @@ func TestEnableClaudeTokenTelemetryPreservesConflictingInheritedSettings(t *test
 		}
 		return "", false
 	}
-	_, err := enableClaudeTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs", lookup)
-	if err == nil || !strings.Contains(err.Error(), "inherited environment") {
-		t.Fatalf("enableClaudeTokenTelemetry() error = %v, want inherited routing conflict", err)
+	if _, err := enableClaudeTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs", lookup); err != nil {
+		t.Fatalf("enable inherited Claude routing takeover: %v", err)
 	}
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("Claude settings were written after inherited conflict: %v", err)
+	_, configuredEnv, _, _, err := readClaudeSettings(path)
+	if err != nil || configuredEnv["OTEL_EXPORTER_OTLP_ENDPOINT"] != "http://127.0.0.1:4318" {
+		t.Fatalf("inherited generic endpoint was not overridden locally: env=%+v err=%v", configuredEnv, err)
 	}
-	if _, err := os.Stat(statePath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("ownership was written after inherited conflict: %v", err)
+	if _, err := disableClaudeTokenTelemetry(path, statePath, lookup); err != nil {
+		t.Fatalf("disable inherited Claude routing takeover: %v", err)
+	}
+	_, restoredEnv, _, _, err := readClaudeSettings(path)
+	if err != nil || len(restoredEnv) != 0 {
+		t.Fatalf("local inherited-route override was not removed: env=%+v err=%v", restoredEnv, err)
 	}
 }
 
@@ -2535,49 +3791,57 @@ func TestClaudeTokenTelemetryRejectsMalformedOwnershipWithoutWriting(t *testing.
 	}
 }
 
-func TestConfigureClaudeTokenTelemetryPreservesConflictingTraceSettings(t *testing.T) {
+func TestConfigureClaudeTokenTelemetryOverridesAndRemovesConflictingTraceSettings(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "settings.json")
+	statePath := filepath.Join(t.TempDir(), "state.json")
 	initial := `{"env":{"OTEL_TRACES_EXPORTER":"console"}}`
 	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
 		t.Fatalf("write Claude settings: %v", err)
 	}
-	_, err := enableClaudeTokenTelemetry(path, filepath.Join(t.TempDir(), "state.json"), "http://127.0.0.1:4318/v1/logs", nil)
-	if err == nil || !strings.Contains(err.Error(), "OTEL_TRACES_EXPORTER") {
-		t.Fatalf("expected conflicting Claude trace setting error, got %v", err)
+	if _, err := enableClaudeTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs", nil); err != nil {
+		t.Fatalf("enable conflicting Claude trace exporter: %v", err)
 	}
-	out, readErr := os.ReadFile(path)
-	if readErr != nil {
-		t.Fatalf("read Claude settings: %v", readErr)
+	_, configuredEnv, _, _, err := readClaudeSettings(path)
+	if err != nil || configuredEnv["OTEL_TRACES_EXPORTER"] != "otlp" {
+		t.Fatalf("Claude trace exporter was not taken over: env=%+v err=%v", configuredEnv, err)
 	}
-	if string(out) != initial {
-		t.Fatalf("conflicting Claude trace settings were changed: %s", out)
+	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
+		t.Fatalf("disable Claude trace takeover: %v", err)
+	}
+	_, disabledEnv, _, _, err := readClaudeSettings(path)
+	if err != nil || len(disabledEnv) != 0 {
+		t.Fatalf("managed Claude trace route was not removed: env=%+v err=%v", disabledEnv, err)
 	}
 }
 
-func TestConfigureClaudeTokenTelemetryPreservesConflictingMetricSettings(t *testing.T) {
+func TestConfigureClaudeTokenTelemetryOverridesAndRemovesConflictingMetricSettings(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "settings.json")
+	statePath := filepath.Join(t.TempDir(), "state.json")
 	initial := `{"env":{"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT":"https://metrics.example/v1/metrics"}}`
 	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
 		t.Fatalf("write Claude settings: %v", err)
 	}
-	_, err := enableClaudeTokenTelemetry(path, filepath.Join(t.TempDir(), "state.json"), "http://127.0.0.1:4318/v1/logs", nil)
-	if err == nil || !strings.Contains(err.Error(), "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") {
-		t.Fatalf("expected conflicting Claude metric setting error, got %v", err)
+	if _, err := enableClaudeTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs", nil); err != nil {
+		t.Fatalf("enable conflicting Claude metrics endpoint: %v", err)
 	}
-	out, readErr := os.ReadFile(path)
-	if readErr != nil {
-		t.Fatalf("read Claude settings: %v", readErr)
+	_, configuredEnv, _, _, err := readClaudeSettings(path)
+	if err != nil || configuredEnv["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"] != "http://127.0.0.1:4318/v1/metrics" {
+		t.Fatalf("Claude metrics endpoint was not taken over: env=%+v err=%v", configuredEnv, err)
 	}
-	if string(out) != initial {
-		t.Fatalf("conflicting Claude metric settings were changed: %s", out)
+	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
+		t.Fatalf("disable Claude metrics takeover: %v", err)
+	}
+	_, disabledEnv, _, _, err := readClaudeSettings(path)
+	if err != nil || len(disabledEnv) != 0 {
+		t.Fatalf("managed Claude metrics route was not removed: env=%+v err=%v", disabledEnv, err)
 	}
 }
 
-func TestEnableClaudeTokenTelemetryPreservesSignalSpecificTLSRouting(t *testing.T) {
+func TestEnableClaudeTokenTelemetryPreservesTLSSettingsWhileTakingOverRouting(t *testing.T) {
 	t.Parallel()
 
 	for _, key := range []string{
@@ -2589,26 +3853,36 @@ func TestEnableClaudeTokenTelemetryPreservesSignalSpecificTLSRouting(t *testing.
 		"OTEL_EXPORTER_OTLP_METRICS_CLIENT_KEY",
 	} {
 		t.Run(key, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "settings.json")
+			root := t.TempDir()
+			path := filepath.Join(root, "settings.json")
+			statePath := filepath.Join(root, "state.json")
 			initial := fmt.Sprintf(`{"env":{%q:"/user-owned/credential.pem"}}`, key)
 			if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
 				t.Fatalf("write Claude settings: %v", err)
 			}
 			_, err := enableClaudeTokenTelemetry(
 				path,
-				filepath.Join(t.TempDir(), "state.json"),
+				statePath,
 				"http://127.0.0.1:4318/v1/logs",
 				nil,
 			)
-			if err == nil || !strings.Contains(err.Error(), key) {
-				t.Fatalf("enableClaudeTokenTelemetry() error = %v, want %s routing conflict", err, key)
+			if err != nil {
+				t.Fatalf("enableClaudeTokenTelemetry with %s: %v", key, err)
 			}
-			out, readErr := os.ReadFile(path)
+			_, configuredEnv, _, _, readErr := readClaudeSettings(path)
 			if readErr != nil {
 				t.Fatalf("read Claude settings: %v", readErr)
 			}
-			if string(out) != initial {
-				t.Fatalf("Claude TLS routing was changed: %s", out)
+			if configuredEnv[key] != "/user-owned/credential.pem" ||
+				configuredEnv["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] != "http://127.0.0.1:4318/v1/logs" {
+				t.Fatalf("Claude TLS setting or Observer routing is wrong: %+v", configuredEnv)
+			}
+			if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
+				t.Fatalf("disable Claude token telemetry: %v", err)
+			}
+			_, restoredEnv, _, _, readErr := readClaudeSettings(path)
+			if readErr != nil || len(restoredEnv) != 1 || restoredEnv[key] != "/user-owned/credential.pem" {
+				t.Fatalf("Claude TLS setting was not retained after disable: env=%+v err=%v", restoredEnv, readErr)
 			}
 		})
 	}
@@ -2624,23 +3898,27 @@ func TestEnableClaudeTokenTelemetryPreservesDynamicHeadersHelper(t *testing.T) {
 	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
 		t.Fatalf("write Claude settings: %v", err)
 	}
-	_, err := enableClaudeTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs", nil)
-	if err == nil || !strings.Contains(err.Error(), "otelHeadersHelper") {
-		t.Fatalf("enableClaudeTokenTelemetry() error = %v, want dynamic headers conflict", err)
+	if _, err := enableClaudeTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs", nil); err != nil {
+		t.Fatalf("enable Claude telemetry with headers helper: %v", err)
 	}
-	out, readErr := os.ReadFile(path)
+	config, env, _, _, readErr := readClaudeSettings(path)
 	if readErr != nil {
 		t.Fatalf("read Claude settings: %v", readErr)
 	}
-	if string(out) != initial {
-		t.Fatalf("Claude dynamic headers configuration was changed: %s", out)
+	if config["otelHeadersHelper"] != "/usr/local/bin/corporate-otel-headers" ||
+		env["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] != "http://127.0.0.1:4318/v1/logs" {
+		t.Fatalf("headers helper or Observer routing is wrong: config=%+v env=%+v", config, env)
 	}
-	if _, statErr := os.Stat(statePath); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("ownership was written after dynamic headers conflict: %v", statErr)
+	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
+		t.Fatalf("disable Claude telemetry with headers helper: %v", err)
+	}
+	restored, _, _, _, readErr := readClaudeSettings(path)
+	if readErr != nil || len(restored) != 1 || restored["otelHeadersHelper"] != "/usr/local/bin/corporate-otel-headers" {
+		t.Fatalf("headers helper was not preserved after disable: config=%+v err=%v", restored, readErr)
 	}
 }
 
-func TestEnableClaudeTokenTelemetryHonorsDisabledOTelSDK(t *testing.T) {
+func TestEnableClaudeTokenTelemetryOverridesAndRemovesDisabledOTelSDK(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -2667,32 +3945,361 @@ func TestEnableClaudeTokenTelemetryHonorsDisabledOTelSDK(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.initial), 0o600); err != nil {
 				t.Fatalf("write Claude settings: %v", err)
 			}
-			_, err := enableClaudeTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs", tc.lookup)
-			if err == nil || !strings.Contains(err.Error(), "OTEL_SDK_DISABLED") {
-				t.Fatalf("enableClaudeTokenTelemetry() error = %v, want disabled SDK conflict", err)
+			if _, err := enableClaudeTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs", tc.lookup); err != nil {
+				t.Fatalf("enable Claude telemetry with disabled SDK: %v", err)
 			}
-			out, readErr := os.ReadFile(path)
+			_, configuredEnv, _, _, readErr := readClaudeSettings(path)
 			if readErr != nil {
 				t.Fatalf("read Claude settings: %v", readErr)
 			}
-			if string(out) != tc.initial {
-				t.Fatalf("Claude settings were changed while OTel was disabled: %s", out)
+			if configuredEnv["OTEL_SDK_DISABLED"] != "false" {
+				t.Fatalf("OTEL_SDK_DISABLED was not overridden: %+v", configuredEnv)
 			}
-			if _, statErr := os.Stat(statePath); !errors.Is(statErr, os.ErrNotExist) {
-				t.Fatalf("ownership was written while OTel was disabled: %v", statErr)
+			if _, err := disableClaudeTokenTelemetry(path, statePath, tc.lookup); err != nil {
+				t.Fatalf("disable Claude SDK override: %v", err)
+			}
+			_, disabledEnv, _, _, readErr := readClaudeSettings(path)
+			if readErr != nil {
+				t.Fatalf("read disabled Claude settings: %v", readErr)
+			}
+			if _, exists := disabledEnv["OTEL_SDK_DISABLED"]; exists {
+				t.Fatalf("managed SDK override was not removed: %+v", disabledEnv)
 			}
 		})
 	}
 }
 
-func TestEnableClaudeTokenTelemetryNeverOverridesExistingOTLPRouting(t *testing.T) {
+func TestClaudeDetailedBetaRoutingConflictRequiresActivePair(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "settings.json")
+	endpoint := "http://127.0.0.1:4318/v1/logs"
+	required, _, err := claudeTokenTelemetrySettings(endpoint)
+	if err != nil {
+		t.Fatalf("build Claude telemetry settings: %v", err)
+	}
+	tests := []struct {
+		name         string
+		env          map[string]any
+		inherited    map[string]string
+		wantConflict bool
+	}{
+		{
+			name: "settings override",
+			env: map[string]any{
+				"ENABLE_BETA_TRACING_DETAILED": "1",
+				"BETA_TRACING_ENDPOINT":        "https://corporate.example/v1/traces",
+			},
+			wantConflict: true,
+		},
+		{
+			name: "matching Observer base endpoint",
+			env: map[string]any{
+				"ENABLE_BETA_TRACING_DETAILED": "1",
+				"BETA_TRACING_ENDPOINT":        "http://127.0.0.1:4318",
+			},
+		},
+		{
+			name: "trailing slash creates unsupported double slash paths",
+			env: map[string]any{
+				"ENABLE_BETA_TRACING_DETAILED": "1",
+				"BETA_TRACING_ENDPOINT":        "http://127.0.0.1:4318/",
+			},
+			wantConflict: true,
+		},
+		{
+			name: "inherited override",
+			inherited: map[string]string{
+				"ENABLE_BETA_TRACING_DETAILED": "true",
+				"BETA_TRACING_ENDPOINT":        "https://corporate.example/v1/traces",
+			},
+			wantConflict: true,
+		},
+		{
+			name: "mixed sources",
+			env: map[string]any{
+				"ENABLE_BETA_TRACING_DETAILED": "1",
+			},
+			inherited: map[string]string{
+				"BETA_TRACING_ENDPOINT": "https://corporate.example/v1/traces",
+			},
+			wantConflict: true,
+		},
+		{
+			name: "disabled detailed tracing",
+			env: map[string]any{
+				"ENABLE_BETA_TRACING_DETAILED": "0",
+				"BETA_TRACING_ENDPOINT":        "https://corporate.example/v1/traces",
+			},
+		},
+		{
+			name: "missing detailed endpoint",
+			env: map[string]any{
+				"ENABLE_BETA_TRACING_DETAILED": "1",
+			},
+		},
+		{
+			name: "empty detailed endpoint",
+			env: map[string]any{
+				"ENABLE_BETA_TRACING_DETAILED": "1",
+				"BETA_TRACING_ENDPOINT":        "",
+			},
+		},
+		{
+			name: "whitespace detailed endpoint remains active in Claude",
+			env: map[string]any{
+				"ENABLE_BETA_TRACING_DETAILED": "1",
+				"BETA_TRACING_ENDPOINT":        "  ",
+			},
+			wantConflict: true,
+		},
+		{
+			name: "ordinary enhanced tracing alias",
+			env: map[string]any{
+				"ENABLE_ENHANCED_TELEMETRY_BETA": "1",
+				"BETA_TRACING_ENDPOINT":          "https://corporate.example/v1/traces",
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			lookup := func(key string) (string, bool) {
+				value, ok := tc.inherited[key]
+				return value, ok
+			}
+			conflict := claudeOTLPRoutingConflict(
+				map[string]any{},
+				tc.env,
+				required,
+				endpoint,
+				nil,
+				lookup,
+			)
+			if tc.wantConflict {
+				if !strings.Contains(conflict, "ENABLE_BETA_TRACING_DETAILED") ||
+					!strings.Contains(conflict, "BETA_TRACING_ENDPOINT") {
+					t.Fatalf("routing conflict = %q, want both detailed-beta setting names", conflict)
+				}
+				if strings.Contains(conflict, "corporate.example") {
+					t.Fatalf("routing conflict exposed the user-owned endpoint: %q", conflict)
+				}
+				return
+			}
+			if conflict != "" {
+				t.Fatalf("routing conflict = %q, want none", conflict)
+			}
+		})
+	}
+}
+
+func TestClaudeDetailedBetaRoutingIsTakenOverAndRemoved(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "settings.json")
+	statePath := filepath.Join(root, "token-telemetry.json")
+	endpoint := "http://127.0.0.1:4318/v1/logs"
+	required, defaults, err := claudeTokenTelemetrySettings(endpoint)
+	if err != nil {
+		t.Fatalf("build Claude telemetry settings: %v", err)
+	}
+	env := make(map[string]any, len(required)+len(defaults)+2)
+	for _, setting := range append(required, defaults...) {
+		env[setting.key] = setting.value
+	}
+	env["ENABLE_BETA_TRACING_DETAILED"] = "1"
+	env["BETA_TRACING_ENDPOINT"] = "https://corporate.example/v1/traces"
+	initial, err := json.MarshalIndent(map[string]any{"env": env}, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal Claude settings: %v", err)
+	}
+	initial = append(initial, '\n')
+	if err := os.WriteFile(path, initial, 0o600); err != nil {
+		t.Fatalf("write Claude settings: %v", err)
+	}
+
+	before, err := inspectClaudeTokenTelemetry(path, statePath, endpoint, nil)
+	if err != nil || before.State != "conflict" || !strings.Contains(before.Detail, "BETA_TRACING_ENDPOINT") {
+		t.Fatalf("pre-enable status = %+v, err=%v, want takeover-needed conflict", before, err)
+	}
+	if _, err = enableClaudeTokenTelemetry(path, statePath, endpoint, nil); err != nil {
+		t.Fatalf("enable detailed-beta takeover: %v", err)
+	}
+	_, configuredEnv, _, _, readErr := readClaudeSettings(path)
+	if readErr != nil {
+		t.Fatalf("read configured Claude settings: %v", readErr)
+	}
+	if configuredEnv["BETA_TRACING_ENDPOINT"] != "http://127.0.0.1:4318" {
+		t.Fatalf("detailed-beta endpoint was not redirected to Observer: %+v", configuredEnv)
+	}
+	result, err := inspectClaudeTokenTelemetry(path, statePath, endpoint, nil)
+	if err != nil {
+		t.Fatalf("inspect Claude token telemetry: %v", err)
+	}
+	if result.State != "enabled-managed" {
+		t.Fatalf("status = %+v, want enabled managed routing", result)
+	}
+	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
+		t.Fatalf("disable detailed-beta takeover: %v", err)
+	}
+	_, disabledEnv, _, _, readErr := readClaudeSettings(path)
+	if readErr != nil {
+		t.Fatalf("read disabled detailed-beta settings: %v", readErr)
+	}
+	if _, exists := disabledEnv["BETA_TRACING_ENDPOINT"]; exists {
+		t.Fatalf("managed detailed-beta endpoint was not removed: %+v", disabledEnv)
+	}
+	after, err := inspectClaudeTokenTelemetry(path, statePath, endpoint, nil)
+	if err != nil || after.State != "disabled" {
+		t.Fatalf("post-disable status = %+v, err=%v, want disabled", after, err)
+	}
+}
+
+func TestClaudeDetailedBetaRoutingAtObserverIsOwnedAndRemoved(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "settings.json")
+	statePath := filepath.Join(root, "token-telemetry.json")
+	endpoint := "http://127.0.0.1:4318/v1/logs"
+	initial := []byte(`{
+  "env": {
+    "ENABLE_BETA_TRACING_DETAILED": "1",
+    "BETA_TRACING_ENDPOINT": "http://localhost:4318"
+  }
+}
+`)
+	if err := os.WriteFile(path, initial, 0o600); err != nil {
+		t.Fatalf("write Claude settings: %v", err)
+	}
+
+	result, err := enableClaudeTokenTelemetry(path, statePath, endpoint, nil)
+	if err != nil {
+		t.Fatalf("enable matching detailed-beta routing: %v", err)
+	}
+	if result.State != "enabled-managed" {
+		t.Fatalf("enable result = %+v, want enabled-managed", result)
+	}
+	_, enabledEnv, _, _, err := readClaudeSettings(path)
+	if err != nil {
+		t.Fatalf("read enabled Claude settings: %v", err)
+	}
+	if enabledEnv["ENABLE_BETA_TRACING_DETAILED"] != "1" || enabledEnv["BETA_TRACING_ENDPOINT"] != "http://127.0.0.1:4318" {
+		t.Fatalf("matching detailed-beta routing was not normalized to Observer: %+v", enabledEnv)
+	}
+	ownership, err := readTokenTelemetryOwnership(statePath)
+	if err != nil {
+		t.Fatalf("read token telemetry ownership: %v", err)
+	}
+	managed := ownership.Targets["claude-code"].Env
+	if managed["ENABLE_BETA_TRACING_DETAILED"] != "1" {
+		t.Fatalf("Obstudio did not own the detailed-beta flag: %+v", managed)
+	}
+	if managed["BETA_TRACING_ENDPOINT"] != "http://127.0.0.1:4318" {
+		t.Fatalf("Obstudio did not own the detailed-beta endpoint: %+v", managed)
+	}
+	disabled, err := disableClaudeTokenTelemetry(path, statePath, nil)
+	if err != nil {
+		t.Fatalf("disable matching detailed-beta routing: %v", err)
+	}
+	if disabled.State != "disabled" {
+		t.Fatalf("disable result = %+v, want disabled", disabled)
+	}
+	_, disabledEnv, _, _, err := readClaudeSettings(path)
+	if err != nil {
+		t.Fatalf("read disabled Claude settings: %v", err)
+	}
+	if len(disabledEnv) != 0 {
+		t.Fatalf("disable did not remove the managed detailed-beta pair: %+v", disabledEnv)
+	}
+	status, err := inspectClaudeTokenTelemetry(path, statePath, endpoint, nil)
+	if err != nil {
+		t.Fatalf("inspect preserved detailed-beta routing: %v", err)
+	}
+	if status.State != "disabled" {
+		t.Fatalf("post-disable status = %+v, want disabled", status)
+	}
+}
+
+func TestDisableClaudeTokenTelemetryReportsWhitespaceDetailedBetaAsUnmanaged(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "settings.json")
+	statePath := filepath.Join(root, "token-telemetry.json")
+	initial := []byte(`{
+  "env": {
+    "ENABLE_BETA_TRACING_DETAILED": "1",
+    "BETA_TRACING_ENDPOINT": "  "
+  }
+}
+`)
+	if err := os.WriteFile(path, initial, 0o600); err != nil {
+		t.Fatalf("write Claude settings: %v", err)
+	}
+
+	result, err := disableClaudeTokenTelemetry(path, statePath, nil)
+	if err != nil {
+		t.Fatalf("disable Claude token telemetry: %v", err)
+	}
+	if result.State != "unmanaged" || !strings.Contains(result.Detail, "detailed-beta") {
+		t.Fatalf("disable result = %+v, want active unmanaged detailed-beta routing", result)
+	}
+	configured, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read Claude settings: %v", err)
+	}
+	if !bytes.Equal(configured, initial) {
+		t.Fatalf("disable changed user-owned whitespace detailed-beta routing:\n%s", configured)
+	}
+}
+
+func TestClaudeTokenTelemetryStatusScopesResultToUserSettings(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "settings.json")
+	statePath := filepath.Join(root, "token-telemetry.json")
+	endpoint := "http://127.0.0.1:4318/v1/logs"
+	required, defaults, err := claudeTokenTelemetrySettings(endpoint)
+	if err != nil {
+		t.Fatalf("build Claude telemetry settings: %v", err)
+	}
+	env := make(map[string]any, len(required)+len(defaults))
+	for _, setting := range append(required, defaults...) {
+		env[setting.key] = setting.value
+	}
+	data, err := json.Marshal(map[string]any{"env": env})
+	if err != nil {
+		t.Fatalf("marshal Claude settings: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write Claude settings: %v", err)
+	}
+
+	result, err := inspectClaudeTokenTelemetry(path, statePath, endpoint, nil)
+	if err != nil {
+		t.Fatalf("inspect Claude token telemetry: %v", err)
+	}
+	if result.State != "enabled-existing" {
+		t.Fatalf("status = %+v, want enabled-existing", result)
+	}
+	for _, phrase := range []string{"user-level Claude Code settings", "Claude Desktop", "higher-precedence"} {
+		if !strings.Contains(result.Detail, phrase) {
+			t.Fatalf("status detail = %q, want %q", result.Detail, phrase)
+		}
+	}
+}
+
+func TestEnableClaudeTokenTelemetryTakesOverAllExistingSignalRoutingAndDisableRemovesIt(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "settings.json")
 	initial := map[string]any{
 		"model": "sonnet",
 		"env": map[string]any{
 			"EXISTING":                            "preserved",
+			"ENABLE_BETA_TRACING_DETAILED":        "1",
 			"BETA_TRACING_ENDPOINT":               "https://corporate.example/v1/traces",
 			"OTEL_EXPORTER_OTLP_ENDPOINT":         "https://corporate.example/v1/otlp",
 			"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "https://corporate.example/v1/metrics",
@@ -2712,20 +4319,122 @@ func TestEnableClaudeTokenTelemetryNeverOverridesExistingOTLPRouting(t *testing.
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatalf("write Claude settings: %v", err)
 	}
-	statePath := filepath.Join(t.TempDir(), "state.json")
-	_, err = enableClaudeTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs", nil)
-	if err == nil || !strings.Contains(err.Error(), "another value") {
-		t.Fatalf("enableClaudeTokenTelemetry() error = %v, want conflict", err)
+	statePath := filepath.Join(root, "state.json")
+	if _, err = enableClaudeTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs", nil); err != nil {
+		t.Fatalf("enable Claude routing takeover: %v", err)
 	}
-	out, err := os.ReadFile(path)
+	config, env, _, _, err := readClaudeSettings(path)
 	if err != nil {
-		t.Fatalf("read Claude settings: %v", err)
+		t.Fatalf("read configured Claude settings: %v", err)
 	}
-	if string(out) != string(data) {
-		t.Fatalf("conflicting Claude settings were changed:\n%s", out)
+	for key, want := range map[string]string{
+		"OTEL_EXPORTER_OTLP_ENDPOINT":         "http://127.0.0.1:4318",
+		"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "http://127.0.0.1:4318/v1/metrics",
+		"OTEL_EXPORTER_OTLP_METRICS_PROTOCOL": "http/protobuf",
+		"OTEL_METRICS_EXPORTER":               "otlp",
+		"OTEL_LOGS_EXPORTER":                  "otlp",
+		"OTEL_TRACES_EXPORTER":                "otlp",
+		"BETA_TRACING_ENDPOINT":               "http://127.0.0.1:4318",
+		"OTEL_LOGS_EXPORT_INTERVAL":           "60000",
+		"OTEL_TRACES_EXPORT_INTERVAL":         "60000",
+		"OTEL_METRIC_EXPORT_INTERVAL":         "60000",
+	} {
+		if env[key] != want {
+			t.Fatalf("Claude setting %s = %#v, want %q", key, env[key], want)
+		}
 	}
-	if _, err := os.Stat(statePath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("ownership state was written after conflict: %v", err)
+	if config["model"] != "sonnet" || env["EXISTING"] != "preserved" {
+		t.Fatalf("unrelated Claude settings changed: config=%+v env=%+v", config, env)
+	}
+	ownership, err := readTokenTelemetryOwnership(statePath)
+	if err != nil {
+		t.Fatalf("read takeover ownership: %v", err)
+	}
+	for _, key := range []string{
+		"OTEL_EXPORTER_OTLP_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_METRICS_PROTOCOL",
+		"OTEL_METRICS_EXPORTER",
+		"OTEL_LOGS_EXPORTER",
+		"OTEL_TRACES_EXPORTER",
+		"BETA_TRACING_ENDPOINT",
+	} {
+		if ownership.Targets["claude-code"].Env[key] == "" {
+			t.Fatalf("managed Claude setting %s was not recorded: %+v", key, ownership)
+		}
+	}
+	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
+		t.Fatalf("disable Claude routing takeover: %v", err)
+	}
+	disabledConfig, disabledEnv, _, _, err := readClaudeSettings(path)
+	if err != nil || disabledConfig["model"] != "sonnet" {
+		t.Fatalf("read disabled Claude routing: config=%+v env=%+v err=%v", disabledConfig, disabledEnv, err)
+	}
+	for key, want := range map[string]string{
+		"EXISTING":                    "preserved",
+		"OTEL_LOGS_EXPORT_INTERVAL":   "60000",
+		"OTEL_TRACES_EXPORT_INTERVAL": "60000",
+		"OTEL_METRIC_EXPORT_INTERVAL": "60000",
+	} {
+		if disabledEnv[key] != want {
+			t.Fatalf("unmanaged Claude setting %s was not preserved: env=%+v", key, disabledEnv)
+		}
+	}
+	if len(disabledEnv) != 4 {
+		t.Fatalf("managed Claude routes were not removed: %+v", disabledEnv)
+	}
+}
+
+func TestEnableClaudeTokenTelemetryRemovesOverriddenNonStringRoutingValues(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "settings.json")
+	statePath := filepath.Join(root, "state.json")
+	initial := `{"env":{"OTEL_LOGS_EXPORTER":false,"OTEL_TRACES_EXPORTER":null,"OTEL_METRICS_EXPORTER":42}}`
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Claude settings: %v", err)
+	}
+	if _, err := enableClaudeTokenTelemetry(path, statePath, "http://127.0.0.1:4318/v1/logs", nil); err != nil {
+		t.Fatalf("enable Claude telemetry over non-string values: %v", err)
+	}
+	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
+		t.Fatalf("disable Claude telemetry over non-string values: %v", err)
+	}
+	_, env, _, _, err := readClaudeSettings(path)
+	if err != nil {
+		t.Fatalf("read disabled Claude settings: %v", err)
+	}
+	if len(env) != 0 {
+		t.Fatalf("overridden non-string Claude routes were not removed: %+v", env)
+	}
+}
+
+func TestEnableClaudeTokenTelemetryEndpointUpdateRemovesLatestManagedValue(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	path := filepath.Join(root, "settings.json")
+	statePath := filepath.Join(root, "state.json")
+	initialEndpoint := "https://corporate.example/v1/logs"
+	initial := fmt.Sprintf(`{"env":{"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT":%q}}`, initialEndpoint)
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatalf("write Claude settings: %v", err)
+	}
+	for _, endpoint := range []string{
+		"http://127.0.0.1:4318/v1/logs",
+		"http://127.0.0.1:5318/v1/logs",
+	} {
+		if _, err := enableClaudeTokenTelemetry(path, statePath, endpoint, nil); err != nil {
+			t.Fatalf("enable Claude endpoint %s: %v", endpoint, err)
+		}
+	}
+	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
+		t.Fatalf("disable updated Claude endpoint: %v", err)
+	}
+	_, env, _, _, err := readClaudeSettings(path)
+	if err != nil || len(env) != 0 {
+		t.Fatalf("managed Claude endpoint was not removed: env=%+v err=%v", env, err)
 	}
 }
 

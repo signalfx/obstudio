@@ -741,7 +741,7 @@ func TestToolsCallTokenUsageOverviewRejectsConflictingProviderLogRetransmission(
 
 	data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"conversationId": "conflicting-log-session"})
 	task := toMapAny(toSliceAny(data["tasks"])[0])
-	if task["correlationStatus"] != "trace_usage_mismatch" || task["accountingStatus"] != "uncorrelated" {
+	if task["correlationStatus"] != "trace_usage_mismatch" || task["accountingStatus"] != "partial" {
 		t.Fatalf("conflicting provider-log retransmission was presented as exact: %+v", task)
 	}
 	if task["requestCount"] != float64(1) || !strings.Contains(task["normalization"].(string), "conflicting retransmissions") {
@@ -1315,7 +1315,7 @@ func TestToolsCallTokenUsageOverviewRequiresCompletedMatchingProviderTrace(t *te
 
 		data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"provider": "claude"})
 		task := toMapAny(toSliceAny(data["tasks"])[0])
-		if task["traceComplete"] != true || task["correlationStatus"] != "trace_usage_mismatch" || task["accountingStatus"] != "uncorrelated" {
+		if task["traceComplete"] != true || task["correlationStatus"] != "trace_usage_mismatch" || task["accountingStatus"] != "partial" {
 			t.Fatalf("partial retained Claude logs were overstated as exact: %+v", task)
 		}
 	})
@@ -1350,7 +1350,7 @@ func TestToolsCallTokenUsageOverviewRequiresCompletedMatchingProviderTrace(t *te
 
 		data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"provider": "codex"})
 		task := toMapAny(toSliceAny(data["tasks"])[0])
-		if task["traceComplete"] != true || task["correlationStatus"] != "trace_usage_mismatch" || task["accountingStatus"] != "uncorrelated" {
+		if task["traceComplete"] != true || task["correlationStatus"] != "trace_usage_mismatch" || task["accountingStatus"] != "partial" {
 			t.Fatalf("Codex usage without a turn total was overstated as exact: %+v", task)
 		}
 	})
@@ -1454,6 +1454,22 @@ func TestToolsCallTokenUsageOverviewCorrelatesRealCodexTraceShapeAndCumulativeEv
 		providerLog("startup", 3*time.Second, 8991, 0, 0, 0, 8991),
 		providerLog("turn-total", 4*time.Second, 20005, 3456, 16, 9, 20021),
 	})
+	metric := func(tokenType string, value float64) store.MetricDataPoint {
+		return store.MetricDataPoint{
+			Name: "codex.turn.token_usage", Type: "histogram", Count: 1, Sum: value,
+			Timestamp: now.Add(5 * time.Second), StartTime: now,
+			Attributes: map[string]any{"token_type": tokenType, "model": "gpt-5.4-mini"},
+			Resource:   store.Resource{ServiceName: "Codex Desktop"},
+			Scope:      store.Scope{Name: "codex"},
+		}
+	}
+	s.AddMetricsForConnection("codex", []store.MetricDataPoint{
+		metric("input", 20005),
+		metric("cached_input", 3456),
+		metric("output", 16),
+		metric("reasoning_output", 9),
+		metric("total", 20021),
+	})
 
 	data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"provider": "codex"})
 	if data["accountingStatus"] != "exact" || data["status"] != "measured" {
@@ -1461,11 +1477,18 @@ func TestToolsCallTokenUsageOverviewCorrelatesRealCodexTraceShapeAndCumulativeEv
 	}
 	task := toMapAny(toSliceAny(data["tasks"])[0])
 	usage := toMapAny(task["usage"])
-	if task["taskId"] != turnID || task["traceId"] != "main-trace" || task["rootSpanName"] != "session_task.turn" || task["requestCount"] != float64(1) || task["providerEventCount"] != float64(2) || task["traceComplete"] != true {
+	if task["taskId"] != turnID || task["traceId"] != "main-trace" || task["rootSpanName"] != "session_task.turn" || task["requestCount"] != float64(1) || task["providerEventCount"] != float64(2) || task["providerMetricCount"] != float64(0) || task["traceComplete"] != true {
 		t.Fatalf("real Codex trace identity or event reconciliation was lost: %+v", task)
 	}
 	if usage["inputTokens"] != float64(20005) || usage["providerTotalTokens"] != float64(20021) || usage["effectiveTotalTokens"] != float64(20021) {
-		t.Fatalf("Codex cumulative/startup events were double counted: %+v", usage)
+		t.Fatalf("Codex cumulative/startup events or uncorrelated metrics were double counted: %+v", usage)
+	}
+	metricGroups := s.QueryMetricGroupsFiltered(store.MetricGroupFilter{MetricName: "codex.turn.token_usage", Limit: 10})
+	if len(metricGroups) != 1 || metricGroups[0].DataPointCount != 5 {
+		t.Fatalf("Codex token metric was not retained for Metrics Explorer: %+v", metricGroups)
+	}
+	if providerMetrics := s.SnapshotProviderUsageMetrics(); len(providerMetrics) != 0 {
+		t.Fatalf("uncorrelated Codex token metrics entered task-accounting retention: %+v", providerMetrics)
 	}
 }
 
@@ -1661,8 +1684,10 @@ func TestToolsCallTokenUsageOverviewUsesRetainedCodexTaskAfterGenericSpanEvictio
 		}
 	}
 	s.AddSpansForConnection("noise", noise)
-	if detail := s.Trace("retained-codex-trace", 1); detail != nil {
-		t.Fatal("fixture did not evict the completed task from the generic span ring")
+	for _, span := range s.SnapshotSpans() {
+		if span.TraceID == "retained-codex-trace" {
+			t.Fatal("fixture did not evict the completed task from the generic span ring")
+		}
 	}
 
 	data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"threadId": "retained-codex-thread"})
@@ -1675,6 +1700,58 @@ func TestToolsCallTokenUsageOverviewUsesRetainedCodexTaskAfterGenericSpanEvictio
 	}
 	if got := toMapAny(task["usage"])["effectiveTotalTokens"]; got != float64(46) {
 		t.Fatalf("retained provider task total = %#v, want 46", got)
+	}
+}
+
+func TestToolsCallTokenUsageOverviewKeepsAccountingAfterLiveProcessEviction(t *testing.T) {
+	t.Parallel()
+
+	s := store.New()
+	now := time.Now().UTC()
+	s.AddSpansForConnection("codex-process", []store.Span{{
+		TraceID: "evicted-codex-trace", SpanID: "evicted-codex-turn", Name: "session_task.turn",
+		StartTime: now, EndTime: now.Add(2 * time.Millisecond),
+		Attributes: map[string]any{
+			"thread.id": "evicted-codex-thread", "turn.id": "evicted-codex-turn",
+			"codex.turn.token_usage.input_tokens":        int64(12),
+			"codex.turn.token_usage.cached_input_tokens": int64(8),
+			"codex.turn.token_usage.output_tokens":       int64(6),
+			"codex.turn.token_usage.total_tokens":        int64(18),
+		},
+		Resource: store.Resource{ServiceName: "codex-app-server"},
+	}})
+	s.AddLogsForConnection("codex-process", []store.LogRecord{{
+		ID: "evicted-codex-log", Timestamp: now.Add(time.Millisecond),
+		TraceID: "evicted-codex-trace", SpanID: "evicted-codex-turn",
+		Body: "codex.sse_event", Resource: store.Resource{ServiceName: "codex-app-server"},
+		Attributes: map[string]any{
+			"event.name": "codex.sse_event", "event.kind": "response.completed",
+			"response.id": "evicted-codex-response", "conversation.id": "evicted-codex-thread",
+			"turn.id": "evicted-codex-turn", "input_token_count": int64(12),
+			"output_token_count": int64(6), "tool_token_count": int64(18),
+		},
+	}})
+
+	s.EvictConnection("codex-process")
+	if stats := s.Stats(); stats.SpanCount != 0 || stats.TraceCount != 0 || stats.DataPointCount != 0 || stats.LogCount != 0 || len(stats.ServiceNames) != 0 {
+		t.Fatalf("disconnected process remained in live telemetry: %+v", stats)
+	}
+
+	data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"threadId": "evicted-codex-thread"})
+	if data["accountingStatus"] != "exact" || data["measurementSource"] != "provider_telemetry" {
+		t.Fatalf("completed accounting was not retained after live eviction: %+v", data)
+	}
+	tasks := toSliceAny(data["tasks"])
+	if len(tasks) != 1 {
+		t.Fatalf("retained task count = %d, want 1: %+v", len(tasks), data)
+	}
+	task := toMapAny(tasks[0])
+	if task["requestCount"] != float64(1) || task["providerEventCount"] != float64(1) {
+		t.Fatalf("retained log and span were double counted: %+v", task)
+	}
+	usage := toMapAny(task["usage"])
+	if usage["cachedInputTokens"] != float64(8) || usage["effectiveTotalTokens"] != float64(18) {
+		t.Fatalf("retained normalized token usage = %+v, want cached input 8 and total 18", usage)
 	}
 }
 
@@ -1715,6 +1792,46 @@ func TestToolsCallTokenUsageOverviewUsesLateClaudeRequestAfterGenericSpanEvictio
 	task := toMapAny(toSliceAny(data["tasks"])[0])
 	if task["measurementSource"] != "claude_request_spans" || task["correlationStatus"] != "trace_request_window_incomplete" || toMapAny(task["usage"])["effectiveTotalTokens"] != float64(7) {
 		t.Fatalf("late Claude request was not retained in the completed task snapshot: %+v", task)
+	}
+}
+
+func TestToolsCallTokenUsageOverviewUsesRetainedProviderTraceForLogCorrelation(t *testing.T) {
+	s := store.New()
+	now := time.Now().UTC()
+	s.AddSpansForConnection("claude", []store.Span{{
+		TraceID: "retained-live-claude-trace", SpanID: "request", Name: "claude_code.llm_request",
+		StartTime: now, EndTime: now.Add(time.Millisecond),
+		Attributes: map[string]any{
+			"gen_ai.provider.name": "anthropic",
+			"session.id":           "retained-live-claude-session",
+		},
+		Resource: store.Resource{ServiceName: "claude-code-desktop"},
+	}})
+	noise := make([]store.Span, store.DefaultSpanCap+1)
+	for index := range noise {
+		noise[index] = store.Span{
+			TraceID: "retained-live-noise", SpanID: fmt.Sprintf("noise-%05d", index), Name: "noise",
+			StartTime: now.Add(time.Second), EndTime: now.Add(time.Second + time.Millisecond),
+		}
+	}
+	s.AddSpansForConnection("noise", noise)
+	s.AddLogsForConnection("claude", []store.LogRecord{{
+		ID: "retained-live-request-log", Timestamp: now, TraceID: "retained-live-claude-trace", Body: "claude_code.api_request",
+		Attributes: map[string]any{
+			"event.name": "api_request", "request_id": "retained-live-request",
+			"input_tokens": int64(5), "cache_read_tokens": int64(0), "cache_creation_tokens": int64(0), "output_tokens": int64(2),
+		},
+		Resource: store.Resource{ServiceName: "claude-code-desktop"},
+	}})
+
+	data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"conversationId": "retained-live-claude-session"})
+	tasks := toSliceAny(data["tasks"])
+	if len(tasks) != 1 {
+		t.Fatalf("retained provider trace did not correlate its provider log: %+v", data)
+	}
+	task := toMapAny(tasks[0])
+	if task["conversationId"] != "retained-live-claude-session" || task["traceComplete"] != false || task["accountingStatus"] == "exact" {
+		t.Fatalf("retained live Claude correlation was overstated or lost: %+v", task)
 	}
 }
 
@@ -2352,6 +2469,59 @@ func TestBuildClaudeMetricTaskCountsCumulativeResetAsSeparateSeries(t *testing.T
 	if usage.InputTokens == nil || *usage.InputTokens != 14 || usage.OutputTokens == nil || *usage.OutputTokens != 4 ||
 		usage.EffectiveTotalTokens == nil || *usage.EffectiveTotalTokens != 18 {
 		t.Fatalf("cumulative reset series were not aggregated independently: %+v", usage)
+	}
+	if built.metricCoverageStart == nil || !built.metricCoverageStart.Equal(now) ||
+		built.metricCoverageLatest == nil || !built.metricCoverageLatest.Equal(now.Add(3*time.Second)) {
+		t.Fatalf("cumulative reset coverage did not span all reset segments: start=%v latest=%v", built.metricCoverageStart, built.metricCoverageLatest)
+	}
+}
+
+func TestSelectClaudeMetricFallbacksReconcilesRequestAfterCumulativeReset(t *testing.T) {
+	t.Parallel()
+
+	start := time.Now().UTC()
+	metricPoint := func(seriesStart time.Time, tokenType string, value float64) store.MetricDataPoint {
+		return store.MetricDataPoint{
+			Name: "claude_code.token.usage", Type: "sum", Temporality: "cumulative", Value: value,
+			IsMonotonic: true, StartTime: seriesStart, Timestamp: seriesStart.Add(time.Second),
+			Attributes: map[string]any{
+				"session.id": "reset-reconciliation-session", "model": "claude-sonnet-4-6", "query_source": "main", "type": tokenType,
+			},
+			Resource: store.Resource{ServiceName: "claude-code"}, Scope: store.Scope{Name: "com.anthropic.claude_code"},
+		}
+	}
+	points := make([]store.MetricDataPoint, 0, 8)
+	for _, series := range []struct {
+		start  time.Time
+		values map[string]float64
+	}{
+		{start: start, values: map[string]float64{"input": 10, "cacheRead": 1, "cacheCreation": 2, "output": 3}},
+		{start: start.Add(2 * time.Second), values: map[string]float64{"input": 1, "cacheRead": 0, "cacheCreation": 0, "output": 1}},
+	} {
+		for tokenType, value := range series.values {
+			points = append(points, metricPoint(series.start, tokenType, value))
+		}
+	}
+	metric := buildClaudeMetricTask(points, time.Time{})
+	requestTotal := int64(2)
+	richer := providerLogTaskBuild{
+		task: tokenUsageTask{
+			Provider: "claude", ConversationID: "reset-reconciliation-session", AccountingStatus: "partial",
+			StartTime: formatTokenUsageTime(start.Add(2500 * time.Millisecond)), MeasurementSource: "claude_api_request_logs",
+			Usage: tokenUsageValues{EffectiveTotalTokens: &requestTotal},
+		},
+		latest: start.Add(2750 * time.Millisecond),
+	}
+
+	logs, spans, metrics := selectClaudeMetricFallbacks(
+		[]providerLogTaskBuild{richer}, nil, []providerLogTaskBuild{metric},
+	)
+	if len(logs) != 0 || len(spans) != 0 || len(metrics) != 1 {
+		t.Fatalf("complete reset-aware metric did not replace covered request subtotal: logs=%+v spans=%+v metrics=%+v", logs, spans, metrics)
+	}
+	if metrics[0].task.AccountingStatus != "exact" || metrics[0].task.Usage.EffectiveTotalTokens == nil ||
+		*metrics[0].task.Usage.EffectiveTotalTokens != 18 {
+		t.Fatalf("reset-aware metric selection lost exact session accounting: %+v", metrics[0].task)
 	}
 }
 
@@ -3043,6 +3213,415 @@ func TestRepositoryPathFilterDistinguishesLinkedWorktrees(t *testing.T) {
 	}
 }
 
+func TestToolsCallTokenUsageOverviewSelectsRicherCorrelatedUsageWithoutDoubleCounting(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	t.Run("claude request span fills provider log gaps", func(t *testing.T) {
+		s := store.New()
+		s.AddSpansForConnection("claude", []store.Span{
+			{
+				TraceID: "claude-rich-trace", SpanID: "interaction", Name: "claude_code.interaction",
+				StartTime: now, EndTime: now.Add(3 * time.Millisecond),
+				Attributes: map[string]any{"prompt.id": "claude-rich-prompt", "session.id": "claude-rich-session"},
+				Resource:   store.Resource{ServiceName: "claude-code"},
+			},
+			{
+				TraceID: "claude-rich-trace", SpanID: "request", ParentSpanID: "interaction", Name: "claude_code.llm_request",
+				StartTime: now.Add(time.Millisecond), EndTime: now.Add(2 * time.Millisecond),
+				Attributes: map[string]any{
+					"gen_ai.provider.name":                 "anthropic",
+					"gen_ai.operation.name":                "chat",
+					"gen_ai.usage.input_tokens":            int64(15),
+					"gen_ai.usage.cached_input_tokens":     int64(5),
+					"gen_ai.usage.output_tokens":           int64(3),
+					"gen_ai.usage.reasoning_output_tokens": int64(2),
+					"gen_ai.usage.total_tokens":            int64(18),
+				},
+				Resource: store.Resource{ServiceName: "claude-code"},
+			},
+		})
+		s.AddLogsForConnection("claude", []store.LogRecord{{
+			ID: "claude-rich-log", Timestamp: now.Add(time.Millisecond), TraceID: "claude-rich-trace", SpanID: "request",
+			Body: "claude_code.api_request", Resource: store.Resource{ServiceName: "claude-code"},
+			Attributes: map[string]any{
+				"event.name": "api_request", "request_id": "claude-rich-request",
+				"prompt.id": "claude-rich-prompt", "session.id": "claude-rich-session",
+				"input_tokens": int64(15), "output_tokens": int64(3), "total_tokens": int64(18),
+			},
+		}})
+
+		data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"taskId": "claude-rich-prompt"})
+		task := toMapAny(toSliceAny(data["tasks"])[0])
+		usage := toMapAny(task["usage"])
+		if data["accountingStatus"] != "partial" || task["correlationStatus"] != "trace_request_window_incomplete" || task["measurementSource"] != "claude_request_spans+claude_api_request_logs" {
+			t.Fatalf("richer Claude evidence was not selected: %+v", task)
+		}
+		if task["providerEventCount"] != float64(1) || task["requestCount"] != float64(1) || toMapAny(task["coverage"])["recordCount"] != float64(1) {
+			t.Fatalf("correlated Claude sources were counted as separate requests: %+v", task)
+		}
+		if usage["inputTokens"] != float64(15) || usage["cachedInputTokens"] != float64(5) || usage["outputTokens"] != float64(3) || usage["reasoningOutputTokens"] != float64(2) || usage["effectiveTotalTokens"] != float64(18) {
+			t.Fatalf("richer Claude token fields were not preserved without duplication: %+v", usage)
+		}
+	})
+
+	t.Run("claude enriched request subtotal remains partial until cumulative metric arrives", func(t *testing.T) {
+		s := store.New()
+		sessionStart := time.Now().UTC().Add(time.Second)
+		requestSpan := func(spanID string, offset time.Duration, input, output int64) store.Span {
+			return store.Span{
+				TraceID: "claude-late-request-trace", SpanID: spanID, ParentSpanID: "interaction", Name: "claude_code.llm_request",
+				StartTime: sessionStart.Add(offset), EndTime: sessionStart.Add(offset + time.Millisecond),
+				Attributes: map[string]any{
+					"gen_ai.provider.name":             "anthropic",
+					"gen_ai.usage.input_tokens":        input,
+					"gen_ai.usage.cached_input_tokens": int64(0),
+					"gen_ai.usage.output_tokens":       output,
+					"gen_ai.usage.total_tokens":        input + output,
+				},
+				Resource: store.Resource{ServiceName: "claude-code"},
+			}
+		}
+		requestLog := func(id, spanID string, offset time.Duration, input, output int64) store.LogRecord {
+			return store.LogRecord{
+				ID: id, Timestamp: sessionStart.Add(offset), TraceID: "claude-late-request-trace", SpanID: spanID,
+				Body: "claude_code.api_request", Resource: store.Resource{ServiceName: "claude-code"},
+				Attributes: map[string]any{
+					"event.name": "api_request", "request_id": id,
+					"prompt.id": "claude-late-request-prompt", "session.id": "claude-late-request-session",
+					"input_tokens": input, "cache_read_tokens": int64(0), "cache_creation_tokens": int64(0),
+					"output_tokens": output, "total_tokens": input + output,
+				},
+			}
+		}
+
+		s.AddSpansForConnection("claude", []store.Span{
+			{
+				TraceID: "claude-late-request-trace", SpanID: "interaction", Name: "claude_code.interaction",
+				StartTime: sessionStart, EndTime: sessionStart.Add(5 * time.Millisecond),
+				Attributes: map[string]any{"prompt.id": "claude-late-request-prompt", "session.id": "claude-late-request-session"},
+				Resource:   store.Resource{ServiceName: "claude-code"},
+			},
+			requestSpan("request-a", time.Millisecond, 8, 2),
+		})
+		s.AddLogsForConnection("claude", []store.LogRecord{requestLog("log-a", "request-a", time.Millisecond, 8, 2)})
+
+		first := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"taskId": "claude-late-request-prompt"})
+		firstTask := toMapAny(toSliceAny(first["tasks"])[0])
+		if first["accountingStatus"] != "partial" || firstTask["correlationStatus"] != "trace_request_window_incomplete" {
+			t.Fatalf("completed root span incorrectly closed Claude request accounting: %+v", firstTask)
+		}
+
+		s.AddSpansForConnection("claude", []store.Span{requestSpan("request-b", 2*time.Millisecond, 15, 5)})
+		s.AddLogsForConnection("claude", []store.LogRecord{requestLog("log-b", "request-b", 2*time.Millisecond, 15, 5)})
+		second := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"taskId": "claude-late-request-prompt"})
+		secondTask := toMapAny(toSliceAny(second["tasks"])[0])
+		if second["accountingStatus"] != "partial" || secondTask["requestCount"] != float64(2) || toMapAny(secondTask["usage"])["effectiveTotalTokens"] != float64(30) {
+			t.Fatalf("late Claude request was missed, duplicated, or marked exact: %+v", secondTask)
+		}
+
+		metric := func(tokenType string, value float64) store.MetricDataPoint {
+			return store.MetricDataPoint{
+				Name: "claude_code.token.usage", Type: "sum", Temporality: "cumulative", IsMonotonic: true,
+				StartTime: sessionStart, Timestamp: sessionStart.Add(10 * time.Millisecond), Value: value,
+				Attributes: map[string]any{"session.id": "claude-late-request-session", "type": tokenType},
+				Resource:   store.Resource{ServiceName: "claude-code"},
+			}
+		}
+		s.AddMetricsForConnection("claude", []store.MetricDataPoint{
+			metric("input", 23),
+			metric("cacheRead", 0),
+			metric("cacheCreation", 0),
+			metric("output", 7),
+		})
+		exact := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"conversationId": "claude-late-request-session"})
+		exactTask := toMapAny(toSliceAny(exact["tasks"])[0])
+		if exact["accountingStatus"] != "exact" || exactTask["measurementSource"] != "claude_token_metrics" || toMapAny(exactTask["usage"])["effectiveTotalTokens"] != float64(30) {
+			t.Fatalf("complete cumulative Claude metrics did not replace the request subtotal exactly once: %+v", exactTask)
+		}
+	})
+
+	t.Run("claude task provenance includes enrichment of later requests", func(t *testing.T) {
+		s := store.New()
+		requestSpan := func(spanID string, offset time.Duration, input, cached, output int64) store.Span {
+			return store.Span{
+				TraceID: "claude-mixed-provenance-trace", SpanID: spanID, ParentSpanID: "interaction", Name: "claude_code.llm_request",
+				StartTime: now.Add(offset), EndTime: now.Add(offset + time.Millisecond),
+				Attributes: map[string]any{
+					"gen_ai.provider.name":             "anthropic",
+					"gen_ai.usage.input_tokens":        input,
+					"gen_ai.usage.cached_input_tokens": cached,
+					"gen_ai.usage.output_tokens":       output,
+					"gen_ai.usage.total_tokens":        input + output,
+				},
+				Resource: store.Resource{ServiceName: "claude-code"},
+			}
+		}
+		s.AddSpansForConnection("claude", []store.Span{
+			{
+				TraceID: "claude-mixed-provenance-trace", SpanID: "interaction", Name: "claude_code.interaction",
+				StartTime: now, EndTime: now.Add(5 * time.Millisecond),
+				Attributes: map[string]any{"prompt.id": "claude-mixed-provenance-prompt", "session.id": "claude-mixed-provenance-session"},
+				Resource:   store.Resource{ServiceName: "claude-code"},
+			},
+			requestSpan("request-a", time.Millisecond, 10, 0, 2),
+			requestSpan("request-b", 2*time.Millisecond, 20, 5, 3),
+		})
+		requestLog := func(id, spanID string, offset time.Duration, input, output int64) store.LogRecord {
+			return store.LogRecord{
+				ID: id, Timestamp: now.Add(offset), TraceID: "claude-mixed-provenance-trace", SpanID: spanID,
+				Body: "claude_code.api_request", Resource: store.Resource{ServiceName: "claude-code"},
+				Attributes: map[string]any{
+					"event.name": "api_request", "request_id": id,
+					"prompt.id": "claude-mixed-provenance-prompt", "session.id": "claude-mixed-provenance-session",
+					"input_tokens": input, "output_tokens": output, "total_tokens": input + output,
+				},
+			}
+		}
+		firstLog := requestLog("log-a", "request-a", time.Millisecond, 10, 2)
+		firstLog.Attributes["cache_read_tokens"] = int64(0)
+		firstLog.Attributes["cache_creation_tokens"] = int64(0)
+		s.AddLogsForConnection("claude", []store.LogRecord{
+			firstLog,
+			requestLog("log-b", "request-b", 2*time.Millisecond, 20, 3),
+		})
+
+		data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"taskId": "claude-mixed-provenance-prompt"})
+		task := toMapAny(toSliceAny(data["tasks"])[0])
+		if data["accountingStatus"] != "partial" || task["correlationStatus"] != "trace_request_window_incomplete" || task["measurementSource"] != "claude_api_request_logs+claude_request_spans" {
+			t.Fatalf("task provenance omitted later span enrichment: %+v", task)
+		}
+		if !strings.Contains(task["normalization"].(string), "selected the richer correlated span usage") {
+			t.Fatalf("task normalization omitted later span enrichment: %+v", task)
+		}
+		if usage := toMapAny(task["usage"]); usage["effectiveTotalTokens"] != float64(35) || usage["cachedInputTokens"] != float64(5) {
+			t.Fatalf("mixed-source task usage was duplicated or lost: %+v", usage)
+		}
+	})
+
+	t.Run("codex task span fills response log gaps", func(t *testing.T) {
+		s := store.New()
+		s.AddSpansForConnection("codex", []store.Span{{
+			TraceID: "codex-rich-trace", SpanID: "turn", Name: "session_task.turn",
+			StartTime: now, EndTime: now.Add(2 * time.Millisecond),
+			Attributes: map[string]any{
+				"thread.id": "codex-rich-thread", "turn.id": "codex-rich-turn",
+				"codex.turn.token_usage.input_tokens":            int64(12),
+				"codex.turn.token_usage.cached_input_tokens":     int64(8),
+				"codex.turn.token_usage.output_tokens":           int64(6),
+				"codex.turn.token_usage.reasoning_output_tokens": int64(4),
+				"codex.turn.token_usage.total_tokens":            int64(18),
+			},
+			Resource: store.Resource{ServiceName: "codex-app-server"},
+		}})
+		s.AddLogsForConnection("codex", []store.LogRecord{{
+			ID: "codex-rich-log", Timestamp: now.Add(time.Millisecond), TraceID: "codex-rich-trace", SpanID: "turn",
+			Body: "codex.sse_event", Resource: store.Resource{ServiceName: "codex-app-server"},
+			Attributes: map[string]any{
+				"event.name": "codex.sse_event", "event.kind": "response.completed", "response.id": "codex-rich-response",
+				"conversation.id": "codex-rich-thread", "turn.id": "codex-rich-turn",
+				"input_token_count": int64(12), "output_token_count": int64(6), "tool_token_count": int64(18),
+			},
+		}})
+
+		data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"taskId": "codex-rich-turn"})
+		task := toMapAny(toSliceAny(data["tasks"])[0])
+		usage := toMapAny(task["usage"])
+		if data["accountingStatus"] != "exact" || task["measurementSource"] != "codex_task_span+codex_response_completed_logs" {
+			t.Fatalf("richer Codex evidence was not selected: %+v", task)
+		}
+		if task["providerEventCount"] != float64(1) || task["requestCount"] != float64(1) || usage["effectiveTotalTokens"] != float64(18) {
+			t.Fatalf("correlated Codex sources were double counted: %+v", task)
+		}
+		if usage["cachedInputTokens"] != float64(8) || usage["reasoningOutputTokens"] != float64(4) {
+			t.Fatalf("Codex span breakdown did not fill response-log gaps: %+v", usage)
+		}
+	})
+
+	t.Run("matching provider totals do not hide contradictory filled fields", func(t *testing.T) {
+		s := store.New()
+		s.AddSpansForConnection("codex", []store.Span{{
+			TraceID: "codex-contradictory-trace", SpanID: "turn", Name: "session_task.turn",
+			StartTime: now, EndTime: now.Add(2 * time.Millisecond),
+			Attributes: map[string]any{
+				"thread.id": "codex-contradictory-thread", "turn.id": "codex-contradictory-turn",
+				"codex.turn.token_usage.output_tokens": int64(5),
+				"codex.turn.token_usage.total_tokens":  int64(10),
+			},
+			Resource: store.Resource{ServiceName: "codex-app-server"},
+		}})
+		s.AddLogsForConnection("codex", []store.LogRecord{{
+			ID: "codex-contradictory-log", Timestamp: now.Add(time.Millisecond), TraceID: "codex-contradictory-trace", SpanID: "turn",
+			Body: "codex.sse_event", Resource: store.Resource{ServiceName: "codex-app-server"},
+			Attributes: map[string]any{
+				"event.name": "codex.sse_event", "event.kind": "response.completed", "response.id": "codex-contradictory-response",
+				"conversation.id": "codex-contradictory-thread", "turn.id": "codex-contradictory-turn",
+				"input_token_count": int64(6), "tool_token_count": int64(10),
+			},
+		}})
+
+		data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"taskId": "codex-contradictory-turn"})
+		task := toMapAny(toSliceAny(data["tasks"])[0])
+		usage := toMapAny(task["usage"])
+		if data["accountingStatus"] != "partial" || task["accountingStatus"] != "partial" || task["correlationStatus"] != "trace_usage_mismatch" {
+			t.Fatalf("contradictory correlated usage was not marked partial: %+v", task)
+		}
+		if usage["inputTokens"] != float64(6) || usage["outputTokens"] != nil || usage["derivedTotalTokens"] != nil || usage["providerTotalTokens"] != float64(10) {
+			t.Fatalf("cross-source enrichment did not preserve one internally consistent source: %+v", usage)
+		}
+		if !strings.Contains(task["normalization"].(string), "would contradict the shared provider total") {
+			t.Fatalf("cross-source contradiction was not explained: %+v", task)
+		}
+	})
+
+	t.Run("claude log export order differs from request span order", func(t *testing.T) {
+		s := store.New()
+		requestSpan := func(spanID string, offset time.Duration, input, output int64) store.Span {
+			return store.Span{
+				TraceID: "claude-order-trace", SpanID: spanID, ParentSpanID: "interaction", Name: "claude_code.llm_request",
+				StartTime: now.Add(offset), EndTime: now.Add(offset + time.Millisecond),
+				Attributes: map[string]any{
+					"gen_ai.provider.name": "anthropic", "gen_ai.operation.name": "chat",
+					"gen_ai.usage.input_tokens": input, "gen_ai.usage.cached_input_tokens": int64(0),
+					"gen_ai.usage.cache_creation_input_tokens": int64(0), "gen_ai.usage.output_tokens": output,
+					"gen_ai.usage.total_tokens": input + output,
+				},
+				Resource: store.Resource{ServiceName: "claude-code"},
+			}
+		}
+		s.AddSpansForConnection("claude", []store.Span{
+			{
+				TraceID: "claude-order-trace", SpanID: "interaction", Name: "claude_code.interaction",
+				StartTime: now, EndTime: now.Add(5 * time.Millisecond),
+				Attributes: map[string]any{"prompt.id": "claude-order-prompt", "session.id": "claude-order-session"},
+				Resource:   store.Resource{ServiceName: "claude-code"},
+			},
+			requestSpan("request-a", time.Millisecond, 8, 2),
+			requestSpan("request-b", 2*time.Millisecond, 15, 5),
+		})
+		requestLog := func(id, spanID string, offset time.Duration, input, output int64) store.LogRecord {
+			return store.LogRecord{
+				ID: id, Timestamp: now.Add(offset), TraceID: "claude-order-trace", SpanID: spanID,
+				Body: "claude_code.api_request", Resource: store.Resource{ServiceName: "claude-code"},
+				Attributes: map[string]any{
+					"event.name": "api_request", "request_id": id,
+					"prompt.id": "claude-order-prompt", "session.id": "claude-order-session",
+					"input_tokens": input, "cache_read_tokens": int64(0), "cache_creation_tokens": int64(0),
+					"output_tokens": output, "total_tokens": input + output,
+				},
+			}
+		}
+		// Export B before A even though span A started first.
+		s.AddLogsForConnection("claude", []store.LogRecord{
+			requestLog("log-b", "request-b", 3*time.Millisecond, 15, 5),
+			requestLog("log-a", "request-a", 4*time.Millisecond, 8, 2),
+		})
+
+		data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"taskId": "claude-order-prompt"})
+		task := toMapAny(toSliceAny(data["tasks"])[0])
+		if data["accountingStatus"] != "partial" || task["correlationStatus"] != "trace_request_window_incomplete" || task["requestCount"] != float64(2) || toMapAny(task["usage"])["effectiveTotalTokens"] != float64(30) {
+			t.Fatalf("span-ID correlation depended on provider export order: %+v", task)
+		}
+	})
+
+	t.Run("claude logs without span IDs reconcile only at task level", func(t *testing.T) {
+		s := store.New()
+		requestSpan := func(spanID string, offset time.Duration, input, output int64) store.Span {
+			return store.Span{
+				TraceID: "claude-unmatched-order-trace", SpanID: spanID, ParentSpanID: "interaction", Name: "claude_code.llm_request",
+				StartTime: now.Add(offset), EndTime: now.Add(offset + time.Millisecond),
+				Attributes: map[string]any{
+					"gen_ai.provider.name": "anthropic", "gen_ai.operation.name": "chat",
+					"gen_ai.usage.input_tokens": input, "gen_ai.usage.cached_input_tokens": int64(0),
+					"gen_ai.usage.cache_creation_input_tokens": int64(0), "gen_ai.usage.output_tokens": output,
+					"gen_ai.usage.total_tokens": input + output,
+				},
+				Resource: store.Resource{ServiceName: "claude-code"},
+			}
+		}
+		s.AddSpansForConnection("claude", []store.Span{
+			{
+				TraceID: "claude-unmatched-order-trace", SpanID: "interaction", Name: "claude_code.interaction",
+				StartTime: now, EndTime: now.Add(5 * time.Millisecond),
+				Attributes: map[string]any{"prompt.id": "claude-unmatched-order-prompt", "session.id": "claude-unmatched-order-session"},
+				Resource:   store.Resource{ServiceName: "claude-code"},
+			},
+			requestSpan("request-a", time.Millisecond, 8, 2),
+			requestSpan("request-b", 2*time.Millisecond, 15, 5),
+		})
+		requestLog := func(id string, offset time.Duration, input, output int64) store.LogRecord {
+			return store.LogRecord{
+				ID: id, Timestamp: now.Add(offset), TraceID: "claude-unmatched-order-trace",
+				Body: "claude_code.api_request", Resource: store.Resource{ServiceName: "claude-code"},
+				Attributes: map[string]any{
+					"event.name": "api_request", "request_id": id,
+					"prompt.id": "claude-unmatched-order-prompt", "session.id": "claude-unmatched-order-session",
+					"input_tokens": input, "cache_read_tokens": int64(0), "cache_creation_tokens": int64(0),
+					"output_tokens": output, "total_tokens": input + output,
+				},
+			}
+		}
+		// Without span IDs, the opposite log order cannot prove request-level pairing.
+		s.AddLogsForConnection("claude", []store.LogRecord{
+			requestLog("log-b", 3*time.Millisecond, 15, 5),
+			requestLog("log-a", 4*time.Millisecond, 8, 2),
+		})
+
+		data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"taskId": "claude-unmatched-order-prompt"})
+		task := toMapAny(toSliceAny(data["tasks"])[0])
+		if data["accountingStatus"] != "partial" || task["correlationStatus"] != "trace_request_window_incomplete" ||
+			task["requestCount"] != float64(2) || toMapAny(task["usage"])["effectiveTotalTokens"] != float64(30) {
+			t.Fatalf("unmatched request order was treated as a source disagreement: %+v", task)
+		}
+	})
+}
+
+func TestToolsCallTokenUsageOverviewMarksCorrelatedSourceDisagreementPartial(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	s := store.New()
+	s.AddSpansForConnection("claude", []store.Span{
+		{
+			TraceID: "claude-conflict-trace", SpanID: "interaction", Name: "claude_code.interaction",
+			StartTime: now, EndTime: now.Add(3 * time.Millisecond),
+			Attributes: map[string]any{"prompt.id": "claude-conflict-prompt", "session.id": "claude-conflict-session"},
+			Resource:   store.Resource{ServiceName: "claude-code"},
+		},
+		{
+			TraceID: "claude-conflict-trace", SpanID: "request", ParentSpanID: "interaction", Name: "claude_code.llm_request",
+			StartTime: now.Add(time.Millisecond), EndTime: now.Add(2 * time.Millisecond),
+			Attributes: map[string]any{
+				"gen_ai.provider.name": "anthropic", "gen_ai.operation.name": "chat",
+				"gen_ai.usage.input_tokens": int64(14), "gen_ai.usage.output_tokens": int64(4), "gen_ai.usage.total_tokens": int64(18),
+			},
+			Resource: store.Resource{ServiceName: "claude-code"},
+		},
+	})
+	s.AddLogsForConnection("claude", []store.LogRecord{{
+		ID: "claude-conflict-log", Timestamp: now.Add(time.Millisecond), TraceID: "claude-conflict-trace", SpanID: "request",
+		Body: "claude_code.api_request", Resource: store.Resource{ServiceName: "claude-code"},
+		Attributes: map[string]any{
+			"event.name": "api_request", "request_id": "claude-conflict-request",
+			"prompt.id": "claude-conflict-prompt", "session.id": "claude-conflict-session",
+			"input_tokens": int64(15), "output_tokens": int64(3), "total_tokens": int64(18),
+		},
+	}})
+
+	data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"taskId": "claude-conflict-prompt"})
+	task := toMapAny(toSliceAny(data["tasks"])[0])
+	usage := toMapAny(task["usage"])
+	if data["accountingStatus"] != "partial" || task["correlationStatus"] != "trace_usage_mismatch" {
+		t.Fatalf("conflicting correlated sources were presented as exact: %+v", task)
+	}
+	if usage["effectiveTotalTokens"] != float64(18) || task["requestCount"] != float64(1) {
+		t.Fatalf("conflicting sources were added together: %+v", task)
+	}
+	if normalization, _ := task["normalization"].(string); !strings.Contains(normalization, "token fields disagreed") {
+		t.Fatalf("source disagreement was not explained: %+v", task)
+	}
+}
+
 func TestToolsCallTokenUsageOverviewUsesExactClaudeMetricsOverMalformedLogs(t *testing.T) {
 	t.Parallel()
 
@@ -3160,6 +3739,64 @@ func TestToolsCallTokenUsageOverviewUsesExactClaudeMetricsForMixedQualitySession
 	}
 }
 
+func TestToolsCallTokenUsageOverviewUsesExactClaudeMetricsWhenRequestSubtotalDisagrees(t *testing.T) {
+	t.Parallel()
+
+	s := store.New()
+	now := time.Now().UTC().Add(time.Second)
+	s.AddSpansForConnection("claude", []store.Span{
+		{
+			TraceID: "metric-disagreement-trace", SpanID: "interaction", Name: "claude_code.interaction",
+			StartTime: now, EndTime: now.Add(3 * time.Millisecond),
+			Attributes: map[string]any{"prompt.id": "metric-disagreement-prompt", "session.id": "metric-disagreement-session"},
+			Resource:   store.Resource{ServiceName: "claude-code"},
+		},
+		{
+			TraceID: "metric-disagreement-trace", SpanID: "request", ParentSpanID: "interaction", Name: "claude_code.llm_request",
+			StartTime: now.Add(time.Millisecond), EndTime: now.Add(2 * time.Millisecond),
+			Resource: store.Resource{ServiceName: "claude-code"},
+		},
+	})
+	s.AddLogsForConnection("claude", []store.LogRecord{{
+		ID: "metric-disagreement-request", Timestamp: now.Add(time.Millisecond), TraceID: "metric-disagreement-trace", SpanID: "request",
+		Body: "claude_code.api_request", Resource: store.Resource{ServiceName: "claude-code"},
+		Attributes: map[string]any{
+			"event.name": "api_request", "request_id": "metric-disagreement-request",
+			"prompt.id": "metric-disagreement-prompt", "session.id": "metric-disagreement-session",
+			"input_tokens": int64(10), "cache_read_tokens": int64(0),
+			"cache_creation_tokens": int64(0), "output_tokens": int64(2),
+		},
+	}})
+	metric := func(tokenType string, value float64) store.MetricDataPoint {
+		return store.MetricDataPoint{
+			Name: "claude_code.token.usage", Type: "sum", Temporality: "cumulative", IsMonotonic: true,
+			StartTime: now, Timestamp: now.Add(4 * time.Millisecond), Value: value,
+			Attributes: map[string]any{"session.id": "metric-disagreement-session", "type": tokenType},
+			Resource:   store.Resource{ServiceName: "claude-code"},
+		}
+	}
+	s.AddMetricsForConnection("claude", []store.MetricDataPoint{
+		metric("input", 17),
+		metric("cacheRead", 0),
+		metric("cacheCreation", 0),
+		metric("output", 3),
+	})
+
+	data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"conversationId": "metric-disagreement-session"})
+	tasks := toSliceAny(data["tasks"])
+	if len(tasks) != 1 || data["measurementSource"] != "provider_metrics" || data["accountingStatus"] != "exact" {
+		t.Fatalf("exact cumulative session total did not replace a disagreeing request subtotal: %+v", data)
+	}
+	task := toMapAny(tasks[0])
+	usage := toMapAny(task["usage"])
+	if task["providerMetricCount"] != float64(4) || task["providerEventCount"] != float64(0) || usage["effectiveTotalTokens"] != float64(20) {
+		t.Fatalf("disagreeing request and metric sources were combined or undercounted: %+v", task)
+	}
+	if normalization, _ := task["normalization"].(string); !strings.Contains(normalization, "disagreed with the retained per-request subtotal") {
+		t.Fatalf("metric selection did not explain the source disagreement: %+v", task)
+	}
+}
+
 func TestToolsCallTokenUsageOverviewKeepsPostStartClaudeSubtotalPartialWhenSessionPredatesObserver(t *testing.T) {
 	t.Parallel()
 
@@ -3260,6 +3897,329 @@ func TestSelectClaudeMetricFallbacksCarriesIncompleteSessionHistoryToLogsAndSpan
 				t.Fatalf("%s history limitation is not explained: %+v", test.name, selected[0].task)
 			}
 		})
+	}
+}
+
+func TestSelectClaudeMetricFallbacksKeepsRicherExactTasksWhenSessionTotalMatches(t *testing.T) {
+	t.Parallel()
+
+	requestTotal := int64(12)
+	metricTotal := int64(12)
+	richer := providerLogTaskBuild{task: tokenUsageTask{
+		Provider: "claude", ConversationID: "matching-session", AccountingStatus: "exact",
+		MeasurementSource: "claude_api_request_logs",
+		Usage:             tokenUsageValues{EffectiveTotalTokens: &requestTotal},
+	}}
+	metric := providerLogTaskBuild{task: tokenUsageTask{
+		Provider: "claude", ConversationID: "matching-session", AccountingStatus: "exact",
+		MeasurementSource: "claude_token_metrics",
+		Usage:             tokenUsageValues{EffectiveTotalTokens: &metricTotal},
+	}}
+
+	logs, spans, metrics := selectClaudeMetricFallbacks(
+		[]providerLogTaskBuild{richer},
+		nil,
+		[]providerLogTaskBuild{metric},
+	)
+	if len(logs) != 1 || len(spans) != 0 || len(metrics) != 0 {
+		t.Fatalf("matching exact session evidence did not keep the richer request source: logs=%+v spans=%+v metrics=%+v", logs, spans, metrics)
+	}
+}
+
+func TestSelectClaudeMetricFallbacksDoesNotReplaceNewerRequestWithStaleMetric(t *testing.T) {
+	t.Parallel()
+
+	requestTotal := int64(12)
+	metricTotal := int64(10)
+	now := time.Now().UTC()
+	richer := providerLogTaskBuild{
+		task: tokenUsageTask{
+			Provider: "claude", ConversationID: "stale-metric-session", AccountingStatus: "exact",
+			MeasurementSource: "claude_api_request_logs",
+			Usage:             tokenUsageValues{EffectiveTotalTokens: &requestTotal},
+		},
+		latest: now.Add(time.Second),
+	}
+	metric := providerLogTaskBuild{
+		task: tokenUsageTask{
+			Provider: "claude", ConversationID: "stale-metric-session", AccountingStatus: "exact",
+			MeasurementSource: "claude_token_metrics",
+			Usage:             tokenUsageValues{EffectiveTotalTokens: &metricTotal},
+		},
+		latest: now,
+	}
+
+	logs, spans, metrics := selectClaudeMetricFallbacks(
+		[]providerLogTaskBuild{richer}, nil, []providerLogTaskBuild{metric},
+	)
+	if len(logs) != 1 || len(spans) != 0 || len(metrics) != 0 {
+		t.Fatalf("stale cumulative metric replaced or accompanied newer request usage: logs=%+v spans=%+v metrics=%+v", logs, spans, metrics)
+	}
+	if logs[0].task.AccountingStatus != "partial" || !strings.Contains(logs[0].task.Normalization, "predates the latest request") {
+		t.Fatalf("stale cumulative disagreement was not reported as partial: %+v", logs[0].task)
+	}
+}
+
+func TestSelectClaudeMetricFallbacksDoesNotReplaceRequestPredatingMetricStart(t *testing.T) {
+	t.Parallel()
+
+	requestTotal := int64(12)
+	start := time.Now().UTC()
+	points := make([]store.MetricDataPoint, 0, len(requiredClaudeMetricTokenTypes))
+	for _, tokenType := range []string{"input", "cacheRead", "cacheCreation", "output"} {
+		points = append(points, store.MetricDataPoint{
+			Name: "claude_code.token.usage", Type: "sum", Temporality: "cumulative", Value: 2,
+			IsMonotonic: true, StartTime: start.Add(time.Second), Timestamp: start.Add(3 * time.Second),
+			Attributes: map[string]any{
+				"session.id": "late-start-metric-session", "model": "claude-sonnet", "query_source": "main", "type": tokenType,
+			},
+			Resource: store.Resource{ServiceName: "claude-code"}, Scope: store.Scope{Name: "com.anthropic.claude_code"},
+		})
+	}
+	metric := buildClaudeMetricTask(points, time.Time{})
+	richer := providerLogTaskBuild{
+		task: tokenUsageTask{
+			Provider: "claude", ConversationID: "late-start-metric-session", AccountingStatus: "exact",
+			StartTime: formatTokenUsageTime(start), MeasurementSource: "claude_api_request_logs",
+			Usage: tokenUsageValues{EffectiveTotalTokens: &requestTotal},
+		},
+		latest: start.Add(2 * time.Second),
+	}
+
+	logs, spans, metrics := selectClaudeMetricFallbacks(
+		[]providerLogTaskBuild{richer}, nil, []providerLogTaskBuild{metric},
+	)
+	if len(logs) != 1 || len(spans) != 0 || len(metrics) != 0 {
+		t.Fatalf("late-start cumulative metric replaced or accompanied earlier request usage: logs=%+v spans=%+v metrics=%+v", logs, spans, metrics)
+	}
+	if logs[0].task.AccountingStatus != "partial" || !strings.Contains(logs[0].task.Normalization, "starts after the earliest request") {
+		t.Fatalf("late-start cumulative coverage gap was not reported as partial: %+v", logs[0].task)
+	}
+}
+
+func TestSelectClaudeMetricFallbacksDoesNotReplaceUntimestampedRequestWithMetric(t *testing.T) {
+	t.Parallel()
+
+	requestTotal := int64(12)
+	metricTotal := int64(10)
+	richer := providerLogTaskBuild{task: tokenUsageTask{
+		Provider: "claude", ConversationID: "unknown-order-session", AccountingStatus: "exact",
+		MeasurementSource: "claude_api_request_logs",
+		Usage:             tokenUsageValues{EffectiveTotalTokens: &requestTotal},
+	}}
+	metric := providerLogTaskBuild{
+		task: tokenUsageTask{
+			Provider: "claude", ConversationID: "unknown-order-session", AccountingStatus: "exact",
+			MeasurementSource: "claude_token_metrics",
+			Usage:             tokenUsageValues{EffectiveTotalTokens: &metricTotal},
+		},
+		latest: time.Now().UTC(),
+	}
+
+	logs, spans, metrics := selectClaudeMetricFallbacks(
+		[]providerLogTaskBuild{richer}, nil, []providerLogTaskBuild{metric},
+	)
+	if len(logs) != 1 || len(spans) != 0 || len(metrics) != 0 {
+		t.Fatalf("unordered cumulative metric replaced or accompanied request usage: logs=%+v spans=%+v metrics=%+v", logs, spans, metrics)
+	}
+	if logs[0].task.AccountingStatus != "partial" || !strings.Contains(logs[0].task.Normalization, "could not be ordered") {
+		t.Fatalf("unknown cumulative ordering was not reported as partial: %+v", logs[0].task)
+	}
+}
+
+func TestSelectClaudeMetricFallbacksUsesOldestRequiredMetricComponentTimestamp(t *testing.T) {
+	t.Parallel()
+
+	start := time.Now().UTC()
+	points := make([]store.MetricDataPoint, 0, 4)
+	for _, tokenType := range []string{"input", "cacheRead", "cacheCreation", "output"} {
+		pointTime := start
+		if tokenType == "cacheCreation" {
+			pointTime = start.Add(2 * time.Second)
+		}
+		points = append(points, store.MetricDataPoint{
+			Name: "claude_code.token.usage", Type: "sum", Temporality: "cumulative", Value: 2,
+			IsMonotonic: true, StartTime: start.Add(-time.Minute), Timestamp: pointTime,
+			Attributes: map[string]any{
+				"session.id": "staggered-metric-session", "model": "claude-sonnet", "query_source": "main", "type": tokenType,
+			},
+			Resource: store.Resource{ServiceName: "claude-code"}, Scope: store.Scope{Name: "com.anthropic.claude_code"},
+		})
+	}
+	metric := buildClaudeMetricTask(points, time.Time{})
+	if metric.task.AccountingStatus != "exact" {
+		t.Fatalf("complete cumulative metric fixture was not exact: %+v", metric.task)
+	}
+
+	requestTotal := int64(12)
+	richer := providerLogTaskBuild{
+		task: tokenUsageTask{
+			Provider: "claude", ConversationID: "staggered-metric-session", AccountingStatus: "exact",
+			MeasurementSource: "claude_api_request_logs",
+			Usage:             tokenUsageValues{EffectiveTotalTokens: &requestTotal},
+		},
+		latest: start.Add(time.Second),
+	}
+	logs, spans, metrics := selectClaudeMetricFallbacks([]providerLogTaskBuild{richer}, nil, []providerLogTaskBuild{metric})
+	if len(logs) != 1 || len(spans) != 0 || len(metrics) != 0 {
+		t.Fatalf("one late metric component certified a stale cumulative total: logs=%+v spans=%+v metrics=%+v", logs, spans, metrics)
+	}
+	if logs[0].task.AccountingStatus != "partial" || !strings.Contains(logs[0].task.Normalization, "predates the latest request") {
+		t.Fatalf("staggered cumulative freshness was not reported as partial: %+v", logs[0].task)
+	}
+}
+
+func TestCombineProviderTaskBuildsRequiresMetricRepositoryCorrelationForRepositoryQuery(t *testing.T) {
+	t.Parallel()
+
+	start := time.Now().UTC()
+	end := start.Add(time.Second)
+	richerTotal := int64(10)
+	metricTotal := int64(12)
+	richer := providerLogTaskBuild{
+		task: tokenUsageTask{
+			TaskID:                      "repo-prompt",
+			TaskKind:                    "prompt",
+			ConversationID:              "repo-session",
+			RepositoryName:              "entity-model-service",
+			RepositoryPath:              "/work/entity-model-service",
+			WorkspacePath:               "/work/entity-model-service/worktree",
+			RepositoryCorrelationStatus: "task_correlated",
+			RepositoryCorrelationSource: "provider_task_span",
+			StartTime:                   formatTokenUsageTime(start),
+			EndTime:                     formatTokenUsageTime(end),
+			MeasurementSource:           "claude_task_spans",
+			Status:                      "measured",
+			AccountingStatus:            "exact",
+			Provider:                    "claude",
+			TraceComplete:               true,
+			Usage:                       tokenUsageValues{EffectiveTotalTokens: &richerTotal},
+		},
+		latest: end,
+	}
+	metricStart := start.Add(-time.Second)
+	metricLatest := end.Add(time.Second)
+	metric := providerLogTaskBuild{
+		task: tokenUsageTask{
+			TaskID:            "repo-session",
+			TaskKind:          "session",
+			ConversationID:    "repo-session",
+			StartTime:         formatTokenUsageTime(metricStart),
+			EndTime:           formatTokenUsageTime(metricLatest),
+			MeasurementSource: "claude_token_metrics",
+			Status:            "measured",
+			AccountingStatus:  "exact",
+			Provider:          "claude",
+			Usage:             tokenUsageValues{EffectiveTotalTokens: &metricTotal},
+		},
+		latest:               metricLatest,
+		metricCoverageStart:  &metricStart,
+		metricCoverageLatest: &metricLatest,
+	}
+
+	tasks := combineProviderTaskBuilds(
+		[]providerLogTaskBuild{richer}, nil, []providerLogTaskBuild{metric},
+		map[string]any{"conversationId": "repo-session", "repositoryName": "entity-model-service"},
+	)
+	filtered, coverage := correlateAndFilterProviderTasksWithResolver(
+		tasks,
+		nil,
+		&tokenUsageRepositoryFilter{RepositoryName: "entity-model-service"},
+		func(string) string { return "path" },
+	)
+	if len(filtered) != 1 || coverage.MatchedTaskCount != 1 {
+		t.Fatalf("unattributed Claude metric hid repository-scoped task usage: tasks=%+v coverage=%+v", tasks, coverage)
+	}
+	got := filtered[0].task
+	if got.MeasurementSource != "claude_task_spans" || got.RepositoryPath != richer.task.RepositoryPath ||
+		coverage.CandidateTaskCount != 2 || coverage.UnattributedTaskCount != 1 {
+		t.Fatalf("repository query guessed metric attribution or hid coverage: task=%+v coverage=%+v", got, coverage)
+	}
+
+	metric.task.RepositoryName = "other-service"
+	metric.task.RepositoryPath = "/work/other-service"
+	metric.task.WorkspacePath = "/work/other-service/worktree"
+	metric.task.RepositoryCorrelationStatus = "session_correlated"
+	metric.task.RepositoryCorrelationSource = "provider_lifecycle_hook"
+	tasks = combineProviderTaskBuilds(
+		[]providerLogTaskBuild{richer}, nil, []providerLogTaskBuild{metric},
+		map[string]any{"conversationId": "repo-session", "repositoryName": "entity-model-service"},
+	)
+	filtered, coverage = correlateAndFilterProviderTasksWithResolver(
+		tasks,
+		nil,
+		&tokenUsageRepositoryFilter{RepositoryName: "entity-model-service"},
+		func(string) string { return "path" },
+	)
+	if len(filtered) != 1 || filtered[0].task.MeasurementSource != "claude_task_spans" || coverage.MatchedTaskCount != 1 ||
+		coverage.CandidateTaskCount != 2 || coverage.AmbiguousTaskCount != 1 {
+		t.Fatalf("different-repository Claude metric hid repository-scoped task usage: tasks=%+v coverage=%+v", tasks, coverage)
+	}
+
+	metric.task.RepositoryName = richer.task.RepositoryName
+	metric.task.RepositoryPath = richer.task.RepositoryPath
+	metric.task.WorkspacePath = richer.task.WorkspacePath
+	metric.task.RepositoryCorrelationStatus = "session_correlated"
+	metric.task.RepositoryCorrelationSource = "provider_lifecycle_hook"
+	tasks = combineProviderTaskBuilds(
+		[]providerLogTaskBuild{richer}, nil, []providerLogTaskBuild{metric},
+		map[string]any{"conversationId": "repo-session", "repositoryName": "entity-model-service"},
+	)
+	if len(tasks) != 1 || tasks[0].task.MeasurementSource != "claude_token_metrics" ||
+		tasks[0].task.RepositoryCorrelationStatus != "session_correlated" {
+		t.Fatalf("explicitly correlated Claude metric did not replace the covered subtotal: %+v", tasks)
+	}
+}
+
+func TestCombineProviderTaskBuildsIgnoresInProgressClaudePromptDuringMetricReconciliation(t *testing.T) {
+	t.Parallel()
+
+	start := time.Now().UTC()
+	completedTotal := int64(10)
+	inProgressTotal := int64(2)
+	metricTotal := int64(10)
+	completedEnd := start.Add(time.Second)
+	completed := providerLogTaskBuild{
+		task: tokenUsageTask{
+			TaskID: "completed-prompt", TaskKind: "prompt", ConversationID: "active-session",
+			StartTime: formatTokenUsageTime(start), EndTime: formatTokenUsageTime(completedEnd),
+			MeasurementSource: "claude_api_request_logs", Status: "measured", AccountingStatus: "exact",
+			Provider: "claude", TraceComplete: true,
+			Usage: tokenUsageValues{EffectiveTotalTokens: &completedTotal},
+		},
+		latest: completedEnd,
+	}
+	inProgressEnd := completedEnd.Add(2 * time.Second)
+	inProgress := providerLogTaskBuild{
+		task: tokenUsageTask{
+			TaskID: "live-prompt", TaskKind: "prompt", ConversationID: "active-session",
+			StartTime: formatTokenUsageTime(completedEnd.Add(time.Second)), EndTime: formatTokenUsageTime(inProgressEnd),
+			MeasurementSource: "claude_api_request_logs", Status: "partial", AccountingStatus: "partial",
+			Provider: "claude", TraceComplete: false,
+			Usage: tokenUsageValues{EffectiveTotalTokens: &inProgressTotal},
+		},
+		latest: inProgressEnd,
+	}
+	metricStart := start.Add(-time.Second)
+	metric := providerLogTaskBuild{
+		task: tokenUsageTask{
+			TaskID: "active-session", TaskKind: "session", ConversationID: "active-session",
+			StartTime: formatTokenUsageTime(metricStart), EndTime: formatTokenUsageTime(completedEnd),
+			MeasurementSource: "claude_token_metrics", Status: "measured", AccountingStatus: "exact",
+			Provider: "claude", Usage: tokenUsageValues{EffectiveTotalTokens: &metricTotal},
+		},
+		latest:               completedEnd,
+		metricCoverageStart:  &metricStart,
+		metricCoverageLatest: &completedEnd,
+	}
+
+	tasks := combineProviderTaskBuilds(
+		[]providerLogTaskBuild{completed, inProgress}, nil, []providerLogTaskBuild{metric},
+		map[string]any{"conversationId": "active-session"},
+	)
+	if len(tasks) != 1 || tasks[0].task.TaskID != "completed-prompt" ||
+		tasks[0].task.AccountingStatus != "exact" || tasks[0].task.TraceComplete != true {
+		t.Fatalf("in-progress Claude prompt contaminated completed-session accounting: %+v", tasks)
 	}
 }
 
