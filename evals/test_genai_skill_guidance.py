@@ -578,7 +578,7 @@ def test_genai_readiness_contract_does_not_require_opaque_ids():
         term for term in required_instrument_terms if term not in instrument_normalized
     ]
     assert "every independently actionable surface row" in configure
-    assert "| Surface | Audit Status | Missing Signal |" in configure
+    assert "Surface | Audit Status | Missing Signal |" in configure
 
 
 def test_audit_keeps_genai_governance_and_cost_context_out_of_default_findings():
@@ -965,23 +965,26 @@ def test_splunk_configure_generates_genai_readiness_categories():
         assert not missing
 
 
-def test_splunk_configure_summary_lists_all_genai_display_categories():
+def test_splunk_configure_routes_to_all_genai_display_categories():
     skill = _read(SPLUNK_CONFIGURE)
-    required_display_terms = [
-        "GenAI Latency",
-        "GenAI Token Pressure",
-        "GenAI Provider",
-        "GenAI Tool",
-        "GenAI Model Config",
-        "GenAI Workflow Fanout",
-        "GenAI Retrieval",
-        "GenAI Memory Context",
-        "GenAI Evaluation Quality",
-        "GenAI Content Governance",
-        "GenAI Cost",
-    ]
-    for term in required_display_terms:
-        assert skill.count(term) >= 2
+    classification = _read(SPLUNK_CONFIGURE_REFS / "detector-classification.md")
+    required_display_names = {
+        "genai-latency": "GenAI Latency",
+        "genai-token-pressure": "GenAI Token Pressure",
+        "genai-provider": "GenAI Provider",
+        "genai-tool": "GenAI Tool",
+        "genai-model-config": "GenAI Model Config",
+        "genai-workflow-fanout": "GenAI Workflow Fanout",
+        "genai-retrieval": "GenAI Retrieval",
+        "genai-memory-context": "GenAI Memory Context",
+        "genai-evaluation-quality": "GenAI Evaluation Quality",
+        "genai-content-governance": "GenAI Content Governance",
+        "genai-cost": "GenAI Cost",
+    }
+    for slug, display_name in required_display_names.items():
+        assert f"| `{slug}` | {display_name} |" in classification
+    assert "references/detector-classification.md" in skill
+    assert "category names" in skill
 
 
 def test_splunk_configure_consumes_all_genai_readiness_rows():

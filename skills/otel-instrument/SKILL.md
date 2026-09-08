@@ -1,18 +1,11 @@
 ---
 name: otel-instrument
 description: >-
-  Add OpenTelemetry traces, metrics, and local application logs using
-  auto-instrumentation and optional custom signals, write separate instrumentation Markdown
-  and HTML reports,
-  and run verification unless explicitly skipped or blocked. Use when the user
-  types $otel-instrument, asks to "add OTel", "add tracing", "add metrics",
-  "implement observability", "wire up telemetry", "instrument this service",
-  passes selected executable audit finding IDs with --ids, supplies
-  .observe/otel-selection.json,
-  asks to add a specific custom signal like "add a metric to track queue
-  depth", "add a span for payment processing", "track error rate for X", or
-  asks to add signals that make incidents faster to detect or localize, or asks
-  to instrument GenAI/LLM workflows with OpenTelemetry semantic conventions.
+  Add OpenTelemetry traces, metrics, and local application logs through
+  auto-instrumentation and selected custom signals, then write reports and
+  verify unless blocked. Use for $otel-instrument, approved audit IDs or
+  .observe/otel-selection.json, service instrumentation, specific spans or
+  metrics, incident-detection signals, and GenAI/LLM semantic conventions.
 ---
 
 # Instrument

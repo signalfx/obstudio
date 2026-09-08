@@ -1,16 +1,11 @@
 ---
 name: otel-verify
 description: >-
-  Run deterministic verification for existing OpenTelemetry instrumentation and
-  produce a report. Use when the user types $otel-verify, asks to verify OTel
-  instrumentation, prove spans/metrics/logs are emitted, run observability
-  tests, validate .observe/otel-audit.json, consume approved finding IDs from
-  --ids or .observe/otel-selection.json, check GenAI trace correctness, prove
-  modified/declared spans, metrics, and logs, derive per-code-path coverage from
-  an audit report, produce an instrumentation verification report, or emit local
-  explorer-visible OTLP contract telemetry without starting the full app. This
-  skill is read-only for application code unless the user explicitly asks to
-  add or repair tests; use $otel-instrument to add new instrumentation.
+  Deterministically verify existing OpenTelemetry spans, metrics, logs,
+  approved audit IDs, GenAI traces, per-path coverage, and local OTLP emission,
+  then write verification reports. Use for $otel-verify, instrumentation tests,
+  and emission proof. Read-only for application code; use $otel-instrument for
+  changes and modify tests only when requested.
 ---
 
 # OTel Verify
