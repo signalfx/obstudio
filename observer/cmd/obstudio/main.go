@@ -248,7 +248,7 @@ func run(config runConfig) error {
 		repositoryCorrelationModeResolver,
 		freeAccountSubmitter,
 	)
-	webCleanup := web.Register(mux, s, v)
+	webCleanup := web.Register(mux, s, v, strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")))
 
 	srv := &http.Server{Addr: mainAddr, Handler: mux}
 	mainListener, err := listenObserverHTTP("tcp", mainAddr)
@@ -330,6 +330,13 @@ func run(config runConfig) error {
 	return runErr
 }
 
+// ensureObserverControlToken generates OBSTUDIO_CONTROL_TOKEN when nothing set it
+// (e.g. a standalone `go run ./cmd/obstudio` with no wrapping extension), so Observer's
+// own web UI can authenticate mutating requests -- including CIMD sign-in, which mints a
+// real (in-memory-only) OAuth token -- the same way a VS Code-managed Observer already
+// does. The generated token is delivered to Observer's own page via an inline script
+// (see web.Register/injectControlToken), never through a fetchable, cross-origin-
+// readable JSON response.
 func ensureObserverControlToken() error {
 	if strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")) != "" {
 		return nil
@@ -952,11 +959,14 @@ func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 			"  OTLP/HTTP receiver:  http://%s\n"+
 			"  OTLP/gRPC receiver:  %s\n"+
 			"  MCP endpoint:        http://%s/mcp\n"+
-			"  Agent setup:         obstudio install --target=<agent>[,<agent>...]\n\n",
+			"  Agent setup:         obstudio install --target=<agent>[,<agent>...]\n"+
+			"\nEnvironment Variables\n"+
+			"  OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED: %s\n\n",
 		observerBrowserURL(mainAddr),
 		otlpHTTPAddr,
 		otlpGRPCAddr,
 		mainAddr,
+		strings.TrimSpace(os.Getenv("OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED")),
 	)
 }
 

@@ -1,13 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createSplunkExportBrowserSession,
+  disconnectSISCIMDSession,
+  fetchSISCIMDSession,
   fetchSplunkExportStatus,
   isUnusableSplunkExportBrowserSession,
+  loginSISCIMD,
   recoverSplunkExportBrowserSession,
+  registerSISCIMDClient,
   resolveSplunkCloudRealm,
   runSplunkExportBrowserAction,
 } from "../api/client";
-import type { SplunkExportSignalStatus, SplunkExportStatus } from "../api/types";
+import type { SISCIMDSessionStatus, SplunkExportSignalStatus, SplunkExportStatus } from "../api/types";
 import {
   isObserverHostCloudTimeoutError,
   isSplunkExportStatus,
@@ -18,6 +22,9 @@ import {
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 
 const maxSplunkDestinationBytes = 2048;
+const sisCIMDSessionPollIntervalMs = 1_500;
+
+const maxSplunkRealmLength = 32;
 const maxSplunkAccessTokenBytes = 4096;
 const maxFreeAccountFirstNameLength = 40;
 const maxFreeAccountLastNameLength = 40;
@@ -71,6 +78,9 @@ interface CloudTabProps {
 }
 
 interface CloudActionResponse {
+  cimdRegistrationVerified?: boolean;
+  cimdSession?: SISCIMDSessionStatus;
+  message?: string;
   realm?: string;
   status?: SplunkExportStatus;
 }
@@ -94,6 +104,10 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const [freeAccountMutationState, setFreeAccountMutationState] = useState<FreeAccountMutationState>("idle");
   const [cloudInitializationFinished, setCloudInitializationFinished] = useState(false);
   const [fieldError, setFieldError] = useState<CloudFieldError | null>(null);
+  const [cimdRegistrationEnabled, setCIMDRegistrationEnabled] = useState(false);
+  const [cimdRegistrationVerified, setCIMDRegistrationVerified] = useState(false);
+  const [cimdSession, setCIMDSession] = useState<SISCIMDSessionStatus | null>(null);
+  const [cimdLoginBusy, setCIMDLoginBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<CloudBridgeAction | null>("initialize");
   const [controlError, setControlError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -162,6 +176,11 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       try {
         let nextStatus: unknown;
         let controlInitializationError: unknown;
+        // The IDE's cimdRegistrationEnabled setting, when the bridge reports it, is the
+        // source of truth and overrides Observer's own env-var-driven flag below. That
+        // env var only matters when there is no IDE bridge to ask (e.g. standalone
+        // `go run ./cmd/obstudio` + browser dev).
+        let cimdRegistrationEnabledFromBridge: boolean | undefined;
         if (bridge) {
           try {
             const response = await callBridge("initialize");
@@ -169,6 +188,13 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             bridgeInitialized = true;
             if (response.warning?.trim()) {
               controlInitializationError = new Error(response.warning);
+            }
+            cimdRegistrationEnabledFromBridge = response.cimdRegistrationEnabled;
+            if (response.cimdSession) {
+              setCIMDSession(response.cimdSession);
+              if (response.cimdSession.phase === "connected") {
+                setCIMDRegistrationVerified(true);
+              }
             }
             if (!isSplunkExportStatus(nextStatus)) {
               nextStatus = await fetchSplunkExportStatus(controller.signal);
@@ -195,6 +221,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         if (!nextStatus || !isSplunkExportStatus(nextStatus)) {
           throw new Error("Observer returned an invalid cloud status.");
         }
+        setCIMDRegistrationEnabled(cimdRegistrationEnabledFromBridge ?? nextStatus.cimdRegistrationEnabled);
         setStatus(nextStatus);
         if (bridge || nextBrowserToken) setControlError(null);
         if (controlInitializationError) {
@@ -457,6 +484,9 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       }
       if (response.status) setStatus(response.status);
       setControlError(null);
+      if (response.cimdRegistrationVerified !== undefined) {
+        setCIMDRegistrationVerified(response.cimdRegistrationVerified);
+      }
       return response;
     } catch (actionError) {
       const message = errorMessage(actionError, "The cloud connection request failed.");
@@ -611,6 +641,145 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     event.preventDefault();
     event.currentTarget.form?.requestSubmit();
   };
+
+  const setupCIMD = async () => {
+    if (bridge) {
+      const response = await runAction("setup-cimd");
+      if (!response) return;
+      setNotice(response.message
+        ?? "CIMD client registration verified with SIS. Splunk Observability Cloud export remains disconnected.");
+      return;
+    }
+
+    // No IDE bridge (e.g. standalone `go run ./cmd/obstudio` + browser dev): probe
+    // registration directly through Observer's own backend instead of the bridge.
+    if (busyAction) return;
+    setBusyAction("setup-cimd");
+    setError(null);
+    setNotice(null);
+    try {
+      await registerSISCIMDClient();
+      setCIMDRegistrationVerified(true);
+      setNotice("CIMD client registration verified with SIS. Splunk Observability Cloud export remains disconnected.");
+    } catch (setupError) {
+      setError(errorMessage(setupError, "CIMD client registration failed."));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const loginCIMD = async () => {
+    if (cimdLoginBusy) return;
+    if (bridge) {
+      // The extension opens the system browser itself (vscode.env.openExternal) and
+      // runs its own loopback callback listener -- no window.open popup-gesture
+      // handling needed here. This call blocks for the whole flow, same as setup-cimd.
+      setCIMDLoginBusy(true);
+      setError(null);
+      setNotice(null);
+      try {
+        const response = await runAction("login-cimd");
+        if (response?.cimdSession) setCIMDSession(response.cimdSession);
+        if (response?.cimdSession?.phase === "connected") {
+          setNotice("Signed in to SIS.");
+        }
+      } finally {
+        setCIMDLoginBusy(false);
+      }
+      return;
+    }
+    // Open the tab synchronously, inside the click handler, before any await. Chrome
+    // (and other browsers) only treats window.open as part of the original user
+    // gesture when there is no async gap first -- after an await, the tab may still
+    // open for real, but window.open silently returns null instead of a handle, which
+    // made a real success look identical to a blocked popup. Reserving a blank tab
+    // now and redirecting it once loginSISCIMD() resolves keeps the call inside the
+    // gesture and gives us a real handle to check. No windowFeatures string here:
+    // "noreferrer" implicitly sets "noopener" too, which -- like "noopener" on its
+    // own -- forces window.open to return null even on success, defeating the null
+    // check below every time.
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setError("Could not open the SIS sign-in page. Allow popups for this page and try again.");
+      return;
+    }
+    // Sever window.opener before navigating the popup to SIS -- otherwise the external
+    // authorization page could use window.opener to navigate this tab (reverse tabnabbing).
+    popup.opener = null;
+    setCIMDLoginBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await loginSISCIMD();
+      popup.location.href = response.authorizationUrl;
+      setNotice("Complete sign-in in the new tab, then return here.");
+    } catch (loginError) {
+      popup.close();
+      setError(errorMessage(loginError, "CIMD sign-in failed."));
+      setCIMDLoginBusy(false);
+    }
+  };
+
+  const disconnectCIMD = async () => {
+    if (bridge) {
+      const response = await runAction("disconnect-cimd");
+      if (!response) return;
+      if (response.cimdSession) setCIMDSession(response.cimdSession);
+      setNotice("SIS sign-in disconnected.");
+      return;
+    }
+    try {
+      const nextSession = await disconnectSISCIMDSession();
+      setCIMDSession(nextSession);
+      setNotice("SIS sign-in disconnected.");
+    } catch (disconnectError) {
+      setError(errorMessage(disconnectError, "Could not disconnect the SIS sign-in."));
+    }
+  };
+
+  useEffect(() => {
+    if (bridge || !cimdRegistrationVerified) return undefined;
+    let active = true;
+    const controller = new AbortController();
+
+    const poll = async () => {
+      try {
+        const nextSession = await fetchSISCIMDSession(controller.signal);
+        if (!active) return;
+        setCIMDSession(nextSession);
+        if (nextSession.phase === "connected" || nextSession.phase === "error") {
+          setCIMDLoginBusy(false);
+        }
+      } catch {
+        // Keep the last known session state if a background poll fails.
+      }
+    };
+
+    if (!cimdLoginBusy) {
+      // Not mid-login: check once so the UI knows whether to show "Sign in" or
+      // "Disconnect" (e.g. after a reload where registration was already verified from
+      // a previous visit), but do not keep polling -- cimdRegistrationVerified stays
+      // true for the rest of the tab's life once set, so gating the recurring interval
+      // on it alone (as this used to) would poll every 1.5s indefinitely, long after the
+      // session reaches a terminal phase.
+      void poll();
+      return () => {
+        active = false;
+        controller.abort();
+      };
+    }
+    // Mid-login: poll on the regular interval, without an immediate extra poll here --
+    // that would race the login that was *just* started (setCIMDLoginBusy(true) runs
+    // synchronously before the popup/loginSISCIMD() call resolves) and could observe a
+    // stale or not-yet-updated session. Once a poll's result flips cimdLoginBusy back to
+    // false, this effect re-runs and simply does not reschedule.
+    const intervalId = window.setInterval(() => void poll(), sisCIMDSessionPollIntervalMs);
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [bridge, cimdRegistrationVerified, cimdLoginBusy]);
 
   const openExternalLink = (
     event: React.MouseEvent<HTMLAnchorElement>,
@@ -823,6 +992,66 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
               </div>
             ) : null}
           </header>
+
+          {!cloudConfigured && cimdRegistrationEnabled ? (
+            <section aria-labelledby="cloud-cimd-title" className="cloud-cimd-setup">
+              <div>
+                <h3 id="cloud-cimd-title">Unified sign-in</h3>
+                <p>
+                  {cimdRegistrationVerified
+                    ? "CIMD client registration verified with SIS. Cloud export is still disconnected."
+                    : "Register this IDE as a secretless SIS OAuth client using CIMD and PKCE."}
+                </p>
+              </div>
+              {cimdRegistrationVerified ? (
+                <span className="cloud-cimd-setup__status" role="status">Registration verified</span>
+              ) : (
+                <button
+                  className="cloud-button"
+                  disabled={busyAction !== null}
+                  onClick={() => void setupCIMD()}
+                  type="button"
+                >
+                  {busyAction === "setup-cimd" ? "Registering..." : "Register OAuth client with CIMD"}
+                </button>
+              )}
+            </section>
+          ) : null}
+
+          {!cloudConfigured && cimdRegistrationVerified ? (
+            <section aria-labelledby="cloud-cimd-login-title" className="cloud-cimd-setup">
+              <div>
+                <h3 id="cloud-cimd-login-title">SIS sign-in</h3>
+                <p>
+                  {cimdSession?.phase === "connected"
+                    ? "Signed in to SIS. Cloud export is still disconnected."
+                    : cimdSession?.phase === "pending" && !bridge
+                      ? "Waiting for sign-in to complete in the other tab..."
+                      : cimdSession?.phase === "error"
+                        ? `Sign-in failed: ${cimdSession.error ?? "unknown error"}`
+                        : "Sign in to SIS using the OAuth client registered above."}
+                </p>
+              </div>
+              {cimdSession?.phase === "connected" ? (
+                <button
+                  className="cloud-button cloud-button--danger"
+                  onClick={() => void disconnectCIMD()}
+                  type="button"
+                >
+                  Disconnect
+                </button>
+              ) : (
+                <button
+                  className="cloud-button"
+                  disabled={cimdLoginBusy}
+                  onClick={() => void loginCIMD()}
+                  type="button"
+                >
+                  {cimdLoginBusy ? "Signing in..." : "Sign in to SIS"}
+                </button>
+              )}
+            </section>
+          ) : null}
 
           {!cloudConfigured ? (
             <form aria-label="Cloud connection" className="cloud-connect-form" noValidate onSubmit={connect}>

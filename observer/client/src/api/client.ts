@@ -1,4 +1,13 @@
-import type { LogRecord, MetricGroup, SplunkExportStatus, TraceDetail, TraceSummary } from "./types";
+import type {
+  LogRecord,
+  MetricGroup,
+  SISCIMDLoginStartResult,
+  SISCIMDRegistrationResult,
+  SISCIMDSessionStatus,
+  SplunkExportStatus,
+  TraceDetail,
+  TraceSummary,
+} from "./types";
 import type { PreviewResponse } from "../dashboards/types";
 import { observerFetch } from "../host/transport";
 
@@ -440,6 +449,73 @@ async function postSplunkExportBrowserJSON(
     throw new SplunkExportBrowserActionError(message, response.status);
   }
   return parsed;
+}
+
+/**
+ * Probe SIS CIMD client registration directly through Observer's own backend, for use
+ * when there is no IDE bridge (e.g. standalone `go run ./cmd/obstudio` + browser dev).
+ * Stores no secret, but the probe itself has side effects on SIS and its response
+ * reveals federation redirect/cookie details, so -- like the sibling login routes below
+ * -- it is gated by the Observer control token; see the route comment in
+ * sis_cimd_register.go.
+ */
+export async function registerSISCIMDClient(signal?: AbortSignal): Promise<SISCIMDRegistrationResult> {
+  return fetchSISCIMDGated<SISCIMDRegistrationResult>("/api/splunk/cimd/register", { method: "POST", signal });
+}
+
+/**
+ * Observer's own auto-generated Observer control token, injected into index.html only
+ * for the page Observer itself serves (see injectControlToken in server.go) -- never
+ * fetchable cross-origin, unlike a plain JSON API response. Required to call the
+ * gated SIS CIMD login/session routes below when there is no IDE bridge.
+ */
+function observerControlToken(): string | undefined {
+  const token = (window as unknown as { __OBSTUDIO_CONTROL_TOKEN__?: unknown }).__OBSTUDIO_CONTROL_TOKEN__;
+  return typeof token === "string" && token !== "" ? token : undefined;
+}
+
+async function fetchSISCIMDGated<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = observerControlToken();
+  if (!token) {
+    throw new Error("Observer did not provide a control token for this page. Reload the Cloud tab and try again.");
+  }
+  const response = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: { ...init.headers, Authorization: `Bearer ${token}` },
+  });
+  return parseSISCIMDJSONResponse<T>(response);
+}
+
+async function parseSISCIMDJSONResponse<T>(response: Response): Promise<T> {
+  const body: unknown = await response.json().catch(() => undefined);
+  if (!response.ok) {
+    const message = body && typeof body === "object" && "error" in body && typeof body.error === "string"
+      ? body.error
+      : `${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
+  return body as T;
+}
+
+/**
+ * Start SIS CIMD sign-in directly through Observer's own backend, for use when there is
+ * no IDE bridge. Returns the authorization URL for the caller to open (e.g.
+ * window.open from the click handler, to avoid popup blockers) -- the actual token
+ * exchange happens in the background on Observer; poll fetchSISCIMDSession for the
+ * result. Requires Observer's own injected control token; see observerControlToken.
+ */
+export async function loginSISCIMD(): Promise<SISCIMDLoginStartResult> {
+  return fetchSISCIMDGated<SISCIMDLoginStartResult>("/api/splunk/cimd/login", { method: "POST" });
+}
+
+/** Poll the redacted SIS CIMD session status. Never returns a raw access token. */
+export async function fetchSISCIMDSession(signal?: AbortSignal): Promise<SISCIMDSessionStatus> {
+  return fetchSISCIMDGated<SISCIMDSessionStatus>("/api/splunk/cimd/session", { signal });
+}
+
+/** Clear the in-memory SIS CIMD session held by Observer's own backend. */
+export async function disconnectSISCIMDSession(): Promise<SISCIMDSessionStatus> {
+  return fetchSISCIMDGated<SISCIMDSessionStatus>("/api/splunk/cimd/session/disconnect", { method: "POST" });
 }
 
 /** Fetch per-service aggregates computed from the full span store. */

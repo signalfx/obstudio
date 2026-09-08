@@ -84,6 +84,16 @@
         "category": "Splunk Observability Studio"
       },
       {
+        "command": "observability-studio.signInToSISWithCIMD",
+        "title": "Set Up SIS Sign-In with CIMD",
+        "category": "Splunk Observability Studio"
+      },
+      {
+        "command": "observability-studio.clearSISSession",
+        "title": "Clear Local SIS CIMD Session",
+        "category": "Splunk Observability Studio"
+      },
+      {
         "command": "observability-studio.configureClaudeCodeMCP",
         "title": "Enable Claude Code Integration",
         "category": "Splunk Observability Studio"
@@ -118,6 +128,45 @@
           "minimum": 1,
           "maximum": 65535,
           "markdownDescription": "Local port used by the extension-managed Observer UI and MCP HTTP endpoint when `sharedObserverUrl` is unset."
+        },
+        "observability-studio.sisCimdRegistrationEnabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "Feature flag (PoC): show the CIMD OAuth client setup control in the Cloud tab. Off by default so it does not appear for developers not working on the CIMD registration flow."
+        },
+        "observability-studio.sisCimdOAuthIssuer": {
+          "type": "string",
+          "default": "https://127.0.0.1:9090/test-tenant/sis/v1/rg/cimd-demo",
+          "scope": "machine",
+          "markdownDescription": "SIS resource-group issuer URL used for Client ID Metadata Document (CIMD) sign-in. Loopback HTTP is accepted only for local development. Defaults to a local PoC SIS instance; override for demos. TODO: evaluate a real issuer discovery step (realm/tenant selection) before this goes beyond PoC."
+        },
+        "observability-studio.sisCimdOAuthClientId": {
+          "type": "string",
+          "default": "https://127.0.0.1:9192/oauth/client-metadata.json",
+          "scope": "machine",
+          "markdownDescription": "Exact HTTPS URL of the CIMD client metadata document. SIS uses this document to create or refresh its public shadow client during authorization. Defaults to a local PoC metadata document; override for demos."
+        },
+        "observability-studio.sisCimdOAuthRedirectUri": {
+          "type": "string",
+          "enum": [
+            "http://127.0.0.1:33418/callback"
+          ],
+          "default": "http://127.0.0.1:33418/callback",
+          "scope": "machine",
+          "markdownDescription": "Fixed loopback callback URI declared by the CIMD metadata document."
+        },
+        "observability-studio.sisCimdOAuthScope": {
+          "type": "string",
+          "default": "openid offline_access",
+          "scope": "machine",
+          "markdownDescription": "Space-separated scopes requested for the CIMD public-client SIS session. Every scope must be declared by the metadata document and supported by SIS."
+        },
+        "observability-studio.sisCimdOAuthDevelopmentCaBundlePath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "Optional absolute PEM CA bundle path for loopback-only CIMD development. It augments standard roots only when both issuer and client metadata hosts are loopback and never disables TLS verification."
         }
       }
     }
@@ -135,7 +184,7 @@
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test:unit": "npm run compile-tests && node --test --experimental-test-coverage out/test/extension.test.js out/test/webview-html.test.js out/test/observer-lifecycle.test.js out/test/build-vsix.test.js out/test/startup-errors.test.js",
+    "test:unit": "npm run compile-tests && node --test --experimental-test-coverage out/test/extension.test.js out/test/webview-html.test.js out/test/observer-lifecycle.test.js out/test/build-vsix.test.js out/test/startup-errors.test.js out/test/sis-cimd-oauth.test.js",
     "test:integration": "tsc --outDir out --rootDir src --module Node16 --target ES2022 --strict --skipLibCheck --esModuleInterop src/test/extension-integration.test.ts && node --test out/test/extension-integration.test.js",
     "test:integration:smoke": "tsc --outDir out --rootDir src --module Node16 --target ES2022 --strict --skipLibCheck --esModuleInterop src/test/extension-integration.test.ts && node --test --test-name-pattern=\"installed VSIX smoke test\" out/test/extension-integration.test.js",
     "test:host:current": "npm run compile-tests && npm run compile && vscode-test --run out/test/extension-vscode.test.js --fail-zero --timeout 30000",

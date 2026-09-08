@@ -87,6 +87,13 @@ describe("Observer host transport", () => {
     const invalid = callObserverHostCloud("initialize");
     respond(posted.at(-1), true, { status: { connected: "yes" } });
     await expect(invalid).rejects.toThrow("invalid cloud response");
+
+    // A stringified boolean must not pass validation and end up truthy in the UI.
+    const invalidCIMDFlag = callObserverHostCloud("initialize");
+    respond(posted.at(-1), true, {
+      status: { ...disconnectedStatus(), cimdRegistrationEnabled: "false" },
+    });
+    await expect(invalidCIMDFlag).rejects.toThrow("invalid cloud response");
   });
 
   it("preserves allowlisted cloud failure metadata for outcome handling", async () => {
@@ -206,6 +213,7 @@ function respond(request: PostedMessage | undefined, ok: boolean, result?: unkno
 
 function disconnectedStatus() {
   return {
+    cimdRegistrationEnabled: false,
     connected: false,
     enabled: false,
     version: "V".repeat(43),

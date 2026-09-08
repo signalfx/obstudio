@@ -991,6 +991,29 @@ test('IDE host transport restricts HTTP paths, cancellation, and telemetry comma
 		command: 'connect',
 		type: 'obstudio.host.telemetry',
 	}), false);
+	for (const cimdAction of ['setup-cimd', 'login-cimd', 'disconnect-cimd']) {
+		// runAction() always attaches expectedVersion for optimistic-concurrency checks,
+		// even for CIMD actions that otherwise carry no payload of their own.
+		assert.equal(isObserverHostRequestEnvelope({
+			request: { action: cimdAction, kind: 'cloud', payload: { expectedVersion: 'V'.repeat(43) } },
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), true, cimdAction);
+		assert.equal(isObserverHostRequestEnvelope({
+			request: { action: cimdAction, kind: 'cloud' },
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), false, `${cimdAction} must require expectedVersion`);
+		assert.equal(isObserverHostRequestEnvelope({
+			request: {
+				action: cimdAction,
+				kind: 'cloud',
+				payload: { expectedVersion: 'V'.repeat(43), realm: 'us0' },
+			},
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), false, `${cimdAction} must not accept a realm payload`);
+	}
 });
 
 test('IDE host response collection rejects truncated and aborted responses', async () => {
@@ -2880,6 +2903,33 @@ test('shared startup probes health separately from the intended control endpoint
 	assert.match(
 		source,
 		/const mcpUrl = observerEndpoints\.mcpUrl/,
+	);
+});
+
+function waitForObserverReadySource(): string {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const start = source.indexOf('async function waitForObserverReady(');
+	const end = source.indexOf('\nasync function probeObserver(', start);
+	assert.notEqual(start, -1);
+	assert.notEqual(end, -1);
+	return source.slice(start, end);
+}
+
+test('a health mismatch retries with a bounded delay rather than an immediate failure', () => {
+	// Regression coverage for the Cisco-Secure-Endpoint-content-filter false mismatch:
+	// a mismatch below the attempt limit must retry, not throw on the first attempt.
+	assert.match(
+		waitForObserverReadySource(),
+		/case 'mismatch': \{\n\t+mismatchAttempts \+= 1;[\s\S]*?if \(mismatchAttempts < maxMismatchAttempts\) \{[\s\S]*?await delay\(mismatchRetryDelayMs\);[\s\S]*?break;\n\t+\}/,
+	);
+});
+
+test('a health mismatch throws once the attempt limit is reached, not retrying indefinitely', () => {
+	const source = waitForObserverReadySource();
+	assert.match(source, /const maxMismatchAttempts = 6;/);
+	assert.match(
+		source,
+		/if \(mismatchAttempts < maxMismatchAttempts\) \{[\s\S]*?break;\n\t+\}\n\t+const mismatchContext[\s\S]*?throw wrappedError;/,
 	);
 });
 

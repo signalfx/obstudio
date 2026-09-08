@@ -92,6 +92,48 @@ func TestSplunkExportLifecycleDoesNotExposeToken(t *testing.T) {
 	}
 }
 
+func TestSplunkExportStatusReflectsCIMDRegistrationEnvFlag(t *testing.T) {
+	newMux := func() *http.ServeMux {
+		metrics, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		traces, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		mux := http.NewServeMux()
+		newSplunkExportService(metrics, traces, nil).register(mux)
+		return mux
+	}
+
+	statusFor := func(mux *http.ServeMux) splunkExportStatusResponse {
+		response := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
+		if response.Code != http.StatusOK {
+			t.Fatalf("status request = %d, body = %s", response.Code, response.Body.String())
+		}
+		var status splunkExportStatusResponse
+		if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
+			t.Fatal(err)
+		}
+		return status
+	}
+
+	if status := statusFor(newMux()); status.CIMDRegistrationEnabled {
+		t.Fatalf("expected the flag to default to false, got %+v", status)
+	}
+
+	t.Setenv("OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED", "true")
+	if status := statusFor(newMux()); !status.CIMDRegistrationEnabled {
+		t.Fatalf("expected the flag to be true when the env var is set, got %+v", status)
+	}
+
+	t.Setenv("OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED", "0")
+	if status := statusFor(newMux()); status.CIMDRegistrationEnabled {
+		t.Fatalf("expected the flag to be false for a falsy value, got %+v", status)
+	}
+}
+
 func TestSplunkExportStatusRequiresBothSignalsInSameRealm(t *testing.T) {
 	tests := []struct {
 		name                  string
