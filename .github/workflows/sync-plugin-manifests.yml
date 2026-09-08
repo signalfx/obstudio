@@ -1,0 +1,61 @@
+name: Sync Plugin Manifests
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: "Release tag (vMAJOR.MINOR.PATCH[-prerelease][+build]) to bump the plugin manifests to"
+        required: true
+        type: string
+      base:
+        description: "Branch to bump the manifests on and open the sync PR against"
+        required: false
+        type: string
+        default: main
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag (vMAJOR.MINOR.PATCH[-prerelease][+build]) to bump the plugin manifests to"
+        required: true
+        type: string
+      base:
+        description: "Branch to bump the manifests on and open the sync PR against"
+        required: false
+        type: string
+        default: main
+
+jobs:
+  sync-plugin-manifests:
+    name: Sync plugin manifest versions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base }}
+
+      - name: Bump committed plugin manifests to release version
+        run: |
+          python3 plugins/obstudio/scripts/stage_obstudio_plugin.py \
+            --bump-manifests --release-tag "${{ inputs.release_tag }}"
+
+      - name: Open PR to sync plugin manifest versions
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: bot/sync-plugin-version-${{ inputs.release_tag }}
+          base: ${{ inputs.base }}
+          delete-branch: true
+          commit-message: "chore: sync plugin manifest versions to ${{ inputs.release_tag }}"
+          title: "Sync plugin manifest versions to ${{ inputs.release_tag }}"
+          body: |
+            Automated version sync after release [${{ inputs.release_tag }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ inputs.release_tag }}).
+
+            Updates the `version` field in:
+            - `plugins/obstudio/.claude-plugin/plugin.json`
+            - `plugins/obstudio/.codex-plugin/plugin.json`
+
+            so marketplace installs on `${{ inputs.base }}` report the released version.
+          labels: automated
