@@ -163,3 +163,13 @@ jobs:
             echo "Verify \`Splunk.observability-studio\` version \`${marketplace_version}\` after publishing."
           } >> "${GITHUB_STEP_SUMMARY}"
           echo "::notice title=Manual Marketplace publish required::Upload the four VSIX files from ${RELEASE_URL} to ${MARKETPLACE_PUBLISHER_URL}; do not rebuild them."
+
+  sync-plugin-manifests:
+    name: Sync plugin manifest versions
+    needs: publish-release
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/sync-plugin-manifests.yml
+    with:
+      release_tag: ${{ github.ref_name }}

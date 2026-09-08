@@ -94,6 +94,11 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="verify the staged plugin and exit")
     parser.add_argument("--sync-plugin-skills", action="store_true", help="refresh the committed plugin skills copy")
     parser.add_argument("--check-plugin-skills", action="store_true", help="verify committed plugin skills are synced")
+    parser.add_argument(
+        "--bump-manifests",
+        action="store_true",
+        help="bump the committed Claude and Codex plugin manifests to --release-tag and exit",
+    )
     args = parser.parse_args()
 
     if args.sync_plugin_skills:
@@ -101,6 +106,11 @@ def main() -> int:
         return 0
     if args.check_plugin_skills:
         verify_plugin_skills_synced()
+        return 0
+    if args.bump_manifests:
+        if not args.release_tag:
+            raise RuntimeError("--release-tag is required with --bump-manifests")
+        bump_committed_manifest_versions(release_version_from_tag(args.release_tag))
         return 0
 
     output = args.output.expanduser().resolve()
@@ -142,9 +152,25 @@ def release_version_from_tag(release_tag: str) -> str:
 def stamp_staged_manifest_versions(output: Path, host: str, version: str) -> None:
     for selected_host in PLUGIN_HOSTS if host == "all" else (host,):
         manifest_path = output / (".claude-plugin" if selected_host == "claude" else ".codex-plugin") / "plugin.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest["version"] = version
-        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        _write_manifest_version(manifest_path, version)
+
+
+def bump_committed_manifest_versions(version: str, plugin_root: Path = PLUGIN_ROOT) -> list[Path]:
+    """Bump the version field in the committed (non-staged) plugin manifests."""
+    updated = []
+    for selected_host in PLUGIN_HOSTS:
+        manifest_path = plugin_root / (".claude-plugin" if selected_host == "claude" else ".codex-plugin") / "plugin.json"
+        _write_manifest_version(manifest_path, version)
+        updated.append(manifest_path)
+        print(f"bumped {manifest_path} -> {version}")
+    return updated
+
+
+def _write_manifest_version(manifest_path: Path, version: str) -> None:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["version"] = version
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
 
 def plugin_paths(host: str) -> tuple[str, ...]:
     if host == "all":
