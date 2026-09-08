@@ -1,9 +1,11 @@
 import importlib.util
 import json
+import sys
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 def load_stage_module():
@@ -106,6 +108,18 @@ class StageObstudioPluginTest(unittest.TestCase):
             for manifest_dir in (".claude-plugin", ".codex-plugin"):
                 manifest = json.loads((plugin_root / manifest_dir / "plugin.json").read_text(encoding="utf-8"))
                 self.assertEqual(manifest["version"], "1.2.3")
+
+    def test_cli_bump_manifests_routes_release_tag(self):
+        with mock.patch.object(sys, "argv", ["stage_obstudio_plugin.py", "--bump-manifests", "--release-tag", "v1.2.3"]):
+            with mock.patch.object(STAGE, "bump_committed_manifest_versions") as bump:
+                self.assertEqual(STAGE.main(), 0)
+
+        bump.assert_called_once_with("1.2.3")
+
+    def test_cli_bump_manifests_requires_release_tag(self):
+        with mock.patch.object(sys, "argv", ["stage_obstudio_plugin.py", "--bump-manifests"]):
+            with self.assertRaisesRegex(RuntimeError, "--release-tag is required with --bump-manifests"):
+                STAGE.main()
 
     def test_verify_rejects_staged_symlinks(self):
         with tempfile.TemporaryDirectory() as tempdir:

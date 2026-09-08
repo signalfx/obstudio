@@ -37,9 +37,11 @@ jobs:
           ref: ${{ inputs.base }}
 
       - name: Bump committed plugin manifests to release version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           python3 plugins/obstudio/scripts/stage_obstudio_plugin.py \
-            --bump-manifests --release-tag "${{ inputs.release_tag }}"
+            --bump-manifests --release-tag "$RELEASE_TAG"
 
       - name: Open PR to sync plugin manifest versions
         uses: peter-evans/create-pull-request@v7
@@ -58,4 +60,3 @@ jobs:
             - `plugins/obstudio/.codex-plugin/plugin.json`
 
             so marketplace installs on `${{ inputs.base }}` report the released version.
-          labels: automated
