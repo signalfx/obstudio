@@ -24,8 +24,12 @@ resources only from source-backed metrics that are verified or explicitly
 accepted as source-only inputs. Report missing or unverified readiness coverage
 as instrumentation prerequisites instead of inventing alerts from absent data.
 
-Before writing outputs, read `../references/report-flow-contract.md` and follow
-the Splunk Configure Contract plus Splunk Configure Verification.
+Before writing outputs, read only the tail of
+`../references/report-flow-contract.md` starting at
+`## Splunk Configure Contract`; it contains both the Splunk Configure Contract
+and Splunk Configure Verification. Do not load the preceding audit,
+instrumentation, or verification sections unless resolving a concrete contract
+conflict.
 
 When a prompt mentions MTTD, faster incident detection, better alerts, easier
 incident debugging, or blast-radius visibility, generate detectors and

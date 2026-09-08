@@ -89,6 +89,13 @@ def _long_prose_paragraphs(text: str) -> set[str]:
     return paragraphs
 
 
+def _section_tail_bytes(path: Path, heading: str) -> int:
+    text = path.read_text()
+    assert text.count(heading) == 1, f"expected one {heading!r} heading in {path}"
+    tail = heading + text.split(heading, 1)[1]
+    return len(tail.encode())
+
+
 def test_core_entrypoints_and_catalog_descriptions_are_bounded() -> None:
     total_bytes = 0
 
@@ -108,7 +115,10 @@ def test_core_entrypoints_and_catalog_descriptions_are_bounded() -> None:
 def test_splunk_configure_entrypoint_is_a_bounded_router() -> None:
     raw = CONFIGURE.read_bytes()
     text = raw.decode()
-    default_load_bytes = len(raw) + REPORT_FLOW.stat().st_size
+    configure_contract_bytes = _section_tail_bytes(
+        REPORT_FLOW, "## Splunk Configure Contract"
+    )
+    default_load_bytes = len(raw) + configure_contract_bytes
     full_load_bytes = (
         default_load_bytes
         + CLASSIFICATION.stat().st_size
@@ -117,9 +127,11 @@ def test_splunk_configure_entrypoint_is_a_bounded_router() -> None:
     )
 
     assert len(raw) <= 39_000
-    assert default_load_bytes <= 85_000
-    assert full_load_bytes <= 139_000
+    assert default_load_bytes <= 42_000
+    assert full_load_bytes <= 97_000
     assert not _non_shell_fences(text)
+    assert "read only the tail" in text
+    assert "Do not load the preceding audit" in text
 
 
 def test_splunk_configure_routes_to_single_contract_owners() -> None:
