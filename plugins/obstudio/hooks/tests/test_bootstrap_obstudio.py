@@ -183,14 +183,12 @@ class ClaudeBootstrapTest(unittest.TestCase):
                 BOOTSTRAP.resolve_plugin_data()
 
     def test_uses_claude_manifest_version_and_owner(self):
-        root = Path(__file__).resolve().parents[4]
         prior = os.environ.get("OBSTUDIO_PLUGIN_HOST")
         os.environ["OBSTUDIO_PLUGIN_HOST"] = "claude"
         try:
             self.assertEqual(BOOTSTRAP.plugin_owner(), "claude-plugin")
             self.assertEqual(BOOTSTRAP.plugin_display_name(), "Splunk Observability Studio")
             self.assertEqual(BOOTSTRAP.skill_command("observer-open"), "/obstudio:observer-open")
-            self.assertEqual(BOOTSTRAP.read_plugin_version(root / "plugins" / "obstudio"), "0.0.18")
             self.assertEqual(
                 BOOTSTRAP.codex_obstudio_mcp_policy(Path("ignored"), "http://127.0.0.1:3000/mcp"),
                 "plugin-local",
@@ -211,6 +209,32 @@ class ClaudeBootstrapTest(unittest.TestCase):
                 os.environ.pop("OBSTUDIO_PLUGIN_HOST", None)
             else:
                 os.environ["OBSTUDIO_PLUGIN_HOST"] = prior
+
+    def test_read_plugin_version_uses_selected_host_manifest(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            (root / ".claude-plugin").mkdir()
+            (root / ".codex-plugin").mkdir()
+            (root / ".claude-plugin" / "plugin.json").write_text(
+                '{"version": "0.0.0-claude-test"}',
+                encoding="utf-8",
+            )
+            (root / ".codex-plugin" / "plugin.json").write_text(
+                '{"version": "0.0.0-codex-test"}',
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "claude"}, clear=True):
+                self.assertEqual(
+                    BOOTSTRAP.read_plugin_version(root),
+                    "0.0.0-claude-test",
+                )
+
+            with mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "codex"}, clear=True):
+                self.assertEqual(
+                    BOOTSTRAP.read_plugin_version(root),
+                    "0.0.0-codex-test",
+                )
 
 
 class RepositoryCorrelationTest(unittest.TestCase):
