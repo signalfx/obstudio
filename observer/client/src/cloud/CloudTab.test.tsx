@@ -2698,16 +2698,34 @@ describe("CloudTab", () => {
     expect(await screen.findByText("Unified sign-in")).toBeTruthy();
   });
 
-  it("hides the CIMD setup control by default", async () => {
+  it("keeps cloud controls available on a fresh install with current Observer status", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
 
     const initialize = await bridge.next("initialize");
     bridge.respond(initialize, { status: disconnectedStatus() });
 
-    await screen.findByLabelText("Access token");
+    const connect = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
+    expect(connect.disabled).toBe(false);
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText("Unified sign-in")).toBeNull();
     expect(screen.queryByRole("button", { name: "Register OAuth client with CIMD" })).toBeNull();
+  });
+
+  it("keeps cloud controls available after an upgrade reuses a pre-CIMD Observer", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, {
+      cimdRegistrationEnabled: false,
+      status: legacyDisconnectedStatus(),
+    });
+
+    const connect = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
+    expect(connect.disabled).toBe(false);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Unified sign-in")).toBeNull();
   });
 
   it("shows the CIMD setup control when the extension enables the feature flag", async () => {
@@ -3250,6 +3268,12 @@ function disconnectedStatus(version = disconnectedVersion): SplunkExportStatus {
     metrics: signalStatus(false),
     traces: signalStatus(false),
   };
+}
+
+function legacyDisconnectedStatus(): SplunkExportStatus {
+  const status = disconnectedStatus();
+  delete status.cimdRegistrationEnabled;
+  return status;
 }
 
 function connectedStatus(

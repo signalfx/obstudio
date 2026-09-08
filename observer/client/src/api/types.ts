@@ -310,7 +310,7 @@ export interface SplunkExportStatus {
   version: string;
   metrics: SplunkExportSignalStatus;
   traces: SplunkExportSignalStatus;
-  cimdRegistrationEnabled: boolean;
+  cimdRegistrationEnabled?: boolean;
 }
 
 export interface SISCIMDRegistrationResult {

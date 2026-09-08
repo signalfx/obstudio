@@ -84,6 +84,10 @@ describe("Observer host transport", () => {
     respond(request, true, { status: disconnectedStatus() });
     await expect(pending).resolves.toEqual({ status: disconnectedStatus() });
 
+    const legacy = callObserverHostCloud("initialize");
+    respond(posted.at(-1), true, { status: legacyDisconnectedStatus() });
+    await expect(legacy).resolves.toEqual({ status: legacyDisconnectedStatus() });
+
     const invalid = callObserverHostCloud("initialize");
     respond(posted.at(-1), true, { status: { connected: "yes" } });
     await expect(invalid).rejects.toThrow("invalid cloud response");
@@ -232,4 +236,9 @@ function disconnectedStatus() {
       failedBatches: 0,
     },
   };
+}
+
+function legacyDisconnectedStatus() {
+  const { cimdRegistrationEnabled: _cimdRegistrationEnabled, ...status } = disconnectedStatus();
+  return status;
 }
