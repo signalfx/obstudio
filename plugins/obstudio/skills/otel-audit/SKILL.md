@@ -1,17 +1,11 @@
 ---
 name: otel-audit
 description: >-
-  Scan a codebase for existing OpenTelemetry instrumentation and report
-  on observability coverage gaps. Read-only for application code -- writes
-  audit artifacts under .observe/ including .observe/otel-audit.json
-  and .observe/otel.html, but does not modify service code.
-  Use when the user types $otel-audit, asks about observability gaps,
-  wants to assess instrumentation coverage, says "what signals am I
-  missing", "scan this service for observability", asks about
-  "observability readiness", asks whether instrumentation can make incidents
-  faster to detect or localize, or asks whether GenAI/LLM workflows follow
-  OpenTelemetry semantic conventions. Do NOT use for implementing code changes
-  -- use $otel-instrument instead.
+  Scan a codebase for existing OpenTelemetry instrumentation and observability
+  gaps. Read-only for application code: writes .observe/otel-audit.json and
+  .observe/otel.html but does not modify service code. Use for $otel-audit,
+  coverage/readiness reviews, incident detection or localization gaps, and
+  GenAI/LLM semantic-convention checks. Use $otel-instrument for changes.
 ---
 
 # Audit -- Observability Coverage Scan

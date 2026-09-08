@@ -21,6 +21,7 @@
     "Reports no OTel SDK initialization, no go.opentelemetry.io dependencies, and no OTLP exporter.",
     "Calls out filesystem I/O, background indexing, and LRU eviction as optional custom instrumentation candidates.",
     "Separates coverage gaps from anti-patterns and avoids inventing existing instrumentation.",
-    "Classifies a missing compatible Go application-log bridge and local Observer exporter as a required default gap when the existing sink can be preserved, while retaining explicit opt-out/operator ownership and keeping cloud forwarding limited to traces and metrics."
+    "Classifies a missing compatible Go application-log bridge and local Observer exporter as a required default gap when the existing sink can be preserved, while retaining explicit opt-out/operator ownership and keeping cloud forwarding limited to traces and metrics.",
+    "Treats both a direct coverage scan and an observability-readiness review as read-only audit work: writes only canonical .observe audit artifacts and routes implementation follow-up to $otel-instrument."
   ]
 }

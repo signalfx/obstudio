@@ -4,6 +4,37 @@ Rules for mapping metrics from an otel-audit report into detector categories.
 Use the priority order below when multiple rules match; the first qualifying
 category in that order wins.
 
+## Category Display Names
+
+Use this mapping for report and chat summary labels. The slug remains the
+machine-facing classification value.
+
+| Category slug | Display name |
+|---|---|
+| `impact-classification` | Impact Classification |
+| `auth-edge` | Auth/Edge |
+| `customer-impact` | Customer Impact |
+| `freshness` | Freshness |
+| `backpressure` | Backpressure |
+| `dependency` | Dependency |
+| `capacity-saturation` | Capacity Saturation |
+| `genai-latency` | GenAI Latency |
+| `genai-token-pressure` | GenAI Token Pressure |
+| `genai-provider` | GenAI Provider |
+| `genai-tool` | GenAI Tool |
+| `genai-model-config` | GenAI Model Config |
+| `genai-workflow-fanout` | GenAI Workflow Fanout |
+| `genai-retrieval` | GenAI Retrieval |
+| `genai-memory-context` | GenAI Memory Context |
+| `genai-evaluation-quality` | GenAI Evaluation Quality |
+| `genai-content-governance` | GenAI Content Governance |
+| `genai-cost` | GenAI Cost |
+| `latency` | Latency |
+| `error` | Error |
+| `throughput` | Throughput |
+| `saturation` | Saturation |
+| `release-context` | Release Context |
+
 ## Route-Level De-duplication
 
 Before classifying individual metrics, group candidate metrics that share the
