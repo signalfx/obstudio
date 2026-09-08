@@ -221,7 +221,9 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         if (!nextStatus || !isSplunkExportStatus(nextStatus)) {
           throw new Error("Observer returned an invalid cloud status.");
         }
-        setCIMDRegistrationEnabled(cimdRegistrationEnabledFromBridge ?? nextStatus.cimdRegistrationEnabled);
+        setCIMDRegistrationEnabled(
+          cimdRegistrationEnabledFromBridge ?? nextStatus.cimdRegistrationEnabled ?? false,
+        );
         setStatus(nextStatus);
         if (bridge || nextBrowserToken) setControlError(null);
         if (controlInitializationError) {
