@@ -90,6 +90,23 @@ class StageObstudioPluginTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "must match release version 1.2.3"):
                 STAGE.verify_staged_plugin(output, host="claude", expected_version="1.2.3")
 
+    def test_bump_committed_manifest_versions_updates_both_hosts(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            plugin_root = Path(tempdir) / "obstudio"
+            for manifest_dir in (".claude-plugin", ".codex-plugin"):
+                (plugin_root / manifest_dir).mkdir(parents=True)
+                (plugin_root / manifest_dir / "plugin.json").write_text(
+                    json.dumps({"name": "obstudio", "version": "0.0.16"}),
+                    encoding="utf-8",
+                )
+
+            updated = STAGE.bump_committed_manifest_versions("1.2.3", plugin_root=plugin_root)
+
+            self.assertEqual(len(updated), 2)
+            for manifest_dir in (".claude-plugin", ".codex-plugin"):
+                manifest = json.loads((plugin_root / manifest_dir / "plugin.json").read_text(encoding="utf-8"))
+                self.assertEqual(manifest["version"], "1.2.3")
+
     def test_verify_rejects_staged_symlinks(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio"

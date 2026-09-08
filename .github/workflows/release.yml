@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   build-vsix:
@@ -163,3 +164,39 @@ jobs:
             echo "Verify \`Splunk.observability-studio\` version \`${marketplace_version}\` after publishing."
           } >> "${GITHUB_STEP_SUMMARY}"
           echo "::notice title=Manual Marketplace publish required::Upload the four VSIX files from ${RELEASE_URL} to ${MARKETPLACE_PUBLISHER_URL}; do not rebuild them."
+
+  sync-plugin-manifests:
+    name: Sync plugin manifest versions
+    runs-on: ubuntu-latest
+    needs: publish-release
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Bump committed plugin manifests to release version
+        run: |
+          python3 plugins/obstudio/scripts/stage_obstudio_plugin.py \
+            --bump-manifests --release-tag "${{ github.ref_name }}"
+
+      - name: Open PR to sync plugin manifest versions
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: bot/sync-plugin-version-${{ github.ref_name }}
+          base: main
+          delete-branch: true
+          commit-message: "chore: sync plugin manifest versions to ${{ github.ref_name }}"
+          title: "Sync plugin manifest versions to ${{ github.ref_name }}"
+          body: |
+            Automated version sync after release [${{ github.ref_name }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}).
+
+            Updates the `version` field in:
+            - `plugins/obstudio/.claude-plugin/plugin.json`
+            - `plugins/obstudio/.codex-plugin/plugin.json`
+
+            so marketplace installs report the released version.
+          labels: automated
