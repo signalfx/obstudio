@@ -95,8 +95,8 @@ Parse a three-level graph:
 2. `signalfx_dashboard`: HCL label, `name`, `description`,
    `dashboard_group`, and every chart placement (`chart_id`, `column`, `row`,
    `width`, `height`).
-3. Each `signalfx_*_chart`: HCL label, `name`, chart type, and normalized
-   `program_text`; text charts carry `markdown` instead.
+3. Each chart: HCL resource/label, `name`, optional `plot_type`/`color_by`, and
+   normalized `program_text` (or text `markdown`).
 
 Read `../references/terraform-normalization.md`. Dedent every indented
 `<<-EOF` heredoc and resolve every `${var.*}` from tfvars/defaults before
@@ -106,9 +106,8 @@ normalization. Fail rather than guess unresolved variables. HCL
 uses `program_text`, `chart_id`, and `dashboard_group`; REST uses
 `programText`, `chartId`, and `groupId`.
 
-Read `references/chart-wire-contract.md`. The publish path must recognize
-`TimeSeriesChart` and `SingleValue` as well as the remaining mapped types.
-`packageSpecifications` belongs in chart bodies.
+Read `references/chart-wire-contract.md` for HCL/REST types, visualization
+defaults/validation, and `packageSpecifications`.
 
 ### 2. Select Offline Or Live Mode
 

@@ -17,8 +17,8 @@ Parse `.observe/terraform/dashboards.tf` into a three-level graph:
 2. Each `signalfx_dashboard`: HCL label, `name`, `description`,
    `dashboard_group`, and every `chart` placement (`chart_id`, `column`, `row`,
    `width`, `height`).
-3. Each `signalfx_*_chart`: HCL label, `name`, chart type, `program_text`, or
-   `markdown` for text charts.
+3. Each chart: HCL resource/label, `name`, optional `plot_type`/`color_by`, and
+   `program_text` (or text `markdown`).
 
 Read `../../references/terraform-normalization.md` and normalize every
 `program_text`: reproduce Terraform `<<-EOF` dedent, trim blank edges, and

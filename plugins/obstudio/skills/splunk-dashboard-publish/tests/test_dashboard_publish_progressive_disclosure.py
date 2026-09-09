@@ -174,6 +174,13 @@ def test_chart_wire_preserves_explicit_visualization_options() -> None:
         "type": "SingleValue",
         "colorBy": "Scale",
     }
+    assert chart_options("signalfx_time_chart", plot_type="ColumnChart")[
+        "defaultPlotType"
+    ] == "ColumnChart"
+    assert chart_options("signalfx_single_value_chart", color_by="Scale") == {
+        "type": "SingleValue",
+        "colorBy": "Scale",
+    }
     assert chart_options("time_series", color_by="Scale")["colorBy"] == "Scale"
 
 
@@ -207,6 +214,13 @@ def test_chart_wire_defaults_only_absent_options_and_rejects_invalid_values() ->
         chart_options("heatmap", color_by="Dimension")
     with pytest.raises(ValueError, match="unsupported chart type"):
         chart_options("GaugeChart")
+
+
+def test_parse_contract_carries_visualization_options_into_wire_mapping() -> None:
+    for path in (SKILL, OFFLINE):
+        text = path.read_text(encoding="utf-8")
+        assert "HCL resource/label" in text
+        assert "`plot_type`/`color_by`" in text
 
 
 def test_put_404_requires_a_new_confirmed_diff() -> None:

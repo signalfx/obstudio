@@ -1,10 +1,12 @@
 # Chart Wire Contract
 
-Preserve supported `plot_type` and `color_by`. Default only absent attributes;
-reject every other value.
+Preserve supported options; default only when absent.
+
+HCL includes `signalfx_time_chart` and `signalfx_single_value_chart`.
 
 ```python
 CHART_TYPE_MAP = {
+    "time": "TimeSeriesChart",
     "time_series": "TimeSeriesChart",
     "single_value": "SingleValue",
     "list": "List",
@@ -23,7 +25,8 @@ COLOR_BY_TYPES = {
 
 
 def chart_options(chart_type, *, plot_type=None, color_by=None):
-    rest_type = CHART_TYPE_MAP.get(chart_type, chart_type)
+    local_type = chart_type.removeprefix("signalfx_").removesuffix("_chart")
+    rest_type = CHART_TYPE_MAP.get(local_type, chart_type)
     if rest_type not in CHART_TYPE_MAP.values():
         raise ValueError("unsupported chart type")
     color_config = COLOR_BY_TYPES.get(rest_type)
@@ -48,12 +51,10 @@ def chart_options(chart_type, *, plot_type=None, color_by=None):
     return options
 ```
 
-Use it as body `options` with normalized `programText` and
-`packageSpecifications: "signalfx"`. Only `TimeSeriesChart` gets
-`defaultPlotType`; SingleValue Scale has no `defaultPlotType`.
+Body: `{programText, options, packageSpecifications: "signalfx"}`. Only time
+charts get `defaultPlotType`.
 
-A `Text` chart omits `programText` and uses `options.type=Text` plus `markdown`.
-Never send unresolved `${var.*}`, indented heredocs, or no-argument `.last()`.
+`Text` omits `programText` and puts `markdown` in options. Reject unresolved
+`${var.*}`, indented heredocs, and bare `.last()`.
 
-`signalfx_time_chart`/`signalfx_single_value_chart` map above; dashboards use
-`groupId`.
+The REST dashboard-group field is `groupId`.
