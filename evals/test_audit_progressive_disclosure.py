@@ -100,6 +100,10 @@ def test_audit_renderer_owns_the_canonical_reader_projection() -> None:
         "the only failure is starting the loopback report server",
         "Do not inspect the helper implementation",
         "repeat the same server start without a concrete environment remedy",
+        "include that proven error class",
+        "bind: operation not permitted",
+        "do not shorten it to \"the server could not start.\"",
+        "say that it exposed no deeper cause",
         "never invent a review URL",
         "exact one-line handoff applies only when links.review_report exists",
     ):
