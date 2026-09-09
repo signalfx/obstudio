@@ -92,7 +92,9 @@ Require `.observe/terraform/detectors.tf`; optionally read
 
 1. HCL label and resolved `name`;
 2. raw `program_text`;
-3. every rule's `severity`, `detect_label`, and `notifications`;
+3. every rule's `severity`, `detect_label`, `notifications`, and explicit
+   boolean `disabled` value, defaulting `disabled` to `false` only when the
+   attribute is absent;
 4. first `data('metric.name', ...)` metric; and
 5. resolved `filter('service.name', '...')` value, recognizing `sf_service` as
    the equivalent live dimension.
@@ -150,8 +152,9 @@ ledger.
 
 After a current live `yes`, follow `references/live-publish.md`. POST only the
 confirmed GAP rows to `/v2/detector`, sequentially, with normalized
-`programText`, camelCase `detectLabel`, rule severity/notifications, and
-`"tags": ["obstudio"]`. Never POST an offline or UNCERTAIN row. If the diff
+`programText`, camelCase `detectLabel`, rule severity/notifications, the parsed
+`disabled` value, and `"tags": ["obstudio"]`. Never POST an offline or
+UNCERTAIN row. If the diff
 becomes stale, re-fetch and reconfirm before continuing.
 
 ### 5. Ledger And Response

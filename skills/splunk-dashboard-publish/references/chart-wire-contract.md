@@ -1,25 +1,7 @@
-# Dashboard Publish Chart Wire Contract
+# Chart Wire Contract
 
-Read this reference whenever parsing a chart type or planning/building a
-`POST /v2/chart` body. It is self-contained so publish runs do not need to load
-the dashboard-generation templates.
-
-## Type Mapping
-
-| HCL resource | Local type | REST `options.type` |
-|---|---|---|
-| `signalfx_time_chart` | `time_series` | `TimeSeriesChart` |
-| `signalfx_single_value_chart` | `single_value` | `SingleValue` |
-| `signalfx_list_chart` | `list` | `List` |
-| `signalfx_heatmap_chart` | `heatmap` | `Heatmap` |
-| `signalfx_text_chart` | `text` | `Text` |
-| `signalfx_table_chart` | `table` | `TableChart` |
-
-The generator's broader reference is
-`../../splunk-dashboard/references/dashboard-templates.md`, but do not load it
-for publish: this local contract owns the publish-time wire mapping and body.
-
-## Chart Body
+Preserve supported `plot_type` and `color_by`. Default only absent attributes;
+reject every other value.
 
 ```python
 CHART_TYPE_MAP = {
@@ -31,26 +13,47 @@ CHART_TYPE_MAP = {
     "table": "TableChart",
 }
 
-rest_type = CHART_TYPE_MAP.get(chart_type, chart_type)
-options = {"type": rest_type, "colorBy": "Dimension"}
-if rest_type == "TimeSeriesChart":
-    options["defaultPlotType"] = "LineChart"
-
-body = {
-    "name": chart_name,
-    "programText": normalized_program_text,
-    "options": options,
-    "packageSpecifications": "signalfx",
+PLOT_TYPES = {"LineChart", "AreaChart", "ColumnChart", "Histogram"}
+COLORS = {"Dimension", "Scale", "Metric"}
+COLOR_BY_TYPES = {
+    "TimeSeriesChart": ("Dimension", COLORS),
+    "SingleValue": ("Metric", COLORS),
+    "List": ("Dimension", COLORS),
 }
+
+
+def chart_options(chart_type, *, plot_type=None, color_by=None):
+    rest_type = CHART_TYPE_MAP.get(chart_type, chart_type)
+    if rest_type not in CHART_TYPE_MAP.values():
+        raise ValueError("unsupported chart type")
+    color_config = COLOR_BY_TYPES.get(rest_type)
+    if color_by is not None:
+        if color_config is None or color_by not in color_config[1]:
+            raise ValueError("unsupported color_by")
+    elif color_config is not None:
+        color_by = color_config[0]
+
+    if rest_type == "TimeSeriesChart":
+        plot_type = "LineChart" if plot_type is None else plot_type
+        if plot_type not in PLOT_TYPES:
+            raise ValueError("unsupported plot_type")
+    elif plot_type is not None:
+        raise ValueError("plot_type is unsupported")
+
+    options = {"type": rest_type}
+    if color_by is not None:
+        options["colorBy"] = color_by
+    if plot_type is not None:
+        options["defaultPlotType"] = plot_type
+    return options
 ```
 
-Only `TimeSeriesChart` accepts `defaultPlotType`. `SingleValue`, `List`,
-`Heatmap`, `Text`, and `TableChart` reject it with HTTP 400.
+Use it as body `options` with normalized `programText` and
+`packageSpecifications: "signalfx"`. Only `TimeSeriesChart` gets
+`defaultPlotType`; SingleValue Scale has no `defaultPlotType`.
 
-A `Text` chart omits `programText`; put its content in
-`options: {"type": "Text", "markdown": "..."}`. Never send unresolved
-`${var.*}`, heredoc indentation, or no-argument `.last()`. Use an explicit
-window for `.last()` or the appropriate `.mean()` gauge aggregation.
+A `Text` chart omits `programText` and uses `options.type=Text` plus `markdown`.
+Never send unresolved `${var.*}`, indented heredocs, or no-argument `.last()`.
 
-HCL uses `program_text`, `chart_id`, and `dashboard_group`; REST bodies use
-`programText`, `chartId`, and `groupId`.
+`signalfx_time_chart`/`signalfx_single_value_chart` map above; dashboards use
+`groupId`.
