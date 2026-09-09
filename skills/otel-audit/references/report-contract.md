@@ -2,8 +2,8 @@
 
 Load only after source assessment is complete and immediately before writing
 `.observe/otel-audit.json`. This file is the sole normative audit artifact,
-reader, and handoff contract. Do not load the shared
-`../../references/report-flow-contract.md` or merge its older audit wording.
+reader, and handoff contract. Do not load or merge the older shared audit
+wording.
 
 ### Step 3 -- Report
 
