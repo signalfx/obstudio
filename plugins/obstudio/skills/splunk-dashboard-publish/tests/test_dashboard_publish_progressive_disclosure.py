@@ -83,7 +83,7 @@ def test_offline_reference_is_non_mutating_and_self_contained() -> None:
         "Orphan charts",
         "stop after it",
         "inside the `Reason` cell itself",
-        "Normalized Chart Programs",
+        "### Normalized Chart Programs And Options",
         "Exact options",
         "literal JSON from `chart_options`",
         "stop on unsupported values",

@@ -139,9 +139,9 @@ cleanup ran offline.
 
 Return counts, three-level diff, bodies/order, offline boundary. State no
 network/mutation ran; live work must re-fetch, reclassify, show
-a new diff, and confirm again. Include the `Normalized Chart Programs` table
-with literal per-chart `options`. The final must state unsupported option values
-stop planning, never replaced by defaults. Verify literal
+a new diff, and confirm again. Include the `Normalized Chart Programs And
+Options` table with literal per-chart `options`. The final must state
+unsupported option values stop planning, never replaced by defaults. Verify literal
 `"tags": ["obstudio"]`; add missing bodies.
 A future-live response is incomplete unless it says: create GAPs only; the sole
 COVERED mutation is this append-only PUT preserving existing chart placements
