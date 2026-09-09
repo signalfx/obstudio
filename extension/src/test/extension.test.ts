@@ -2100,7 +2100,10 @@ test('upgrade retirement verifies Observer health and the executable path before
 	const retirementStart = startupEnd + 1;
 	const retirementEnd = source.indexOf('\nasync function waitForProcessExit(', retirementStart);
 	const retirement = source.slice(retirementStart, retirementEnd);
-	assert.match(retirement, /observerVersion === getBundleVersion\(context\)/);
+	assert.match(
+		retirement,
+		/const bundleVersion = getBundleVersion\(context\);[\s\S]*?observerVersion === bundleVersion/,
+	);
 	assert.match(
 		retirement,
 		/if \(!observerHealthVerified\) \{[\s\S]*?return restartRequired\(\);[\s\S]*?const preStopExecutablePath = await readProcessExecutablePath/,
