@@ -58,7 +58,7 @@ do not infer it only from the launch command or installed packages.
   provider while tracing and logs remain disabled. Never describe all OTel as
   no-op because one startup wrapper lacks `opentelemetry-instrument`.
 - For Python repositories, run the bundled
-  `scripts/scan_python_otel_topology.py <service-root>` before reporting. The
+  `../scripts/scan_python_otel_topology.py <service-root>` before reporting. The
   scanner finds candidates; reconcile every hit with target-process
   reachability before using it as evidence.
 - Reconcile resource precedence. Identify operator-provided

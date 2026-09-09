@@ -107,10 +107,11 @@ the IDs.
 
 ## Ledger And Summary
 
-Write `.observe/dashboard-sync.md` after every run, including success, partial
-failure, or all-COVERED no-op. Use the shared ledger template, with separate
-group, dashboard, and chart tables and a concrete non-empty `Reason` cell per
-row. Add an `Orphan charts` section whenever IDs remain unreferenced.
+For a non-dry-run live run, write `.observe/dashboard-sync.md` after success,
+partial failure, or an all-COVERED no-op. A connected dry run never writes a
+ledger. Use the shared ledger template, with separate group, dashboard,
+and chart tables and a concrete non-empty `Reason` cell per row. Add an
+`Orphan charts` section whenever IDs remain unreferenced.
 
 Deep links use
 `https://app.${realm}.signalfx.com/#/dashboard/{id}`. Never include the access

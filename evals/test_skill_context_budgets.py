@@ -216,6 +216,28 @@ def _instrument_report_contract_bytes() -> int:
     return len(routed.encode())
 
 
+def _verify_full_route_bytes() -> int:
+    refs = VERIFY_DIR / "references"
+    return (
+        _bytes(
+            VERIFY_DIR / "SKILL.md",
+            refs / "verification-report.md",
+            refs / "json-approval-handoff.md",
+            refs / "direct-verification.md",
+            refs / "project-runtime-resolution.md",
+            refs / "path-scenario-coverage.md",
+            refs / "explorer-witness.md",
+            refs / "app-code-test-authoring.md",
+            FULL_RUNTIME,
+        )
+        + _section_bytes(
+            REPORT_FLOW,
+            "## Verification Report Contract",
+            "## Splunk Configure Contract",
+        )
+    )
+
+
 def _bytes(*paths: Path) -> int:
     return sum(path.stat().st_size for path in paths)
 
@@ -274,21 +296,25 @@ def test_otel_instrument_routes_have_explicit_context_budgets() -> None:
     direct = _bytes(core, runtime) + _instrument_report_contract_bytes() + max(
         path.stat().st_size for path in languages
     )
-    canonical = direct + handoff.stat().st_size
+    canonical_instrument = direct + handoff.stat().st_size
+    canonical_end_to_end = canonical_instrument + _verify_full_route_bytes()
 
     assert direct <= 85_000
     assert direct + FULL_RUNTIME.stat().st_size <= 89_000
-    assert canonical <= 103_000
-    assert canonical + INCIDENT.stat().st_size + incident_local.stat().st_size <= 122_000
-    assert canonical + GENAI.stat().st_size + genai_local.stat().st_size <= 152_000
+    assert canonical_instrument <= 103_000
+    assert canonical_end_to_end <= 175_000
     assert (
-        canonical
+        canonical_instrument + INCIDENT.stat().st_size + incident_local.stat().st_size
+        <= 122_000
+    )
+    assert canonical_instrument + GENAI.stat().st_size + genai_local.stat().st_size <= 152_000
+    assert (
+        canonical_end_to_end
         + INCIDENT.stat().st_size
         + incident_local.stat().st_size
         + GENAI.stat().st_size
         + genai_local.stat().st_size
-        + FULL_RUNTIME.stat().st_size
-        <= 175_000
+        <= 246_000
     )
 
 
@@ -301,14 +327,7 @@ def test_otel_verify_routes_have_explicit_context_budgets() -> None:
         REPORT_FLOW, "## Verification Report Contract", "## Splunk Configure Contract"
     )
     durable = _bytes(core, report, handoff) + shared_contract
-    full = durable + _bytes(
-        refs / "direct-verification.md",
-        refs / "project-runtime-resolution.md",
-        refs / "path-scenario-coverage.md",
-        refs / "explorer-witness.md",
-        refs / "app-code-test-authoring.md",
-        FULL_RUNTIME,
-    )
+    full = _verify_full_route_bytes()
 
     assert durable <= 34_000
     assert full <= 71_000

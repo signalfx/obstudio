@@ -32,12 +32,19 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         self.assertLessEqual(len(skill.encode()), 12_000)
         self.assertIn("## Progressive Disclosure", skill)
         self.assertIn("## Existing Durable Proof Packet", skill)
-        self.assertIn("Do not read `direct-verification.md`", skill)
+        self.assertIn("Do not read `references/direct-verification.md`", skill)
         self.assertIn("stop before\n`## Splunk Configure Contract`", skill)
         self.assertIn("Inside a loaded\nreference", skill)
         self.assertIn("from that reference's directory", skill)
         self.assertTrue(DIRECT.is_file())
         self.assertTrue(REPORT.is_file())
+
+        for relative in re.findall(r"`([^`]+\.md)`", skill):
+            if relative.startswith(".observe/"):
+                continue
+            target = (SKILL_DIR / relative).resolve()
+            self.assertTrue(target.is_file(), f"entrypoint routes to missing {relative}")
+            self.assertTrue(target.is_relative_to(SKILL_DIR.parent.resolve()))
 
     def test_nested_reference_routes_resolve_from_their_owner(self) -> None:
         references = sorted((SKILL_DIR / "references").glob("*.md"))

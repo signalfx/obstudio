@@ -77,7 +77,8 @@ def test_connected_dry_run_uses_live_read_only_classification() -> None:
     assert "A dry-run request with usable live access is not offline" in entrypoint
     assert "perform the read-only live fetch" in entrypoint
     assert "later non-dry-run must re-fetch" in entrypoint
-    assert "dry run" in live.lower()
+    assert "a connected dry run never writes one" in entrypoint
+    assert "A connected dry run never writes a ledger" in live
 
 
 def test_live_reference_preserves_status_idempotency_and_orphan_contracts() -> None:

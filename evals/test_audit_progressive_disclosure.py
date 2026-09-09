@@ -74,6 +74,11 @@ def test_nested_audit_reference_routes_resolve_from_their_owner() -> None:
             assert target.is_file(), f"{owner} routes to missing {relative}"
             assert target.is_relative_to(skills)
 
+    assessment = REFERENCES / "telemetry-assessment.md"
+    scanner_route = "../scripts/scan_python_otel_topology.py"
+    assert scanner_route in assessment.read_text(encoding="utf-8")
+    assert (assessment.parent / scanner_route).resolve().is_file()
+
 
 def test_audit_renderer_owns_the_canonical_reader_projection() -> None:
     skill = normalized(SKILL)

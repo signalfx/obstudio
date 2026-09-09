@@ -82,7 +82,7 @@ Load only the references required by the selected mode:
 | User explicitly requests permanent tests | `references/app-code-test-authoring.md` (routed from direct verification) | App-code test requirements |
 | Markdown report or final response is written | `references/verification-report.md` | Reader order, status projection, validation, response shape |
 
-Do not read `direct-verification.md` for a request that only validates and
+Do not read `references/direct-verification.md` for a request that only validates and
 renders a complete, already-bound durable proof packet. Do not skip it when
 new verification evidence must be executed.
 
@@ -117,14 +117,14 @@ existing complete `.observe/otel-verify.json` packet and no new runtime claim
 is requested.
 
 1. Validate the complete audit -> selection -> instrumentation -> verification
-   chain with the shared validator from `json-approval-handoff.md`.
+   chain with the shared validator from `references/json-approval-handoff.md`.
 2. Preserve supplied evidence, finding/scenario/item order, proof modes,
    visibility, and trace IDs. Do not rerun the application, replace direct
    proof with source inspection, invent a removed signal, or broaden scope.
 3. Write the compatibility Markdown from the bound proof and run the reader
    validator. Refresh instrumentation HTML only through the bound render flow.
 
-This mode does not load `direct-verification.md`, project-runtime, path,
+This mode does not load `references/direct-verification.md`, project-runtime, path,
 full-runtime, explorer, or test-authoring references unless the request also
 requires new evidence.
 
@@ -148,9 +148,9 @@ Keep these invariants visible while executing:
 ### 3. Produce And Validate Artifacts
 
 In canonical flow, write `.observe/otel-verify.json` exactly as
-`json-approval-handoff.md` specifies, preserving selected finding, scenario,
+`references/json-approval-handoff.md` specifies, preserving selected finding, scenario,
 and instrumentation-item order and exact digest bindings. Then write
-`.observe/otel-verify.md` through `verification-report.md`.
+`.observe/otel-verify.md` through `references/verification-report.md`.
 
 Always run the reader validator. In canonical mode include audit, selection,
 instrumentation, and verification JSON arguments; then validate the complete
@@ -188,7 +188,7 @@ JSON, durable evidence, and Markdown technical detail.
 
 ### 9. Final Response
 
-Use the exact heading order from `verification-report.md` and include the
+Use the exact heading order from `references/verification-report.md` and include the
 individual result table rather than only linking to the file. In canonical
 flow, use these link forms:
 
