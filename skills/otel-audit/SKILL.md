@@ -40,8 +40,8 @@ working context:
 6. After assessment is complete, load `references/report-contract.md` to write,
    finalize, and hand off the canonical artifacts.
 
-Do not load the shared `../references/report-flow-contract.md`. The local
-report contract is the sole authority for audit artifacts and handoff.
+Do not load the shared report-flow contract. The local report contract is the
+sole authority for audit artifacts and handoff.
 
 ## Process
 
