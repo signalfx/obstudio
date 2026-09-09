@@ -484,6 +484,9 @@ the collector before the process stops.
 
 ### Using in main()
 
+`projectServiceName` below is the repository's existing checked-in service-name
+constant, not a placeholder to copy.
+
 ```go
 func main() {
 	runCtx, stop := signal.NotifyContext(
@@ -495,7 +498,7 @@ func main() {
 	// before slog.SetDefault rewires it. Native slog apps pass their existing
 	// handler here instead.
 	existingLogHandler := preserveStandardLogger(log.Default())
-	shutdown, err := initOTel(runCtx, existingLogHandler)
+	shutdown, err := initOTel(runCtx, existingLogHandler, projectServiceName)
 	if err != nil {
 		log.Fatalf("failed to initialize telemetry: %v", err)
 	}
