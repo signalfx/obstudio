@@ -32,7 +32,50 @@ def new_run_root(repo_root: Path, skill: str, run_id: str | None = None) -> Path
     return repo_root / ".workspace" / "codex-evals" / skill / run_id
 
 
-def _preserve_timeout_artifacts(exec_dir: Path, artifact_dir: Path) -> None:
+def _case_artifact_roots(run_root: Path, case: EvalCase) -> tuple[Path, Path]:
+    for field, value in (
+        ("language", case.language),
+        ("service", case.service),
+        ("prompt_id", case.prompt_id),
+    ):
+        component = Path(value)
+        if (
+            not value
+            or "\\" in value
+            or component.is_absolute()
+            or len(component.parts) != 1
+            or component.parts[0] in {".", ".."}
+            or component.as_posix() != value
+        ):
+            raise ValueError(f"case {field} must be a safe path component")
+
+    resolved_run_root = run_root.resolve()
+    cases_root = (resolved_run_root / "cases").resolve()
+    try:
+        cases_root.relative_to(resolved_run_root)
+    except ValueError as exc:
+        raise ValueError("case artifacts must stay within the run root") from exc
+
+    case_root = (
+        cases_root / case.language / case.service / case.prompt_id
+    ).resolve()
+    try:
+        case_root.relative_to(cases_root)
+    except ValueError as exc:
+        raise ValueError("case artifacts must stay within the run cases root") from exc
+    return cases_root, case_root
+
+
+def _preserve_timeout_artifacts(
+    exec_dir: Path, artifact_dir: Path, cases_root: Path
+) -> None:
+    resolved_artifact_dir = artifact_dir.resolve()
+    try:
+        resolved_artifact_dir.relative_to(cases_root)
+    except ValueError as exc:
+        raise ValueError(
+            "timeout artifacts must stay within the run cases root"
+        ) from exc
     if artifact_dir.exists():
         shutil.rmtree(artifact_dir)
     artifact_dir.mkdir(parents=True)
@@ -60,7 +103,7 @@ def run_case(
 ) -> CaseResult:
     if backend is None:
         backend = CodexBackend()
-    case_root = run_root / "cases" / case.language / case.service / case.prompt_id
+    cases_root, case_root = _case_artifact_roots(run_root, case)
     exec_case_root = Path(tempfile.mkdtemp(prefix=f"codex-eval-{case.skill}-{case.language}-{case.service}-{case.prompt_id}-"))
     try:
         with_skill = None
@@ -72,6 +115,7 @@ def run_case(
                 side="with_skill",
                 exec_dir=exec_case_root / "with_skill",
                 artifact_dir=case_root / "with_skill",
+                cases_root=cases_root,
                 prompt=side_prompt(case, "with_skill"),
                 skill_dir=skill_dir,
                 model=model,
@@ -90,6 +134,7 @@ def run_case(
                 side="baseline",
                 exec_dir=exec_case_root / "baseline",
                 artifact_dir=case_root / "baseline",
+                cases_root=cases_root,
                 prompt=side_prompt(case, "baseline"),
                 skill_dir=skill_dir,
                 model=model,
@@ -122,6 +167,7 @@ def run_side(
     side: str,
     exec_dir: Path,
     artifact_dir: Path,
+    cases_root: Path,
     prompt: str,
     skill_dir: Path | None,
     model: str | None,
@@ -146,7 +192,7 @@ def run_side(
         )
     except subprocess.TimeoutExpired as exc:
         try:
-            _preserve_timeout_artifacts(exec_dir, artifact_dir)
+            _preserve_timeout_artifacts(exec_dir, artifact_dir, cases_root)
         except Exception as artifact_error:
             exc.add_note(f"failed to preserve timeout artifacts: {artifact_error}")
         raise

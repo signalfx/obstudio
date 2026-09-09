@@ -1033,6 +1033,72 @@ def test_command_runner_timeout_kills_descendants_and_preserves_output(
         stop_path.write_text("stop\n", encoding="utf-8")
 
 
+@pytest.mark.skipif(
+    backend_module._IS_WINDOWS,
+    reason="POSIX process groups use different cleanup from Windows taskkill",
+)
+def test_process_tree_cleanup_kills_child_after_leader_exits(tmp_path: Path):
+    heartbeat_path = tmp_path / "leader-exit-heartbeat.txt"
+    stop_path = tmp_path / "leader-exit-stop"
+    child_code = (
+        "import sys, time\n"
+        "from pathlib import Path\n"
+        "heartbeat = Path(sys.argv[1])\n"
+        "stop = Path(sys.argv[2])\n"
+        "for _ in range(1500):\n"
+        "    if stop.exists():\n"
+        "        break\n"
+        "    heartbeat.write_text(str(time.monotonic()), encoding='utf-8')\n"
+        "    time.sleep(0.02)\n"
+    )
+    leader_code = (
+        "import subprocess, sys\n"
+        "subprocess.Popen(\n"
+        "    [sys.executable, '-c', sys.argv[1], sys.argv[2], sys.argv[3]],\n"
+        "    stdout=subprocess.DEVNULL,\n"
+        "    stderr=subprocess.DEVNULL,\n"
+        ")\n"
+    )
+    leader = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            leader_code,
+            child_code,
+            str(heartbeat_path),
+            str(stop_path),
+        ],
+        start_new_session=True,
+    )
+
+    try:
+        leader.wait(timeout=5)
+        deadline = time.monotonic() + 5
+        while not heartbeat_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        first_heartbeat = heartbeat_path.read_text(encoding="utf-8")
+        deadline = time.monotonic() + 1
+        while (
+            heartbeat_path.read_text(encoding="utf-8") == first_heartbeat
+            and time.monotonic() < deadline
+        ):
+            time.sleep(0.02)
+        assert heartbeat_path.read_text(encoding="utf-8") != first_heartbeat
+
+        errors = backend_module._terminate_process_tree(
+            leader,
+            process_group_id=leader.pid,
+        )
+
+        time.sleep(0.1)
+        heartbeat = heartbeat_path.read_text(encoding="utf-8")
+        time.sleep(0.15)
+        assert heartbeat_path.read_text(encoding="utf-8") == heartbeat
+        assert errors == []
+    finally:
+        stop_path.write_text("stop\n", encoding="utf-8")
+
+
 def test_process_group_options_use_a_new_session(monkeypatch):
     monkeypatch.setattr(backend_module, "_IS_WINDOWS", False)
 
@@ -1074,7 +1140,9 @@ def test_command_runner_interrupt_terminates_process_group(monkeypatch, tmp_path
         backend_module.os,
         "killpg",
         lambda pid, sig: killpg_calls.append((pid, sig)),
+        raising=False,
     )
+    monkeypatch.setattr(backend_module.signal, "SIGKILL", 9, raising=False)
 
     with pytest.raises(KeyboardInterrupt):
         run_streamed_command(
@@ -1088,12 +1156,83 @@ def test_command_runner_interrupt_terminates_process_group(monkeypatch, tmp_path
     assert process.returncode == -9
 
 
-def test_windows_process_tree_cleanup_uses_taskkill(monkeypatch):
+def test_command_runner_cleanup_failures_do_not_mask_timeout(
+    monkeypatch, tmp_path: Path
+):
+    original_timeout = subprocess.TimeoutExpired(["agent"], 10)
+
+    class FailingProcess:
+        pid = 789
+        stdout = io.StringIO("")
+        stderr = io.StringIO("")
+        first_wait = True
+
+        def wait(self, timeout=None):
+            if self.first_wait:
+                self.first_wait = False
+                raise original_timeout
+            raise RuntimeError("wait cleanup failed")
+
+        def poll(self):
+            raise RuntimeError("poll cleanup failed")
+
+        def kill(self):
+            raise RuntimeError("kill cleanup failed")
+
+    class FailingThread:
+        def __init__(self, **_kwargs):
+            pass
+
+        def start(self):
+            pass
+
+        def join(self, timeout=None):
+            raise RuntimeError("join cleanup failed")
+
+    def fail_killpg(*_args):
+        raise RuntimeError("group cleanup failed")
+
+    monkeypatch.setattr(backend_module, "_IS_WINDOWS", False)
+    monkeypatch.setattr(
+        backend_module.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: FailingProcess(),
+    )
+    monkeypatch.setattr(backend_module.threading, "Thread", FailingThread)
+    monkeypatch.setattr(
+        backend_module.os,
+        "killpg",
+        fail_killpg,
+        raising=False,
+    )
+    monkeypatch.setattr(backend_module.signal, "SIGKILL", 9, raising=False)
+
+    with pytest.raises(subprocess.TimeoutExpired) as raised:
+        run_streamed_command(
+            ["agent"],
+            stdout_path=tmp_path / "trace.jsonl",
+            stderr_path=tmp_path / "stderr.txt",
+            timeout=10,
+        )
+
+    assert raised.value is original_timeout
+    notes = "\n".join(raised.value.__notes__)
+    assert "process-group kill failed: group cleanup failed" in notes
+    assert "agent root poll failed: poll cleanup failed" in notes
+    assert "agent root kill failed: kill cleanup failed" in notes
+    assert "agent root wait failed: wait cleanup failed" in notes
+    assert "stdout stream thread cleanup failed: join cleanup failed" in notes
+    assert "stderr stream thread cleanup failed: join cleanup failed" in notes
+
+
+def test_windows_process_tree_cleanup_attempts_taskkill_after_leader_exit(
+    monkeypatch,
+):
     calls = []
 
     class FakeProcess:
         pid = 123
-        returncode = None
+        returncode = 0
         killed = False
         waited = False
 
@@ -1110,7 +1249,7 @@ def test_windows_process_tree_cleanup_uses_taskkill(monkeypatch):
 
     def fake_run(command, **kwargs):
         calls.append((command, kwargs))
-        return subprocess.CompletedProcess(command, 0)
+        return subprocess.CompletedProcess(command, 128)
 
     monkeypatch.setattr(backend_module, "_IS_WINDOWS", True)
     monkeypatch.setattr(
@@ -1123,12 +1262,16 @@ def test_windows_process_tree_cleanup_uses_taskkill(monkeypatch):
     process = FakeProcess()
 
     assert backend_module._process_group_popen_kwargs() == {"creationflags": 512}
-    backend_module._terminate_process_tree(process)
+    errors = backend_module._terminate_process_tree(
+        process,
+        process_group_id=None,
+    )
 
     assert calls[0][0] == ["taskkill", "/PID", "123", "/T", "/F"]
     assert calls[0][1]["timeout"] == 10
-    assert process.killed is True
+    assert process.killed is False
     assert process.waited is True
+    assert errors == ["taskkill exited with 128"]
 
 
 def test_config_loads_live_ab_and_judge_model(tmp_path: Path):
@@ -4318,6 +4461,102 @@ def test_run_case_preserves_timeout_streams_before_temp_cleanup(tmp_path: Path):
     )
     assert not (artifact_dir / "stale.txt").exists()
     assert not (artifact_dir / "summary.json").exists()
+
+
+def test_run_case_rejects_unsafe_artifact_path_components(tmp_path: Path):
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    run_root = tmp_path / "run"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel.txt"
+    sentinel.write_text("keep\n", encoding="utf-8")
+    unsafe_components = (
+        ("language", "../outside"),
+        ("service", str(outside.resolve())),
+        ("prompt_id", ".."),
+    )
+
+    for field, value in unsafe_components:
+        backend = TimeoutBackend()
+        case = sanity_case(fixture_dir=fixture_dir, **{field: value})
+
+        with pytest.raises(ValueError, match=f"case {field} must be"):
+            run_case(
+                repo_root=tmp_path,
+                run_root=run_root,
+                case=case,
+                rubric=False,
+                sides=("with_skill",),
+                backend=backend,
+            )
+
+        assert backend.exec_dir is None
+        assert sentinel.read_text(encoding="utf-8") == "keep\n"
+
+
+@pytest.mark.skipif(
+    backend_module._IS_WINDOWS,
+    reason="creating directory symlinks can require elevated Windows privileges",
+)
+def test_run_case_rejects_cases_root_symlink_escape(tmp_path: Path):
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel.txt"
+    sentinel.write_text("keep\n", encoding="utf-8")
+    (run_root / "cases").symlink_to(outside, target_is_directory=True)
+    backend = TimeoutBackend()
+
+    with pytest.raises(ValueError, match="must stay within the run root"):
+        run_case(
+            repo_root=tmp_path,
+            run_root=run_root,
+            case=sanity_case(fixture_dir=fixture_dir),
+            rubric=False,
+            sides=("with_skill",),
+            backend=backend,
+        )
+
+    assert backend.exec_dir is None
+    assert sentinel.read_text(encoding="utf-8") == "keep\n"
+
+
+@pytest.mark.skipif(
+    backend_module._IS_WINDOWS,
+    reason="creating directory symlinks can require elevated Windows privileges",
+)
+def test_timeout_preservation_rejects_artifact_symlink_escape(tmp_path: Path):
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    run_root = tmp_path / "run"
+    artifact_parent = run_root / "cases" / "sample" / "service" / "direct"
+    artifact_parent.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel.txt"
+    sentinel.write_text("keep\n", encoding="utf-8")
+    (artifact_parent / "baseline").symlink_to(outside, target_is_directory=True)
+    backend = TimeoutBackend()
+
+    with pytest.raises(subprocess.TimeoutExpired) as raised:
+        run_case(
+            repo_root=tmp_path,
+            run_root=run_root,
+            case=sanity_case(fixture_dir=fixture_dir),
+            rubric=False,
+            sides=("baseline",),
+            backend=backend,
+        )
+
+    notes = "\n".join(raised.value.__notes__)
+    assert "timeout artifacts must stay within the run cases root" in notes
+    assert backend.exec_dir is not None
+    assert not backend.exec_dir.parent.exists()
+    assert sentinel.read_text(encoding="utf-8") == "keep\n"
 
 
 class FailingJudgeBackend(RecordingBackend):
