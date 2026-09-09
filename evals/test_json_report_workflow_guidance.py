@@ -28,6 +28,24 @@ INSTRUMENT_EVAL = (
 CHI_CANONICAL_VERIFY_EVAL = (
     ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "verify.json"
 )
+CHI_DIRECT_VERIFY_EVAL = (
+    ROOT
+    / "evals"
+    / "go"
+    / "chi-basic"
+    / "eval"
+    / "qual"
+    / "verify-runtime-blocker.json"
+)
+CHI_DIRECT_VERIFY_PROBE = (
+    ROOT
+    / "evals"
+    / "go"
+    / "chi-basic"
+    / "eval"
+    / "inputs"
+    / "conclusive-listener-probe.txt"
+)
 CHI_DIRECT_INSTRUMENT_EVAL = (
     ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "instrument.json"
 )
@@ -395,6 +413,39 @@ def test_representative_evals_require_canonical_artifacts_and_scope() -> None:
     assert ".observe/otel-instrumentation.json" in instrument
     assert ".observe/otel-instrumentation.html" in instrument
     assert ".observe/otel-verify.json" in verify
+
+
+def test_direct_verify_eval_covers_conclusive_runtime_blocker() -> None:
+    canonical = json.loads(_read(CHI_CANONICAL_VERIFY_EVAL))
+    direct = json.loads(_read(CHI_DIRECT_VERIFY_EVAL))
+    contract = " ".join(
+        [item["task"] for item in direct["prompts"]]
+        + direct["rubric"]
+        + [_read(CHI_DIRECT_VERIFY_PROBE)]
+    )
+
+    assert [item["id"] for item in canonical["prompts"]] == [
+        "canonical-proof-packet"
+    ]
+    assert [item["id"] for item in direct["prompts"]] == [
+        "conclusive-listener-blocker"
+    ]
+    assert direct["prompts"][0]["eval_inputs"] == [
+        "eval/inputs/conclusive-listener-probe.txt"
+    ]
+    for term in (
+        "new direct verification",
+        "Current-run prerequisite probe",
+        "same selected Go runtime",
+        "Checked-in application listener: :8000",
+        "does not launch",
+        "overall result as Blocked",
+        "ambiguous probe",
+        "application code, configuration, or tests",
+        "free :8000 and rerun full-runtime proof",
+        "does not substitute generated SDK telemetry",
+    ):
+        assert term in contract
 
 
 def test_audit_final_handoff_requires_only_browser_link() -> None:

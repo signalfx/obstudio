@@ -1,0 +1,24 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "conclusive-listener-blocker",
+      "eval_inputs": [
+        "eval/inputs/conclusive-listener-probe.txt"
+      ],
+      "task": "Use $otel-verify read-only to decide the next direct-verification action for the runtime-only GET /health claim. Treat ./service/eval/inputs/conclusive-listener-probe.txt as the sanitized prerequisite transcript from this current run. Do not access the network or change application code, dependencies, runtime configuration, or tests. State whether the real application should now be launched, the exact runtime-row and overall status, the evidence and next action to record, and how the decision would differ if the probe were ambiguous or the failure came from application code, configuration, or tests."
+    }
+  ],
+  "judge_inputs": [
+    "Read ./service/eval/inputs/conclusive-listener-probe.txt for the selected current-run evidence.",
+    "Read ./last_message.md for the modeled direct-verification decision.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Treats this as new direct verification, not existing-durable-proof rendering, and applies the project-runtime and full-runtime acceptance contracts to the supplied current-run evidence.",
+    "Recognizes the conclusive same-runtime bind probe on the exact configured listener as the concrete runtime blocker and does not launch or repeatedly retry the application solely to reproduce that result.",
+    "Records the GET /health runtime scenario as Blocked or Not proven with the exact listener prerequisite, evidence, and the next action to free :8000 and rerun full-runtime proof; because no meaningful telemetry proof executed, reports the overall result as Blocked rather than Pass, Partial, Source only, or an application Fail, while keeping the successful build viability gate separate.",
+    "States that an ambiguous probe or a failure specific to application code, configuration, or tests does not justify skipping the real application launch and must be investigated through the normal runtime gate.",
+    "Leaves application code, dependencies, runtime configuration, and tests unchanged, does not substitute generated SDK telemetry, and does not claim that runtime telemetry was emitted or verified."
+  ]
+}
