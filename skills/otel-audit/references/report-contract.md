@@ -329,6 +329,11 @@ loopback report server, keep those valid artifacts and stop. Do not inspect the
 helper implementation, probe its private state, invoke help, or repeat the same
 server start without a concrete environment remedy. Report the exact server
 blocker concisely and never invent a review URL.
+When an earlier loopback command in the same run exposed an exact environment
+error, include that proven error class (for example,
+`bind: operation not permitted`) in the blocker sentence; do not shorten it to
+"the server could not start." If no deeper cause was exposed, quote the exact
+`finalize-audit` failure text and say that it exposed no deeper cause.
 
 `finalize-audit` starts or reuses a detached report server bound only to
 `127.0.0.1` on an available port and returns the HTTP Markdown link in
