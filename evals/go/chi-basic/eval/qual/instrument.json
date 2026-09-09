@@ -18,12 +18,12 @@
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
-    "Confirms target process, runtime shape, service.name source, and environment dimension before editing.",
+    "Confirms target process, runtime shape, service.name source, and deployment.environment.name source or explicit absence before editing.",
     "Initializes the SDK exactly once and sets tracer provider and text map propagator.",
     "Uses route-aware, low-cardinality HTTP spans and preserves chi routing behavior.",
     "Keeps OTLP endpoint and service name configurable through environment variables.",
-    "Scopes implementation to approved OTEL-001 and does not add the unselected OTEL-002 task.created business metric or other drive-by signals.",
+    "Scopes custom and business instrumentation to approved OTEL-001: does not add unselected OTEL-002 task.created, OTEL-004 task.create, or other unapproved custom signals. The Go guide's standard runtime metrics baseline is allowed and is not a drive-by custom signal.",
     "Writes canonical .observe/otel-selection.json preserving requested ID OTEL-001 separately from dependency-closed approved IDs, then writes bound .observe/otel-instrumentation.json that records selected finding ID OTEL-001, implementation status, changed signals, validation evidence, and verification handoff without rewriting the audit baseline.",
-    "Retains .observe/otel-instrumentation.md as the complete compatibility report, renders .observe/otel-instrumentation.html with one concise verification status followed by every selected finding's change, observability improvement, item proof, and coverage, leaves .observe/otel.html audit-only, and runs otel-verify or records the exact blocker."
+    "Retains .observe/otel-instrumentation.md as the complete compatibility report, renders .observe/otel-instrumentation.html with one concise verification status and every selected finding's change and observability improvement, leaves .observe/otel.html audit-only, and runs otel-verify or records the exact blocker. With a bound verification overlay, detailed item/scenario proof and coverage come from that overlay. Without one, each finding's verification-not-run/not-proven placeholder satisfies the HTML proof and coverage requirement; detailed item/scenario proof is not required, the exact blocker may be recorded in Markdown and the final response, and instrumentation-phase harness or exporter tests stay separately labeled rather than being promoted to bound proof."
   ]
 }

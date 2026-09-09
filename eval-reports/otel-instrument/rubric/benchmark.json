@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "otel-instrument",
-    "run_id": "20260909T054625077006Z",
+    "run_id": "20260909T102455997130Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
@@ -21,11 +21,11 @@
     "failure_count": 0,
     "with_skill": {
       "prompt_count": 1,
-      "command_count": 41,
-      "duration_seconds": 581.098,
-      "agent_duration_seconds": 450.568,
-      "tokens": 1313677,
-      "agent_tokens": 1109576,
+      "command_count": 87,
+      "duration_seconds": 943.676,
+      "agent_duration_seconds": 765.192,
+      "tokens": 4659530,
+      "agent_tokens": 3802140,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 1,
         "selected_record_count": 1,
-        "input_tokens": 1089077,
-        "cached_input_tokens": 1022208,
+        "input_tokens": 3773047,
+        "cached_input_tokens": 3551232,
         "cache_creation_input_tokens": null,
-        "output_tokens": 20499,
-        "reasoning_output_tokens": 6230,
+        "output_tokens": 29093,
+        "reasoning_output_tokens": 7801,
         "provider_total_tokens": null,
-        "derived_total_tokens": 1109576,
-        "effective_total_tokens": 1109576,
+        "derived_total_tokens": 3802140,
+        "effective_total_tokens": 3802140,
         "coverage": {
           "record_count": 1,
           "modeled_count": 1,
@@ -59,26 +59,26 @@
         }
       },
       "rubric": {
-        "passed": 6,
-        "total": 6,
-        "average_score": 95.0
+        "passed": 7,
+        "total": 7,
+        "average_score": 94.0
       },
-      "rubric_tokens": 204101,
-      "rubric_duration_seconds": 129.072,
+      "rubric_tokens": 857390,
+      "rubric_duration_seconds": 173.676,
       "rubric_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
         "usage_record_count": 1,
         "selected_record_count": 1,
-        "input_tokens": 198292,
-        "cached_input_tokens": 158336,
+        "input_tokens": 849182,
+        "cached_input_tokens": 690944,
         "cache_creation_input_tokens": null,
-        "output_tokens": 5809,
-        "reasoning_output_tokens": 2507,
+        "output_tokens": 8208,
+        "reasoning_output_tokens": 3209,
         "provider_total_tokens": null,
-        "derived_total_tokens": 204101,
-        "effective_total_tokens": 204101,
+        "derived_total_tokens": 857390,
+        "effective_total_tokens": 857390,
         "coverage": {
           "record_count": 1,
           "modeled_count": 1,
@@ -101,21 +101,21 @@
   },
   "evals": [
     {
-      "id": "python/flask-basic/qual/instrument-operator-owned-logs-header",
-      "case": "python/flask-basic",
-      "language": "python",
-      "service": "flask-basic",
+      "id": "go/chi-basic/qual/instrument",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
       "prompt_count": 1,
       "prompts": [
-        "operator-owned-logs-header"
+        "direct"
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 41,
-        "duration_seconds": 581.098,
-        "agent_duration_seconds": 450.568,
-        "tokens": 1313677,
-        "agent_tokens": 1109576,
+        "command_count": 87,
+        "duration_seconds": 943.676,
+        "agent_duration_seconds": 765.192,
+        "tokens": 4659530,
+        "agent_tokens": 3802140,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -123,14 +123,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 1089077,
-          "cached_input_tokens": 1022208,
+          "input_tokens": 3773047,
+          "cached_input_tokens": 3551232,
           "cache_creation_input_tokens": null,
-          "output_tokens": 20499,
-          "reasoning_output_tokens": 6230,
+          "output_tokens": 29093,
+          "reasoning_output_tokens": 7801,
           "provider_total_tokens": null,
-          "derived_total_tokens": 1109576,
-          "effective_total_tokens": 1109576,
+          "derived_total_tokens": 3802140,
+          "effective_total_tokens": 3802140,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -149,26 +149,26 @@
           }
         },
         "rubric": {
-          "passed": 6,
-          "total": 6,
-          "average_score": 95.0
+          "passed": 7,
+          "total": 7,
+          "average_score": 94.0
         },
-        "rubric_tokens": 204101,
-        "rubric_duration_seconds": 129.072,
+        "rubric_tokens": 857390,
+        "rubric_duration_seconds": 173.676,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 198292,
-          "cached_input_tokens": 158336,
+          "input_tokens": 849182,
+          "cached_input_tokens": 690944,
           "cache_creation_input_tokens": null,
-          "output_tokens": 5809,
-          "reasoning_output_tokens": 2507,
+          "output_tokens": 8208,
+          "reasoning_output_tokens": 3209,
           "provider_total_tokens": null,
-          "derived_total_tokens": 204101,
-          "effective_total_tokens": 204101,
+          "derived_total_tokens": 857390,
+          "effective_total_tokens": 857390,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -190,27 +190,26 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260909T054625077006Z/results/python/flask-basic/qual-instrument-operator-owned-logs-header/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260909T054625077006Z/results/python/flask-basic/qual-instrument-operator-owned-logs-header/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260909T054625077006Z/results/python/flask-basic/qual-instrument-operator-owned-logs-header/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20260909T102455997130Z/results/go/chi-basic/qual-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260909T102455997130Z/results/go/chi-basic/qual-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260909T102455997130Z/results/go/chi-basic/qual-instrument/with_baseline.json"
       }
     }
   ],
   "failures": [],
   "source": {
     "digest_version": 2,
-    "digest": "bd58a4928fec35912040ac922dcf4edd64fa8a3f34e7cf6678fc545dda4fc339",
+    "digest": "e66f625f1b7e38d7035c352963ad317b2c5d7e74d2970a19ac9a0e271852220c",
     "eval_kinds": [
       "rubric"
     ],
     "files": {
       "evals/codex-evals.token-benchmark-network.toml": "8f6b7b901a2d355e54196fba60275fd2d4528a900d408d40e803c14b4275213e",
+      "evals/go/chi-basic/eval/inputs/otel-audit.json": "b2cec5a1635fc3ba29e70f66d0f328942c17c2f5b0697b37092f35a0f72e5aab",
+      "evals/go/chi-basic/eval/qual/instrument.json": "bb9065ec2ddafd69572d92098bea0bfd5b246f4889b053152b5cc32290b6e5f1",
+      "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
+      "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
       "evals/pyproject.toml": "5d9274a20067dbdf33bbc6a7fff51f4a0bb5ab10c3163b80266ca3432a32293d",
-      "evals/python/flask-basic/Makefile": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe",
-      "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
-      "evals/python/flask-basic/eval/inputs/operator-owned-logs.env": "22a08ec66c8e8d32997840c7eb9e916d04e783ec5947d455a2cb1afe817d1c6e",
-      "evals/python/flask-basic/eval/qual/instrument-operator-owned-logs-header.json": "1db94981343a93630552ac2c340277219123c078f8bb86a7231d5a113a3d7ac0",
-      "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f",
       "evals/uv.lock": "ad811e95827dd15596c6b41c9a6e112dc011ce6eece83b3322054ff786b932b3",
       "pytest-codex-evals/pyproject.toml": "e356e980db8086d731a14dee7b6f508b60e43652ecf86d051b1a6faece0339db",
       "pytest-codex-evals/src/pytest_codex_evals/__init__.py": "b7a1a6542146ea0c4d860cbaacaba484b18b7556b04b11787e472bd051235d4f",
@@ -247,8 +246,8 @@
       "skills/otel-instrument/SKILL.md": "f9e3bbe5f9af2e1d43b8552e5c426e94a69fc43a9269733ccf871e7b04ae719c",
       "skills/otel-instrument/references/genai-implementation.md": "dcc70b0cf3d8a25a9a893e75bca99efc02f868cf7be869dd9db75f77fd8c46a5",
       "skills/otel-instrument/references/incident-implementation.md": "91ac2017d56091c425c173e7c25c3f262af2d4d4564e9f3af580ebfabe7e66dc",
-      "skills/otel-instrument/references/json-approval-handoff.md": "f35874a16f4a184d35c2780434b4296bcdf62e54107dea26330569f9cffd7910",
-      "skills/otel-instrument/references/languages/go.md": "26dfcebe71e38122fd43b6f3b9b667af3b67eec34af7292abd58f3fd60df48c1",
+      "skills/otel-instrument/references/json-approval-handoff.md": "5c7a45d5df529c216dbc7adcaa05c3083adcc44c96c5ada63f391c73066503f6",
+      "skills/otel-instrument/references/languages/go.md": "e62c5a7b4c1e0a4ccf78a2879dbc3c2c34b78dade7a3247236865473406accb5",
       "skills/otel-instrument/references/languages/java.md": "5d33e338d2ab4dee2163989ac5c35398dbd90d2d480ba9880e6f7bb837019fbb",
       "skills/otel-instrument/references/languages/node.md": "508927f8b26f779aa16ec35e280473a75bff2218c9bbca7db6027ff3e75407aa",
       "skills/otel-instrument/references/languages/python.md": "918ebfd2962ffc16d68e7447cb3403538fcc0fbc327e3c03cc2a76e26ed35c91",
@@ -274,12 +273,12 @@
     "skill_path": "skills/otel-instrument",
     "selections": [
       {
-        "definition_path": "evals/python/flask-basic/eval/qual/instrument-operator-owned-logs-header.json",
-        "fixture_dir": "evals/python/flask-basic",
-        "prompt_id": "operator-owned-logs-header",
+        "definition_path": "evals/go/chi-basic/eval/qual/instrument.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "direct",
         "eval_kind": "rubric",
         "eval_inputs": [
-          "eval/inputs/operator-owned-logs.env"
+          "eval/inputs/otel-audit.json"
         ]
       }
     ],

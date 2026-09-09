@@ -335,6 +335,44 @@ def test_instrument_keeps_verification_results_in_bound_overlay() -> None:
     assert "do not duplicate them as new instrumentation schema fields" in handoff
 
 
+def test_instrumentation_phase_validation_is_not_bound_verification() -> None:
+    instrument = " ".join(_read(INSTRUMENT_SKILL).split())
+    rubric = " ".join(
+        json.loads(_read(CHI_DIRECT_INSTRUMENT_EVAL))["rubric"]
+    )
+
+    assert "instrumentation-phase validation, never item proof" in instrument
+    assert "With bound verification, HTML names the repair" in instrument
+    assert "HTML keeps per-finding proof and OTLP/product visibility not run/not proven" in instrument
+    assert "details stay in Markdown" in instrument
+    assert "With a bound verification overlay, detailed item/scenario proof and coverage come from that overlay" in rubric
+    assert "placeholder satisfies the HTML proof and coverage requirement" in rubric
+    assert "detailed item/scenario proof is not required" in rubric
+    assert "instrumentation-phase harness or exporter tests stay separately labeled" in rubric
+    assert "rather than being promoted to bound proof" in rubric
+
+
+def test_instrument_preflight_records_deployment_environment_ownership() -> None:
+    instrument = " ".join(_read(INSTRUMENT_SKILL).split())
+    rubric = " ".join(
+        json.loads(_read(CHI_DIRECT_INSTRUMENT_EVAL))["rubric"]
+    )
+
+    assert "Before editing, record the `deployment.environment.name` source or explicit absence" in instrument
+    assert "preserve operator `OTEL_RESOURCE_ATTRIBUTES`" in instrument
+    assert "deployment.environment.name source or explicit absence before editing" in rubric
+
+
+def test_instrument_rubric_allows_standard_runtime_auto_instrumentation() -> None:
+    rubric = " ".join(
+        json.loads(_read(CHI_DIRECT_INSTRUMENT_EVAL))["rubric"]
+    )
+
+    assert "does not add unselected OTEL-002 task.created, OTEL-004 task.create" in rubric
+    assert "The Go guide's standard runtime metrics baseline" in rubric
+    assert "is not a drive-by custom signal" in rubric
+
+
 def test_instrumentation_meta_result_never_uses_not_run() -> None:
     handoff = " ".join(_read(INSTRUMENT_HANDOFF).split())
 
