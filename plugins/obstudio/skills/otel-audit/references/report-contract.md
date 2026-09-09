@@ -419,6 +419,16 @@ has selected executable IDs.
 
 Keep these essential input semantics in the canonical JSON:
 
+- Encode each audited interface in `routes` with parameterized paths and any
+  required query-name shape, for example `/kv/{key}` and
+  `/search?word={word}`. This is interface inventory only: expected OTel
+  `http.route` values remain path-only (for example, `/search`) and never
+  contain query strings or values.
+- In `verification.scenarios[*].trigger`, never embed concrete key, query,
+  path-parameter, request-body, tenant, or user values. Use placeholders such
+  as `{key}` and `{word}`, or semantic conditions such as `an existing key` and
+  `a missing key`; keep expected telemetry on the same low-cardinality route
+  templates.
 - `meta.genai_ownership_detected` is the explicit ownership switch. Populate
   `genai_readiness` only when it is true. Human HTML must not render full
   Incident or GenAI readiness ledgers as separate primary sections; preserve
