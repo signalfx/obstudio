@@ -45,10 +45,6 @@
  "routes": [
   {
    "method": "GET",
-   "path": "/health"
-  },
-  {
-   "method": "GET",
    "path": "/kv/{key}"
   },
   {
@@ -101,7 +97,7 @@
    "gap": "No OTel providers, resource merge, propagator, exporters, or shutdown flush are reachable from the server entrypoint.",
    "impact": "Selected service-owned telemetry cannot emit with stable identity or flush reliably.",
    "product_outcome": "One consistent kvstore identity and export lifecycle",
-   "required_fix": "Initialize OTel once before serving, preserve operator resource settings, configure trace and metric export plus local application-log export from environment, retain the documented detected-local Observer logs fallback, install W3C propagation, and flush on shutdown without hardcoding a cloud endpoint.",
+   "required_fix": "Initialize OTel once before serving, preserve operator resource settings, configure trace and metric export from environment, install W3C propagation, and flush on shutdown without hardcoding a cloud endpoint.",
    "instrument_mode": "default",
    "verification_scenarios": [
     "runtime.startup.provider",
@@ -114,7 +110,7 @@
    ],
    "acceptance_criteria": [
     "Exactly one SDK lifecycle starts before serving and flushes during shutdown.",
-    "Endpoints remain operator-configurable while retaining the documented detected-local Observer logs fallback; no cloud endpoint is hardcoded."
+    "Trace and metric endpoints remain operator-configurable; no cloud endpoint is hardcoded."
    ],
    "constraints": [
     "Do not initialize providers from package init or request paths.",
@@ -127,7 +123,7 @@
      "attributes": [
       "service.name"
      ],
-     "product_view": "Service-correlated traces, metrics, and logs"
+     "product_view": "Service-correlated traces and metrics"
     }
    ],
    "follow_up_actions": [
