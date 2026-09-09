@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20260820T011432966449Z |
+| Run ID | 20260909T043732811680Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -23,8 +23,8 @@ This report validates eval JSON, eval directory availability, and skill source a
 | go/chi-basic/runtime/instrument | go/chi-basic | 1 | evals/go/chi-basic/eval/runtime/instrument.json | 0 | 0 | 1 |
 | go/chi-partial/qual/instrument | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/instrument.json | 0 | 6 | 0 |
 | go/chi-partial/runtime/instrument | go/chi-partial | 1 | evals/go/chi-partial/eval/runtime/instrument.json | 0 | 0 | 1 |
-| go/kvstore/qual/incident-readiness | go/kvstore | 1 | evals/go/kvstore/eval/qual/incident-readiness.json | 0 | 6 | 0 |
-| go/kvstore/qual/instrument | go/kvstore | 2 | evals/go/kvstore/eval/qual/instrument.json | 0 | 10 | 0 |
+| go/kvstore/qual/incident-readiness | go/kvstore | 1 | evals/go/kvstore/eval/qual/incident-readiness.json | 0 | 8 | 0 |
+| go/kvstore/qual/instrument | go/kvstore | 2 | evals/go/kvstore/eval/qual/instrument.json | 0 | 13 | 0 |
 | go/kvstore/runtime/instrument | go/kvstore | 1 | evals/go/kvstore/eval/runtime/instrument.json | 0 | 0 | 2 |
 | java/kafka-batch-consumer/qual/instrument | java/kafka-batch-consumer | 2 | evals/java/kafka-batch-consumer/eval/qual/instrument.json | 0 | 5 | 0 |
 | java/kafka-listener-container/qual/instrument | java/kafka-listener-container | 2 | evals/java/kafka-listener-container/eval/qual/instrument.json | 0 | 5 | 0 |
@@ -41,6 +41,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/fastapi-celery/qual/instrument | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/instrument.json | 0 | 5 | 0 |
 | python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/runtime/instrument.json | 0 | 0 | 1 |
 | python/flask-basic/qual/instrument | python/flask-basic | 2 | evals/python/flask-basic/eval/qual/instrument.json | 0 | 10 | 0 |
+| python/flask-basic/qual/instrument-operator-owned-logs-header | python/flask-basic | 1 | evals/python/flask-basic/eval/qual/instrument-operator-owned-logs-header.json | 0 | 6 | 0 |
 | python/flask-basic/runtime/instrument | python/flask-basic | 1 | evals/python/flask-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
 | python/mcp-ai-tool-demo/qual/instrument | python/mcp-ai-tool-demo | 1 | evals/python/mcp-ai-tool-demo/eval/qual/instrument.json | 0 | 7 | 0 |
 | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/eval/sanity/instrument.json | 0 | 0 | 0 |
