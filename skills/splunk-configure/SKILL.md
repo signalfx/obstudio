@@ -31,6 +31,12 @@ and Splunk Configure Verification. Do not load the preceding audit,
 instrumentation, or verification sections unless resolving a concrete contract
 conflict.
 
+Resolve paths in this entrypoint from the directory containing this `SKILL.md`.
+Inside a loaded reference, resolve relative paths from that reference's
+directory. Shared entrypoint references use `../references/`; configure-only
+references and scripts use `references/` and `scripts/`. Read the exact routed
+path; do not probe for alternate copies unless it is missing.
+
 When a prompt mentions MTTD, faster incident detection, better alerts, easier
 incident debugging, or blast-radius visibility, generate detectors and
 dashboards that make customer impact, affected workflow, likely fault domain,
@@ -607,6 +613,9 @@ python3 <splunk-configure-skill-dir>/scripts/validate_configure_output.py \
   --configure-verify-report .observe/splunk-configure-verify.md \
   --verify-report .observe/otel-verify.md
 ```
+
+Treat that command as the validator's interface. Do not read its source before
+running it; inspect only the code relevant to an unexplained failure.
 
 For every metric the user explicitly accepted as source-only, append
 `--allow-source-only-metric <exact-metric-name>`. Never use that option merely

@@ -5,18 +5,77 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
+AUDIT_SKILL = SKILLS_DIR / "otel-audit" / "SKILL.md"
+AUDIT_REFERENCES = SKILLS_DIR / "otel-audit" / "references"
+INSTRUMENT_SKILL = SKILLS_DIR / "otel-instrument" / "SKILL.md"
+INSTRUMENT_RUNTIME_REF = (
+    SKILLS_DIR / "otel-instrument" / "references" / "project-runtime-validation.md"
+)
+INSTRUMENT_INCIDENT_REF = (
+    SKILLS_DIR / "otel-instrument" / "references" / "incident-implementation.md"
+)
+INSTRUMENT_HANDOFF_REF = (
+    SKILLS_DIR / "otel-instrument" / "references" / "json-approval-handoff.md"
+)
 INCIDENT_REF = SKILLS_DIR / "references" / "incident-readiness.md"
+REPORT_FLOW = SKILLS_DIR / "references" / "report-flow-contract.md"
 SPLUNK_CONFIGURE = SKILLS_DIR / "splunk-configure" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
 
 
+def _instrument_report_contract() -> str:
+    text = REPORT_FLOW.read_text()
+    status_marker = "\n## Status Rules\n"
+    audit_marker = "\n## Audit Contract\n"
+    instrument_marker = "\n## Instrumentation Contract\n"
+    verify_marker = "\n## Verification Report Contract\n"
+    assert text.count("\nFor an audit,") == 1
+    for marker in (status_marker, audit_marker, instrument_marker, verify_marker):
+        assert text.count(marker) == 1
+    prefix = text.split("\nFor an audit,", 1)[0].rstrip()
+    status = "## Status Rules\n" + text.split(status_marker, 1)[1].split(
+        audit_marker, 1
+    )[0].rstrip()
+    instrument = "## Instrumentation Contract\n" + text.split(
+        instrument_marker, 1
+    )[1].split(verify_marker, 1)[0].rstrip()
+    return "\n\n".join((prefix, status, instrument)) + "\n"
+
+
 def _read(path: Path) -> str:
     assert path.exists(), f"Expected file not found: {path}"
-    return path.read_text()
+    text = path.read_text()
+    if path == AUDIT_SKILL:
+        text += "\n" + "\n".join(
+            reference.read_text()
+            for reference in sorted(AUDIT_REFERENCES.rglob("*.md"))
+        )
+    if path == INSTRUMENT_SKILL:
+        text += "\n".join(
+            (
+                "",
+                _read(INSTRUMENT_RUNTIME_REF),
+                _instrument_report_contract(),
+                _read(INCIDENT_REF),
+                _read(INSTRUMENT_INCIDENT_REF),
+                _read(INSTRUMENT_HANDOFF_REF),
+            )
+        )
+    return text
 
 
 def _squash(text: str) -> str:
     return " ".join(text.split())
+
+
+def test_instrument_routes_incident_guidance_progressively():
+    core = INSTRUMENT_SKILL.read_text()
+    assert "Read exactly one detected-language guide, never all language guides" in core
+    assert "Load `../references/incident-readiness.md` and" in core
+    assert "`./references/incident-implementation.md` only when the repo owns" in core
+    assert "asks for faster detection/localization" in core
+    assert "use one heading-bounded extraction" in core
+    assert "fixed line offsets" in core
 
 
 def test_incident_reference_covers_generic_incident_patterns():
@@ -103,7 +162,7 @@ def test_audit_and_instrument_load_incident_reference():
     for text in (audit, instrument):
         assert "../references/incident-readiness.md" in text
         assert "incident-readiness" in text
-        assert "faster incident detection" in text
+        assert "faster" in text and "detection" in text
 
 
 def test_instrument_allows_recommended_semconv_readiness_signals():
@@ -258,7 +317,8 @@ def test_instrument_requires_generic_runtime_surface_closure():
     skill = _squash(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md"))
     reference = _squash(_read(INCIDENT_REF))
     required_skill_terms = [
-        "load `../references/incident-readiness.md`",
+        "`../references/incident-readiness.md`",
+        "`./references/incident-implementation.md`",
         "queue depth/lag/oldest age",
         "worker/pool saturation",
         "stream/long-lived connection",
@@ -283,12 +343,11 @@ def test_instrument_requires_generic_runtime_surface_closure():
 def test_instrument_skips_custom_prompt_for_incident_readiness_requests():
     text = _squash(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md"))
     required_terms = [
-        "Skip this prompt",
-        "incident-readiness or GenAI/LLM",
-        "Audit-Driven Readiness path",
-        "safe app-owned incident gap",
-        "scoped",
-        "signals",
+        "Skip this question",
+        "selected audit scope",
+        "incident-readiness scope",
+        "GenAI scope",
+        "specific custom request already supplies approval",
     ]
     missing = [term for term in required_terms if term not in text]
     assert not missing
@@ -330,7 +389,9 @@ def test_splunk_configure_consumes_current_main_gaps_section():
 
 def test_audit_maps_incident_readiness_to_current_gap_contract():
     audit = _squash(_read(SKILLS_DIR / "otel-audit" / "SKILL.md"))
-    report_contract = _squash(_read(SKILLS_DIR / "references" / "report-flow-contract.md"))
+    report_contract = _squash(
+        _read(SKILLS_DIR / "otel-audit" / "references" / "report-contract.md")
+    )
     required_terms = [
         "### Incident Readiness",
         "single prioritized `## Gaps` table",
@@ -344,13 +405,12 @@ def test_audit_maps_incident_readiness_to_current_gap_contract():
     assert not missing
     assert "## Gap Ledger" not in audit
     required_contract_terms = [
-        "one `### Incident Readiness` subsection",
-        "Every telemetry-scoped `partial` or `missing` row",
-        "product contracts, cost ownership, safety policy, content-governance policy",
-        "remain readiness context",
-        "`Area` cell is identical",
-        "not a second top-level gap ledger",
-        "telemetry-scoped Incident Readiness rows",
+        "Every telemetry-scoped partial, missing, or owner-mapped",
+        "must have an unresolved",
+        "finding with an identical `area`",
+        "required signals name service-owned OTel telemetry or configuration",
+        "product contract, cost owner, safety policy, content-governance rule",
+        "preserve authored readiness rows in canonical JSON",
     ]
     assert not [term for term in required_contract_terms if term not in report_contract]
 
@@ -615,6 +675,6 @@ def test_incident_readiness_guidance_stays_generic_and_non_genai():
         "workflow delivery/evaluation",
     ]
     for path in [INCIDENT_REF, *shared_skill_paths]:
-        text = _read(path)
+        text = path.read_text() if path == INSTRUMENT_SKILL else _read(path)
         bad = [term for term in blocked_project_terms if term in text]
         assert not bad, f"{path} contains project-specific terms: {bad}"

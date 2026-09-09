@@ -1,10 +1,11 @@
 # Terraform Templates for Dashboards
 
 HCL templates for `signalfx_dashboard_group`, `signalfx_dashboard`, and the
-per-panel `signalfx_*_chart` resources. The chart `program_text` reuses the
-shared `../../references/signalflow-patterns.md` fragment (the
-`data(...).<agg>().publish(...)` body) with **no** `detect()/when()/threshold()`
-tail — charts visualize, they do not alert.
+per-panel `signalfx_*_chart` resources. The ordinary chart shapes below contain
+the complete `data(...).<agg>().publish(...)` body. They have **no**
+`detect()/when()/threshold()` tail — charts visualize, they do not alert. Load
+the shared `../../references/signalflow-patterns.md` only for an advanced shape
+routed there by the skill entrypoint, such as a merged route-group histogram.
 
 ## Provider + group + dashboard skeleton
 
@@ -51,9 +52,8 @@ resource "signalfx_dashboard" "red" {
 }
 ```
 
-`dashboard_group` is the HCL attribute; the REST create body uses `groupId`. The
-`chart {}` block grid fields are `column` (0-11), `row` (≥0), `width` (1-12),
-`height` (≥1).
+The `chart {}` block grid fields are `column` (0-11), `row` (≥0), `width`
+(1-12), and `height` (≥1).
 
 ## Time-series chart (`signalfx_time_chart`)
 
@@ -139,28 +139,20 @@ Also available from the provider when a panel needs them:
 same `name` + `program_text` shape; the preview `chartType` is `list`, `heatmap`,
 or `table` respectively.
 
-## Chart resource ↔ REST mapping (used by `$splunk-dashboard-publish`)
+## Chart resource ↔ preview mapping
 
-| HCL resource | preview `chartType` | REST `options.type` |
-|---|---|---|
-| `signalfx_time_chart` | `time_series` | `TimeSeriesChart` |
-| `signalfx_single_value_chart` | `single_value` | `SingleValue` |
-| `signalfx_list_chart` | `list` | `List` |
-| `signalfx_heatmap_chart` | `heatmap` | `Heatmap` |
-| `signalfx_text_chart` | `text` | `Text` |
-| `signalfx_table_chart` | `table` | `TableChart` |
+| HCL resource | preview `chartType` |
+|---|---|
+| `signalfx_time_chart` | `time_series` |
+| `signalfx_single_value_chart` | `single_value` |
+| `signalfx_list_chart` | `list` |
+| `signalfx_heatmap_chart` | `heatmap` |
+| `signalfx_text_chart` | `text` |
+| `signalfx_table_chart` | `table` |
 
-> **`SingleValue` REST constraint:** the `POST /v2/chart` body for a `SingleValue`
-> chart must NOT include `defaultPlotType` in `options` — that field is only valid for
-> `TimeSeriesChart` and the API returns HTTP 400 if it appears on any other type.
-> Correct `options` body for `SingleValue`:
-> ```json
-> { "type": "SingleValue", "colorBy": "Dimension" }
-> ```
-> For `TimeSeriesChart` only, `defaultPlotType` is valid:
-> ```json
-> { "type": "TimeSeriesChart", "defaultPlotType": "LineChart", "colorBy": "Dimension" }
-> ```
+Live REST type and body rules belong exclusively to
+`../../splunk-dashboard-publish/references/chart-wire-contract.md`; generation
+does not load that publish reference.
 
 ## terraform.tfvars.example
 

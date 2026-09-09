@@ -36,6 +36,7 @@ DASHBOARD_TEMPLATES = SPLUNK_DASHBOARD_REFS / "dashboard-templates.md"
 SPLUNK_DASHBOARD_PUBLISH = SKILLS_DIR / "splunk-dashboard-publish" / "SKILL.md"
 SPLUNK_DASHBOARD_PUBLISH_REFS = SKILLS_DIR / "splunk-dashboard-publish" / "references"
 DASHBOARD_COVERAGE_MODEL = SPLUNK_DASHBOARD_PUBLISH_REFS / "dashboard-coverage-model.md"
+DASHBOARD_CHART_WIRE = SPLUNK_DASHBOARD_PUBLISH_REFS / "chart-wire-contract.md"
 
 # Detector publish skill (canonical; splunk-sync is the deprecated stub).
 SPLUNK_DETECTOR_PUBLISH = SKILLS_DIR / "splunk-detector-publish" / "SKILL.md"
@@ -150,9 +151,7 @@ def test_dashboard_skills_reach_shared_references():
         ("../references/terraform-normalization.md", TERRAFORM_NORMALIZATION_REF),
         ("../references/ledger-template.md", LEDGER_TEMPLATE_REF),
         ("../references/coverage-decision-tree.md", COVERAGE_DECISION_TREE_REF),
-        # The chart-type ↔ REST mapping lives in the shared splunk-dashboard skill;
-        # publish references it by relative path — verify the path actually resolves.
-        ("../splunk-dashboard/references/dashboard-templates.md", DASHBOARD_TEMPLATES),
+        ("references/chart-wire-contract.md", DASHBOARD_CHART_WIRE),
     ):
         assert relpath in publish, f"splunk-dashboard-publish/SKILL.md must include {relpath}"
         assert (SPLUNK_DASHBOARD_PUBLISH.parent / relpath).resolve() == target.resolve()
@@ -403,19 +402,19 @@ def test_dashboard_classification_counter_test_covers_singular_error_keywords():
         )
 
 
-def test_dashboard_templates_map_hcl_chart_resources_to_rest_types():
-    text = _read(DASHBOARD_TEMPLATES)
-    # The HCL resource name vs the REST options.type — the chart-first publish depends on this.
-    for hcl, rest in (
-        ("signalfx_time_chart", "TimeSeriesChart"),
-        ("signalfx_single_value_chart", "SingleValue"),
+def test_dashboard_generation_and_publish_own_distinct_type_mappings():
+    templates = _read(DASHBOARD_TEMPLATES)
+    wire = _read(DASHBOARD_CHART_WIRE)
+    for hcl, preview, rest in (
+        ("signalfx_time_chart", "time_series", "TimeSeriesChart"),
+        ("signalfx_single_value_chart", "single_value", "SingleValue"),
     ):
-        assert hcl in text, f"templates missing HCL chart resource: {hcl}"
-        assert rest in text, f"templates missing REST chart type: {rest}"
-    # dashboard_group is the HCL attribute; the REST body uses groupId.
-    assert "dashboard_group" in text
-    assert "groupId" in text
-    assert "sensitive = true" in text
+        assert hcl in templates and preview in templates
+        assert hcl in wire and rest in wire
+    assert "REST `options.type`" not in templates
+    assert "dashboard_group" in templates
+    assert "groupId" in wire
+    assert "sensitive = true" in templates
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +432,7 @@ def test_dashboard_publish_uses_camel_case_rest_wire_names():
     """REST bodies use camelCase; HCL attributes stay snake_case. Both appear by design,
     so this asserts the camelCase wire names exist (mirrors the detectorOrigin casing test)
     and that the skill distinguishes the HCL spelling from the REST spelling."""
-    text = _read(SPLUNK_DASHBOARD_PUBLISH)
+    text = _read(SPLUNK_DASHBOARD_PUBLISH) + _read(DASHBOARD_CHART_WIRE)
     for wire in ("programText", "chartId", "groupId"):
         assert wire in text, f"publish SKILL.md must use camelCase REST wire name: {wire}"
     # The HCL spellings coexist (parsed from Terraform), and the skill must call out the mapping.
@@ -443,7 +442,7 @@ def test_dashboard_publish_uses_camel_case_rest_wire_names():
 
 
 def test_dashboard_publish_documents_chart_first_ordering():
-    text = _read(SPLUNK_DASHBOARD_PUBLISH)
+    text = _read(SPLUNK_DASHBOARD_PUBLISH) + _read(DASHBOARD_CHART_WIRE)
     assert "chart-first" in text, "must document chart-first creation ordering"
     assert "POST /v2/chart" in text, "must POST charts first to collect IDs"
     assert "POST /v2/dashboard" in text, "must POST the dashboard referencing chart IDs"

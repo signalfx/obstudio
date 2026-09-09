@@ -21,6 +21,7 @@
   "rubric": [
     "Runs the canonical bound-flow validator and preserves exact audit_sha256, selection_sha256, and instrumentation_sha256 bindings rather than treating the four JSON files independently.",
     "Leaves application code, dependencies, runtime configuration, and tests unchanged because this prompt validates an existing durable proof packet; any request to add or repair instrumentation is handed to $otel-instrument.",
+    "Treats the supplied verification JSON as an existing durable proof packet: it does not execute new application/runtime/OTLP checks, broaden the selected scope, or invent replacement telemetry while validating and rendering the saved proof.",
     "Writes a reader-first .observe/otel-verify.md that says generated trace rather than exposing raw trace or span identifiers."
   ]
 }

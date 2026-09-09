@@ -1,12 +1,11 @@
 ---
 name: connect-splunk-observability-cloud
 description: >-
-  Open the already-running local Obstudio Observer Cloud tab so a user can
-  connect an existing or newly ready Splunk Observability Cloud organization
-  by entering its URL and access token outside agent context. Use when a user
-  asks to connect, configure, or provide credentials for Splunk Observability
-  Cloud, Splunk O11y, or SignalFx outside the Obstudio IDE extension. Do not use
-  this skill to create a Free Edition account.
+  Open the running local Obstudio Observer Cloud tab for credential entry
+  outside agent context. Use to connect an existing or newly ready Splunk
+  Observability Cloud organization, or configure Splunk O11y/SignalFx outside
+  the Obstudio IDE extension. Never collect credentials. Do not use this skill
+  to create a Free Edition account; use $create-splunk-free-account for signup.
 ---
 
 # Connect Splunk Observability Cloud

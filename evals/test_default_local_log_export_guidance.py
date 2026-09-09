@@ -3,18 +3,33 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
+AUDIT_SKILL = SKILLS / "otel-audit" / "SKILL.md"
+AUDIT_REFERENCES = SKILLS / "otel-audit" / "references"
 LANGUAGES = SKILLS / "otel-instrument" / "references" / "languages"
+INSTRUMENT_SKILL = SKILLS / "otel-instrument" / "SKILL.md"
+INSTRUMENT_RUNTIME = (
+    SKILLS / "otel-instrument" / "references" / "project-runtime-validation.md"
+)
+KVSTORE_RUBRIC = ROOT / "evals" / "go" / "kvstore" / "eval" / "qual" / "instrument.json"
+KVSTORE_RUNTIME = ROOT / "evals" / "go" / "kvstore" / "eval" / "runtime" / "instrument.json"
 
 
 def _read(path: Path) -> str:
     assert path.is_file(), f"Expected file not found: {path}"
-    return path.read_text(encoding="utf-8")
+    text = path.read_text(encoding="utf-8")
+    if path == AUDIT_SKILL:
+        text += "\n" + "\n".join(
+            reference.read_text(encoding="utf-8")
+            for reference in sorted(AUDIT_REFERENCES.rglob("*.md"))
+        )
+    return text
 
 
 def _normalized(path: Path) -> str:
@@ -83,6 +98,98 @@ def test_audit_selects_missing_supported_local_logs_by_default() -> None:
         "Obstudio-to-Splunk cloud forwarding is traces and metrics only",
     ):
         assert term in instrument
+
+
+def test_instrument_preserves_repo_service_and_distinct_log_contracts() -> None:
+    instrument = _normalized(INSTRUMENT_SKILL)
+    for term in (
+        "Resolve an absent-value default from checked-in launch, Compose, runtime-eval, fixture, documentation, and test contracts",
+        "Never replace a repository-owned service default with a generic or shortened name",
+        "a shutdown/startup warning is not a duplicate of the request warning",
+        "it needs trace/span IDs only if it runs inside an active span",
+        "Do not invent, remove, merge, or rename log bodies to manufacture proof",
+    ):
+        assert term in instrument
+
+    rubric = " ".join(json.loads(_read(KVSTORE_RUBRIC))["rubric"])
+    runtime = _read(KVSTORE_RUNTIME)
+    for term in (
+        "go-kvstore",
+        "request-context warning",
+        "distinct existing shutdown warning",
+        "without requiring request correlation outside an active span",
+    ):
+        assert term in rubric
+    for body in ("runtime request completed", "runtime shutdown completed"):
+        assert body in runtime
+
+
+def test_go_dependency_resolution_is_bounded_after_network_failure() -> None:
+    runtime = _normalized(INSTRUMENT_RUNTIME)
+    go = _normalized(LANGUAGES / "go.md")
+
+    for term in (
+        "one project-native dependency attempt",
+        "one batched declared-cache/version inventory",
+        "at most one compatible offline retry",
+        "Do not enumerate or read dependency source unless a compile error requires one specific API check",
+        "Never repeat full file inventories",
+        "cleanup checks",
+        "record the exact network, cache, version, or API blocker",
+        "Never add or change `replace`, `exclude`, or `toolchain` directives solely to fit the local cache",
+    ):
+        assert term in runtime
+
+    for term in (
+        "one project-native attempt",
+        "one batched declared-cache/version inventory",
+        "at most one compatible offline retry",
+        "Do not recursively search or read module-cache source",
+        "Do not repeat full repository inventories or cleanup probes",
+        "record the exact blocker",
+        "Never add or change `replace`, `exclude`, or `toolchain` solely to fit cached modules",
+    ):
+        assert term in go
+
+
+def test_instrument_reuses_inventory_and_validation_evidence() -> None:
+    skill = _normalized(ROOT / "skills/otel-instrument/SKILL.md")
+    runtime = _normalized(INSTRUMENT_RUNTIME)
+    full_runtime = _normalized(ROOT / "skills/references/full-runtime-acceptance.md")
+
+    for term in (
+        "one validation ledger keyed by gate and relevant inputs",
+        "rerun only the failed and dependent invalidated gates",
+        "never a passing gate merely for fresher report evidence",
+        "never search an absolute or user-global skill location",
+        "not applicable (no canonical audit/selection)",
+        "Do not reread a complete report solely to compose the final response",
+    ):
+        assert term in skill
+
+    for term in (
+        "Build one bounded inventory before editing",
+        "prune `.git`, `.gocache`, `.gomodcache`",
+        "Resolve whether the service is a Git worktree once",
+        "Preserve a passing gate until a relevant input changes",
+        "sole detailed command inventory",
+    ):
+        assert term in runtime
+
+    assert "Do not launch the application solely to reproduce it" in full_runtime
+
+
+def test_instrument_progressive_reference_paths_resolve_from_declared_bases() -> None:
+    skill_dir = INSTRUMENT_SKILL.parent
+    owners = [INSTRUMENT_SKILL, *sorted((skill_dir / "references").rglob("*.md"))]
+
+    for owner in owners:
+        for relative in re.findall(r"`((?:\./|\.\./)[^`]+\.md)`", _read(owner)):
+            if "<" in relative or "{" in relative:
+                continue
+            target = (owner.parent / relative).resolve()
+            assert target.is_file(), f"{owner} routes to missing {relative}"
+            assert target.is_relative_to(SKILLS.resolve())
 
 
 def test_all_language_guides_define_local_logs_and_cloud_boundary() -> None:
