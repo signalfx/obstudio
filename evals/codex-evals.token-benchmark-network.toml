@@ -13,6 +13,7 @@ judge = "gpt-5.5"
 
 [agent]
 backend = "codex"
+timeout = 2400
 extra_args = [
   "--ignore-user-config",
   "--config",
