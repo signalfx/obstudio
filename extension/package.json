@@ -120,7 +120,7 @@
         "observability-studio.sharedObserverUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional loopback `obstudio` base URL or `/mcp` URL override for the UI and MCP connection. The host must be `localhost` or a loopback IP address. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`. A configured local Observer's OTLP receiver ports are not remapped or validated."
+          "markdownDescription": "Optional loopback `obstudio` base URL or `/mcp` URL override for the UI and MCP connection. The host must be `localhost` or a loopback IP address, and Observer must report the version bundled with this extension. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`. A configured local Observer's OTLP receiver ports are not remapped or validated."
         },
         "observability-studio.managedObserverPort": {
           "type": "number",

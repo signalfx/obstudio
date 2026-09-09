@@ -326,9 +326,36 @@ type StartupHintCarrier = {
 };
 
 type OtherExtensionObserverRetirement =
+	| { status: 'ignored' }
 	| { status: 'not-applicable' }
 	| { pid?: number; port?: number; status: 'restart-required'; version?: string }
 	| { status: 'retired' };
+
+function observerRestartRequiredError(
+	retirement: Extract<OtherExtensionObserverRetirement, { status: 'restart-required' }>,
+	bundleVersion: string,
+): Error {
+	const portLabel = retirement.port === undefined
+		? 'an unknown localhost port'
+		: `localhost port ${retirement.port}`;
+	const pidLabel = retirement.pid === undefined
+		? 'PID unavailable'
+		: `PID ${retirement.pid}`;
+	const restartMessage = retirement.version === undefined
+		? `Observer on ${portLabel} (${pidLabel}) could not be verified as bundled Observer ${bundleVersion}. `
+			+ 'Cloud controls are unavailable until it is stopped.'
+		: `Observer ${retirement.version} on ${portLabel} (${pidLabel}) does not match bundled Observer ${bundleVersion}. `
+			+ 'Cloud controls are unavailable until it is stopped.';
+	const restartError = new Error(restartMessage);
+	Object.assign(restartError, {
+		startupHint: 'Restart VS Code, then run Splunk Observability Studio: Start Observer. '
+			+ (retirement.pid === undefined
+				? 'If it remains running, stop the Observer on the displayed port and retry.'
+				: 'If it remains running, stop the displayed PID and retry.'),
+		startupTitle: 'Restart required',
+	});
+	return restartError;
+}
 
 const agentIntegrationSpecs: AgentIntegrationSpec[] = [
 	{
@@ -521,6 +548,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			observerProcess === undefined
 			&& observerStartupPromise === undefined
 			&& observerBaseUrl === undefined
+			&& observerLifecycleState.status === 'stopped'
 		) {
 			void vscode.window.showInformationMessage('Observer is not running.');
 			return;
@@ -662,7 +690,10 @@ export async function activate(context: vscode.ExtensionContext) {
 				'observability-studio.internal.setObserverOtlpPortsForTest',
 				(value?: { grpc?: unknown; http?: unknown }) => {
 					if (observerLifecycleState.status !== 'stopped' || observerStartupPromise !== undefined) {
-						throw new Error('Observer must be stopped before changing test OTLP ports.');
+						throw new Error(
+							'Observer must be stopped before changing test OTLP ports '
+							+ `(status=${observerLifecycleState.status}, startup=${observerStartupPromise === undefined ? 'idle' : 'active'}).`,
+						);
 					}
 					const nextHttpPort = parseInternalTestPort(value?.http, defaultObserverOtlpHttpPort);
 					const nextGrpcPort = parseInternalTestPort(value?.grpc, defaultObserverOtlpGrpcPort);
@@ -891,6 +922,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		if (observerOutputChannel === undefined) {
 			throw new Error('Observer output channel is not initialized.');
 		}
+		const bundleVersion = getBundleVersion(context);
 		const discoveredState = readSharedObserverDiscovery(
 			os.homedir(),
 			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
@@ -911,10 +943,22 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				: observerEndpointRolesForDiscovery(configuredDiscovery, sharedObserverUrl);
 			setObserverEndpoints(configuredEndpoints);
 			syncObserverUi();
-			await waitForObserverReady(configuredEndpoints, { requireStableOtlp: false }, runId);
+			const configuredProbe = await waitForObserverReady(
+				configuredEndpoints,
+				{ requireStableOtlp: false },
+				runId,
+			);
 			const sharedPort = observerPortFromUrl(configuredEndpoints.restBaseUrl);
 			if (sharedPort === undefined) {
 				throw new Error(`Observer URL does not resolve to a usable port: ${sharedObserverUrl}`);
+			}
+			if (configuredProbe.health.version !== bundleVersion) {
+				throw observerRestartRequiredError({
+					pid: configuredDiscovery?.pid,
+					port: sharedPort,
+					status: 'restart-required',
+					version: configuredProbe.health.version,
+				}, bundleVersion);
 			}
 			if (completeObserverStart(observerLifecycleState, runId, sharedPort)) {
 				syncObserverUi();
@@ -961,30 +1005,15 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			);
 			assertObserverRunCurrent(observerLifecycleState, runId);
 			if (retirement.status === 'restart-required') {
-				const portLabel = retirement.port === undefined
-					? 'an unknown localhost port'
-					: `localhost port ${retirement.port}`;
-				const pidLabel = retirement.pid === undefined
-					? 'PID unavailable'
-					: `PID ${retirement.pid}`;
-				const restartMessage = retirement.version === undefined
-					? `Observer on ${portLabel} (${pidLabel}) could not be verified for automatic replacement. `
-						+ 'Cloud controls are unavailable until it is stopped.'
-					: `Observer ${retirement.version} on ${portLabel} (${pidLabel}) is still running `
-						+ 'from a previous extension installation. Cloud controls are unavailable until it is stopped.';
-				const restartError = new Error(restartMessage);
-				Object.assign(restartError, {
-					startupHint: 'Restart VS Code to stop the previous Observer, then run Splunk Observability Studio: Start Observer. '
-						+ (retirement.pid === undefined
-							? 'If it remains running, stop the Observer on the displayed port and retry.'
-							: 'If it remains running, stop the displayed PID and retry.'),
-					startupTitle: 'Restart required',
-				});
-				throw restartError;
+				throw observerRestartRequiredError(retirement, bundleVersion);
 			}
 			let discoveryDetail: string;
 			if (retirement.status === 'retired') {
 				discoveryDetail = 'the running Observer belonged to a different installed extension copy';
+			} else if (retirement.status === 'ignored') {
+				discoveryDetail = `Observer ${discoveryProbe.status === 'ready'
+					? discoveryProbe.health.version || '(unversioned)'
+					: '(unversioned)'} does not match bundled Observer ${bundleVersion}`;
 			} else if (discoveryProbe.status === 'ready') {
 				setObserverEndpoints(discoveredEndpoints);
 				const discoveredPort = observerPortFromUrl(discoveredEndpoints.restBaseUrl);
@@ -1026,27 +1055,51 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			);
 			assertObserverRunCurrent(observerLifecycleState, runId);
 			if (managedProbe.status === 'ready') {
-				setObserverEndpoints(managedObserverEndpoints);
-				observerUsesSharedServer = true;
-				appendObserverOutputLine(
-					`Reusing CLI-managed observer at ${managedObserverEndpoints.restBaseUrl}`,
+				const retirement = await retireOtherExtensionManagedObserver(
+					context,
+					managedDiscovery,
+					true,
+					managedProbe.health.version,
+					managedPort,
 				);
-				if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
-					syncObserverUi();
+				assertObserverRunCurrent(observerLifecycleState, runId);
+				if (retirement.status === 'restart-required') {
+					throw observerRestartRequiredError(retirement, bundleVersion);
 				}
-				return;
+				if (retirement.status === 'not-applicable') {
+					setObserverEndpoints(managedObserverEndpoints);
+					observerUsesSharedServer = true;
+					appendObserverOutputLine(
+						`Reusing CLI-managed observer at ${managedObserverEndpoints.restBaseUrl}`,
+					);
+					if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
+						syncObserverUi();
+					}
+					return;
+				}
+				appendObserverOutputLine(
+					`The previous Observer at ${managedObserverEndpoints.restBaseUrl} was stopped before managed startup.`,
+				);
+			} else {
+				const managedDetail = managedProbe.status === 'mismatch'
+					? managedProbe.reason
+					: getErrorMessage(managedProbe.error);
+				appendObserverOutputLine(
+					`Ignoring stale or incompatible CLI-managed Observer state for ${managedObserverBaseUrl}: ${managedDetail}`,
+				);
 			}
-			const managedDetail = managedProbe.status === 'mismatch'
-				? managedProbe.reason
-				: getErrorMessage(managedProbe.error);
-			appendObserverOutputLine(
-				`Ignoring stale or incompatible CLI-managed Observer state for ${managedObserverBaseUrl}: ${managedDetail}`,
-			);
 		}
 		const existingObserver = await probeObserver(managedEndpoints, 500, { requireStableOtlp: true });
 		assertObserverRunCurrent(observerLifecycleState, runId);
 
 		if (existingObserver.status === 'ready') {
+			if (existingObserver.health.version !== bundleVersion) {
+				throw observerRestartRequiredError({
+					port: managedPort,
+					status: 'restart-required',
+					version: existingObserver.health.version,
+				}, bundleVersion);
+			}
 			observerUsesSharedServer = true;
 			setObserverEndpoints(managedEndpoints);
 			appendObserverOutputLine(`Reusing shared observer at ${managedObserverBaseUrl}`);
@@ -1190,7 +1243,13 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			}
 		});
 
-		await waitForObserverReady(managedEndpoints, { requireStableOtlp: true }, runId);
+		const startedProbe = await waitForObserverReady(managedEndpoints, { requireStableOtlp: true }, runId);
+		if (startedProbe.health.version !== bundleVersion) {
+			throw new Error(
+				`Bundled Observer reported version ${String(startedProbe.health.version)}, `
+				+ `expected ${bundleVersion}.`,
+			);
+		}
 		logObserverLifecycle(`Run ${runId}: observer is accepting connections at ${managedObserverBaseUrl}.`);
 		const startupCompleted = await observerCloudLifecycleOperations.run(async () => {
 			if (!completeObserverStart(observerLifecycleState, runId, observerPort)) {
@@ -1261,11 +1320,21 @@ async function retireOtherExtensionManagedObserver(
 	managedPort: number,
 ): Promise<OtherExtensionObserverRetirement> {
 	const discoveryPort = observerPortFromUrl(discovery.baseUrl);
-	if (discoveryPort !== managedPort) {
+	const bundleVersion = getBundleVersion(context);
+	if (observerHealthVerified && observerVersion === bundleVersion) {
 		return { status: 'not-applicable' };
 	}
-	if (observerHealthVerified && observerVersion === getBundleVersion(context)) {
-		return { status: 'not-applicable' };
+	if (discoveryPort !== managedPort) {
+		if (!observerHealthVerified) {
+			return { status: 'not-applicable' };
+		}
+		appendObserverOutputLine(
+			`Observer ${observerVersion ?? '(unversioned)'} at ${discovery.baseUrl} does not match `
+			+ `bundled Observer ${bundleVersion}; leaving the other port untouched.`,
+		);
+		return {
+			status: 'ignored',
+		};
 	}
 	const pid = discovery.pid;
 	if (pid === undefined) {
@@ -1281,7 +1350,9 @@ async function retireOtherExtensionManagedObserver(
 		};
 	}
 	if (pid === process.pid) {
-		return { status: 'not-applicable' };
+		return observerHealthVerified
+			? { pid, port: discoveryPort, status: 'restart-required', version: observerVersion }
+			: { status: 'not-applicable' };
 	}
 	const processExecutablePath = await readProcessExecutablePath(pid);
 	if (processExecutablePath === undefined) {
@@ -1363,7 +1434,7 @@ async function retireOtherExtensionManagedObserver(
 
 	appendObserverOutputLine(
 		`Replacing Observer from installed extension ${otherExtensionObserver.version} (PID ${otherExtensionObserver.pid}) `
-		+ `with bundled Observer ${getBundleVersion(context)}.`,
+		+ `with bundled Observer ${bundleVersion}.`,
 	);
 	try {
 		process.kill(otherExtensionObserver.pid, 'SIGTERM');

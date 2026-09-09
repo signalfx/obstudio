@@ -2072,7 +2072,10 @@ test('automatic agent refresh removes stale authentication before prompting', ()
 
 test('shared startup validates health without a credential or feature probe', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
-	assert.match(source, /waitForObserverReady\(configuredEndpoints, \{ requireStableOtlp: false \}, runId\)/);
+	assert.match(
+		source,
+		/waitForObserverReady\(\s*configuredEndpoints,\s*\{ requireStableOtlp: false \},\s*runId,\s*\)/,
+	);
 	assert.match(
 		source,
 		/probeObserver\([\s\S]*?discoveredEndpoints,[\s\S]*?\{ requireStableOtlp: true \}/,
@@ -2110,6 +2113,22 @@ test('upgrade retirement verifies Observer health and the executable path before
 	assert.doesNotMatch(retirement, /readProcessCommand|processCommand/);
 });
 
+test('all local Observer reuse paths use the same bundled-version compatibility rule', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const startupStart = source.indexOf('async function startObserver(');
+	const startupEnd = source.indexOf('\nasync function retireOtherExtensionManagedObserver(', startupStart);
+	const startup = source.slice(startupStart, startupEnd);
+	assert.match(startup, /const bundleVersion = getBundleVersion\(context\)/);
+	assert.match(startup, /configuredProbe\.health\.version !== bundleVersion/);
+	assert.match(
+		startup,
+		/managedProbe\.status === 'ready'[\s\S]*?retireOtherExtensionManagedObserver\([\s\S]*?managedProbe\.health\.version/,
+	);
+	assert.match(startup, /existingObserver\.health\.version !== bundleVersion/);
+	assert.match(startup, /startedProbe\.health\.version !== bundleVersion/);
+	assert.doesNotMatch(startup, /0\.0\.18|0\.0\.20/);
+});
+
 test('manual lifecycle commands settle configuration-triggered restarts before acting', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
 	for (const command of ['startObserver', 'stopObserver', 'restartObserver']) {
@@ -2118,6 +2137,13 @@ test('manual lifecycle commands settle configuration-triggered restarts before a
 		const body = source.slice(start, source.indexOf('\n\t});', start));
 		assert.match(body, /await settleObserverConfigurationRestart\(\);/);
 	}
+	const stopStart = source.indexOf("registerCommand('observability-studio.stopObserver', async () => {");
+	const stopBody = source.slice(stopStart, source.indexOf('\n\t});', stopStart));
+	assert.match(
+		stopBody,
+		/observerBaseUrl === undefined[\s\S]*?observerLifecycleState\.status === 'stopped'/,
+		'Stop must clear an idle startup error instead of returning before the lifecycle reset',
+	);
 });
 
 function waitForObserverReadySource(): string {

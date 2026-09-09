@@ -217,12 +217,12 @@ bundled version can be reused. If a different or unversioned Observer occupies
 the selected managed port, VS Code stops it only after verifying the
 shared-state PID and the process's exact non-symlinked executable path inside
 another installed Splunk extension package. Only that verified extension
-process is stopped; other Observers on other ports remain running. macOS and
-Linux use signal escalation, while Windows uses its native process-inspection
-and forced-termination commands. If the outdated process cannot be verified or
-stopped, the extension does not reuse it or enable Cloud controls: the panel
-shows **Restart required** together with its localhost port and its PID when one
-was recorded.
+process is stopped. Other Observers on other ports remain running; an outdated
+one is ignored while the extension starts or reuses the bundled version on the
+selected managed port. macOS and Linux use signal escalation, while Windows
+uses its native process-inspection and forced-termination commands. If an
+outdated process on the selected port cannot be verified or stopped, the
+extension does not reuse it or enable Cloud controls until the user stops it.
 
 | Service | URL |
 |---------|-----|
