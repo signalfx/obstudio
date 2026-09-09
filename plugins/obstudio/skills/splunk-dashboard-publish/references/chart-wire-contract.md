@@ -51,7 +51,7 @@ def chart_options(chart_type, *, plot_type=None, color_by=None):
     return options
 ```
 
-Body: `{programText, options, packageSpecifications: "signalfx"}`. Only time
+Body: `{name, programText, options, packageSpecifications: "signalfx"}`. Only time
 charts get `defaultPlotType`.
 
 `Text` omits `programText` and puts `markdown` in options. Reject unresolved

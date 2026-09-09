@@ -222,6 +222,9 @@ def test_parse_contract_carries_visualization_options_into_wire_mapping() -> Non
         assert "HCL resource/label" in text
         assert "`plot_type`/`color_by`" in text
 
+    wire = CHART_WIRE.read_text(encoding="utf-8")
+    assert '{name, programText, options, packageSpecifications: "signalfx"}' in wire
+
 
 def test_put_404_requires_a_new_confirmed_diff() -> None:
     text = " ".join(SPLUNK_API.read_text(encoding="utf-8").split())
