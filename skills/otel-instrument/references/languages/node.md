@@ -270,11 +270,14 @@ stalled drain or exporter from leaving the process alive indefinitely; a
 successful drain and flush exits `0`, a drain/export failure exits `1`, and a
 timeout or second signal uses the conventional nonzero signal exit code.
 
-Adapt `LOCAL_OBSERVER_LOGS_ENDPOINT` to the detected Observer service address
-for Docker/Compose. On the absent/`otlp` branch, any other explicit endpoint
-throws before `NodeSDK` or the logging bridge is constructed. Report that
-operator-owned boundary conflict instead of converting it to local or cloud
-export.
+Adapt the local endpoint policy to the detected Observer service address for
+Docker/Compose. When checked-in host and container paths coexist, retain the
+host fallback plus each exact container receiver in an exact allowlist or
+select one through a checked-in runtime-mode setting. Do not accept arbitrary
+same-shape hostnames or infer trust from the endpoint string. On the
+absent/`otlp` branch, any other explicit endpoint throws before `NodeSDK` or the
+logging bridge is constructed. Report that operator-owned boundary conflict
+instead of converting it to local or cloud export.
 
 With `OTEL_LOGS_EXPORTER=none`, both the added processor and bridge are omitted.
 For another explicit exporter such as `console`, leave provider, exporter, and

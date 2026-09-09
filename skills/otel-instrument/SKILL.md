@@ -199,8 +199,8 @@ Observer OTLP application-log export is part of the standard baseline:
   not a log-export opt-out.
 - Export locally only when `OTEL_LOGS_EXPORTER` is absent/`otlp` and the
   signal-specific logs endpoint is absent or exactly the detected local
-  Observer receiver. Default host HTTP logs to
-  `http://localhost:4318/v1/logs`; adapt to the checked-in container receiver.
+  Observer receiver. Host default is `http://localhost:4318/v1/logs`; keep
+  checked-in container URLs. Never infer locality from hostname syntax.
 - `OTEL_LOGS_EXPORTER=none` disables the added local log path. Any other explicit exporter is
   operator-owned; add no local provider, exporter, or bridge and do not treat
   the environment value alone as proof that its pipeline works.

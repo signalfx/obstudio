@@ -18,6 +18,15 @@ INSTRUMENT_RUNTIME = (
     SKILLS / "otel-instrument" / "references" / "project-runtime-validation.md"
 )
 KVSTORE_RUBRIC = ROOT / "evals" / "go" / "kvstore" / "eval" / "qual" / "instrument.json"
+KVSTORE_TOPOLOGY_RUBRIC = (
+    ROOT
+    / "evals"
+    / "go"
+    / "kvstore"
+    / "eval"
+    / "qual"
+    / "instrument-container-topology.json"
+)
 KVSTORE_RUNTIME = ROOT / "evals" / "go" / "kvstore" / "eval" / "runtime" / "instrument.json"
 
 
@@ -708,7 +717,27 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
 
     for path, (service_name, record_count) in runtime_cases.items():
         definition = json.loads(_read(path))
+        prompt = definition["prompts"][0]
         default_check, opt_out_check = definition["checks"]
+
+        assert prompt["eval_inputs"] == ["eval/inputs/runtime-topology.env"]
+        assert "./service/eval/inputs/runtime-topology.env" in prompt["task"]
+        topology = path.parents[1] / "inputs" / "runtime-topology.env"
+        assert _read(topology).splitlines() == [
+            "# Checked-in local runtime topology for the managed demo check.",
+            "OBSTUDIO_OBSERVER_RUNTIME=container",
+            "OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318",
+            "OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf",
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://observer:4318/v1/logs",
+            "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/protobuf",
+        ]
+
+        compose = _read(path.with_name("docker-compose.yml"))
+        assert (
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://observer:4318/v1/logs"
+            in compose
+        )
+        assert "OBSTUDIO_OBSERVER_RUNTIME=container" in compose
 
         assert default_check["environment"]["CODEX_EVAL_OTEL_LOGS_EXPORTER"] == ""
         assert default_check["stop_services_before_validation"] == ["app"]
@@ -771,6 +800,36 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
         opt_out_sink = opt_out_check["expect"]["service_logs"][0]
         assert opt_out_sink["occurrences"]["runtime request completed"] == record_count
         assert opt_out_sink["occurrences"]["runtime shutdown completed"] == 1
+
+
+def test_host_and_container_local_receiver_policy_uses_checked_in_evidence() -> None:
+    instrument = _normalized(INSTRUMENT_SKILL)
+    go = _normalized(LANGUAGES / "go.md")
+    node = _normalized(LANGUAGES / "node.md")
+    python = _normalized(LANGUAGES / "python.md")
+
+    assert "keep checked-in container URLs" in instrument
+    assert "Never infer locality from hostname syntax" in instrument
+    for guide in (go, node):
+        assert "checked-in host" in guide
+        assert "exact allowlist" in guide
+    assert "hostname syntax" in go
+    assert "same-shape hostnames" in node
+    assert "its two branches are the allowlist" in python
+
+    definition = json.loads(_read(KVSTORE_TOPOLOGY_RUBRIC))
+    prompt = definition["prompts"][0]
+    rubric = " ".join(definition["rubric"])
+    assert prompt["eval_inputs"] == ["eval/inputs/runtime-topology.env"]
+    assert "./service/eval/inputs/runtime-topology.env" in prompt["task"]
+    for term in (
+        "http://observer:4318/v1/logs",
+        "http://localhost:4318/v1/logs",
+        "exact active checked-in local receiver",
+        "arbitrary same-shape hostname",
+        "before constructing",
+    ):
+        assert term in rubric
 
 
 def test_runtime_fixtures_emit_one_shutdown_marker_from_signal_lifecycle() -> None:

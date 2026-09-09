@@ -544,8 +544,9 @@ slog.InfoContext(ctx, "order accepted", "order.type", "standard")
 ```
 
 An unset `OTEL_LOGS_EXPORTER` is treated as `otlp` only when the logs endpoint
-is absent or matches `localObserverLogsEndpoint`. Adapt that constant to the
-detected Observer service address for Docker/Compose. A non-local explicit
+is absent or matches a detected local Observer endpoint. For coexisting
+checked-in host/container paths, use an exact allowlist or selector; never
+infer locality from hostname syntax. A non-local explicit
 endpoint on the absent/`otlp` branch returns an error before the provider or
 bridge is constructed; report the operator-owned boundary conflict instead of
 converting it to local or cloud export. Exact `none` and every other explicit
@@ -781,11 +782,11 @@ metrics from `otelhttp`, including `http.server.request.duration` or the older
 `http.server.duration` name, export promptly to Observer.
 
 For Docker or Compose, use the checked-in local Observer service address (for
-example `http://observer:4318/v1/logs`) instead of loopback and adapt
-`localObserverLogsEndpoint` to that same detected value. On the absent/`otlp`
-branch, accept an explicit endpoint only when it matches that local value; do
-not derive the log destination from `OTEL_EXPORTER_OTLP_ENDPOINT` when that
-generic value might point directly to cloud ingest.
+example `http://observer:4318/v1/logs`) instead of loopback. If a host path also
+exists, retain both through a checked-in selector or exact allowlist. On the
+absent/`otlp` branch, accept only those exact local values; never derive logs from
+`OTEL_EXPORTER_OTLP_ENDPOINT` when that generic value might point directly to
+cloud ingest.
 
 ### Local Observer application logs and cloud boundary
 
