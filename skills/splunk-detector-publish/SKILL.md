@@ -1,470 +1,178 @@
 ---
 name: splunk-detector-publish
 description: >-
-  Diff local splunk-configure detector specs against live Splunk Observability
-  Cloud detectors and create only the confirmed gaps. Reads
-  .observe/terraform/detectors.tf, fetches live detectors for the service via
-  the Splunk O11y REST API (GET /v2/detector), classifies each local spec as
-  COVERED / GAP / UNCERTAIN / AutoDetect-advisory, shows a confirmation diff,
-  and creates only the confirmed GAPs via POST /v2/detector (idempotent by
-  diffing local specs against the live detector set and tolerating a 409).
-  Writes .observe/detector-sync.md as an idempotent resume ledger. Use when the
-  user types $splunk-detector-publish, asks to "sync detectors", "check which detectors are
-  missing", "create missing monitors", or "push detector gaps to Splunk".
+  Compare .observe/terraform/detectors.tf with live Splunk Observability Cloud
+  detectors, classify COVERED/GAP/UNCERTAIN results, confirm, and create only
+  GAPs with an idempotent ledger. Use for $splunk-detector-publish, "sync
+  detectors", "check which detectors are missing", "create missing monitors",
+  or "push detector gaps to Splunk". Requires existing $splunk-configure output.
 metadata:
   author: otel-studio
   version: 0.3.2
   category: observability
 ---
 
-# Detector Publish -- Splunk O11y Detector Gap Analysis and Create
+# Detector Publish -- Splunk O11y Detector Gap Analysis And Create
 
-## Overview
-
-Compare locally-generated `signalfx_detector` specs (from `$splunk-configure`)
-against **live** Splunk Observability Cloud detectors for the same service.
-Create only the genuine gaps; skip anything already covered. Write a persistent
-ledger so re-runs are idempotent and auditable.
-
-## When to Use
-
-- After `$splunk-configure` has already produced `.observe/terraform/detectors.tf`
-- When the user wants to push only the missing detectors to Splunk O11y without
-  duplicating detectors that already exist
-- When auditing which detectors are already live vs. which are still missing
-
-**When NOT to use:** If no local spec exists yet, instruct the user to run
+Compare `$splunk-configure` Terraform with live Splunk Observability Cloud and
+create only explicitly confirmed detector gaps. If
+`.observe/terraform/detectors.tf` is absent, stop and ask the user to run
 `$splunk-configure` first.
 
-## Auth and API
+Resolve paths in this entrypoint from the skill directory. Inside a loaded
+reference, resolve relative paths from that reference's directory. Read only
+the routed references; do not scan alternate copies or load every reference.
 
-> Shared reference: `../references/splunk-api.md` is the single source of truth
-> for auth, the skip-on-500 paginated fetch loop, and HTTP-status handling used
-> by all Splunk sync skills. The detector-specific concrete steps below restate
-> the parts this skill depends on.
+## Always-Loaded Safety Contract
 
-All Splunk O11y data calls use the **Splunk REST API** directly. Read the token
-from the environment:
+- Local parsing, offline planning, and live comparison are read-only. Before
+  **every remote mutation set**, show the complete current diff, ordered GAP
+  operations, resolved realm and realm source, then require explicit current
+  yes/no confirmation. Credentials, a dry-run answer, a prior ledger, or an
+  earlier confirmation are not consent.
+- A mutation set is authorized only for the exact fresh diff shown. Every live
+  run fetches and reclassifies current state; never infer state from a prior
+  ledger. If local specs, normalized payloads, realm, or live results change
+  after confirmation, discard it, re-fetch, reclassify, show the new diff, and
+  confirm again.
+- Create only rows currently classified `GAP` and included in that confirmation.
+  Skip `COVERED`; never create `UNCERTAIN`. This skill never updates or deletes
+  detectors. A missing or incomplete live inventory proves no GAP: classify
+  every affected local spec `UNCERTAIN` and stop before mutation.
+- Live auth uses `SPLUNK_ACCESS_TOKEN` from the environment as `X-SF-Token`.
+  Never echo, log, print, persist, or place it in prompt/report context. Never
+  write it to `.observe/detector-sync.md` or a Terraform example. Resolve the
+  realm from non-empty `SPLUNK_REALM` first, then the connected Observer's
+  realm-only lookup; Observer is never a token source. Missing live token or
+  realm is a blocker, not an invitation to guess.
+- Offline/no-network/placeholder-credential mode never reads environment
+  credentials and never calls the Splunk API. Its verdicts are `UNCERTAIN`, not
+  provisional live GAPs. Its informational diff or answer cannot authorize a
+  later write; a later online run must fetch, classify, show, and confirm again.
+- Live pagination skips only HTTP 500 pages. Never swallow 401, 403, parse,
+  transport, JSON, or other failures; an incomplete fetch cannot become an
+  empty successful list. Continuous 500s are a blocker. A successful empty list
+  may yield GAPs.
+- Mutations are sequential. POST 200/201 records the returned ID; 409/duplicate
+  requires a GET and reuse of the existing ID as COVERED; HTTP 400 requires
+  field-casing versus SignalFlow-normalization diagnosis; 401/403 stops without
+  retry; other per-detector failures are recorded and reported.
+- Every verdict and ledger row has a concrete, non-empty `Reason` naming the
+  metric, resolved `service.name` (or equivalent `sf_service`) filter, and live
+  comparison result. `detectorOrigin == "AutoDetect"` is advisory only and can
+  never make a service-specific local spec COVERED.
+- Normalize before comparison or any planned/live POST. HCL `program_text` maps
+  to REST `programText`, `detect_label` maps to `detectLabel`, and every create
+  body includes the literal ownership marker `"tags": ["obstudio"]`.
 
-| Variable | Purpose |
-|---|---|
-| `SPLUNK_ACCESS_TOKEN` | Org access token; sent as `X-SF-Token` header |
-| `SPLUNK_REALM` | Optional fallback realm (e.g. `lab0`, `us0`, `us1`) |
+## Reference Router
 
-Resolve the realm using `../references/splunk-api.md`: keep
-`SPLUNK_ACCESS_TOKEN` paired with a non-empty `SPLUNK_REALM` when it is set;
-otherwise call `observer_splunk_connection_realm` and use the connected SOS
-destination's non-empty `realm`. The read-only tool returns only the non-secret
-region.
+| Condition | Read | Authority |
+|---|---|---|
+| Offline/no-network, placeholder credentials, preview, or dry-run-only | `references/offline-plan.md` | Local parse, normalized planned payloads/order, UNCERTAIN diff, offline stop |
+| Any `program_text` is parsed | `../references/terraform-normalization.md` | `<<-EOF` dedent, every `${var.*}` resolution, HTTP 400 prevention |
+| Live comparison or mutation | `references/live-publish.md` | Fresh fetch, structural classification, confirmation, sequential create, ledger |
+| Live API access | `../references/splunk-api.md` (routed by live publish) | Auth, realm, skip-on-500 pagination, response/error handling |
+| Live classification | `references/coverage-model.md` (routed by live publish) | Detector match, AutoDetect advisory, idempotency |
+| Ledger will be written | `../references/ledger-template.md` (routed by live publish) | `.observe/detector-sync.md` structure and concrete reasons |
 
-If `SPLUNK_ACCESS_TOKEN` is missing, or neither realm source is available, stop
-and tell the user. Before creating detectors, include the resolved realm and its
-source in the confirmation.
-
-Base URL: `https://api.${realm}.signalfx.com`
-
-**Important:** The `/v2/detector` list endpoint has a known server-side bug where
-certain offset values return HTTP 500. Always skip-on-500 when paginating — do
-not treat it as an auth or hard failure. See Step 3 for the pagination pattern.
+`references/coverage-model.md` incorporates the verdict vocabulary and reason
+rules from `../references/coverage-decision-tree.md`; do not load that shared
+decision tree separately. Offline mode must not load `references/live-publish.md`,
+`references/coverage-model.md`, `../references/splunk-api.md`,
+`../references/coverage-decision-tree.md`, or
+`../references/ledger-template.md`.
 
 ## Process
 
-### Step 1 -- Locate Local Specs
+### 1. Locate, Parse, And Normalize Local Specs
 
-Look for `.observe/terraform/detectors.tf` in the repository root.
+Require `.observe/terraform/detectors.tf`; optionally read
+`.observe/detectors.md` for rationale. Parse every `signalfx_detector` resource:
 
-- If the file exists, proceed to Step 2.
-- If the file is missing, stop and respond:
+1. HCL label and resolved `name`;
+2. raw `program_text`;
+3. every rule's `severity`, `detect_label`, and `notifications`;
+4. first `data('metric.name', ...)` metric; and
+5. resolved `filter('service.name', '...')` value, recognizing `sf_service` as
+   the equivalent live dimension.
 
-> No local detector spec found at `.observe/terraform/detectors.tf`. Please run
-> `$splunk-configure` first to generate the detector Terraform.
+Read `../references/terraform-normalization.md`. Reproduce `<<-EOF` dedent,
+trim blank edges, and resolve every `${var.*}` from `terraform.tfvars`, then
+`*.auto.tfvars`, `terraform.tfvars.example`, then `variables.tf` defaults. This
+includes threshold, stddev, and window variables, not only service name. Ask
+rather than guess if any value is unresolved. Carry the one normalized string
+into both comparison and `programText`; unresolved interpolation or leading
+indentation causes an HTTP 400 SignalFlow parse failure.
 
-Also read `.observe/detectors.md` if it exists — it provides the human summary
-and classification rationale that helps resolve ambiguous UNCERTAIN cases.
+Fail fast on malformed HCL. Avoid repeated full repository inventories: inspect
+the named Terraform inputs and only the supporting files required to resolve a
+specific field.
 
-### Step 2 -- Parse Local Specs
+### 2. Select Offline Or Live Mode
 
-Parse every `signalfx_detector` resource block in `detectors.tf`. For each one
-extract:
+When the request forbids network, credentials are placeholders, network is
+unavailable, or the user asks only for a preview/dry run, read
+`references/offline-plan.md`. Do not probe credentials or connectivity. Show
+exact normalized programs and planned REST bodies/order, classify every local
+spec `UNCERTAIN` because no live comparison occurred, include an AutoDetect
+advisory, and stop without remote mutation.
 
-1. **HCL resource label** (e.g. `latency_http_server_request_duration`)
-2. **name** — the string in the `name` field (may reference `${var.service_name}`)
-3. **program_text** — the heredoc value of the `program_text` field
-4. **rules** — each `rule` block: `severity`, `detect_label`, `notifications`
-5. **metric_name** — the first `data('metric.name', ...)` argument in program_text
-6. **service_filter** — the `filter('service.name', '...')` value in program_text;
-   resolve `${var.service_name}` by reading `terraform.tfvars` (if present) or
-   `terraform.tfvars.example` and prompting the user if still unresolvable
+Otherwise, read `references/live-publish.md` before reading credentials or
+making the first API call. It routes to the API, coverage, normalization, and
+ledger references. Fetch the current detector inventory, classify structurally,
+show the diff, obtain confirmation, and create only its confirmed GAPs.
 
-**HCL field name is `program_text`; live API field is `programText` — normalize
-when comparing.**
+### 3. Show A Complete Diff
 
-Fail fast if the file is not parseable (malformed HCL) and tell the user.
+For either mode, show one row per local detector with a non-empty Reason:
 
-#### Step 2a -- Normalize `program_text` to valid SignalFlow (required before create)
+```markdown
+## Detector Publish Diff — <service-name> [offline plan when applicable]
 
-> Shared reference: `../references/terraform-normalization.md` documents this
-> normalization (heredoc dedent + resolve every `${var.*}`) once for all sync
-> skills. The detector-specific restatement below is what this skill applies.
+| Local Spec | Metric | Severity | Status | Live Detector | Reason |
+|---|---|---|---|---|---|
 
-The raw `program_text` value extracted from HCL is **not** valid SignalFlow and
-**must** be normalized before it is sent in any `POST /v2/detector` body. The
-Splunk API runs the string through the SignalFlow parser as-is and rejects it
-with **HTTP 400** if either of the following is left unhandled. Do this once,
-during parsing, and carry the normalized string forward:
-
-1. **Strip indented-heredoc whitespace (`<<-EOF`).** Terraform's `<<-EOF`
-   "indented heredoc" deletes the leading whitespace of the *least-indented*
-   line at apply time, but the raw bytes between the `<<-EOF` and `EOF` markers
-   still carry the editor indentation. SignalFlow treats a leading-whitespace
-   line as a syntax error, so reproduce Terraform's behavior: find the smallest
-   leading-whitespace run across all non-blank lines and strip exactly that many
-   leading characters from every line (i.e. `textwrap.dedent` after trimming the
-   trailing marker line). Plain `<<EOF` (no dash) is already flush-left — leave
-   it unchanged. Always `.strip()` the final result so a leading/trailing blank
-   line never reaches the parser.
-
-2. **Resolve every `${var.*}` reference, not just `service.name`.** Detector
-   program text routinely interpolates thresholds, stddev counts, and windows —
-   `threshold(${var.saturation_queue_depth_threshold})`,
-   `fire_num_stddev=${var...._stddev}`, etc. A literal `${var...}` token is
-   invalid SignalFlow. Resolve **all** of them, in this precedence order, before
-   create:
-
-   - a matching assignment in `terraform.tfvars` (then `*.auto.tfvars`, then
-     `terraform.tfvars.example`), else
-   - the `default` value of the matching `variable "<name>" { ... }` block in
-     `variables.tf`, else
-   - prompt the user for the value (do not guess, and do not POST with an
-     unresolved token).
-
-   Substitute the resolved literal for the whole `${var.<name>}` span. Numbers
-   are emitted bare (`50.0`), strings keep their SignalFlow quoting as written
-   in the surrounding program text.
-
-```python
-import re, textwrap
-
-def dedent_heredoc(raw: str) -> str:
-    # Mirrors Terraform <<-EOF: strip common leading whitespace, trim blank edges.
-    return textwrap.dedent(raw).strip()
-
-def resolve_vars(program_text: str, tf_vars: dict, var_defaults: dict) -> str:
-    # tf_vars: name->value from terraform.tfvars / *.auto.tfvars / .example
-    # var_defaults: name->default from variables.tf `variable` blocks
-    unresolved = []
-
-    def repl(m):
-        name = m.group(1)
-        if name in tf_vars:
-            return str(tf_vars[name])
-        if name in var_defaults:
-            return str(var_defaults[name])
-        unresolved.append(name)
-        return m.group(0)
-
-    out = re.sub(r"\$\{var\.([A-Za-z0-9_]+)\}", repl, program_text)
-    if unresolved:
-        raise ValueError(
-            "Unresolved Terraform variables in program_text "
-            f"(no tfvars assignment and no default): {sorted(set(unresolved))}. "
-            "Prompt the user for these before POSTing the detector."
-        )
-    return out
-
-# Per spec, during parsing:
-program_text = resolve_vars(dedent_heredoc(raw_program_text), tf_vars, var_defaults)
-```
-
-Both transforms are pure-string and deterministic; the result is the exact
-SignalFlow Splunk would have received had the Terraform been `terraform apply`-d.
-Use this normalized `program_text` everywhere downstream — both for COVERED/GAP
-comparison and for the create body in Step 6.
-
-### Step 3 -- Fetch Live Detectors
-
-Retrieve all live detectors in the org using the Splunk O11y REST API:
-
-```python
-import urllib.request, json, sys
-from collections import defaultdict
-
-token = "<SPLUNK_ACCESS_TOKEN>"
-realm = "<resolved realm>"
-base  = f"https://api.{realm}.signalfx.com/v2/detector"
-
-limit = 50          # keep small; large limits hit the 500 bug more often
-offset = 0
-all_detectors = []
-seen_ids = set()
-consecutive_empty = 0   # counts genuinely empty pages (real end-of-list signal)
-consecutive_500 = 0     # counts 500 pages separately — does NOT advance empty counter
-
-while consecutive_empty < 5 and consecutive_500 < 10:
-    url = f"{base}?limit={limit}&offset={offset}"
-    req = urllib.request.Request(url, headers={"X-SF-Token": token})
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.load(resp)
-    except urllib.error.HTTPError as e:
-        if e.code == 500:
-            # Skip-on-500: the API has a known bug at certain offsets.
-            # Do NOT increment consecutive_empty here — a 500 is not an empty
-            # page; incrementing it would stop the loop after just 5 bad offsets
-            # and hide detectors on later pages.
-            offset += limit
-            consecutive_500 += 1
-            continue
-        raise RuntimeError(f"Splunk API error {e.code} fetching detectors: {e}") from e
-    except (urllib.error.URLError, json.JSONDecodeError, OSError) as e:
-        raise RuntimeError(f"Failed to fetch detectors: {e}") from e
-
-    consecutive_500 = 0  # a successful response resets the 500 streak
-    batch = data.get("results", [])
-    if not batch:
-        consecutive_empty += 1
-        offset += limit
-        continue
-
-    consecutive_empty = 0
-    for d in batch:
-        if d["id"] not in seen_ids:
-            seen_ids.add(d["id"])
-            all_detectors.append(d)
-    offset += limit
-```
-
-Each detector object from the list endpoint includes `id`, `name`,
-`programText`, `detectorOrigin`, and `rules`. That is sufficient for
-classification — no second per-detector GET is required unless `programText`
-is absent or truncated (in that case fetch `GET /v2/detector/{id}`).
-
-If the org has zero detectors, all local specs are GAPs — proceed to Step 4
-with an empty live list.
-
-### Step 4 -- Classify Each Local Spec
-
-Apply the coverage model from `references/coverage-model.md` (which builds on the
-shared `../references/coverage-decision-tree.md` verdict vocabulary) to assign
-each local spec one of four statuses:
-
-**COVERED**
-A live Standard (`detectorOrigin != "AutoDetect"`) detector's `programText`
-references the same OTel metric name AND filters the same `service.name` or
-`sf_service` value. Both conditions must hold simultaneously.
-
-**GAP**
-No live Standard detector matches on both the metric name AND the service
-filter. This spec must be created.
-
-**UNCERTAIN**
-The metric name appears in a live detector's programText but the service filter
-is absent, uses a different dimension key, or the filter value is ambiguous
-(e.g. a wildcard). Show to the user; do not auto-create and do not auto-cover.
-
-**Offline / fetch-unavailable fallback**
-Always attempt the live detector fetch (Step 3) before declaring any verdict.
-Do NOT skip the fetch and jump straight to any classification — the fetch is the
-authoritative signal. When the fetch genuinely fails (network error, auth
-failure, API unreachable, or a non-500 HTTP error), mark every local spec
-**UNCERTAIN** (not GAP). A failed fetch proves neither absence nor presence of a
-live detector: classifying as GAP when the fetch fails would cause duplicate
-creates once connectivity returns. Show the UNCERTAIN specs in the confirmation
-diff, stop at the confirmation gate, explicitly state that the live inventory
-could not be fetched, and require the user to re-run once the API is reachable
-before any POST is attempted. Do not create detectors from an incomplete
-inventory.
-
-**AutoDetect advisory (informational only)**
-For latency or error specs: note any live detector with
-`detectorOrigin == "AutoDetect"` that references `service.request` metrics as a
-*possible overlap* advisory line. AutoDetect detectors are org-wide and never
-filter by `service.name`, so they cannot count as COVERED for a specific service.
-They are advisory only and do NOT change the spec's classification.
-
-Always include the `### AutoDetect Advisory` section in the confirmation diff,
-even when offline or when no AutoDetect detectors were fetched. In offline
-context, write: "Live inventory not fetched — AutoDetect detectors (if any)
-are org-wide and advisory only; they would not count as COVERED for
-service-specific specs." This section is required in every diff output.
-
-See `references/coverage-model.md` for worked examples and edge cases.
-
-### Step 5 -- Confirmation Diff
-
-Print a structured diff table before any writes. Do not proceed until the user
-explicitly confirms.
-
-```
-## Detector Publish Diff — <service-name>
-
-### COVERED (N) — no action needed
-| Local Spec | Metric | Matched Live Detector |
-|------------|--------|----------------------|
-| latency_<id> | <metric> | <live detector name (id)> |
-
-### GAP (N) — will be created
-| Local Spec | Metric | Severity | Why no match |
-|------------|--------|----------|--------------|
-| error_<id> | <metric> | Critical | no live detector with this metric + service filter |
-
-### UNCERTAIN (N) — review manually
-| Local Spec | Metric | Live Detector | Issue |
-|------------|--------|---------------|-------|
-| saturation_<id> | <metric> | <name> | service filter absent in live programText |
-
-### AutoDetect Advisory (N) — informational
-| Local Spec | Metric | AutoDetect Detector | Note |
-|------------|--------|---------------------|------|
-| latency_<id> | <metric> | <org-wide detector name> | org-wide AutoDetect, not service-scoped; does not substitute for a custom detector |
+### AutoDetect Advisory
+<advisory rows, or an explicit no-live-inventory/no-advisory statement>
 
 ---
-N GAPs will be created. N UNCERTAIN specs need manual review.
+N GAPs are eligible for this live mutation set; N UNCERTAIN require review.
 Confirm? (yes/no)
 ```
 
-If there are zero GAPs and zero UNCERTAINs, respond:
+An offline `Confirm?` is informational only and must say that no answer can
+authorize a write. In live mode, list the exact sequential POST order and realm
+source. Zero GAPs means no mutation; a live all-COVERED run still writes the
+ledger.
 
-> All N local detector specs are already COVERED by live Splunk detectors. Nothing
-> to create. Ledger written to `.observe/detector-sync.md`.
+### 4. Execute Only A Confirmed Live Mutation Set
 
-Then skip to Step 7 (write the ledger).
+After a current live `yes`, follow `references/live-publish.md`. POST only the
+confirmed GAP rows to `/v2/detector`, sequentially, with normalized
+`programText`, camelCase `detectLabel`, rule severity/notifications, and
+`"tags": ["obstudio"]`. Never POST an offline or UNCERTAIN row. If the diff
+becomes stale, re-fetch and reconfirm before continuing.
 
-### Step 6 -- Create GAPs
+### 5. Ledger And Response
 
-After the user confirms, for each GAP spec:
+For a live success, partial failure, or all-COVERED no-op, write
+`.observe/detector-sync.md` from `../references/ledger-template.md`. Include
+summary counts, each local spec, metric, final status, live/created ID and link,
+and a concrete Reason. Never persist the token.
 
-1. First offer a dry run: construct the POST body and print it without sending.
-   If the user says "dry run first" or "preview", show the payload before creating.
-2. POST to `https://api.${realm}.signalfx.com/v2/detector` using the resolved realm:
-   ```python
-   body = {
-       "name": resolved_name,           # ${var.service_name} substituted
-       "programText": program_text,     # NORMALIZED per Step 2a: heredoc dedented
-                                        # AND all ${var.*} resolved — never the raw
-                                        # HCL value, or Splunk returns HTTP 400
-       "rules": [
-           {
-               "severity": rule["severity"],
-               "detectLabel": rule["detect_label"],
-               "notifications": rule.get("notifications", []),
-               "disabled": False,
-           }
-           for rule in rules
-       ],
-       "description": f"Created by splunk-detector-publish from {hcl_label}",
-       "tags": ["obstudio"],
-   }
-   data = json.dumps(body).encode("utf-8")
-   req = urllib.request.Request(
-       f"https://api.{realm}.signalfx.com/v2/detector",
-       data=data,
-       method="POST",
-       headers={"X-SF-Token": token, "Content-Type": "application/json"},
-   )
-   try:
-       with urllib.request.urlopen(req, timeout=30) as resp:
-           status = resp.status
-           created = json.load(resp)
-   except urllib.error.HTTPError as e:
-       status = e.code          # branch on status below; do not raise blindly
-       created = None
-   ```
-   Note: HCL uses `detect_label`; the REST API uses `detectLabel` — normalize.
-   `urllib` raises `HTTPError` for any non-2xx response, so branch on `status`:
-3. On HTTP 200: record `created["id"]` and `created["name"]` plus
-   `https://app.${realm}.signalfx.com/#/detector/{id}` for the ledger.
-4. On HTTP 409 or a duplicate-name response: reclassify as COVERED in the ledger
-   (race condition between diff and create). Not an error.
-5. On HTTP 403: token lacks detector-write scope. Stop and tell the user.
-6. On any other error: record the failure and continue with remaining GAPs.
-   Report all failures in the final summary.
-
-Create GAPs sequentially, not in parallel, to make progress visible and errors
-attributable.
-
-### Step 7 -- Write Ledger
-
-> Shared reference: `../references/ledger-template.md` defines the resumable
-> ledger shape (summary counts + per-item status table with a required non-empty
-> **Reason** column) used by all sync skills. The detector ledger below follows
-> it.
-
-Write or overwrite `.observe/detector-sync.md` after every run (success, partial
-failure, or zero-gap no-op):
-
-```markdown
-# Detector Publish Ledger: <service-name>
-
-**Date:** <YYYY-MM-DD>
-**Local spec:** `.observe/terraform/detectors.tf`
-**Service filter resolved to:** `<service_name_value>`
-
-## Summary
-
-| Status | Count |
-|--------|-------|
-| COVERED | N |
-| GAP → Created | N |
-| GAP → Failed | N |
-| UNCERTAIN | N |
-| AutoDetect Advisory | N |
-
-## Detector Status
-
-| Local Spec | Metric | Status | Detector ID | Link | Notes |
-|------------|--------|--------|-------------|------|-------|
-| latency_<id> | <metric> | COVERED | <id> | | matched live detector "<name>" |
-| error_<id> | <metric> | CREATED | <id> | <link> | |
-| saturation_<id> | <metric> | UNCERTAIN | | | service filter absent in live programText |
-| latency_<id2> | <metric> | AutoDetect Advisory | | | org-wide AutoDetect detector noted |
-
----
-*Generated by splunk-detector-publish on <YYYY-MM-DD>*
-```
-
-A re-run on a fully-synced service will re-read the live state and produce an
-all-COVERED ledger — it will not re-create anything because the GAP check is
-re-evaluated fresh.
-
-### Step 8 -- Chat Summary
-
-After the ledger is written, present a concise summary:
-
-```
-## Detector Publish Complete — <service-name>
-
-| Status | Count |
-|--------|-------|
-| Already covered | N |
-| Created | N |
-| Uncertain (manual review) | N |
-| AutoDetect advisory | N |
-
-Ledger: `.observe/detector-sync.md`
-```
-
-If any GAPs failed to create, list them explicitly with the error message.
-If UNCERTAIN specs remain, recommend running `$splunk-detector-publish` again after
-reviewing and resolving the ambiguous live detectors manually.
+Return covered, created, failed, and uncertain counts; the ledger path; every
+failure; and the exact next action. Offline responses instead state that no
+credentials, network call, ledger-backed live verdict, or remote mutation was
+used, and require a new online fetch/diff/confirmation.
 
 ## Red Flags
 
-- `.observe/terraform/detectors.tf` missing — run `$splunk-configure` first
-- `SPLUNK_ACCESS_TOKEN` not set — stop and tell the user
-- No realm from `SPLUNK_REALM` or the connected Observer — stop and tell the user
-- `service_name` not resolvable from `terraform.tfvars` or `.example` — prompt
-  the user before fetching live detectors
-- All offsets returning HTTP 500 continuously (not intermittent) — likely an
-  auth failure masquerading as 500; verify the token is valid
-- A live detector has `programText` missing or empty — treat as not-a-match
-  (cannot verify service filter); classify as UNCERTAIN, not COVERED
-- POST returns HTTP 403 — token lacks detector-write scope; tell the user and
-  stop
-- POST returns HTTP 400 with "Unrecognized field" — field name casing mismatch;
-  check `programText` vs `program_text` and `detectLabel` vs `detect_label`
-- POST returns HTTP 400 with a SignalFlow parse/syntax error (not a field-name
-  error) — the `program_text` was sent un-normalized. Re-check Step 2a: the
-  `<<-EOF` heredoc must be dedented and **every** `${var.*}` (thresholds, stddev,
-  windows — not just `service.name`) must be resolved before the POST. A literal
-  `${var...}` token or a leading-whitespace program line both parse-fail as 400.
+- Missing `detectors.tf`: run `$splunk-configure`.
+- Unresolved `${var.*}` or indented SignalFlow: do not compare or POST.
+- Missing/incomplete live inventory: UNCERTAIN, never GAP.
+- AutoDetect-only overlap: advisory, never COVERED.
+- Missing token/realm, 401/403, or continuous 500s: stop with the exact blocker.
+- HTTP 400: distinguish REST casing (`programText`, `detectLabel`) from
+  unnormalized SignalFlow.
+- Changed state or payload after confirmation: re-fetch, re-diff, reconfirm.

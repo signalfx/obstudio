@@ -33,8 +33,8 @@ For a single-value KPI panel, prefer `.mean()` as the safe no-argument
 aggregation. Do **not** use bare `.last()` — SignalFlow's `.last()` requires an
 explicit window duration (e.g. `.last('1m')`), and a windowless `.last()` is
 rejected with an HTTP 400 at chart-create time (see
-`splunk-dashboard/references/dashboard-templates.md` and
-`splunk-dashboard-publish/SKILL.md`). For a time-series panel, publish the stream
+`../splunk-dashboard/references/dashboard-templates.md` and
+`../splunk-dashboard-publish/SKILL.md`). For a time-series panel, publish the stream
 directly and let the chart's `plot_type` render it.
 
 ## Worked fragments
@@ -58,7 +58,7 @@ A = data('db.pool.connections.active', filter=filter('service.name', '${var.serv
 
 When `splunk-configure`'s Route-Level De-duplication merges an error or
 throughput counter into a same-route duration histogram (see
-`splunk-configure/references/detector-classification.md`), express the merged
+`../splunk-configure/references/detector-classification.md`), express the merged
 Error and Throughput detectors by adding the route/operation dimension
 (`http.route`, `rpc.method`, `db.operation.name`, or equivalent) as a second
 `filter(...)` rather than reading a second metric. Error and Throughput are
@@ -102,7 +102,7 @@ A = data('http.server.request.duration', filter=filter('service.name', '${var.se
 - **Detector** (`signalfx_detector`) appends a detection clause after the
   `.publish(...)`: `detect(when(A > threshold(${var.<id>_threshold}))).publish('<Alert Label>')`
   or an `against_recent.detector_mean_std(...)` block for sudden-change detection.
-  See `splunk-configure/references/terraform-templates.md`.
+  See `../splunk-configure/references/terraform-templates.md`.
 - **Chart** (`signalfx_*_chart`) has **no** `detect()/when()/threshold()` tail —
   the panel just visualizes the published stream. The dashboard chart
   `program_text` is exactly the base fragment above.

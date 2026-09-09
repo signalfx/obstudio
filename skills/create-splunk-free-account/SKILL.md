@@ -1,13 +1,11 @@
 ---
 name: create-splunk-free-account
 description: >-
-  Submit a consent-gated Splunk Observability Cloud Free Edition signup intake
-  in a detected or user-selected supported signup region through Observer's
-  browserless MCP backend. Use when a user asks to create, provision, register,
-  start, or sign up for a free Splunk Observability Cloud, Splunk O11y, or
-  SignalFx account or organization, or explicitly asks to submit another
-  intake with the same details or email, including requests to avoid the Splunk
-  web form.
+  Submit a consent-gated Splunk Observability Cloud Free Edition intake through
+  Observer in a reviewed supported region. Use to create, provision, register,
+  start, or sign up for a free Splunk O11y/SignalFx account, or when the user
+  explicitly asks to submit another intake with the same details or email.
+  Requires explicit terms acceptance and never uses the Splunk web form.
 ---
 
 # Get started with Observability Cloud Free Edition

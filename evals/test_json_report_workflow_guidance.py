@@ -6,9 +6,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT_SKILL = ROOT / "skills" / "otel-audit" / "SKILL.md"
+AUDIT_REFERENCES = ROOT / "skills" / "otel-audit" / "references"
 INSTRUMENT_SKILL = ROOT / "skills" / "otel-instrument" / "SKILL.md"
 VERIFY_SKILL = ROOT / "skills" / "otel-verify" / "SKILL.md"
 INSTRUMENT_HANDOFF = ROOT / "skills" / "otel-instrument" / "references" / "json-approval-handoff.md"
+INSTRUMENT_RUNTIME_REF = (
+    ROOT
+    / "skills"
+    / "otel-instrument"
+    / "references"
+    / "project-runtime-validation.md"
+)
 VERIFY_HANDOFF = ROOT / "skills" / "otel-verify" / "references" / "json-approval-handoff.md"
 AUDIT_INPUT = ROOT / "evals" / "go" / "chi-basic" / "eval" / "inputs" / "otel-audit.json"
 REPORT_TOOL = ROOT / "skills" / "references" / "scripts" / "observe_report.py"
@@ -34,8 +42,42 @@ CHI_DECISION_INSTRUMENT_EVAL = (
 )
 
 
+def _instrument_report_contract() -> str:
+    text = REPORT_FLOW.read_text(encoding="utf-8")
+    status_marker = "\n## Status Rules\n"
+    audit_marker = "\n## Audit Contract\n"
+    instrument_marker = "\n## Instrumentation Contract\n"
+    verify_marker = "\n## Verification Report Contract\n"
+    assert text.count("\nFor an audit,") == 1
+    for marker in (status_marker, audit_marker, instrument_marker, verify_marker):
+        assert text.count(marker) == 1
+    prefix = text.split("\nFor an audit,", 1)[0].rstrip()
+    status = "## Status Rules\n" + text.split(status_marker, 1)[1].split(
+        audit_marker, 1
+    )[0].rstrip()
+    instrument = "## Instrumentation Contract\n" + text.split(
+        instrument_marker, 1
+    )[1].split(verify_marker, 1)[0].rstrip()
+    return "\n\n".join((prefix, status, instrument)) + "\n"
+
+
 def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+    text = path.read_text(encoding="utf-8")
+    if path == AUDIT_SKILL:
+        text += "\n" + "\n".join(
+            reference.read_text(encoding="utf-8")
+            for reference in sorted(AUDIT_REFERENCES.rglob("*.md"))
+        )
+    if path == INSTRUMENT_SKILL:
+        text += "\n".join(
+            (
+                "",
+                INSTRUMENT_RUNTIME_REF.read_text(encoding="utf-8"),
+                _instrument_report_contract(),
+                INSTRUMENT_HANDOFF.read_text(encoding="utf-8"),
+            )
+        )
+    return text
 
 
 def _eval_contract(path: Path) -> str:
@@ -66,7 +108,8 @@ def test_reader_report_contracts_are_available() -> None:
         "verification-report.md",
     )
 
-    assert "#### Reader Order" in instrument
+    assert "## Reader-First Report Order" in instrument
+    assert "## Instrumentation Contract" in instrument
     assert "## Reader Report" in verify
 
 
@@ -140,32 +183,60 @@ def test_human_html_usage_flow_is_documented() -> None:
 
     assert "The reviewer uses `.observe/otel.html` to understand findings" in audit
     assert "It is not a proof report" in audit
-    assert "Users open `.observe/otel-instrumentation.html` after instrumentation" in instrument
-    assert "Do not use it to change selected scope" in instrument
+    assert "Open `.observe/otel-instrumentation.html` after `$otel-instrument`" in instrument
+    assert "not as a place to change audit scope" in instrument
 
 
 def test_instrument_keeps_interactive_contract() -> None:
-    instrument = _read(INSTRUMENT_SKILL)
+    core = INSTRUMENT_SKILL.read_text(encoding="utf-8")
     resolved = _resolved_contract(
         INSTRUMENT_SKILL,
         "instrumentation-report.md",
         "genai-instrumentation.md",
     )
     handoff = _read(INSTRUMENT_HANDOFF)
-    opening = instrument.split("## Workflow", 1)[0]
-    canonical_gate = instrument.split(
-        "#### Canonical Audit And Selection Gate", 1
-    )[1].split("### Fast Path", 1)[0]
 
+    assert "`../references/report-flow-contract.md`" in core
+    assert "use one heading-bounded extraction" in core
+    assert "fixed line offsets" in core
+    assert "directory containing the loaded `otel-instrument/SKILL.md`" in " ".join(
+        core.split()
+    )
+    assert "from that reference's directory" in core
     assert (
-        "Before editing application code, read "
-        "`../references/report-flow-contract.md`" in opening
+        "<instrument-skill-dir>/../references/report-flow-contract.md" in core
     )
-    assert "`./references/json-approval-handoff.md`" in opening
-    assert "read and follow `./references/json-approval-handoff.md`" in " ".join(
-        canonical_gate.split()
+    assert REPORT_FLOW.is_file()
+    assert "`./references/json-approval-handoff.md`" in core
+    core_normalized = " ".join(core.split())
+    assert "It is authoritative for selection precedence" in core_normalized
+    assert "## Reader-First Report Order" in resolved
+    assert "## Selection Gate" in handoff
+
+
+def test_instrument_report_contract_route_excludes_unrelated_sections() -> None:
+    routed = _instrument_report_contract()
+
+    for required in (
+        "# OTel Report Flow Contract",
+        "## Canonical Artifact Chain",
+        "## Document Ownership",
+        "## Human HTML Usage Flow",
+        "## Reader-First Report Order",
+        "## Status Rules",
+        "## Instrumentation Contract",
+    ):
+        assert required in routed
+    assert "For an audit," not in routed
+    for excluded_heading in (
+        "Audit Contract",
+        "Verification Report Contract",
+        "Splunk Configure Contract",
+    ):
+        assert f"\n## {excluded_heading}\n" not in routed
+    assert routed.rstrip().endswith(
+        "explicit scope decision is fully recorded."
     )
-    assert "#### Reader Order" in resolved
 
 
 def test_instrument_interactive_references_are_resolvable() -> None:
@@ -174,7 +245,7 @@ def test_instrument_interactive_references_are_resolvable() -> None:
 
     assert "./references/json-approval-handoff.md" in instrument
     assert INSTRUMENT_HANDOFF.is_file()
-    assert "#### Signals Changed" in resolved
+    assert "## Signals Changed" in resolved
 
 
 def test_verify_keeps_interactive_contract() -> None:
@@ -260,11 +331,11 @@ def test_manual_decision_answers_are_separate_and_gate_matching_work() -> None:
     instrument = " ".join(_read(INSTRUMENT_SKILL).split())
     handoff = " ".join(_read(INSTRUMENT_HANDOFF).split())
 
-    for text in (audit, flow):
+    for text in (audit,):
         for term in ("two or three", "`decision_options`", "`outcome`", "`unlocks`"):
             assert term in text
         assert "pairwise disjoint" in text
-    assert "explicit selectable `decision_options`" in flow
+    assert "two or three explicit `decision_options`" in audit
 
     for text in (flow, instrument, handoff):
         for term in (

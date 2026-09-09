@@ -132,9 +132,12 @@ class ValidateReaderReportTest(unittest.TestCase):
             "| OTel item | Type | Added or modified | Working status | "
             "How it was tested | Evidence |"
         )
-        skill = SKILL.read_text(encoding="utf-8")
-        self.assertGreaterEqual(skill.count(expected_header), 2)
-        self.assertNotIn(stale_header, skill)
+        report_contract = (
+            SKILL.parent / "references" / "verification-report.md"
+        ).read_text(encoding="utf-8")
+        resolved_contract = SKILL.read_text(encoding="utf-8") + report_contract
+        self.assertGreaterEqual(resolved_contract.count(expected_header), 2)
+        self.assertNotIn(stale_header, resolved_contract)
 
         stale_report = """# OTel Verification Report: stale
 
