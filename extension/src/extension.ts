@@ -327,7 +327,7 @@ type StartupHintCarrier = {
 
 type OtherExtensionObserverRetirement =
 	| { status: 'not-applicable' }
-	| { pid: number; port?: number; status: 'restart-required'; version?: string }
+	| { pid?: number; port?: number; status: 'restart-required'; version?: string }
 	| { status: 'retired' };
 
 const agentIntegrationSpecs: AgentIntegrationSpec[] = [
@@ -956,21 +956,28 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				context,
 				discoveredObserver,
 				discoveryProbe.status === 'ready',
+				discoveryProbe.status === 'ready' ? discoveryProbe.health.version : undefined,
+				getConfiguredManagedObserverPort(),
 			);
 			assertObserverRunCurrent(observerLifecycleState, runId);
 			if (retirement.status === 'restart-required') {
 				const portLabel = retirement.port === undefined
 					? 'an unknown localhost port'
 					: `localhost port ${retirement.port}`;
+				const pidLabel = retirement.pid === undefined
+					? 'PID unavailable'
+					: `PID ${retirement.pid}`;
 				const restartMessage = retirement.version === undefined
-					? `Observer on ${portLabel} (PID ${retirement.pid}) could not be verified for automatic replacement. `
+					? `Observer on ${portLabel} (${pidLabel}) could not be verified for automatic replacement. `
 						+ 'Cloud controls are unavailable until it is stopped.'
-					: `Observer ${retirement.version} on ${portLabel} (PID ${retirement.pid}) is still running `
+					: `Observer ${retirement.version} on ${portLabel} (${pidLabel}) is still running `
 						+ 'from a previous extension installation. Cloud controls are unavailable until it is stopped.';
 				const restartError = new Error(restartMessage);
 				Object.assign(restartError, {
 					startupHint: 'Restart VS Code to stop the previous Observer, then run Splunk Observability Studio: Start Observer. '
-						+ 'If it remains running, stop the displayed PID and retry.',
+						+ (retirement.pid === undefined
+							? 'If it remains running, stop the Observer on the displayed port and retry.'
+							: 'If it remains running, stop the displayed PID and retry.'),
 					startupTitle: 'Restart required',
 				});
 				throw restartError;
@@ -1250,15 +1257,36 @@ async function retireOtherExtensionManagedObserver(
 	context: vscode.ExtensionContext,
 	discovery: SharedObserverDiscovery,
 	observerHealthVerified: boolean,
+	observerVersion: string | undefined,
+	managedPort: number,
 ): Promise<OtherExtensionObserverRetirement> {
+	const discoveryPort = observerPortFromUrl(discovery.baseUrl);
+	if (discoveryPort !== managedPort) {
+		return { status: 'not-applicable' };
+	}
+	if (observerHealthVerified && observerVersion === getBundleVersion(context)) {
+		return { status: 'not-applicable' };
+	}
 	const pid = discovery.pid;
-	if (pid === undefined || pid === process.pid) {
+	if (pid === undefined) {
+		if (!observerHealthVerified) {
+			return { status: 'not-applicable' };
+		}
+		appendObserverOutputLine(
+			`Observer at ${discovery.baseUrl} has no valid recorded PID; refusing to reuse or stop it automatically.`,
+		);
+		return {
+			port: discoveryPort,
+			status: 'restart-required',
+		};
+	}
+	if (pid === process.pid) {
 		return { status: 'not-applicable' };
 	}
 	const processExecutablePath = await readProcessExecutablePath(pid);
 	if (processExecutablePath === undefined) {
 		if (!processIsRunning(pid)) {
-			return { status: 'not-applicable' };
+			return { status: 'retired' };
 		}
 		appendObserverOutputLine(
 			`Observer PID ${pid} could not be inspected; refusing to stop it automatically.`,
@@ -1281,7 +1309,15 @@ async function retireOtherExtensionManagedObserver(
 			processExecutablePath,
 		});
 		if (unverifiedObserver === undefined) {
-			return { status: 'not-applicable' };
+			appendObserverOutputLine(
+				`Observer PID ${pid} at ${discovery.baseUrl} is not the current bundled Observer; `
+				+ 'refusing to reuse or stop it automatically.',
+			);
+			return {
+				pid,
+				port: discoveryPort,
+				status: 'restart-required',
+			};
 		}
 		appendObserverOutputLine(
 			`Observer PID ${unverifiedObserver.pid} appears to belong to a previous extension installation, `

@@ -182,6 +182,19 @@ Observer is local-only: its UI, REST API, and HTTP MCP endpoint must bind to a
 loopback host. `--shared-url` can select another loopback Observer, but remote
 Observers and reverse-proxy publication are not supported.
 
+### v0.0.21 local Observer migration
+
+v0.0.21 intentionally removes the authenticated remote/shared Observer mode
+that v0.0.20 supported. Before upgrading a remotely published or LAN-bound
+Observer, move its UI, REST API, and MCP listener to `127.0.0.1` or `localhost`
+and update native clients to use that loopback URL. Remove reverse-proxy routes
+and `OBSTUDIO_PUBLIC_MCP_URL`, then rerun `obstudio install --target=<agent>` to
+replace older MCP entries containing an `Authorization` header. If a deployment
+cannot move to loopback yet, keep it on v0.0.20 until that migration is possible;
+v0.0.21 will reject the non-loopback listener instead of exposing unauthenticated
+mutation endpoints remotely. This restriction applies to the local Observer
+control surface, not to exporting telemetry to Splunk Observability Cloud.
+
 Native loopback clients do not need a bearer credential. This is a deliberate
 local-machine trust boundary, not same-user authentication: any process or OS
 account that can reach the loopback endpoint can invoke native MCP and mutation
@@ -199,15 +212,17 @@ storage before applying it to Observer. If a request has an uncertain transport
 outcome, a single-use scoped rollback capability restores the prior in-memory
 Observer configuration without exposing either the old or new ingest token.
 Freshly started extension-managed Observers are restored from IDE secret
-storage. During an extension upgrade, VS Code replaces an older
-extension-managed Observer only after verifying the shared-state PID and the
-process's exact non-symlinked executable path inside another installed Splunk
-extension package. Only that recorded process is stopped; other Observers on
-other ports remain running. macOS and Linux use signal escalation, while
-Windows uses its native process-inspection and forced-termination commands. If
-the verified process cannot be stopped, the extension does not reuse it or
-enable Cloud controls: the panel shows **Restart required** together with its
-localhost port and PID.
+storage. During an extension upgrade, a healthy Observer reporting the current
+bundled version can be reused. If a different or unversioned Observer occupies
+the selected managed port, VS Code stops it only after verifying the
+shared-state PID and the process's exact non-symlinked executable path inside
+another installed Splunk extension package. Only that verified extension
+process is stopped; other Observers on other ports remain running. macOS and
+Linux use signal escalation, while Windows uses its native process-inspection
+and forced-termination commands. If the outdated process cannot be verified or
+stopped, the extension does not reuse it or enable Cloud controls: the panel
+shows **Restart required** together with its localhost port and its PID when one
+was recorded.
 
 | Service | URL |
 |---------|-----|

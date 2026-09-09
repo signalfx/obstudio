@@ -116,7 +116,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: npm
           cache-dependency-path: extension/package-lock.json
 
@@ -127,7 +127,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: extension
-        run: npm ci
+        run: npm ci --engine-strict
 
       - name: Run unit tests
         working-directory: extension
@@ -156,6 +156,26 @@ jobs:
           test -n "${binary}"
           chmod +x "${binary}"
           echo "OBSTUDIO_V018_BINARY_PATH=${binary}" >> "${GITHUB_ENV}"
+
+      - name: Prepare exact v0.0.20 upgrade fixture
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          fixture_dir="${RUNNER_TEMP}/obstudio-v0.0.20"
+          archive="${fixture_dir}/obstudio_0.0.20_linux_amd64.zip"
+          mkdir -p "${fixture_dir}/unpacked"
+          gh release download v0.0.20 \
+            --repo signalfx/obstudio \
+            --pattern 'obstudio_0.0.20_linux_amd64.zip' \
+            --dir "${fixture_dir}"
+          echo "56efc339d671e041da2d812b0c5e824b084a5c4215a92f148ecc77d64d805323  ${archive}" | sha256sum -c -
+          unzip -q "${archive}" -d "${fixture_dir}/unpacked"
+          binary="$(find "${fixture_dir}/unpacked" -type f -name obstudio -print -quit)"
+          test -n "${binary}"
+          chmod +x "${binary}"
+          echo "OBSTUDIO_V020_BINARY_PATH=${binary}" >> "${GITHUB_ENV}"
 
       - name: Run VS Code host tests
         working-directory: extension
