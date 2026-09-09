@@ -24,6 +24,14 @@ matching the frameworks and clients detected in the codebase.
 | `segmentio/kafka-go`     | `go.opentelemetry.io/contrib/instrumentation/github.com/segmentio/kafka-go/otelsegmentio` | spans only      | Kafka producer/consumer spans                                                           |
 | `aws-sdk-go-v2`          | `go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws`        | spans only      | AWS service call spans                                                                  |
 
+Use the bounded Go dependency-resolution contract in
+`../project-runtime-validation.md`: one project-native attempt, then on a
+network failure one batched declared-cache/version inventory and at most one
+compatible offline retry. Do not recursively search or read module-cache source
+unless a compile error names a specific API that must be checked. Do not repeat
+full repository inventories or cleanup probes; record the exact blocker. Never
+add or change `replace`, `exclude`, or `toolchain` solely to fit cached modules.
+
 
 **Never use `go.opentelemetry.io/otel/semconv/`* packages directly.** These
 versioned semconv modules can cause runtime conflicts when different
@@ -185,6 +193,7 @@ const localObserverLogsEndpoint = "http://localhost:4318/v1/logs"
 func initOTel(
 	ctx context.Context,
 	existingLogHandler slog.Handler,
+	projectServiceName string,
 ) (func(context.Context) error, error) {
 	res, err := resource.New(ctx,
 		resource.WithFromEnv(),
@@ -201,7 +210,10 @@ func initOTel(
 	serviceName := strings.TrimSpace(os.Getenv("OTEL_SERVICE_NAME"))
 	if serviceName == "" {
 		if _, exists := res.Set().Value(serviceNameKey); !exists {
-			serviceName = "my-service"
+			serviceName = strings.TrimSpace(projectServiceName)
+			if serviceName == "" {
+				return nil, errors.New("checked-in project service name is required")
+			}
 		}
 	}
 	if serviceName != "" {
@@ -264,7 +276,7 @@ func initOTel(
 			sdklog.WithProcessor(sdklog.NewBatchProcessor(logExporter)),
 		)
 		applicationLogHandler = otelslog.NewHandler(
-			"my-service",
+			serviceName,
 			otelslog.WithLoggerProvider(lp),
 		)
 	}
@@ -320,6 +332,12 @@ func useDefaultLocalLogExport() (bool, error) {
 				"Observer; refusing to create an Obstudio log provider or bridge",
 		)
 	}
+	if strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS")) != "" {
+		return false, errors.New(
+			"OTEL_EXPORTER_OTLP_LOGS_HEADERS is operator-owned; refusing to " +
+				"apply it to the default local Observer exporter",
+		)
+	}
 	return true, nil
 }
 
@@ -334,7 +352,6 @@ func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, erro
 		)
 	}
 
-	logsHeaders := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS"))
 	if strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")) != "" {
 		return nil, errors.New(
 			"move generic OTLP headers to trace/metric signal variables and remove OTEL_EXPORTER_OTLP_HEADERS",
@@ -345,10 +362,11 @@ func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, erro
 	if endpoint == "" {
 		endpoint = localObserverLogsEndpoint
 	}
-	opts := []otlploghttp.Option{otlploghttp.WithEndpointURL(endpoint)}
-	if logsHeaders == "" {
-		// Prevent a future generic header from becoming the log credential.
-		opts = append(opts, otlploghttp.WithHeaders(map[string]string{}))
+	// The default local Observer path is unauthenticated. Supplying an explicit
+	// empty map also prevents environment headers from becoming its credential.
+	opts := []otlploghttp.Option{
+		otlploghttp.WithEndpointURL(endpoint),
+		otlploghttp.WithHeaders(map[string]string{}),
 	}
 	return otlploghttp.New(ctx, opts...)
 }
@@ -631,8 +649,17 @@ go func(ctx context.Context) {
 Before adding a custom counter or histogram for an outcome that happens
 inside a request `otelhttp.NewHandler` already wraps, check whether it
 belongs as an attribute on `http.server.request.duration` instead — see
-`../../SKILL.md` `#### Implementation Rules` and the `Go:` entry under
-`#### Language-Specific Musts` for the `otelhttp.LabelerFromContext` pattern.
+`../../SKILL.md` `### HTTP and errors`. For a detector-relevant distinction
+that status code cannot express, use the per-request labeler already injected
+by `otelhttp.NewHandler`:
+
+```go
+labeler, _ := otelhttp.LabelerFromContext(r.Context())
+labeler.Add(attribute.String("outcome.reason", "gateway_timeout"))
+```
+
+No extra handler option is needed. Do not use the deprecated
+`otelhttp.WithMetricAttributesFn` middleware option.
 Only define a new instrument when the signal does not correlate 1:1 with a
 single request (a queue-depth gauge, a background job outcome).
 
@@ -720,11 +747,11 @@ configuration automatically.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Common OTLP HTTP endpoint |
-| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the Obstudio-owned local log path, even when logs headers are set |
+| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the default local log path |
 | `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or detected-local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for host/native Obstudio runs | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
-| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Explicit headers are operator-owned and are never applied to the default local Observer exporter |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
@@ -770,10 +797,11 @@ URL, realm, access token, generic cloud header, cloud exporter, or forwarding
 flag into log configuration. For the absent/`otlp` branch, reject a non-local
 explicit logs endpoint before constructing the provider or bridge, preserve it
 as operator configuration, report the boundary conflict, and require the
-operator to resolve it. Also reject any generic OTLP header on the local branch
-even when signal-specific logs headers exist; move the generic credentials to
-trace/metric variables and remove the generic setting. Obstudio cloud
-forwarding remains traces and metrics only.
+operator to resolve it. Reject generic OTLP headers on the local branch and
+move those credentials to trace/metric variables. Also reject an explicit
+signal-specific logs header: it is operator-owned configuration and must not be
+applied to the default local Observer exporter. Obstudio cloud forwarding
+remains traces and metrics only.
 
 Add an in-memory SDK log test and a full local Observer runtime check. Emit one
 sanitized application record at each required severity both outside and inside

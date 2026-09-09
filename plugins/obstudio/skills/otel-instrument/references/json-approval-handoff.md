@@ -134,6 +134,24 @@ python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" rende
   --selection-json .observe/otel-selection.json
 ```
 
+## Implementation Queue And Closure
+
+Treat the validated dependency-closed selected finding set as the
+implementation queue. `manual decision` and `external follow-up` findings
+cannot enter the executable selection. Reject unanswered manual dependencies,
+unresolved external follow-up, and executable work outside the recorded
+option's `unlocks`.
+
+Build an internal closure matrix before editing:
+`finding ID -> area -> priority -> required fix -> instrument mode -> planned
+action -> verification scenarios`. Implement exactly that queue. Use one row
+per selected audit finding in the technical report, keep unselected findings
+out of this implementation report, and do not report unselected findings as
+implemented work. Canonical instrumentation JSON contains selected rows only.
+Update the matrix after validation and verification. A row may be `Working`,
+`Not working`, `Not proven`, `Not configured`, or `Deferred`; code presence or
+a shared helper test alone cannot establish `Working`.
+
 ## Instrumentation JSON
 
 Write `.observe/otel-instrumentation.json` with this shape:

@@ -40,6 +40,33 @@ class StageObstudioPluginTest(unittest.TestCase):
             self.assertTrue((output / "skills" / "references" / "report-flow-contract.md").is_file())
             self.assertFalse((output / "skills" / "otel-instrument").is_symlink())
             self.assertFalse(any(path.is_symlink() for path in output.rglob("*")))
+            actual_paths = {
+                path.relative_to(output / "skills")
+                for path in (output / "skills").rglob("SKILL.md")
+            }
+            self.assertEqual(actual_paths, STAGE.EXPECTED_SKILL_PATHS)
+            names = [STAGE.read_skill_name(output / "skills" / path) for path in actual_paths]
+            self.assertEqual(set(names), STAGE.EXPECTED_SKILL_NAMES)
+            self.assertEqual(len(names), len(set(names)))
+
+    def test_verify_rejects_missing_or_extra_skill(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            output = Path(tempdir) / "obstudio"
+            STAGE.stage_plugin(output)
+            (output / "skills" / "otel-audit" / "SKILL.md").unlink()
+
+            with self.assertRaisesRegex(RuntimeError, "skill catalog mismatch"):
+                STAGE.verify_staged_plugin(output, host="all")
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            output = Path(tempdir) / "obstudio"
+            STAGE.stage_plugin(output)
+            extra = output / "skills" / "unexpected"
+            extra.mkdir()
+            (extra / "SKILL.md").write_text("---\nname: unexpected\n---\n")
+
+            with self.assertRaisesRegex(RuntimeError, "skill catalog mismatch"):
+                STAGE.verify_staged_plugin(output, host="all")
 
     def test_host_stage_omits_other_host_metadata(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -215,23 +242,11 @@ class StageObstudioPluginTest(unittest.TestCase):
     def test_verify_rejects_too_many_default_prompts(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio"
-            (output / ".codex-plugin").mkdir(parents=True)
-            (output / "skills").mkdir(parents=True)
-            (output / ".codex-plugin" / "plugin.json").write_text(
-                json.dumps(
-                    {
-                        "interface": {
-                            "defaultPrompt": [
-                                "one",
-                                "two",
-                                "three",
-                                "four",
-                            ],
-                        },
-                    }
-                ),
-                encoding="utf-8",
-            )
+            STAGE.stage_plugin(output, host="codex")
+            manifest_path = output / ".codex-plugin" / "plugin.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["interface"]["defaultPrompt"] = ["one", "two", "three", "four"]
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
             with self.assertRaisesRegex(RuntimeError, "defaultPrompt must contain at most 3 entries"):
                 STAGE.verify_staged_plugin(output)
@@ -239,24 +254,11 @@ class StageObstudioPluginTest(unittest.TestCase):
     def test_verify_rejects_unknown_manifest_skill_references(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio"
-            (output / ".codex-plugin").mkdir(parents=True)
-            skill_dir = output / "skills" / "observer-control" / "observer-open"
-            skill_dir.mkdir(parents=True)
-            (skill_dir / "SKILL.md").write_text(
-                "---\nname: observer-open\n---\n",
-                encoding="utf-8",
-            )
-            (output / ".codex-plugin" / "plugin.json").write_text(
-                json.dumps(
-                    {
-                        "interface": {
-                            "longDescription": "Open with $open-observer.",
-                            "defaultPrompt": [],
-                        },
-                    }
-                ),
-                encoding="utf-8",
-            )
+            STAGE.stage_plugin(output, host="codex")
+            manifest_path = output / ".codex-plugin" / "plugin.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["interface"]["longDescription"] = "Open with $open-observer."
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
             with self.assertRaisesRegex(RuntimeError, r"unknown skills: \$open-observer"):
                 STAGE.verify_staged_plugin(output)
