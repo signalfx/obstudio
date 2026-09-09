@@ -110,6 +110,24 @@ def test_audit_renderer_owns_the_canonical_reader_projection() -> None:
         assert term.replace("`", "") in skill.replace("`", "")
 
 
+def test_audit_routes_and_scenarios_stay_parameterized() -> None:
+    report = " ".join(
+        (REFERENCES / "report-contract.md").read_text(encoding="utf-8").split()
+    )
+
+    for term in (
+        "required query-name shape",
+        "/kv/{key}",
+        "/search?word={word}",
+        "http.route values remain path-only",
+        "never embed concrete key, query, path-parameter, request-body, tenant, or user values",
+        "an existing key",
+        "a missing key",
+        "same low-cardinality route templates",
+    ):
+        assert term.replace("`", "") in report.replace("`", "")
+
+
 def test_audit_human_report_is_one_priority_ordered_decision_view() -> None:
     skill = normalized(SKILL)
 
