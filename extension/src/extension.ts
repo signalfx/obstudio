@@ -104,6 +104,7 @@ import {
 import { ObserverWebviewTelemetry } from './observer-webview-telemetry';
 import {
 	forceTerminateProcess,
+	gracefullyTerminateProcess,
 	processIsRunning,
 	readProcessExecutablePath,
 } from './process-control';
@@ -1436,29 +1437,33 @@ async function retireOtherExtensionManagedObserver(
 		`Replacing Observer from installed extension ${otherExtensionObserver.version} (PID ${otherExtensionObserver.pid}) `
 		+ `with bundled Observer ${bundleVersion}.`,
 	);
+	let gracefulTerminationRequested = false;
 	try {
-		process.kill(otherExtensionObserver.pid, 'SIGTERM');
+		await gracefullyTerminateProcess(otherExtensionObserver.pid);
+		gracefulTerminationRequested = true;
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
+		if (!processIsRunning(otherExtensionObserver.pid)) {
 			return { status: 'retired' };
 		}
 		appendObserverOutputLine(
-			`Could not stop Observer from installed extension ${otherExtensionObserver.version}: ${getErrorMessage(error)}`,
+			`Could not request a graceful stop for Observer from installed extension `
+			+ `${otherExtensionObserver.version}: ${getErrorMessage(error)}. Proceeding to the verified forced-stop fallback.`,
 		);
-		return restartRequired();
 	}
 
-	if (await waitForProcessExit(
-		otherExtensionObserver.pid,
-		outdatedExtensionObserverShutdownTimeoutMs,
-	)) {
-		appendObserverOutputLine(`Stopped Observer from installed extension ${otherExtensionObserver.version}.`);
-		return { status: 'retired' };
+	if (gracefulTerminationRequested) {
+		if (await waitForProcessExit(
+			otherExtensionObserver.pid,
+			outdatedExtensionObserverShutdownTimeoutMs,
+		)) {
+			appendObserverOutputLine(`Stopped Observer from installed extension ${otherExtensionObserver.version}.`);
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Observer from installed extension ${otherExtensionObserver.version} did not stop after `
+			+ `${outdatedExtensionObserverShutdownTimeoutMs}ms; forcing it to stop.`,
+		);
 	}
-	appendObserverOutputLine(
-		`Observer from installed extension ${otherExtensionObserver.version} did not stop after `
-		+ `${outdatedExtensionObserverShutdownTimeoutMs}ms; forcing it to stop.`,
-	);
 	const currentProcessExecutablePath = await readProcessExecutablePath(otherExtensionObserver.pid);
 	const reverifiedObserver = currentProcessExecutablePath === undefined
 		? undefined

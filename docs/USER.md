@@ -219,10 +219,10 @@ shared-state PID and the process's exact non-symlinked executable path inside
 another installed Splunk extension package. Only that verified extension
 process is stopped. Other Observers on other ports remain running; an outdated
 one is ignored while the extension starts or reuses the bundled version on the
-selected managed port. macOS and Linux use signal escalation, while Windows
-uses its native process-inspection and forced-termination commands. If an
-outdated process on the selected port cannot be verified or stopped, the
-extension does not reuse it or enable Cloud controls until the user stops it.
+selected managed port. macOS and Linux use `SIGTERM` followed by `SIGKILL`;
+Windows uses `taskkill` without `/F` followed by a revalidated `/F` fallback.
+If an outdated process on the selected port cannot be verified or stopped,
+the extension does not reuse it or enable Cloud controls until the user stops it.
 
 | Service | URL |
 |---------|-----|

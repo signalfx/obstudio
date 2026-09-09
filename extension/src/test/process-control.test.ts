@@ -13,6 +13,7 @@ import {
 import {
 	forceTerminateProcess,
 	forceTerminationPlan,
+	gracefulTerminationPlan,
 	normalizeLinuxExecutableLink,
 	processInspectionPlan,
 	processIsRunning,
@@ -42,9 +43,29 @@ test('force termination uses taskkill for the supported Windows platform', () =>
 	});
 });
 
-test('force termination rejects invalid process IDs', () => {
+test('graceful termination uses SIGTERM on supported Unix platforms', () => {
+	for (const platform of ['darwin', 'linux'] as const) {
+		assert.deepEqual(gracefulTerminationPlan(4321, platform), {
+			kind: 'signal',
+			signal: 'SIGTERM',
+		});
+	}
+});
+
+test('graceful termination uses taskkill without force on the supported Windows platform', () => {
+	const plan = gracefulTerminationPlan(4321, 'win32');
+	assert.deepEqual(plan, {
+		args: ['/PID', '4321', '/T'],
+		command: 'C:\\Windows\\System32\\taskkill.exe',
+		kind: 'command',
+	});
+	assert.equal(plan.args.includes('/F'), false);
+});
+
+test('termination plans reject invalid process IDs', () => {
 	for (const pid of [Number.NaN, 0, -1, 1.5]) {
 		assert.throws(() => forceTerminationPlan(pid, process.platform), /invalid process ID/);
+		assert.throws(() => gracefulTerminationPlan(pid, process.platform), /invalid process ID/);
 	}
 });
 

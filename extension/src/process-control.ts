@@ -6,6 +6,10 @@ export type ForceTerminationPlan =
 	| { kind: 'signal'; signal: 'SIGKILL' }
 	| { args: string[]; command: string; kind: 'command' };
 
+export type GracefulTerminationPlan =
+	| { kind: 'signal'; signal: 'SIGTERM' }
+	| { args: string[]; command: string; kind: 'command' };
+
 export type ProcessInspectionPlan = {
 	args: string[];
 	command: string;
@@ -102,6 +106,23 @@ export function forceTerminationPlan(
 	return { kind: 'signal', signal: 'SIGKILL' };
 }
 
+export function gracefulTerminationPlan(
+	pid: number,
+	platform: NodeJS.Platform = process.platform,
+): GracefulTerminationPlan {
+	if (!Number.isSafeInteger(pid) || pid <= 0) {
+		throw new Error(`Cannot terminate invalid process ID ${pid}.`);
+	}
+	if (platform === 'win32') {
+		return {
+			args: ['/PID', String(pid), '/T'],
+			command: windowsSystemTool('taskkill.exe'),
+			kind: 'command',
+		};
+	}
+	return { kind: 'signal', signal: 'SIGTERM' };
+}
+
 function windowsSystemTool(...segments: string[]): string {
 	const windowsDirectory = process.env.SystemRoot?.trim()
 		|| process.env.WINDIR?.trim()
@@ -113,7 +134,17 @@ function windowsSystemTool(...segments: string[]): string {
 }
 
 export async function forceTerminateProcess(pid: number): Promise<void> {
-	const plan = forceTerminationPlan(pid);
+	await executeTerminationPlan(pid, forceTerminationPlan(pid));
+}
+
+export async function gracefullyTerminateProcess(pid: number): Promise<void> {
+	await executeTerminationPlan(pid, gracefulTerminationPlan(pid));
+}
+
+async function executeTerminationPlan(
+	pid: number,
+	plan: ForceTerminationPlan | GracefulTerminationPlan,
+): Promise<void> {
 	if (plan.kind === 'signal') {
 		process.kill(pid, plan.signal);
 		return;

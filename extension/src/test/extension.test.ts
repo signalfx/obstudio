@@ -2087,7 +2087,7 @@ test('shared startup validates health without a credential or feature probe', ()
 	assert.doesNotMatch(probe, /challenge|proof|token|Authorization/i);
 });
 
-test('upgrade retirement verifies Observer health and the executable path before signaling a PID', () => {
+test('upgrade retirement verifies Observer health and the executable path before terminating a PID', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
 	const startupStart = source.indexOf('async function startObserver(');
 	const startupEnd = source.indexOf('\nasync function retireOtherExtensionManagedObserver(', startupStart);
@@ -2110,8 +2110,13 @@ test('upgrade retirement verifies Observer health and the executable path before
 	);
 	assert.ok(
 		retirement.indexOf('const preStopExecutablePath = await readProcessExecutablePath')
-			< retirement.indexOf("process.kill(otherExtensionObserver.pid, 'SIGTERM')"),
-		'the actual executable must be reverified immediately before SIGTERM',
+			< retirement.indexOf('await gracefullyTerminateProcess(otherExtensionObserver.pid)'),
+		'the actual executable must be reverified immediately before graceful termination',
+	);
+	assert.doesNotMatch(
+		retirement,
+		/process\.kill\(otherExtensionObserver\.pid, 'SIGTERM'\)/,
+		'the upgrade path must not treat Node SIGTERM as graceful on Windows',
 	);
 	assert.doesNotMatch(retirement, /readProcessCommand|processCommand/);
 });
