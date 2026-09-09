@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import threading
 from dataclasses import dataclass, field
@@ -9,6 +10,9 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .trace import ActionEvent, CommandEvent, TraceSummary, parse_events, parse_trace
+
+
+_IS_WINDOWS = os.name == "nt"
 
 
 @dataclass
@@ -59,6 +63,48 @@ class StreamedCommandResult:
     stderr: str
 
 
+def _process_group_popen_kwargs() -> dict[str, Any]:
+    if _IS_WINDOWS:
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+
+    if _IS_WINDOWS:
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError:
+            process.kill()
+
+    if process.poll() is None:
+        process.kill()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        if process.poll() is None:
+            process.kill()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+
+
 def run_streamed_command(
     cmd: list[str],
     *,
@@ -76,6 +122,7 @@ def run_streamed_command(
         env=env,
         text=True,
         bufsize=1,
+        **_process_group_popen_kwargs(),
     )
 
     stdout_thread = threading.Thread(
@@ -92,9 +139,8 @@ def run_streamed_command(
     stderr_thread.start()
     try:
         returncode = process.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
+    except BaseException:
+        _terminate_process_tree(process)
         stdout_thread.join(timeout=5)
         stderr_thread.join(timeout=5)
         raise

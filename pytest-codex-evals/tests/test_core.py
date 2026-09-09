@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
+import pytest_codex_evals.backends as backend_module
 
 from pytest_codex_evals.ab import side_prompt
 from pytest_codex_evals.config import load_settings
@@ -969,6 +972,163 @@ def test_command_runner_records_output_without_terminal_echo(tmp_path: Path, cap
     assert stderr_path.read_text(encoding="utf-8") == "error line\n"
     assert captured.out == ""
     assert captured.err == ""
+
+
+def test_command_runner_timeout_kills_descendants_and_preserves_output(
+    tmp_path: Path, capfd
+):
+    trace_path = tmp_path / "trace.jsonl"
+    stderr_path = tmp_path / "stderr.txt"
+    heartbeat_path = tmp_path / "heartbeat.txt"
+    stop_path = tmp_path / "stop"
+    child_code = (
+        "import sys, time\n"
+        "from pathlib import Path\n"
+        "heartbeat = Path(sys.argv[1])\n"
+        "stop = Path(sys.argv[2])\n"
+        "for _ in range(1500):\n"
+        "    if stop.exists():\n"
+        "        break\n"
+        "    heartbeat.write_text(str(time.monotonic()), encoding='utf-8')\n"
+        "    time.sleep(0.02)\n"
+    )
+    parent_code = (
+        "import subprocess, sys, time\n"
+        "from pathlib import Path\n"
+        "child = subprocess.Popen([sys.executable, '-c', sys.argv[1], sys.argv[2], sys.argv[3]])\n"
+        "heartbeat = Path(sys.argv[2])\n"
+        "deadline = time.monotonic() + 5\n"
+        "while not heartbeat.exists() and time.monotonic() < deadline:\n"
+        "    time.sleep(0.02)\n"
+        "print('partial trace', flush=True)\n"
+        "print('partial error', file=sys.stderr, flush=True)\n"
+        "time.sleep(60)\n"
+    )
+
+    try:
+        with pytest.raises(subprocess.TimeoutExpired):
+            run_streamed_command(
+                [
+                    sys.executable,
+                    "-c",
+                    parent_code,
+                    child_code,
+                    str(heartbeat_path),
+                    str(stop_path),
+                ],
+                stdout_path=trace_path,
+                stderr_path=stderr_path,
+                timeout=2,
+            )
+
+        captured = capfd.readouterr()
+        assert trace_path.read_text(encoding="utf-8") == "partial trace\n"
+        assert stderr_path.read_text(encoding="utf-8") == "partial error\n"
+        assert captured.out == ""
+        assert captured.err == ""
+        heartbeat = heartbeat_path.read_text(encoding="utf-8")
+        time.sleep(0.15)
+        assert heartbeat_path.read_text(encoding="utf-8") == heartbeat
+    finally:
+        stop_path.write_text("stop\n", encoding="utf-8")
+
+
+def test_process_group_options_use_a_new_session(monkeypatch):
+    monkeypatch.setattr(backend_module, "_IS_WINDOWS", False)
+
+    assert backend_module._process_group_popen_kwargs() == {
+        "start_new_session": True
+    }
+
+
+def test_command_runner_interrupt_terminates_process_group(monkeypatch, tmp_path: Path):
+    killpg_calls = []
+
+    class FakeProcess:
+        pid = 456
+        stdout = io.StringIO("")
+        stderr = io.StringIO("")
+        returncode = None
+        interrupted = False
+
+        def wait(self, timeout=None):
+            if timeout is not None and not self.interrupted:
+                self.interrupted = True
+                raise KeyboardInterrupt
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            self.returncode = -9
+
+    process = FakeProcess()
+    monkeypatch.setattr(backend_module, "_IS_WINDOWS", False)
+    monkeypatch.setattr(
+        backend_module.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: process,
+    )
+    monkeypatch.setattr(
+        backend_module.os,
+        "killpg",
+        lambda pid, sig: killpg_calls.append((pid, sig)),
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        run_streamed_command(
+            ["agent"],
+            stdout_path=tmp_path / "trace.jsonl",
+            stderr_path=tmp_path / "stderr.txt",
+            timeout=10,
+        )
+
+    assert killpg_calls == [(456, backend_module.signal.SIGKILL)]
+    assert process.returncode == -9
+
+
+def test_windows_process_tree_cleanup_uses_taskkill(monkeypatch):
+    calls = []
+
+    class FakeProcess:
+        pid = 123
+        returncode = None
+        killed = False
+        waited = False
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+        def wait(self, timeout=None):
+            self.waited = True
+            return self.returncode
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(backend_module, "_IS_WINDOWS", True)
+    monkeypatch.setattr(
+        backend_module.subprocess,
+        "CREATE_NEW_PROCESS_GROUP",
+        512,
+        raising=False,
+    )
+    monkeypatch.setattr(backend_module.subprocess, "run", fake_run)
+    process = FakeProcess()
+
+    assert backend_module._process_group_popen_kwargs() == {"creationflags": 512}
+    backend_module._terminate_process_tree(process)
+
+    assert calls[0][0] == ["taskkill", "/PID", "123", "/T", "/F"]
+    assert calls[0][1]["timeout"] == 10
+    assert process.killed is True
+    assert process.waited is True
 
 
 def test_config_loads_live_ab_and_judge_model(tmp_path: Path):
@@ -4101,6 +4261,63 @@ class RecordingBackend:
 
     def parse_trace(self, trace_path: Path):
         return parse_trace(trace_path)
+
+
+class TimeoutBackend(RecordingBackend):
+    def __init__(self) -> None:
+        super().__init__()
+        self.exec_dir: Path | None = None
+
+    def run_agent(
+        self,
+        *,
+        prompt: str,
+        exec_dir: Path,
+        model: str | None = None,
+        timeout: int = 1200,
+    ) -> AgentResult:
+        self.agent_timeouts.append(timeout)
+        self.exec_dir = exec_dir
+        (exec_dir / "trace.jsonl").write_text("partial trace\n", encoding="utf-8")
+        (exec_dir / "stderr.txt").write_text("partial error\n", encoding="utf-8")
+        raise subprocess.TimeoutExpired(["recording-agent"], timeout)
+
+
+def test_run_case_preserves_timeout_streams_before_temp_cleanup(tmp_path: Path):
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    skill_dir = tmp_path / "skills" / "sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    case = sanity_case(fixture_dir=fixture_dir)
+    run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
+    artifact_dir = run_root / "cases" / "sample" / "service" / "direct" / "with_skill"
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "stale.txt").write_text("stale\n", encoding="utf-8")
+    backend = TimeoutBackend()
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        run_case(
+            repo_root=tmp_path,
+            run_root=run_root,
+            case=case,
+            skill_dir=skill_dir,
+            rubric=False,
+            sides=("with_skill",),
+            backend=backend,
+            agent_timeout=3,
+        )
+
+    assert backend.exec_dir is not None
+    assert not backend.exec_dir.parent.exists()
+    assert (artifact_dir / "trace.jsonl").read_text(encoding="utf-8") == (
+        "partial trace\n"
+    )
+    assert (artifact_dir / "stderr.txt").read_text(encoding="utf-8") == (
+        "partial error\n"
+    )
+    assert not (artifact_dir / "stale.txt").exists()
+    assert not (artifact_dir / "summary.json").exists()
 
 
 class FailingJudgeBackend(RecordingBackend):

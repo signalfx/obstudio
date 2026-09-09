@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -29,6 +30,16 @@ def new_run_id() -> str:
 def new_run_root(repo_root: Path, skill: str, run_id: str | None = None) -> Path:
     run_id = run_id or new_run_id()
     return repo_root / ".workspace" / "codex-evals" / skill / run_id
+
+
+def _preserve_timeout_artifacts(exec_dir: Path, artifact_dir: Path) -> None:
+    if artifact_dir.exists():
+        shutil.rmtree(artifact_dir)
+    artifact_dir.mkdir(parents=True)
+    for name in ("trace.jsonl", "stderr.txt"):
+        source = exec_dir / name
+        if source.is_file() and not source.is_symlink():
+            shutil.copy2(source, artifact_dir / name)
 
 
 def run_case(
@@ -126,12 +137,19 @@ def run_side(
     prepare_side_workspace(repo_root, case, side, exec_dir, skill_dir)
 
     agent_start = time.monotonic()
-    agent_result = backend.run_agent(
-        prompt=prompt,
-        exec_dir=exec_dir,
-        model=model,
-        timeout=agent_timeout,
-    )
+    try:
+        agent_result = backend.run_agent(
+            prompt=prompt,
+            exec_dir=exec_dir,
+            model=model,
+            timeout=agent_timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        try:
+            _preserve_timeout_artifacts(exec_dir, artifact_dir)
+        except Exception as artifact_error:
+            exc.add_note(f"failed to preserve timeout artifacts: {artifact_error}")
+        raise
     agent_duration_seconds = time.monotonic() - agent_start
 
     trace = backend.parse_trace(agent_result.trace_path)
