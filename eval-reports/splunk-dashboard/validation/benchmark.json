@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "splunk-dashboard",
-    "run_id": "20260909T072906898950Z",
+    "run_id": "20260909T080350425763Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -31,6 +31,22 @@
         "generate"
       ],
       "definition_path": "evals/dashboards/checkout-red/eval/qual/dashboard.json",
+      "eval_dir": "evals/dashboards/checkout-red",
+      "skill_path": "skills/splunk-dashboard",
+      "sanity_check_count": 0,
+      "rubric_check_count": 8,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "dashboards/checkout-red/qual/dashboard-genai",
+      "case": "dashboards/checkout-red",
+      "language": "dashboards",
+      "service": "checkout-red",
+      "prompt_count": 1,
+      "prompts": [
+        "genai-classification"
+      ],
+      "definition_path": "evals/dashboards/checkout-red/eval/qual/dashboard-genai.json",
       "eval_dir": "evals/dashboards/checkout-red",
       "skill_path": "skills/splunk-dashboard",
       "sanity_check_count": 0,
@@ -88,23 +104,24 @@
     }
   ],
   "summary": {
-    "eval_count": 4,
-    "case_count": 5,
-    "prompt_count": 5,
+    "eval_count": 5,
+    "case_count": 6,
+    "prompt_count": 6,
     "sanity_check_count": 10,
-    "rubric_check_count": 8,
+    "rubric_check_count": 16,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 2,
-    "digest": "832944a697f162d54a0633a2bc2ce499a34e2df9d8615d3b8675433dfeb7e2de",
+    "digest": "0917af0c1fc6fcb0a3fb0bfe30bb01dd83cd361018eb697288dcf2230b560ff2",
     "eval_kinds": [
       "rubric",
       "sanity"
     ],
     "files": {
       "evals/codex-evals.validation.toml": "ce69f042257fdb4a4c8d196f2f0f515fdc371316c02ab7d86aecc36267f7e940",
-      "evals/dashboards/checkout-red/eval/qual/dashboard.json": "45daaca6d1c7a0f01c5cf36b3bb7a6e0bf5ed3a2b85b147abcbed852a08ef52e",
+      "evals/dashboards/checkout-red/eval/inputs/otel-audit-genai.json": "3b6cb16b6f666ee75275e38e8cf3be45f1384b1529cf31849b0bd5f8cea47205",
+      "evals/dashboards/checkout-red/eval/qual/dashboard-genai.json": "156552fa4901df07c40b1a786d6261fb4122c7453e428911f14b40ff8e12bc61",
       "evals/dashboards/checkout-red/otel-audit.json": "70d5b1ee8fa801912041311dd2387a5c839892f8a02a2e707e3220c2f891bbe6",
       "evals/pyproject.toml": "5d9274a20067dbdf33bbc6a7fff51f4a0bb5ab10c3163b80266ca3432a32293d",
       "evals/uv.lock": "ad811e95827dd15596c6b41c9a6e112dc011ce6eece83b3322054ff786b932b3",
@@ -154,9 +171,10 @@
       "skills/references/tests/test_observe_report.py": "77c3e9b98a3a84fe0f7699f7ab40eabcf0dd40fe9cef231e4958b12653535a69",
       "skills/splunk-dashboard/SKILL.md": "05c62cb7819155a525f2b054739c5aa06593363916974a7b637a9d1ba8c6dcd2",
       "skills/splunk-dashboard/references/artifact-contract.md": "eca86ba5cfd59130e9a8edc13e8b1663da206cd33b20ce548c5facdf8fcc0807",
-      "skills/splunk-dashboard/references/dashboard-classification.md": "52f2fb7dd9320b4c25ea7ae2f24b31fb47e82f545c48975b1f824b24b2526f26",
+      "skills/splunk-dashboard/references/dashboard-classification.md": "27c70b7fa8024ae63278cb2f7ea9a3a8a3002a04028766ced62a4004bdfdc0e9",
       "skills/splunk-dashboard/references/dashboard-templates.md": "b08ba8e9ce4e0fed37f9be4d9190e132c87f7a6ea1e029d8360dbe2b595c6906",
-      "skills/splunk-dashboard/tests/test_dashboard_progressive_disclosure.py": "d703af9eea54c2b4b7a00518c5ec21903b5a716e9429bf0909c084b597f9959b",
+      "skills/splunk-dashboard/tests/test_dashboard_progressive_disclosure.py": "8f8a1e3166d6c4ccc02c75e58a89d4507827475388ba11a59c2905598bc5f793",
+      "evals/dashboards/checkout-red/eval/qual/dashboard.json": "45daaca6d1c7a0f01c5cf36b3bb7a6e0bf5ed3a2b85b147abcbed852a08ef52e",
       "evals/dashboards/checkout-red/eval/sanity/dashboard.json": "5b78adefe9848f9c3f6d9de6a9f3e3ff8811074c95160e1535008c0fd5496b97",
       "evals/sanity/skill-smoke/eval/sanity/dashboard-no-audit.json": "bf0827bb92ddfae2222bfd46ac60d2c0628bb1ce41e30033692c7ccc4dbdd8f8",
       "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9",
@@ -164,6 +182,15 @@
     },
     "skill_path": "skills/splunk-dashboard",
     "selections": [
+      {
+        "definition_path": "evals/dashboards/checkout-red/eval/qual/dashboard-genai.json",
+        "fixture_dir": "evals/dashboards/checkout-red",
+        "prompt_id": "genai-classification",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/otel-audit-genai.json"
+        ]
+      },
       {
         "definition_path": "evals/dashboards/checkout-red/eval/qual/dashboard.json",
         "fixture_dir": "evals/dashboards/checkout-red",

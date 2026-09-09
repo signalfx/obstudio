@@ -130,4 +130,14 @@ def test_split_contract_preserves_dashboard_semantics_and_safety() -> None:
         "genai-cost",
     ):
         assert genai_category in text
+    for genai_match in (
+        "requested/response model",
+        "agent/model/tool call counts",
+        "bounded numeric capture, redaction, privacy",
+        "app-computed cost",
+    ):
+        assert genai_match in text
+    assert "generic words such as model, memory, quality, or cost alone do not qualify" in text
+    assert "counts, outcomes, and cost use a `time_series` sum" in text
+    assert "current state, score, or ratio uses `single_value`" in text
     assert "detect()/when()/threshold()" in text
