@@ -124,6 +124,18 @@ def test_instrument_preserves_repo_service_and_distinct_log_contracts() -> None:
         assert body in runtime
 
 
+def test_go_init_example_passes_the_checked_in_service_name() -> None:
+    guide = _read(LANGUAGES / "go.md")
+
+    assert "projectServiceName string" in guide
+    assert "repository's existing checked-in service-name" in guide
+    assert (
+        "shutdown, err := initOTel(runCtx, existingLogHandler, projectServiceName)"
+        in guide
+    )
+    assert "initOTel(runCtx, existingLogHandler)" not in guide
+
+
 def test_go_dependency_resolution_is_bounded_after_network_failure() -> None:
     runtime = _normalized(INSTRUMENT_RUNTIME)
     go = _normalized(LANGUAGES / "go.md")
