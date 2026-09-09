@@ -1,6 +1,8 @@
 from pathlib import Path
 import re
 
+import pytest
+
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 SKILLS_DIR = SKILL_DIR.parent
@@ -138,6 +140,73 @@ def test_live_reference_preserves_status_idempotency_and_orphan_contracts() -> N
         "Never include the access token",
     ):
         assert required in text
+
+
+def _chart_options():
+    text = CHART_WIRE.read_text(encoding="utf-8")
+    blocks = re.findall(r"```python\n(.*?)```", text, flags=re.DOTALL)
+    block = next(block for block in blocks if "def chart_options" in block)
+    namespace = {}
+    exec(block, namespace)
+    return namespace["chart_options"]
+
+
+def test_chart_wire_preserves_explicit_visualization_options() -> None:
+    chart_options = _chart_options()
+
+    assert chart_options(
+        "time_series", plot_type="AreaChart", color_by="Metric"
+    ) == {
+        "type": "TimeSeriesChart",
+        "colorBy": "Metric",
+        "defaultPlotType": "AreaChart",
+    }
+    assert chart_options("single_value", color_by="Scale") == {
+        "type": "SingleValue",
+        "colorBy": "Scale",
+    }
+    assert chart_options("TimeSeriesChart", plot_type="AreaChart") == {
+        "type": "TimeSeriesChart",
+        "colorBy": "Dimension",
+        "defaultPlotType": "AreaChart",
+    }
+    assert chart_options("SingleValue", color_by="Scale") == {
+        "type": "SingleValue",
+        "colorBy": "Scale",
+    }
+    assert chart_options("time_series", color_by="Scale")["colorBy"] == "Scale"
+
+
+def test_chart_wire_defaults_only_absent_options_and_rejects_invalid_values() -> None:
+    chart_options = _chart_options()
+
+    assert chart_options("time_series") == {
+        "type": "TimeSeriesChart",
+        "colorBy": "Dimension",
+        "defaultPlotType": "LineChart",
+    }
+    assert chart_options("single_value") == {
+        "type": "SingleValue",
+        "colorBy": "Metric",
+    }
+    assert chart_options("list") == {"type": "List", "colorBy": "Dimension"}
+    for chart_type in ("single_value", "list", "heatmap", "text", "table"):
+        assert "defaultPlotType" not in chart_options(chart_type)
+
+    with pytest.raises(ValueError, match="unsupported plot_type"):
+        chart_options("time_series", plot_type="SplineChart")
+    with pytest.raises(ValueError, match="unsupported plot_type"):
+        chart_options("time_series", plot_type="")
+    with pytest.raises(ValueError, match="plot_type is unsupported"):
+        chart_options("single_value", plot_type="LineChart")
+    with pytest.raises(ValueError, match="unsupported color_by"):
+        chart_options("time_series", color_by="Value")
+    with pytest.raises(ValueError, match="unsupported color_by"):
+        chart_options("single_value", color_by="")
+    with pytest.raises(ValueError, match="unsupported color_by"):
+        chart_options("heatmap", color_by="Dimension")
+    with pytest.raises(ValueError, match="unsupported chart type"):
+        chart_options("GaugeChart")
 
 
 def test_put_404_requires_a_new_confirmed_diff() -> None:
