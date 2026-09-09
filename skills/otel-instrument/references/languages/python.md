@@ -397,6 +397,12 @@ boundary conflict rather than converting it to local or cloud export. If
 `OTEL_LOGS_EXPORTER=none`, or another explicit exporter is selected, the helper
 leaves logging untouched without validating that operator-owned endpoint. Do
 not broaden the condition to install local OTLP alongside another exporter.
+When a practical test seam exists, exercise `configure_opentelemetry()` and its
+returned bridge installer on both logs-header branches. Spy on constructors and
+handler state to prove that a nonempty signal-specific header creates zero local
+log providers, exporters, processors, or bridges, while the otherwise identical
+header-absent branch creates exactly one of each and preserves every original
+logging handler.
 Call the returned `install_logging_bridge` exactly once after the application's
 logging configuration has established its original sinks. Attach `shutdown`
 to the existing server/worker graceful lifecycle after it stops accepting work
