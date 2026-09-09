@@ -188,6 +188,7 @@ Disable it with `EVAL_PROGRESS=0`.
 | `evals/codex-evals.toml` | Default live config and model settings |
 | `evals/codex-evals.baseline.toml` | Compatibility with-baseline config |
 | `evals/codex-evals.ab.toml` | Compatibility A/B config |
+| `evals/codex-evals.token-benchmark.toml` | Reproducible Codex/high benchmark isolated from user configuration |
 
 Set the judge model with:
 

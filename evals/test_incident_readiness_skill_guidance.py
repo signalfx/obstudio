@@ -95,6 +95,15 @@ def test_incident_reference_covers_generic_incident_patterns():
     assert not missing
 
 
+def test_incident_reference_targets_existing_instrument_heading():
+    incident = _read(INCIDENT_REF)
+    instrument = INSTRUMENT_SKILL.read_text()
+
+    assert "`../otel-instrument/SKILL.md`" in incident
+    assert "`### HTTP and errors`" in incident
+    assert "\n### HTTP and errors\n" in instrument
+
+
 def test_incident_reference_covers_generic_mttd_signal_checklist():
     text = _read(INCIDENT_REF)
     required_terms = [

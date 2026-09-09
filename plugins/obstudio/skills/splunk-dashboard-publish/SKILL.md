@@ -124,7 +124,7 @@ A dry-run request with usable live access is not offline: read
 `references/live-publish.md`, perform the read-only live fetch and structural
 classification, show real COVERED/GAP/UNCERTAIN results, and stop before every
 mutation even if the user answers yes. A later non-dry-run must re-fetch, show
-the current diff, and obtain a new confirmation.
+the diff, and obtain a new confirmation.
 
 Otherwise read `references/live-publish.md` before the first API call. It
 routes to the shared API, live coverage, and ledger contracts. Fetch groups and
@@ -176,10 +176,10 @@ N UNCERTAIN require review; N orphan charts are proposed for deletion.
 Confirm? (yes/no)
 ```
 
-If there are zero GAPs and zero UNCERTAINs, perform no mutation and write the
-all-COVERED ledger in live mode. Offline mode always stops after its
-informational confirmation diff; a later online run must fetch, reclassify,
-show a new diff, and confirm again.
+With zero GAPs and UNCERTAINs, do no remote mutation. Write the all-COVERED
+ledger only in non-dry-run live mode; a connected dry run never writes one.
+Offline mode stops after its informational diff. A later online run must fetch,
+reclassify, show a new diff, and confirm again.
 
 ### 5. Execute Confirmed Live GAPs
 
@@ -199,9 +199,9 @@ Build chart bodies exactly as `references/chart-wire-contract.md` specifies.
 
 ### 6. Write The Resumable Ledger And Summary
 
-In live mode, write `.observe/dashboard-sync.md` after success, partial
-failure, or an all-COVERED no-op, using
-`../references/ledger-template.md`. Keep separate group/dashboard/chart
+For non-dry-run live runs, write `.observe/dashboard-sync.md` after success,
+partial failure, or an all-COVERED no-op with `../references/ledger-template.md`.
+Keep separate group/dashboard/chart
 tables, summary counts, IDs/deep links, concrete reasons, failures, and any
 remaining `Orphan charts`. Never write the access token.
 

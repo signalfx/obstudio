@@ -1,0 +1,16 @@
+[run]
+mode = "with_skill"
+
+[rubric]
+enabled = true
+
+[runtime]
+enabled = false
+
+[models]
+agent = "gpt-5.5"
+judge = "gpt-5.5"
+
+[agent]
+backend = "codex"
+extra_args = ["--ignore-user-config", "--config", "model_reasoning_effort=\"high\""]

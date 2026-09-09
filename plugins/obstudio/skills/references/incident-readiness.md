@@ -67,7 +67,7 @@ Create traces, metrics, and logs that can answer these questions quickly:
   a logical failure returned as a successful status code) and the language has
   no per-call metric-attribute hook to carry the outcome on the convention
   metric instead -- see `../otel-instrument/SKILL.md`
-  `#### Implementation Rules` for the full attribute-vs-metric test.
+  `### HTTP and errors` for the full attribute-vs-metric test.
 - Use stable dimensions: `service.name`, `service.version`,
   `deployment.environment.name`, `cloud.region`, `cloud.platform`,
   `container.image.name`, `container.image.tags`, route or workflow name,
