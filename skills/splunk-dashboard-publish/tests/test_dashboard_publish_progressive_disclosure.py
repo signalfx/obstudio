@@ -92,6 +92,25 @@ def test_offline_reference_is_non_mutating_and_self_contained() -> None:
     assert "GAP (offline plan)" not in text
 
 
+def test_offline_future_live_plan_keeps_covered_container_put_narrow() -> None:
+    text = " ".join(OFFLINE.read_text(encoding="utf-8").split())
+
+    for required in (
+        "Retain every existing `charts[]` placement and its order",
+        "append only confirmed new placements",
+        "Never remove/reorder existing placements",
+        "recreate or otherwise mutate the COVERED dashboard",
+        "mutate UNCERTAIN",
+        "sole permitted COVERED mutation",
+        "does not make the dashboard a GAP",
+        "after either the POST failure or the PUT failure",
+        "create GAPs only",
+        "append-only PUT preserving existing chart placements and order",
+        "after dashboard POST or PUT failure record every unreferenced chart ID",
+    ):
+        assert required in text
+
+
 def test_connected_dry_run_uses_live_read_only_classification() -> None:
     entrypoint = " ".join(SKILL.read_text(encoding="utf-8").split())
     live = " ".join(LIVE.read_text(encoding="utf-8").split())
