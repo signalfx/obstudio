@@ -456,8 +456,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			logObserverLifecycle(`Skipping automatic agent integration prompt: ${getErrorMessage(error)}`);
 		});
 
-	const openObserverDisposable = vscode.commands.registerCommand('observability-studio.openObserver', () => {
-		openObserverPanel(context);
+	const openObserverDisposable = vscode.commands.registerCommand('observability-studio.openObserver', async () => {
+		await settleObserverConfigurationRestart();
+		await openObserverPanel(context);
 	});
 
 	const statusMenuDisposable = vscode.commands.registerCommand('observability-studio.statusMenu', async () => {

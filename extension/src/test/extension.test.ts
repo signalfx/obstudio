@@ -2137,14 +2137,21 @@ test('all local Observer reuse paths use the same bundled-version compatibility 
 	assert.doesNotMatch(startup, /0\.0\.18|0\.0\.20/);
 });
 
-test('manual lifecycle commands settle configuration-triggered restarts before acting', () => {
+test('manual lifecycle and panel commands settle configuration-triggered restarts before acting', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
-	for (const command of ['startObserver', 'stopObserver', 'restartObserver']) {
+	for (const command of ['openObserver', 'startObserver', 'stopObserver', 'restartObserver']) {
 		const start = source.indexOf(`registerCommand('observability-studio.${command}', async () => {`);
 		assert.notEqual(start, -1);
 		const body = source.slice(start, source.indexOf('\n\t});', start));
 		assert.match(body, /await settleObserverConfigurationRestart\(\);/);
 	}
+	const openStart = source.indexOf("registerCommand('observability-studio.openObserver', async () => {");
+	const openBody = source.slice(openStart, source.indexOf('\n\t});', openStart));
+	assert.match(
+		openBody,
+		/await openObserverPanel\(context\);/,
+		'Open Observer must not resolve before its panel startup attempt finishes',
+	);
 	const stopStart = source.indexOf("registerCommand('observability-studio.stopObserver', async () => {");
 	const stopBody = source.slice(stopStart, source.indexOf('\n\t});', stopStart));
 	assert.match(
