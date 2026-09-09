@@ -4,18 +4,23 @@
     {
       "id": "conclusive-listener-blocker",
       "eval_inputs": [
-        "eval/inputs/conclusive-listener-probe.txt"
+        "eval/inputs/canonical-verify-evidence.txt",
+        "eval/inputs/conclusive-listener-probe.txt",
+        "eval/inputs/otel-audit.json",
+        "eval/inputs/otel-instrumentation.json",
+        "eval/inputs/otel-selection.json"
       ],
-      "task": "Use $otel-verify read-only to decide the next direct-verification action for the runtime-only GET /health claim. Treat ./service/eval/inputs/conclusive-listener-probe.txt as the sanitized prerequisite transcript from this current run. Do not access the network or change application code, dependencies, runtime configuration, or tests. State whether the real application should now be launched, the exact runtime-row and overall status, the evidence and next action to record, and how the decision would differ if the probe were ambiguous or the failure came from application code, configuration, or tests."
+      "task": "Create ./service/.observe and copy the canonical audit, selection, and instrumentation JSON files from ./service/eval/inputs into it. No saved verification JSON is selected for this prompt. Use $otel-verify read-only to validate that bound chain and decide the next direct-verification action for the runtime-only GET /health claim. Treat ./service/eval/inputs/conclusive-listener-probe.txt as the sanitized prerequisite transcript from this current run. Do not access the network or change application code, dependencies, runtime configuration, or tests. Write the bound canonical verification JSON and reader-first verification report. State whether the real application should now be launched, the exact runtime-row and overall status, the evidence and next action to record, and how the decision would differ if the probe were ambiguous or the failure came from application code, configuration, or tests."
     }
   ],
   "judge_inputs": [
     "Read ./service/eval/inputs/conclusive-listener-probe.txt for the selected current-run evidence.",
+    "Inspect ./service/.observe/otel-audit.json, otel-selection.json, otel-instrumentation.json, otel-verify.json, and otel-verify.md.",
     "Read ./last_message.md for the modeled direct-verification decision.",
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
-    "Treats this as new direct verification, not existing-durable-proof rendering, and applies the project-runtime and full-runtime acceptance contracts to the supplied current-run evidence.",
+    "Validates the exact bound audit -> selection -> instrumentation chain, treats this as new direct verification rather than saved-proof rendering, and writes verification JSON/Markdown with the exact audit and instrumentation bindings while applying the project-runtime and full-runtime acceptance contracts.",
     "Recognizes the conclusive same-runtime bind probe on the exact configured listener as the concrete runtime blocker and does not launch or repeatedly retry the application solely to reproduce that result.",
     "Records the GET /health runtime scenario as Blocked or Not proven with the exact listener prerequisite, evidence, and the next action to free :8000 and rerun full-runtime proof; because no meaningful telemetry proof executed, reports the overall result as Blocked rather than Pass, Partial, Source only, or an application Fail, while keeping the successful build viability gate separate.",
     "States that an ambiguous probe or a failure specific to application code, configuration, or tests does not justify skipping the real application launch and must be investigated through the normal runtime gate.",

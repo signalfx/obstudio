@@ -431,10 +431,16 @@ def test_direct_verify_eval_covers_conclusive_runtime_blocker() -> None:
         "conclusive-listener-blocker"
     ]
     assert direct["prompts"][0]["eval_inputs"] == [
-        "eval/inputs/conclusive-listener-probe.txt"
+        "eval/inputs/canonical-verify-evidence.txt",
+        "eval/inputs/conclusive-listener-probe.txt",
+        "eval/inputs/otel-audit.json",
+        "eval/inputs/otel-instrumentation.json",
+        "eval/inputs/otel-selection.json",
     ]
     for term in (
         "new direct verification",
+        "exact bound audit -> selection -> instrumentation chain",
+        "Write the bound canonical verification JSON",
         "Current-run prerequisite probe",
         "same selected Go runtime",
         "Checked-in application listener: :8000",

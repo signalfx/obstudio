@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20260909T071245577344Z",
+    "run_id": "20260909T072906898929Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -64,14 +64,18 @@
   },
   "source": {
     "digest_version": 2,
-    "digest": "4a455f670cdc932496a868d8d4ea4fceb7e958ba182d2be7bc41458620a328e0",
+    "digest": "4c1bb61bdd2e274419b13a70e03369b868aa424b9bbf2d662d191a6df684a196",
     "eval_kinds": [
       "rubric"
     ],
     "files": {
       "evals/codex-evals.validation.toml": "ce69f042257fdb4a4c8d196f2f0f515fdc371316c02ab7d86aecc36267f7e940",
+      "evals/go/chi-basic/eval/inputs/canonical-verify-evidence.txt": "b50e49d8841073f3291119d5fba42fc329f1c6878bf73263c4b52e2744d0ab2a",
       "evals/go/chi-basic/eval/inputs/conclusive-listener-probe.txt": "a78c6e252c518f5bfd5e32ea9b974747a4caf196797e61b82e2f72ffc643fe59",
-      "evals/go/chi-basic/eval/qual/verify-runtime-blocker.json": "e253fc34814db74a068eb1666fa9adf6d41884c88231b1c9942f4f6c976f760c",
+      "evals/go/chi-basic/eval/inputs/otel-audit.json": "b2cec5a1635fc3ba29e70f66d0f328942c17c2f5b0697b37092f35a0f72e5aab",
+      "evals/go/chi-basic/eval/inputs/otel-instrumentation.json": "7aec4eb58a52c3edaf5f61d0f745f65cd3b9cdc68a297ab7eaa0d7be287caf7a",
+      "evals/go/chi-basic/eval/inputs/otel-selection.json": "b93dbb07927456dcc3aa44ba1cf8a80f85c4e254cfdfc2fa961a2aeb1ff9bbca",
+      "evals/go/chi-basic/eval/qual/verify-runtime-blocker.json": "e2fe07928ffcd3c0dbf98e148b5cf9ba1c45e9b316def3e704b000268b802c14",
       "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
       "evals/pyproject.toml": "5d9274a20067dbdf33bbc6a7fff51f4a0bb5ab10c3163b80266ca3432a32293d",
@@ -132,10 +136,6 @@
       "skills/references/splunk-api.md": "ed674fabc3365c52530470df3a21b4a53f012d2ec532b05c80978d9ed6a67a80",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "77c3e9b98a3a84fe0f7699f7ab40eabcf0dd40fe9cef231e4958b12653535a69",
-      "evals/go/chi-basic/eval/inputs/canonical-verify-evidence.txt": "b50e49d8841073f3291119d5fba42fc329f1c6878bf73263c4b52e2744d0ab2a",
-      "evals/go/chi-basic/eval/inputs/otel-audit.json": "b2cec5a1635fc3ba29e70f66d0f328942c17c2f5b0697b37092f35a0f72e5aab",
-      "evals/go/chi-basic/eval/inputs/otel-instrumentation.json": "7aec4eb58a52c3edaf5f61d0f745f65cd3b9cdc68a297ab7eaa0d7be287caf7a",
-      "evals/go/chi-basic/eval/inputs/otel-selection.json": "b93dbb07927456dcc3aa44ba1cf8a80f85c4e254cfdfc2fa961a2aeb1ff9bbca",
       "evals/go/chi-basic/eval/inputs/otel-verify.json": "1673743bb357567b284e73afff9705970772b5fb3052cce8ceb16c14fa6db021",
       "evals/go/chi-basic/eval/qual/verify.json": "3174b333217783c20ce4087c7d302fb222efd98c76abd8aa18a1b620c96d4119"
     },
@@ -147,7 +147,11 @@
         "prompt_id": "conclusive-listener-blocker",
         "eval_kind": "rubric",
         "eval_inputs": [
-          "eval/inputs/conclusive-listener-probe.txt"
+          "eval/inputs/canonical-verify-evidence.txt",
+          "eval/inputs/conclusive-listener-probe.txt",
+          "eval/inputs/otel-audit.json",
+          "eval/inputs/otel-instrumentation.json",
+          "eval/inputs/otel-selection.json"
         ]
       },
       {
