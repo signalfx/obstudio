@@ -84,6 +84,9 @@ def test_offline_reference_is_non_mutating_and_self_contained() -> None:
         "stop after it",
         "inside the `Reason` cell itself",
         "Normalized Chart Programs",
+        "Exact options",
+        "literal JSON from `chart_options`",
+        "stop on unsupported values",
         "placeholder such as `<normalized SignalFlow>`",
         "final response is incomplete unless",
         'literal `"tags": ["obstudio"]`',
@@ -224,6 +227,10 @@ def test_parse_contract_carries_visualization_options_into_wire_mapping() -> Non
 
     wire = CHART_WIRE.read_text(encoding="utf-8")
     assert '{name, programText, options, packageSpecifications: "signalfx"}' in wire
+    normalized_wire = " ".join(wire.split())
+    assert "show exact per-chart `options`" in normalized_wire
+    assert "unsupported values stop, never default" in normalized_wire
+    assert "`defaultPlotType` is `TimeSeriesChart`-only" in normalized_wire
 
 
 def test_put_404_requires_a_new_confirmed_diff() -> None:

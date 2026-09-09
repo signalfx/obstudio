@@ -1,8 +1,7 @@
 # Chart Wire Contract
 
-Preserve supported options; default only when absent.
-
-HCL includes `signalfx_time_chart` and `signalfx_single_value_chart`.
+HCL: `signalfx_time_chart`, `signalfx_single_value_chart`. Preserve options;
+default only when absent.
 
 ```python
 CHART_TYPE_MAP = {
@@ -51,10 +50,9 @@ def chart_options(chart_type, *, plot_type=None, color_by=None):
     return options
 ```
 
-Body: `{name, programText, options, packageSpecifications: "signalfx"}`. Only time
-charts get `defaultPlotType`.
+Body: `{name, programText, options, packageSpecifications: "signalfx"}`. Plans
+show exact per-chart `options` and state unsupported values stop, never default.
+`defaultPlotType` is `TimeSeriesChart`-only.
 
-`Text` omits `programText` and puts `markdown` in options. Reject unresolved
-`${var.*}`, indented heredocs, and bare `.last()`.
-
-The REST dashboard-group field is `groupId`.
+`Text` puts `markdown` in options, not `programText`. Reject `${var.*}`, indented
+heredocs, or bare `.last()`. Dashboard groups use `groupId`.
