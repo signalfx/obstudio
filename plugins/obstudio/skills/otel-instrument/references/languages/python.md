@@ -124,6 +124,10 @@ if [ "$OTEL_LOGS_EXPORTER" = otlp ]; then
     echo "move generic OTLP headers to trace/metric signal variables and remove the generic value" >&2
     exit 1
   fi
+  if [ -n "${OTEL_EXPORTER_OTLP_LOGS_HEADERS:-}" ]; then
+    echo "OTEL_EXPORTER_OTLP_LOGS_HEADERS is operator-owned; refusing the default local Observer exporter" >&2
+    exit 1
+  fi
 fi
 if [ "$OTEL_LOGS_EXPORTER" = none ]; then
   # Ensure the explicit opt-out cannot inherit the zero-code default bridge.
@@ -268,6 +272,11 @@ def _use_default_local_log_export():
             "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local "
             "Observer; refusing to create an Obstudio log provider or bridge"
         )
+    if os.environ.get("OTEL_EXPORTER_OTLP_LOGS_HEADERS", "").strip():
+        raise RuntimeError(
+            "OTEL_EXPORTER_OTLP_LOGS_HEADERS is operator-owned; refusing to "
+            "apply it to the default local Observer exporter"
+        )
     return True
 
 
@@ -281,8 +290,8 @@ def _local_log_exporter():
             f"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL={protocol!r}"
         )
 
-    # Reject generic headers even when logs headers are present: SDKs may merge
-    # both sources and leak a cloud credential into the local log request.
+    # Reject generic headers independently; the eligibility gate above already
+    # rejects signal-specific headers for this default unauthenticated path.
     if os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip():
         raise RuntimeError(
             "move generic OTLP headers to trace/metric signal variables and "
@@ -291,7 +300,7 @@ def _local_log_exporter():
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
     if not endpoint:
         endpoint = LOCAL_OBSERVER_LOGS_ENDPOINT
-    return OTLPLogExporter(endpoint=endpoint)
+    return OTLPLogExporter(endpoint=endpoint, headers={})
 
 
 def configure_opentelemetry():
@@ -557,8 +566,7 @@ async def process_order(order_id: str) -> Order:
 Before adding a custom counter or histogram for an outcome that happens
 inside a request the ASGI/WSGI instrumentation already covers, check
 whether it belongs as an attribute on `http.server.request.duration`
-instead — see `../../SKILL.md` `#### Implementation Rules` and the
-`Python:` entry under `#### Language-Specific Musts`. The instrumentation
+instead — see `../../SKILL.md` `### HTTP and errors`. The instrumentation
 already sets `http.response.status_code` on that metric for every request,
 and `error.type` for a 5xx (or otherwise invalid) status, with no extra code
 -- a plain 4xx client-error response does not set `error.type` on a server
@@ -634,14 +642,14 @@ destination.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Common OTLP endpoint; protocol must match |
-| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the Obstudio-owned local log path, even when logs headers are set |
+| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the default local log path |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | Common protocol when using port 4318 |
 | `OTEL_EXPORTER_OTLP_<SIGNAL>_ENDPOINT` | unset | Per-signal endpoint, including `/v1/<signal>` for HTTP exporters |
 | `OTEL_EXPORTER_OTLP_<SIGNAL>_PROTOCOL` | unset | Per-signal `grpc` or `http/protobuf` |
 | `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or detected-local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for host/native Obstudio runs | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
-| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Explicit headers are operator-owned and are never applied to the default local Observer exporter |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
@@ -683,11 +691,11 @@ endpoint on local Observer. Never copy a Splunk ingest URL, realm, access token,
 generic cloud header, cloud exporter, or forwarding flag into the log pipeline.
 For the absent/`otlp` branch, reject a non-local explicit logs endpoint before
 constructing the provider or handler, preserve it as operator configuration,
-report the boundary conflict, and require the operator to resolve it. Also
-reject any generic OTLP header on the local branch even when signal-specific
-logs headers exist; move the generic credentials to trace/metric variables and
-remove the generic setting. Obstudio cloud forwarding remains traces and
-metrics only.
+report the boundary conflict, and require the operator to resolve it. Reject
+generic OTLP headers on the local branch and move those credentials to
+trace/metric variables. Also reject an explicit signal-specific logs header:
+it is operator-owned configuration and must not be applied to the default local
+Observer exporter. Obstudio cloud forwarding remains traces and metrics only.
 
 Verify one sanitized record at each required severity both outside and inside
 an active span. Assert its body/category, severity, shared `service.name`,

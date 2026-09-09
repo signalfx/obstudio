@@ -57,6 +57,10 @@ PLUGIN_SKILL_ENTRIES = (
     "splunk-dashboard-sync",
     "references",
 )
+EXPECTED_SKILL_PATHS = frozenset(
+    Path(entry) / "SKILL.md" for entry in PLUGIN_SKILL_ENTRIES if entry != "references"
+)
+EXPECTED_SKILL_NAMES = frozenset(path.parent.name for path in EXPECTED_SKILL_PATHS)
 
 PLUGIN_SHARED_PATHS = (
     ".mcp.json",
@@ -327,11 +331,33 @@ def verify_staged_plugin(output: Path, host: str = "codex", expected_version: st
     if symlinks:
         rendered = "\n".join(str(path.relative_to(output)) for path in symlinks)
         raise RuntimeError(f"staged plugin must not contain symlinks:\n{rendered}")
+    verify_exact_skill_catalog(skills)
     for selected_host in PLUGIN_HOSTS if host == "all" else (host,):
         manifest = output / (".claude-plugin" if selected_host == "claude" else ".codex-plugin") / "plugin.json"
         if not manifest.is_file():
             raise RuntimeError(f"missing plugin manifest: {manifest}")
         verify_plugin_manifest(manifest, skills, selected_host, expected_version=expected_version)
+
+
+def verify_exact_skill_catalog(skills_root: Path) -> None:
+    actual_paths = {path.relative_to(skills_root) for path in skills_root.rglob("SKILL.md")}
+    if actual_paths != EXPECTED_SKILL_PATHS:
+        missing = sorted(EXPECTED_SKILL_PATHS - actual_paths)
+        extra = sorted(actual_paths - EXPECTED_SKILL_PATHS)
+        details = []
+        if missing:
+            details.append("missing: " + ", ".join(map(str, missing)))
+        if extra:
+            details.append("extra: " + ", ".join(map(str, extra)))
+        raise RuntimeError("staged plugin skill catalog mismatch; " + "; ".join(details))
+
+    names = [read_skill_name(skills_root / path) for path in sorted(actual_paths)]
+    if any(name is None for name in names):
+        raise RuntimeError("every staged SKILL.md must declare a valid frontmatter name")
+    if len(names) != len(set(names)):
+        raise RuntimeError("staged plugin skill names must be unique")
+    if set(names) != EXPECTED_SKILL_NAMES:
+        raise RuntimeError("staged plugin skill names do not match the expected catalog")
 
 
 def verify_plugin_manifest(
@@ -351,6 +377,8 @@ def verify_plugin_manifest(
     if host == "claude":
         if not isinstance(manifest.get("name"), str) or not manifest["name"].strip():
             raise RuntimeError("plugin manifest must include a non-empty name")
+        if manifest.get("skills") != ["./skills/", "./skills/observer-control/"]:
+            raise RuntimeError("Claude plugin manifest must expose both skill catalog roots")
     else:
         interface = manifest.get("interface")
         if not isinstance(interface, dict):
@@ -363,6 +391,8 @@ def verify_plugin_manifest(
                 "plugin manifest interface.defaultPrompt must contain at most "
                 f"{MAX_DEFAULT_PROMPTS} entries"
             )
+        if manifest.get("skills") != "./skills/":
+            raise RuntimeError("Codex plugin manifest must expose the staged skill catalog root")
     verify_manifest_skill_references(manifest, available_skill_names(skills_root))
 
 

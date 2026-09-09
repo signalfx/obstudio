@@ -92,9 +92,8 @@ detector generation.
 ### Evidenced Non-Standard Outcome Attribute
 
 A histogram may carry a custom attribute that is not `error.type` or a
-`*.response.status_code` key (for example `outcome.reason` set via a
-per-call metric-attribute hook, as in `otel-instrument/SKILL.md`'s
-`Labeler` pattern) but that audit or source evidence shows takes on a value
+`*.response.status_code` key (for example `outcome.reason` set via an HTTP
+per-call metric-attribute hook) but that audit or source evidence shows takes on a value
 present only for a failing outcome on that route -- for example
 `outcome.reason` observed as `gateway_timeout` only on non-2xx responses.
 Generate an attribute-filtered outcome detector for that route from the
@@ -126,10 +125,8 @@ a standard error/status attribute:
   this additional detector covers a separate, non-standard dimension and is
   not a second Error detector for the same signal.
 
-This mirrors the check `$otel-instrument` performs before adding a new custom
-metric (see `otel-instrument/SKILL.md` `#### Implementation Rules`): if the
-attribute already exists on the RED metric, alert on the attribute rather
-than standing up a second detector for a second metric.
+If the attribute already exists on the RED metric, alert on that attribute
+rather than standing up a second detector on a redundant metric.
 
 ## Classification Rules
 

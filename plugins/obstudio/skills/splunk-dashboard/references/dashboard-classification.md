@@ -1,9 +1,8 @@
 # Dashboard Classification Rules
 
-Rules for grouping metrics from an otel-audit report into dashboard panels. The
-dashboard analogue of `splunk-configure/references/detector-classification.md`:
-the same signal categories (latency / error / throughput / saturation), but each
-metric maps to a **panel** (chart type + grid placement) instead of a detector.
+Self-contained rules for grouping metrics from an otel-audit report into
+dashboard panels. They use latency, error, throughput, and saturation categories,
+but each metric maps to a **panel** (chart type + grid placement), not a detector.
 
 The counter/error gate here is deliberately **broader** than the detector skill's,
 so the two are not identical: this doc treats a name ending in `.processed` as a
@@ -87,19 +86,21 @@ a `single_value` panel (current saturation) and optionally a `time_series` trend
 When the canonical audit has `genai_readiness[]` rows, GenAI findings, or
 source evidence that maps the metric to an LLM/GenAI workflow, and GenAI
 metrics exist, group them into their **own** `signalfx_dashboard` inside a
-separate GenAI dashboard group. Mirror the GenAI categories from
-`splunk-configure/references/detector-classification.md` (genai-latency,
-genai-token-pressure, genai-provider, genai-tool, etc.) but render each as a
-panel: latency/duration → `time_series` percentile; token usage → `time_series`
-or `single_value`; provider/tool error counts → `time_series`. A missing GenAI
-signal is a preview/instrumentation prerequisite — never an invented panel.
+separate GenAI dashboard group. Classify source-backed metrics locally as
+`genai-latency` (model/workflow duration), `genai-token-pressure` (token or
+context counts/ratios), `genai-provider` (provider/model outcomes or fallback),
+`genai-tool` (tool duration/outcomes), or `genai-retrieval` (retrieval
+duration/outcomes). Render latency/duration as a `time_series` percentile,
+token usage as `time_series` or `single_value`, and provider/tool/retrieval
+error counts as `time_series`. Keep explicitly evidenced memory, evaluation,
+or data-export metrics independently actionable. A missing GenAI signal is a
+preview/instrumentation prerequisite—never an invented panel.
 
 ## Exclusion rules
 
-Skip a metric (no panel) when it matches the detector skill's exclusion rules:
-auto-instrumented library duplicates when a custom equivalent exists, generic
-runtime/host metrics without an actionable view, and informational-only metrics
-(`process.uptime`, version gauges). Record each skipped metric with a reason.
+Skip auto-instrumented library duplicates when a custom equivalent exists,
+generic runtime/host metrics without an actionable view, and informational-only
+metrics (`process.uptime`, version gauges). Record each skip with a reason.
 
 ## Grid placement (12-column)
 

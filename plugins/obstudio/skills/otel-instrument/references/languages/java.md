@@ -135,9 +135,9 @@ which existing appenders remain active before editing.
   settings, then remove the generic cloud settings from the startup surface.
   Keep the logs endpoint local and do not copy a realm, ingest URL, access
   token, auth header, exporter, or forwarding flag into log configuration.
-  Reject a generic header from the local log path even when signal-specific
-  logs headers are present, because the SDK may merge both. Obstudio cloud
-  forwarding remains traces and metrics only.
+  Reject generic and signal-specific headers from the default local log path.
+  Explicit log headers are operator-owned and require a separately proven
+  pipeline. Obstudio cloud forwarding remains traces and metrics only.
 - Treat log bodies, arguments, throwable rendering, markers, structured
   messages, and MDC/context data as a privacy surface. Capture only reviewed,
   bounded keys with the detected appender's
@@ -182,6 +182,7 @@ fail() { printf '%s\n' "$*" >&2; exit 1; }
 logs_exporter=${OTEL_LOGS_EXPORTER:-}
 logs_protocol=${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL:-}
 logs_endpoint=${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}
+logs_headers=${OTEL_EXPORTER_OTLP_LOGS_HEADERS:-}
 generic_endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 generic_headers=${OTEL_EXPORTER_OTLP_HEADERS:-}
 logs_exporter_d=0
@@ -211,6 +212,8 @@ read_otel_property() {
       logs_protocol=$otel_property_value; logs_protocol_d=1 ;;
     -Dotel.exporter.otlp.logs.endpoint)
       logs_endpoint=$otel_property_value; logs_endpoint_d=1 ;;
+    -Dotel.exporter.otlp.logs.headers)
+      logs_headers=$otel_property_value ;;
     -Dotel.exporter.otlp.endpoint)
       generic_endpoint=$otel_property_value ;;
     -Dotel.exporter.otlp.headers)
@@ -339,6 +342,9 @@ if [ -n "$generic_endpoint" ] && \
 fi
 if [ -n "$generic_headers" ]; then
   fail "move generic OTLP headers to trace/metric signal variables and remove the generic value"
+fi
+if [ -n "$logs_headers" ]; then
+  fail "OTLP logs headers are operator-owned; refusing the default local Observer exporter"
 fi
 
 case "${OBSTUDIO_JAVA_LOG_DEFAULTS:-environment}" in
@@ -556,7 +562,7 @@ public Item getItem(@SpanAttribute("item.id") String id) {
 Before adding a custom counter or histogram for an outcome that happens
 inside a request the Java agent already covers, check whether it belongs as
 an attribute on `http.server.request.duration` instead — see `../../SKILL.md`
-`#### Implementation Rules`. The agent already sets
+`### HTTP and errors`. The agent already sets
 `http.response.status_code` on that metric for every request, and
 `error.type` for a 5xx (or otherwise invalid) status, with no extra code --
 a plain 4xx client-error response does not set `error.type` on a server
@@ -612,12 +618,12 @@ Keep an HTTP/protobuf logs endpoint paired with the complete `/v1/logs` path.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Common OTLP endpoint only when it is local or collector-owned; never leave a direct-cloud value for logs to inherit |
-| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the agent-owned local log path, even when logs headers are set |
+| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the default local log path |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` for Java agent 2.x | Common protocol when using port 4318 |
 | `OTEL_LOGS_EXPORTER` | `otlp` only when absent and the logs endpoint is absent or detected-local | `none` disables agent log export; any other explicit value is preserved |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the local baseline | Signal-specific log transport |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for a host JVM | Signal-specific local Observer application-log destination |
-| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Only signal-specific operator-owned log headers; never inherit a generic cloud credential |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Explicit headers are operator-owned and are never applied to the default local Observer exporter |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | unset | Use these instead of a generic endpoint for direct-cloud trace/metric export |
 | `OTEL_EXPORTER_OTLP_TRACES_HEADERS` / `OTEL_EXPORTER_OTLP_METRICS_HEADERS` | unset | Keep cloud credentials signal-specific; never copy them to logs |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
@@ -649,9 +655,10 @@ If an existing generic endpoint/header targets cloud ingest, first move those
 values to the trace- and metric-specific variables in the table and remove the
 generic cloud variables from the launch environment. A signal-specific local
 logs endpoint alone does not prevent a generic cloud header from being
-inherited or merged, even when a signal-specific logs header is also present.
-Do not configure a logs cloud header or a cloud log-forwarding pipeline;
-Obstudio forwards only traces and metrics. On the absent/`otlp` branch, accept
+inherited or merged. An explicit signal-specific logs header is operator-owned
+and must not be applied to the default local Observer exporter. Do not configure
+a logs cloud header or a cloud log-forwarding pipeline; Obstudio forwards only
+traces and metrics. On the absent/`otlp` branch, accept
 an explicit logs endpoint only when it matches the detected local Observer;
 otherwise fail before the agent starts and report the operator-owned boundary
 conflict. Preserve `none` and non-OTLP exporter branches without interpreting
