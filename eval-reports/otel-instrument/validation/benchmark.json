@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20260909T055639192158Z",
+    "run_id": "20260909T064023086851Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -492,7 +492,7 @@
   },
   "source": {
     "digest_version": 2,
-    "digest": "85b1924bdca8eb769c9e9dc31957ea6827fbcbb56663d1a917375796bebaa8bf",
+    "digest": "1b323542bf81291021de4449ae0bc5ee5e483cd187cac7c79730069baa52b6cd",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -542,7 +542,7 @@
       "skills/otel-instrument/references/genai-implementation.md": "dcc70b0cf3d8a25a9a893e75bca99efc02f868cf7be869dd9db75f77fd8c46a5",
       "skills/otel-instrument/references/incident-implementation.md": "91ac2017d56091c425c173e7c25c3f262af2d4d4564e9f3af580ebfabe7e66dc",
       "skills/otel-instrument/references/json-approval-handoff.md": "f35874a16f4a184d35c2780434b4296bcdf62e54107dea26330569f9cffd7910",
-      "skills/otel-instrument/references/languages/go.md": "26dfcebe71e38122fd43b6f3b9b667af3b67eec34af7292abd58f3fd60df48c1",
+      "skills/otel-instrument/references/languages/go.md": "e62c5a7b4c1e0a4ccf78a2879dbc3c2c34b78dade7a3247236865473406accb5",
       "skills/otel-instrument/references/languages/java.md": "5d33e338d2ab4dee2163989ac5c35398dbd90d2d480ba9880e6f7bb837019fbb",
       "skills/otel-instrument/references/languages/node.md": "508927f8b26f779aa16ec35e280473a75bff2218c9bbca7db6027ff3e75407aa",
       "skills/otel-instrument/references/languages/python.md": "918ebfd2962ffc16d68e7447cb3403538fcc0fbc327e3c03cc2a76e26ed35c91",
