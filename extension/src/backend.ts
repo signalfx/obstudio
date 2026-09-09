@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as crypto from 'node:crypto';
 import { isIP } from 'node:net';
 import * as path from 'node:path';
 
@@ -13,7 +12,6 @@ export type ObserverBackend = {
 
 export type ObserverHealth = {
 	apiVersion?: string;
-	challengeProof?: string;
 	endpoints?: Record<string, string>;
 	kind?: string;
 	mode?: string;
@@ -24,25 +22,30 @@ export type ObserverHealth = {
 
 type SharedObserverState = {
 	baseUrl?: string;
-	controlToken?: string;
-	healthProofSecret?: string;
 	healthUrl?: string;
 	mcpUrl?: string;
+	pid?: number;
 	updatedAt?: string;
 };
 
 export type SharedObserverDiscovery = {
 	baseUrl: string;
-	controlToken?: string;
-	healthProofSecret?: string;
 	healthUrl?: string;
 	mcpUrl?: string;
+	pid?: number;
 	updatedAtMs?: number;
 };
 
-export const observerHealthProofChallengeQuery = 'obstudioHealthChallenge';
-const observerHealthProofChallengeBytes = 32;
-const observerHealthProofDomain = 'obstudio-health-proof-v2\0';
+export type OtherExtensionManagedObserver = {
+	binaryPath: string;
+	pid: number;
+	version: string;
+};
+
+export type OtherExtensionObserverExecutable = {
+	binaryPath: string;
+	pid: number;
+};
 
 export function isLoopbackObserverHost(hostname: string): boolean {
 	let normalized = hostname.trim().toLowerCase();
@@ -88,8 +91,8 @@ export function normalizeObserverBaseUrl(raw: string): string {
 	} else if (hostname.endsWith('.') && isLoopbackObserverHost(hostname)) {
 		parsed.hostname = hostname.slice(0, -1);
 	}
-	if (parsed.protocol === 'http:' && !isLoopbackObserverHost(parsed.hostname)) {
-		throw new Error('Observer URL must use HTTPS unless the host is loopback.');
+	if (!isLoopbackObserverHost(parsed.hostname)) {
+		throw new Error('Observer URL host must be loopback.');
 	}
 
 	if (parsed.pathname.endsWith('/mcp')) {
@@ -137,25 +140,20 @@ export function readSharedObserverDiscovery(
 			return undefined;
 		}
 		const updatedAtMs = typeof state.updatedAt === 'string' ? Date.parse(state.updatedAt) : Number.NaN;
-		const controlToken = typeof state.controlToken === 'string' && state.controlToken.trim().length > 0
-			? state.controlToken.trim()
-			: undefined;
-		const healthProofSecret = typeof state.healthProofSecret === 'string'
-			&& isCanonicalBase64Url(state.healthProofSecret.trim(), observerHealthProofChallengeBytes)
-			? state.healthProofSecret.trim()
-			: undefined;
 		const healthUrl = typeof state.healthUrl === 'string' && state.healthUrl.trim().length > 0
 			? normalizeSharedObserverHealthUrl(state.healthUrl)
 			: undefined;
 		const mcpUrl = typeof state.mcpUrl === 'string' && state.mcpUrl.trim().length > 0
 			? normalizeSharedObserverMCPUrl(state.mcpUrl)
 			: undefined;
+		const pid = typeof state.pid === 'number' && Number.isSafeInteger(state.pid) && state.pid > 0
+			? state.pid
+			: undefined;
 		return {
 			baseUrl: normalizeSharedObserverBaseUrl(state.baseUrl),
-			...(controlToken !== undefined ? { controlToken } : {}),
-			...(healthProofSecret !== undefined ? { healthProofSecret } : {}),
 			...(healthUrl !== undefined ? { healthUrl } : {}),
 			...(mcpUrl !== undefined ? { mcpUrl } : {}),
+			...(pid !== undefined ? { pid } : {}),
 			...(Number.isFinite(updatedAtMs) ? { updatedAtMs } : {}),
 		};
 	} catch {
@@ -163,11 +161,208 @@ export function readSharedObserverDiscovery(
 	}
 }
 
+export function findOtherExtensionManagedObserver(options: {
+	currentExtensionPath: string;
+	discovery: SharedObserverDiscovery;
+	processExecutablePath: string;
+}): OtherExtensionManagedObserver | undefined {
+	const pid = options.discovery.pid;
+	if (
+		pid === undefined
+		|| options.processExecutablePath.trim() === ''
+	) {
+		return undefined;
+	}
+
+	const extensionsDirectory = path.dirname(path.resolve(options.currentExtensionPath));
+	let entries: fs.Dirent[];
+	try {
+		entries = fs.readdirSync(extensionsDirectory, { withFileTypes: true });
+	} catch {
+		return undefined;
+	}
+
+	for (const entry of entries) {
+		if (!entry.isDirectory() || !entry.name.toLowerCase().startsWith('splunk.observability-studio-')) {
+			continue;
+		}
+		const extensionPath = path.join(extensionsDirectory, entry.name);
+		if (path.resolve(extensionPath) === path.resolve(options.currentExtensionPath)) {
+			continue;
+		}
+		const identity = readExtensionPackageIdentity(extensionPath);
+		if (
+			identity === undefined
+			|| identity.publisher.toLowerCase() !== 'splunk'
+			|| identity.name !== 'observability-studio'
+		) {
+			continue;
+		}
+		let backend: ObserverBackend;
+		try {
+			backend = resolveBackend(extensionPath);
+		} catch {
+			continue;
+		}
+		if (
+			!isNonSymlinkedExtensionBackend(extensionPath, backend.command)
+			|| !processPathsEqual(options.processExecutablePath, backend.command)
+		) {
+			continue;
+		}
+		return {
+			binaryPath: backend.command,
+			pid,
+			version: identity.version,
+		};
+	}
+	return undefined;
+}
+
+export function findOtherExtensionObserverExecutable(options: {
+	currentExtensionPath: string;
+	discovery: SharedObserverDiscovery;
+	processExecutablePath: string;
+}): OtherExtensionObserverExecutable | undefined {
+	const pid = options.discovery.pid;
+	if (pid === undefined || options.processExecutablePath.trim() === '') {
+		return undefined;
+	}
+
+	const extensionsDirectory = path.dirname(path.resolve(options.currentExtensionPath));
+	const executablePath = path.resolve(options.processExecutablePath);
+	const relativeExecutablePath = path.relative(extensionsDirectory, executablePath);
+	const segments = relativeExecutablePath.split(path.sep);
+	const normalizedSegments = process.platform === 'win32'
+		? segments.map((segment) => segment.toLowerCase())
+		: segments;
+	if (
+		normalizedSegments.length !== 4
+		|| !normalizedSegments[0].toLowerCase().startsWith('splunk.observability-studio-')
+		|| normalizedSegments[1] !== 'dist'
+		|| normalizedSegments[2] !== 'observer'
+		|| !['obstudio', 'obstudio.exe'].includes(normalizedSegments[3].toLowerCase())
+	) {
+		return undefined;
+	}
+
+	const extensionPath = path.join(extensionsDirectory, segments[0]);
+	if (processPathsEqual(extensionPath, options.currentExtensionPath)) {
+		return undefined;
+	}
+	return { binaryPath: executablePath, pid };
+}
+
+function isNonSymlinkedExtensionBackend(extensionPath: string, binaryPath: string): boolean {
+	const resolvedExtensionPath = path.resolve(extensionPath);
+	const resolvedBinaryPath = path.resolve(binaryPath);
+	const relativeBinaryPath = path.relative(resolvedExtensionPath, resolvedBinaryPath);
+	if (
+		relativeBinaryPath === ''
+		|| relativeBinaryPath === '..'
+		|| relativeBinaryPath.startsWith(`..${path.sep}`)
+		|| path.isAbsolute(relativeBinaryPath)
+	) {
+		return false;
+	}
+
+	const segments = relativeBinaryPath.split(path.sep);
+	let candidatePath = resolvedExtensionPath;
+	try {
+		for (let index = 0; index < segments.length; index += 1) {
+			candidatePath = path.join(candidatePath, segments[index]);
+			const info = fs.lstatSync(candidatePath);
+			if (info.isSymbolicLink()) {
+				return false;
+			}
+			const isLast = index === segments.length - 1;
+			if ((isLast && !info.isFile()) || (!isLast && !info.isDirectory())) {
+				return false;
+			}
+		}
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function readExtensionPackageIdentity(extensionPath: string): {
+	name: string;
+	publisher: string;
+	version: string;
+} | undefined {
+	const packagePath = path.join(extensionPath, 'package.json');
+	try {
+		const extensionInfo = fs.lstatSync(extensionPath);
+		const packageInfo = fs.lstatSync(packagePath);
+		if (
+			extensionInfo.isSymbolicLink()
+			|| !extensionInfo.isDirectory()
+			|| packageInfo.isSymbolicLink()
+			|| !packageInfo.isFile()
+			|| packageInfo.size > 1024 * 1024
+		) {
+			return undefined;
+		}
+		const parsed: unknown = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+		if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+			return undefined;
+		}
+		const value = parsed as Record<string, unknown>;
+		if (
+			typeof value.name !== 'string'
+			|| typeof value.publisher !== 'string'
+			|| typeof value.version !== 'string'
+		) {
+			return undefined;
+		}
+		return {
+			name: value.name,
+			publisher: value.publisher,
+			version: value.version,
+		};
+	} catch {
+		return undefined;
+	}
+}
+
+function processPathsEqual(firstPath: string, secondPath: string): boolean {
+	const caseFold = (value: string) => process.platform === 'win32' ? value.toLowerCase() : value;
+	return caseFold(path.resolve(firstPath)) === caseFold(path.resolve(secondPath));
+}
+
 function readPrivateSharedObserverState(statePath: string): string | undefined {
 	const effectiveUserId = process.geteuid?.();
-	if (effectiveUserId === undefined || process.platform === 'win32') {
-		// Node does not expose the Windows ACL primitives needed to prove the same
-		// owner-only policy as the Observer. Keep discovery fail-closed there.
+	if (process.platform === 'win32') {
+		// The shared state contains only validated loopback endpoints and a PID, not
+		// credentials. Windows profile ACLs protect the directory, and callers must
+		// independently verify the PID's exact installed-extension executable before
+		// stopping it. Still reject links and file-replacement races here.
+		const linkedBefore = fs.lstatSync(statePath);
+		if (linkedBefore.isSymbolicLink() || !linkedBefore.isFile()) {
+			return undefined;
+		}
+		const descriptor = fs.openSync(statePath, fs.constants.O_RDONLY);
+		try {
+			const opened = fs.fstatSync(descriptor);
+			const linkedAfter = fs.lstatSync(statePath);
+			if (
+				!opened.isFile()
+				|| linkedAfter.isSymbolicLink()
+				|| !linkedAfter.isFile()
+				|| linkedAfter.dev !== opened.dev
+				|| linkedAfter.ino !== opened.ino
+				|| linkedAfter.dev !== linkedBefore.dev
+				|| linkedAfter.ino !== linkedBefore.ino
+			) {
+				return undefined;
+			}
+			return fs.readFileSync(descriptor, 'utf8');
+		} finally {
+			fs.closeSync(descriptor);
+		}
+	}
+	if (effectiveUserId === undefined) {
 		return undefined;
 	}
 	const parentPath = path.dirname(statePath);
@@ -205,32 +400,8 @@ function readPrivateSharedObserverState(statePath: string): string | undefined {
 	}
 }
 
-export function isLocalObserverControlHost(rawHostname: string): boolean {
-	const hostname = rawHostname.toLowerCase().replace(/^\[|\]$/g, '');
-	const ipv4Octets = hostname.split('.');
-	const ipv4Loopback = ipv4Octets.length === 4
-		&& ipv4Octets[0] === '127'
-		&& ipv4Octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255);
-	return hostname === 'localhost'
-		|| hostname === '::1'
-		|| ipv4Loopback;
-}
-
 export function normalizeSharedObserverBaseUrl(raw: string): string {
-	let normalized: string;
-	try {
-		normalized = normalizeObserverBaseUrl(raw);
-	} catch (error) {
-		if (error instanceof Error && error.message === 'Observer URL must use HTTPS unless the host is loopback.') {
-			throw new Error('A non-local shared Observer URL must use HTTPS.');
-		}
-		throw error;
-	}
-	const parsed = new URL(normalized);
-	if (parsed.protocol === 'http:' && !isLocalObserverControlHost(parsed.hostname)) {
-		throw new Error('A non-local shared Observer URL must use HTTPS.');
-	}
-	return normalized;
+	return normalizeObserverBaseUrl(raw);
 }
 
 export function normalizeSharedObserverHealthUrl(raw: string): string {
@@ -265,136 +436,14 @@ function normalizeSharedObserverEndpointUrl(raw: string, suffix: string, label: 
 	} else if (hostname.endsWith('.') && isLoopbackObserverHost(hostname)) {
 		parsed.hostname = hostname.slice(0, -1);
 	}
-	if (parsed.protocol === 'http:' && !isLocalObserverControlHost(parsed.hostname)) {
-		throw new Error(`A non-local Observer ${label} URL must use HTTPS.`);
+	if (!isLoopbackObserverHost(parsed.hostname)) {
+		throw new Error(`Observer ${label} URL host must be loopback.`);
 	}
 	parsed.pathname = parsed.pathname.replace(/\/+$/, '');
 	if (!parsed.pathname.endsWith(suffix)) {
 		throw new Error(`Observer ${label} URL must end with ${suffix}.`);
 	}
 	return parsed.toString();
-}
-
-export function createObserverHealthProofChallenge(): string {
-	return crypto.randomBytes(observerHealthProofChallengeBytes).toString('base64url');
-}
-
-function observerMCPUrl(observerUrl: string): string | undefined {
-	try {
-		return normalizeSharedObserverMCPUrl(`${normalizeSharedObserverBaseUrl(observerUrl)}/mcp`);
-	} catch {
-		return undefined;
-	}
-}
-
-export function verifiedSharedObserverMCPUrl(
-	observerUrl: string,
-	health: ObserverHealth,
-	intendedControlMCPUrl?: string,
-): string | undefined {
-	const intendedMCPUrl = observerMCPUrl(intendedControlMCPUrl ?? observerUrl);
-	const advertisedMCPUrl = health.endpoints?.mcp;
-	if (
-		intendedMCPUrl === undefined
-		|| typeof advertisedMCPUrl !== 'string'
-	) {
-		return undefined;
-	}
-	let normalizedAdvertisedMCPUrl: string;
-	try {
-		normalizedAdvertisedMCPUrl = normalizeSharedObserverMCPUrl(advertisedMCPUrl);
-	} catch {
-		return undefined;
-	}
-	if (
-		normalizedAdvertisedMCPUrl !== advertisedMCPUrl
-		|| !sameAdvertisedObserverControlEndpoint(intendedMCPUrl, normalizedAdvertisedMCPUrl)
-	) {
-		return undefined;
-	}
-	return normalizedAdvertisedMCPUrl;
-}
-
-export function verifySharedObserverControlToken(
-	observerUrl: string,
-	discovered: SharedObserverDiscovery,
-	challenge: string,
-	health: ObserverHealth,
-	rejectedToken?: string,
-	intendedControlMCPUrl?: string,
-): string | undefined {
-	const controlToken = discovered.controlToken?.trim();
-	const healthProofSecret = discovered.healthProofSecret?.trim();
-	const proof = health.challengeProof;
-	const advertisedMCPUrl = health.endpoints?.mcp;
-	if (
-		controlToken === undefined
-		|| controlToken === ''
-		|| healthProofSecret === undefined
-		|| !isCanonicalBase64Url(healthProofSecret, observerHealthProofChallengeBytes)
-		|| controlToken === rejectedToken
-		|| proof === undefined
-		|| typeof advertisedMCPUrl !== 'string'
-		|| verifiedSharedObserverMCPUrl(observerUrl, health, intendedControlMCPUrl) === undefined
-		|| !isCanonicalBase64Url(challenge, observerHealthProofChallengeBytes)
-		|| !isCanonicalBase64Url(proof, 32)
-	) {
-		return undefined;
-	}
-	const controlTokenDigest = crypto.createHash('sha256').update(controlToken, 'utf8').digest();
-	const expectedProof = crypto
-		.createHmac('sha256', Buffer.from(healthProofSecret, 'base64url'))
-		.update(observerHealthProofDomain, 'utf8')
-		.update(controlTokenDigest)
-		.update(Buffer.from([0]))
-		.update(challenge, 'utf8')
-		.update(Buffer.from([0]))
-		.update(advertisedMCPUrl, 'utf8')
-		.digest();
-	const providedProof = Buffer.from(proof, 'base64url');
-	return crypto.timingSafeEqual(expectedProof, providedProof) ? controlToken : undefined;
-}
-
-function sameAdvertisedObserverControlEndpoint(intended: string, advertised: string): boolean {
-	if (intended === advertised) {
-		return true;
-	}
-	try {
-		const intendedURL = new URL(intended);
-		const advertisedURL = new URL(advertised);
-		if (!isLocalhostIPv4Alias(intendedURL.hostname) || !isLocalhostIPv4Alias(advertisedURL.hostname)) {
-			return false;
-		}
-		return intendedURL.protocol === advertisedURL.protocol
-			&& effectiveObserverPort(intendedURL) === effectiveObserverPort(advertisedURL)
-			&& intendedURL.pathname === advertisedURL.pathname
-			&& intendedURL.search === advertisedURL.search
-			&& intendedURL.hash === ''
-			&& advertisedURL.hash === ''
-			&& intendedURL.username === ''
-			&& intendedURL.password === ''
-			&& advertisedURL.username === ''
-			&& advertisedURL.password === '';
-	} catch {
-		return false;
-	}
-}
-
-function isLocalhostIPv4Alias(hostname: string): boolean {
-	const normalized = hostname.toLowerCase().replace(/\.$/, '');
-	return normalized === 'localhost' || normalized === '127.0.0.1';
-}
-
-function effectiveObserverPort(value: URL): string {
-	return value.port || (value.protocol === 'https:' ? '443' : '80');
-}
-
-function isCanonicalBase64Url(value: string, decodedLength: number): boolean {
-	if (!/^[A-Za-z0-9_-]+$/.test(value)) {
-		return false;
-	}
-	const decoded = Buffer.from(value, 'base64url');
-	return decoded.length === decodedLength && decoded.toString('base64url') === value;
 }
 
 export function resolveBackend(extensionPath: string): ObserverBackend {

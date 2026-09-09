@@ -28,8 +28,6 @@ type RuntimeState = {
 
 type SharedObserverHandle = {
 	baseUrl: string;
-	controlToken?: string;
-	healthProofSecret?: string;
 	dispose: () => Promise<void>;
 	statePath?: string;
 };
@@ -63,18 +61,6 @@ function setTestEnvironmentVariable(name: string, value: string): () => void {
 			return;
 		}
 		process.env[name] = original;
-	};
-}
-
-function setTestObserverControlEnvironment(controlToken: string, healthProofSecret: string): () => void {
-	const restoreControlToken = setTestEnvironmentVariable('OBSTUDIO_CONTROL_TOKEN', controlToken);
-	const restoreHealthProofSecret = setTestEnvironmentVariable(
-		'OBSTUDIO_HEALTH_PROOF_SECRET',
-		healthProofSecret,
-	);
-	return () => {
-		restoreHealthProofSecret();
-		restoreControlToken();
 	};
 }
 
@@ -225,9 +211,6 @@ async function startSharedObserver(
 	ports: SharedObserverPorts = {},
 ): Promise<SharedObserverHandle> {
 	let lastFailure: Error | undefined;
-	const controlToken = envOverrides.OBSTUDIO_CONTROL_TOKEN ?? crypto.randomBytes(32).toString('base64url');
-	const healthProofSecret = envOverrides.OBSTUDIO_HEALTH_PROOF_SECRET
-		?? crypto.randomBytes(32).toString('base64url');
 	const stateDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-shared-state-'));
 	const statePath = path.join(stateDirectory, 'shared-observer.json');
 
@@ -242,8 +225,6 @@ async function startSharedObserver(
 				...process.env,
 				...envOverrides,
 				HOST: '127.0.0.1',
-				OBSTUDIO_CONTROL_TOKEN: controlToken,
-				OBSTUDIO_HEALTH_PROOF_SECRET: healthProofSecret,
 				OBSTUDIO_SHARED_OBSERVER_STATE_PATH: statePath,
 				PORT: String(port),
 				OTLP_GRPC_PORT: String(grpcPort),
@@ -260,8 +241,6 @@ async function startSharedObserver(
 			await waitForHttpOrExit(baseUrl, child, 10_000);
 			return {
 				baseUrl,
-				controlToken,
-				healthProofSecret,
 				dispose: async () => {
 					await terminateChild(child);
 					cleanupTempDir(stateDirectory);
@@ -330,15 +309,19 @@ async function startSlowSharedObserver(delayMs: number): Promise<SharedObserverH
 
 async function startDiscoverableSharedObserver(
 	firstHealthDelayMs: number,
-	controlToken?: string,
+	cloudAuthorizations?: string[],
 ): Promise<SharedObserverHandle> {
 	const port = await getAvailablePort();
-	const baseUrl = `http://127.0.0.1:${port}`;
-	const mcpUrl = `${baseUrl}/mcp`;
-	const healthProofSecret = controlToken === undefined
-		? undefined
-		: crypto.randomBytes(32).toString('base64url');
+	const baseUrl = 'http://127.0.0.1:' + port;
+	const mcpUrl = baseUrl + '/mcp';
 	let healthRequestCount = 0;
+	const cloudStatus = {
+		connected: false,
+		enabled: false,
+		metrics: { configured: false },
+		traces: { configured: false },
+		version: 'V'.repeat(43),
+	};
 	const server = http.createServer(async (request, response) => {
 		const requestUrl = new URL(request.url ?? '/', baseUrl);
 		if (requestUrl.pathname === '/api/health') {
@@ -346,28 +329,51 @@ async function startDiscoverableSharedObserver(
 			if (healthRequestCount === 1) {
 				await new Promise((resolve) => setTimeout(resolve, firstHealthDelayMs));
 			}
-			const challenge = requestUrl.searchParams.get('obstudioHealthChallenge') ?? '';
-			const challengeProof = controlToken === undefined || healthProofSecret === undefined || challenge.length === 0
-				? undefined
-				: crypto
-					.createHmac('sha256', Buffer.from(healthProofSecret, 'base64url'))
-					.update('obstudio-health-proof-v2\0', 'utf8')
-					.update(crypto.createHash('sha256').update(controlToken, 'utf8').digest())
-					.update(Buffer.from([0]))
-					.update(challenge, 'utf8')
-					.update(Buffer.from([0]))
-					.update(mcpUrl, 'utf8')
-					.digest('base64url');
 			response.setHeader('Content-Type', 'application/json');
 			response.end(JSON.stringify({
 				apiVersion: 'v1',
-				...(challengeProof === undefined ? {} : { challengeProof }),
 				endpoints: {
 					mcp: mcpUrl,
 					otlpGrpc: '127.0.0.1:4317',
 					otlpHttp: 'http://127.0.0.1:4318',
 				},
 				kind: 'obstudio',
+			}));
+			return;
+		}
+		if (requestUrl.pathname === '/api/splunk/export' && request.method === 'GET') {
+			response.setHeader('Content-Type', 'application/json');
+			response.end(JSON.stringify(cloudStatus));
+			return;
+		}
+		if (requestUrl.pathname === '/api/splunk/export/refresh' && request.method === 'POST') {
+			response.setHeader('Content-Type', 'application/json');
+			response.end(JSON.stringify(cloudStatus));
+			return;
+		}
+		if (requestUrl.pathname === '/api/splunk/export/realm' && cloudAuthorizations !== undefined) {
+			cloudAuthorizations.push(request.headers.authorization ?? '');
+			if (request.method !== 'POST' || request.headers.authorization !== undefined) {
+				response.writeHead(400, { 'Content-Type': 'application/json' });
+				response.end(JSON.stringify({ error: 'unexpected authorization' }));
+				return;
+			}
+			response.setHeader('Content-Type', 'application/json');
+			response.end(JSON.stringify({ realm: 'us1' }));
+			return;
+		}
+		if (requestUrl.pathname === '/api/splunk/free-account' && cloudAuthorizations !== undefined) {
+			cloudAuthorizations.push(request.headers.authorization ?? '');
+			if (request.method !== 'POST' || request.headers.authorization !== undefined) {
+				response.writeHead(400, { 'Content-Type': 'application/json' });
+				response.end(JSON.stringify({ error: 'unexpected authorization' }));
+				return;
+			}
+			response.setHeader('Content-Type', 'application/json');
+			response.end(JSON.stringify({
+				intakeAcknowledged: true,
+				realm: 'us1',
+				region: 'us',
 			}));
 			return;
 		}
@@ -383,8 +389,6 @@ async function startDiscoverableSharedObserver(
 
 	return {
 		baseUrl,
-		controlToken,
-		healthProofSecret,
 		dispose: async () => {
 			await new Promise<void>((resolve, reject) => {
 				server.close((error) => {
@@ -397,6 +401,232 @@ async function startDiscoverableSharedObserver(
 			});
 		},
 	};
+}
+
+function writeObserverProcessFixture(
+	binaryPath: string,
+	version: string,
+	options: { legacyBearerAuth: boolean },
+): void {
+	const source = `#!/usr/bin/env node
+const http = require('node:http');
+const net = require('node:net');
+
+const host = process.env.HOST || '127.0.0.1';
+const port = Number(process.env.PORT);
+const otlpHttpPort = Number(process.env.OTLP_HTTP_PORT || '4318');
+const otlpGrpcPort = Number(process.env.OTLP_GRPC_PORT || '4317');
+const baseUrl = 'http://' + host + ':' + port;
+const mcpUrl = baseUrl + '/mcp';
+const controlToken = process.env.OBSTUDIO_CONTROL_TOKEN || '';
+const status = {
+  connected: false,
+  enabled: false,
+  metrics: { configured: false },
+  traces: { configured: false },
+  version: 'VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV',
+};
+
+function sendJson(response, statusCode, value) {
+  response.writeHead(statusCode, { 'Content-Type': 'application/json' });
+  response.end(JSON.stringify(value));
+}
+
+const server = http.createServer((request, response) => {
+  const requestUrl = new URL(request.url || '/', baseUrl);
+  if (requestUrl.pathname === '/api/health') {
+    const health = {
+      apiVersion: 'v1',
+      endpoints: {
+        mcp: mcpUrl,
+        otlpGrpc: '127.0.0.1:' + otlpGrpcPort,
+        otlpHttp: 'http://127.0.0.1:' + otlpHttpPort,
+      },
+      kind: 'obstudio',
+      version: ${JSON.stringify(version)},
+    };
+    sendJson(response, 200, health);
+    return;
+  }
+
+  const authorized = request.headers.authorization === 'Bearer ' + controlToken;
+  if (requestUrl.pathname === '/api/splunk/export' && request.method === 'GET') {
+    sendJson(response, 200, status);
+    return;
+  }
+  if (${JSON.stringify(options.legacyBearerAuth)} && !authorized) {
+    sendJson(response, 401, { error: 'unauthorized' });
+    return;
+  }
+  if (!${JSON.stringify(options.legacyBearerAuth)} && request.headers.authorization !== undefined) {
+    sendJson(response, 400, { error: 'unexpected authorization' });
+    return;
+  }
+  if (requestUrl.pathname === '/api/splunk/export/refresh') {
+    sendJson(response, 200, status);
+    return;
+  }
+  if (requestUrl.pathname === '/api/splunk/free-account') {
+    sendJson(response, 200, { intakeAcknowledged: true, realm: 'us1', region: 'us' });
+    return;
+  }
+  sendJson(response, 404, { error: 'not found' });
+});
+
+const otlpHttpServer = http.createServer((_request, response) => {
+  response.writeHead(204);
+  response.end();
+});
+const otlpGrpcServer = net.createServer((socket) => socket.end());
+let readyReceivers = 0;
+function receiverReady() {
+  readyReceivers += 1;
+  if (readyReceivers === 2) {
+    server.listen(port, host);
+  }
+}
+otlpHttpServer.listen(otlpHttpPort, host, receiverReady);
+otlpGrpcServer.listen(otlpGrpcPort, host, receiverReady);
+
+let stopping = false;
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    if (stopping) return;
+    stopping = true;
+    let openServers = 3;
+    const closed = () => {
+      openServers -= 1;
+      if (openServers === 0) process.exit(0);
+    };
+    server.close(closed);
+    otlpHttpServer.close(closed);
+    otlpGrpcServer.close(closed);
+  });
+}
+`;
+	fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
+	fs.writeFileSync(binaryPath, source, { mode: 0o755 });
+	fs.chmodSync(binaryPath, 0o755);
+}
+
+function writeNativeLegacyObserverProcessFixture(binaryPath: string, version: string): void {
+	const sourcePath = `${binaryPath}.go`;
+	const source = `package main
+
+import (
+	"encoding/json"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+)
+
+func env(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func sendJSON(response http.ResponseWriter, status int, value any) {
+	response.Header().Set("Content-Type", "application/json")
+	response.WriteHeader(status)
+	_ = json.NewEncoder(response).Encode(value)
+}
+
+func main() {
+	host := env("HOST", "127.0.0.1")
+	port := env("PORT", "3000")
+	otlpHTTPPort := env("OTLP_HTTP_PORT", "4318")
+	otlpGRPCPort := env("OTLP_GRPC_PORT", "4317")
+	controlToken := os.Getenv("OBSTUDIO_CONTROL_TOKEN")
+	baseURL := "http://" + host + ":" + port
+	status := map[string]any{
+		"connected": false,
+		"enabled": false,
+		"metrics": map[string]any{"configured": false},
+		"traces": map[string]any{"configured": false},
+		"version": "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV",
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(response http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.URL.Path == "/api/health":
+			sendJSON(response, http.StatusOK, map[string]any{
+				"apiVersion": "v1",
+				"endpoints": map[string]string{
+					"mcp": baseURL + "/mcp",
+					"otlpGrpc": host + ":" + otlpGRPCPort,
+					"otlpHttp": "http://" + host + ":" + otlpHTTPPort,
+				},
+				"kind": "obstudio",
+				"version": ${JSON.stringify(version)},
+			})
+		case request.URL.Path == "/api/splunk/export" && request.Method == http.MethodGet:
+			sendJSON(response, http.StatusOK, status)
+		case request.URL.Path == "/api/splunk/free-account" && request.Method == http.MethodPost:
+			sendJSON(response, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		case request.Header.Get("Authorization") != "Bearer "+controlToken:
+			sendJSON(response, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		default:
+			sendJSON(response, http.StatusNotFound, map[string]string{"error": "not found"})
+		}
+	})
+
+	observerListener, err := net.Listen("tcp", host+":"+port)
+	if err != nil {
+		panic(err)
+	}
+	otlpHTTPListener, err := net.Listen("tcp", host+":"+otlpHTTPPort)
+	if err != nil {
+		panic(err)
+	}
+	otlpGRPCListener, err := net.Listen("tcp", host+":"+otlpGRPCPort)
+	if err != nil {
+		panic(err)
+	}
+
+	observerServer := &http.Server{Handler: mux}
+	otlpHTTPServer := &http.Server{Handler: http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.WriteHeader(http.StatusNoContent)
+	})}
+	go func() { _ = observerServer.Serve(observerListener) }()
+	go func() { _ = otlpHTTPServer.Serve(otlpHTTPListener) }()
+	go func() {
+		for {
+			connection, acceptErr := otlpGRPCListener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			_ = connection.Close()
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop
+	_ = observerServer.Close()
+	_ = otlpHTTPServer.Close()
+	_ = otlpGRPCListener.Close()
+}
+`;
+	fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
+	fs.writeFileSync(sourcePath, source, { mode: 0o600 });
+	try {
+		cp.execFileSync('go', ['build', '-o', binaryPath, sourcePath], {
+			env: {
+				...process.env,
+				CGO_ENABLED: '0',
+				GOCACHE: process.env.GOCACHE ?? path.join(os.tmpdir(), 'obstudio-vscode-host-go-cache'),
+			},
+			stdio: 'pipe',
+		});
+	} finally {
+		fs.rmSync(sourcePath, { force: true });
+	}
+	fs.chmodSync(binaryPath, 0o755);
 }
 
 async function startConflictingHttpService(port: number): Promise<SharedObserverHandle> {
@@ -628,6 +858,17 @@ async function postJson(url: string): Promise<any> {
 	return requestJson(url, 'POST');
 }
 
+async function requestStatus(url: string, method: 'GET' | 'POST'): Promise<number> {
+	return new Promise((resolve, reject) => {
+		const request = http.request(url, { method }, (response) => {
+			response.resume();
+			resolve(response.statusCode ?? 0);
+		});
+		request.on('error', reject);
+		request.end();
+	});
+}
+
 async function requestJson(url: string, method: 'GET' | 'POST'): Promise<any> {
 	return new Promise((resolve, reject) => {
 		const request = http.request(url, { method }, (response) => {
@@ -739,79 +980,11 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('managed observer agent installs use retained proof credentials without matching private state', async function () {
-		this.timeout(45_000);
-		if (process.platform === 'darwin') {
-			this.skip();
-		}
-
-		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
-		const originalHome = process.env.HOME;
-		const originalUserProfile = process.env.USERPROFILE;
-		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
-		const statePath = path.join(tempHome, '.obstudio', 'shared-observer.json');
-		const codexConfigPath = path.join(tempHome, '.codex', 'config.toml');
-		const cursorConfigPath = path.join(tempHome, '.cursor', 'mcp.json');
-		const managedPort = await getAvailablePort();
-		const managedBaseUrl = `http://127.0.0.1:${managedPort}`;
-		const managedMCPUrl = `${managedBaseUrl}/mcp`;
-		const config = vscode.workspace.getConfiguration('observability-studio');
-
-		process.env.HOME = tempHome;
-		process.env.USERPROFILE = tempHome;
-		process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
-
-		try {
-			await getExtension();
-			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await vscode.commands.executeCommand('observability-studio.stopObserver');
-			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
-			await waitFor(
-				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
-				(value) => Boolean(value && !value.sharedMode && value.observerUrl === managedBaseUrl),
-				20_000,
-			);
-
-			fs.mkdirSync(path.dirname(codexConfigPath), { recursive: true });
-			fs.rmSync(statePath, { force: true });
-			await vscode.commands.executeCommand('observability-studio.configureCodexMCP');
-			await assertCodexConfigured([codexConfigPath], managedMCPUrl);
-
-			fs.mkdirSync(path.dirname(statePath), { recursive: true, mode: 0o700 });
-			fs.writeFileSync(
-				statePath,
-				JSON.stringify({
-					baseUrl: 'http://127.0.0.1:1',
-					controlToken: crypto.randomBytes(32).toString('base64url'),
-					healthProofSecret: crypto.randomBytes(32).toString('base64url'),
-					healthUrl: 'http://127.0.0.1:1/api/health',
-					mcpUrl: 'http://127.0.0.1:1/mcp',
-				}),
-				{ mode: 0o600 },
-			);
-			fs.mkdirSync(path.dirname(cursorConfigPath), { recursive: true });
-			await vscode.commands.executeCommand('observability-studio.configureCursorMCP');
-			await assertJSONMCPConfigured([cursorConfigPath], 'obstudio', managedMCPUrl);
-		} finally {
-			await vscode.commands.executeCommand('observability-studio.stopObserver');
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
-			if (originalSharedObserverStatePath === undefined) {
-				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
-			} else {
-				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
-			}
-			process.env.HOME = originalHome;
-			process.env.USERPROFILE = originalUserProfile;
-			cleanupTempDir(tempHome);
-		}
-	});
-
 	test('extension reuses the healthy observer recorded in shared state', async function () {
 		this.timeout(30_000);
 
 		await getExtension();
-		const controlToken = crypto.randomBytes(32).toString('base64url');
-		const sharedObserver = await startDiscoverableSharedObserver(750, controlToken);
+		const sharedObserver = await startDiscoverableSharedObserver(750);
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
 		const originalHome = process.env.HOME;
 		const originalUserProfile = process.env.USERPROFILE;
@@ -828,8 +1001,6 @@ suite('VS Code Host', () => {
 			statePath,
 			JSON.stringify({
 				baseUrl: sharedObserver.baseUrl,
-				controlToken,
-				healthProofSecret: sharedObserver.healthProofSecret,
 				healthUrl: `${sharedObserver.baseUrl}/api/health`,
 				mcpUrl: `${sharedObserver.baseUrl}/mcp`,
 				updatedAt: new Date().toISOString(),
@@ -868,6 +1039,476 @@ suite('VS Code Host', () => {
 			}
 			cleanupTempDir(tempHome);
 			await sharedObserver.dispose();
+		}
+	});
+
+	test('extension reuses a CLI-managed Observer without control credentials', async function () {
+		this.timeout(45_000);
+
+		await getExtension();
+		const cloudAuthorizations: string[] = [];
+		const managedObserver = await startDiscoverableSharedObserver(0, cloudAuthorizations);
+		const managedPort = Number(new URL(managedObserver.baseUrl).port);
+		const managedMCPUrl = managedObserver.baseUrl + '/mcp';
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const managedStatePath = path.join(stateDir, 'managed-control.json');
+		const codexConfigPath = path.join(tempHome, '.codex', 'config.toml');
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		const config = vscode.workspace.getConfiguration('observability-studio');
+
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+		delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+		fs.writeFileSync(managedStatePath, JSON.stringify({
+			baseUrl: managedObserver.baseUrl,
+			healthUrl: managedObserver.baseUrl + '/api/health',
+			mcpUrl: managedMCPUrl,
+			pid: process.pid,
+			updatedAt: new Date().toISOString(),
+		}), { mode: 0o600 });
+
+		try {
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+
+			const state = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(value?.sharedMode && value.observerUrl === managedObserver.baseUrl),
+				20_000,
+			);
+			assert.equal(state.sharedMode, true);
+			await vscode.commands.executeCommand('observability-studio.configureCodexMCP');
+			await assertCodexConfigured([codexConfigPath], managedMCPUrl);
+			assert.equal(readCodexObstudioAuthorization(codexConfigPath), undefined);
+
+			const realm = await vscode.commands.executeCommand<{ realm?: string }>(
+				'observability-studio.internal.resolveCloudRealmForTest',
+			);
+			assert.equal(realm?.realm, 'us1');
+			assert.deepEqual(cloudAuthorizations, ['']);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			cleanupTempDir(tempHome);
+			await managedObserver.dispose();
+		}
+	});
+
+	test('Free Edition signup works through CLI-managed Observer state without credentials', async function () {
+		this.timeout(45_000);
+
+		await getExtension();
+		const cloudAuthorizations: string[] = [];
+		const managedObserver = await startDiscoverableSharedObserver(0, cloudAuthorizations);
+		const managedPort = Number(new URL(managedObserver.baseUrl).port);
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		const config = vscode.workspace.getConfiguration('observability-studio');
+
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+		delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+		fs.writeFileSync(
+			path.join(stateDir, 'managed-control.json'),
+			JSON.stringify({
+				baseUrl: managedObserver.baseUrl,
+				healthUrl: `${managedObserver.baseUrl}/api/health`,
+				mcpUrl: `${managedObserver.baseUrl}/mcp`,
+				pid: process.pid,
+				updatedAt: new Date().toISOString(),
+			}),
+			{ mode: 0o600 },
+		);
+
+		try {
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+
+			const response = await vscode.commands.executeCommand<{
+				freeAccount?: { intakeAcknowledged?: boolean };
+			}>('observability-studio.internal.createFreeAccountForTest');
+			assert.equal(response?.freeAccount?.intakeAcknowledged, true);
+			assert.deepEqual(cloudAuthorizations, ['']);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			cleanupTempDir(tempHome);
+			await managedObserver.dispose();
+		}
+	});
+
+	test('fresh install starts its bundled Observer with credential-free Cloud controls', async function () {
+		this.timeout(45_000);
+		if (process.platform === 'win32') {
+			this.skip();
+		}
+
+		const extension = await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+		const currentBackendPath = path.join(extension.extensionPath, 'dist', 'observer', 'obstudio');
+		const currentBackendContents = fs.readFileSync(currentBackendPath);
+		const currentBackendMode = fs.statSync(currentBackendPath).mode;
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-fresh-home-'));
+		const statePath = path.join(tempHome, '.obstudio', 'shared-observer.json');
+		const observerPorts = await resolveSharedObserverPorts({});
+		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+
+		try {
+			process.env.HOME = tempHome;
+			process.env.USERPROFILE = tempHome;
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+			await vscode.commands.executeCommand(
+				'observability-studio.internal.setObserverOtlpPortsForTest',
+				{ grpc: observerPorts.grpc, http: observerPorts.http },
+			);
+			writeObserverProcessFixture(
+				currentBackendPath,
+				String(extension.packageJSON.version),
+				{ legacyBearerAuth: false },
+			);
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+
+			const state = await vscode.commands.executeCommand<RuntimeState>(
+				'observability-studio.internal.getRuntimeState',
+			);
+			assert.equal(state.sharedMode, false);
+			assert.equal(state.observerUrl, baseUrl);
+			const response = await vscode.commands.executeCommand<{
+				freeAccount?: { intakeAcknowledged?: boolean };
+			}>('observability-studio.internal.createFreeAccountForTest');
+			assert.equal(response?.freeAccount?.intakeAcknowledged, true);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+			fs.writeFileSync(currentBackendPath, currentBackendContents, { mode: currentBackendMode });
+			fs.chmodSync(currentBackendPath, currentBackendMode);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(tempHome);
+		}
+	});
+
+	test('upgrade replaces only the recorded v0.0.18 extension Observer before enabling Cloud controls', async function () {
+		this.timeout(45_000);
+
+		const extension = await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+		const observerBinaryName = process.platform === 'win32' ? 'obstudio.exe' : 'obstudio';
+		const currentBackendPath = path.join(extension.extensionPath, 'dist', 'observer', observerBinaryName);
+		const currentBackendContents = fs.readFileSync(currentBackendPath);
+		const currentBackendMode = fs.statSync(currentBackendPath).mode;
+		const legacyExtensionPath = path.join(
+			path.dirname(extension.extensionPath),
+			'splunk.observability-studio-0.0.18',
+		);
+		const legacyBackendPath = path.join(legacyExtensionPath, 'dist', 'observer', observerBinaryName);
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-upgrade-home-'));
+		const legacyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-v018-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const controlToken = crypto.randomBytes(32).toString('base64url');
+		const observerPorts = await resolveSharedObserverPorts({});
+		const managedPort = observerPorts.ui;
+		const baseUrl = `http://127.0.0.1:${managedPort}`;
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		const unrelatedObserver = await startDiscoverableSharedObserver(0);
+		let legacyProcess: cp.ChildProcess | undefined;
+
+		try {
+			await waitFor(
+				async () => {
+					try {
+						await vscode.commands.executeCommand(
+							'observability-studio.internal.setObserverOtlpPortsForTest',
+							{ grpc: observerPorts.grpc, http: observerPorts.http },
+						);
+						return true;
+					} catch {
+						await vscode.commands.executeCommand('observability-studio.stopObserver');
+						return false;
+					}
+				},
+				(value) => value,
+				10_000,
+			);
+			assert.equal(fs.existsSync(legacyExtensionPath), false, 'legacy fixture path should be unused');
+			writeObserverProcessFixture(
+				currentBackendPath,
+				String(extension.packageJSON.version),
+				{ legacyBearerAuth: false },
+			);
+			const exactLegacyBinary = process.env.OBSTUDIO_V018_BINARY_PATH?.trim();
+			if (process.env.CI) {
+				assert.ok(exactLegacyBinary, 'CI must provide the exact v0.0.18 Observer binary');
+			}
+			if (exactLegacyBinary) {
+				fs.mkdirSync(path.dirname(legacyBackendPath), { recursive: true });
+				fs.copyFileSync(exactLegacyBinary, legacyBackendPath);
+				fs.chmodSync(legacyBackendPath, 0o755);
+			} else {
+				writeNativeLegacyObserverProcessFixture(legacyBackendPath, '0.0.18');
+			}
+			fs.writeFileSync(path.join(legacyExtensionPath, 'package.json'), JSON.stringify({
+				name: 'observability-studio',
+				publisher: 'Splunk',
+				version: '0.0.18',
+			}));
+
+			legacyProcess = cp.spawn(legacyBackendPath, [], {
+				env: {
+					...process.env,
+					HOME: legacyHome,
+					HOST: '127.0.0.1',
+					OBSTUDIO_CONTROL_TOKEN: controlToken,
+					OTLP_GRPC_PORT: String(observerPorts.grpc),
+					OTLP_HTTP_PORT: String(observerPorts.http),
+					PORT: String(managedPort),
+					USERPROFILE: legacyHome,
+				},
+				stdio: 'pipe',
+			});
+			await waitForHttpOrExit(`${baseUrl}/api/health`, legacyProcess, 10_000);
+			const legacyHealth = await fetchJson(`${baseUrl}/api/health`);
+			assert.equal(legacyHealth.version, '0.0.18');
+			assert.equal(
+				await requestStatus(`${baseUrl}/api/splunk/export/refresh`, 'POST'),
+				401,
+				'v0.0.18 reproduces the protected refresh that v0.0.20 could not authenticate without a health proof',
+			);
+			assert.equal(
+				await requestStatus(`${baseUrl}/api/splunk/free-account`, 'POST'),
+				405,
+				'v0.0.18 reproduces the missing Free Edition signup endpoint',
+			);
+
+			process.env.HOME = tempHome;
+			process.env.USERPROFILE = tempHome;
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+			fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+			fs.writeFileSync(statePath, JSON.stringify({
+				baseUrl,
+				controlToken,
+				healthUrl: `${baseUrl}/api/health`,
+				mcpUrl: `${baseUrl}/mcp`,
+				pid: legacyProcess.pid,
+				updatedAt: new Date().toISOString(),
+			}), { mode: 0o600 });
+
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.resetAgentIntegrationPromptState');
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+
+			const state = await vscode.commands.executeCommand<RuntimeState>(
+				'observability-studio.internal.getRuntimeState',
+			);
+			assert.equal(state.sharedMode, false, 'upgrade must run the newly installed Observer binary');
+			assert.equal(state.observerUrl, baseUrl);
+			const currentHealth = await fetchJson(`${baseUrl}/api/health`);
+			assert.equal(currentHealth.version, String(extension.packageJSON.version));
+			const unrelatedHealth = await fetchJson(`${unrelatedObserver.baseUrl}/api/health`);
+			assert.equal(unrelatedHealth.kind, 'obstudio', 'an Observer on another port must remain running');
+			await waitFor(
+				() => Promise.resolve(legacyProcess?.exitCode),
+				(exitCode) => exitCode !== null && exitCode !== undefined,
+				5_000,
+			);
+
+			const response = await vscode.commands.executeCommand<{
+				freeAccount?: { intakeAcknowledged?: boolean };
+			}>('observability-studio.internal.createFreeAccountForTest');
+			assert.equal(response?.freeAccount?.intakeAcknowledged, true);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await waitFor(
+				async () => {
+					try {
+						await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+						return true;
+					} catch {
+						await vscode.commands.executeCommand('observability-studio.stopObserver');
+						return false;
+					}
+				},
+				(value) => value,
+				10_000,
+			);
+			if (legacyProcess !== undefined) {
+				await terminateChild(legacyProcess);
+			}
+			fs.writeFileSync(currentBackendPath, currentBackendContents, { mode: currentBackendMode });
+			fs.chmodSync(currentBackendPath, currentBackendMode);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(legacyExtensionPath);
+			cleanupTempDir(tempHome);
+			cleanupTempDir(legacyHome);
+			await unrelatedObserver.dispose();
+		}
+	});
+
+	test('upgrade blocks Cloud controls with port and PID when the previous Observer cannot be verified', async function () {
+		this.timeout(45_000);
+
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-restart-required-home-'));
+		const legacyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-restart-required-legacy-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const observerPorts = await resolveSharedObserverPorts({});
+		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+		process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+
+		const extension = await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+		const observerBinaryName = process.platform === 'win32' ? 'obstudio.exe' : 'obstudio';
+		const currentBackendPath = path.join(extension.extensionPath, 'dist', 'observer', observerBinaryName);
+		const currentBackendContents = fs.readFileSync(currentBackendPath);
+		const currentBackendMode = fs.statSync(currentBackendPath).mode;
+		const legacyExtensionPath = path.join(
+			path.dirname(extension.extensionPath),
+			'splunk.observability-studio-stale-fixture',
+		);
+		const legacyBackendPath = path.join(legacyExtensionPath, 'dist', 'observer', observerBinaryName);
+		let legacyProcess: cp.ChildProcess | undefined;
+
+		try {
+			writeObserverProcessFixture(
+				currentBackendPath,
+				String(extension.packageJSON.version),
+				{ legacyBearerAuth: false },
+			);
+			writeNativeLegacyObserverProcessFixture(legacyBackendPath, 'stale-fixture');
+			const legacyPackagePath = path.join(legacyExtensionPath, 'package.json');
+			fs.writeFileSync(legacyPackagePath, JSON.stringify({
+				name: 'observability-studio',
+				publisher: 'Splunk',
+				version: 'stale-fixture',
+			}));
+
+			legacyProcess = cp.spawn(legacyBackendPath, [], {
+				env: {
+					...process.env,
+					HOME: legacyHome,
+					HOST: '127.0.0.1',
+					OTLP_GRPC_PORT: String(observerPorts.grpc),
+					OTLP_HTTP_PORT: String(observerPorts.http),
+					PORT: String(observerPorts.ui),
+					USERPROFILE: legacyHome,
+				},
+				stdio: 'pipe',
+			});
+			await waitForHttpOrExit(`${baseUrl}/api/health`, legacyProcess, 10_000);
+
+			fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+			fs.writeFileSync(statePath, JSON.stringify({
+				baseUrl,
+				healthUrl: `${baseUrl}/api/health`,
+				mcpUrl: `${baseUrl}/mcp`,
+				pid: legacyProcess.pid,
+				updatedAt: new Date().toISOString(),
+			}), { mode: 0o600 });
+			fs.rmSync(legacyPackagePath);
+
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.openObserver');
+
+			const failedState = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
+					'observability-studio.internal.getRuntimeState',
+				)),
+				(value) => Boolean(
+					value
+					&& value.observerPort === undefined
+					&& value.observerUrl === undefined
+					&& value.panelHtml?.includes('<h2>Restart required</h2>')
+					&& value.panelHtml.includes(`localhost port ${observerPorts.ui}`)
+					&& value.panelHtml.includes(`PID ${legacyProcess?.pid}`)
+					&& value.panelHtml.includes('Cloud controls are unavailable'),
+				),
+				20_000,
+			);
+			assert.equal(failedState.sharedMode, false);
+			assert.equal(legacyProcess.exitCode, null, 'an unverifiable process must not be terminated');
+		} finally {
+			if (legacyProcess !== undefined) {
+				await terminateChild(legacyProcess);
+			}
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			fs.writeFileSync(currentBackendPath, currentBackendContents, { mode: currentBackendMode });
+			fs.chmodSync(currentBackendPath, currentBackendMode);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(legacyExtensionPath);
+			cleanupTempDir(tempHome);
+			cleanupTempDir(legacyHome);
 		}
 	});
 
@@ -934,21 +1575,12 @@ suite('VS Code Host', () => {
 		const originalHome = process.env.HOME;
 		const originalUserProfile = process.env.USERPROFILE;
 		const extension = await getExtension();
-		const controlToken = crypto.randomBytes(32).toString('base64url');
-		const healthProofSecret = crypto.randomBytes(32).toString('base64url');
-		const observerEnvironment = {
-			OBSTUDIO_CONTROL_TOKEN: controlToken,
-			OBSTUDIO_HEALTH_PROOF_SECRET: healthProofSecret,
-		};
 		const firstSharedObserver = await startSharedObserver(
 			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
-			observerEnvironment,
 		);
 		const secondSharedObserver = await startSharedObserver(
 			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
-			observerEnvironment,
 		);
-		const restoreControlToken = setTestObserverControlEnvironment(controlToken, healthProofSecret);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const firstSharedMcpUrl = `${firstSharedObserver.baseUrl}/mcp`;
 		const secondSharedMcpUrl = `${secondSharedObserver.baseUrl}/mcp`;
@@ -995,7 +1627,6 @@ suite('VS Code Host', () => {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await firstSharedObserver.dispose();
 			await secondSharedObserver.dispose();
-			restoreControlToken();
 			process.env.HOME = originalHome;
 			process.env.USERPROFILE = originalUserProfile;
 			cleanupTempDir(tempHome);
@@ -1113,12 +1744,9 @@ suite('VS Code Host', () => {
 		this.timeout(30_000);
 
 		const extension = await getExtension();
-		const controlToken = crypto.randomBytes(32).toString('base64url');
 		const sharedObserver = await startSharedObserver(
 			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
-			{ OBSTUDIO_CONTROL_TOKEN: controlToken },
 		);
-		const restoreControlToken = setTestObserverControlEnvironment(controlToken, sharedObserver.healthProofSecret!);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
@@ -1201,7 +1829,6 @@ suite('VS Code Host', () => {
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();
-			restoreControlToken();
 			process.env.HOME = originalHome;
 			process.env.USERPROFILE = originalUserProfile;
 			for (const snapshot of originalSnapshots) {
@@ -1215,12 +1842,9 @@ suite('VS Code Host', () => {
 		this.timeout(30_000);
 
 		const extension = await getExtension();
-		const controlToken = crypto.randomBytes(32).toString('base64url');
 		const sharedObserver = await startSharedObserver(
 			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
-			{ OBSTUDIO_CONTROL_TOKEN: controlToken },
 		);
-		const restoreControlToken = setTestObserverControlEnvironment(controlToken, sharedObserver.healthProofSecret!);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
@@ -1310,10 +1934,7 @@ suite('VS Code Host', () => {
 			await assertJSONMCPConfigured([claudeConfigPath, originalClaudeConfigPath], 'obstudio', sharedMcpUrl);
 			await assertJSONMCPConfigured([cursorConfigPath, originalCursorConfigPath], 'obstudio', sharedMcpUrl);
 			await assertJSONMCPConfigured([kiroConfigPath, originalKiroConfigPath], 'obstudio', sharedMcpUrl, false);
-			await assertKiroMCPPolicyPreserved(
-				[kiroConfigPath, originalKiroConfigPath],
-				{ Authorization: `Bearer ${controlToken}` },
-			);
+			await assertKiroMCPPolicyPreserved([kiroConfigPath, originalKiroConfigPath]);
 			await assertJSONMCPPreservesExistingServer(
 				[claudeConfigPath, originalClaudeConfigPath],
 				'existingClaude',
@@ -1338,7 +1959,6 @@ suite('VS Code Host', () => {
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();
-			restoreControlToken();
 			process.env.HOME = originalHome;
 			process.env.USERPROFILE = originalUserProfile;
 			for (const snapshot of originalSnapshots) {
@@ -1352,12 +1972,9 @@ suite('VS Code Host', () => {
 		this.timeout(30_000);
 
 		const extension = await getExtension();
-		const controlToken = crypto.randomBytes(32).toString('base64url');
 		const sharedObserver = await startSharedObserver(
 			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
-			{ OBSTUDIO_CONTROL_TOKEN: controlToken },
 		);
-		const restoreControlToken = setTestObserverControlEnvironment(controlToken, sharedObserver.healthProofSecret!);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
@@ -1463,7 +2080,6 @@ suite('VS Code Host', () => {
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();
-			restoreControlToken();
 			process.env.HOME = originalHome;
 			process.env.USERPROFILE = originalUserProfile;
 			for (const snapshot of originalSnapshots) {
@@ -1495,12 +2111,6 @@ suite('VS Code Host', () => {
 
 		const extension = await getExtension();
 		const sharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
-		assert.ok(sharedObserver.controlToken);
-		assert.ok(sharedObserver.healthProofSecret);
-		const restoreControlToken = setTestObserverControlEnvironment(
-			sharedObserver.controlToken,
-			sharedObserver.healthProofSecret,
-		);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 
@@ -1541,7 +2151,6 @@ suite('VS Code Host', () => {
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();
-			restoreControlToken();
 			process.env.HOME = originalHome;
 			process.env.USERPROFILE = originalUserProfile;
 			for (const snapshot of originalSnapshots) {
@@ -1591,160 +2200,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('Observer restart refreshes owned agent authorization and isolates target failures', async function () {
-		this.timeout(90_000);
-
-		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
-		const originalHome = process.env.HOME;
-		const originalUserProfile = process.env.USERPROFILE;
-		const extension = await getExtension();
-		const binaryPath = path.join(extension.extensionPath, 'dist', 'observer', 'obstudio');
-		const observerPort = await getAvailablePort();
-		const firstControlToken = crypto.randomBytes(32).toString('base64url');
-		const firstHealthProofSecret = crypto.randomBytes(32).toString('base64url');
-		const secondControlToken = crypto.randomBytes(32).toString('base64url');
-		const secondHealthProofSecret = crypto.randomBytes(32).toString('base64url');
-		const thirdControlToken = crypto.randomBytes(32).toString('base64url');
-		const thirdHealthProofSecret = crypto.randomBytes(32).toString('base64url');
-		const sharedMcpUrl = `http://127.0.0.1:${observerPort}/mcp`;
-		const codexConfigPath = path.join(tempHome, '.codex', 'config.toml');
-		const claudeConfigPath = path.join(tempHome, '.claude.json');
-		const cursorConfigPath = path.join(tempHome, '.cursor', 'mcp.json');
-		const config = vscode.workspace.getConfiguration('observability-studio');
-		let firstObserver: SharedObserverHandle | undefined;
-		let secondObserver: SharedObserverHandle | undefined;
-		let thirdObserver: SharedObserverHandle | undefined;
-		let restoreControlEnvironment: (() => void) | undefined;
-
-		await vscode.commands.executeCommand('observability-studio.stopObserver');
-		await vscode.commands.executeCommand('observability-studio.internal.waitForAgentIntegrationRefresh');
-		await vscode.commands.executeCommand('observability-studio.internal.resetAgentIntegrationPromptState');
-		process.env.HOME = tempHome;
-		process.env.USERPROFILE = tempHome;
-
-		try {
-			fs.mkdirSync(path.dirname(codexConfigPath), { recursive: true });
-			fs.mkdirSync(path.join(tempHome, '.claude'), { recursive: true });
-			fs.mkdirSync(path.dirname(cursorConfigPath), { recursive: true });
-			firstObserver = await startSharedObserver(
-				binaryPath,
-				{
-					OBSTUDIO_CONTROL_TOKEN: firstControlToken,
-					OBSTUDIO_HEALTH_PROOF_SECRET: firstHealthProofSecret,
-				},
-				{ ui: observerPort },
-			);
-			restoreControlEnvironment = setTestObserverControlEnvironment(
-				firstControlToken,
-				firstHealthProofSecret,
-			);
-			await config.update('sharedObserverUrl', sharedMcpUrl, vscode.ConfigurationTarget.Global);
-			await waitFor(
-				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
-				(value) => Boolean(value && value.sharedMode && value.observerUrl === firstObserver?.baseUrl),
-				20_000,
-			);
-
-			await vscode.commands.executeCommand('observability-studio.configureCodexMCP');
-			await vscode.commands.executeCommand('observability-studio.configureClaudeCodeMCP');
-			await vscode.commands.executeCommand('observability-studio.configureCursorMCP');
-			assert.equal(readCodexObstudioAuthorization(codexConfigPath), `Bearer ${firstControlToken}`);
-			assert.equal(readJSONObstudioAuthorization(claudeConfigPath), `Bearer ${firstControlToken}`);
-			assert.equal(readJSONObstudioAuthorization(cursorConfigPath), `Bearer ${firstControlToken}`);
-			await vscode.commands.executeCommand('observability-studio.internal.clearAgentIntegrationPrompts');
-
-			await vscode.commands.executeCommand('observability-studio.stopObserver');
-			await firstObserver.dispose();
-			firstObserver = undefined;
-			restoreControlEnvironment();
-			restoreControlEnvironment = undefined;
-
-			secondObserver = await startSharedObserver(
-				binaryPath,
-				{
-					OBSTUDIO_CONTROL_TOKEN: secondControlToken,
-					OBSTUDIO_HEALTH_PROOF_SECRET: secondHealthProofSecret,
-				},
-				{ ui: observerPort },
-			);
-			restoreControlEnvironment = setTestObserverControlEnvironment(
-				secondControlToken,
-				secondHealthProofSecret,
-			);
-			await vscode.commands.executeCommand('observability-studio.startObserver');
-			await waitFor(
-				() => Promise.resolve({
-					claude: readJSONObstudioAuthorization(claudeConfigPath),
-					codex: readCodexObstudioAuthorization(codexConfigPath),
-					cursor: readJSONObstudioAuthorization(cursorConfigPath),
-				}),
-				(value) => value.codex === `Bearer ${secondControlToken}`
-					&& value.claude === `Bearer ${secondControlToken}`
-					&& value.cursor === `Bearer ${secondControlToken}`,
-				20_000,
-			);
-			await vscode.commands.executeCommand('observability-studio.internal.waitForAgentIntegrationRefresh');
-
-			const prompts = await vscode.commands.executeCommand<Array<{ detail?: string; message: string }>>(
-				'observability-studio.internal.getAgentIntegrationPrompts',
-			);
-			assert.equal(prompts.some((item) => item.message.startsWith('Enable ')), false);
-
-			const claudeSkillsPath = path.join(tempHome, '.claude', 'skills');
-			fs.rmSync(claudeSkillsPath, { force: true, recursive: true });
-			fs.writeFileSync(claudeSkillsPath, 'block Claude skill installation', 'utf8');
-			await vscode.commands.executeCommand('observability-studio.stopObserver');
-			await secondObserver.dispose();
-			secondObserver = undefined;
-			restoreControlEnvironment();
-			restoreControlEnvironment = undefined;
-
-			thirdObserver = await startSharedObserver(
-				binaryPath,
-				{
-					OBSTUDIO_CONTROL_TOKEN: thirdControlToken,
-					OBSTUDIO_HEALTH_PROOF_SECRET: thirdHealthProofSecret,
-				},
-				{ ui: observerPort },
-			);
-			restoreControlEnvironment = setTestObserverControlEnvironment(
-				thirdControlToken,
-				thirdHealthProofSecret,
-			);
-			await vscode.commands.executeCommand('observability-studio.startObserver');
-			await waitFor(
-				() => Promise.resolve({
-					claude: readJSONObstudioAuthorization(claudeConfigPath),
-					codex: readCodexObstudioAuthorization(codexConfigPath),
-					cursor: readJSONObstudioAuthorization(cursorConfigPath),
-				}),
-				(value) => value.codex === `Bearer ${thirdControlToken}`
-					&& value.cursor === `Bearer ${thirdControlToken}`
-					&& value.claude === `Bearer ${secondControlToken}`,
-				20_000,
-			);
-			await vscode.commands.executeCommand('observability-studio.internal.waitForAgentIntegrationRefresh');
-			assert.equal(readCodexObstudioAuthorization(codexConfigPath), `Bearer ${thirdControlToken}`);
-			assert.equal(readJSONObstudioAuthorization(cursorConfigPath), `Bearer ${thirdControlToken}`);
-			assert.equal(readJSONObstudioAuthorization(claudeConfigPath), `Bearer ${secondControlToken}`);
-			const runtimeState = await vscode.commands.executeCommand<RuntimeState>(
-				'observability-studio.internal.getRuntimeState',
-			);
-			assert.equal(runtimeState.observerUrl, thirdObserver.baseUrl);
-		} finally {
-			await vscode.commands.executeCommand('observability-studio.stopObserver');
-			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await firstObserver?.dispose();
-			await secondObserver?.dispose();
-			await thirdObserver?.dispose();
-			restoreControlEnvironment?.();
-			process.env.HOME = originalHome;
-			process.env.USERPROFILE = originalUserProfile;
-			cleanupTempDir(tempHome);
-		}
-	});
-
-	test('unowned stale authorization prompts before refreshing every agent config format', async function () {
+	test('unowned stale authorization prompts before removal from every agent config format', async function () {
 		this.timeout(60_000);
 
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
@@ -1752,10 +2208,8 @@ suite('VS Code Host', () => {
 		const originalUserProfile = process.env.USERPROFILE;
 		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
 		const extension = await getExtension();
-		const currentControlToken = crypto.randomBytes(32).toString('base64url');
 		const sharedObserver = await startSharedObserver(
 			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
-			{ OBSTUDIO_CONTROL_TOKEN: currentControlToken },
 		);
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 		const statePath = path.join(tempHome, '.obstudio', 'shared-observer.json');
@@ -1776,8 +2230,6 @@ suite('VS Code Host', () => {
 				statePath,
 				JSON.stringify({
 					baseUrl: sharedObserver.baseUrl,
-					controlToken: currentControlToken,
-					healthProofSecret: sharedObserver.healthProofSecret,
 					healthUrl: `${sharedObserver.baseUrl}/api/health`,
 					mcpUrl: sharedMcpUrl,
 					updatedAt: new Date().toISOString(),
@@ -1872,10 +2324,8 @@ suite('VS Code Host', () => {
 				),
 				20_000,
 			);
-			const currentAuthorization = `Bearer ${currentControlToken}`;
 			const promptText = JSON.stringify(prompts);
 			assert.equal(promptText.includes(staleAuthorization), false);
-			assert.equal(promptText.includes(currentControlToken), false);
 			assert.equal(readCodexObstudioAuthorization(codexConfigPath), staleAuthorization);
 			for (const configPath of [claudeConfigPath, cursorConfigPath, kiroConfigPath]) {
 				assert.equal(readJSONObstudioAuthorization(configPath), staleAuthorization);
@@ -1888,13 +2338,12 @@ suite('VS Code Host', () => {
 
 			const codexConfig = await waitForFileText(codexConfigPath);
 			assert.equal(codexConfig.includes(`"X-Observer-Test" = "preserved"`), true);
-			assert.equal(codexConfig.includes(`Authorization = ${JSON.stringify(currentAuthorization)}`), true);
-			assert.equal((codexConfig.match(/authorization/gi) ?? []).length, 1);
+			assert.equal((codexConfig.match(/authorization/gi) ?? []).length, 0);
 			for (const configPath of [claudeConfigPath, cursorConfigPath, kiroConfigPath]) {
 				const agentConfig = JSON.parse(await waitForFileText(configPath));
 				const headers = agentConfig.mcpServers.obstudio.headers as Record<string, string>;
 				const authorizationHeaders = Object.entries(headers).filter(([name]) => name.toLowerCase() === 'authorization');
-				assert.deepEqual(authorizationHeaders, [['Authorization', currentAuthorization]]);
+				assert.deepEqual(authorizationHeaders, []);
 				assert.equal(headers['X-Observer-Test'], 'preserved');
 			}
 
@@ -2013,12 +2462,9 @@ suite('VS Code Host', () => {
 		const originalKiroConfigPath = originalHome ? path.join(originalHome, '.kiro', 'settings', 'mcp.json') : '';
 		const originalSnapshot = snapshotFile(originalKiroConfigPath);
 		const extension = await getExtension();
-		const controlToken = crypto.randomBytes(32).toString('base64url');
 		const sharedObserver = await startSharedObserver(
 			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
-			{ OBSTUDIO_CONTROL_TOKEN: controlToken },
 		);
-		const restoreControlToken = setTestObserverControlEnvironment(controlToken, sharedObserver.healthProofSecret!);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 
@@ -2076,7 +2522,6 @@ suite('VS Code Host', () => {
 			await assertKiroMCPPolicyPreserved(
 				[kiroConfigPath],
 				{
-					Authorization: `Bearer ${controlToken}`,
 					'X-Observer-Test': 'preserved',
 				},
 			);
@@ -2094,7 +2539,6 @@ suite('VS Code Host', () => {
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();
-			restoreControlToken();
 			process.env.HOME = originalHome;
 			process.env.USERPROFILE = originalUserProfile;
 			restoreSnapshot(originalSnapshot);
@@ -2112,12 +2556,9 @@ suite('VS Code Host', () => {
 		const originalKiroConfigPath = originalHome ? path.join(originalHome, '.kiro', 'settings', 'mcp.json') : '';
 		const originalSnapshot = snapshotFile(originalKiroConfigPath);
 		const extension = await getExtension();
-		const controlToken = crypto.randomBytes(32).toString('base64url');
 		const sharedObserver = await startSharedObserver(
 			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
-			{ OBSTUDIO_CONTROL_TOKEN: controlToken },
 		);
-		const restoreControlToken = setTestObserverControlEnvironment(controlToken, sharedObserver.healthProofSecret!);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 		const skillsRoot = path.join(tempHome, '.kiro', 'skills');
@@ -2167,7 +2608,6 @@ suite('VS Code Host', () => {
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();
-			restoreControlToken();
 			process.env.HOME = originalHome;
 			process.env.USERPROFILE = originalUserProfile;
 			restoreSnapshot(originalSnapshot);
@@ -2184,12 +2624,9 @@ suite('VS Code Host', () => {
 		const codexConfigPath = path.join(tempHome, '.codex', 'config.toml');
 		const cursorConfigPath = path.join(tempHome, '.cursor', 'mcp.json');
 		const extension = await getExtension();
-		const controlToken = crypto.randomBytes(32).toString('base64url');
 		const sharedObserver = await startSharedObserver(
 			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
-			{ OBSTUDIO_CONTROL_TOKEN: controlToken },
 		);
-		const restoreControlToken = setTestObserverControlEnvironment(controlToken, sharedObserver.healthProofSecret!);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 
@@ -2224,7 +2661,6 @@ suite('VS Code Host', () => {
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();
-			restoreControlToken();
 			process.env.HOME = originalHome;
 			process.env.USERPROFILE = originalUserProfile;
 			cleanupTempDir(tempHome);

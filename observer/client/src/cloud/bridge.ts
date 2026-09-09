@@ -39,7 +39,7 @@ export interface UseCloudBridgeResult {
 /**
  * Exposes the VS Code/Kiro cloud command channel when the same React client is
  * running as a top-level IDE webview. Standalone localhost pages return no
- * bridge and continue to use the browser-session API.
+ * bridge and call the same-origin local API directly.
  */
 export function useCloudBridge(): UseCloudBridgeResult {
   const bridge = isObserverIDEHost() ? ideBridge : null;

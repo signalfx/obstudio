@@ -2,15 +2,14 @@ package mcp
 
 import (
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -19,8 +18,7 @@ import (
 )
 
 type httpHandler struct {
-	dispatcher   *Dispatcher
-	controlToken string
+	dispatcher *Dispatcher
 	// TODO: expire abandoned sessions if we see real accumulation in long-lived use.
 	sessions sync.Map
 }
@@ -28,8 +26,7 @@ type httpHandler struct {
 // Register adds the MCP HTTP endpoints to the given ServeMux.
 func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	h := &httpHandler{
-		dispatcher:   NewDispatcher(s, params...),
-		controlToken: strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")),
+		dispatcher: NewDispatcher(s, params...),
 	}
 	mux.HandleFunc("GET /mcp", h.handleStream)
 	mux.HandleFunc("POST /mcp", h.handle)
@@ -37,9 +34,12 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("OPTIONS /mcp", h.handleOptions)
 }
 
-func (h *httpHandler) handleOptions(w http.ResponseWriter, _ *http.Request) {
+func (h *httpHandler) handleOptions(w http.ResponseWriter, r *http.Request) {
+	if !originAllowed(r) {
+		http.Error(w, "origin not allowed", http.StatusForbidden)
+		return
+	}
 	w.Header().Set("Allow", "GET, POST, DELETE, OPTIONS")
-	setCORSHeaders(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -48,11 +48,6 @@ func (h *httpHandler) handleStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "origin not allowed", http.StatusForbidden)
 		return
 	}
-	setCORSHeaders(w)
-	if !h.authorize(w, r) {
-		return
-	}
-
 	sessionID := strings.TrimSpace(r.Header.Get("Mcp-Session-Id"))
 	// Streamable HTTP clients may establish the SSE stream before sending
 	// initialize, so a missing session ID is allowed here.
@@ -93,11 +88,6 @@ func (h *httpHandler) handleStream(w http.ResponseWriter, r *http.Request) {
 func (h *httpHandler) handle(w http.ResponseWriter, r *http.Request) {
 	if !originAllowed(r) {
 		http.Error(w, "origin not allowed", http.StatusForbidden)
-		return
-	}
-
-	setCORSHeaders(w)
-	if !h.authorize(w, r) {
 		return
 	}
 
@@ -143,10 +133,6 @@ func (h *httpHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setCORSHeaders(w)
-	if !h.authorize(w, r) {
-		return
-	}
 	sessionID := strings.TrimSpace(r.Header.Get("Mcp-Session-Id"))
 	if sessionID == "" {
 		http.Error(w, "missing Mcp-Session-Id header", http.StatusBadRequest)
@@ -169,34 +155,17 @@ func (h *httpHandler) sessionExists(sessionID string) bool {
 	return ok
 }
 
-func setCORSHeaders(w http.ResponseWriter) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Mcp-Session-Id")
-	w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
-}
-
-func (h *httpHandler) authorize(w http.ResponseWriter, r *http.Request) bool {
-	if bearerTokenMatches(r.Header.Get("Authorization"), h.controlToken) {
-		return true
-	}
-	w.Header().Set("WWW-Authenticate", `Bearer realm="obstudio"`)
-	http.Error(w, "unauthorized", http.StatusUnauthorized)
-	return false
-}
-
-func bearerTokenMatches(authorization, expected string) bool {
-	if expected == "" || !strings.HasPrefix(authorization, "Bearer ") {
+func originAllowed(r *http.Request) bool {
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || !loopbackHost(remoteHost) {
 		return false
 	}
-	provided := strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))
-	return len(provided) == len(expected) && subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
-}
-
-func originAllowed(r *http.Request) bool {
 	origin := strings.TrimSpace(r.Header.Get("Origin"))
 	if origin == "" {
-		// Non-browser local clients like Codex and Claude do not send Origin.
+		// This is an intentional local-machine trust boundary, not same-user
+		// authentication: native clients omit Origin, and any OS account or
+		// process that can reach this loopback endpoint is trusted. Browser
+		// callers must pass the exact same-origin check below.
 		return true
 	}
 
@@ -204,13 +173,21 @@ func originAllowed(r *http.Request) bool {
 	if err != nil {
 		return false
 	}
-
-	switch parsed.Hostname() {
-	case "localhost", "127.0.0.1", "::1":
-		return true
-	default:
-		return false
+	expectedScheme := "http"
+	if r.TLS != nil {
+		expectedScheme = "https"
 	}
+	return parsed.User == nil && parsed.Path == "" && parsed.RawQuery == "" && parsed.Fragment == "" &&
+		parsed.Scheme == expectedScheme && strings.EqualFold(parsed.Host, r.Host) && loopbackHost(parsed.Hostname())
+}
+
+func loopbackHost(host string) bool {
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func generateSessionID() string {

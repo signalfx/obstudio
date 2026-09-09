@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,9 +15,8 @@ import (
 )
 
 // TODO(CIMD PoC): This mirrors extension/src/sis-cimd-oauth.ts's authorizeWithSISCIMD
-// for Observer's own standalone web UI (no VS Code bridge). Unlike registration, login
-// mints a real OAuth session, so every route here is gated by OBSTUDIO_CONTROL_TOKEN --
-// see requireObserverControlToken in splunk_export.go. The resulting token is held only
+// for Observer's own standalone web UI (no VS Code bridge). The routes are restricted
+// to local native callers or Observer's same-origin browser page. The resulting token is held only
 // in this process's memory (sisCIMDLoginState below); it is never written to disk, never
 // returned to the browser, and is lost on restart. If these two implementations drift,
 // prefer the TypeScript one as the more heavily tested source of truth.
@@ -193,16 +191,16 @@ func startSISCIMDLoginHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 	listener.run(generation)
 
-	writeJSON(w, sisCIMDLoginStartResult{AuthorizationURL: authorizationURL})
+	writeSameOriginJSON(w, sisCIMDLoginStartResult{AuthorizationURL: authorizationURL})
 }
 
 func sisCIMDSessionStatusHandler(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, globalSISCIMDLoginState.status())
+	writeSameOriginJSON(w, globalSISCIMDLoginState.status())
 }
 
 func disconnectSISCIMDSessionHandler(w http.ResponseWriter, _ *http.Request) {
 	globalSISCIMDLoginState.disconnect()
-	writeJSON(w, globalSISCIMDLoginState.status())
+	writeSameOriginJSON(w, globalSISCIMDLoginState.status())
 }
 
 type sisCIMDCallbackListener struct {
@@ -478,15 +476,11 @@ func htmlEscape(value string) string {
 	return b.String()
 }
 
-// registerSISCIMDLoginRoutes wires the gated registration/login/session routes onto mux.
-// Registration is included here, not left ungated, because an unauthenticated cross-site
-// POST could otherwise trigger the outbound SIS authorization probe (and any shadow-client
-// creation/refresh it causes SIS to perform) and read back its redirect/cookie details --
-// see registerSISCIMDClientHandler's doc comment.
+// registerSISCIMDLoginRoutes wires local-only registration/login/session routes onto mux.
+// The shared gate rejects remote processes and cross-site browser requests.
 func registerSISCIMDLoginRoutes(mux *http.ServeMux) {
-	controlToken := strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN"))
 	gate := func(next http.HandlerFunc) http.HandlerFunc {
-		return requireObserverControlToken(controlToken, next, writeSISCIMDRegistrationError)
+		return requireLocalObserverRequest(next, writeSISCIMDRegistrationError)
 	}
 	mux.HandleFunc("POST /api/splunk/cimd/register", gate(registerSISCIMDClientHandler))
 	mux.HandleFunc("POST /api/splunk/cimd/login", gate(startSISCIMDLoginHandler))

@@ -15,7 +15,7 @@ Splunk Observability Studio combines agent skills for auditing, instrumenting, v
 | Visual Studio Code | Supported on `1.82.0` or later | [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Splunk.observability-studio) |
 | Windsurf / Devin Desktop | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
 
-The Observer panel follows one host-neutral path in every listed Code-OSS editor: the extension loads the same bundled React application as a top-level `WebviewPanel` and uses the same request bridge. It does not replace native paste or intercept editor modifier shortcuts. Cloud fields therefore remain normal editable inputs, while a missing or failed host control capability disables only the cloud mutation controls that depend on it; the rest of Observer remains usable.
+The Observer panel follows one host-neutral path in every listed Code-OSS editor: the extension loads the same bundled React application as a top-level `WebviewPanel` and uses the same request bridge. It does not replace native paste or intercept editor modifier shortcuts. Cloud fields therefore remain normal editable inputs. If initial Cloud status cannot be read, Connect and Create Account remain available so either action can retry through the local Observer.
 
 ### Coding-agent integration
 
@@ -45,12 +45,9 @@ Editor compatibility and coding-agent integration are separate. Setup for Cursor
 4. Fully restart Claude Code or Codex, then start a fresh task so it reloads the installed skills, local Observer connection, and telemetry routing. An already-open task does not acquire newly configured MCP tools when its URL is reopened.
 
 The enable command records a non-secret fingerprint of the MCP entry it writes.
-When an extension-managed Observer restarts and rotates its control token, the
-extension refreshes the credential only if that endpoint and complete MCP entry
-are unchanged. User-edited, malformed, differently routed, and unowned entries
-are never replaced automatically; the extension offers the enable prompt
-instead. Run the enable command once after upgrading from an older build so an
-existing entry can participate in guarded automatic refresh.
+MCP entries created by older releases may contain an obsolete local
+`Authorization` header. Running the enable command again removes that header
+while preserving unrelated user-managed headers and settings.
 
 Agent integration does not change provider OTLP settings. To collect token usage,
 install the standalone `obstudio` CLI from the
@@ -206,9 +203,9 @@ When the extension starts its bundled Observer, it exposes these local endpoints
 | Observer UI and REST | `http://127.0.0.1:3000` by default |
 | Local Observer MCP | `http://127.0.0.1:3000/mcp` by default |
 
-If the extension reuses a shared Observer, use that Observer's configured UI, MCP, and OTLP receiver endpoints. A manually configured `sharedObserverUrl` does not remap or validate the shared Observer's OTLP ports.
+If the extension reuses another local Observer, use that Observer's configured UI, MCP, and OTLP receiver endpoints. A manually configured `sharedObserverUrl` must resolve to loopback and does not remap or validate that Observer's OTLP ports.
 
-The extension-managed Observer keeps telemetry local unless you explicitly enable Splunk Observability Cloud export. A shared Observer follows its own export configuration.
+The extension-managed Observer keeps telemetry local unless you explicitly enable Splunk Observability Cloud export. Another local Observer follows its own export configuration.
 
 Observer provides seven focused views:
 
@@ -277,13 +274,14 @@ Move the extension-managed Observer UI and MCP endpoint to another local port wi
 }
 ```
 
-For an extension-managed Observer, the OTLP receivers remain fixed at `4318` and `4317`. Set `observability-studio.sharedObserverUrl` to reuse an Observer you already manage, then send telemetry to the receiver endpoints configured by that Observer.
+For an extension-managed Observer, the OTLP receivers remain fixed at `4318` and `4317`. Set `observability-studio.sharedObserverUrl` to reuse a loopback Observer you already manage, then send telemetry to the receiver endpoints configured by that Observer.
 
 ## Local by default
 
-- An extension-managed Observer retains incoming telemetry locally for development inspection. A shared Observer follows its own retention and export configuration.
+- An extension-managed Observer retains incoming telemetry locally for development inspection. Another local Observer follows its own retention and export configuration.
 - The Cloud tab exports metrics and traces only. Its connection field accepts a realm or a Splunk Observability Cloud UI, API, ingest, or other documented service URL on either the current `observability.splunkcloud.com` domain or the legacy `signalfx.com` domain. Observer leaves the user's entry visible while connecting or retrying, resolves URLs to a canonical realm internally, stores only that realm, and never sends the access token during URL resolution. Its key is stored in IDE secret storage, and a new connection leaves remote export off until you explicitly enable it.
-- In the IDE extension, the Cloud tab can submit a Free Edition signup from separate first-name and last-name fields, an email address, one of the public form's United States, Europe, or Asia Pacific hosting options, and explicit Terms acceptance. The submit action is blocked only while that request is in flight; after it returns, the user can explicitly submit another request with the same email. Observer keeps no email-keyed submission history and does not suppress duplicate email addresses. Observer calls Splunk's GeoIP endpoint without an IP-address parameter; Splunk derives coarse country, state, city, postal code, and sales region from the request's network source IP. Observer sends the four matching location fields in the signup payload and uses country code plus sales region only to preselect a supported hosting region. Explicit Terms acceptance is sent upstream as `privacyPolicyCheck: "1"`. Observer does not call Cisco OpenDNS and neither receives nor explicitly transmits a raw IP value; region selection does not use application telemetry. Splunk still processes the request's source IP. A remote/shared Observer can reflect that host's network rather than the laptop. The flow falls back atomically to United States/California, empty city/postal code, and the United States signup region when GeoIP lookup is blocked, times out, or is incomplete, or when returned values are unrecognized by the region map. Observer's local signup diagnostics record only the upstream HTTP status and an allowlisted response classification; they never record request or response payloads, personal information, IP addresses, headers, or raw response bodies.
+- In the IDE extension, the Cloud tab can submit a Free Edition signup from separate first-name and last-name fields, an email address, one of the public form's United States, Europe, or Asia Pacific hosting options, and explicit Terms acceptance. The submit action is blocked only while that request is in flight; after it returns, the user can explicitly submit another request with the same email. Observer keeps no email-keyed submission history and does not suppress duplicate email addresses. It sends `Developer` as the job title, an empty phone number, and a fresh random six-letter lowercase company name for every submission instead of reusing the screening-prone `dev` placeholder. Observer calls Splunk's GeoIP endpoint without an IP-address parameter; Splunk derives coarse country, state, city, postal code, and sales region from the request's network source IP. Observer sends the four matching location fields in the signup payload and uses country code plus sales region only to preselect a supported hosting region. Explicit Terms acceptance is sent upstream as `privacyPolicyCheck: "1"`. Observer does not call Cisco OpenDNS and neither receives nor explicitly transmits a raw IP value; region selection does not use application telemetry. Splunk still processes the request's source IP. The flow falls back atomically to United States/California, empty city/postal code, and the United States signup region when GeoIP lookup is blocked, times out, or is incomplete, or when returned values are unrecognized by the region map. An HTTP-success `Denied Person` response is reported as acknowledged but pending account setup, matching the public form; a 400/422 `Denied Person` response remains a definite rejection. Observer's local signup diagnostics record only the upstream HTTP status and an allowlisted response classification; they never record request or response payloads, personal information, IP addresses, headers, or raw response bodies.
+- Observer listens only on loopback. Native local callers do not use a bearer credential; this deliberately trusts every process or OS account that can reach loopback and is intended for trusted single-user development machines unless OS-level isolation is applied. Browser mutations require strict same-origin checks, and mutation responses never opt into wildcard CORS. Splunk ingest tokens are accepted only on writes and are redacted from all status responses. On a managed restart, the extension restores its connection from IDE secret storage. During an extension upgrade, it stops only the PID recorded for the selected Observer and only after the process's exact non-symlinked bundled executable path matches another installed Splunk extension package; Observers on other ports are left running. The extension requests a graceful stop first and then uses the platform-native forced-termination path if needed. If it cannot stop the verified process, the panel blocks Cloud controls and displays **Restart required** with the selected localhost port and PID instead of reusing the old backend.
 - Optional remote Splunk MCP setup is separate from telemetry export. Its automatic connector supports Claude Code, Codex, Cursor, and GitHub Copilot in Visual Studio Code; it does not configure Devin Local, Kiro, or legacy Cascade. Those agents can still be configured manually when they support the remote MCP transport.
 - Publishing skills show a diff and require confirmation before creating missing detectors or dashboards.
 - Access tokens are not part of the demo media and should be supplied only through the supported local configuration flow.
@@ -291,9 +289,9 @@ For an extension-managed Observer, the OTLP receivers remain fixed at `4318` and
 ## Troubleshooting
 
 - If the extension-managed Observer cannot start, check its configured UI/MCP port (`managedObserverPort`, `3000` by default) and the fixed receiver ports `4318` and `4317`. Choose another `managedObserverPort` if its UI/MCP port is already used.
-- If the extension cannot connect to a shared Observer, verify `sharedObserverUrl`. If its UI loads but telemetry does not arrive, use the OTLP receiver endpoints configured by that Observer.
-- Fully restart your coding agent after enabling an integration or after the extension reports that it refreshed Observer credentials. Then use a fresh task so it reloads the skills, MCP settings, and telemetry routing. Existing tasks keep their startup tool set.
-- Use **Observer Status** to restart the extension-managed runtime, reconnect a shared Observer, or open the extension logs.
+- If the extension cannot connect to another local Observer, verify that `sharedObserverUrl` uses `localhost` or a loopback IP address. If its UI loads but telemetry does not arrive, use the OTLP receiver endpoints configured by that Observer.
+- Fully restart your coding agent after enabling an integration. Then use a fresh task so it reloads the skills, MCP settings, and telemetry routing. Existing tasks keep their startup tool set.
+- Use **Observer Status** to restart the extension-managed runtime, reconnect another local Observer, or open the extension logs.
 
 ## Requirements and links
 

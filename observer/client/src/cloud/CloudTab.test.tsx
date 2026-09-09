@@ -9,15 +9,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 import { CloudTab } from "./CloudTab";
 
-const browserLaunchToken = "A".repeat(43);
-const browserToken = "B".repeat(43);
 const disconnectedVersion = "D".repeat(43);
 const connectedVersion = "C".repeat(43);
 const enabledVersion = "E".repeat(43);
-
-function setObserverControlToken(token: string | undefined): void {
-  (window as unknown as { __OBSTUDIO_CONTROL_TOKEN__?: string }).__OBSTUDIO_CONTROL_TOKEN__ = token;
-}
 
 afterEach(() => {
   cleanup();
@@ -25,24 +19,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
   window.sessionStorage.clear();
   window.history.replaceState({}, "", "/");
-  setObserverControlToken(undefined);
 });
 
 describe("CloudTab", () => {
-  it("loads standalone status after browser-session configuration refresh completes", async () => {
-    window.history.replaceState({}, "", `/#obstudio-cloud-control=${browserLaunchToken}`);
-    let sessionRefreshFinished = false;
+  it("loads standalone status directly without creating a browser session", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        await Promise.resolve();
-        sessionRefreshFinished = true;
-        return jsonResponse({ browserToken });
-      }
       if (path === "/api/splunk/export") {
-        return jsonResponse(sessionRefreshFinished
-          ? connectedStatus(false, "us1")
-          : disconnectedStatus());
+        return jsonResponse(connectedStatus(false, "us1"));
       }
       throw new Error(`unexpected request: ${path}`);
     }));
@@ -55,7 +39,6 @@ describe("CloudTab", () => {
   });
 
   it("recovers standalone controls and Observer state after a transient initial status failure", async () => {
-    window.history.replaceState({}, "", `/#obstudio-cloud-control=${browserLaunchToken}`);
     let statusCalls = 0;
     let markInitialStatusAttempted: (() => void) | undefined;
     const initialStatusAttempted = new Promise<void>((resolve) => {
@@ -63,9 +46,6 @@ describe("CloudTab", () => {
     });
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        return jsonResponse({ browserToken });
-      }
       if (path === "/api/splunk/export") {
         statusCalls += 1;
         if (statusCalls === 1) {
@@ -87,7 +67,7 @@ describe("CloudTab", () => {
     expect(statusCalls).toBe(1);
     expect(screen.getByRole("alert").textContent).toContain("503");
     expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled)
-      .toBe(true);
+      .toBe(false);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
@@ -101,7 +81,6 @@ describe("CloudTab", () => {
   });
 
   it("reconciles standalone form state when another session connects and forgets", async () => {
-    window.history.replaceState({}, "", `/#obstudio-cloud-control=${browserLaunchToken}`);
     let observerStatus = disconnectedStatus();
     let statusCalls = 0;
     let markInitialStatusReturned: (() => void) | undefined;
@@ -110,9 +89,6 @@ describe("CloudTab", () => {
     });
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        return jsonResponse({ browserToken });
-      }
       if (path === "/api/splunk/export") {
         statusCalls += 1;
         if (statusCalls === 1) markInitialStatusReturned?.();
@@ -161,15 +137,14 @@ describe("CloudTab", () => {
     let statusCalls = 0;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        expectBareBrowserSessionRequest(init);
-        return jsonResponse({ browserToken });
-      }
       if (path === "/api/splunk/export" && init?.method !== "POST") {
         statusCalls += 1;
         return jsonResponse(observerStatus);
       }
       if (path === "/api/splunk/export") {
+        const headers = new Headers(init?.headers);
+        expect(headers.get("X-Obstudio-Browser-Request")).toBe("1");
+        expect(headers.get("Authorization")).toBeNull();
         expect(JSON.parse(String(init?.body))).toEqual({
           accessToken: "losing_token",
           expectedVersion: disconnectedVersion,
@@ -226,10 +201,6 @@ describe("CloudTab", () => {
     let statusCalls = 0;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        expectBareBrowserSessionRequest(init);
-        return jsonResponse({ browserToken });
-      }
       if (path === "/api/splunk/export" && init?.method !== "POST") {
         statusCalls += 1;
         return jsonResponse(observerStatus);
@@ -270,9 +241,6 @@ describe("CloudTab", () => {
     });
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        return jsonResponse({ browserToken });
-      }
       if (path === "/api/splunk/export" && init?.method !== "POST") {
         statusCalls += 1;
         if (statusCalls === 1) {
@@ -367,23 +335,17 @@ describe("CloudTab", () => {
     expect(screen.getByRole("switch", { name: "Remote telemetry export is off" })).toBeTruthy();
   });
 
-  it("keeps standalone authorization across a StrictMode duplicate initialization", async () => {
-    window.history.replaceState({}, "", `/#obstudio-cloud-control=${browserLaunchToken}`);
-    let sessionCalls = 0;
+  it("keeps direct standalone controls usable across StrictMode initialization", async () => {
     let statusCalls = 0;
-    let finishServerRefresh: (() => void) | undefined;
-    const serverRefreshFinished = new Promise<void>((resolve) => {
-      finishServerRefresh = resolve;
+    let finishStatus: (() => void) | undefined;
+    const statusReady = new Promise<void>((resolve) => {
+      finishStatus = resolve;
     });
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        sessionCalls += 1;
-        await serverRefreshFinished;
-        return jsonResponse({ browserToken });
-      }
       if (path === "/api/splunk/export") {
         statusCalls += 1;
+        await statusReady;
         return jsonResponse(disconnectedStatus());
       }
       throw new Error(`unexpected request: ${path}`);
@@ -392,115 +354,18 @@ describe("CloudTab", () => {
 
     render(<React.StrictMode><CloudTab /></React.StrictMode>);
 
-    await waitFor(() => expect(sessionCalls).toBe(1));
+    await waitFor(() => expect(statusCalls).toBeGreaterThanOrEqual(1));
     expect(screen.queryByRole("alert")).toBeNull();
-    finishServerRefresh?.();
+    finishStatus?.();
     const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
     await waitFor(() => expect(connectButton.disabled).toBe(false));
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(statusCalls).toBe(1);
-    expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1")).toBe(browserToken);
-    expect(window.location.hash).toBe("");
-  });
-
-  it("retries the process launch credential when the first browser-session response is lost", async () => {
-    window.history.replaceState({}, "", `/#obstudio-cloud-control=${browserLaunchToken}`);
-    let sessionCalls = 0;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        sessionCalls += 1;
-        expectBrowserLaunchRequest(init);
-        if (sessionCalls === 1) {
-          throw new Error("browser-session response was lost");
-        }
-        return jsonResponse({ browserToken });
-      }
-      if (path === "/api/splunk/export") return jsonResponse(disconnectedStatus());
-      throw new Error(`unexpected request: ${path}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<CloudTab />);
-
-    const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
-    await waitFor(() => expect(connectButton.disabled).toBe(false));
-    expect(sessionCalls).toBe(2);
-    expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1")).toBe(browserToken);
-    expect(window.location.hash).toBe("");
-  });
-
-  it("keeps a valid standalone launch usable when session storage is unavailable", async () => {
-    window.history.replaceState({}, "", `/#obstudio-cloud-control=${browserLaunchToken}`);
-    const getItem = vi.spyOn(window.sessionStorage, "getItem").mockImplementation(() => {
-      throw new Error("storage blocked");
-    });
-    const setItem = vi.spyOn(window.sessionStorage, "setItem").mockImplementation(() => {
-      throw new Error("storage blocked");
-    });
-    let sessionCalls = 0;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        sessionCalls += 1;
-        expectBrowserLaunchRequest(init);
-        if (sessionCalls === 1) {
-          throw new Error("browser-session response was lost");
-        }
-        return jsonResponse({ browserToken });
-      }
-      if (path === "/api/splunk/export") return jsonResponse(disconnectedStatus());
-      throw new Error(`unexpected request: ${path}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    try {
-      render(<CloudTab />);
-
-      const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
-      await waitFor(() => expect(connectButton.disabled).toBe(false));
-      expect(sessionCalls).toBe(2);
-      expect(window.location.hash).toBe("");
-    } finally {
-      getItem.mockRestore();
-      setItem.mockRestore();
-    }
-  });
-
-  it("restores a standalone session from its HttpOnly cookie when browser storage is unavailable", async () => {
-    const getItem = vi.spyOn(window.sessionStorage, "getItem").mockImplementation(() => {
-      throw new Error("storage blocked");
-    });
-    const setItem = vi.spyOn(window.sessionStorage, "setItem").mockImplementation(() => {
-      throw new Error("storage blocked");
-    });
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        expectBareBrowserSessionRequest(init);
-        expect(new Headers(init?.headers).get("X-Obstudio-Browser-Token")).toBeNull();
-        return jsonResponse({ browserToken });
-      }
-      if (path === "/api/splunk/export") return jsonResponse(disconnectedStatus());
-      throw new Error(`unexpected request: ${path}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    try {
-      render(<CloudTab />);
-
-      const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
-      await waitFor(() => expect(connectButton.disabled).toBe(false));
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-    } finally {
-      getItem.mockRestore();
-      setItem.mockRestore();
-    }
+    expect(statusCalls).toBeGreaterThanOrEqual(1);
   });
 
   it("keeps the shared web connection fields editable without an IDE bridge", async () => {
     const user = userEvent.setup();
-    vi.stubGlobal("fetch", browserSessionFetch(disconnectedStatus(), ""));
+    vi.stubGlobal("fetch", statusFetch(disconnectedStatus()));
 
     render(<CloudTab />);
 
@@ -510,18 +375,14 @@ describe("CloudTab", () => {
     expect((regionInput as HTMLInputElement).disabled).toBe(false);
     expect((tokenInput as HTMLInputElement).disabled).toBe(false);
     expect((regionInput as HTMLInputElement).value).toBe("");
-    expect((regionInput as HTMLInputElement).placeholder).toBe("");
+    expect((regionInput as HTMLInputElement).placeholder).toBe("Realm or Observability Cloud URL");
     expect(regionInput.closest(".cloud-field__control")
-      ?.classList.contains("cloud-field__control--filled")).toBe(true);
+      ?.classList.contains("cloud-field__control--filled")).toBe(false);
     expect(tokenInput.closest(".cloud-field__control")
       ?.classList.contains("cloud-field__control--filled")).toBe(false);
     await waitFor(() => {
       expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled).toBe(false);
     });
-    expect(window.location.hash).toBe("");
-    expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1"))
-      .toBe(browserToken);
-
     await user.click(regionInput);
     await user.paste("eu1");
     await user.click(tokenInput);
@@ -529,7 +390,7 @@ describe("CloudTab", () => {
 
     expect((regionInput as HTMLInputElement).value).toBe("eu1");
     expect((tokenInput as HTMLInputElement).value).toBe("token_without_bridge_123456789");
-    expect(screen.getByPlaceholderText("Access token")).toBeTruthy();
+    expect(screen.getByPlaceholderText("Create Ingest token")).toBeTruthy();
     expect(document.querySelector('label[for="cloud-region"]')?.textContent)
       .toBe("Realm or Observability Cloud URL");
     expect(document.querySelector('label[for="cloud-access-token"]')?.textContent).toBe("Access token");
@@ -592,13 +453,9 @@ describe("CloudTab", () => {
     expect(css).toMatch(/\.cloud-connect-form__action \.cloud-button\s*\{[^}]*width:\s*100%;[^}]*min-height:\s*44px;[^}]*border-radius:\s*24px;/s);
   });
 
-  it("keeps bare standalone controls available for the first local session", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  it("keeps standalone controls available without a browser credential", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        expectBareBrowserSessionRequest(init);
-        return jsonResponse({ browserToken });
-      }
       if (path === "/api/splunk/export") return jsonResponse(disconnectedStatus());
       throw new Error(`unexpected request: ${path}`);
     });
@@ -614,102 +471,12 @@ describe("CloudTab", () => {
     expect((screen.getByLabelText("Access token") as HTMLInputElement).disabled).toBe(false);
     fireEvent.change(screen.getByLabelText("Realm or Observability Cloud URL"), { target: { value: "us1" } });
     fireEvent.change(screen.getByLabelText("Access token"), { target: { value: "still_editable" } });
-    expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1")).toBe(browserToken);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("reuses a stored standalone browser session within the current Observer process", async () => {
-    window.sessionStorage.setItem("obstudio.cloud.browser-session.v1", browserToken);
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  it("shows Observer state with standalone mutation controls available", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        expectBareBrowserSessionRequest(init);
-        expect(new Headers(init?.headers).get("X-Obstudio-Browser-Token")).toBe(browserToken);
-        return jsonResponse({ browserToken });
-      }
-      return jsonResponse(disconnectedStatus());
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<CloudTab />);
-
-    const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
-    await waitFor(() => expect(connectButton.disabled).toBe(false));
-    expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1"))
-      .toBe(browserToken);
-    expect(window.location.hash).toBe("");
-  });
-
-  it("replaces a stored session from a prior Observer process without disabling controls", async () => {
-    window.sessionStorage.setItem("obstudio.cloud.browser-session.v1", browserToken);
-    const replacementBrowserToken = "C".repeat(43);
-    let sessionCalls = 0;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        sessionCalls += 1;
-        expectBareBrowserSessionRequest(init);
-        expect(new Headers(init?.headers).get("X-Obstudio-Browser-Token")).toBe(browserToken);
-        return jsonResponse({ browserToken: replacementBrowserToken });
-      }
-      if (path === "/api/splunk/export") return jsonResponse(disconnectedStatus());
-      throw new Error(`unexpected request: ${path}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<CloudTab />);
-
-    const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
-    await waitFor(() => expect(connectButton.disabled).toBe(false));
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
-    expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).disabled).toBe(false);
-    expect((screen.getByLabelText("Access token") as HTMLInputElement).disabled).toBe(false);
-    expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1"))
-      .toBe(replacementBrowserToken);
-    expect(sessionCalls).toBe(1);
-  });
-
-  it("retries a rejected stored session as an authorized bare standalone page", async () => {
-    window.sessionStorage.setItem("obstudio.cloud.browser-session.v1", browserToken);
-    const replacementBrowserToken = "C".repeat(43);
-    let sessionCalls = 0;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        sessionCalls += 1;
-        expectBareBrowserSessionRequest(init);
-        const requestToken = new Headers(init?.headers).get("X-Obstudio-Browser-Token");
-        if (sessionCalls === 1) {
-          expect(requestToken).toBe(browserToken);
-          return jsonResponse({ error: "browser cloud control launch is not valid" }, 401);
-        }
-        expect(requestToken).toBeNull();
-        return jsonResponse({ browserToken: replacementBrowserToken });
-      }
-      if (path === "/api/splunk/export") return jsonResponse(disconnectedStatus());
-      throw new Error(`unexpected request: ${path}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<CloudTab />);
-
-    const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
-    await waitFor(() => expect(connectButton.disabled).toBe(false));
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
-    expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1"))
-      .toBe(replacementBrowserToken);
-    expect(sessionCalls).toBe(2);
-  });
-
-  it("shows Observer connection and export state without browser mutation authorization", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        expectBareBrowserSessionRequest(init);
-        return jsonResponse({ error: "browser cloud control launch is not valid" }, 401);
-      }
       if (path === "/api/splunk/export") return jsonResponse(connectedStatus(true, "us1"));
       throw new Error(`unexpected request: ${path}`);
     });
@@ -719,40 +486,14 @@ describe("CloudTab", () => {
 
     expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("Observer state is read-only in this browser session.")).toBeTruthy();
+    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
     expect((screen.getByRole("switch", { name: "Remote telemetry export is on" }) as HTMLButtonElement).disabled)
-      .toBe(true);
-    expect((screen.getByRole("button", { name: "Remove connection" }) as HTMLButtonElement).disabled)
-      .toBe(true);
-  });
-
-  it("keeps standalone controls available when configuration refresh returns a warning", async () => {
-    window.history.replaceState({}, "", `/#obstudio-cloud-control=${browserLaunchToken}`);
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
-      const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        return jsonResponse({
-          browserToken,
-          warning: "Could not parse the configured env file.",
-        });
-      }
-      if (path === "/api/splunk/export") return jsonResponse(disconnectedStatus());
-      throw new Error(`unexpected request: ${path}`);
-    }));
-
-    render(<CloudTab />);
-
-    expect((await screen.findByRole("alert")).textContent)
-      .toContain("Could not parse the configured env file.");
-    expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).disabled).toBe(false);
-    expect((screen.getByLabelText("Access token") as HTMLInputElement).disabled).toBe(false);
-    expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled)
       .toBe(false);
-    expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1"))
-      .toBe(browserToken);
+    expect((screen.getByRole("button", { name: "Remove connection" }) as HTMLButtonElement).disabled)
+      .toBe(false);
   });
 
-  it("keeps Connect available when authenticated IDE initialization returns a status warning", async () => {
+  it("keeps Connect available when IDE initialization returns a status warning", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
 
@@ -787,18 +528,13 @@ describe("CloudTab", () => {
     const enabledValues: boolean[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        expect(new Headers(init?.headers).get("X-Obstudio-Browser-Request")).toBe("1");
-        expectBareBrowserSessionRequest(init);
-        return jsonResponse({ browserToken });
-      }
       if (path === "/api/splunk/export" && init?.method !== "POST") {
         return jsonResponse(status);
       }
       mutationPaths.push(path);
       const headers = new Headers(init?.headers);
       expect(headers.get("X-Obstudio-Browser-Request")).toBe("1");
-      expect(headers.get("X-Obstudio-Browser-Token")).toBe(browserToken);
+      expect(headers.get("Authorization")).toBeNull();
       if (path === "/api/splunk/export") {
         expect(JSON.parse(String(init?.body))).toEqual({
           accessToken: "browser_token_123456789",
@@ -853,7 +589,8 @@ describe("CloudTab", () => {
 
     expect(await screen.findByText("Connect to export metrics and traces.")).toBeTruthy();
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).value).toBe("");
-    expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).placeholder).toBe("");
+    expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).placeholder)
+      .toBe("Realm or Observability Cloud URL");
     expect(mutationPaths).toEqual([
       "/api/splunk/export",
       "/api/splunk/export/enabled",
@@ -861,8 +598,6 @@ describe("CloudTab", () => {
       "/api/splunk/export/forget",
     ]);
     expect(enabledValues).toEqual([true, false]);
-    expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1"))
-      .toBe(browserToken);
   });
 
   it("resolves a pasted Splunk service URL before a standalone browser connection", async () => {
@@ -871,17 +606,13 @@ describe("CloudTab", () => {
     const mutationPaths: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        expectBareBrowserSessionRequest(init);
-        return jsonResponse({ browserToken });
-      }
       if (path === "/api/splunk/export" && init?.method !== "POST") {
         return jsonResponse(status);
       }
       mutationPaths.push(path);
       const headers = new Headers(init?.headers);
       expect(headers.get("X-Obstudio-Browser-Request")).toBe("1");
-      expect(headers.get("X-Obstudio-Browser-Token")).toBe(browserToken);
+      expect(headers.get("Authorization")).toBeNull();
       if (path === "/api/splunk/export/realm") {
         const body = JSON.parse(String(init?.body));
         expect(body).toEqual({ destination });
@@ -916,92 +647,12 @@ describe("CloudTab", () => {
     ]);
   });
 
-  it("reacquires standalone controls without replaying URL resolution when the browser session is invalid", async () => {
-    const destination = "https://customer.observability.splunkcloud.com/#/signin";
-    const replacementBrowserToken = "C".repeat(43);
-    let sessionCalls = 0;
-    let resolutionCalls = 0;
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        sessionCalls += 1;
-        return jsonResponse({ browserToken: sessionCalls === 1 ? browserToken : replacementBrowserToken });
-      }
-      if (path === "/api/splunk/export" && init?.method !== "POST") {
-        return jsonResponse(disconnectedStatus());
-      }
-      if (path === "/api/splunk/export/realm") {
-        resolutionCalls += 1;
-        expect(new Headers(init?.headers).get("X-Obstudio-Browser-Token")).toBe(browserToken);
-        return jsonResponse({ error: "browser cloud control session is not valid" }, 401);
-      }
-      throw new Error(`unexpected request: ${path}`);
-    }));
-    render(<CloudTab />);
-
-    const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
-    await waitFor(() => expect(connectButton.disabled).toBe(false));
-    const regionInput = screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement;
-    const tokenInput = screen.getByLabelText("Access token") as HTMLInputElement;
-    fireEvent.change(regionInput, { target: { value: destination } });
-    fireEvent.change(tokenInput, { target: { value: "preserved_url_token" } });
-    fireEvent.click(connectButton);
-
-    expect(await screen.findByText("Cloud controls refreshed. Retry the action.")).toBeTruthy();
-    await waitFor(() => expect(connectButton.disabled).toBe(false));
-    expect(regionInput.value).toBe(destination);
-    expect(tokenInput.value).toBe("preserved_url_token");
-    expect(sessionCalls).toBe(2);
-    expect(resolutionCalls).toBe(1);
-    expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1"))
-      .toBe(replacementBrowserToken);
-  });
-
-  it("reacquires controls without retrying a mutation when the browser session is invalid", async () => {
+  it("keeps standalone controls usable when Splunk rejects an access token", async () => {
     const user = userEvent.setup();
-    window.history.replaceState({}, "", `/#obstudio-cloud-control=${browserLaunchToken}`);
-    let sessionCalls = 0;
-    let mutationCalls = 0;
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        sessionCalls += 1;
-        return jsonResponse({ browserToken });
-      }
-      if (path === "/api/splunk/export" && init?.method !== "POST") {
-        return jsonResponse(disconnectedStatus());
-      }
-      mutationCalls += 1;
-      return jsonResponse({ error: "browser cloud control session is not valid" }, 401);
-    }));
-    render(<CloudTab />);
-
-    const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
-    await waitFor(() => expect(connectButton.disabled).toBe(false));
-    const regionInput = screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement;
-    const tokenInput = screen.getByLabelText("Access token") as HTMLInputElement;
-    await user.type(regionInput, "us1");
-    await user.type(tokenInput, "browser_token_before_invalidation");
-    await user.keyboard("{Enter}");
-
-    expect(await screen.findByText("Cloud controls refreshed. Retry the action.")).toBeTruthy();
-    await waitFor(() => expect(connectButton.disabled).toBe(false));
-    expect(regionInput.disabled).toBe(false);
-    expect(tokenInput.disabled).toBe(false);
-    expect(sessionCalls).toBe(2);
-    expect(mutationCalls).toBe(1);
-  });
-
-  it("keeps the standalone session usable when Splunk rejects an access token", async () => {
-    const user = userEvent.setup();
-    window.history.replaceState({}, "", `/#obstudio-cloud-control=${browserLaunchToken}`);
     let status = disconnectedStatus();
     let connectCalls = 0;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
-      if (path === "/api/splunk/export/browser/session") {
-        return jsonResponse({ browserToken });
-      }
       if (path === "/api/splunk/export" && init?.method !== "POST") {
         return jsonResponse(status);
       }
@@ -1049,7 +700,7 @@ describe("CloudTab", () => {
     });
     const regionInput = await screen.findByLabelText("Realm or Observability Cloud URL") as HTMLInputElement;
     expect(regionInput.value).toBe("");
-    expect(regionInput.placeholder).toBe("");
+    expect(regionInput.placeholder).toBe("Realm or Observability Cloud URL");
 
     const connectButton = screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement;
     expect(connectButton.disabled).toBe(false);
@@ -1083,6 +734,41 @@ describe("CloudTab", () => {
 
     expect((regionInput as HTMLInputElement).value).toBe("eu1");
     expect((tokenInput as HTMLInputElement).value).toBe("token_before_bridge_123456789");
+  });
+
+  it("keeps both setup forms and retry actions available when Observer status is unavailable", async () => {
+    const bridge = installBridge({ httpError: "Observer is unavailable" });
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.reject(initialize, "Observer is starting");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Observer is unavailable");
+    const regionInput = screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement;
+    const tokenInput = screen.getByLabelText("Access token") as HTMLInputElement;
+    expect(regionInput.disabled).toBe(false);
+    expect(tokenInput.disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled).toBe(false);
+
+    const openSignup = screen.getByRole("button", {
+      name: "Get started with Observability Cloud Free Edition",
+    }) as HTMLButtonElement;
+    expect(openSignup.disabled).toBe(false);
+    fireEvent.click(openSignup);
+
+    const form = await screen.findByRole("form", { name: "Free Edition account" });
+    for (const field of [
+      within(form).getByLabelText("First name"),
+      within(form).getByLabelText("Last name"),
+      within(form).getByLabelText("Email"),
+      within(form).getByLabelText("Region"),
+      within(form).getByRole("checkbox", { name: /I accept the Observability Cloud/i }),
+    ]) {
+      expect((field as HTMLInputElement | HTMLSelectElement).disabled).toBe(false);
+    }
+    await waitFor(() => expect(
+      within(form).getByRole("button", { name: "Start Free Edition" }).hasAttribute("disabled"),
+    ).toBe(false));
   });
 
   it("connects through the IDE bridge without rendering the token after success", async () => {
@@ -1215,52 +901,52 @@ describe("CloudTab", () => {
     expect(screen.getByText("Send metrics and traces to configured destination.")).toBeTruthy();
   });
 
-  it("shows Observer state read-only when bridge initialization fails", async () => {
+  it("keeps connected controls available when bridge initialization fails", async () => {
     const bridge = installBridge({ httpStatus: connectedStatus(false, "us1") });
     render(<CloudTab />);
 
     const initialize = await bridge.next("initialize");
-    bridge.reject(initialize, "Observer control token is missing");
+    bridge.reject(initialize, "Observer was still starting");
 
     expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("Observer state is read-only in this browser session.")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Observer was still starting");
+    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
     expect((screen.getByRole("button", { name: "Remove connection" }) as HTMLButtonElement).disabled)
-      .toBe(true);
+      .toBe(false);
   });
 
-  it("keeps the read-only IDE state visible while disconnected fields are edited", async () => {
+  it("keeps IDE controls available while disconnected fields are edited after initialization fails", async () => {
     const bridge = installBridge({ httpStatus: disconnectedStatus() });
     render(<CloudTab />);
 
     const initialize = await bridge.next("initialize");
-    bridge.reject(initialize, "Observer control token is missing");
+    bridge.reject(initialize, "Observer was still starting");
 
     const regionInput = await screen.findByLabelText("Realm or Observability Cloud URL");
     const tokenInput = screen.getByLabelText("Access token");
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("Observer state is read-only in this browser session.")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Observer was still starting");
+    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
     expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled)
-      .toBe(true);
+      .toBe(false);
 
     fireEvent.change(regionInput, { target: { value: "eu1" } });
     fireEvent.change(tokenInput, { target: { value: "edited_after_initialize_failure" } });
 
     expect((regionInput as HTMLInputElement).value).toBe("eu1");
     expect((tokenInput as HTMLInputElement).value).toBe("edited_after_initialize_failure");
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("Observer state is read-only in this browser session.")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Observer was still starting");
+    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
     expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled)
-      .toBe(true);
+      .toBe(false);
   });
 
-  it("does not let Enter bypass a disabled Connect button after IDE initialization fails", async () => {
+  it("lets Enter explicitly retry Connect when both initialization and status loading fail", async () => {
     const user = userEvent.setup();
-    const bridge = installBridge({ httpStatus: disconnectedStatus() });
+    const bridge = installBridge({ httpError: "Observer status is unavailable" });
     render(<CloudTab />);
 
     const initialize = await bridge.next("initialize");
-    bridge.reject(initialize, "Observer control token is missing");
+    bridge.reject(initialize, "Observer is starting");
 
     const regionInput = await screen.findByLabelText("Realm or Observability Cloud URL");
     const tokenInput = screen.getByLabelText("Access token");
@@ -1269,11 +955,13 @@ describe("CloudTab", () => {
     await user.paste("human_like_token");
     await user.keyboard("{Enter}");
 
-    expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled)
-      .toBe(true);
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("Observer state is read-only in this browser session.")).toBeTruthy();
-    expect(bridge.requests().some((request) => request.action === "connect")).toBe(false);
+    const connect = await bridge.next("connect");
+    expect(connect.payload).toEqual({
+      accessToken: "human_like_token",
+      realm: "us1",
+    });
+    bridge.respond(connect, { status: connectedStatus(false, "us1") });
+    expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
   });
 
   it("falls back to Observer status when the IDE initialize response omits status", async () => {
@@ -1304,7 +992,7 @@ describe("CloudTab", () => {
     expect(screen.queryByRole("form", { name: "Free Edition account" })).toBeNull();
   });
 
-  it("keeps protected signup unavailable when IDE control initialization fails", async () => {
+  it("keeps signup editable and retryable when IDE initialization fails", async () => {
     const bridge = installBridge({ autoRegion: false });
     render(<CloudTab />);
 
@@ -1312,13 +1000,27 @@ describe("CloudTab", () => {
     bridge.reject(initialize, "Observer status unavailable");
 
     const startButton = await screen.findByRole("button", { name: "Get started with Observability Cloud Free Edition" });
-    await waitFor(() => expect((startButton as HTMLButtonElement).disabled).toBe(true));
-    expect(screen.getByText("Observer state is read-only in this browser session.")).toBeTruthy();
+    await waitFor(() => expect((startButton as HTMLButtonElement).disabled).toBe(false));
 
     fireEvent.click(startButton);
-    expect(screen.queryByRole("form", { name: "Free Edition account" })).toBeNull();
-    expect(bridge.requests().some((request) => request.action === "detect-free-account-region")).toBe(false);
-    expect(bridge.requests().some((request) => request.action === "create-free-account")).toBe(false);
+    const form = screen.getByRole("form", { name: "Free Edition account" });
+    const detectRegion = await bridge.next("detect-free-account-region");
+    bridge.reject(detectRegion, "Location lookup is unavailable");
+    expect((within(form).getByLabelText("First name") as HTMLInputElement).disabled).toBe(false);
+    fireEvent.change(within(form).getByLabelText("First name"), { target: { value: "Example" } });
+    fireEvent.change(within(form).getByLabelText("Last name"), { target: { value: "Person" } });
+    fireEvent.change(within(form).getByLabelText("Email"), { target: { value: "person@example.com" } });
+    fireEvent.click(within(form).getByRole("checkbox", { name: /I accept the Observability Cloud/i }));
+    const createButton = within(form).getByRole("button", { name: "Start Free Edition" });
+    await waitFor(() => expect(createButton.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(createButton);
+    expect((await bridge.next("create-free-account")).payload).toEqual({
+      email: "person@example.com",
+      firstName: "Example",
+      lastName: "Person",
+      region: "us",
+      termsAccepted: true,
+    });
   });
 
   it("opens external help and terms links through the IDE bridge", async () => {
@@ -1594,6 +1296,35 @@ describe("CloudTab", () => {
     expect(await screen.findByRole("heading", {
       name: "Thank you for registering. Your free edition account is on its way!",
     })).toBeTruthy();
+  });
+
+  it("shows accepted pending setup instead of rejecting a 200 Denied Person response", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { status: disconnectedStatus() });
+    const form = await fillValidFreeAccountForm();
+    fireEvent.submit(form);
+    const request = await bridge.next("create-free-account");
+    bridge.respond(request, {
+      freeAccount: {
+        accountSetupPending: true,
+        intakeAcknowledged: true,
+        message: "Server-provided pending copy.",
+        realm: "eu0",
+        region: "Europe (Ireland)",
+      },
+    });
+
+    expect(await screen.findByRole("heading", {
+      name: "Splunk received your Free Edition request.",
+    })).toBeTruthy();
+    expect(screen.getByText(
+      "Splunk needs extra time to finish setting up the account. If a confirmation email does not arrive within 24 hours, contact Splunk Support.",
+    )).toBeTruthy();
+    expect(screen.queryByText(/within 10 minutes/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("preserves signup edits made while the submitted request is pending", async () => {
@@ -2262,7 +1993,7 @@ describe("CloudTab", () => {
     expect(screen.queryByText("Cloud destination connected.")).toBeNull();
   });
 
-  it("fails closed if the IDE does not confirm completion of an accepted Connect request", async () => {
+  it("allows an explicit retry if the IDE does not confirm completion of Connect", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
 
@@ -2288,7 +2019,7 @@ describe("CloudTab", () => {
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).disabled).toBe(false);
     expect(tokenInput.disabled).toBe(false);
     expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled)
-      .toBe(true);
+      .toBe(false);
   });
 
   it("does not report success unless Observer confirms the connection", async () => {
@@ -2530,7 +2261,7 @@ describe("CloudTab", () => {
     expect(await screen.findByText("Connect to export metrics and traces.")).toBeTruthy();
     const regionInput = screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement;
     expect(regionInput.value).toBe("");
-    expect(regionInput.placeholder).toBe("");
+    expect(regionInput.placeholder).toBe("Realm or Observability Cloud URL");
     expect(screen.getByLabelText("Access token")).toBeTruthy();
   });
 
@@ -2809,9 +2540,11 @@ describe("CloudTab", () => {
   });
 
   it("registers through Observer's own backend when there is no IDE bridge", async () => {
-    setObserverControlToken("observer-control-token-1234567890");
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).includes("/api/splunk/cimd/register") && init?.method === "POST") {
+        const headers = new Headers(init.headers);
+        expect(headers.get("X-Obstudio-Browser-Request")).toBe("1");
+        expect(headers.get("Authorization")).toBeNull();
         return jsonResponse({
           authorizationUrl: "https://127.0.0.1:9090/authorize?client_id=abc",
           location: "http://127.0.0.1:9193/authorize?client_id=mock-splunkd-client",
@@ -2836,7 +2569,6 @@ describe("CloudTab", () => {
   });
 
   it("surfaces a registration failure from Observer's own backend when there is no IDE bridge", async () => {
-    setObserverControlToken("observer-control-token-1234567890");
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).includes("/api/splunk/cimd/register") && init?.method === "POST") {
         return jsonResponse({ error: "SIS discovery does not advertise CIMD support" }, 502);
@@ -2858,7 +2590,6 @@ describe("CloudTab", () => {
   });
 
   it("signs in through Observer's own backend and polls until connected, with no IDE bridge", async () => {
-    setObserverControlToken("observer-control-token-1234567890");
     const sessionPhases: SISCIMDSessionStatus[] = [
       { phase: "pending" },
       {
@@ -2882,7 +2613,9 @@ describe("CloudTab", () => {
         });
       }
       if (url.includes("/api/splunk/cimd/login") && init?.method === "POST") {
-        expect(init?.headers).toMatchObject({ Authorization: "Bearer observer-control-token-1234567890" });
+        const headers = new Headers(init.headers);
+        expect(headers.get("X-Obstudio-Browser-Request")).toBe("1");
+        expect(headers.get("Authorization")).toBeNull();
         return jsonResponse({ authorizationUrl: "https://127.0.0.1:9090/oauth2/authorize?state=abc" });
       }
       if (url.includes("/api/splunk/cimd/session")) {
@@ -2922,7 +2655,6 @@ describe("CloudTab", () => {
   });
 
   it("disconnects the SIS session through Observer's own backend", async () => {
-    setObserverControlToken("observer-control-token-1234567890");
     vi.stubGlobal("open", vi.fn(() => fakePopup()));
     let sessionPhase: "pending" | "connected" | "disconnected" = "pending";
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -2962,7 +2694,6 @@ describe("CloudTab", () => {
   });
 
   it("surfaces a login failure from Observer's own backend when there is no IDE bridge", async () => {
-    setObserverControlToken("observer-control-token-1234567890");
     const popup = fakePopup();
     vi.stubGlobal("open", vi.fn(() => popup));
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -2989,36 +2720,12 @@ describe("CloudTab", () => {
     expect(popup.close).toHaveBeenCalled();
   });
 
-  it("requires Observer's injected control token before registering with no IDE bridge", async () => {
-    // registerSISCIMDClient is gated the same way as the sign-in routes below it, so a
-    // missing control token surfaces here, one step earlier than sign-in -- there is no
-    // way to reach the "Sign in to SIS" button at all without first registering.
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.includes("/api/splunk/cimd/register") && init?.method === "POST") {
-        return jsonResponse({
-          authorizationUrl: "https://127.0.0.1:9090/authorize?client_id=abc",
-          location: "http://127.0.0.1:9193/authorize?client_id=mock-splunkd-client",
-          cookieMaxAgeSeconds: 600,
-        });
-      }
-      return jsonResponse({ ...disconnectedStatus(), cimdRegistrationEnabled: true });
-    }));
-
-    render(<CloudTab />);
-    fireEvent.click(await screen.findByRole("button", { name: "Register OAuth client with CIMD" }));
-
-    expect((await screen.findByRole("alert")).textContent)
-      .toContain("Observer did not provide a control token");
-  });
-
   it("reports a genuinely blocked popup without an async gap masking a real success", async () => {
     // Regression test: window.open must be called synchronously in the click handler,
     // before any await, or Chrome silently returns null even when the tab opens for
     // real (breaking the user-gesture chain). loginCIMD opens a blank tab first and
     // redirects it via popup.location.href once the login response resolves, so a
     // null return here reflects a genuinely blocked popup, not a false positive.
-    setObserverControlToken("observer-control-token-1234567890");
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/api/splunk/cimd/register") && init?.method === "POST") {
@@ -3110,6 +2817,7 @@ type HostHTTPRequest = {
 
 function installBridge(options: {
   autoRegion?: false | string;
+  httpError?: string;
   httpStatus?: SplunkExportStatus;
 } = {}) {
   window.history.replaceState({}, "", "/?tab=cloud");
@@ -3156,6 +2864,10 @@ function installBridge(options: {
           requestId: envelope.requestId,
         });
         void Promise.resolve().then(() => {
+          if (options.httpError !== undefined) {
+            dispatchResponse(envelope.requestId!, false, undefined, options.httpError);
+            return;
+          }
           dispatchResponse(envelope.requestId!, true, {
             body: JSON.stringify(options.httpStatus ?? disconnectedStatus()),
             headers: { "content-type": "application/json" },
@@ -3222,28 +2934,8 @@ function installBridge(options: {
   };
 }
 
-function browserSessionFetch(body: unknown, launchToken = browserLaunchToken) {
-  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (String(input) === "/api/splunk/export/browser/session") {
-      expect(new Headers(init?.headers).get("X-Obstudio-Browser-Request")).toBe("1");
-      expectBrowserSessionRequest(init, launchToken);
-      return jsonResponse({ browserToken });
-    }
-    return jsonResponse(body);
-  });
-}
-
-function expectBrowserLaunchRequest(init?: RequestInit): void {
-  expectBrowserSessionRequest(init, browserLaunchToken);
-}
-
-function expectBareBrowserSessionRequest(init?: RequestInit): void {
-  expectBrowserSessionRequest(init, "");
-}
-
-function expectBrowserSessionRequest(init: RequestInit | undefined, launchToken: string): void {
-  const body = JSON.parse(String(init?.body)) as { launchToken?: string };
-  expect(body).toEqual({ launchToken });
+function statusFetch(body: unknown) {
+  return vi.fn(async () => jsonResponse(body));
 }
 
 // A minimal stand-in for the real popup window handle loginCIMD opens synchronously

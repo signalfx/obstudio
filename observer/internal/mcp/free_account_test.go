@@ -182,6 +182,33 @@ func TestFreeAccountToolForwardsExplicitConsentAndReturnsAcknowledgedIntake(t *t
 	}
 }
 
+func TestFreeAccountToolPreservesPendingAccountSetupResult(t *testing.T) {
+	submitter := &fakeMCPFreeAccountSubmitter{result: freeaccount.Result{
+		IntakeAcknowledged:  true,
+		AccountSetupPending: true,
+		Realm:               "eu0",
+		Region:              "Europe (Ireland)",
+		Message:             "Splunk needs extra time to finish setting up the account.",
+	}}
+	dispatcher := NewDispatcher(store.New(), submitter)
+	response, handled := dispatcher.Dispatch(jsonRPCRequest{
+		ID: 1, JSONRPC: "2.0", Method: "tools/call",
+		Params: map[string]any{
+			"name": "observer_splunk_free_account_create",
+			"arguments": map[string]any{
+				"firstName": "Ada", "lastName": "Lovelace", "email": "ada@example.com", "termsAccepted": true,
+			},
+		},
+	})
+	if !handled || response.Error != nil {
+		t.Fatalf("unexpected response: %+v", response)
+	}
+	payload := toMapAny(parseToolResult(t, response.Result.(toolResult)))
+	if payload["intakeAcknowledged"] != true || payload["accountSetupPending"] != true {
+		t.Fatalf("pending setup tool payload = %#v", payload)
+	}
+}
+
 func TestFreeAccountToolRejectsUnexpectedArgumentsBeforeSubmission(t *testing.T) {
 	for _, extraKey := range []string{"fullName", "publicIp", "company"} {
 		t.Run(extraKey, func(t *testing.T) {

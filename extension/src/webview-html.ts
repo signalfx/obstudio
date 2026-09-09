@@ -70,9 +70,11 @@ export function getObserverLoadingWebviewHtml(): string {
 export function getObserverErrorWebviewHtml(
 	errorMessage: string,
 	startupHint: string = getObserverStartupHint('generic'),
+	title = 'Observer could not start',
 ): string {
 	const escaped = escapeHtml(errorMessage);
 	const hint = escapeHtml(startupHint);
+	const escapedTitle = escapeHtml(title);
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -120,7 +122,7 @@ export function getObserverErrorWebviewHtml(
 </head>
 <body>
 	<div class="container">
-		<h2>Observer could not start</h2>
+		<h2>${escapedTitle}</h2>
 		<div class="error-detail">${escaped}</div>
 		<p class="hint">
 			${hint}

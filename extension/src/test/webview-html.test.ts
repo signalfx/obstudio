@@ -88,6 +88,18 @@ describe('getObserverErrorWebviewHtml', () => {
 		assert.ok(html.includes('Observer could not start'));
 	});
 
+	it('shows a restart-required heading and the selected Observer port', () => {
+		const html = getObserverErrorWebviewHtml(
+			'Observer 0.0.18 on localhost port 3000 (PID 4321) is still running.',
+			'Restart VS Code, then start Observer.',
+			'Restart required',
+		);
+		assert.ok(html.includes('<h2>Restart required</h2>'));
+		assert.ok(html.includes('localhost port 3000'));
+		assert.ok(html.includes('PID 4321'));
+		assert.ok(html.includes('Restart VS Code'));
+	});
+
 	it('includes restart hint', () => {
 		const html = getObserverErrorWebviewHtml('some error');
 		assert.ok(html.includes('Restart Observer'));

@@ -557,9 +557,9 @@ func sisCIMDContains(values []string, target string) bool {
 }
 
 // registerSISCIMDClientHandler probes SIS CIMD client registration and reports the
-// federated authorization redirect it returns. Gated by OBSTUDIO_CONTROL_TOKEN (see
-// registerSISCIMDLoginRoutes): although this route stores no secret, the probe itself has
-// real side effects (SIS may create or refresh a shadow client) and its response reveals
+// federated authorization redirect it returns. The local request gate prevents cross-site
+// calls: although this route stores no secret, the probe itself has real side effects
+// (SIS may create or refresh a shadow client) and its response reveals
 // federation redirect/cookie details, so it must not be cross-site callable. The response
 // is same-origin-only for the same reason -- writeJSON's wildcard CORS header would let
 // any origin that could reach this route also read the response it triggered.

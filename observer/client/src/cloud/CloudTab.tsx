@@ -1,12 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  createSplunkExportBrowserSession,
   disconnectSISCIMDSession,
   fetchSISCIMDSession,
   fetchSplunkExportStatus,
-  isUnusableSplunkExportBrowserSession,
   loginSISCIMD,
-  recoverSplunkExportBrowserSession,
   registerSISCIMDClient,
   resolveSplunkCloudRealm,
   runSplunkExportBrowserAction,
@@ -49,6 +46,7 @@ const freeAccountRealmByRegion: ReadonlyMap<string, string> = new Map(
 );
 
 interface FreeAccountResult {
+  accountSetupPending?: boolean;
   intakeAcknowledged: boolean;
   realm: string;
   region: string;
@@ -87,9 +85,7 @@ interface CloudActionResponse {
 
 export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElement {
   const { bridge, callBridge } = useCloudBridge();
-  const [initializedBridge, setInitializedBridge] = useState<typeof bridge>(null);
   const [status, setStatus] = useState<SplunkExportStatus | null>(null);
-  const [browserToken, setBrowserToken] = useState<string | null>(null);
   const [region, setRegion] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [freeAccountFirstName, setFreeAccountFirstName] = useState("");
@@ -100,6 +96,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const [freeAccountTermsAccepted, setFreeAccountTermsAccepted] = useState(false);
   const [freeAccountOpen, setFreeAccountOpen] = useState(false);
   const [freeAccountSuccess, setFreeAccountSuccess] = useState(false);
+  const [freeAccountSetupPending, setFreeAccountSetupPending] = useState(false);
   const [freeAccountSubmitError, setFreeAccountSubmitError] = useState<string | null>(null);
   const [freeAccountMutationState, setFreeAccountMutationState] = useState<FreeAccountMutationState>("idle");
   const [cloudInitializationFinished, setCloudInitializationFinished] = useState(false);
@@ -171,8 +168,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     const controller = new AbortController();
     setCloudInitializationFinished(false);
     const initialize = async () => {
-      let bridgeInitialized = false;
-      let nextBrowserToken: string | null = null;
       try {
         let nextStatus: unknown;
         let controlInitializationError: unknown;
@@ -185,7 +180,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           try {
             const response = await callBridge("initialize");
             nextStatus = response.status;
-            bridgeInitialized = true;
             if (response.warning?.trim()) {
               controlInitializationError = new Error(response.warning);
             }
@@ -205,16 +199,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             nextStatus = await fetchSplunkExportStatus(controller.signal);
           }
         } else {
-          try {
-            const session = await createSplunkExportBrowserSession(controller.signal);
-            nextBrowserToken = session.browserToken;
-            if (session.warning?.trim()) {
-              controlInitializationError = new Error(session.warning);
-            }
-          } catch (browserSessionError) {
-            if (controller.signal.aborted) return;
-            controlInitializationError = browserSessionError;
-          }
           nextStatus = await fetchSplunkExportStatus(controller.signal);
         }
         if (!active) return;
@@ -225,7 +209,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           cimdRegistrationEnabledFromBridge ?? nextStatus.cimdRegistrationEnabled ?? false,
         );
         setStatus(nextStatus);
-        if (bridge || nextBrowserToken) setControlError(null);
+        setControlError(null);
         if (controlInitializationError) {
           const message = errorMessage(controlInitializationError, "Could not enable cloud connection controls.");
           setControlError(message);
@@ -237,8 +221,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         onConnectionChange?.("disconnected");
       } finally {
         if (active) {
-          setBrowserToken(nextBrowserToken);
-          setInitializedBridge(bridgeInitialized ? bridge : null);
           setBusyAction(null);
           setCloudInitializationFinished(true);
         }
@@ -266,15 +248,14 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   }, [freeAccountSuccess]);
 
   const connected = status?.connected === true;
-  const controlAvailable = bridge !== null
-    ? initializedBridge === bridge
-    : browserToken !== null;
+  // Once the initial probe has completed, let an explicit user action retry the
+  // Observer even when that probe failed. The mutation endpoints accept an omitted
+  // expectedVersion and still perform their normal validation.
+  const controlAvailable = cloudInitializationFinished;
   const mutationsDisabled = busyAction !== null
-    || status === null
     || !controlAvailable
     || freeAccountMutationState === "uncertain";
-  const displayedError = error ?? (controlAvailable ? controlError : null);
-  const controlUnavailable = busyAction === null && status !== null && !controlAvailable;
+  const displayedError = error ?? controlError;
 
   const applyObserverStatus = useCallback((
     nextStatus: SplunkExportStatus,
@@ -396,6 +377,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     setFreeAccountRegionDetection("idle");
     setFreeAccountOpen(false);
     setFreeAccountSuccess(false);
+    setFreeAccountSetupPending(false);
     setFreeAccountSubmitError(null);
     setFreeAccountMutationState("idle");
   }, [cloudConfigured]);
@@ -459,10 +441,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   ): Promise<CloudActionResponse | null> => {
     if (busyAction || actionInFlightRef.current || !controlAvailable) return null;
     const expectedVersion = statusRef.current?.version;
-    if (!expectedVersion) {
-      setError("Observer cloud state is unavailable. Refresh and try again.");
-      return null;
-    }
     const versionedPayload = { ...payload, expectedVersion };
     const actionGeneration = ++actionGenerationRef.current;
     actionInFlightRef.current = true;
@@ -474,15 +452,13 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       let response: CloudBridgeResponse | CloudActionResponse;
       if (bridge) {
         response = await callBridge(action, versionedPayload);
-      } else if (browserToken) {
+      } else {
         if (action !== "connect" && action !== "forget" && action !== "set-enabled") {
           throw new Error("This cloud action requires an IDE session.");
         }
         response = {
-          status: await runSplunkExportBrowserAction(action, versionedPayload, browserToken),
+          status: await runSplunkExportBrowserAction(action, versionedPayload),
         };
-      } else {
-        throw new Error("Cloud connection changes are not available in this session.");
       }
       if (response.status) setStatus(response.status);
       setControlError(null);
@@ -493,31 +469,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     } catch (actionError) {
       const message = errorMessage(actionError, "The cloud connection request failed.");
       if (bridge && isObserverHostCloudTimeoutError(actionError)) {
-        setInitializedBridge(null);
         setError(message);
         setControlError(null);
-      } else if (!bridge && isUnusableSplunkExportBrowserSession(actionError)) {
-        setBrowserToken(null);
-        setControlError(null);
-        try {
-          const recovered = await recoverSplunkExportBrowserSession();
-          const result = await loadObserverStatus(
-            false,
-            undefined,
-            () => actionGenerationRef.current === actionGeneration,
-          );
-          if (!result.applied) {
-            throw new Error("Observer returned an invalid cloud status.");
-          }
-          setBrowserToken(recovered.browserToken);
-          setError(null);
-          setControlError(recovered.warning?.trim() || null);
-          setNotice("Cloud controls refreshed. Retry the action.");
-        } catch {
-          setError(message);
-          void reconcileFailedAction(actionGeneration);
-        }
-        return null;
       } else {
         setError(message);
       }
@@ -543,9 +496,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     try {
       const resolvedRealm = bridge
         ? (await callBridge("resolve-realm", { destination })).realm
-        : browserToken
-          ? await resolveSplunkCloudRealm(destination, browserToken)
-          : undefined;
+        : await resolveSplunkCloudRealm(destination);
       const realm = typeof resolvedRealm === "string" ? resolvedRealm.trim().toLowerCase() : "";
       if (!splunkRealmPattern.test(realm)) {
         throw new Error("Observer returned an invalid Splunk Observability Cloud realm.");
@@ -556,33 +507,9 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         resolutionError,
         "Could not determine the realm from that Observability Cloud URL.",
       );
-      if (!bridge && isUnusableSplunkExportBrowserSession(resolutionError)) {
-        setBrowserToken(null);
-        setControlError(null);
-        try {
-          const recovered = await recoverSplunkExportBrowserSession();
-          const result = await loadObserverStatus(
-            false,
-            undefined,
-            () => actionGenerationRef.current === actionGeneration,
-          );
-          if (!result.applied) {
-            throw new Error("Observer returned an invalid cloud status.");
-          }
-          setBrowserToken(recovered.browserToken);
-          setError(null);
-          setControlError(recovered.warning?.trim() || null);
-          setNotice("Cloud controls refreshed. Retry the action.");
-        } catch {
-          setFieldError("region");
-          setError(message);
-          regionInputRef.current?.focus();
-        }
-      } else {
-        setFieldError("region");
-        setError(message);
-        regionInputRef.current?.focus();
-      }
+      setFieldError("region");
+      setError(message);
+      regionInputRef.current?.focus();
       return null;
     } finally {
       actionInFlightRef.current = false;
@@ -901,11 +828,11 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       setRegion((currentRegion) => (
         currentRegion.trim() === "" ? result.realm : currentRegion
       ));
+      setFreeAccountSetupPending(result.accountSetupPending === true);
       setFreeAccountSuccess(true);
     } catch (submissionError) {
       setFieldError(null);
       if (isObserverHostCloudTimeoutError(submissionError)) {
-        setInitializedBridge(null);
         setFreeAccountMutationState("uncertain");
         setFreeAccountSubmitError(`${errorMessage(
           submissionError,
@@ -936,6 +863,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const startAnotherFreeAccountRequest = () => {
     setFreeAccountOpen(true);
     setFreeAccountSuccess(false);
+    setFreeAccountSetupPending(false);
     setFieldError(null);
     setError(null);
     setFreeAccountSubmitError(null);
@@ -943,6 +871,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
 
   const openFreeAccount = () => {
     setFreeAccountOpen(true);
+    setFreeAccountSetupPending(false);
     setFieldError(null);
     setError(null);
     setFreeAccountSubmitError(null);
@@ -974,11 +903,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             <div>
               <h2>Splunk Observability Cloud</h2>
               <p>{connectionSummary}</p>
-              {controlUnavailable ? (
-                <p className="cloud-control-note" role="status">
-                  Observer state is read-only in this browser session.
-                </p>
-              ) : null}
             </div>
             {cloudConfigured ? (
               <div className="cloud-panel__actions">
@@ -1058,7 +982,11 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           {!cloudConfigured ? (
             <form aria-label="Cloud connection" className="cloud-connect-form" noValidate onSubmit={connect}>
               <div className="cloud-field cloud-field--region">
-                <div className="cloud-field__control cloud-field__control--filled">
+                <div
+                  className={region
+                    ? "cloud-field__control cloud-field__control--filled"
+                    : "cloud-field__control"}
+                >
                   <label className="cloud-field__floating-label" htmlFor="cloud-region">Realm or Observability Cloud URL</label>
                   <input
                     aria-describedby={fieldError === "region" ? "cloud-region-format cloud-region-error" : "cloud-region-format"}
@@ -1075,6 +1003,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                       setError(null);
                     }}
                     onKeyDown={submitConnectionOnEnter}
+                    placeholder="Realm or Observability Cloud URL"
                     ref={regionInputRef}
                     spellCheck={false}
                     value={region}
@@ -1125,7 +1054,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                         setError(splunkAccessTokenTooLongMessage);
                       }
                     }}
-                    placeholder="Access token"
+                    placeholder="Create Ingest token"
                     ref={tokenInputRef}
                     spellCheck={false}
                     type="password"
@@ -1229,7 +1158,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                       aria-controls="cloud-free-account-details"
                       aria-expanded={false}
                       className="cloud-button cloud-button--setup-action cloud-free-account__start"
-                      disabled={mutationsDisabled}
                       onClick={openFreeAccount}
                       type="button"
                     >
@@ -1246,10 +1174,14 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   {freeAccountSuccess ? (
                     <div className="cloud-free-account__outcome cloud-free-account__outcome--success">
                       <h3 id="cloud-free-account-success-title" ref={freeAccountSuccessRef} tabIndex={-1}>
-                        Thank you for registering. Your free edition account is on its way!
+                        {freeAccountSetupPending
+                          ? "Splunk received your Free Edition request."
+                          : "Thank you for registering. Your free edition account is on its way!"}
                       </h3>
                       <p className="cloud-free-account__confirmation-copy">
-                        You will receive an email within 10 minutes. Check your spam folder if it doesn’t arrive. If you still need help, please reach out to Splunk Support.
+                        {freeAccountSetupPending
+                          ? "Splunk needs extra time to finish setting up the account. If a confirmation email does not arrive within 24 hours, contact Splunk Support."
+                          : "You will receive an email within 10 minutes. Check your spam folder if it doesn’t arrive. If you still need help, please reach out to Splunk Support."}
                       </p>
                       <div className="cloud-free-account__outcome-actions">
                         <button className="cloud-button cloud-free-account__repeat" onClick={startAnotherFreeAccountRequest} type="button">
@@ -1595,9 +1527,17 @@ function parseFreeAccountResult(value: unknown): FreeAccountResult | undefined {
   const region = parseFreeAccountRegion(result.region);
   const expectedRealm = region === undefined ? undefined : freeAccountRealmByRegion.get(region);
   return typeof result.intakeAcknowledged === "boolean"
+    && (result.accountSetupPending === undefined || typeof result.accountSetupPending === "boolean")
     && region !== undefined
     && realm === expectedRealm
-    ? { intakeAcknowledged: result.intakeAcknowledged, realm, region }
+    ? {
+      ...(result.accountSetupPending === undefined
+        ? {}
+        : { accountSetupPending: result.accountSetupPending }),
+      intakeAcknowledged: result.intakeAcknowledged,
+      realm,
+      region,
+    }
     : undefined;
 }
 

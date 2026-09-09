@@ -783,3 +783,26 @@ def test_runtime_observer_keeps_grpc_loopback_when_http_is_container_visible() -
 
     observer_main = _read(ROOT / "observer/cmd/obstudio/main.go")
     assert 'valueOrEnv(config.otlpGRPCHost, "OTLP_GRPC_HOST", host)' in observer_main
+    for dockerfile in (
+        ROOT / "observer/Dockerfile",
+        ROOT / "evals/runtime/observer.Dockerfile",
+    ):
+        observer_dockerfile = _read(dockerfile)
+        assert "OBSTUDIO_MODE=docker-runtime-eval" in observer_dockerfile
+        assert (
+            "OBSTUDIO_DOCKER_RUNTIME_EVAL_ALLOW_NON_LOOPBACK=true"
+            in observer_dockerfile
+        )
+        assert "OTLP_GRPC_HOST=127.0.0.1" in observer_dockerfile
+
+    runtime_compose_files = sorted(
+        ROOT.glob("evals/**/eval/runtime/docker-compose.yml")
+    )
+    assert runtime_compose_files
+    for compose_file in runtime_compose_files:
+        compose = _read(compose_file)
+        if "dockerfile: evals/runtime/observer.Dockerfile" not in compose:
+            continue
+        observer_service = compose.split("\n  app:", 1)[0]
+        assert "target: 3000" in observer_service
+        assert "host_ip: 127.0.0.1" in observer_service

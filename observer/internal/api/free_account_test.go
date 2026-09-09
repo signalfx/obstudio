@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -33,8 +34,54 @@ func (f *fakeFreeAccountSubmitter) DetectRegion(_ context.Context) freeaccount.R
 	return f.regionResult
 }
 
-func TestFreeAccountEndpointRequiresControlTokenAndForwardsExactRequest(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "observer-control-secret")
+func localFreeAccountRequest(method, target string, body io.Reader) *http.Request {
+	request := httptest.NewRequest(method, target, body)
+	request.RemoteAddr = "127.0.0.1:54321"
+	return request
+}
+
+func TestFreeAccountEndpointUsesLocalOriginTrustWithoutControlCredentials(t *testing.T) {
+	submitter := &fakeFreeAccountSubmitter{result: freeaccount.Result{
+		IntakeAcknowledged: true,
+		Realm:              "us1",
+		Region:             "United States",
+	}}
+	mux := http.NewServeMux()
+	Register(mux, store.New(), submitter)
+	body := `{"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com","region":"us","termsAccepted":true}`
+
+	localRequest := httptest.NewRequest(http.MethodPost, "/api/splunk/free-account", strings.NewReader(body))
+	localRequest.RemoteAddr = "127.0.0.1:54321"
+	localResponse := httptest.NewRecorder()
+	mux.ServeHTTP(localResponse, localRequest)
+	if localResponse.Code != http.StatusAccepted {
+		t.Fatalf("local request status = %d, want %d; body=%s", localResponse.Code, http.StatusAccepted, localResponse.Body.String())
+	}
+	if submitter.calls != 1 {
+		t.Fatalf("local request submitter calls = %d, want 1", submitter.calls)
+	}
+	if got := localResponse.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("local mutation Access-Control-Allow-Origin = %q, want unset", got)
+	}
+
+	crossOriginRequest := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:3000/api/splunk/free-account", strings.NewReader(body))
+	crossOriginRequest.RemoteAddr = "127.0.0.1:54321"
+	crossOriginRequest.Header.Set("Origin", "https://attacker.example")
+	crossOriginRequest.Header.Set("Sec-Fetch-Site", "cross-site")
+	crossOriginResponse := httptest.NewRecorder()
+	mux.ServeHTTP(crossOriginResponse, crossOriginRequest)
+	if crossOriginResponse.Code != http.StatusForbidden {
+		t.Fatalf("cross-origin request status = %d, want %d; body=%s", crossOriginResponse.Code, http.StatusForbidden, crossOriginResponse.Body.String())
+	}
+	if submitter.calls != 1 {
+		t.Fatalf("cross-origin request reached submitter; calls = %d, want 1", submitter.calls)
+	}
+	if got := crossOriginResponse.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("cross-origin mutation Access-Control-Allow-Origin = %q, want unset", got)
+	}
+}
+
+func TestFreeAccountEndpointForwardsExactLocalRequest(t *testing.T) {
 	submitter := &fakeFreeAccountSubmitter{result: freeaccount.Result{
 		IntakeAcknowledged: true,
 		Realm:              "eu0",
@@ -45,25 +92,8 @@ func TestFreeAccountEndpointRequiresControlTokenAndForwardsExactRequest(t *testi
 	Register(mux, store.New(), submitter)
 
 	requestBody := `{"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com","region":"Europe (Ireland)","termsAccepted":true}`
-	request := httptest.NewRequest(http.MethodPost, "/api/splunk/free-account", strings.NewReader(requestBody))
+	request := localFreeAccountRequest(http.MethodPost, "/api/splunk/free-account", strings.NewReader(requestBody))
 	response := httptest.NewRecorder()
-	mux.ServeHTTP(response, request)
-	if response.Code != http.StatusUnauthorized || submitter.calls != 0 {
-		t.Fatalf("missing auth response=%d calls=%d", response.Code, submitter.calls)
-	}
-	assertFreeAccountErrorResponse(t, response, "unauthorized", true)
-
-	request = httptest.NewRequest(http.MethodPost, "/api/splunk/free-account", strings.NewReader(requestBody))
-	request.Header.Set("Authorization", "Bearer wrong-control-token")
-	response = httptest.NewRecorder()
-	mux.ServeHTTP(response, request)
-	if response.Code != http.StatusUnauthorized || submitter.calls != 0 {
-		t.Fatalf("invalid auth response=%d calls=%d", response.Code, submitter.calls)
-	}
-
-	request = httptest.NewRequest(http.MethodPost, "/api/splunk/free-account", strings.NewReader(requestBody))
-	request.Header.Set("Authorization", "Bearer observer-control-secret")
-	response = httptest.NewRecorder()
 	mux.ServeHTTP(response, request)
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, body=%s", response.Code, response.Body.String())
@@ -100,22 +130,43 @@ func TestFreeAccountEndpointRequiresControlTokenAndForwardsExactRequest(t *testi
 	}
 }
 
-func TestFreeAccountRegionEndpointRequiresControlTokenAndReturnsOnlyRegion(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "observer-control-secret")
+func TestFreeAccountEndpointPreservesPendingAccountSetupResult(t *testing.T) {
+	submitter := &fakeFreeAccountSubmitter{result: freeaccount.Result{
+		IntakeAcknowledged:  true,
+		AccountSetupPending: true,
+		Realm:               "eu0",
+		Region:              "Europe (Ireland)",
+		Message:             "Splunk needs extra time to finish setting up the account.",
+	}}
+	mux := http.NewServeMux()
+	Register(mux, store.New(), submitter)
+	request := localFreeAccountRequest(
+		http.MethodPost,
+		"/api/splunk/free-account",
+		strings.NewReader(`{"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com","termsAccepted":true}`),
+	)
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, body=%s", response.Code, response.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["intakeAcknowledged"] != true || payload["accountSetupPending"] != true {
+		t.Fatalf("pending setup response = %#v", payload)
+	}
+}
+
+func TestFreeAccountRegionEndpointReturnsOnlyRegionForLocalRequest(t *testing.T) {
 	submitter := &fakeFreeAccountSubmitter{regionResult: freeaccount.RegionResult{Region: "Europe (Ireland)"}}
 	mux := http.NewServeMux()
 	Register(mux, store.New(), submitter)
 
-	request := httptest.NewRequest(http.MethodGet, "/api/splunk/free-account/region", nil)
+	request := localFreeAccountRequest(http.MethodGet, "/api/splunk/free-account/region", nil)
 	response := httptest.NewRecorder()
-	mux.ServeHTTP(response, request)
-	if response.Code != http.StatusUnauthorized || submitter.detectionCalls != 0 {
-		t.Fatalf("missing auth response=%d calls=%d", response.Code, submitter.detectionCalls)
-	}
-
-	request = httptest.NewRequest(http.MethodGet, "/api/splunk/free-account/region", nil)
-	request.Header.Set("Authorization", "Bearer observer-control-secret")
-	response = httptest.NewRecorder()
 	mux.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || submitter.detectionCalls != 1 {
 		t.Fatalf("authorized response=%d calls=%d body=%s", response.Code, submitter.detectionCalls, response.Body.String())
@@ -132,33 +183,16 @@ func TestFreeAccountRegionEndpointRequiresControlTokenAndReturnsOnlyRegion(t *te
 	}
 }
 
-func TestFreeAccountEndpointUnavailableWithoutControlToken(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
-	submitter := &fakeFreeAccountSubmitter{}
-	mux := http.NewServeMux()
-	Register(mux, store.New(), submitter)
-
-	request := httptest.NewRequest(http.MethodPost, "/api/splunk/free-account", strings.NewReader(`{}`))
-	response := httptest.NewRecorder()
-	mux.ServeHTTP(response, request)
-	if response.Code != http.StatusServiceUnavailable || submitter.calls != 0 {
-		t.Fatalf("response=%d calls=%d", response.Code, submitter.calls)
-	}
-	assertFreeAccountErrorResponse(t, response, "observer_control_unavailable", true)
-}
-
 func TestFreeAccountEndpointRejectsLegacyRealmRegion(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "observer-control-secret")
 	submitter := freeaccount.New(freeaccount.Config{GeoURL: ":", SignupURL: ":"})
 	mux := http.NewServeMux()
 	Register(mux, store.New(), submitter)
 
-	request := httptest.NewRequest(
+	request := localFreeAccountRequest(
 		http.MethodPost,
 		"/api/splunk/free-account",
 		strings.NewReader(`{"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com","region":"eu0","termsAccepted":true}`),
 	)
-	request.Header.Set("Authorization", "Bearer observer-control-secret")
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, request)
 
@@ -172,7 +206,7 @@ func TestFreeAccountEndpointIsOnlyRegisteredWhenInjected(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux, store.New())
 	response := httptest.NewRecorder()
-	mux.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/splunk/free-account", strings.NewReader(`{}`)))
+	mux.ServeHTTP(response, localFreeAccountRequest(http.MethodPost, "/api/splunk/free-account", strings.NewReader(`{}`)))
 	if response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405 with no POST route", response.Code)
 	}
@@ -187,16 +221,14 @@ func TestFreeAccountEndpointRejectsUnknownAndCallerControlledLocationFields(t *t
 		`"fullName":"Ada Lovelace"`,
 	} {
 		t.Run(field, func(t *testing.T) {
-			t.Setenv("OBSTUDIO_CONTROL_TOKEN", "observer-control-secret")
 			submitter := &fakeFreeAccountSubmitter{}
 			mux := http.NewServeMux()
 			Register(mux, store.New(), submitter)
-			request := httptest.NewRequest(
+			request := localFreeAccountRequest(
 				http.MethodPost,
 				"/api/splunk/free-account",
 				strings.NewReader(`{"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com","termsAccepted":true,`+field+`}`),
 			)
-			request.Header.Set("Authorization", "Bearer observer-control-secret")
 			response := httptest.NewRecorder()
 			mux.ServeHTTP(response, request)
 			if response.Code != http.StatusBadRequest || submitter.calls != 0 {
@@ -217,18 +249,17 @@ func TestFreeAccountEndpointMapsSafeSignupErrors(t *testing.T) {
 	}{
 		{name: "validation", err: &freeaccount.Error{Code: freeaccount.ErrorCodeValidation, Message: "validation", RetrySafe: true}, wantStatus: http.StatusBadRequest, wantCode: "validation_error", wantRetry: true},
 		{name: "rejected", err: &freeaccount.Error{Code: freeaccount.ErrorCodeRejected, Message: "rejected", RetrySafe: true}, wantStatus: http.StatusUnprocessableEntity, wantCode: "submission_rejected", wantRetry: true},
+		{name: "preparation", err: &freeaccount.Error{Code: freeaccount.ErrorCodePreparation, Message: "preparation", RetrySafe: true}, wantStatus: http.StatusServiceUnavailable, wantCode: "submission_preparation_failed", wantRetry: true},
 		{name: "unknown", err: &freeaccount.Error{Code: freeaccount.ErrorCodeOutcomeUnknown, Message: "unknown", RetrySafe: false}, wantStatus: http.StatusBadGateway, wantCode: "outcome_unknown", wantRetry: false},
 		{name: "canceled before send", err: &freeaccount.Error{Code: freeaccount.ErrorCodeCanceled, Message: "canceled", RetrySafe: true}, wantStatus: http.StatusRequestTimeout, wantCode: "request_canceled", wantRetry: true},
 		{name: "internal error is redacted", err: errors.New("PII secret.person@example.com"), wantStatus: http.StatusInternalServerError, wantCode: "internal_error", wantRetry: false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			t.Setenv("OBSTUDIO_CONTROL_TOKEN", "observer-control-secret")
 			submitter := &fakeFreeAccountSubmitter{err: test.err}
 			mux := http.NewServeMux()
 			Register(mux, store.New(), submitter)
-			request := httptest.NewRequest(http.MethodPost, "/api/splunk/free-account", strings.NewReader(`{"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com","termsAccepted":true}`))
-			request.Header.Set("Authorization", "Bearer observer-control-secret")
+			request := localFreeAccountRequest(http.MethodPost, "/api/splunk/free-account", strings.NewReader(`{"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com","termsAccepted":true}`))
 			response := httptest.NewRecorder()
 			mux.ServeHTTP(response, request)
 			if response.Code != test.wantStatus {

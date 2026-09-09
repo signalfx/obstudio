@@ -178,22 +178,36 @@ obstudio stop     Stop Observer
 Installing an update does not restart Observer. These commands do not control
 foreground or extension-managed Observers.
 
-When publishing a shared Observer through an HTTPS reverse proxy, set
-`OBSTUDIO_PUBLIC_MCP_URL` to its complete public MCP URL (for example,
-`https://observer.example.com/mcp`). The Observer advertises and authenticates
-that URL so installers and extensions can use the protected endpoint safely.
-Every HTTP MCP `GET`, `POST`, and `DELETE` request requires the Observer control
-token as a bearer token, including requests sent over loopback. Normal local
-discovery writes this authorization header into the agent configuration.
+Observer is local-only: its UI, REST API, and HTTP MCP endpoint must bind to a
+loopback host. `--shared-url` can select another loopback Observer, but remote
+Observers and reverse-proxy publication are not supported.
 
-Observer also generates an independent health-proof secret and stores it in its
-private local runtime state. For an explicit remote `--shared-url`, provide both
-the same `OBSTUDIO_CONTROL_TOKEN` and `OBSTUDIO_HEALTH_PROOF_SECRET` while running
-`obstudio install`; the installer uses the proof secret to verify the control
-token before storing the authorization header. A configured health-proof secret
-must be the canonical, unpadded base64url encoding of 32 random bytes and must
-not reuse the control token. Reverse proxies must forward the `Authorization`
-header to Observer.
+Native loopback clients do not need a bearer credential. This is a deliberate
+local-machine trust boundary, not same-user authentication: any process or OS
+account that can reach the loopback endpoint can invoke native MCP and mutation
+operations. Use Observer on a trusted single-user development machine or apply
+OS-level isolation on a shared host. Browser mutations must come from the
+Observer's exact origin and include its browser-request marker; cross-origin
+requests and mutation preflights are rejected, and mutation responses do not
+use wildcard CORS. Splunk ingest tokens are write-only and are never returned
+by status, health, recovery, or lifecycle endpoints. Older MCP entries
+containing an Observer `Authorization` header are migrated by the next explicit
+`obstudio install` or IDE integration-enable action.
+
+The editor extension stores a user-entered Cloud connection in IDE secret
+storage before applying it to Observer. If a request has an uncertain transport
+outcome, a single-use scoped rollback capability restores the prior in-memory
+Observer configuration without exposing either the old or new ingest token.
+Freshly started extension-managed Observers are restored from IDE secret
+storage. During an extension upgrade, VS Code replaces an older
+extension-managed Observer only after verifying the shared-state PID and the
+process's exact non-symlinked executable path inside another installed Splunk
+extension package. Only that recorded process is stopped; other Observers on
+other ports remain running. macOS and Linux use signal escalation, while
+Windows uses its native process-inspection and forced-termination commands. If
+the verified process cannot be stopped, the extension does not reuse it or
+enable Cloud controls: the panel shows **Restart required** together with its
+localhost port and PID.
 
 | Service | URL |
 |---------|-----|

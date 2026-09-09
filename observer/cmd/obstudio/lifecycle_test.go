@@ -33,25 +33,48 @@ type failingObserverAddr struct{}
 func (failingObserverAddr) Network() string { return "tcp" }
 func (failingObserverAddr) String() string  { return "127.0.0.1:0" }
 
-func TestManagedStopRequiresLoopbackBearerAndQueuesOnce(t *testing.T) {
+func TestManagedStopUsesLoopbackProcessTrustWithoutBearerCredentials(t *testing.T) {
 	stop := make(chan struct{}, 1)
 	mux := http.NewServeMux()
-	registerManagedStop(mux, "secret", stop)
+	registerManagedStop(mux, stop)
+
+	request := httptest.NewRequest(http.MethodPost, managedStopPath, nil)
+	request.RemoteAddr = "127.0.0.1:54321"
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("local stop status = %d, want %d; body=%s", response.Code, http.StatusAccepted, response.Body.String())
+	}
+
+	remote := httptest.NewRequest(http.MethodPost, managedStopPath, nil)
+	remote.RemoteAddr = "192.0.2.1:54321"
+	remoteResponse := httptest.NewRecorder()
+	mux.ServeHTTP(remoteResponse, remote)
+	if remoteResponse.Code != http.StatusForbidden {
+		t.Fatalf("remote stop status = %d, want %d", remoteResponse.Code, http.StatusForbidden)
+	}
+}
+
+func TestManagedStopRequiresLocalNativeCallerAndQueuesOnce(t *testing.T) {
+	stop := make(chan struct{}, 1)
+	mux := http.NewServeMux()
+	registerManagedStop(mux, stop)
 	tests := []struct {
-		name, remote, token string
-		status              int
+		name, remote, origin string
+		status               int
 	}{
-		{"remote", "192.0.2.1:1234", "Bearer secret", http.StatusUnauthorized},
-		{"missing", "127.0.0.1:1234", "", http.StatusUnauthorized},
-		{"wrong", "127.0.0.1:1234", "Bearer wrong", http.StatusUnauthorized},
-		{"valid", "127.0.0.1:1234", "Bearer secret", http.StatusAccepted},
-		{"duplicate", "127.0.0.1:1234", "Bearer secret", http.StatusConflict},
+		{"remote", "192.0.2.1:1234", "", http.StatusForbidden},
+		{"browser", "127.0.0.1:1234", "http://127.0.0.1:3000", http.StatusForbidden},
+		{"valid", "127.0.0.1:1234", "", http.StatusAccepted},
+		{"duplicate", "127.0.0.1:1234", "", http.StatusConflict},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, managedStopPath, nil)
 			request.RemoteAddr = test.remote
-			request.Header.Set("Authorization", test.token)
+			if test.origin != "" {
+				request.Header.Set("Origin", test.origin)
+			}
 			response := httptest.NewRecorder()
 			mux.ServeHTTP(response, request)
 			if response.Code != test.status {
@@ -93,7 +116,7 @@ func TestManagedServeFailureReturnsErrorAndCleansState(t *testing.T) {
 	}
 }
 
-func TestManagedStopDoesNotForwardBearerOnRedirect(t *testing.T) {
+func TestManagedStopDoesNotFollowRedirect(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -109,14 +132,14 @@ func TestManagedStopDoesNotForwardBearerOnRedirect(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	if err := writeSharedObserverState(managedControlStatePath(), sharedObserverState{HealthURL: server.URL + "/api/health", ControlToken: "secret"}); err != nil {
+	if err := writeSharedObserverState(managedControlStatePath(), sharedObserverState{HealthURL: server.URL + "/api/health"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := stopManagedObserver(server.Client()); err == nil || !strings.Contains(err.Error(), "HTTP 307") {
 		t.Fatalf("redirecting stop = %v", err)
 	}
 	if redirected {
-		t.Fatal("stop request followed redirect and exposed its bearer token")
+		t.Fatal("stop request followed redirect and reached an unrelated process")
 	}
 }
 
@@ -345,7 +368,7 @@ func TestCurrentManagedEnvironmentCanonicalizesRelativeWeaverPath(t *testing.T) 
 }
 
 func TestManagedEnvironmentPreservesPublicMCPURLForRestart(t *testing.T) {
-	const publicMCPURL = "https://observer.example.test/team/mcp"
+	const publicMCPURL = "https://localhost/team/mcp"
 	t.Setenv(observerPublicMCPURLEnv, publicMCPURL)
 
 	environment := currentManagedEnvironment()
@@ -443,7 +466,7 @@ func TestManagedObserverHealthPreservesOwnership(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(sharedObserverHealth{Kind: "obstudio", APIVersion: "v1", Owner: "extension", Mode: "managed", Version: "v1"})
 	}))
 	defer server.Close()
-	if err := writeSharedObserverState(managedControlStatePath(), sharedObserverState{HealthURL: server.URL, ControlToken: "secret"}); err != nil {
+	if err := writeSharedObserverState(managedControlStatePath(), sharedObserverState{HealthURL: server.URL}); err != nil {
 		t.Fatal(err)
 	}
 	health, _, err := managedObserverHealth(server.Client())
@@ -467,17 +490,17 @@ func TestManagedObserverDiscoveryIgnoresSharedOwnerReplacement(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(sharedObserverHealth{Kind: "obstudio", APIVersion: "v1", Owner: "cli", Mode: "standalone"})
 	}))
 	defer foreground.Close()
-	if err := writeSharedObserverState(managedControlStatePath(), sharedObserverState{HealthURL: managed.URL, ControlToken: "managed"}); err != nil {
+	if err := writeSharedObserverState(managedControlStatePath(), sharedObserverState{HealthURL: managed.URL}); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeSharedObserverState(sharedObserverStatePath(), sharedObserverState{HealthURL: foreground.URL, ControlToken: "foreground"}); err != nil {
+	if err := writeSharedObserverState(sharedObserverStatePath(), sharedObserverState{HealthURL: foreground.URL}); err != nil {
 		t.Fatal(err)
 	}
 	health, state, err := managedObserverHealth(managed.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if health.Mode != managedObserverMode || state.ControlToken != "managed" {
+	if health.Mode != managedObserverMode {
 		t.Fatalf("managed discovery = %+v, %+v", health, state)
 	}
 }
@@ -679,7 +702,7 @@ func TestRestartRechecksSharedOwnerAfterManagedStop(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(sharedObserverHealth{Kind: "obstudio", APIVersion: "v1", Owner: "cli", Mode: managedObserverMode, Endpoints: map[string]string{"mcp": managed.URL + "/mcp"}})
 	}))
 	defer managed.Close()
-	managedState := sharedObserverState{HealthURL: managed.URL + "/api/health", MCPURL: managed.URL + "/mcp", ControlToken: "secret"}
+	managedState := sharedObserverState{HealthURL: managed.URL + "/api/health", MCPURL: managed.URL + "/mcp"}
 	if err := writeSharedObserverState(managedControlStatePath(), managedState); err != nil {
 		t.Fatal(err)
 	}
