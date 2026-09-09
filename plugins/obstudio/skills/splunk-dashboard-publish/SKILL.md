@@ -33,8 +33,8 @@ a required file is missing. Read only the references routed by the selected mode
   update, or delete, show the complete diff and require explicit current
   yes/no confirmation. Credentials, a prior run, or earlier confirmation are
   not consent. A changed diff requires confirmation again.
-- Create/update only `GAP` rows. Never mutate `COVERED` or `UNCERTAIN` rows;
-  UNCERTAIN requires human review.
+- Create only GAPs. On a COVERED dashboard, append only confirmed chart GAPs.
+  Never mutate UNCERTAIN objects.
 - Live REST auth uses `SPLUNK_ACCESS_TOKEN` from the environment as
   `X-SF-Token`. Never log it, echo it, write it to
   `.observe/dashboard-sync.md`, put it in prompt/report context, or persist a

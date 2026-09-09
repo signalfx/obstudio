@@ -62,9 +62,12 @@ Use `chart-wire-contract.md` exactly. It owns HCL-to-REST type mapping,
 `options`, `programText`, `packageSpecifications`, text-chart behavior, and the
 `defaultPlotType` restriction.
 
-## Mutate Confirmed GAPs Sequentially
+## Create Confirmed GAPs And Attach Chart GAPs Sequentially
 
-Execute only rows in the confirmed diff, in this order:
+Create only `GAP` objects from the confirmed diff. The sole permitted mutation
+of a `COVERED` object is the containing-dashboard PUT required to attach
+confirmed chart-level `GAP` rows; this exception does not reclassify the
+dashboard itself as GAP. Execute in this order:
 
 1. Create each GAP group with `POST /v2/dashboardgroup` body
    `{name, description}`; reuse the ID of a COVERED group.
@@ -77,8 +80,11 @@ Execute only rows in the confirmed diff, in this order:
 4. For a GAP dashboard, `POST /v2/dashboard` with `name`, `description`,
    `groupId`, placed `charts[]`, and `"tags": ["obstudio"]`.
 5. For a COVERED dashboard with chart GAPs, fetch its current object and
-   `PUT /v2/dashboard/{id}` with the existing `charts[]` plus only new placed
-   chart entries. Never recreate the dashboard.
+   `PUT /v2/dashboard/{id}` with every existing `charts[]` placement retained
+   and only the confirmed new chart placements appended. Build the accepted PUT
+   body from current live values and change only `charts[]`; never remove or
+   reorder an existing placement, recreate the dashboard, or update it for any
+   other reason.
 6. Once a created/reused chart is successfully referenced, remove it from the
    orphan list. Delete only unmatched orphan IDs included in the confirmed diff
    via `DELETE /v2/chart/{id}`.

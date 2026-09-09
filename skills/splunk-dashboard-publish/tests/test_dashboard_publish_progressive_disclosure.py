@@ -33,7 +33,7 @@ def test_always_loaded_contract_keeps_publish_safety_visible() -> None:
         "SPLUNK_ACCESS_TOKEN",
         "Never log it",
         "explicit current yes/no confirmation",
-        "Create/update only `GAP` rows",
+        "Create only GAPs",
         "Fetch and reclassify live state on every run",
         "Only HTTP 500 pages",
         "bare `except Exception`",
@@ -42,6 +42,27 @@ def test_always_loaded_contract_keeps_publish_safety_visible() -> None:
         "non-empty Reason",
     ):
         assert required in text
+
+
+def test_covered_dashboard_put_is_a_narrow_chart_gap_attachment_exception() -> None:
+    entrypoint = " ".join(SKILL.read_text(encoding="utf-8").split())
+    live = " ".join(LIVE.read_text(encoding="utf-8").split())
+
+    for required in (
+        "On a COVERED dashboard, append only confirmed chart GAPs",
+        "Never mutate UNCERTAIN objects",
+    ):
+        assert required in entrypoint
+
+    for required in (
+        "sole permitted mutation of a `COVERED` object",
+        "does not reclassify the dashboard itself as GAP",
+        "every existing `charts[]` placement retained",
+        "only the confirmed new chart placements appended",
+        "change only `charts[]`",
+        "never remove or reorder an existing placement",
+    ):
+        assert required in live
 
 
 def test_offline_reference_is_non_mutating_and_self_contained() -> None:

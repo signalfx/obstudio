@@ -1,0 +1,452 @@
+{
+ "schema_version": 2,
+ "kind": "otel-audit",
+ "meta": {
+  "audit_id": "kvstore-20260909",
+  "service_name": "go-kvstore",
+  "commit": "fixture",
+  "language": "go",
+  "framework": "net/http",
+  "date": "2026-09-09",
+  "status": "Partial",
+  "genai_ownership_detected": false
+ },
+ "summary": [
+  "The Go kvstore lacks an SDK lifecycle and detector-ready diagnostics for asynchronous persistence, index pressure, and capacity eviction."
+ ],
+ "flow": "audit -> select -> instrument -> verify -> configure/dashboard -> publish",
+ "evidence": [
+  {
+   "check": "Manifest",
+   "finding": "Go module without OpenTelemetry dependencies",
+   "source": "go.mod"
+  },
+  {
+   "check": "Entry point",
+   "finding": "net/http server startup",
+   "source": "cmd/kvstore-server/main.go:18-42"
+  },
+  {
+   "check": "Route source",
+   "finding": "Key-value and search handlers",
+   "source": "kvstore/http.go:23-95"
+  },
+  {
+   "check": "Runtime/startup",
+   "finding": "Server lifecycle and launch environment",
+   "source": "cmd/kvstore-server/main.go:18-67,.vscode/launch.json:12-15"
+  },
+  {
+   "check": "GenAI ownership",
+   "finding": "No",
+   "source": "go.mod and source scan"
+  }
+ ],
+ "routes": [
+  {
+   "method": "GET",
+   "path": "/health"
+  },
+  {
+   "method": "GET",
+   "path": "/kv/{key}"
+  },
+  {
+   "method": "PUT",
+   "path": "/kv/{key}"
+  },
+  {
+   "method": "DELETE",
+   "path": "/kv/{key}"
+  },
+  {
+   "method": "GET",
+   "path": "/search"
+  }
+ ],
+ "signal_flow": {
+  "component_flow_map": "cmd/kvstore-server [GAP: Provider and resource lifecycle] -> HTTP handlers [GAP: HTTP route telemetry] -> request logs [GAP: Local application log pipeline]\nGo process [GAP: Go runtime and host metrics]\nStore persistence/index/eviction [GAP: Store async diagnostics]"
+ },
+ "current_instrumentation": {
+  "spans": [],
+  "metrics": [],
+  "logs": [],
+  "incident_readiness": [
+   {
+    "area": "Provider and resource lifecycle",
+    "status": "missing",
+    "evidence": "cmd/kvstore-server/main.go:18-42",
+    "required_signals": "One provider/resource lifecycle with OTLP export, W3C propagation, and shutdown flush",
+    "impact": "No selected telemetry can emit reliably without this prerequisite."
+   },
+   {
+    "area": "Store async diagnostics",
+    "status": "missing",
+    "evidence": "kvstore/store.go:130-267",
+    "required_signals": "Persistence failure, index queue pressure, and capacity eviction metrics",
+    "impact": "Successful API responses can hide later data-loss, stale-search, or eviction symptoms."
+   }
+  ]
+ },
+ "genai_readiness": [],
+ "findings": [
+  {
+   "id": "OTEL-001",
+   "title": "Server startup lacks OTel provider and resource lifecycle",
+   "severity": "high",
+   "priority": "required",
+   "effort": "small",
+   "status": "proposed",
+   "area": "Provider and resource lifecycle",
+   "gap": "No OTel providers, resource merge, propagator, exporters, or shutdown flush are reachable from the server entrypoint.",
+   "impact": "Selected service-owned telemetry cannot emit with stable identity or flush reliably.",
+   "product_outcome": "One consistent kvstore identity and export lifecycle",
+   "required_fix": "Initialize OTel once before serving, preserve operator resource settings, configure trace and metric export plus local application-log export from environment, retain the documented detected-local Observer logs fallback, install W3C propagation, and flush on shutdown without hardcoding a cloud endpoint.",
+   "instrument_mode": "default",
+   "verification_scenarios": [
+    "runtime.startup.provider",
+    "runtime.shutdown.flush"
+   ],
+   "dependencies": [],
+   "evidence": [
+    "cmd/kvstore-server/main.go:18-42",
+    ".vscode/launch.json:12-15"
+   ],
+   "acceptance_criteria": [
+    "Exactly one SDK lifecycle starts before serving and flushes during shutdown.",
+    "Endpoints remain operator-configurable while retaining the documented detected-local Observer logs fallback; no cloud endpoint is hardcoded."
+   ],
+   "constraints": [
+    "Do not initialize providers from package init or request paths.",
+    "Preserve operator-provided service.name and resource attributes."
+   ],
+   "expected_telemetry": [
+    {
+     "type": "resource",
+     "name": "service.name",
+     "attributes": [
+      "service.name"
+     ],
+     "product_view": "Service-correlated traces, metrics, and logs"
+    }
+   ],
+   "follow_up_actions": [
+    "Select this prerequisite with dependent executable findings."
+   ],
+   "resolution": null,
+   "resolved_commit": null
+  },
+  {
+   "id": "OTEL-002",
+   "title": "HTTP API lacks route-level telemetry",
+   "severity": "high",
+   "priority": "required",
+   "effort": "medium",
+   "status": "proposed",
+   "area": "HTTP route telemetry",
+   "gap": "The net/http routes have no route-aware OTel server instrumentation.",
+   "impact": "Latency and errors cannot be attributed to bounded route patterns.",
+   "product_outcome": "Route-level request health in APM",
+   "required_fix": "Add one route-aware server instrumentation layer and bounded HTTP metrics.",
+   "instrument_mode": "default",
+   "verification_scenarios": [
+    "http.route.telemetry"
+   ],
+   "dependencies": [
+    "OTEL-001"
+   ],
+   "evidence": [
+    "kvstore/http.go:23-95"
+   ],
+   "acceptance_criteria": [
+    "Requests emit route-aware server telemetry without raw keys in attributes."
+   ],
+   "constraints": [
+    "Preserve route behavior and exclude concrete keys."
+   ],
+   "expected_telemetry": [
+    {
+     "type": "metric",
+     "name": "http.server.request.duration",
+     "attributes": [
+      "http.route"
+     ],
+     "product_view": "HTTP RED dashboard"
+    }
+   ],
+   "follow_up_actions": [
+    "Select this finding separately when route coverage is approved."
+   ],
+   "resolution": null,
+   "resolved_commit": null
+  },
+  {
+   "id": "OTEL-003",
+   "title": "Application logs lack local OTel export and correlation",
+   "severity": "medium",
+   "priority": "required",
+   "effort": "medium",
+   "status": "proposed",
+   "area": "Local application log pipeline",
+   "gap": "Existing application logs have no local OTel provider/exporter/bridge.",
+   "impact": "Persistence and request failures cannot be correlated through OTel logs.",
+   "product_outcome": "Local application logs correlated with active traces",
+   "required_fix": "Add one official Go logging bridge and local OTLP log path while preserving stdout.",
+   "instrument_mode": "default",
+   "verification_scenarios": [
+    "logs.request.correlation"
+   ],
+   "dependencies": [
+    "OTEL-001",
+    "OTEL-002"
+   ],
+   "evidence": [
+    "cmd/kvstore-server/main.go:29-66",
+    "kvstore/store.go:223-239"
+   ],
+   "acceptance_criteria": [
+    "One request-context log exports locally with trace and span correlation while stdout remains active."
+   ],
+   "constraints": [
+    "Do not duplicate records or send application logs directly to cloud."
+   ],
+   "expected_telemetry": [
+    {
+     "type": "log",
+     "name": "application log",
+     "attributes": [
+      "trace_id",
+      "span_id",
+      "severity"
+     ],
+     "product_view": "Correlated logs"
+    }
+   ],
+   "follow_up_actions": [
+    "Select with its route-context dependency when correlated logs are approved."
+   ],
+   "resolution": null,
+   "resolved_commit": null
+  },
+  {
+   "id": "OTEL-004",
+   "title": "Go runtime and host metrics are missing",
+   "severity": "medium",
+   "priority": "recommended",
+   "effort": "small",
+   "status": "proposed",
+   "area": "Go runtime and host metrics",
+   "gap": "The service has no Go runtime or process saturation metrics.",
+   "impact": "Operators cannot separate runtime pressure from store failures.",
+   "product_outcome": "Runtime saturation context",
+   "required_fix": "Enable official Go runtime and host metrics through the shared provider.",
+   "instrument_mode": "default",
+   "verification_scenarios": [
+    "runtime.metrics.collect"
+   ],
+   "dependencies": [
+    "OTEL-001"
+   ],
+   "evidence": [
+    "go.mod:1-3",
+    "cmd/kvstore-server/main.go:18-42"
+   ],
+   "acceptance_criteria": [
+    "A focused collection observes runtime metrics with stable service resource attributes."
+   ],
+   "constraints": [
+    "Use official runtime instrumentation rather than custom duplicates."
+   ],
+   "expected_telemetry": [
+    {
+     "type": "metric",
+     "name": "process.runtime.go.goroutines",
+     "attributes": [],
+     "product_view": "Runtime saturation dashboard"
+    }
+   ],
+   "follow_up_actions": [
+    "Select separately when runtime saturation coverage is approved."
+   ],
+   "resolution": null,
+   "resolved_commit": null
+  },
+  {
+   "id": "OTEL-005",
+   "title": "Async store internals lack detector-ready diagnostics",
+   "severity": "medium",
+   "priority": "recommended",
+   "effort": "medium",
+   "status": "proposed",
+   "area": "Store async diagnostics",
+   "gap": "Async persistence, buffered indexing, and capacity eviction have no low-cardinality detector inputs.",
+   "impact": "Accepted writes can later fail, search can lag, or entries can be evicted without a detector-ready signal.",
+   "product_outcome": "Persistence, backlog, and eviction incident detection",
+   "required_fix": "Add app-owned metrics for persistence outcome, real index queue pressure, and capacity eviction with bounded dimensions.",
+   "instrument_mode": "fix all",
+   "verification_scenarios": [
+    "store.async.persistence.failure",
+    "store.index.backpressure",
+    "store.capacity.eviction"
+   ],
+   "dependencies": [
+    "OTEL-001"
+   ],
+   "evidence": [
+    "kvstore/store.go:130-160",
+    "kvstore/store.go:208-267"
+   ],
+   "acceptance_criteria": [
+    "A forced persistence failure emits kvstore.persistence.operations with bounded operation, outcome=failure, and reason.",
+    "A deterministic pressure path emits nonzero kvstore.index.queue.depth with bounded workflow.",
+    "Capacity eviction emits kvstore.evictions with reason=capacity and no concrete key."
+   ],
+   "constraints": [
+    "Do not attach keys, paths, values, search terms, request IDs, goroutine IDs, or error text.",
+    "Do not change store behavior to create telemetry; prove non-default observable state and run go test -race ./...."
+   ],
+   "expected_telemetry": [
+    {
+     "type": "metric",
+     "name": "kvstore.persistence.operations",
+     "attributes": [
+      "operation",
+      "outcome",
+      "reason"
+     ],
+     "product_view": "Persistence failure detector"
+    },
+    {
+     "type": "metric",
+     "name": "kvstore.index.queue.depth",
+     "attributes": [
+      "workflow"
+     ],
+     "product_view": "Index pressure detector"
+    },
+    {
+     "type": "metric",
+     "name": "kvstore.evictions",
+     "attributes": [
+      "reason"
+     ],
+     "product_view": "Capacity eviction detector"
+    }
+   ],
+   "follow_up_actions": [
+    "Select this finding to instrument and verify all three audited store scenarios."
+   ],
+   "resolution": null,
+   "resolved_commit": null
+  }
+ ],
+ "verification": {
+  "environments": [
+   {
+    "id": "go.local",
+    "surface": "Go kvstore module",
+    "config_evidence": "go.mod and cmd/kvstore-server/main.go",
+    "runner": "go test -race ./...",
+    "scope": "module",
+    "prerequisites": "Go toolchain and module dependency access"
+   }
+  ],
+  "scenarios": [
+   {
+    "id": "runtime.startup.provider",
+    "trigger": "Start the server through cmd/kvstore-server",
+    "entrypoint": "cmd/kvstore-server/main.go:18",
+    "expected_signals": "One provider/resource lifecycle",
+    "proof_level": "focused call-site",
+    "acceptance_criteria": "Startup initializes one lifecycle with operator-preserved service identity.",
+    "environments": [
+     "go.local"
+    ]
+   },
+   {
+    "id": "runtime.shutdown.flush",
+    "trigger": "Invoke graceful shutdown",
+    "entrypoint": "cmd/kvstore-server/main.go:42",
+    "expected_signals": "Provider shutdown and flush",
+    "proof_level": "focused call-site",
+    "acceptance_criteria": "Shutdown flushes every configured provider exactly once.",
+    "environments": [
+     "go.local"
+    ]
+   },
+   {
+    "id": "http.route.telemetry",
+    "trigger": "Send a request to /kv/{key}",
+    "entrypoint": "kvstore/http.go:23",
+    "expected_signals": "Bounded route-aware server telemetry",
+    "proof_level": "full runtime",
+    "acceptance_criteria": "The request emits HTTP telemetry with a route template and no raw key.",
+    "environments": [
+     "go.local"
+    ]
+   },
+   {
+    "id": "logs.request.correlation",
+    "trigger": "Emit a request-context application log",
+    "entrypoint": "kvstore/http.go:59",
+    "expected_signals": "One local log with active trace correlation",
+    "proof_level": "full runtime",
+    "acceptance_criteria": "The record retains its console sink and exports once with trace and span IDs.",
+    "environments": [
+     "go.local"
+    ]
+   },
+   {
+    "id": "runtime.metrics.collect",
+    "trigger": "Collect from the shared meter provider",
+    "entrypoint": "cmd/kvstore-server/main.go:18",
+    "expected_signals": "Go runtime metrics",
+    "proof_level": "focused call-site",
+    "acceptance_criteria": "Collection includes a nonempty official runtime metric.",
+    "environments": [
+     "go.local"
+    ]
+   },
+   {
+    "id": "store.async.persistence.failure",
+    "trigger": "Force the persistence seam to fail",
+    "entrypoint": "kvstore/store.go:223",
+    "expected_signals": "Nonzero kvstore.persistence.operations failure datapoint",
+    "proof_level": "focused call-site",
+    "acceptance_criteria": "The datapoint has bounded operation, outcome=failure, and reason attributes.",
+    "environments": [
+     "go.local"
+    ]
+   },
+   {
+    "id": "store.index.backpressure",
+    "trigger": "Deterministically fill or block the index queue",
+    "entrypoint": "kvstore/store.go:242",
+    "expected_signals": "Nonzero kvstore.index.queue.depth datapoint",
+    "proof_level": "focused call-site",
+    "acceptance_criteria": "The observed queue depth is nonzero and only workflow is dimensional.",
+    "environments": [
+     "go.local"
+    ]
+   },
+   {
+    "id": "store.capacity.eviction",
+    "trigger": "Exceed bounded store capacity",
+    "entrypoint": "kvstore/store.go:130",
+    "expected_signals": "Nonzero kvstore.evictions datapoint",
+    "proof_level": "focused call-site",
+    "acceptance_criteria": "The datapoint has reason=capacity and no concrete key.",
+    "environments": [
+     "go.local"
+    ]
+   }
+  ]
+ },
+ "anti_patterns": [
+  "Metric attributes containing keys, values, paths, queries, request IDs, goroutine IDs, or error text."
+ ],
+ "recommendation": [
+  "Select approved audit IDs, save the bound selection, then run $otel-instrument for that exact scope."
+ ],
+ "scan_blockers": []
+}
