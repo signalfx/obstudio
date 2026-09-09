@@ -446,6 +446,15 @@ func TestHTTPSameOriginIsAccepted(t *testing.T) {
 	}
 }
 
+func TestHTTPLocalhostTrailingDotSameOriginIsAccepted(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "http://localhost.:3000/mcp", nil)
+	request.RemoteAddr = "127.0.0.1:54321"
+	request.Header.Set("Origin", "http://localhost.:3000")
+	if !originAllowed(request) {
+		t.Fatal("localhost. same-origin MCP request was rejected")
+	}
+}
+
 func TestHTTPRejectsRemoteOrigins(t *testing.T) {
 	server := newHTTPTestServer(t)
 	defer server.Close()

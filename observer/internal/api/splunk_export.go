@@ -573,7 +573,7 @@ func isLocalObserverRequest(r *http.Request) bool {
 }
 
 func isLoopbackHostname(host string) bool {
-	host = strings.Trim(strings.TrimSpace(host), "[]")
+	host = strings.TrimSuffix(strings.Trim(strings.TrimSpace(host), "[]"), ".")
 	if strings.EqualFold(host, "localhost") {
 		return true
 	}

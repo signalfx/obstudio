@@ -85,6 +85,33 @@ func TestSplunkExportUsesLocalOriginTrustAndHasNoCredentialRecoveryAPI(t *testin
 	}
 }
 
+func TestSplunkExportAcceptsSameOriginLocalhostTrailingDot(t *testing.T) {
+	metrics, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	traces, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	newTestSplunkExportService(metrics, traces, nil).register(mux)
+
+	request := httptest.NewRequest(http.MethodPost, "http://localhost.:3000/api/splunk/export",
+		strings.NewReader(`{"realm":"us1","accessToken":"`+testSplunkAccessToken+`"}`))
+	request.RemoteAddr = "127.0.0.1:54321"
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "http://localhost.:3000")
+	request.Header.Set("Sec-Fetch-Site", "same-origin")
+	request.Header.Set(splunkBrowserRequestHeader, "1")
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("localhost. same-origin configure status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+}
+
 func TestSplunkMutationPreflightDoesNotGrantCrossOriginAccess(t *testing.T) {
 	metrics, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	if err != nil {
