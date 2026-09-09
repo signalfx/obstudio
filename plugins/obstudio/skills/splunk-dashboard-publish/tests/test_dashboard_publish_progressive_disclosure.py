@@ -184,6 +184,13 @@ def test_chart_wire_preserves_explicit_visualization_options() -> None:
         "type": "SingleValue",
         "colorBy": "Scale",
     }
+    assert chart_options("signalfx_list_chart") == {
+        "type": "List",
+        "colorBy": "Dimension",
+    }
+    assert chart_options("signalfx_heatmap_chart") == {"type": "Heatmap"}
+    assert chart_options("signalfx_text_chart") == {"type": "Text"}
+    assert chart_options("signalfx_table_chart") == {"type": "TableChart"}
     assert chart_options("time_series", color_by="Scale")["colorBy"] == "Scale"
 
 
@@ -226,8 +233,12 @@ def test_parse_contract_carries_visualization_options_into_wire_mapping() -> Non
         assert "`plot_type`/`color_by`" in text
 
     wire = CHART_WIRE.read_text(encoding="utf-8")
-    assert '{name, programText, options, packageSpecifications: "signalfx"}' in wire
     normalized_wire = " ".join(wire.split())
+    assert "`signalfx_time_chart`, `signalfx_single_value_chart`" in wire
+    assert "list, heatmap, text, or table `signalfx_*_chart` resources" in (
+        normalized_wire
+    )
+    assert '{name, programText, options, packageSpecifications: "signalfx"}' in wire
     assert "show exact per-chart `options`" in normalized_wire
     assert "unsupported values stop, never default" in normalized_wire
     assert "`defaultPlotType` is `TimeSeriesChart`-only" in normalized_wire

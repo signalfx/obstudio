@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "splunk-dashboard-publish",
-    "run_id": "20260909T053902174801Z",
+    "run_id": "20260909T065801486732Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -65,7 +65,7 @@
   },
   "source": {
     "digest_version": 2,
-    "digest": "9553d7f75200fe0dce3ed191cf08284a56384f57ba0f66afd5f27d74b77b6752",
+    "digest": "8b558271f4ccc506ae234c6a6060499a0d0d9bee333702494e5346291b19cce6",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -123,11 +123,11 @@
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "77c3e9b98a3a84fe0f7699f7ab40eabcf0dd40fe9cef231e4958b12653535a69",
       "skills/splunk-dashboard-publish/SKILL.md": "8c8ffa3df450c628fb609f7e36683c85e978634b8e921c38dd1663c63d2423a6",
-      "skills/splunk-dashboard-publish/references/chart-wire-contract.md": "b7e396b046f9bc67f5f5c7088fab159d6d29c20f8f78be2b64d71d4fafddc772",
+      "skills/splunk-dashboard-publish/references/chart-wire-contract.md": "42a5df400de71b251364b57bc9ff537ff2f1834c1c1ba1989399a541cebb483d",
       "skills/splunk-dashboard-publish/references/dashboard-coverage-model.md": "8538452c7dfba51693c6a36befbe74a67b0e7f677db936496a850249e18442ce",
       "skills/splunk-dashboard-publish/references/live-publish.md": "76865895c801d0e82556d44c44ef894a41b9ac8dbe84fd07d82a944d7c5bda45",
       "skills/splunk-dashboard-publish/references/offline-plan.md": "d47545b86803e026b369b638c04e848d7bb2388eb75601a860b293116b405fc9",
-      "skills/splunk-dashboard-publish/tests/test_dashboard_publish_progressive_disclosure.py": "2341d21a5b6fb7f176842dc9ee0031cadb447fdc13bb0f32cde2fe4d8e6e81a4",
+      "skills/splunk-dashboard-publish/tests/test_dashboard_publish_progressive_disclosure.py": "571677b6794e8a6fb7600117bd0561c87c6766e5594a2f07d65526a35a589b8a",
       "evals/sanity/skill-smoke/eval/sanity/dashboard-publish.json": "748bd26dfeeee534643ab02374c4c88459133e261f67f92c6380a027057079c2",
       "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9"
     },

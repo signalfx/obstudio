@@ -1,7 +1,8 @@
 # Chart Wire Contract
 
-HCL: `signalfx_time_chart`, `signalfx_single_value_chart`. Preserve options;
-default only when absent.
+HCL: `signalfx_time_chart`, `signalfx_single_value_chart`, and list, heatmap,
+text, or table `signalfx_*_chart` resources. Preserve options; default only
+when absent.
 
 ```python
 CHART_TYPE_MAP = {
