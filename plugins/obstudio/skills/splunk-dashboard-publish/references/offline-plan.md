@@ -99,8 +99,13 @@ Describe what a later confirmed online run would do:
 1. `POST /v2/dashboardgroup` for a live-confirmed GAP group and keep its ID.
 2. `POST /v2/chart` for each live-confirmed GAP chart and keep each chart ID.
 3. `POST /v2/dashboard` for a missing dashboard, referencing the collected
-   `chartId` values with exact grid placement; or fetch-merge-`PUT
-   /v2/dashboard/{id}` when only panels are missing from a covered dashboard.
+   `chartId` values with exact grid placement.
+4. For confirmed chart GAPs in a COVERED dashboard, fetch current state and
+   fetch-merge-`PUT /v2/dashboard/{id}` solely to attach them. Retain every
+   existing `charts[]` placement and its order; append only confirmed new
+   placements. Never remove/reorder existing placements, recreate or otherwise
+   mutate the COVERED dashboard, or mutate UNCERTAIN. This sole permitted
+   COVERED mutation does not make the dashboard a GAP.
 
 Show the planned chart body shape from `chart-wire-contract.md`, then list the
 exact `name`, REST type, and complete normalized `programText` for each planned
@@ -125,9 +130,10 @@ body = {
 
 Explain that chart IDs must be written incrementally to
 `.observe/dashboard-sync.md`. If dashboard POST/PUT fails after chart creation,
-those IDs become explicit `Orphan charts` so a retry can match/reuse them or a
-future confirmed cleanup can `DELETE /v2/chart/{id}`. Never imply that cleanup
-ran offline.
+record every still-unreferenced chart ID immediately as explicit `Orphan charts`
+after either the POST failure or the PUT failure. A retry can match/reuse them,
+or a future confirmed cleanup can `DELETE /v2/chart/{id}`. Never imply that
+cleanup ran offline.
 
 ## Response
 
@@ -138,3 +144,7 @@ that live reclassification plus a new explicit confirmation is required. The
 response must include the `Normalized Chart Programs` table rather than only a
 count of unresolved variables. Before finalizing, search the response for the
 literal `"tags": ["obstudio"]`; if it is absent, add the planned dashboard body.
+A future-live response is incomplete unless it says: create GAPs only; the sole
+COVERED mutation is this append-only PUT preserving existing chart placements
+and order; never otherwise mutate COVERED or UNCERTAIN; and after dashboard
+POST or PUT failure record every unreferenced chart ID under `Orphan charts`.
