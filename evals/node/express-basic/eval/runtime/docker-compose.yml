@@ -16,6 +16,10 @@ services:
     build:
       context: ${CODEX_EVAL_SERVICE_DIR:?CODEX_EVAL_SERVICE_DIR is required}
       dockerfile: ${CODEX_EVAL_REPO_ROOT:?CODEX_EVAL_REPO_ROOT is required}/evals/node/express-basic/eval/runtime/App.Dockerfile
+    entrypoint: ["/bin/sh", "/usr/local/bin/npm-signal-proxy.sh"]
+    command: ["npm", "run", "dev"]
+    volumes:
+      - ./npm-signal-proxy.sh:/usr/local/bin/npm-signal-proxy.sh:ro
     environment:
       - PORT=8000
       - OTEL_SERVICE_NAME=node-express-basic

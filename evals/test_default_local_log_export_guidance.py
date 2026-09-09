@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import re
+import signal
 import subprocess
+import sys
+import time
 from pathlib import Path
 
 
@@ -307,7 +310,7 @@ def test_python_cli_preserves_non_otlp_bridge_ownership(tmp_path: Path) -> None:
         launcher,
         _fenced_code_after(
             LANGUAGES / "python.md",
-            "## Auto-Instrumentation (CLI Wrapper)",
+            "## CLI Wrapper (Explicit Zero-Code Exception)",
             "bash",
         ),
     )
@@ -753,10 +756,17 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
             or check["id"] == "request-context-logs"
         )
         assert record_check["match"] == {"body": "runtime request completed"}
-        assert record_check["field_contains"] == {"severityText": "WARN"}
-        assert record_check["field_equals"] == {
-            "resource.serviceName": service_name
-        }
+        if service_name == "go-kvstore":
+            assert "field_contains" not in record_check
+            assert record_check["field_equals"] == {
+                "severityNumber": 13,
+                "resource.serviceName": service_name,
+            }
+        else:
+            assert record_check["field_contains"] == {"severityText": "WARN"}
+            assert record_check["field_equals"] == {
+                "resource.serviceName": service_name
+            }
         assert record_check["non_empty"] == ["traceId", "spanId"]
         assert record_check["exact_count"] == record_count
         assert record_check["unique_by"] == ["traceId", "spanId"]
@@ -767,13 +777,20 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
             for check in default_logs["record_checks"]
             if check["id"] == "shutdown-log"
         )
-        assert shutdown_check == {
+        expected_shutdown = {
             "id": "shutdown-log",
             "match": {"body": "runtime shutdown completed"},
-            "field_contains": {"severityText": "WARN"},
             "field_equals": {"resource.serviceName": service_name},
             "exact_count": 1,
         }
+        if service_name == "go-kvstore":
+            expected_shutdown["field_equals"] = {
+                "severityNumber": 13,
+                "resource.serviceName": service_name,
+            }
+        else:
+            expected_shutdown["field_contains"] = {"severityText": "WARN"}
+        assert shutdown_check == expected_shutdown
 
         default_sink = default_check["expect"]["service_logs"][0]
         assert default_sink["occurrences"]["runtime request completed"] == record_count
@@ -800,6 +817,107 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
         opt_out_sink = opt_out_check["expect"]["service_logs"][0]
         assert opt_out_sink["occurrences"]["runtime request completed"] == record_count
         assert opt_out_sink["occurrences"]["runtime shutdown completed"] == 1
+
+
+def test_runtime_regressions_keep_python_setup_go_levels_and_node_startup() -> None:
+    instrument = _normalized(INSTRUMENT_SKILL)
+    python = _normalized(LANGUAGES / "python.md")
+    go = _normalized(LANGUAGES / "go.md")
+    fastapi_runtime = json.loads(
+        _read(
+            ROOT
+            / "evals/python/fastapi-celery/eval/runtime/instrument.json"
+        )
+    )
+    fastapi_qual = json.loads(
+        _read(ROOT / "evals/python/fastapi-celery/eval/qual/instrument.json")
+    )
+    kvstore_main = _read(ROOT / "evals/go/kvstore/cmd/kvstore-server/main.go")
+    node_runtime_image = _read(
+        ROOT / "evals/node/express-basic/eval/runtime/App.Dockerfile"
+    )
+    node_runtime_compose = _read(
+        ROOT / "evals/node/express-basic/eval/runtime/docker-compose.yml"
+    )
+    node_signal_proxy = _read(
+        ROOT / "evals/node/express-basic/eval/runtime/npm-signal-proxy.sh"
+    )
+
+    assert "Python uses per-process setup" in instrument
+    assert "user selects CLI-only" in instrument
+    assert "Preserve existing log APIs/levels" in instrument
+    assert "CLI Wrapper (Explicit Zero-Code Exception)" in python
+    assert "wrapper-only startup edits fail" in python
+    assert "per-process setup below" in python
+    assert "worker_process_init" in python
+    assert "keep provider setup out of `worker.py` import time" in python
+    assert "severity number (`WARN` is 13)" in go
+    assert 'slog.Warn("runtime shutdown completed")' in kvstore_main
+
+    fastapi_task = fastapi_runtime["prompts"][0]["task"]
+    assert "API startup must use a separate explicit OTel setup module" in fastapi_task
+    assert "worker_process_init" in fastapi_task
+    assert "worker.py import stays provider-free" in fastapi_task
+    assert "wrapper-only instrumentation is insufficient" in fastapi_task
+
+    trace_expectation = fastapi_runtime["checks"][0]["expect"]["endpoints"][0]
+    assert trace_expectation["detail_path_template"] == "/api/query/traces/{id}"
+    assert trace_expectation["detail_id_field"] == "traceId"
+    assert trace_expectation["detail_contains_all"] == [
+        "fastapi-celery-worker",
+        "run/worker.fulfill_order",
+    ]
+    assert any("run/worker.fulfill_order" in row for row in fastapi_qual["rubric"])
+    assert any("worker_process_init" in row for row in fastapi_qual["rubric"])
+
+    assert 'CMD ["npm", "run", "dev"]' in node_runtime_image
+    assert '"./instrumentation.js"' not in node_runtime_image
+    assert (
+        'entrypoint: ["/bin/sh", "/usr/local/bin/npm-signal-proxy.sh"]'
+        in node_runtime_compose
+    )
+    assert 'command: ["npm", "run", "dev"]' in node_runtime_compose
+    assert (
+        "./npm-signal-proxy.sh:/usr/local/bin/npm-signal-proxy.sh:ro"
+        in node_runtime_compose
+    )
+    assert '"$@" &' in node_signal_proxy
+    assert "forward_and_wait()" in node_signal_proxy
+    assert 'signal_leaves "$runner_pid"' in node_signal_proxy
+    assert 'wait "$runner_pid"' in node_signal_proxy
+
+
+def test_node_runtime_signal_proxy_preserves_child_status(tmp_path: Path) -> None:
+    proxy = ROOT / "evals/node/express-basic/eval/runtime/npm-signal-proxy.sh"
+    ready = tmp_path / "ready"
+    child = tmp_path / "child.py"
+    child.write_text(
+        "import signal, sys, time\n"
+        "from pathlib import Path\n"
+        "signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))\n"
+        "Path(sys.argv[1]).touch()\n"
+        "while True: time.sleep(1)\n",
+        encoding="utf-8",
+    )
+
+    process = subprocess.Popen(["/bin/sh", proxy, sys.executable, child, ready])
+    try:
+        deadline = time.monotonic() + 5
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready.exists()
+        process.send_signal(signal.SIGTERM)
+        assert process.wait(timeout=5) == 0
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=5)
+
+    failed = subprocess.run(
+        ["/bin/sh", proxy, "/bin/sh", "-c", "exit 7"],
+        timeout=5,
+    )
+    assert failed.returncode == 7
 
 
 def test_host_and_container_local_receiver_policy_uses_checked_in_evidence() -> None:

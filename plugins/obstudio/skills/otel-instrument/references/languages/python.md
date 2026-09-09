@@ -91,9 +91,11 @@ to copy this example.
 
 ---
 
-## Auto-Instrumentation (CLI Wrapper)
+## CLI Wrapper (Explicit Zero-Code Exception)
 
-Reuse the current app command and wrap it with the OTel auto-instrumentation agent. Do not introduce Docker just for observability.
+Use this wrapper only when the user explicitly selects CLI-only ownership.
+Otherwise use per-process setup below; wrapper-only startup edits fail.
+Reuse the current command and do not introduce Docker just for observability.
 
 ```bash
 #!/bin/sh
@@ -148,19 +150,8 @@ pass the same command the project already uses, for example
 `uvicorn`. Do not inline only the final `opentelemetry-instrument` command and
 drop the policy checks.
 
-If the project already runs in Docker:
-```dockerfile
-COPY otel-entrypoint.sh /usr/local/bin/otel-entrypoint
-RUN chmod 0755 /usr/local/bin/otel-entrypoint
-ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
-ENV OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-ENV OBSTUDIO_OBSERVER_RUNTIME=container
-ENV OTEL_LOGS_EXPORTER=otlp
-ENV OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/protobuf
-ENV OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4318/v1/logs
-ENTRYPOINT ["/usr/local/bin/otel-entrypoint"]
-CMD ["python", "app.py"]
-```
+For existing Docker, copy the wrapper, make it the entrypoint, retain the
+current command, and select its checked-in container branch through Compose.
 
 Generate the wrapper's `container` branch with the exact local Observer service
 address detected in the project topology, then select that checked-in branch
@@ -201,9 +192,10 @@ Create a separate file for OTel setup. Configure providers before creating the
 application object (Flask app, FastAPI app, etc.), but install the logging
 bridge only after the application has established its existing console/file
 handlers and before it begins serving.
-For Python services, this explicit setup file is the default implementation
-path; a Makefile or Docker command that only wraps the process with
-`opentelemetry-instrument` is not enough by itself.
+For Python services, this setup is required unless the user selected the
+zero-code exception above; wrapper-only commands are insufficient.
+For prefork Celery, keep provider setup out of `worker.py` import time. Invoke
+the setup module and `CeleryInstrumentor` from `worker_process_init` per child.
 
 ### Existing provider reconciliation
 

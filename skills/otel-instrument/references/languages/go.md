@@ -817,6 +817,10 @@ while preserving the original sink, and the record is visible in the Obstudio
 Explorer. When trace/metric cloud export is enabled, also prove no cloud log
 endpoint, header, exporter, or forwarding path was configured.
 
+When the selected `otelslog` bridge emits numeric severity without optional
+`SeverityText`, validate the OTLP severity number (`WARN` is 13); do not rewrite
+the application's logger API or level merely to manufacture severity text.
+
 ---
 
 ## Gotchas
