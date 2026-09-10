@@ -127,7 +127,7 @@
           "default": 3000,
           "minimum": 1,
           "maximum": 65535,
-          "markdownDescription": "Local port used by the extension-managed Observer UI and MCP HTTP endpoint when `sharedObserverUrl` is unset."
+          "markdownDescription": "Local port used by the extension-managed Observer UI and MCP HTTP endpoint when `sharedObserverUrl` is unset. If a verified but incompatible `obstudio` process already owns this port, the extension stops and replaces it."
         },
         "observability-studio.sisCimdRegistrationEnabled": {
           "type": "boolean",

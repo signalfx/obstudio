@@ -15,6 +15,116 @@ export type ProcessInspectionPlan = {
 	command: string;
 };
 
+export type ListeningProcessInspectionPlan = {
+	args: string[];
+	command: string;
+};
+
+export type ListeningProcess = {
+	executablePath?: string;
+	pid: number;
+};
+
+export function listeningProcessInspectionPlan(
+	port: number,
+	platform: NodeJS.Platform = process.platform,
+): ListeningProcessInspectionPlan {
+	if (!Number.isSafeInteger(port) || port <= 0 || port > 65_535) {
+		throw new Error(`Cannot inspect invalid port ${port}.`);
+	}
+	if (platform === 'win32') {
+		return {
+			command: windowsSystemTool('WindowsPowerShell', 'v1.0', 'powershell.exe'),
+			args: [
+				'-NoProfile',
+				'-NonInteractive',
+				'-Command',
+				`Get-NetTCPConnection -State Listen -LocalPort ${port} -ErrorAction SilentlyContinue `
+					+ '| Select-Object -ExpandProperty OwningProcess -Unique '
+					+ '| ForEach-Object { [Console]::Out.WriteLine($_) }',
+			],
+		};
+	}
+	if (platform === 'darwin' || platform === 'linux') {
+		return {
+			command: platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof',
+			args: ['-nP', '-a', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'],
+		};
+	}
+	throw new Error(`Cannot inspect listening processes on unsupported platform ${platform}.`);
+}
+
+export function parseListeningProcessIds(output: string): number[] {
+	const processIds = new Set<number>();
+	for (const rawLine of output.split(/\r?\n/)) {
+		const match = /^(?:p)?([0-9]+)$/.exec(rawLine.trim());
+		if (match === null) {
+			continue;
+		}
+		const pid = Number(match[1]);
+		if (Number.isSafeInteger(pid) && pid > 0) {
+			processIds.add(pid);
+		}
+	}
+	return [...processIds];
+}
+
+export function isObserverExecutablePath(
+	executablePath: string,
+	platform: NodeJS.Platform = process.platform,
+): boolean {
+	const expectedName = platform === 'win32' ? 'obstudio.exe' : 'obstudio';
+	const basename = platform === 'win32' ? path.win32.basename(executablePath) : path.basename(executablePath);
+	return platform === 'win32' ? basename.toLowerCase() === expectedName : basename === expectedName;
+}
+
+export function processExecutablePathsEqual(
+	firstPath: string,
+	secondPath: string,
+	platform: NodeJS.Platform = process.platform,
+): boolean {
+	const normalize = (value: string) => {
+		const resolved = platform === 'win32' ? path.win32.normalize(value) : path.resolve(value);
+		return platform === 'win32' ? resolved.toLowerCase() : resolved;
+	};
+	return normalize(firstPath) === normalize(secondPath);
+}
+
+export async function readListeningProcess(port: number): Promise<ListeningProcess | undefined> {
+	let plan: ListeningProcessInspectionPlan;
+	try {
+		plan = listeningProcessInspectionPlan(port);
+	} catch {
+		return undefined;
+	}
+	const processIds = await new Promise<number[]>((resolve) => {
+		try {
+			cp.execFile(plan.command, plan.args, {
+				encoding: 'utf8',
+				maxBuffer: 64 * 1024,
+				timeout: 10_000,
+				windowsHide: true,
+			}, (error, stdout) => {
+				if (error !== null) {
+					resolve([]);
+					return;
+				}
+				resolve(parseListeningProcessIds(stdout));
+			});
+		} catch {
+			resolve([]);
+		}
+	});
+	if (processIds.length !== 1) {
+		return undefined;
+	}
+	const pid = processIds[0];
+	return {
+		executablePath: await readProcessExecutablePath(pid),
+		pid,
+	};
+}
+
 export function processInspectionPlan(
 	pid: number,
 	platform: NodeJS.Platform = process.platform,

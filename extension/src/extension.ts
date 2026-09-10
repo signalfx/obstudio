@@ -20,8 +20,6 @@ import {
 import {
 	buildObserverHealthUrl,
 	buildObserverValidatorSummaryUrl,
-	findOtherExtensionManagedObserver,
-	findOtherExtensionObserverExecutable,
 	isLoopbackObserverHost,
 	type ObserverHealth,
 	type SharedObserverDiscovery,
@@ -105,7 +103,10 @@ import { ObserverWebviewTelemetry } from './observer-webview-telemetry';
 import {
 	forceTerminateProcess,
 	gracefullyTerminateProcess,
+	isObserverExecutablePath,
 	processIsRunning,
+	processExecutablePathsEqual,
+	readListeningProcess,
 	readProcessExecutablePath,
 } from './process-control';
 import {
@@ -181,8 +182,8 @@ const observerCloudRollbackTokenHeader = 'X-Obstudio-Cloud-Rollback-Token';
 const observerShutdownTerminationTimeoutMs = 2_000;
 const observerShutdownPostExitDelayMs = 300;
 const observerExtensionUnloadDeadlineMs = 4_500;
-const outdatedExtensionObserverShutdownTimeoutMs = 5_000;
-const outdatedExtensionObserverForceShutdownTimeoutMs = 2_000;
+const outdatedManagedObserverShutdownTimeoutMs = 5_000;
+const outdatedManagedObserverForceShutdownTimeoutMs = 2_000;
 const agentIntegrationPromptDismissedPrefix = 'agentIntegrationPromptDismissed.';
 const agentSkillsBundleVersionPrefix = 'agentSkillsBundleVersion.';
 const agentIntegrationConfigFingerprintPrefix = 'agentIntegrationConfigFingerprint.v1.';
@@ -328,14 +329,14 @@ type StartupHintCarrier = {
 	startupTitle?: string;
 };
 
-type OtherExtensionObserverRetirement =
+type ManagedPortObserverRetirement =
 	| { status: 'ignored' }
 	| { status: 'not-applicable' }
 	| { pid?: number; port?: number; status: 'restart-required'; version?: string }
 	| { status: 'retired' };
 
 function observerRestartRequiredError(
-	retirement: Extract<OtherExtensionObserverRetirement, { status: 'restart-required' }>,
+	retirement: Extract<ManagedPortObserverRetirement, { status: 'restart-required' }>,
 	bundleVersion: string,
 ): Error {
 	const portLabel = retirement.port === undefined
@@ -1000,11 +1001,11 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				);
 				assertObserverRunCurrent(observerLifecycleState, runId);
 			}
-			const retirement = await retireOtherExtensionManagedObserver(
-				context,
+			const retirement = await retireMismatchedManagedPortObserver(
 				discoveredObserver,
 				discoveryProbe.status === 'ready' ? discoveryProbe.health : undefined,
 				getConfiguredManagedObserverPort(),
+				bundleVersion,
 			);
 			assertObserverRunCurrent(observerLifecycleState, runId);
 			if (retirement.status === 'restart-required') {
@@ -1012,7 +1013,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			}
 			let discoveryDetail: string;
 			if (retirement.status === 'retired') {
-				discoveryDetail = 'the running Observer belonged to a different installed extension copy';
+				discoveryDetail = 'the mismatched Observer on the managed port was stopped';
 			} else if (retirement.status === 'ignored') {
 				discoveryDetail = `Observer ${discoveryProbe.status === 'ready'
 					? discoveryProbe.health.version || '(unversioned)'
@@ -1058,11 +1059,11 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			);
 			assertObserverRunCurrent(observerLifecycleState, runId);
 			if (managedProbe.status === 'ready') {
-				const retirement = await retireOtherExtensionManagedObserver(
-					context,
+				const retirement = await retireMismatchedManagedPortObserver(
 					managedDiscovery,
 					managedProbe.health,
 					managedPort,
+					bundleVersion,
 				);
 				assertObserverRunCurrent(observerLifecycleState, runId);
 				if (retirement.status === 'restart-required') {
@@ -1072,7 +1073,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 					setObserverEndpoints(managedObserverEndpoints);
 					observerUsesSharedServer = true;
 					appendObserverOutputLine(
-						`Reusing CLI-managed observer at ${managedObserverEndpoints.restBaseUrl}`,
+						`Reusing Observer at ${managedObserverEndpoints.restBaseUrl}`,
 					);
 					if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
 						syncObserverUi();
@@ -1087,7 +1088,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 					? managedProbe.reason
 					: getErrorMessage(managedProbe.error);
 				appendObserverOutputLine(
-					`Ignoring stale or incompatible CLI-managed Observer state for ${managedObserverBaseUrl}: ${managedDetail}`,
+					`Ignoring stale or incompatible Observer state for ${managedObserverBaseUrl}: ${managedDetail}`,
 				);
 			}
 		}
@@ -1095,20 +1096,39 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		assertObserverRunCurrent(observerLifecycleState, runId);
 
 		if (existingObserver.status === 'ready') {
-			if (existingObserver.health.version !== bundleVersion) {
+			if (existingObserver.health.version === bundleVersion) {
+				observerUsesSharedServer = true;
+				setObserverEndpoints(managedEndpoints);
+				appendObserverOutputLine(`Reusing shared observer at ${managedObserverBaseUrl}`);
+				if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
+					syncObserverUi();
+				}
+				return;
+			}
+			const retirement = await retireMismatchedManagedPortObserver(
+				{
+					baseUrl: managedObserverBaseUrl,
+					healthUrl: managedEndpoints.healthUrl,
+					mcpUrl: managedEndpoints.mcpUrl,
+				},
+				existingObserver.health,
+				managedPort,
+				bundleVersion,
+			);
+			assertObserverRunCurrent(observerLifecycleState, runId);
+			if (retirement.status === 'restart-required') {
+				throw observerRestartRequiredError(retirement, bundleVersion);
+			}
+			if (retirement.status !== 'retired') {
 				throw observerRestartRequiredError({
 					port: managedPort,
 					status: 'restart-required',
 					version: existingObserver.health.version,
 				}, bundleVersion);
 			}
-			observerUsesSharedServer = true;
-			setObserverEndpoints(managedEndpoints);
-			appendObserverOutputLine(`Reusing shared observer at ${managedObserverBaseUrl}`);
-			if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
-				syncObserverUi();
-			}
-			return;
+			appendObserverOutputLine(
+				`The previous Observer at ${managedObserverBaseUrl} was stopped before managed startup.`,
+			);
 		}
 
 		if (existingObserver.status === 'mismatch') {
@@ -1316,14 +1336,13 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 	return observerStartupPromise;
 }
 
-async function retireOtherExtensionManagedObserver(
-	context: vscode.ExtensionContext,
+async function retireMismatchedManagedPortObserver(
 	discovery: SharedObserverDiscovery,
 	observerHealth: ObserverHealth | undefined,
 	managedPort: number,
-): Promise<OtherExtensionObserverRetirement> {
+	bundleVersion: string,
+): Promise<ManagedPortObserverRetirement> {
 	const discoveryPort = observerPortFromUrl(discovery.baseUrl);
-	const bundleVersion = getBundleVersion(context);
 	const observerHealthVerified = observerHealth !== undefined;
 	const observerVersion = observerHealth?.version;
 	if (observerHealthVerified && observerVersion === bundleVersion) {
@@ -1341,43 +1360,33 @@ async function retireOtherExtensionManagedObserver(
 			status: 'ignored',
 		};
 	}
-	const pid = discovery.pid;
-	if (pid === undefined) {
-		if (!observerHealthVerified) {
-			return { status: 'not-applicable' };
-		}
+	if (!observerHealthVerified) {
+		return { status: 'not-applicable' };
+	}
+	const listener = await readListeningProcess(managedPort);
+	if (listener === undefined) {
 		appendObserverOutputLine(
-			`Observer at ${discovery.baseUrl} has no valid recorded PID; refusing to reuse or stop it automatically.`,
+			`Observer at ${discovery.baseUrl} has no unique inspectable listener; refusing to stop it automatically.`,
 		);
 		return {
-			port: discoveryPort,
-			status: 'restart-required',
-		};
-	}
-	if (pid === process.pid) {
-		return observerHealthVerified
-			? { pid, port: discoveryPort, status: 'restart-required', version: observerVersion }
-			: { status: 'not-applicable' };
-	}
-	if (!processIsRunning(pid)) {
-		return { status: 'retired' };
-	}
-	if (
-		observerHealth?.owner !== extensionManagedObserverOwner
-		|| observerHealth.mode !== extensionManagedObserverMode
-	) {
-		appendObserverOutputLine(
-			`Observer PID ${pid} at ${discovery.baseUrl} does not carry the VS Code extension ownership marker; `
-			+ 'refusing to stop it automatically.',
-		);
-		return {
-			pid,
+			pid: discovery.pid,
 			port: discoveryPort,
 			status: 'restart-required',
 			version: observerVersion,
 		};
 	}
-	const processExecutablePath = await readProcessExecutablePath(pid);
+	const { executablePath: processExecutablePath, pid } = listener;
+	if (discovery.pid !== undefined && discovery.pid !== pid) {
+		appendObserverOutputLine(
+			`Ignoring stale Observer PID ${discovery.pid}; localhost port ${managedPort} belongs to PID ${pid}.`,
+		);
+	}
+	if (pid === process.pid) {
+		return { pid, port: discoveryPort, status: 'restart-required', version: observerVersion };
+	}
+	if (!processIsRunning(pid)) {
+		return { status: 'retired' };
+	}
 	if (processExecutablePath === undefined) {
 		if (!processIsRunning(pid)) {
 			return { status: 'retired' };
@@ -1389,133 +1398,110 @@ async function retireOtherExtensionManagedObserver(
 			pid,
 			port: observerPortFromUrl(discovery.baseUrl),
 			status: 'restart-required',
+			version: observerVersion,
 		};
 	}
-	const otherExtensionObserver = findOtherExtensionManagedObserver({
-		currentExtensionPath: context.extensionPath,
-		discovery,
-		processExecutablePath,
-	});
-	if (otherExtensionObserver === undefined) {
-		const unverifiedObserver = findOtherExtensionObserverExecutable({
-			currentExtensionPath: context.extensionPath,
-			discovery,
-			processExecutablePath,
-		});
-		if (unverifiedObserver === undefined) {
-			appendObserverOutputLine(
-				`Observer PID ${pid} at ${discovery.baseUrl} is not the current bundled Observer; `
-				+ 'refusing to reuse or stop it automatically.',
-			);
-			return {
-				pid,
-				port: discoveryPort,
-				status: 'restart-required',
-			};
-		}
+	if (!isObserverExecutablePath(processExecutablePath)) {
 		appendObserverOutputLine(
-			`Observer PID ${unverifiedObserver.pid} appears to belong to a previous extension installation, `
-			+ 'but its installed package can no longer be verified; refusing to stop it automatically.',
+			`Observer health was returned from ${discovery.baseUrl}, but localhost port ${managedPort} `
+			+ `belongs to ${processExecutablePath}; refusing to stop PID ${pid} automatically.`,
 		);
 		return {
-			pid: unverifiedObserver.pid,
-			port: observerPortFromUrl(discovery.baseUrl),
+			pid,
+			port: discoveryPort,
 			status: 'restart-required',
+			version: observerVersion,
 		};
 	}
-	const restartRequired = (): OtherExtensionObserverRetirement => ({
-		pid: otherExtensionObserver.pid,
-		port: observerPortFromUrl(discovery.baseUrl),
+	const restartRequired = (): ManagedPortObserverRetirement => ({
+		pid,
+		port: discoveryPort,
 		status: 'restart-required',
-		version: otherExtensionObserver.version,
+		version: observerVersion,
 	});
 
-	const preStopExecutablePath = await readProcessExecutablePath(otherExtensionObserver.pid);
-	const preStopObserver = preStopExecutablePath === undefined
-		? undefined
-		: findOtherExtensionManagedObserver({
-			currentExtensionPath: context.extensionPath,
-			discovery,
-			processExecutablePath: preStopExecutablePath,
-		});
+	const preStopListener = await readListeningProcess(managedPort);
 	if (
-		preStopObserver === undefined
-		|| path.resolve(preStopObserver.binaryPath) !== path.resolve(otherExtensionObserver.binaryPath)
+		preStopListener === undefined
+		|| preStopListener.pid !== pid
+		|| preStopListener.executablePath === undefined
+		|| !isObserverExecutablePath(preStopListener.executablePath)
+		|| !processExecutablePathsEqual(preStopListener.executablePath, processExecutablePath)
 	) {
 		appendObserverOutputLine(
-			`Could not reverify Observer from installed extension ${otherExtensionObserver.version}; refusing to stop it.`,
+			`Could not reverify Observer ${observerVersion ?? '(unversioned)'} on localhost port ${managedPort}; `
+			+ `refusing to stop PID ${pid}.`,
 		);
 		return restartRequired();
 	}
 
 	appendObserverOutputLine(
-		`Replacing Observer from installed extension ${otherExtensionObserver.version} (PID ${otherExtensionObserver.pid}) `
+		`Replacing Observer ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} (PID ${pid}) `
 		+ `with bundled Observer ${bundleVersion}.`,
 	);
 	let gracefulTerminationRequested = false;
 	try {
-		await gracefullyTerminateProcess(otherExtensionObserver.pid);
+		await gracefullyTerminateProcess(pid);
 		gracefulTerminationRequested = true;
 	} catch (error) {
-		if (!processIsRunning(otherExtensionObserver.pid)) {
+		if (!processIsRunning(pid)) {
 			return { status: 'retired' };
 		}
 		appendObserverOutputLine(
-			`Could not request a graceful stop for Observer from installed extension `
-			+ `${otherExtensionObserver.version}: ${getErrorMessage(error)}. Proceeding to the verified forced-stop fallback.`,
+			`Could not request a graceful stop for Observer ${observerVersion ?? '(unversioned)'} on managed port `
+			+ `${managedPort}: ${getErrorMessage(error)}. Proceeding to the verified forced-stop fallback.`,
 		);
 	}
 
 	if (gracefulTerminationRequested) {
 		if (await waitForProcessExit(
-			otherExtensionObserver.pid,
-			outdatedExtensionObserverShutdownTimeoutMs,
+			pid,
+			outdatedManagedObserverShutdownTimeoutMs,
 		)) {
-			appendObserverOutputLine(`Stopped Observer from installed extension ${otherExtensionObserver.version}.`);
+			appendObserverOutputLine(
+				`Stopped Observer ${observerVersion ?? '(unversioned)'} on managed port ${managedPort}.`,
+			);
 			return { status: 'retired' };
 		}
 		appendObserverOutputLine(
-			`Observer from installed extension ${otherExtensionObserver.version} did not stop after `
-			+ `${outdatedExtensionObserverShutdownTimeoutMs}ms; forcing it to stop.`,
+			`Observer ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} did not stop after `
+			+ `${outdatedManagedObserverShutdownTimeoutMs}ms; forcing it to stop.`,
 		);
 	}
-	const currentProcessExecutablePath = await readProcessExecutablePath(otherExtensionObserver.pid);
-	const reverifiedObserver = currentProcessExecutablePath === undefined
-		? undefined
-		: findOtherExtensionManagedObserver({
-			currentExtensionPath: context.extensionPath,
-			discovery,
-			processExecutablePath: currentProcessExecutablePath,
-		});
+	const currentProcessExecutablePath = await readProcessExecutablePath(pid);
 	if (
-		reverifiedObserver === undefined
-		|| path.resolve(reverifiedObserver.binaryPath) !== path.resolve(otherExtensionObserver.binaryPath)
+		currentProcessExecutablePath === undefined
+		|| !isObserverExecutablePath(currentProcessExecutablePath)
+		|| !processExecutablePathsEqual(currentProcessExecutablePath, processExecutablePath)
 	) {
 		appendObserverOutputLine(
-			`Could not reverify Observer from installed extension ${otherExtensionObserver.version}; refusing a forced stop.`,
+			`Could not reverify Observer ${observerVersion ?? '(unversioned)'} PID ${pid}; refusing a forced stop.`,
 		);
 		return restartRequired();
 	}
 	try {
-		await forceTerminateProcess(otherExtensionObserver.pid);
+		await forceTerminateProcess(pid);
 	} catch (error) {
-		if (!processIsRunning(otherExtensionObserver.pid)) {
+		if (!processIsRunning(pid)) {
 			return { status: 'retired' };
 		}
 		appendObserverOutputLine(
-			`Could not force-stop Observer from installed extension ${otherExtensionObserver.version}: ${getErrorMessage(error)}`,
+			`Could not force-stop Observer ${observerVersion ?? '(unversioned)'} on managed port `
+			+ `${managedPort}: ${getErrorMessage(error)}`,
 		);
 		return restartRequired();
 	}
 	if (await waitForProcessExit(
-		otherExtensionObserver.pid,
-		outdatedExtensionObserverForceShutdownTimeoutMs,
+		pid,
+		outdatedManagedObserverForceShutdownTimeoutMs,
 	)) {
-		appendObserverOutputLine(`Force-stopped Observer from installed extension ${otherExtensionObserver.version}.`);
+		appendObserverOutputLine(
+			`Force-stopped Observer ${observerVersion ?? '(unversioned)'} on managed port ${managedPort}.`,
+		);
 		return { status: 'retired' };
 	}
 	appendObserverOutputLine(
-		`Observer from installed extension ${otherExtensionObserver.version} is still running after a forced stop.`,
+		`Observer ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} is still running after a forced stop.`,
 	);
 	return restartRequired();
 }
@@ -2581,17 +2567,14 @@ async function ensurePortAvailable(reservation: PortReservation): Promise<number
 }
 
 async function identifyPortOwner(port: number): Promise<string | undefined> {
-	return new Promise((resolve) => {
-		cp.exec(`lsof -i :${port} -sTCP:LISTEN -n -P 2>/dev/null`, { timeout: 3000 }, (error, stdout) => {
-			if (error || !stdout) { resolve(undefined); return; }
-			const lines = stdout.trim().split('\n');
-			if (lines.length < 2) { resolve(undefined); return; }
-			const fields = lines[1].split(/\s+/);
-			const command = fields[0];
-			const pid = fields[1];
-			resolve(command && pid ? `${command} (PID ${pid})` : undefined);
-		});
-	});
+	const listener = await readListeningProcess(port);
+	if (listener === undefined) {
+		return undefined;
+	}
+	const command = listener.executablePath === undefined
+		? 'process'
+		: path.basename(listener.executablePath);
+	return `${command} (PID ${listener.pid})`;
 }
 
 async function waitForObserverReady(

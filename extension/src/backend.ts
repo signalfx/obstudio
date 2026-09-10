@@ -36,17 +36,6 @@ export type SharedObserverDiscovery = {
 	updatedAtMs?: number;
 };
 
-export type OtherExtensionManagedObserver = {
-	binaryPath: string;
-	pid: number;
-	version: string;
-};
-
-export type OtherExtensionObserverExecutable = {
-	binaryPath: string;
-	pid: number;
-};
-
 export function isLoopbackObserverHost(hostname: string): boolean {
 	let normalized = hostname.trim().toLowerCase();
 	if (normalized.startsWith('[') && normalized.endsWith(']')) {
@@ -161,183 +150,13 @@ export function readSharedObserverDiscovery(
 	}
 }
 
-export function findOtherExtensionManagedObserver(options: {
-	currentExtensionPath: string;
-	discovery: SharedObserverDiscovery;
-	processExecutablePath: string;
-}): OtherExtensionManagedObserver | undefined {
-	const pid = options.discovery.pid;
-	if (
-		pid === undefined
-		|| options.processExecutablePath.trim() === ''
-	) {
-		return undefined;
-	}
-
-	const extensionsDirectory = path.dirname(path.resolve(options.currentExtensionPath));
-	let entries: fs.Dirent[];
-	try {
-		entries = fs.readdirSync(extensionsDirectory, { withFileTypes: true });
-	} catch {
-		return undefined;
-	}
-
-	for (const entry of entries) {
-		if (!entry.isDirectory() || !entry.name.toLowerCase().startsWith('splunk.observability-studio-')) {
-			continue;
-		}
-		const extensionPath = path.join(extensionsDirectory, entry.name);
-		if (path.resolve(extensionPath) === path.resolve(options.currentExtensionPath)) {
-			continue;
-		}
-		const identity = readExtensionPackageIdentity(extensionPath);
-		if (
-			identity === undefined
-			|| identity.publisher.toLowerCase() !== 'splunk'
-			|| identity.name !== 'observability-studio'
-		) {
-			continue;
-		}
-		let backend: ObserverBackend;
-		try {
-			backend = resolveBackend(extensionPath);
-		} catch {
-			continue;
-		}
-		if (
-			!isNonSymlinkedExtensionBackend(extensionPath, backend.command)
-			|| !processPathsEqual(options.processExecutablePath, backend.command)
-		) {
-			continue;
-		}
-		return {
-			binaryPath: backend.command,
-			pid,
-			version: identity.version,
-		};
-	}
-	return undefined;
-}
-
-export function findOtherExtensionObserverExecutable(options: {
-	currentExtensionPath: string;
-	discovery: SharedObserverDiscovery;
-	processExecutablePath: string;
-}): OtherExtensionObserverExecutable | undefined {
-	const pid = options.discovery.pid;
-	if (pid === undefined || options.processExecutablePath.trim() === '') {
-		return undefined;
-	}
-
-	const extensionsDirectory = path.dirname(path.resolve(options.currentExtensionPath));
-	const executablePath = path.resolve(options.processExecutablePath);
-	const relativeExecutablePath = path.relative(extensionsDirectory, executablePath);
-	const segments = relativeExecutablePath.split(path.sep);
-	const normalizedSegments = process.platform === 'win32'
-		? segments.map((segment) => segment.toLowerCase())
-		: segments;
-	if (
-		normalizedSegments.length !== 4
-		|| !normalizedSegments[0].toLowerCase().startsWith('splunk.observability-studio-')
-		|| normalizedSegments[1] !== 'dist'
-		|| normalizedSegments[2] !== 'observer'
-		|| !['obstudio', 'obstudio.exe'].includes(normalizedSegments[3].toLowerCase())
-	) {
-		return undefined;
-	}
-
-	const extensionPath = path.join(extensionsDirectory, segments[0]);
-	if (processPathsEqual(extensionPath, options.currentExtensionPath)) {
-		return undefined;
-	}
-	return { binaryPath: executablePath, pid };
-}
-
-function isNonSymlinkedExtensionBackend(extensionPath: string, binaryPath: string): boolean {
-	const resolvedExtensionPath = path.resolve(extensionPath);
-	const resolvedBinaryPath = path.resolve(binaryPath);
-	const relativeBinaryPath = path.relative(resolvedExtensionPath, resolvedBinaryPath);
-	if (
-		relativeBinaryPath === ''
-		|| relativeBinaryPath === '..'
-		|| relativeBinaryPath.startsWith(`..${path.sep}`)
-		|| path.isAbsolute(relativeBinaryPath)
-	) {
-		return false;
-	}
-
-	const segments = relativeBinaryPath.split(path.sep);
-	let candidatePath = resolvedExtensionPath;
-	try {
-		for (let index = 0; index < segments.length; index += 1) {
-			candidatePath = path.join(candidatePath, segments[index]);
-			const info = fs.lstatSync(candidatePath);
-			if (info.isSymbolicLink()) {
-				return false;
-			}
-			const isLast = index === segments.length - 1;
-			if ((isLast && !info.isFile()) || (!isLast && !info.isDirectory())) {
-				return false;
-			}
-		}
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-function readExtensionPackageIdentity(extensionPath: string): {
-	name: string;
-	publisher: string;
-	version: string;
-} | undefined {
-	const packagePath = path.join(extensionPath, 'package.json');
-	try {
-		const extensionInfo = fs.lstatSync(extensionPath);
-		const packageInfo = fs.lstatSync(packagePath);
-		if (
-			extensionInfo.isSymbolicLink()
-			|| !extensionInfo.isDirectory()
-			|| packageInfo.isSymbolicLink()
-			|| !packageInfo.isFile()
-			|| packageInfo.size > 1024 * 1024
-		) {
-			return undefined;
-		}
-		const parsed: unknown = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
-		if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-			return undefined;
-		}
-		const value = parsed as Record<string, unknown>;
-		if (
-			typeof value.name !== 'string'
-			|| typeof value.publisher !== 'string'
-			|| typeof value.version !== 'string'
-		) {
-			return undefined;
-		}
-		return {
-			name: value.name,
-			publisher: value.publisher,
-			version: value.version,
-		};
-	} catch {
-		return undefined;
-	}
-}
-
-function processPathsEqual(firstPath: string, secondPath: string): boolean {
-	const caseFold = (value: string) => process.platform === 'win32' ? value.toLowerCase() : value;
-	return caseFold(path.resolve(firstPath)) === caseFold(path.resolve(secondPath));
-}
-
 function readPrivateSharedObserverState(statePath: string): string | undefined {
 	const effectiveUserId = process.geteuid?.();
 	if (process.platform === 'win32') {
 		// The shared state contains only validated loopback endpoints and a PID, not
 		// credentials. Windows profile ACLs protect the directory, and callers must
-		// independently verify the PID's exact installed-extension executable before
-		// stopping it. Still reject links and file-replacement races here.
+		// independently verify the listener PID and Observer executable before stopping
+		// it. Still reject links and file-replacement races here.
 		const linkedBefore = fs.lstatSync(statePath);
 		if (linkedBefore.isSymbolicLink() || !linkedBefore.isFile()) {
 			return undefined;

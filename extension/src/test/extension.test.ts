@@ -18,7 +18,6 @@ import {
 import {
 	buildObserverHealthUrl,
 	buildObserverValidatorSummaryUrl,
-	findOtherExtensionManagedObserver,
 	isLoopbackObserverHost,
 	normalizeObserverBaseUrl,
 	normalizeSharedObserverBaseUrl,
@@ -1834,68 +1833,6 @@ test('readSharedObserverDiscovery ignores legacy credentials and keeps local end
 	}
 });
 
-test('findOtherExtensionManagedObserver identifies only a matching sibling extension process', () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-upgrade-'));
-	try {
-		const currentExtensionPath = path.join(root, 'splunk.observability-studio-current');
-		const otherExtensionPath = path.join(root, 'splunk.observability-studio-previous');
-		const otherBinaryPath = path.join(
-			otherExtensionPath,
-			'dist',
-			'observer',
-			process.platform === 'win32' ? 'obstudio.exe' : 'obstudio',
-		);
-		fs.mkdirSync(currentExtensionPath, { recursive: true });
-		fs.mkdirSync(path.dirname(otherBinaryPath), { recursive: true });
-		fs.writeFileSync(path.join(otherExtensionPath, 'package.json'), JSON.stringify({
-			name: 'observability-studio',
-			publisher: 'Splunk',
-			version: 'previous-install',
-		}));
-		fs.writeFileSync(otherBinaryPath, 'fixture');
-
-		const discovery = { baseUrl: 'http://127.0.0.1:3000', pid: 4321 };
-		const expected = {
-			binaryPath: otherBinaryPath,
-			pid: 4321,
-			version: 'previous-install',
-		};
-		assert.deepEqual(findOtherExtensionManagedObserver({
-			currentExtensionPath,
-			discovery,
-			processExecutablePath: otherBinaryPath,
-		}), expected);
-
-		for (const changes of [
-			{ processExecutablePath: '/usr/local/bin/obstudio' },
-			{ processExecutablePath: `${otherBinaryPath}-helper` },
-			{ processExecutablePath: path.join(root, 'unrelated', 'obstudio') },
-			{ discovery: { baseUrl: discovery.baseUrl } },
-		]) {
-			assert.equal(findOtherExtensionManagedObserver({
-				currentExtensionPath,
-				discovery,
-				processExecutablePath: otherBinaryPath,
-				...changes,
-			}), undefined);
-		}
-
-		if (process.platform !== 'win32') {
-			const externalBinaryPath = path.join(root, 'unrelated-obstudio');
-			fs.writeFileSync(externalBinaryPath, 'fixture');
-			fs.unlinkSync(otherBinaryPath);
-			fs.symlinkSync(externalBinaryPath, otherBinaryPath);
-			assert.equal(findOtherExtensionManagedObserver({
-				currentExtensionPath,
-				discovery,
-				processExecutablePath: otherBinaryPath,
-			}), undefined);
-		}
-	} finally {
-		fs.rmSync(root, { force: true, recursive: true });
-	}
-});
-
 test('readSharedObserverDiscovery rejects state that is not owner-only', () => {
 	if (process.platform === 'win32') {
 		return;
@@ -2092,11 +2029,11 @@ test('shared startup validates health without a credential or feature probe', ()
 test('upgrade retirement verifies Observer health and the executable path before terminating a PID', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
 	const startupStart = source.indexOf('async function startObserver(');
-	const startupEnd = source.indexOf('\nasync function retireOtherExtensionManagedObserver(', startupStart);
+	const startupEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', startupStart);
 	const startup = source.slice(startupStart, startupEnd);
 	assert.match(
 		startup,
-		/let discoveryProbe = await probeObserver\([\s\S]*?const retirement = await retireOtherExtensionManagedObserver\([\s\S]*?discoveryProbe\.status === 'ready'/,
+		/let discoveryProbe = await probeObserver\([\s\S]*?const retirement = await retireMismatchedManagedPortObserver\([\s\S]*?discoveryProbe\.status === 'ready'/,
 	);
 
 	const retirementStart = startupEnd + 1;
@@ -2104,47 +2041,58 @@ test('upgrade retirement verifies Observer health and the executable path before
 	const retirement = source.slice(retirementStart, retirementEnd);
 	assert.match(
 		retirement,
-		/const bundleVersion = getBundleVersion\(context\);[\s\S]*?observerVersion === bundleVersion/,
+		/const observerHealthVerified = observerHealth !== undefined;[\s\S]*?observerVersion === bundleVersion/,
+	);
+	assert.ok(
+		retirement.indexOf('if (!observerHealthVerified)')
+			< retirement.indexOf('const listener = await readListeningProcess(managedPort)'),
+		'Observer health must be verified before inspecting the managed-port listener',
 	);
 	assert.match(
 		retirement,
-		/observerHealth\?\.owner !== extensionManagedObserverOwner[\s\S]*?observerHealth\.mode !== extensionManagedObserverMode/,
+		/const listener = await readListeningProcess\(managedPort\)[\s\S]*?isObserverExecutablePath\(processExecutablePath\)/,
+		'the listener PID must resolve to the Observer executable',
 	);
 	assert.ok(
-		retirement.indexOf('if (!processIsRunning(pid))')
-			< retirement.indexOf('observerHealth?.owner !== extensionManagedObserverOwner'),
-		'a dead recorded PID must be treated as stale before requiring a live Observer ownership marker',
+		retirement.indexOf('const preStopListener = await readListeningProcess(managedPort)')
+			< retirement.indexOf('await gracefullyTerminateProcess(pid)'),
+		'the port owner and executable must be reverified immediately before graceful termination',
+	);
+	assert.match(
+		retirement,
+		/preStopListener\.pid !== pid[\s\S]*?processExecutablePathsEqual\(preStopListener\.executablePath, processExecutablePath\)/,
 	);
 	assert.ok(
-		retirement.indexOf('observerHealth?.owner !== extensionManagedObserverOwner')
-			< retirement.indexOf('const processExecutablePath = await readProcessExecutablePath'),
-		'extension ownership must be established before inspecting or terminating the recorded PID',
-	);
-	assert.ok(
-		retirement.indexOf('const preStopExecutablePath = await readProcessExecutablePath')
-			< retirement.indexOf('await gracefullyTerminateProcess(otherExtensionObserver.pid)'),
-		'the actual executable must be reverified immediately before graceful termination',
+		retirement.indexOf('const currentProcessExecutablePath = await readProcessExecutablePath(pid)')
+			< retirement.indexOf('await forceTerminateProcess(pid)'),
+		'the same PID and executable must be reverified before forced termination',
 	);
 	assert.doesNotMatch(
 		retirement,
-		/process\.kill\(otherExtensionObserver\.pid, 'SIGTERM'\)/,
+		/process\.kill\(pid, 'SIGTERM'\)/,
 		'the upgrade path must not treat Node SIGTERM as graceful on Windows',
 	);
-	assert.doesNotMatch(retirement, /readProcessCommand|processCommand/);
+	assert.doesNotMatch(
+		retirement,
+		/observerHealth\?\.owner|observerHealth\.mode|findOtherExtension|readProcessCommand|processCommand/,
+	);
 });
 
 test('all local Observer reuse paths use the same bundled-version compatibility rule', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
 	const startupStart = source.indexOf('async function startObserver(');
-	const startupEnd = source.indexOf('\nasync function retireOtherExtensionManagedObserver(', startupStart);
+	const startupEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', startupStart);
 	const startup = source.slice(startupStart, startupEnd);
 	assert.match(startup, /const bundleVersion = getBundleVersion\(context\)/);
 	assert.match(startup, /configuredProbe\.health\.version !== bundleVersion/);
 	assert.match(
 		startup,
-		/managedProbe\.status === 'ready'[\s\S]*?retireOtherExtensionManagedObserver\([\s\S]*?managedProbe\.health/,
+		/managedProbe\.status === 'ready'[\s\S]*?retireMismatchedManagedPortObserver\([\s\S]*?managedProbe\.health/,
 	);
-	assert.match(startup, /existingObserver\.health\.version !== bundleVersion/);
+	assert.match(
+		startup,
+		/existingObserver\.health\.version === bundleVersion[\s\S]*?retireMismatchedManagedPortObserver\(/,
+	);
 	assert.match(startup, /startedProbe\.health\.version !== bundleVersion/);
 	assert.doesNotMatch(startup, /0\.0\.18|0\.0\.20/);
 });

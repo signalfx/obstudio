@@ -2,21 +2,23 @@ import * as assert from 'node:assert/strict';
 import * as cp from 'node:child_process';
 import { once } from 'node:events';
 import * as fs from 'node:fs';
+import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import test from 'node:test';
-import {
-	findOtherExtensionManagedObserver,
-	findOtherExtensionObserverExecutable,
-	readSharedObserverDiscovery,
-} from '../backend';
+import { readSharedObserverDiscovery } from '../backend';
 import {
 	forceTerminateProcess,
 	forceTerminationPlan,
 	gracefulTerminationPlan,
+	isObserverExecutablePath,
+	listeningProcessInspectionPlan,
 	normalizeLinuxExecutableLink,
+	parseListeningProcessIds,
+	processExecutablePathsEqual,
 	processInspectionPlan,
 	processIsRunning,
+	readListeningProcess,
 	readProcessExecutablePath,
 } from '../process-control';
 
@@ -88,6 +90,80 @@ test('PID inspection uses native commands on every supported platform', () => {
 	assert.match(windowsPlan.args[3], /\.Path/);
 });
 
+test('listener PID inspection uses native commands on every supported platform', () => {
+	assert.deepEqual(listeningProcessInspectionPlan(39871, 'darwin'), {
+		args: ['-nP', '-a', '-iTCP:39871', '-sTCP:LISTEN', '-Fp'],
+		command: '/usr/sbin/lsof',
+	});
+	assert.deepEqual(listeningProcessInspectionPlan(39871, 'linux'), {
+		args: ['-nP', '-a', '-iTCP:39871', '-sTCP:LISTEN', '-Fp'],
+		command: '/usr/bin/lsof',
+	});
+	const windowsPlan = listeningProcessInspectionPlan(39871, 'win32');
+	assert.equal(
+		windowsPlan.command,
+		'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+	);
+	assert.deepEqual(windowsPlan.args.slice(0, 3), ['-NoProfile', '-NonInteractive', '-Command']);
+	assert.match(windowsPlan.args[3], /Get-NetTCPConnection -State Listen -LocalPort 39871/);
+	assert.match(windowsPlan.args[3], /OwningProcess/);
+});
+
+test('listener PID inspection validates ports and accepts lsof or PowerShell output', () => {
+	for (const port of [Number.NaN, 0, -1, 65_536, 1.5]) {
+		assert.throws(() => listeningProcessInspectionPlan(port, process.platform), /invalid port/);
+	}
+	assert.deepEqual(parseListeningProcessIds('p4321\ncobstudio\np4321\n'), [4321]);
+	assert.deepEqual(parseListeningProcessIds('4321\r\n5678\r\n'), [4321, 5678]);
+	assert.deepEqual(parseListeningProcessIds('warning\np0\n'), []);
+});
+
+test('Observer executable matching is exact and platform-aware', () => {
+	assert.equal(isObserverExecutablePath('/opt/obstudio', 'darwin'), true);
+	assert.equal(isObserverExecutablePath('/opt/OBSTUDIO', 'darwin'), false);
+	assert.equal(isObserverExecutablePath('/opt/obstudio-helper', 'linux'), false);
+	assert.equal(isObserverExecutablePath('C:\\Tools\\obstudio.exe', 'win32'), true);
+	assert.equal(isObserverExecutablePath('C:\\Tools\\OBSTUDIO.EXE', 'win32'), true);
+	assert.equal(isObserverExecutablePath('C:\\Tools\\obstudio.cmd', 'win32'), false);
+});
+
+test('process executable path comparison follows platform path semantics', () => {
+	assert.equal(processExecutablePathsEqual('/opt/obstudio', '/opt/obstudio', 'linux'), true);
+	assert.equal(processExecutablePathsEqual('/opt/obstudio', '/opt/OBSTUDIO', 'linux'), false);
+	assert.equal(
+		processExecutablePathsEqual('C:\\Tools\\obstudio.exe', 'c:\\tools\\OBSTUDIO.EXE', 'win32'),
+		true,
+	);
+	assert.equal(
+		processExecutablePathsEqual('C:\\Tools\\obstudio.exe', 'C:\\Other\\obstudio.exe', 'win32'),
+		false,
+	);
+});
+
+test('listener PID inspection resolves a real loopback listener', { timeout: 10_000 }, async () => {
+	const server = net.createServer();
+	await new Promise<void>((resolve, reject) => {
+		server.once('error', reject);
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	try {
+		const address = server.address();
+		assert.ok(address !== null && typeof address !== 'string');
+		const listener = await readListeningProcess(address.port);
+		assert.ok(listener !== undefined);
+		assert.equal(listener.pid, process.pid);
+		assert.ok(listener.executablePath !== undefined);
+		const normalizePath = (value: string) => process.platform === 'win32'
+			? path.resolve(value).toLowerCase()
+			: path.resolve(value);
+		assert.equal(normalizePath(listener.executablePath), normalizePath(fs.realpathSync(process.execPath)));
+	} finally {
+		await new Promise<void>((resolve, reject) => {
+			server.close((error) => error === undefined ? resolve() : reject(error));
+		});
+	}
+});
+
 test('shared Observer state exposes a credential-free PID on the current platform', () => {
 	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-pid-state-'));
 	try {
@@ -112,80 +188,6 @@ test('shared Observer state exposes a credential-free PID on the current platfor
 		});
 	} finally {
 		fs.rmSync(homeDir, { force: true, recursive: true });
-	}
-});
-
-test('the recorded PID is accepted only for its exact installed-extension binary', () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-pid-owner-'));
-	try {
-		const currentExtensionPath = path.join(root, 'splunk.observability-studio-current');
-		const previousExtensionPath = path.join(root, 'splunk.observability-studio-previous');
-		const binaryPath = path.join(
-			previousExtensionPath,
-			'dist',
-			'observer',
-			process.platform === 'win32' ? 'obstudio.exe' : 'obstudio',
-		);
-		fs.mkdirSync(currentExtensionPath, { recursive: true });
-		fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
-		fs.writeFileSync(path.join(previousExtensionPath, 'package.json'), JSON.stringify({
-			name: 'observability-studio',
-			publisher: 'Splunk',
-			version: 'previous',
-		}));
-		fs.writeFileSync(binaryPath, 'fixture');
-		const processExecutablePath = process.platform === 'win32' ? binaryPath.toUpperCase() : binaryPath;
-		assert.deepEqual(findOtherExtensionManagedObserver({
-			currentExtensionPath,
-			discovery: { baseUrl: 'http://127.0.0.1:39871', pid: 4321 },
-			processExecutablePath,
-		}), {
-			binaryPath,
-			pid: 4321,
-			version: 'previous',
-		});
-		assert.equal(findOtherExtensionManagedObserver({
-			currentExtensionPath,
-			discovery: { baseUrl: 'http://127.0.0.1:39871', pid: 4321 },
-			processExecutablePath: path.join(root, process.platform === 'win32' ? 'obstudio.exe' : 'obstudio'),
-		}), undefined);
-	} finally {
-		fs.rmSync(root, { force: true, recursive: true });
-	}
-});
-
-test('a missing previous extension package is recognized but is not trusted for termination', () => {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-stale-pid-owner-'));
-	try {
-		const currentExtensionPath = path.join(root, 'splunk.observability-studio-current');
-		const previousExtensionPath = path.join(root, 'splunk.observability-studio-previous');
-		const binaryPath = path.join(
-			previousExtensionPath,
-			'dist',
-			'observer',
-			process.platform === 'win32' ? 'obstudio.exe' : 'obstudio',
-		);
-		const processExecutablePath = process.platform === 'win32' ? binaryPath.toUpperCase() : binaryPath;
-		assert.deepEqual(findOtherExtensionObserverExecutable({
-			currentExtensionPath,
-			discovery: { baseUrl: 'http://127.0.0.1:39871', pid: 4321 },
-			processExecutablePath,
-		}), {
-			binaryPath: process.platform === 'win32' ? binaryPath.toUpperCase() : binaryPath,
-			pid: 4321,
-		});
-		assert.equal(findOtherExtensionObserverExecutable({
-			currentExtensionPath,
-			discovery: { baseUrl: 'http://127.0.0.1:39871', pid: 4321 },
-			processExecutablePath: path.join(currentExtensionPath, 'dist', 'observer', path.basename(binaryPath)),
-		}), undefined);
-		assert.equal(findOtherExtensionObserverExecutable({
-			currentExtensionPath,
-			discovery: { baseUrl: 'http://127.0.0.1:39871', pid: 4321 },
-			processExecutablePath: path.join(root, 'other-extension', 'dist', 'observer', path.basename(binaryPath)),
-		}), undefined);
-	} finally {
-		fs.rmSync(root, { force: true, recursive: true });
 	}
 });
 
