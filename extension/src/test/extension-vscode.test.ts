@@ -517,7 +517,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 function writeNativeLegacyObserverProcessFixture(
 	binaryPath: string,
 	version: string,
-	options: { shutdownDelayMs?: number } = {},
+	options: { shutdownDelayMs?: number; vacateWhenFileExists?: string } = {},
 ): void {
 	const sourcePath = `${binaryPath}.go`;
 	const source = `package main
@@ -565,11 +565,23 @@ func main() {
 		"traces": map[string]any{"configured": false},
 		"version": "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV",
 	}
+	var observerListener net.Listener
+	var otlpHTTPListener net.Listener
+	var otlpGRPCListener net.Listener
+	vacatePath := ${JSON.stringify(options.vacateWhenFileExists ?? '')}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(response http.ResponseWriter, request *http.Request) {
 		switch {
 		case request.URL.Path == "/api/health":
+			if vacatePath != "" {
+				if _, statErr := os.Stat(vacatePath); statErr == nil {
+					_ = observerListener.Close()
+					_ = otlpHTTPListener.Close()
+					_ = otlpGRPCListener.Close()
+					vacatePath = ""
+				}
+			}
 			sendJSON(response, http.StatusOK, map[string]any{
 				"apiVersion": "v1",
 				"endpoints": map[string]string{
@@ -593,15 +605,16 @@ func main() {
 		}
 	})
 
-	observerListener, err := net.Listen("tcp", host+":"+port)
+	var err error
+	observerListener, err = net.Listen("tcp", host+":"+port)
 	if err != nil {
 		panic(err)
 	}
-	otlpHTTPListener, err := net.Listen("tcp", host+":"+otlpHTTPPort)
+	otlpHTTPListener, err = net.Listen("tcp", host+":"+otlpHTTPPort)
 	if err != nil {
 		panic(err)
 	}
-	otlpGRPCListener, err := net.Listen("tcp", host+":"+otlpGRPCPort)
+	otlpGRPCListener, err = net.Listen("tcp", host+":"+otlpGRPCPort)
 	if err != nil {
 		panic(err)
 	}
@@ -1722,6 +1735,133 @@ suite('VS Code Host', () => {
 			}
 		});
 	}
+
+	test('upgrade continues when a verified legacy Observer vacates the managed port during retirement', async function () {
+		this.timeout(45_000);
+
+		const extension = await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+		const observerPorts = await resolveSharedObserverPorts({});
+		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-vacated-port-home-'));
+		const legacyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-vacated-port-legacy-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const vacatePath = path.join(tempHome, 'vacate-observer');
+		const observerBinaryName = process.platform === 'win32' ? 'obstudio.exe' : 'obstudio';
+		const legacyBackendPath = path.join(tempHome, 'legacy-observer', observerBinaryName);
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		let legacyProcess: cp.ChildProcess | undefined;
+
+		try {
+			await waitFor(
+				async () => {
+					try {
+						await vscode.commands.executeCommand(
+							'observability-studio.internal.setObserverOtlpPortsForTest',
+							{ grpc: observerPorts.grpc, http: observerPorts.http },
+						);
+						return true;
+					} catch {
+						await vscode.commands.executeCommand('observability-studio.stopObserver');
+						return false;
+					}
+				},
+				(value) => value,
+				10_000,
+			);
+			writeNativeLegacyObserverProcessFixture(
+				legacyBackendPath,
+				'0.0.20',
+				{ vacateWhenFileExists: vacatePath },
+			);
+			legacyProcess = cp.spawn(legacyBackendPath, [], {
+				env: {
+					...process.env,
+					HOME: legacyHome,
+					HOST: '127.0.0.1',
+					OTLP_GRPC_PORT: String(observerPorts.grpc),
+					OTLP_HTTP_PORT: String(observerPorts.http),
+					PORT: String(observerPorts.ui),
+					USERPROFILE: legacyHome,
+				},
+				stdio: 'pipe',
+			});
+			await waitForHttpOrExit(`${baseUrl}/api/health`, legacyProcess, 10_000);
+			fs.writeFileSync(vacatePath, 'vacate', { mode: 0o600 });
+
+			process.env.HOME = tempHome;
+			process.env.USERPROFILE = tempHome;
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+			fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+			fs.writeFileSync(statePath, JSON.stringify({
+				baseUrl,
+				healthUrl: `${baseUrl}/api/health`,
+				mcpUrl: `${baseUrl}/mcp`,
+				pid: legacyProcess.pid,
+				updatedAt: new Date().toISOString(),
+			}), { mode: 0o600 });
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.resetAgentIntegrationPromptState');
+
+			const upgradedState = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
+					'observability-studio.internal.getRuntimeState',
+				)),
+				(value) => Boolean(
+					value
+						&& value.observerPort === observerPorts.ui
+						&& value.observerUrl === baseUrl
+						&& !value.sharedMode,
+				),
+				20_000,
+			);
+			assert.equal(upgradedState.sharedMode, false);
+			assert.equal(
+				legacyProcess.exitCode,
+				null,
+				'the extension should continue once the legacy process no longer owns any managed ports',
+			);
+			const currentHealth = await fetchJson(`${baseUrl}/api/health`);
+			assert.equal(currentHealth.version, String(extension.packageJSON.version));
+			assert.equal(currentHealth.owner, 'vscode-extension');
+			assert.equal(currentHealth.mode, 'managed');
+		} finally {
+			if (legacyProcess !== undefined) {
+				await terminateChild(legacyProcess);
+			}
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await waitFor(
+				async () => {
+					try {
+						await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+						return true;
+					} catch {
+						await vscode.commands.executeCommand('observability-studio.stopObserver');
+						return false;
+					}
+				},
+				(value) => value,
+				10_000,
+			);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(tempHome);
+			cleanupTempDir(legacyHome);
+		}
+	});
 
 	test('upgrade ignores an outdated CLI Observer on another port and enables Cloud on the managed port', async function () {
 		this.timeout(45_000);
