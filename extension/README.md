@@ -150,60 +150,6 @@ by signal and severity.
 
 ![OpenTelemetry validation results](assets/marketplace-validation-tab.gif)
 
-## Collect coding-agent token telemetry
-
-The integration commands listed above install skills and MCP configuration
-only. There is currently no editor command for token telemetry. Download and
-extract the standalone `obstudio` CLI from
-[GitHub Releases](https://github.com/signalfx/obstudio/releases/latest), then
-run it from that directory to enable token telemetry for Codex, Claude Code, or
-both:
-
-```bash
-./obstudio token-telemetry enable --target=codex,claude-code
-./obstudio token-telemetry status --target=codex,claude-code
-```
-
-`enable` takes ownership of recognized provider OTLP routes; there is no force
-flag. Replaced destinations are not retained or restored. `disable` removes
-only unchanged Obstudio-managed values, and values edited after enablement are
-preserved.
-
-To stop collection later, remove unchanged routes managed by Obstudio:
-
-```bash
-./obstudio token-telemetry disable --target=codex,claude-code
-```
-
-New targets default to `--repository-correlation=path`:
-
-| Mode | Repository data |
-|---|---|
-| `path` | Includes repository and workspace paths; supports exact-path queries. |
-| `name` | Includes the repository name without filesystem paths. |
-| `off` | Disables normalized repository correlation. |
-
-Omitting the option for an existing target preserves its recorded mode. Raw
-provider telemetry is unchanged and may still contain a provider-supplied
-working directory.
-
-Restart every affected Codex or Claude process after a routing change. Codex
-CLI, IDE, and Desktop processes share `~/.codex/config.toml`. Claude Desktop's
-active Setup profile has higher precedence than user-level Claude Code settings,
-and the `claude-code` target does not edit that profile. For a Desktop test, use
-an editable profile that enables telemetry and enhanced traces, sends OTLP/HTTP
-protobuf logs, traces, and metrics to `http://127.0.0.1:4318`, and then restart
-the Code session. Otherwise, use a separate Claude Code CLI process or ask the
-administrator to change an organization-locked profile.
-
-Keep the producer running while demonstrating live signals. Completed token
-accounting remains queryable after disconnect until Observer clears, exits, or
-overwrites its bounded history.
-
-See the [token-usage guide](https://github.com/signalfx/obstudio/blob/main/observer/README.md#audit-token-usage-demo)
-for exporter precedence, supported configuration shapes, and detailed Desktop
-diagnostics.
-
 ## Commands and configuration
 
 | Command Palette action | Purpose |
@@ -238,8 +184,8 @@ contracts for its trust and telemetry-handling details.
   receivers; stop the conflicting process or reuse another local Observer.
 - If `sharedObserverUrl` does not connect, confirm that the configured local
   Observer is reachable and its version matches the extension.
-- After enabling an integration or changing token routing, fully restart the
-  agent and start a new task. Existing processes keep their startup settings.
+- After enabling an integration, fully restart the agent and start a new task.
+  Existing processes keep their startup settings.
 - Dashboard previews use the first workspace folder captured when Observer
   starts. Open the service in its own window or make it the first folder, then
   run **Restart Observer** after switching repositories.

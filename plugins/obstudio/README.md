@@ -42,28 +42,6 @@ The shared [`hooks/bootstrap_obstudio.py`](./hooks/bootstrap_obstudio.py)
 downloads the release when needed, validates its published checksum, and
 starts or reuses Observer when the host permits managed startup.
 
-## Optional token telemetry
-
-The bootstrap starts or reuses Observer but does not edit Codex or Claude Code
-OTLP settings. Provider token collection is a separate opt-in. From an
-extracted standalone release, enable either provider and restart it:
-
-```bash
-./obstudio token-telemetry enable --target=codex,claude-code
-./obstudio token-telemetry status --target=codex,claude-code
-```
-
-`enable` takes ownership of recognized provider OTLP routes; there is no force
-flag. Replaced destinations are not saved or restored. `disable` removes only
-unchanged Obstudio-managed values, while later user edits remain untouched.
-
-New targets default repository correlation to `path`. Use `name` to omit
-filesystem paths or `off` to disable normalized correlation. Omitting the flag
-for an existing target preserves its recorded mode. Raw provider telemetry can
-still include a provider-supplied working directory. When correlation is
-enabled, the SessionStart hook sends a content-free association event to the
-same Observer; it does not include prompt or tool content.
-
 ## Maintainer workflow
 
 Shared workflow skill sources are canonical in the top-level `skills/`

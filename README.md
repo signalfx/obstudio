@@ -164,38 +164,10 @@ REST and MCP validation APIs are documented in
 
 ### Collect coding-agent token telemetry
 
-Token telemetry is an explicit opt-in for Codex and Claude Code:
-
-These commands assume the extracted release directory. Source builds use
-`./build/obstudio` instead.
-
-```bash
-./obstudio token-telemetry enable --target=codex,claude-code
-./obstudio token-telemetry status --target=codex,claude-code
-```
-
-`enable` takes ownership of recognized provider OTLP routes; there is no
-separate force flag. Replaced destinations are not saved or restored. `disable`
-removes only unchanged Obstudio-managed values, while values edited after
-enablement are preserved.
-
-To stop collection later, remove unchanged routes managed by Obstudio:
-
-```bash
-./obstudio token-telemetry disable --target=codex,claude-code
-```
-
-New targets default to `--repository-correlation=path`, which supports exact
-path queries. Use `name` to omit filesystem paths or `off` to disable normalized
-repository correlation. Omitting the option for an existing target preserves
-its recorded mode. Raw provider telemetry can still contain provider-supplied
-working-directory data.
-
-Restart every affected provider process after changing its exporter. Claude
-Desktop Setup profiles can override user-level Claude Code routing, and the
-`claude-code` target does not edit those profiles. See
-[the token-usage guide](observer/README.md#audit-token-usage-demo) for provider
-precedence, supported exporter shapes, retention, and Desktop troubleshooting.
+Token telemetry supports **Codex and Claude Code only** and is configured
+through the standalone `obstudio` CLI. See the
+[token-usage guide](observer/README.md#audit-token-usage-demo) for setup,
+routing, repository correlation, and troubleshooting.
 
 ### Forward metrics and traces to Splunk
 

@@ -111,9 +111,9 @@ Additional account and Splunk tools appear when those features are available.
 
 ## Audit token-usage demo
 
-Obstudio can correlate Codex and Claude Code usage with tasks and repositories.
-Provider routing is not changed during installation; token telemetry is an
-explicit opt-in.
+Token telemetry supports **Codex and Claude Code only** and is configured
+through the standalone `obstudio` CLI. Installation does not change provider
+routing; enablement is explicit.
 
 Enable a provider and inspect the same target:
 

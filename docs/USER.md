@@ -159,37 +159,6 @@ result and reports when it is stale. Ask to refresh validation when you need a
 new run. The [Observer guide](../observer/README.md) lists the common REST and
 MCP entry points.
 
-## Collect coding-agent token telemetry
-
-Agent installation does not change Codex or Claude Code exporter settings.
-Enable token telemetry explicitly:
-
-```bash
-./obstudio token-telemetry enable --target=codex,claude-code
-./obstudio token-telemetry status --target=codex,claude-code
-```
-
-`enable` takes ownership of recognized provider OTLP routes; it has no separate
-force flag. Previous destinations are not saved or restored. `disable` removes
-only unchanged Obstudio-managed values, while later edits remain untouched.
-
-To stop collection later, remove unchanged routes managed by Obstudio:
-
-```bash
-./obstudio token-telemetry disable --target=codex,claude-code
-```
-
-New targets use repository correlation mode `path`. Use `name` to omit
-filesystem paths or `off` to disable normalized correlation. Omitting the flag
-for an existing target preserves its recorded mode. Raw provider telemetry is
-unchanged and can still include a provider-supplied working directory.
-
-Restart every affected Codex or Claude process after changing routing. Claude
-Desktop Setup profiles can override user-level Claude Code settings and are not
-edited by `--target=claude-code`. See the
-[token-usage demo](../observer/README.md#audit-token-usage-demo) for a complete
-test, Desktop setup, retention behavior, and result interpretation.
-
 ## Forward to Splunk Observability Cloud
 
 Observer can forward received traces and metrics while keeping the Observer UI
@@ -241,7 +210,6 @@ create their resources; an ingest-only token is not sufficient.
 | `./obstudio status` | Inspect the managed process and endpoints. |
 | `./obstudio restart` | Restart the managed process with current settings. |
 | `./obstudio stop` | Stop the managed process. |
-| `./obstudio token-telemetry <action>` | Enable, inspect, or disable provider routing. |
 | `./obstudio --version` | Print the installed version. |
 | `./obstudio --help` | Show commands and flags. |
 
