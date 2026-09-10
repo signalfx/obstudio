@@ -13,23 +13,15 @@ host-specific SessionStart hook manifests for first-run bootstrap.
 2. Trust the host's `SessionStart` hook when prompted to review it.
 3. Try a workflow or Observer command.
 
-For Codex:
-
-- `$observer-open`, `$observer-status`
-- `$otel-audit`, `$otel-instrument`, `$otel-verify`
-- `$connect-splunk-observability-cloud`, `$create-splunk-free-account`
-
-For Claude Code:
-
-- `/obstudio:observer-open`, `/obstudio:observer-status`
-- `/obstudio:otel-audit`, `/obstudio:otel-instrument`,
-  `/obstudio:otel-verify`
-- `/obstudio:connect-splunk-observability-cloud`,
-  `/obstudio:create-splunk-free-account`
-
-The `connect-splunk-observability-cloud` skill opens the Cloud view so you can
-connect an existing Splunk Observability Cloud organization. The
-`create-splunk-free-account` skill starts a Free Edition signup.
+| Purpose | Codex | Claude Code |
+| --- | --- | --- |
+| Open Observer | `$observer-open` | `/obstudio:observer-open` |
+| Check Observer status | `$observer-status` | `/obstudio:observer-status` |
+| Audit telemetry | `$otel-audit` | `/obstudio:otel-audit` |
+| Implement selected telemetry improvements | `$otel-instrument` | `/obstudio:otel-instrument` |
+| Verify instrumentation | `$otel-verify` | `/obstudio:otel-verify` |
+| Connect an existing Splunk organization | `$connect-splunk-observability-cloud` | `/obstudio:connect-splunk-observability-cloud` |
+| Request a Free Edition organization | `$create-splunk-free-account` | `/obstudio:create-splunk-free-account` |
 
 ## Plugin contents
 
