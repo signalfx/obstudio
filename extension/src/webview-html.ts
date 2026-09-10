@@ -45,7 +45,7 @@ export function getObserverLoadingWebviewHtml(): string {
 		content="default-src 'none'; style-src 'unsafe-inline';"
 	>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Observer</title>
+	<title>Splunk Observability Studio</title>
 	<style>
 		body {
 			align-items: center;
@@ -70,7 +70,7 @@ export function getObserverLoadingWebviewHtml(): string {
 export function getObserverErrorWebviewHtml(
 	errorMessage: string,
 	startupHint: string = getObserverStartupHint('generic'),
-	title = 'Observer could not start',
+	title = 'Splunk Observability Studio could not start',
 ): string {
 	const escaped = escapeHtml(errorMessage);
 	const hint = escapeHtml(startupHint);
@@ -85,7 +85,7 @@ export function getObserverErrorWebviewHtml(
 		content="default-src 'none'; style-src 'unsafe-inline';"
 	>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Observer</title>
+	<title>Splunk Observability Studio</title>
 	<style>
 		body {
 			align-items: center;
@@ -142,7 +142,7 @@ export function getObserverStoppedWebviewHtml(): string {
 		content="default-src 'none'; style-src 'unsafe-inline';"
 	>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Observer</title>
+	<title>Splunk Observability Studio</title>
 	<style>
 		body {
 			align-items: center;
@@ -165,7 +165,7 @@ export function getObserverStoppedWebviewHtml(): string {
 </head>
 <body>
 	<div>
-		<div>Observer is stopped.</div>
+		<div>Splunk Observability Studio is stopped.</div>
 		<p class="hint">
 			Use the Command Palette (Cmd+Shift+P) and run
 			<strong>Splunk Observability Studio: Start Observer</strong> to start it again.

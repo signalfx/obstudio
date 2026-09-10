@@ -75,6 +75,7 @@ describe('getObserverLoadingWebviewHtml', () => {
 	it('shows a starting message', () => {
 		const html = getObserverLoadingWebviewHtml();
 		assert.ok(html.includes('Splunk Observability Studio is starting'));
+		assert.ok(html.includes('<title>Splunk Observability Studio</title>'));
 	});
 
 	it('does not contain an iframe', () => {
@@ -94,7 +95,7 @@ describe('getObserverErrorWebviewHtml', () => {
 
 	it('shows the "could not start" heading', () => {
 		const html = getObserverErrorWebviewHtml('some error');
-		assert.ok(html.includes('Observer could not start'));
+		assert.ok(html.includes('Splunk Observability Studio could not start'));
 	});
 
 	it('shows a restart-required heading and the selected Observer port', () => {
@@ -149,7 +150,7 @@ describe('getObserverErrorWebviewHtml', () => {
 describe('getObserverStoppedWebviewHtml', () => {
 	it('shows stopped message', () => {
 		const html = getObserverStoppedWebviewHtml();
-		assert.ok(html.includes('Observer is stopped'));
+		assert.ok(html.includes('Splunk Observability Studio is stopped'));
 	});
 
 	it('includes start hint', () => {

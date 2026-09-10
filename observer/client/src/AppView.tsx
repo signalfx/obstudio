@@ -86,7 +86,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             ref={tabsRef}
             className="tab-bar__tabs"
             role="tablist"
-            aria-label="Observer sections"
+            aria-label="Splunk Observability Studio sections"
             onKeyDown={(e) => {
               const order: AppTab[] = ["overview", "metrics", "traces", "logs", "services", "validation", "dashboards", "cloud"];
               const idx = order.indexOf(activeTab);
