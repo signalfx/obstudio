@@ -41,15 +41,20 @@ already running before installation, omitting the flag also lets setup detect
 it automatically. Restart each configured agent and begin a new task.
 
 To configure more than one target, replace `codex` in the command for your
-chosen model with a comma-separated list such as
-`codex,claude-code,cursor,kiro,windsurf,copilot`. Keep the `--shared-url` option
-when using the shared model. Use that model when multiple configured agents may
-run concurrently because only one agent-started Observer can use the default
-ports at a time.
+chosen model with a comma-separated list. Keep the `--shared-url` option when
+using the shared model. Use that model when multiple configured agents may run
+concurrently because only one agent-started Observer can use the default ports
+at a time.
 
 ## Agent targets
 
 Use `--target=windsurf` for Windsurf or Devin Desktop.
+
+To connect every supported target to the running shared Observer:
+
+```bash
+./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot --shared-url=http://127.0.0.1:3000/mcp
+```
 
 | Target | Skill command |
 |---|---|
