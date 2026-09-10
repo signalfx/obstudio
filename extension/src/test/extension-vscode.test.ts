@@ -993,14 +993,14 @@ suite('VS Code Host', () => {
 				value
 				&& value.statusBarPresent
 				&& value.statusBarCommand === 'observability-studio.statusMenu'
-				&& value.statusBarText?.includes('Observer'),
+				&& value.statusBarText?.includes('Splunk Observability Studio'),
 			),
 			20_000,
 		);
 
 		assert.equal(state.statusBarPresent, true);
 		assert.equal(state.statusBarCommand, 'observability-studio.statusMenu');
-		assert.match(state.statusBarText ?? '', /Observer/);
+		assert.match(state.statusBarText ?? '', /Splunk Observability Studio/);
 	});
 
 	test('managed observer uses the configured port across restarts', async function () {

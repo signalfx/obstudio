@@ -25,7 +25,7 @@ export function getObserverWebviewHtml(
 		content="default-src 'none'; img-src ${escapeHtml(cspSource)} data:; script-src ${escapeHtml(cspSource)}; style-src ${escapeHtml(cspSource)} 'unsafe-inline'; font-src ${escapeHtml(cspSource)}; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none';"
 	>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Observer — Telemetry Explorer</title>
+	<title>Splunk Observability Studio — Telemetry Explorer</title>
 	<link rel="stylesheet" href="${escapeHtml(styleUri)}">
 </head>
 <body>
@@ -188,13 +188,13 @@ export function getStatusBarUpdate(state: StatusBarState): StatusBarUpdate {
 
 	switch (state) {
 		case 'starting':
-			return { text: '$(loading~spin) Observer', tooltip: 'Observer is starting...', command };
+			return { text: '$(loading~spin) Splunk Observability Studio', tooltip: 'Splunk Observability Studio is starting...', command };
 		case 'running':
-			return { text: '$(pulse) Observer', tooltip: 'Observer is running — click for options', command };
+			return { text: '$(microscope) Splunk Observability Studio', tooltip: 'Splunk Observability Studio is running — click for options', command };
 		case 'stopped':
-			return { text: '$(circle-outline) Observer', tooltip: 'Observer is stopped — click to start', command };
+			return { text: '$(circle-outline) Splunk Observability Studio', tooltip: 'Splunk Observability Studio is stopped — click to start', command };
 		case 'error':
-			return { text: '$(error) Observer', tooltip: 'Observer failed — click for options', command };
+			return { text: '$(error) Splunk Observability Studio', tooltip: 'Splunk Observability Studio failed — click for options', command };
 	}
 }
 

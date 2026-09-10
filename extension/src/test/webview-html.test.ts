@@ -24,6 +24,15 @@ describe('getObserverWebviewHtml', () => {
 		assert.equal(html.includes('<iframe'), false);
 	});
 
+	it('uses the full Splunk Observability Studio title', () => {
+		const html = getObserverWebviewHtml(
+			'vscode-webview://extension-id',
+			'vscode-webview://extension-id/main.js',
+			'vscode-webview://extension-id/main.css',
+		);
+		assert.ok(html.includes('<title>Splunk Observability Studio — Telemetry Explorer</title>'));
+	});
+
 	it('uses a strict CSP without network, frame, or clipboard capabilities', () => {
 		const html = getObserverWebviewHtml(
 			'vscode-webview://extension-id',
@@ -160,14 +169,15 @@ describe('getStatusBarUpdate', () => {
 	it('returns spinner icon and starting tooltip for starting state', () => {
 		const update = getStatusBarUpdate('starting');
 		assert.ok(update.text.includes('loading~spin'));
-		assert.ok(update.text.includes('Observer'));
+		assert.ok(update.text.includes('Splunk Observability Studio'));
 		assert.ok(update.tooltip.includes('starting'));
 		assert.equal(update.command, 'observability-studio.statusMenu');
 	});
 
-	it('returns pulse icon for running state', () => {
+	it('returns microscope icon for running state', () => {
 		const update = getStatusBarUpdate('running');
-		assert.ok(update.text.includes('pulse'));
+		assert.ok(update.text.includes('microscope'));
+		assert.ok(update.text.includes('Splunk Observability Studio'));
 		assert.ok(update.tooltip.includes('running'));
 		assert.equal(update.command, 'observability-studio.statusMenu');
 	});
@@ -175,6 +185,7 @@ describe('getStatusBarUpdate', () => {
 	it('returns circle-outline icon for stopped state', () => {
 		const update = getStatusBarUpdate('stopped');
 		assert.ok(update.text.includes('circle-outline'));
+		assert.ok(update.text.includes('Splunk Observability Studio'));
 		assert.ok(update.tooltip.includes('stopped'));
 		assert.equal(update.command, 'observability-studio.statusMenu');
 	});
@@ -182,6 +193,7 @@ describe('getStatusBarUpdate', () => {
 	it('returns error icon for error state', () => {
 		const update = getStatusBarUpdate('error');
 		assert.ok(update.text.includes('error'));
+		assert.ok(update.text.includes('Splunk Observability Studio'));
 		assert.ok(update.tooltip.includes('failed'));
 		assert.equal(update.command, 'observability-studio.statusMenu');
 	});

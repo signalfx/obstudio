@@ -1727,7 +1727,7 @@ async function openObserverPanel(context: vscode.ExtensionContext): Promise<void
 		lastObserverPanelRenderKey = undefined;
 		observerPanel = vscode.window.createWebviewPanel(
 			observerPanelViewType,
-			'Observer – Telemetry Explorer',
+			'Splunk Observability Studio – Telemetry Explorer',
 			vscode.ViewColumn.One,
 			{
 				enableScripts: true,
@@ -1781,7 +1781,7 @@ function configureObserverPanel(panel: vscode.WebviewPanel, context: vscode.Exte
 
 function applyObserverPanelPresentation(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): void {
 	const iconUri = vscode.Uri.joinPath(context.extensionUri, 'assets', 'observer-icon.png');
-	panel.title = 'Observer – Telemetry Explorer';
+	panel.title = 'Splunk Observability Studio – Telemetry Explorer';
 	panel.iconPath = {
 		light: iconUri,
 		dark: iconUri,
