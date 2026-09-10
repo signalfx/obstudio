@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -113,6 +114,45 @@ class StageObstudioPluginTest(unittest.TestCase):
 
     def test_release_tag_accepts_semver_prerelease_and_build_metadata(self):
         self.assertEqual(STAGE.release_version_from_tag("v1.2.3-rc.1+build.42"), "1.2.3-rc.1+build.42")
+
+    def test_package_target_requires_tag_and_stamps_versioned_archives(self):
+        root = Path(__file__).resolve().parents[4]
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            release_dir = Path(tempdir) / "plugins"
+            make_base = ["make", "--no-print-directory", "package-obstudio-plugin"]
+            output_override = f"PLUGIN_RELEASE_DIR={release_dir}"
+
+            missing_tag = subprocess.run(
+                [*make_base, output_override],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(missing_tag.returncode, 0)
+            self.assertIn("RELEASE_TAG is required", missing_tag.stderr + missing_tag.stdout)
+
+            packaged = subprocess.run(
+                [*make_base, "RELEASE_TAG=v1.2.3", output_override],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(packaged.returncode, 0, packaged.stdout + packaged.stderr)
+
+            for host, manifest_dir in (("codex", ".codex-plugin"), ("claude", ".claude-plugin")):
+                archive = release_dir / f"obstudio_{host}_1.2.3.zip"
+                self.assertTrue(archive.is_file(), packaged.stdout + packaged.stderr)
+
+                with zipfile.ZipFile(archive) as zip_file:
+                    manifest_name = next(
+                        name for name in zip_file.namelist() if name.endswith(f"{manifest_dir}/plugin.json")
+                    )
+                    manifest = json.loads(zip_file.read(manifest_name))
+
+                self.assertEqual(manifest["version"], "1.2.3")
 
     def test_release_tag_verification_rejects_manifest_version_mismatch(self):
         with tempfile.TemporaryDirectory() as tempdir:
