@@ -45,8 +45,9 @@ export function listeningProcessInspectionPlan(
 				'-NoProfile',
 				'-NonInteractive',
 				'-Command',
-				`Get-NetTCPConnection -State Listen -LocalAddress 127.0.0.1 -LocalPort ${port} `
-					+ '-ErrorAction SilentlyContinue '
+				'$connections = @(Get-NetTCPConnection -ErrorAction Stop); '
+					+ `$connections | Where-Object { $_.State -eq 'Listen' -and $_.LocalAddress -eq '127.0.0.1' `
+					+ `-and $_.LocalPort -eq ${port} } `
 					+ '| Select-Object -ExpandProperty OwningProcess -Unique '
 					+ '| ForEach-Object { [Console]::Out.WriteLine($_) }',
 			],

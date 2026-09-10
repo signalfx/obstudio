@@ -2045,22 +2045,22 @@ test('upgrade retirement verifies Observer health and the executable path before
 	);
 	assert.ok(
 		retirement.indexOf('if (!observerHealthVerified)')
-			< retirement.indexOf('const listener = await readListeningProcess(managedPort)'),
+			< retirement.indexOf('const listenerInspection = await inspectListeningProcess(managedPort)'),
 		'Observer health must be verified before inspecting the managed-port listener',
 	);
 	assert.match(
 		retirement,
-		/const listener = await readListeningProcess\(managedPort\)[\s\S]*?isObserverExecutablePath\(processExecutablePath\)/,
+		/const listenerInspection = await inspectListeningProcess\(managedPort\)[\s\S]*?const listener = listenerInspection\.process[\s\S]*?isObserverExecutablePath\(processExecutablePath\)/,
 		'the listener PID must resolve to the Observer executable',
 	);
 	assert.ok(
-		retirement.indexOf('const preStopListener = await readListeningProcess(managedPort)')
+		retirement.indexOf('const preStopInspection = await inspectListeningProcess(managedPort)')
 			< retirement.indexOf('const replacementProbe = await probeObserver('),
 		'the listener must be fixed before refreshing the health identity',
 	);
 	assert.ok(
 		retirement.indexOf('const replacementProbe = await probeObserver(')
-			< retirement.indexOf('const confirmedListener = await readListeningProcess(managedPort)'),
+			< retirement.indexOf('const confirmedInspection = await inspectListeningProcess(managedPort)'),
 		'health must be refreshed before the final listener identity check',
 	);
 	assert.match(
@@ -2069,7 +2069,7 @@ test('upgrade retirement verifies Observer health and the executable path before
 		'the refreshed health identity must come from the canonical managed listener, not a state-file URL',
 	);
 	assert.ok(
-		retirement.indexOf('const confirmedListener = await readListeningProcess(managedPort)')
+		retirement.indexOf('const confirmedInspection = await inspectListeningProcess(managedPort)')
 			< retirement.indexOf('await gracefullyTerminateProcess(pid)'),
 		'the port owner and executable must be reverified immediately before graceful termination',
 	);
@@ -2108,6 +2108,29 @@ test('upgrade retirement verifies Observer health and the executable path before
 		retirement,
 		/observerHealth\?\.owner|observerHealth\.mode|findOtherExtension|readProcessCommand|processCommand/,
 	);
+});
+
+test('upgrade retirement treats a vacated managed port as already retired', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const retirementStart = source.indexOf('async function retireMismatchedManagedPortObserver(');
+	const retirementEnd = source.indexOf('\nasync function waitForProcessExit(', retirementStart);
+	const retirement = source.slice(retirementStart, retirementEnd);
+
+	for (const inspectionName of [
+		'listenerInspection',
+		'preStopInspection',
+		'replacementProbeInspection',
+		'confirmedInspection',
+	]) {
+		assert.match(
+			retirement,
+			new RegExp(
+				`const ${inspectionName} = await inspectListeningProcess\\(managedPort\\);[\\s\\S]*?`
+				+ `${inspectionName}\\.status === 'none'[\\s\\S]*?status: 'retired'`,
+			),
+			`${inspectionName} must distinguish a free port from failed or ambiguous inspection`,
+		);
+	}
 });
 
 test('all local Observer reuse paths use the same bundled-version compatibility rule', () => {

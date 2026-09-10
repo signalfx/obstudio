@@ -108,8 +108,11 @@ test('listener PID inspection uses native commands on every supported platform',
 	assert.deepEqual(windowsPlan.args.slice(0, 3), ['-NoProfile', '-NonInteractive', '-Command']);
 	assert.match(
 		windowsPlan.args[3],
-		/Get-NetTCPConnection -State Listen -LocalAddress 127\.0\.0\.1 -LocalPort 39871/,
+		/Get-NetTCPConnection -ErrorAction Stop/,
 	);
+	assert.match(windowsPlan.args[3], /\.State -eq 'Listen'/);
+	assert.match(windowsPlan.args[3], /\.LocalAddress -eq '127\.0\.0\.1'/);
+	assert.match(windowsPlan.args[3], /\.LocalPort -eq 39871/);
 	assert.match(windowsPlan.args[3], /OwningProcess/);
 });
 

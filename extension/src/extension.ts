@@ -1367,8 +1367,11 @@ async function retireMismatchedManagedPortObserver(
 	if (!observerHealthVerified) {
 		return { status: 'not-applicable' };
 	}
-	const listener = await readListeningProcess(managedPort);
-	if (listener === undefined) {
+	const listenerInspection = await inspectListeningProcess(managedPort);
+	if (listenerInspection.status === 'none') {
+		return { status: 'retired' };
+	}
+	if (listenerInspection.status !== 'unique') {
 		appendObserverOutputLine(
 			`Observer at ${discovery.baseUrl} has no unique inspectable listener; refusing to stop it automatically.`,
 		);
@@ -1379,6 +1382,7 @@ async function retireMismatchedManagedPortObserver(
 			version: observerVersion,
 		};
 	}
+	const listener = listenerInspection.process;
 	const { executablePath: processExecutablePath, pid } = listener;
 	if (discovery.pid !== undefined && discovery.pid !== pid) {
 		appendObserverOutputLine(
@@ -1424,10 +1428,20 @@ async function retireMismatchedManagedPortObserver(
 		version: observerVersion,
 	});
 
-	const preStopListener = await readListeningProcess(managedPort);
+	const preStopInspection = await inspectListeningProcess(managedPort);
+	if (preStopInspection.status === 'none') {
+		return { status: 'retired' };
+	}
+	if (preStopInspection.status !== 'unique') {
+		appendObserverOutputLine(
+			`Could not reverify Observer ${observerVersion ?? '(unversioned)'} on localhost port ${managedPort}; `
+			+ `refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	const preStopListener = preStopInspection.process;
 	if (
-		preStopListener === undefined
-		|| preStopListener.pid !== pid
+		preStopListener.pid !== pid
 		|| preStopListener.executablePath === undefined
 		|| !isObserverExecutablePath(preStopListener.executablePath)
 		|| !processExecutablePathsEqual(preStopListener.executablePath, processExecutablePath)
@@ -1444,6 +1458,10 @@ async function retireMismatchedManagedPortObserver(
 		{ requireStableOtlp: false },
 	);
 	if (replacementProbe.status !== 'ready') {
+		const replacementProbeInspection = await inspectListeningProcess(managedPort);
+		if (replacementProbeInspection.status === 'none') {
+			return { status: 'retired' };
+		}
 		appendObserverOutputLine(
 			`Could not refresh the Observer identity on localhost port ${managedPort}; refusing to stop PID ${pid}.`,
 		);
@@ -1456,10 +1474,19 @@ async function retireMismatchedManagedPortObserver(
 		return { status: 'not-applicable' };
 	}
 	observerVersion = replacementProbe.health.version;
-	const confirmedListener = await readListeningProcess(managedPort);
+	const confirmedInspection = await inspectListeningProcess(managedPort);
+	if (confirmedInspection.status === 'none') {
+		return { status: 'retired' };
+	}
+	if (confirmedInspection.status !== 'unique') {
+		appendObserverOutputLine(
+			`Observer ownership changed while verifying localhost port ${managedPort}; refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	const confirmedListener = confirmedInspection.process;
 	if (
-		confirmedListener === undefined
-		|| confirmedListener.pid !== pid
+		confirmedListener.pid !== pid
 		|| confirmedListener.executablePath === undefined
 		|| !isObserverExecutablePath(confirmedListener.executablePath)
 		|| !processExecutablePathsEqual(confirmedListener.executablePath, processExecutablePath)
