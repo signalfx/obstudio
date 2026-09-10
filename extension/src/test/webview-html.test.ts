@@ -175,9 +175,9 @@ describe('getStatusBarUpdate', () => {
 		assert.equal(update.command, 'observability-studio.statusMenu');
 	});
 
-	it('returns microscope icon for running state', () => {
+	it('returns the product name without a misleading glyph for running state', () => {
 		const update = getStatusBarUpdate('running');
-		assert.ok(update.text.includes('microscope'));
+		assert.strictEqual(update.text, 'Splunk Observability Studio');
 		assert.ok(update.text.includes('Splunk Observability Studio'));
 		assert.ok(update.tooltip.includes('running'));
 		assert.equal(update.command, 'observability-studio.statusMenu');

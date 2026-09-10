@@ -190,7 +190,7 @@ export function getStatusBarUpdate(state: StatusBarState): StatusBarUpdate {
 		case 'starting':
 			return { text: '$(loading~spin) Splunk Observability Studio', tooltip: 'Splunk Observability Studio is starting...', command };
 		case 'running':
-			return { text: '$(microscope) Splunk Observability Studio', tooltip: 'Splunk Observability Studio is running — click for options', command };
+			return { text: 'Splunk Observability Studio', tooltip: 'Splunk Observability Studio is running — click for options', command };
 		case 'stopped':
 			return { text: '$(circle-outline) Splunk Observability Studio', tooltip: 'Splunk Observability Studio is stopped — click to start', command };
 		case 'error':
