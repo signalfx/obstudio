@@ -30,6 +30,20 @@ Trust model:
 - Does not manage a local background Observer process.
 - Does not call live Splunk APIs to create resources.
 
+Cloud onboarding skills:
+
+- `$connect-splunk-observability-cloud`
+- `$create-splunk-free-account`
+
+Trust model:
+
+- Opens the local Cloud view for credential entry outside agent context.
+- Never asks the user to put a Splunk access token in agent chat.
+- Can submit a Free Edition request to Splunk only after the user confirms the
+  signup details and explicitly accepts the Terms of Use.
+- Treats signup as an external write and does not automatically retry an
+  uncertain result.
+
 Observer and MCP controls:
 
 - MCP server config for `http://127.0.0.1:3000/mcp`
@@ -69,6 +83,8 @@ At full enablement, the plugin can help with:
 - generate local reports and Terraform artifacts;
 - connect to a local Observer MCP endpoint;
 - open, check, restart, or stop a managed Observer when the user asks;
+- open the local Cloud credential-entry view when the user asks;
+- submit a consent-gated Free Edition request when the user asks; and
 - publish confirmed Splunk dashboard or detector gaps when the user explicitly
   invokes publish skills and provides credentials.
 
@@ -78,6 +94,12 @@ The managed Observer is intended to bind loopback-local endpoints, including
 `127.0.0.1:3000`, `127.0.0.1:4317`, and `127.0.0.1:4318`. The UI, REST API,
 MCP endpoint, and OTLP receivers should not be exposed on public interfaces by
 default.
+
+These listeners use one shared local trust boundary. Native clients do not
+authenticate as separate principals, so a local process that can reach an
+endpoint is trusted to use the operations it exposes. Browser MCP and mutation
+requests must pass the same-origin check, which prevents cross-site access but
+does not isolate other local processes.
 
 The bundled MCP server config points to `http://127.0.0.1:3000/mcp`. Observer
 command skills do not automatically follow non-default MCP endpoints; they
@@ -103,6 +125,12 @@ If the user trusts the SessionStart hook, the bootstrap may:
 Do not trust the hook if you do not want plugin-managed binary download,
 checksum validation, or local process startup.
 
+The editor extension also owns the Observer version on its configured managed
+port. If that port contains a verified `obstudio` running another version, the
+extension may stop it and start the bundled version. It revalidates the
+listener PID and executable before graceful or forced termination; ambiguous
+or non-Obstudio owners are left running and reported as requiring recovery.
+
 ## Risky Surfaces
 
 The plugin includes several higher-trust surfaces:
@@ -112,6 +140,8 @@ The plugin includes several higher-trust surfaces:
   and should require evidence that the current plugin owns the process.
 - `splunk-detector-publish` and `splunk-dashboard-publish` can call live Splunk
   Observability Cloud APIs and create resources.
+- `create-splunk-free-account` can send signup details and coarse location data
+  to Splunk after explicit confirmation and Terms acceptance.
 - Configured OTLP exporters can send telemetry to configured endpoints.
 - Verification workflows can run project commands, tests, package managers,
   or local servers.
@@ -121,6 +151,10 @@ evidence when controlling a local process, and narrow permissions when the
 active host requires approval for localhost access. Observer command skills should
 inspect only the default loopback health endpoint and the Observer listener
 ports `127.0.0.1:3000`, `127.0.0.1:4317`, and `127.0.0.1:4318`.
+
+Cloud onboarding also requires explicit user intent. Keep access-token entry
+outside agent context, and submit a Free Edition request only after the user
+reviews the region and signup fields and explicitly accepts the Terms of Use.
 
 ## User Controls
 

@@ -30,7 +30,8 @@ the local MCP connection only because it does not support this skill layout.
 To configure every target in one run:
 
 ```bash
-./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot
+./obstudio install --target=codex,\
+claude-code,cursor,kiro,windsurf,copilot
 ```
 
 Keep the bundled `weaver` executable beside `obstudio`. Restart each selected

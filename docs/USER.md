@@ -25,7 +25,8 @@ Use a comma-separated list to install more than one target.
 To configure every target in one run:
 
 ```bash
-./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot
+./obstudio install --target=codex,\
+claude-code,cursor,kiro,windsurf,copilot
 ```
 
 | Target | Skill command |
