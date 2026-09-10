@@ -390,7 +390,7 @@ describe("CloudTab", () => {
 
     expect((regionInput as HTMLInputElement).value).toBe("eu1");
     expect((tokenInput as HTMLInputElement).value).toBe("token_without_bridge_123456789");
-    expect(screen.getByPlaceholderText("Create Ingest token")).toBeTruthy();
+    expect(screen.getByPlaceholderText("INGEST and API token with power role")).toBeTruthy();
     expect(document.querySelector('label[for="cloud-region"]')?.textContent)
       .toBe("Realm or Observability Cloud URL");
     expect(document.querySelector('label[for="cloud-access-token"]')?.textContent).toBe("Access token");

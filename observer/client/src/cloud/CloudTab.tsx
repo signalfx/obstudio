@@ -1062,7 +1062,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                         setError(splunkAccessTokenTooLongMessage);
                       }
                     }}
-                    placeholder="Create Ingest token"
+                    placeholder="INGEST and API token with power role"
                     ref={tokenInputRef}
                     spellCheck={false}
                     type="password"
