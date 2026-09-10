@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | splunk-detector-publish |
-| Run ID | 20260711T231609164685Z |
+| Run ID | 20260910T194736162307Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -17,5 +17,5 @@ This report validates eval JSON, eval directory availability, and skill source a
 
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
-| dashboards/checkout-detectors/qual/detector-publish | dashboards/checkout-detectors | 1 | evals/dashboards/checkout-detectors/eval/qual/detector-publish.json | 0 | 6 | 0 |
+| dashboards/checkout-detectors/qual/detector-publish | dashboards/checkout-detectors | 1 | evals/dashboards/checkout-detectors/eval/qual/detector-publish.json | 0 | 7 | 0 |
 | sanity/skill-smoke/sanity/detector-publish | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/eval/sanity/detector-publish.json | 0 | 0 | 0 |

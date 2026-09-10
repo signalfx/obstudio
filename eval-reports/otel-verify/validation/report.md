@@ -1,4 +1,4 @@
-# connect-splunk-observability-cloud Codex Eval Validation Report
+# otel-verify Codex Eval Validation Report
 
 This report validates eval JSON, eval directory availability, and skill source availability. It does not run Codex execution.
 
@@ -8,8 +8,8 @@ This report validates eval JSON, eval directory availability, and skill source a
 |---|---|
 | Mode | validation |
 | Eval kind | validation |
-| Skill | connect-splunk-observability-cloud |
-| Run ID | 20260910T194736026456Z |
+| Skill | otel-verify |
+| Run ID | 20260910T194736115704Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -17,4 +17,4 @@ This report validates eval JSON, eval directory availability, and skill source a
 
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
-| plugins/obstudio/qual/connect-splunk-observability-cloud | plugins/obstudio | 3 | evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json | 0 | 9 | 0 |
+| go/chi-basic/qual/verify | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/verify.json | 0 | 3 | 0 |

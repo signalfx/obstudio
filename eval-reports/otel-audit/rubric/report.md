@@ -7,25 +7,38 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-audit |
-| Run ID | 20260629T193514000000Z |
+| Run ID | 20260910T194630806051Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
-| Workers | merged |
+| Workers | 1 |
 | Config | evals/codex-evals.toml |
 
 ## Rubric Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/audit | go/chi-basic | 2 | 100% (12/12), avg score 100 | 1.9M | 18.2m | - | - | - |
-| with_skill | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | 100% (12/12), avg score 98 | 3.7M | 16.8m | - | - | - |
-| with_skill | python/assistant-v3-framework-bridge-demo/qual/audit | python/assistant-v3-framework-bridge-demo | 1 | 100% (6/6), avg score 95 | 1.6M | 8.9m | - | - | - |
-| with_skill | python/mcp-ai-tool-demo/qual/audit | python/mcp-ai-tool-demo | 2 | 100% (12/12), avg score 100 | 3.6M | 17.0m | - | - | - |
+| with_skill | go/kvstore/qual/audit | go/kvstore | 2 | 75% (9/12), avg score 86 | 3.5M | 19.0m | - | - | - |
+
+## Agent Token Usage
+
+| Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
+|---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| with_skill | go/kvstore/qual/audit | go/kvstore | with_skill | codex | cumulative | measured | 2/2 recognized | 3448397 | 3203200 | unknown | 44126 | 9252 | unknown | 3492523 |
+
+## Judge Token Usage
+
+| Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
+|---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| with_skill | go/kvstore/qual/audit | go/kvstore | with_skill | codex | cumulative | measured | 2/2 recognized | 303614 | 213760 | unknown | 7596 | 3320 | unknown | 311210 |
 
 ## Rubric Failures
 
-No rubric failures.
+| Mode | Service | Side | Prompt | Result | Evidence |
+|---|---|---|---|---|---|
+| with_skill | go/kvstore | with_skill | direct | rubric:rubric-4 FAIL | OTEL-003 for Store workflow and async durability has priority "required" and instrument_mode "default"; OTEL-004 covers eviction with priority "recommended" and instrument_mode "fix all". |
+| with_skill | go/kvstore | with_skill | readiness-review | rubric:rubric-2 FAIL | routes contains PUT/GET/DELETE /kv/{key} and GET /search; verification scenarios include GET /search?word=bar, PUT /kv/test, and GET /kv/missing. |
+| with_skill | go/kvstore | with_skill | readiness-review | rubric:rubric-4 FAIL | OTEL-004 is required/default for async persistence and index health; OTEL-006 is recommended/fix all for runtime and LRU eviction metrics. |
 
 ## Result JSON
 

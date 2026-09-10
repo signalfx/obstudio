@@ -2,13 +2,13 @@
   "schema_version": 1,
   "kind": "validation",
   "mode": "validation",
-  "skill": "splunk-detector-publish",
+  "skill": "otel-verify",
   "metadata": {
     "mode": "validation",
     "eval_kind": "validation",
     "ab_enabled": false,
-    "skill": "splunk-detector-publish",
-    "run_id": "20260910T194736162307Z",
+    "skill": "otel-verify",
+    "run_id": "20260910T194736115704Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -22,60 +22,46 @@
   },
   "evals": [
     {
-      "id": "dashboards/checkout-detectors/qual/detector-publish",
-      "case": "dashboards/checkout-detectors",
-      "language": "dashboards",
-      "service": "checkout-detectors",
+      "id": "go/chi-basic/qual/verify",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
       "prompt_count": 1,
       "prompts": [
-        "offline-plan"
+        "canonical-proof-packet"
       ],
-      "definition_path": "evals/dashboards/checkout-detectors/eval/qual/detector-publish.json",
-      "eval_dir": "evals/dashboards/checkout-detectors",
-      "skill_path": "skills/splunk-detector-publish",
+      "definition_path": "evals/go/chi-basic/eval/qual/verify.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-verify",
       "sanity_check_count": 0,
-      "rubric_check_count": 7,
-      "runtime_check_count": 0
-    },
-    {
-      "id": "sanity/skill-smoke/sanity/detector-publish",
-      "case": "sanity/skill-smoke",
-      "language": "sanity",
-      "service": "skill-smoke",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "publish"
-      ],
-      "definition_path": "evals/sanity/skill-smoke/eval/sanity/detector-publish.json",
-      "eval_dir": "evals/sanity/skill-smoke",
-      "skill_path": "skills/splunk-detector-publish",
-      "sanity_check_count": 0,
-      "rubric_check_count": 0,
+      "rubric_check_count": 3,
       "runtime_check_count": 0
     }
   ],
   "summary": {
-    "eval_count": 2,
-    "case_count": 3,
-    "prompt_count": 3,
+    "eval_count": 1,
+    "case_count": 1,
+    "prompt_count": 1,
     "sanity_check_count": 0,
-    "rubric_check_count": 7,
+    "rubric_check_count": 3,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 2,
-    "digest": "715e3e7a7e0e1694d500da7333f7835b848ee14bfd417773753d6de30c44c789",
+    "digest": "0958635da84f0160aebb49d7a905a6dcb92ae1307241056c23785db488072843",
     "eval_kinds": [
-      "rubric",
-      "sanity"
+      "rubric"
     ],
     "files": {
       "evals/codex-evals.validation.toml": "ce69f042257fdb4a4c8d196f2f0f515fdc371316c02ab7d86aecc36267f7e940",
-      "evals/dashboards/checkout-detectors/detectors.tf.seed": "9a656b1d1d22a1cf2a94ff950d63fdb0fc9a2a8c2991086be8bc3ba8e579495d",
-      "evals/dashboards/checkout-detectors/eval/qual/detector-publish.json": "51b366f82c739e216212c39ef430f9524fdb3ba3eba000239caa914882e10e4e",
-      "evals/dashboards/checkout-detectors/terraform.tfvars.seed": "e644aa22c17a5306df07022b361b2f2cb0474b3fd7ccaf5cd40989850ea258ce",
-      "evals/dashboards/checkout-detectors/variables.tf.seed": "ba2a5e208ea99d30a32d2b9f8317a8519828f5e43c17fa76357f0a135a3275d3",
+      "evals/go/chi-basic/eval/inputs/canonical-verify-evidence.txt": "b50e49d8841073f3291119d5fba42fc329f1c6878bf73263c4b52e2744d0ab2a",
+      "evals/go/chi-basic/eval/inputs/otel-audit.json": "b2cec5a1635fc3ba29e70f66d0f328942c17c2f5b0697b37092f35a0f72e5aab",
+      "evals/go/chi-basic/eval/inputs/otel-instrumentation.json": "7aec4eb58a52c3edaf5f61d0f745f65cd3b9cdc68a297ab7eaa0d7be287caf7a",
+      "evals/go/chi-basic/eval/inputs/otel-selection.json": "b93dbb07927456dcc3aa44ba1cf8a80f85c4e254cfdfc2fa961a2aeb1ff9bbca",
+      "evals/go/chi-basic/eval/inputs/otel-verify.json": "1673743bb357567b284e73afff9705970772b5fb3052cce8ceb16c14fa6db021",
+      "evals/go/chi-basic/eval/qual/verify.json": "17617986e4fe1889cfaaaefcaba097d5369c19d7a9049cc5bec514e31d459e17",
+      "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
+      "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
       "evals/pyproject.toml": "2c51312de8067b0c85fd99bfa8ad58a8d6870f67d8e8e368b869c7a04b004a0b",
       "evals/uv.lock": "ad811e95827dd15596c6b41c9a6e112dc011ce6eece83b3322054ff786b932b3",
       "pytest-codex-evals/pyproject.toml": "e356e980db8086d731a14dee7b6f508b60e43652ecf86d051b1a6faece0339db",
@@ -110,6 +96,16 @@
       "pytest-codex-evals/src/pytest_codex_evals/schemas/sanity.schema.json": "598666c521c62290a60a2b1f0e67eb8526ad80ebaa12f81e006c51454e7ddc8b",
       "pytest-codex-evals/src/pytest_codex_evals/trace.py": "b2ea2fbde127a030bac5098d54e0ca8aa0242db3106e52d99a7c36a8d1becf7c",
       "pytest-codex-evals/uv.lock": "4474921439df5db6da255d3b69b0ce1b0630c57b359146c4e8b03eefcecbd65e",
+      "skills/otel-verify/SKILL.md": "77320b02dd404a4057fc87dd4da6a6fe66978692d31f73c8914dabd853c27260",
+      "skills/otel-verify/references/app-code-test-authoring.md": "d535a0acb3d123ee01eb5b39c3247378b4900f4977672021022dd0fe3885f91f",
+      "skills/otel-verify/references/explorer-witness.md": "ee76d5856b1c0858a6bcb22e4c9c4526ddf550f2ae3122ea01ea21d505b8931a",
+      "skills/otel-verify/references/json-approval-handoff.md": "e8c258074665349efecdc5d7e9b25fd0ab6217e3cdc40ae21a434c2c5d11f763",
+      "skills/otel-verify/references/path-scenario-coverage.md": "17569756242fc8f6358c804032a9ce55d9a66e4625329d99bd5b2b6c4de4d065",
+      "skills/otel-verify/references/project-runtime-resolution.md": "fa3db09f81d0cfec8418ecb0da4f3d7859ccfeb51bf40ca89fa2f2c74a48f221",
+      "skills/otel-verify/scripts/observe_report.py": "687f9801e563eb4ad4410eafce10b8bba7191601d654c3c5cb3360baa3dd08af",
+      "skills/otel-verify/scripts/validate_reader_report.py": "80f78e45f31ef7859215d085ec2b001a14805866bd92d4ad8d93684fc4027be0",
+      "skills/otel-verify/tests/test_json_approval_flow.py": "8a02ff9baca8aae109789ef464cafe61f2babeae783889d8580f29f074e8b8f1",
+      "skills/otel-verify/tests/test_validate_reader_report.py": "9d13265c741848d7b878a9dacaf86414e0fa85b8a802f4771a78e095939e95b7",
       "skills/references/consumers.json": "cd8084854d7042b7ecc306ef1efca5f1866f1616c4c0ea0f6522e4bce4efd852",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
@@ -121,34 +117,22 @@
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-api.md": "564b96e2e2658fd41b79dbdf6c1f4ce3838a3d0ac0799ce461078bf2e728c660",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "77c3e9b98a3a84fe0f7699f7ab40eabcf0dd40fe9cef231e4958b12653535a69",
-      "skills/splunk-detector-publish/SKILL.md": "28da7b2689f27502591c272c0442441852d5a0d5f3917d257ce428e7d7e98e56",
-      "skills/splunk-detector-publish/references/coverage-model.md": "9bca7ef0a57794f8d2f87173a51a4d9315dd4b4c311906ab90ba8014b43ccc92",
-      "evals/sanity/skill-smoke/eval/sanity/detector-publish.json": "1774a7e5ab89bb505033f7f83b788741e6f8925f6de9034fcd5431e944384020",
-      "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9"
+      "skills/references/tests/test_observe_report.py": "77c3e9b98a3a84fe0f7699f7ab40eabcf0dd40fe9cef231e4958b12653535a69"
     },
-    "skill_path": "skills/splunk-detector-publish",
+    "skill_path": "skills/otel-verify",
     "selections": [
       {
-        "definition_path": "evals/dashboards/checkout-detectors/eval/qual/detector-publish.json",
-        "fixture_dir": "evals/dashboards/checkout-detectors",
-        "prompt_id": "offline-plan",
+        "definition_path": "evals/go/chi-basic/eval/qual/verify.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "canonical-proof-packet",
         "eval_kind": "rubric",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/sanity/skill-smoke/eval/sanity/detector-publish.json",
-        "fixture_dir": "evals/sanity/skill-smoke",
-        "prompt_id": "direct",
-        "eval_kind": "sanity",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/sanity/skill-smoke/eval/sanity/detector-publish.json",
-        "fixture_dir": "evals/sanity/skill-smoke",
-        "prompt_id": "publish",
-        "eval_kind": "sanity",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/canonical-verify-evidence.txt",
+          "eval/inputs/otel-audit.json",
+          "eval/inputs/otel-instrumentation.json",
+          "eval/inputs/otel-selection.json",
+          "eval/inputs/otel-verify.json"
+        ]
       }
     ],
     "config_path": "evals/codex-evals.validation.toml",
