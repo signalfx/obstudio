@@ -331,11 +331,10 @@ func TestRegisterSISCIMDClientHandlerReportsRegistrationResult(t *testing.T) {
 	t.Setenv("OBSTUDIO_SIS_CIMD_OAUTH_CLIENT_ID", mock.config().clientID)
 	t.Setenv("OBSTUDIO_SIS_CIMD_OAUTH_SCOPE", mock.config().scope)
 	t.Setenv("OBSTUDIO_SIS_CIMD_OAUTH_DEVELOPMENT_CA_BUNDLE_PATH", mock.config().developmentCABundlePath)
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 	mux := http.NewServeMux()
 	registerSISCIMDLoginRoutes(mux)
-	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/cimd/register", "", testObserverControlToken)
+	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/cimd/register", "")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -351,23 +350,28 @@ func TestRegisterSISCIMDClientHandlerReportsRegistrationResult(t *testing.T) {
 	}
 }
 
-func TestRegisterSISCIMDClientHandlerRequiresControlToken(t *testing.T) {
+func TestRegisterSISCIMDClientHandlerRejectsCrossOriginRequest(t *testing.T) {
 	mock := startMockSIS(t)
 	t.Setenv("OBSTUDIO_SIS_CIMD_OAUTH_ISSUER", mock.config().issuer)
 	t.Setenv("OBSTUDIO_SIS_CIMD_OAUTH_CLIENT_ID", mock.config().clientID)
 	t.Setenv("OBSTUDIO_SIS_CIMD_OAUTH_SCOPE", mock.config().scope)
 	t.Setenv("OBSTUDIO_SIS_CIMD_OAUTH_DEVELOPMENT_CA_BUNDLE_PATH", mock.config().developmentCABundlePath)
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 	mux := http.NewServeMux()
 	registerSISCIMDLoginRoutes(mux)
 
-	// A cross-site request has no way to obtain the control token (it is injected only
-	// into Observer's own same-origin page), so an unauthenticated POST -- as an
-	// attacker-controlled page could send -- must not trigger the outbound SIS probe.
-	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/cimd/register", "", "")
-	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", response.Code)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"http://127.0.0.1:3000/api/splunk/cimd/register",
+		nil,
+	)
+	request.RemoteAddr = "127.0.0.1:54321"
+	request.Header.Set("Origin", "https://attacker.example")
+	request.Header.Set("Sec-Fetch-Site", "cross-site")
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", response.Code)
 	}
 }
 

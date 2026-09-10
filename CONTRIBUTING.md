@@ -12,7 +12,7 @@ This repository contains:
 | Tool | Version | Purpose |
 |------|---------|---------|
 | Go | 1.25+ | observer collector |
-| Node.js | 20+ | observer client dev/test and VS Code-compatible editor extension |
+| Node.js | 22+ | observer client dev/test and VS Code-compatible editor extension |
 | npm | latest | Package management |
 | uv | latest | Python eval harness and Python fixture apps |
 | Docker | latest | Optional runtime eval checks |

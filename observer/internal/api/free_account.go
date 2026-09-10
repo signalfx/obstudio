@@ -1,19 +1,15 @@
 package api
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
-	"strings"
 
 	"github.com/signalfx/obstudio/observer/internal/freeaccount"
 )
 
 type freeAccountAPI struct {
-	submitter    freeaccount.Submitter
-	controlToken string
+	submitter freeaccount.Submitter
 }
 
 type freeAccountErrorResponse struct {
@@ -24,8 +20,7 @@ type freeAccountErrorResponse struct {
 
 func newFreeAccountAPI(submitter freeaccount.Submitter) *freeAccountAPI {
 	return &freeAccountAPI{
-		submitter:    submitter,
-		controlToken: strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")),
+		submitter: submitter,
 	}
 }
 
@@ -38,7 +33,6 @@ func (a *freeAccountAPI) detectRegion(w http.ResponseWriter, r *http.Request) {
 	result := a.submitter.DetectRegion(r.Context())
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	_ = json.NewEncoder(w).Encode(result)
 }
 
@@ -52,7 +46,6 @@ func (a *freeAccountAPI) submit(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.WriteHeader(http.StatusAccepted)
 		_ = json.NewEncoder(w).Encode(result)
 		return
@@ -69,6 +62,8 @@ func (a *freeAccountAPI) submit(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusBadRequest
 	case freeaccount.ErrorCodeRejected:
 		status = http.StatusUnprocessableEntity
+	case freeaccount.ErrorCodePreparation:
+		status = http.StatusServiceUnavailable
 	case freeaccount.ErrorCodeOutcomeUnknown:
 		status = http.StatusBadGateway
 	case freeaccount.ErrorCodeCanceled:
@@ -78,30 +73,14 @@ func (a *freeAccountAPI) submit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *freeAccountAPI) authorize(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if a.controlToken == "" {
-			writeFreeAccountError(w, http.StatusServiceUnavailable, "observer_control_unavailable", "Observer control is not configured.", true)
-			return
-		}
-		const bearerPrefix = "Bearer "
-		authorization := r.Header.Get("Authorization")
-		if !strings.HasPrefix(authorization, bearerPrefix) {
-			writeFreeAccountError(w, http.StatusUnauthorized, "unauthorized", "Missing Observer control token.", true)
-			return
-		}
-		provided := strings.TrimSpace(strings.TrimPrefix(authorization, bearerPrefix))
-		if len(provided) != len(a.controlToken) || subtle.ConstantTimeCompare([]byte(provided), []byte(a.controlToken)) != 1 {
-			writeFreeAccountError(w, http.StatusUnauthorized, "unauthorized", "Invalid Observer control token.", true)
-			return
-		}
-		next(w, r)
-	}
+	return requireLocalObserverRequest(next, func(w http.ResponseWriter, status int, message string) {
+		writeFreeAccountError(w, status, "forbidden", message, true)
+	})
 }
 
 func writeFreeAccountError(w http.ResponseWriter, status int, code, message string, retrySafe bool) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(freeAccountErrorResponse{
 		Code:      code,

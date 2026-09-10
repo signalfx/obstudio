@@ -18,14 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalfx/obstudio/observer/internal/api"
 	"github.com/signalfx/obstudio/observer/internal/buildutil"
 	"github.com/spf13/cobra"
-)
-
-const (
-	testHealthProofSecret      = "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
-	alternateHealthProofSecret = "Q0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0M"
 )
 
 func TestClaudeCodeTargetUsesClaudeJSON(t *testing.T) {
@@ -4868,84 +4862,7 @@ func TestConfigureMCPPreservesKiroRemoteOptionsForMatchingURL(t *testing.T) {
 	}
 }
 
-func TestConfigureMCPAddsAuthenticatedRemoteHeaderAndPreservesKiroHeaders(t *testing.T) {
-	t.Parallel()
-
-	const mcpURL = "http://127.0.0.1:3000/mcp"
-	configPath := filepath.Join(t.TempDir(), "mcp.json")
-	initial := map[string]any{
-		"mcpServers": map[string]any{
-			"obstudio": map[string]any{
-				"url": mcpURL,
-				"headers": map[string]string{
-					"authorization":   "Bearer stale-token",
-					"X-Observer-Test": "preserved",
-				},
-			},
-		},
-	}
-	data, err := json.Marshal(initial)
-	if err != nil {
-		t.Fatalf("marshal initial Kiro MCP config: %v", err)
-	}
-	if err := os.WriteFile(configPath, data, 0o644); err != nil {
-		t.Fatalf("write initial Kiro MCP config: %v", err)
-	}
-
-	target := targets["kiro"].mcpConfig
-	target.path = func() string { return configPath }
-	if err := configureMCP(target, "/tmp/obstudio", mcpURL, "new-control-token"); err != nil {
-		t.Fatalf("configureMCP returned error: %v", err)
-	}
-
-	data, err = os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("read Kiro MCP config: %v", err)
-	}
-	var config struct {
-		MCPServers map[string]map[string]any `json:"mcpServers"`
-	}
-	if err := json.Unmarshal(data, &config); err != nil {
-		t.Fatalf("unmarshal Kiro MCP config: %v", err)
-	}
-	headers, ok := config.MCPServers["obstudio"]["headers"].(map[string]any)
-	if !ok {
-		t.Fatalf("Kiro headers = %#v, want object", config.MCPServers["obstudio"]["headers"])
-	}
-	authorizationCount := 0
-	for name, value := range headers {
-		if strings.EqualFold(name, "Authorization") {
-			authorizationCount++
-			if value != "Bearer new-control-token" {
-				t.Fatalf("Authorization = %#v, want refreshed bearer token", value)
-			}
-		}
-	}
-	if authorizationCount != 1 {
-		t.Fatalf("Authorization header count = %d, want 1 in %#v", authorizationCount, headers)
-	}
-	if got := headers["X-Observer-Test"]; got != "preserved" {
-		t.Fatalf("custom header = %#v, want preserved", got)
-	}
-	if runtime.GOOS != "windows" {
-		info, err := os.Stat(configPath)
-		if err != nil {
-			t.Fatalf("stat Kiro MCP config: %v", err)
-		}
-		if mode := info.Mode().Perm(); mode != 0o600 {
-			t.Fatalf("authenticated MCP config mode = %#o, want 0600", mode)
-		}
-	}
-	entries, err := os.ReadDir(filepath.Dir(configPath))
-	if err != nil {
-		t.Fatalf("read Kiro config directory: %v", err)
-	}
-	if len(entries) != 1 || entries[0].Name() != filepath.Base(configPath) {
-		t.Fatalf("authenticated JSON config left temporary files: %#v", entries)
-	}
-}
-
-func TestConfigureMCPRefreshPreservesJSONHeadersForEveryTarget(t *testing.T) {
+func TestConfigureMCPRefreshRemovesAuthorizationAndPreservesJSONHeadersForEveryTarget(t *testing.T) {
 	t.Parallel()
 
 	const mcpURL = "http://127.0.0.1:3000/mcp"
@@ -4976,7 +4893,7 @@ func TestConfigureMCPRefreshPreservesJSONHeadersForEveryTarget(t *testing.T) {
 			}
 
 			target.path = func() string { return configPath }
-			if err := configureMCP(target, "/tmp/obstudio", mcpURL, "new-control-token"); err != nil {
+			if err := configureMCP(target, "/tmp/obstudio", mcpURL); err != nil {
 				t.Fatalf("configureMCP returned error: %v", err)
 			}
 
@@ -5000,17 +4917,10 @@ func TestConfigureMCPRefreshPreservesJSONHeadersForEveryTarget(t *testing.T) {
 			if !ok {
 				t.Fatalf("%s headers = %#v, want object", targetName, server["headers"])
 			}
-			authorizationCount := 0
-			for name, value := range headers {
+			for name := range headers {
 				if strings.EqualFold(name, "Authorization") {
-					authorizationCount++
-					if value != "Bearer new-control-token" {
-						t.Fatalf("%s Authorization = %#v, want refreshed bearer token", targetName, value)
-					}
+					t.Fatalf("%s stale Authorization was preserved in %#v", targetName, headers)
 				}
-			}
-			if authorizationCount != 1 {
-				t.Fatalf("%s Authorization count = %d, want 1 in %#v", targetName, authorizationCount, headers)
 			}
 			if got := headers["X-Observer-Test"]; got != "preserved" {
 				t.Fatalf("%s custom header = %#v, want preserved", targetName, got)
@@ -5102,7 +5012,7 @@ func TestConfigureCodexMCPRefreshPreservesSameURLHeaders(t *testing.T) {
 			}
 			target := targets["codex"].mcpConfig
 			target.path = func() string { return configPath }
-			if err := configureMCP(target, "/tmp/obstudio", mcpURL, "new-control-token"); err != nil {
+			if err := configureMCP(target, "/tmp/obstudio", mcpURL); err != nil {
 				t.Fatalf("configureMCP returned error: %v", err)
 			}
 
@@ -5117,9 +5027,8 @@ func TestConfigureCodexMCPRefreshPreservesSameURLHeaders(t *testing.T) {
 			if strings.Contains(text, "stale-token") {
 				t.Fatalf("stale Codex Authorization was preserved:\n%s", text)
 			}
-			if strings.Count(strings.ToLower(text), "authorization") != 1 ||
-				!strings.Contains(text, `Authorization = "Bearer new-control-token"`) {
-				t.Fatalf("Codex Authorization was not replaced exactly once:\n%s", text)
+			if strings.Contains(strings.ToLower(text), "authorization") {
+				t.Fatalf("Codex Authorization was not removed:\n%s", text)
 			}
 		})
 	}
@@ -5143,7 +5052,7 @@ func TestConfigureCodexMCPReplacesLocalServerWithMultilineArgs(t *testing.T) {
 	}
 	target := targets["codex"].mcpConfig
 	target.path = func() string { return configPath }
-	if err := configureMCP(target, "/tmp/obstudio", mcpURL, "new-control-token"); err != nil {
+	if err := configureMCP(target, "/tmp/obstudio", mcpURL); err != nil {
 		t.Fatalf("configureMCP returned error: %v", err)
 	}
 	data, err := os.ReadFile(configPath)
@@ -5210,7 +5119,7 @@ func TestConfigureCodexMCPRejectsUnsafeHeaderSyntaxWithoutWriting(t *testing.T) 
 			}
 			target := targets["codex"].mcpConfig
 			target.path = func() string { return configPath }
-			if err := configureMCP(target, "/tmp/obstudio", mcpURL, "new-control-token"); err == nil {
+			if err := configureMCP(target, "/tmp/obstudio", mcpURL); err == nil {
 				t.Fatal("configureMCP unexpectedly accepted unsafe Codex header syntax")
 			}
 			got, err := os.ReadFile(configPath)
@@ -5275,38 +5184,6 @@ func TestConfigureMCPRemovesSameURLKiroAuthorizationWithoutVerifiedReplacement(t
 	}
 	if got := headers["X-Observer-Test"]; got != "preserved" {
 		t.Fatalf("custom header = %#v, want preserved", got)
-	}
-}
-
-func TestAuthenticatedJSONConfigWriteFailurePreservesExistingFile(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("directory permission failure is not reliable on Windows")
-	}
-	t.Parallel()
-
-	directory := t.TempDir()
-	configPath := filepath.Join(directory, "mcp.json")
-	original := []byte(`{"mcpServers":{"other":{"url":"https://example.com/mcp"}}}`)
-	if err := os.WriteFile(configPath, original, 0o600); err != nil {
-		t.Fatalf("write original JSON config: %v", err)
-	}
-	if err := os.Chmod(directory, 0o500); err != nil {
-		t.Fatalf("make JSON config directory read-only: %v", err)
-	}
-	defer os.Chmod(directory, 0o700)
-
-	target := targets["kiro"].mcpConfig
-	target.path = func() string { return configPath }
-	err := configureMCP(target, "/tmp/obstudio", "http://127.0.0.1:3000/mcp", "control-token")
-	if err == nil {
-		t.Fatal("authenticated JSON config write unexpectedly succeeded")
-	}
-	got, readErr := os.ReadFile(configPath)
-	if readErr != nil {
-		t.Fatalf("read preserved JSON config: %v", readErr)
-	}
-	if !bytes.Equal(got, original) {
-		t.Fatalf("failed atomic JSON write changed existing config: %q", got)
 	}
 }
 
@@ -5385,72 +5262,6 @@ func TestUpsertCodexMCPServerAppendsManagedBlock(t *testing.T) {
 	}
 }
 
-func TestConfigureCodexMCPAddsAuthenticatedRemoteHeader(t *testing.T) {
-	t.Parallel()
-
-	configPath := filepath.Join(t.TempDir(), "config.toml")
-	target := targets["codex"].mcpConfig
-	target.path = func() string { return configPath }
-	if err := configureMCP(target, "/tmp/obstudio", "http://127.0.0.1:3000/mcp", "control-token"); err != nil {
-		t.Fatalf("configureMCP returned error: %v", err)
-	}
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("read Codex MCP config: %v", err)
-	}
-	if !strings.Contains(string(data), `http_headers = { Authorization = "Bearer control-token" }`) {
-		t.Fatalf("Codex MCP config is missing its authorization header:\n%s", data)
-	}
-	if runtime.GOOS != "windows" {
-		info, err := os.Stat(configPath)
-		if err != nil {
-			t.Fatalf("stat Codex MCP config: %v", err)
-		}
-		if mode := info.Mode().Perm(); mode != 0o600 {
-			t.Fatalf("authenticated Codex MCP config mode = %#o, want 0600", mode)
-		}
-	}
-	entries, err := os.ReadDir(filepath.Dir(configPath))
-	if err != nil {
-		t.Fatalf("read Codex config directory: %v", err)
-	}
-	if len(entries) != 1 || entries[0].Name() != filepath.Base(configPath) {
-		t.Fatalf("authenticated Codex config left temporary files: %#v", entries)
-	}
-}
-
-func TestAuthenticatedCodexConfigWriteFailurePreservesExistingFile(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("directory permission failure is not reliable on Windows")
-	}
-	t.Parallel()
-
-	directory := t.TempDir()
-	configPath := filepath.Join(directory, "config.toml")
-	original := []byte("model = \"gpt-5.6\"\n")
-	if err := os.WriteFile(configPath, original, 0o600); err != nil {
-		t.Fatalf("write original Codex config: %v", err)
-	}
-	if err := os.Chmod(directory, 0o500); err != nil {
-		t.Fatalf("make Codex config directory read-only: %v", err)
-	}
-	defer os.Chmod(directory, 0o700)
-
-	target := targets["codex"].mcpConfig
-	target.path = func() string { return configPath }
-	err := configureMCP(target, "/tmp/obstudio", "http://127.0.0.1:3000/mcp", "control-token")
-	if err == nil {
-		t.Fatal("authenticated Codex config write unexpectedly succeeded")
-	}
-	got, readErr := os.ReadFile(configPath)
-	if readErr != nil {
-		t.Fatalf("read preserved Codex config: %v", readErr)
-	}
-	if !bytes.Equal(got, original) {
-		t.Fatalf("failed atomic Codex write changed existing config: %q", got)
-	}
-}
-
 func TestUpsertCodexMCPServerReplacesLegacySection(t *testing.T) {
 	t.Parallel()
 
@@ -5510,7 +5321,7 @@ func TestValidateSharedURL(t *testing.T) {
 		{name: "IPv6 loopback HTTP", raw: "http://[::1]:3000/mcp"},
 		{name: "localhost HTTP", raw: "http://localhost:3000/mcp"},
 		{name: "normalized localhost HTTP", raw: "http://LOCALHOST.:3000/mcp"},
-		{name: "remote HTTPS", raw: "https://example.com/mcp"},
+		{name: "remote HTTPS", raw: "https://example.com/mcp", wantErr: true},
 		{name: "missing scheme", raw: "127.0.0.1:3000/mcp", wantErr: true},
 		{name: "missing host", raw: "http:///mcp", wantErr: true},
 		{name: "wrong scheme", raw: "stdio://obstudio", wantErr: true},
@@ -5542,7 +5353,7 @@ func TestValidateSharedURL(t *testing.T) {
 	}
 }
 
-func TestConfigureMCPRejectsInsecureSharedURLBeforeWritingToken(t *testing.T) {
+func TestConfigureMCPRejectsInsecureSharedURLBeforeWriting(t *testing.T) {
 	t.Parallel()
 
 	configPath := filepath.Join(t.TempDir(), "mcp.json")
@@ -5551,9 +5362,9 @@ func TestConfigureMCPRejectsInsecureSharedURLBeforeWritingToken(t *testing.T) {
 		path:       func() string { return configPath },
 		serversKey: "mcpServers",
 	}
-	err := configureMCP(target, "/tmp/obstudio", "http://observer.example.com/mcp", "must-not-be-written")
-	if err == nil || !strings.Contains(err.Error(), "must use HTTPS") {
-		t.Fatalf("configureMCP() error = %v, want HTTPS validation error", err)
+	err := configureMCP(target, "/tmp/obstudio", "http://observer.example.com/mcp")
+	if err == nil || !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("configureMCP() error = %v, want loopback validation error", err)
 	}
 	if _, statErr := os.Stat(configPath); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("insecure shared URL unexpectedly wrote config: %v", statErr)
@@ -5571,8 +5382,8 @@ func TestNormalizeSharedURL(t *testing.T) {
 		{name: "base URL", raw: "http://127.0.0.1:3000", expected: "http://127.0.0.1:3000/mcp"},
 		{name: "base URL with slash", raw: "http://127.0.0.1:3000/", expected: "http://127.0.0.1:3000/mcp"},
 		{name: "existing mcp URL", raw: "http://127.0.0.1:3000/mcp", expected: "http://127.0.0.1:3000/mcp"},
-		{name: "subpath", raw: "https://example.com/obstudio", expected: "https://example.com/obstudio/mcp"},
-		{name: "subpath mcp", raw: "https://example.com/obstudio/mcp", expected: "https://example.com/obstudio/mcp"},
+		{name: "subpath", raw: "http://localhost:3000/obstudio", expected: "http://localhost:3000/obstudio/mcp"},
+		{name: "subpath mcp", raw: "http://localhost:3000/obstudio/mcp", expected: "http://localhost:3000/obstudio/mcp"},
 	}
 
 	for _, tc := range tests {
@@ -6066,653 +5877,6 @@ func TestReinstallCleansStaleSymlinks(t *testing.T) {
 	}
 }
 
-func TestDetectSharedObserverURLFromStateFile(t *testing.T) {
-	t.Parallel()
-
-	const controlToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mcpURL := server.URL + "/mcp"
-		challenge := r.URL.Query().Get(api.HealthProofChallengeQuery)
-		_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-			Kind:           "obstudio",
-			APIVersion:     "v1",
-			ChallengeProof: api.HealthChallengeProof(testHealthProofSecret, controlToken, challenge, mcpURL),
-			Endpoints:      map[string]string{"mcp": mcpURL},
-		})
-	}))
-	defer server.Close()
-
-	statePath := filepath.Join(t.TempDir(), "shared-observer.json")
-	err := writeSharedObserverState(statePath, sharedObserverState{
-		ControlToken:      controlToken,
-		HealthProofSecret: testHealthProofSecret,
-		HealthURL:         server.URL,
-		MCPURL:            server.URL + "/mcp",
-		PID:               42,
-	})
-	if err != nil {
-		t.Fatalf("writeSharedObserverState returned error: %v", err)
-	}
-
-	detected, detectedToken, ok := detectSharedObserverURLFromStateFile(statePath, server.Client())
-	if !ok {
-		t.Fatal("expected state-file discovery to succeed")
-	}
-	if want := server.URL + "/mcp"; detected != want {
-		t.Fatalf("detectSharedObserverURLFromStateFile = %q, want %q", detected, want)
-	}
-	if detectedToken != controlToken {
-		t.Fatalf("detected control token = %q, want %q", detectedToken, controlToken)
-	}
-}
-
-func TestDetectSharedObserverURLFromStateFileRejectsSpoofedHealth(t *testing.T) {
-	t.Parallel()
-
-	const staleControlToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	const impostorControlToken = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mcpURL := server.URL + "/mcp"
-		challenge := r.URL.Query().Get(api.HealthProofChallengeQuery)
-		_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-			Kind:       "obstudio",
-			APIVersion: "v1",
-			ChallengeProof: api.HealthChallengeProof(
-				alternateHealthProofSecret,
-				impostorControlToken,
-				challenge,
-				mcpURL,
-			),
-			Endpoints: map[string]string{"mcp": mcpURL},
-		})
-	}))
-	defer server.Close()
-
-	statePath := filepath.Join(t.TempDir(), "shared-observer.json")
-	if err := writeSharedObserverState(statePath, sharedObserverState{
-		ControlToken:      staleControlToken,
-		HealthProofSecret: testHealthProofSecret,
-		HealthURL:         server.URL,
-		MCPURL:            server.URL + "/mcp",
-		PID:               42,
-	}); err != nil {
-		t.Fatalf("write shared Observer state: %v", err)
-	}
-
-	if detectedURL, detectedToken, ok := detectSharedObserverURLFromStateFile(statePath, server.Client()); ok {
-		t.Fatalf(
-			"spoofed state discovery succeeded: URL = %q, token = %q",
-			detectedURL,
-			detectedToken,
-		)
-	}
-}
-
-func TestSharedObserverControlTokenProofRejectsDifferentEndpointProof(t *testing.T) {
-	t.Parallel()
-
-	const (
-		controlToken    = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-		requestedMCPURL = "https://observer.example.test/team/mcp"
-		internalMCPURL  = "http://127.0.0.1:3000/mcp"
-	)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-			Kind:       "obstudio",
-			APIVersion: "v1",
-			ChallengeProof: api.HealthChallengeProof(
-				testHealthProofSecret,
-				controlToken,
-				r.URL.Query().Get(api.HealthProofChallengeQuery),
-				internalMCPURL,
-			),
-			Endpoints: map[string]string{"mcp": internalMCPURL},
-		})
-	}))
-	defer server.Close()
-
-	if sharedObserverControlTokenProofValid(
-		server.URL,
-		requestedMCPURL,
-		controlToken,
-		testHealthProofSecret,
-		server.Client(),
-	) {
-		t.Fatal("proof bound to the internal endpoint verified for the requested public endpoint")
-	}
-}
-
-func TestSharedObserverControlTokenProofRejectsCrossOriginRedirect(t *testing.T) {
-	t.Parallel()
-
-	const controlToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	targetHits := make(chan struct{}, 1)
-	var target *httptest.Server
-	target = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		targetHits <- struct{}{}
-		mcpURL := target.URL + "/mcp"
-		_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-			Kind:       "obstudio",
-			APIVersion: "v1",
-			ChallengeProof: api.HealthChallengeProof(
-				testHealthProofSecret,
-				controlToken,
-				r.URL.Query().Get(api.HealthProofChallengeQuery),
-				mcpURL,
-			),
-			Endpoints: map[string]string{"mcp": mcpURL},
-		})
-	}))
-	defer target.Close()
-	redirect := httptest.NewServer(http.RedirectHandler(target.URL+"/api/health", http.StatusTemporaryRedirect))
-	defer redirect.Close()
-
-	if sharedObserverControlTokenProofValid(
-		redirect.URL,
-		target.URL+"/mcp",
-		controlToken,
-		testHealthProofSecret,
-		redirect.Client(),
-	) {
-		t.Fatal("cross-origin health redirect produced a valid control-token proof")
-	}
-	select {
-	case <-targetHits:
-		t.Fatal("proof request followed a cross-origin redirect")
-	default:
-	}
-}
-
-func TestDetectSharedObserverURLFromStateFileSupportsPublicMCPEndpoint(t *testing.T) {
-	t.Parallel()
-
-	const (
-		controlToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-		publicMCPURL = "https://observer.example.test/team/mcp"
-	)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-			Kind:       "obstudio",
-			APIVersion: "v1",
-			ChallengeProof: api.HealthChallengeProof(
-				testHealthProofSecret,
-				controlToken,
-				r.URL.Query().Get(api.HealthProofChallengeQuery),
-				publicMCPURL,
-			),
-			Endpoints: map[string]string{"mcp": publicMCPURL},
-		})
-	}))
-	defer server.Close()
-
-	statePath := filepath.Join(t.TempDir(), "shared-observer.json")
-	if err := writeSharedObserverState(statePath, sharedObserverState{
-		ControlToken:      controlToken,
-		HealthProofSecret: testHealthProofSecret,
-		HealthURL:         server.URL,
-		MCPURL:            publicMCPURL,
-	}); err != nil {
-		t.Fatalf("write shared Observer state: %v", err)
-	}
-	detectedURL, detectedToken, ok := detectSharedObserverURLFromStateFile(statePath, server.Client())
-	if !ok || detectedURL != publicMCPURL || detectedToken != controlToken {
-		t.Fatalf(
-			"public state discovery = (%q, %q, %t), want (%q, %q, true)",
-			detectedURL,
-			detectedToken,
-			ok,
-			publicMCPURL,
-			controlToken,
-		)
-	}
-}
-
-func TestResolveMCPControlTokenRequiresMatchingSharedObserverURL(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("USERPROFILE", homeDir)
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
-
-	const controlToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mcpURL := server.URL + "/mcp"
-		challenge := r.URL.Query().Get(api.HealthProofChallengeQuery)
-		_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-			Kind:           "obstudio",
-			APIVersion:     "v1",
-			ChallengeProof: api.HealthChallengeProof(testHealthProofSecret, controlToken, challenge, mcpURL),
-			Endpoints:      map[string]string{"mcp": mcpURL},
-		})
-	}))
-	defer server.Close()
-
-	mcpURL := server.URL + "/mcp"
-	if err := writeSharedObserverState(sharedObserverStatePath(), sharedObserverState{
-		ControlToken:      controlToken,
-		HealthProofSecret: testHealthProofSecret,
-		HealthURL:         server.URL,
-		MCPURL:            mcpURL,
-	}); err != nil {
-		t.Fatalf("write shared Observer state: %v", err)
-	}
-	if got := resolveMCPControlToken(mcpURL); got != controlToken {
-		t.Fatalf("matching state token = %q, want %q", got, controlToken)
-	}
-	if got := resolveMCPControlToken("http://127.0.0.1:49999/mcp"); got != "" {
-		t.Fatalf("mismatched state token = %q, want empty", got)
-	}
-}
-
-func TestResolveMCPControlTokenSupportsLocalhostAlias(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("USERPROFILE", homeDir)
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
-
-	const controlToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	advertisedMCPURL := ""
-	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-			Kind:       "obstudio",
-			APIVersion: "v1",
-			ChallengeProof: api.HealthChallengeProof(
-				testHealthProofSecret,
-				controlToken,
-				r.URL.Query().Get(api.HealthProofChallengeQuery),
-				advertisedMCPURL,
-			),
-			Endpoints: map[string]string{"mcp": advertisedMCPURL},
-		})
-	}))
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen on IPv4 loopback: %v", err)
-	}
-	server.Listener = listener
-	server.Start()
-	defer server.Close()
-
-	stateMCPURL := server.URL + "/mcp"
-	advertisedMCPURL = stateMCPURL
-	if err := writeSharedObserverState(sharedObserverStatePath(), sharedObserverState{
-		ControlToken:      controlToken,
-		HealthProofSecret: testHealthProofSecret,
-		HealthURL:         server.URL + "/api/health",
-		MCPURL:            stateMCPURL,
-	}); err != nil {
-		t.Fatalf("write shared Observer state: %v", err)
-	}
-	requestedMCPURL := strings.Replace(stateMCPURL, "127.0.0.1", "localhost", 1)
-	advertisedURL, gotToken := resolveMCPControl(requestedMCPURL)
-	if gotToken != controlToken || advertisedURL != stateMCPURL {
-		t.Fatalf(
-			"localhost alias control = (%q, %q), want adopted (%q, %q)",
-			advertisedURL,
-			gotToken,
-			stateMCPURL,
-			controlToken,
-		)
-	}
-}
-
-func TestResolveMCPControlTokenSupportsHTTPSPublicProxy(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("USERPROFILE", homeDir)
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
-
-	const controlToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	const advertisedMCPURL = "https://observer.example.test/team/mcp"
-	requestedPath := make(chan string, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestedPath <- r.URL.Path
-		if r.URL.Path != "/trusted/api/health" {
-			http.NotFound(w, r)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-			Kind:       "obstudio",
-			APIVersion: "v1",
-			ChallengeProof: api.HealthChallengeProof(
-				testHealthProofSecret,
-				controlToken,
-				r.URL.Query().Get(api.HealthProofChallengeQuery),
-				advertisedMCPURL,
-			),
-			Endpoints: map[string]string{"mcp": advertisedMCPURL},
-		})
-	}))
-	defer server.Close()
-
-	if err := writeSharedObserverState(sharedObserverStatePath(), sharedObserverState{
-		ControlToken:      controlToken,
-		HealthProofSecret: testHealthProofSecret,
-		HealthURL:         server.URL + "/trusted/api/health",
-		MCPURL:            advertisedMCPURL,
-	}); err != nil {
-		t.Fatalf("write shared Observer state: %v", err)
-	}
-	gotURL, gotToken := resolveMCPControl(advertisedMCPURL)
-	if gotToken != controlToken || gotURL != advertisedMCPURL {
-		t.Fatalf("public proxy control = (%q, %q), want (%q, %q)", gotURL, gotToken, advertisedMCPURL, controlToken)
-	}
-	if got := <-requestedPath; got != "/trusted/api/health" {
-		t.Fatalf("public proxy health path = %q, want trusted local state URL", got)
-	}
-}
-
-func TestSameSharedObserverControlEndpointCanonicalizesPublicAuthority(t *testing.T) {
-	t.Parallel()
-
-	if !sameSharedObserverControlEndpoint(
-		"https://OBSERVER.Example.Test:443/team/mcp",
-		"https://observer.example.test/team/mcp",
-	) {
-		t.Fatal("equivalent public Observer endpoints did not match")
-	}
-	for _, endpoint := range []string{
-		"https://observer.example.test:444/team/mcp",
-		"https://other.example.test/team/mcp",
-		"https://observer.example.test/other/mcp",
-		"https://observer.example.test/team/mcp?token=secret",
-	} {
-		if sameSharedObserverControlEndpoint("https://observer.example.test/team/mcp", endpoint) {
-			t.Fatalf("different public Observer endpoint %q matched", endpoint)
-		}
-	}
-}
-
-func TestDetectInstallSharedObserverURLFromSourcesFallsBackWithoutProvedToken(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
-	t.Setenv(observerHealthProofSecretEnv, "")
-
-	requested := make(chan struct{}, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		select {
-		case requested <- struct{}{}:
-		default:
-		}
-		_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-			Kind:       "obstudio",
-			APIVersion: "v1",
-			Endpoints:  map[string]string{"mcp": "http://127.0.0.1:3000/mcp"},
-		})
-	}))
-	defer server.Close()
-
-	detectedURL, detectedToken, ok := detectInstallSharedObserverURLFromSources(
-		filepath.Join(t.TempDir(), "missing-state.json"),
-		server.URL,
-		server.Client(),
-	)
-	if ok || detectedURL != "" || detectedToken != "" {
-		t.Fatalf(
-			"tokenless install discovery = (%q, %q, %t), want empty result so install uses stdio",
-			detectedURL,
-			detectedToken,
-			ok,
-		)
-	}
-	select {
-	case <-requested:
-		t.Fatal("tokenless install discovery probed unauthenticated fallback health")
-	default:
-	}
-}
-
-func TestDetectInstallSharedObserverURLFromSourcesRequiresEnvironmentSecretsProof(t *testing.T) {
-	const (
-		environmentToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-		impostorToken    = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
-	)
-	for _, test := range []struct {
-		name               string
-		serverControlToken string
-		serverProofSecret  string
-		wantFound          bool
-	}{
-		{
-			name:               "authentic proof",
-			serverControlToken: environmentToken,
-			serverProofSecret:  testHealthProofSecret,
-			wantFound:          true,
-		},
-		{
-			name:               "different control token",
-			serverControlToken: impostorToken,
-			serverProofSecret:  testHealthProofSecret,
-		},
-		{
-			name:               "different proof secret",
-			serverControlToken: environmentToken,
-			serverProofSecret:  alternateHealthProofSecret,
-		},
-		{name: "missing proof"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Setenv("OBSTUDIO_CONTROL_TOKEN", environmentToken)
-			t.Setenv(observerHealthProofSecretEnv, testHealthProofSecret)
-
-			var server *httptest.Server
-			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				mcpURL := server.URL + "/mcp"
-				_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-					Kind:       "obstudio",
-					APIVersion: "v1",
-					ChallengeProof: api.HealthChallengeProof(
-						test.serverProofSecret,
-						test.serverControlToken,
-						r.URL.Query().Get(api.HealthProofChallengeQuery),
-						mcpURL,
-					),
-					Endpoints: map[string]string{"mcp": mcpURL},
-				})
-			}))
-			defer server.Close()
-
-			detectedURL, detectedToken, ok := detectInstallSharedObserverURLFromSources(
-				filepath.Join(t.TempDir(), "missing-state.json"),
-				server.URL,
-				server.Client(),
-			)
-			if !test.wantFound {
-				if ok || detectedURL != "" || detectedToken != "" {
-					t.Fatalf(
-						"unproved environment token discovery = (%q, %q, %t), want no HTTP MCP configuration",
-						detectedURL,
-						detectedToken,
-						ok,
-					)
-				}
-				return
-			}
-			if wantURL := server.URL + "/mcp"; !ok || detectedURL != wantURL || detectedToken != environmentToken {
-				t.Fatalf(
-					"proved environment token discovery = (%q, %q, %t), want (%q, %q, true)",
-					detectedURL,
-					detectedToken,
-					ok,
-					wantURL,
-					environmentToken,
-				)
-			}
-		})
-	}
-}
-
-func TestResolveInstallSharedObserverRejectsExplicitURLWithoutProvedToken(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("USERPROFILE", homeDir)
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
-	t.Setenv(observerHealthProofSecretEnv, "")
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-			Kind:       "obstudio",
-			APIVersion: "v1",
-		})
-	}))
-	defer server.Close()
-
-	resolvedURL, controlToken, autodetected, err := resolveInstallSharedObserver(
-		server.URL+"/mcp",
-		server.Client(),
-	)
-	if err == nil || !strings.Contains(err.Error(), "OBSTUDIO_CONTROL_TOKEN") {
-		t.Fatalf("explicit tokenless shared URL error = %v, want actionable control-token error", err)
-	}
-	if resolvedURL != "" || controlToken != "" || autodetected {
-		t.Fatalf(
-			"failed explicit shared URL = (%q, %q, %t), want no HTTP MCP configuration",
-			resolvedURL,
-			controlToken,
-			autodetected,
-		)
-	}
-}
-
-func TestResolveInstallSharedObserverAcceptsExplicitURLWithProvedToken(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("USERPROFILE", homeDir)
-
-	const controlToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", controlToken)
-	t.Setenv(observerHealthProofSecretEnv, testHealthProofSecret)
-
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mcpURL := server.URL + "/mcp"
-		_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-			Kind:       "obstudio",
-			APIVersion: "v1",
-			ChallengeProof: api.HealthChallengeProof(
-				testHealthProofSecret,
-				controlToken,
-				r.URL.Query().Get(api.HealthProofChallengeQuery),
-				mcpURL,
-			),
-			Endpoints: map[string]string{"mcp": mcpURL},
-		})
-	}))
-	defer server.Close()
-
-	resolvedURL, resolvedToken, autodetected, err := resolveInstallSharedObserver(
-		server.URL+"/mcp",
-		server.Client(),
-	)
-	if err != nil {
-		t.Fatalf("resolve explicit shared Observer: %v", err)
-	}
-	if wantURL := server.URL + "/mcp"; resolvedURL != wantURL || resolvedToken != controlToken || autodetected {
-		t.Fatalf(
-			"proved explicit shared URL = (%q, %q, %t), want (%q, %q, false)",
-			resolvedURL,
-			resolvedToken,
-			autodetected,
-			wantURL,
-			controlToken,
-		)
-	}
-}
-
-func TestResolveMCPControlTokenRequiresProofForExplicitEnvironmentSecrets(t *testing.T) {
-	const (
-		environmentToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-		impostorToken    = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
-	)
-	for _, test := range []struct {
-		name               string
-		serverControlToken string
-		serverProofSecret  string
-		wantToken          string
-	}{
-		{
-			name:               "authentic proof",
-			serverControlToken: environmentToken,
-			serverProofSecret:  testHealthProofSecret,
-			wantToken:          environmentToken,
-		},
-		{
-			name:               "different control token",
-			serverControlToken: impostorToken,
-			serverProofSecret:  testHealthProofSecret,
-		},
-		{
-			name:               "different proof secret",
-			serverControlToken: environmentToken,
-			serverProofSecret:  alternateHealthProofSecret,
-		},
-		{name: "missing proof"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			homeDir := t.TempDir()
-			t.Setenv("HOME", homeDir)
-			t.Setenv("USERPROFILE", homeDir)
-			t.Setenv("OBSTUDIO_CONTROL_TOKEN", environmentToken)
-			t.Setenv(observerHealthProofSecretEnv, testHealthProofSecret)
-
-			var server *httptest.Server
-			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				mcpURL := server.URL + "/mcp"
-				challenge := r.URL.Query().Get(api.HealthProofChallengeQuery)
-				_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-					Kind:       "obstudio",
-					APIVersion: "v1",
-					ChallengeProof: api.HealthChallengeProof(
-						test.serverProofSecret,
-						test.serverControlToken,
-						challenge,
-						mcpURL,
-					),
-					Endpoints: map[string]string{"mcp": mcpURL},
-				})
-			}))
-			defer server.Close()
-
-			if got := resolveMCPControlToken(server.URL + "/mcp"); got != test.wantToken {
-				t.Fatalf("resolved environment token = %q, want %q", got, test.wantToken)
-			}
-		})
-	}
-}
-
-func TestUnauthenticatedHealthDiscoveryDoesNotReleaseStaleStateToken(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("USERPROFILE", homeDir)
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
-
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(sharedObserverHealth{
-			Kind:       "obstudio",
-			APIVersion: "v1",
-			Endpoints:  map[string]string{"mcp": server.URL + "/mcp"},
-		})
-	}))
-	defer server.Close()
-	mcpURL := server.URL + "/mcp"
-
-	if err := writeSharedObserverState(sharedObserverStatePath(), sharedObserverState{
-		ControlToken: "stale-control-token",
-		HealthURL:    server.URL,
-		MCPURL:       mcpURL,
-	}); err != nil {
-		t.Fatalf("write shared Observer state: %v", err)
-	}
-	if detectedURL, ok := detectSharedObserverURL(server.URL, server.Client()); !ok || detectedURL != mcpURL {
-		t.Fatalf("ordinary health discovery = (%q, %t), want (%q, true)", detectedURL, ok, mcpURL)
-	}
-	if got := resolveMCPControlToken(mcpURL); got != "" {
-		t.Fatalf("unauthenticated health discovery released stale token %q", got)
-	}
-}
-
 func TestWriteSharedObserverStateAtomicallyReplacesExistingState(t *testing.T) {
 	t.Parallel()
 
@@ -6723,11 +5887,10 @@ func TestWriteSharedObserverStateAtomicallyReplacesExistingState(t *testing.T) {
 	}
 
 	want := sharedObserverState{
-		BaseURL:      "http://127.0.0.1:41234",
-		ControlToken: "shared-control-token",
-		HealthURL:    "http://127.0.0.1:41234/api/health",
-		MCPURL:       "http://127.0.0.1:41234/mcp",
-		PID:          4242,
+		BaseURL:   "http://127.0.0.1:41234",
+		HealthURL: "http://127.0.0.1:41234/api/health",
+		MCPURL:    "http://127.0.0.1:41234/mcp",
+		PID:       4242,
 	}
 	if err := writeSharedObserverState(statePath, want); err != nil {
 		t.Fatalf("writeSharedObserverState returned error: %v", err)
@@ -6819,6 +5982,7 @@ func TestValidateRunConfigRejectsObserverPortOverlappingFixedListeners(t *testin
 	err := validateRunConfig(runConfig{
 		host:             "127.0.0.1",
 		observerHTTPPort: "4318",
+		otlpGRPCHost:     "127.0.0.1",
 		otlpHTTPPort:     "4318",
 		otlpGRPCPort:     "4317",
 	})
@@ -6835,6 +5999,7 @@ func TestValidateRunConfigRejectsInvalidPublicMCPURL(t *testing.T) {
 
 	for _, publicMCPURL := range []string{
 		"http://observer.example.test/mcp",
+		"https://observer.example.test/mcp",
 		"https://user:password@observer.example.test/mcp",
 		"https://observer.example.test/mcp?token=secret",
 		"https://observer.example.test/mcp?",
@@ -6844,6 +6009,7 @@ func TestValidateRunConfigRejectsInvalidPublicMCPURL(t *testing.T) {
 		err := validateRunConfig(runConfig{
 			host:             "127.0.0.1",
 			observerHTTPPort: "3000",
+			otlpGRPCHost:     "127.0.0.1",
 			otlpHTTPPort:     "4318",
 			otlpGRPCPort:     "4317",
 			publicMCPURL:     publicMCPURL,
@@ -6858,9 +6024,8 @@ func TestNormalizePublicMCPURLCanonicalizesAdvertisedURL(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]string{
-		"https://OBSERVER.Example.Test:443/team/":             "https://observer.example.test/team/mcp",
-		"http://LOCALHOST.:80/":                               "http://localhost/mcp",
-		"https://[2001:0DB8:0000:0000:0000:0000:0000:1]:443/": "https://[2001:db8::1]/mcp",
+		"http://LOCALHOST.:80/":                 "http://localhost/mcp",
+		"https://[0000:0000:0000:0000::1]:443/": "https://[::1]/mcp",
 	}
 	for input, want := range tests {
 		got, err := normalizePublicMCPURL(input)
@@ -6891,7 +6056,7 @@ func TestBuildSharedObserverStateNormalizesWildcardHost(t *testing.T) {
 func TestBuildSharedObserverStateUsesConfiguredPublicMCPURL(t *testing.T) {
 	t.Parallel()
 
-	const publicMCPURL = "https://observer.example.test/team/mcp"
+	const publicMCPURL = "http://localhost:41234/team/mcp"
 	state := buildSharedObserverState("127.0.0.1", "41234", publicMCPURL)
 	if state.BaseURL != "http://127.0.0.1:41234" || state.HealthURL != "http://127.0.0.1:41234/api/health" {
 		t.Fatalf("public MCP URL changed internal discovery endpoints: %#v", state)

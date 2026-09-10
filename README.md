@@ -278,7 +278,7 @@ obstudio/
 | Tool | Version | Purpose |
 |---|---|---|
 | Go | 1.25+ | Collector and CLI |
-| Node.js | 20+ | React client and VS Code-compatible editor extension |
+| Node.js | 22+ | React client and VS Code-compatible editor extension |
 | npm | latest | JavaScript package management |
 | uv | latest | Python eval harness and Python fixture apps |
 | Docker | latest | Optional runtime eval checks |

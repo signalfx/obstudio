@@ -13,6 +13,7 @@
       "compose_file": "docker-compose.yml",
       "timeout_seconds": 300,
       "expect": {
+        "clear_path": null,
         "endpoints": [
           {
             "id": "traces",

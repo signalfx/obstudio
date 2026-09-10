@@ -149,6 +149,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-Obstudio-Browser-Request": "1",
         },
       });
       if (!response.ok) {

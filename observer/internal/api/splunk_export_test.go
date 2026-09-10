@@ -15,15 +15,77 @@ import (
 	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/otlp"
+	"github.com/signalfx/obstudio/observer/internal/store"
 )
 
-const testObserverControlToken = "observer-control-token"
 const testSplunkAccessToken = "splunk-access-token-1234"
 
-var testSplunkBrowserLaunchToken = strings.Repeat("B", 43)
+func TestSplunkExportUsesLocalOriginTrustAndHasNoCredentialRecoveryAPI(t *testing.T) {
+	metrics, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	traces, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := newTestSplunkExportService(metrics, traces, nil)
+	mux := http.NewServeMux()
+	service.register(mux)
 
-func TestSplunkExportLifecycleDoesNotExposeToken(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
+	localRequest := httptest.NewRequest(http.MethodPost, "/api/splunk/export",
+		strings.NewReader(`{"realm":"us1","accessToken":"`+testSplunkAccessToken+`"}`))
+	localRequest.RemoteAddr = "127.0.0.1:54321"
+	localRequest.Header.Set("Content-Type", "application/json")
+	localResponse := httptest.NewRecorder()
+	mux.ServeHTTP(localResponse, localRequest)
+	if localResponse.Code != http.StatusOK {
+		t.Fatalf("local configure status = %d, want %d; body=%s", localResponse.Code, http.StatusOK, localResponse.Body.String())
+	}
+	if strings.Contains(localResponse.Body.String(), testSplunkAccessToken) {
+		t.Fatalf("local configure response exposed ingest token: %s", localResponse.Body.String())
+	}
+	if got := localResponse.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("local configure Access-Control-Allow-Origin = %q, want unset", got)
+	}
+
+	for _, endpoint := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/api/splunk/export/configuration"},
+		{method: http.MethodPost, path: "/api/splunk/export/shutdown-snapshot"},
+	} {
+		request := httptest.NewRequest(endpoint.method, endpoint.path, strings.NewReader(`{}`))
+		request.RemoteAddr = "127.0.0.1:54321"
+		request.Header.Set("Authorization", "Bearer obsolete-local-secret")
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, request)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("%s %s status = %d, want %d; body=%s", endpoint.method, endpoint.path, response.Code, http.StatusNotFound, response.Body.String())
+		}
+		if strings.Contains(response.Body.String(), testSplunkAccessToken) {
+			t.Fatalf("%s exposed ingest token: %s", endpoint.path, response.Body.String())
+		}
+	}
+
+	crossOriginRequest := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:3000/api/splunk/export",
+		strings.NewReader(`{"realm":"us2","accessToken":"attacker-token"}`))
+	crossOriginRequest.RemoteAddr = "127.0.0.1:54321"
+	crossOriginRequest.Header.Set("Content-Type", "application/json")
+	crossOriginRequest.Header.Set("Origin", "https://attacker.example")
+	crossOriginRequest.Header.Set("Sec-Fetch-Site", "cross-site")
+	crossOriginResponse := httptest.NewRecorder()
+	mux.ServeHTTP(crossOriginResponse, crossOriginRequest)
+	if crossOriginResponse.Code != http.StatusForbidden {
+		t.Fatalf("cross-origin configure status = %d, want %d; body=%s", crossOriginResponse.Code, http.StatusForbidden, crossOriginResponse.Body.String())
+	}
+	if got := metrics.Config(); got.Realm != "us1" || got.AccessToken != testSplunkAccessToken {
+		t.Fatalf("cross-origin configure changed metrics config: %+v", got)
+	}
+}
+
+func TestSplunkExportAcceptsSameOriginLocalhostTrailingDot(t *testing.T) {
 	metrics, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	if err != nil {
 		t.Fatal(err)
@@ -35,7 +97,59 @@ func TestSplunkExportLifecycleDoesNotExposeToken(t *testing.T) {
 	mux := http.NewServeMux()
 	newTestSplunkExportService(metrics, traces, nil).register(mux)
 
-	statusResponse := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
+	request := httptest.NewRequest(http.MethodPost, "http://localhost.:3000/api/splunk/export",
+		strings.NewReader(`{"realm":"us1","accessToken":"`+testSplunkAccessToken+`"}`))
+	request.RemoteAddr = "127.0.0.1:54321"
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "http://localhost.:3000")
+	request.Header.Set("Sec-Fetch-Site", "same-origin")
+	request.Header.Set(splunkBrowserRequestHeader, "1")
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("localhost. same-origin configure status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+}
+
+func TestSplunkMutationPreflightDoesNotGrantCrossOriginAccess(t *testing.T) {
+	metrics, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	traces, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	Register(mux, store.New(), metrics, traces)
+	request := httptest.NewRequest(http.MethodOptions, "http://127.0.0.1:3000/api/splunk/export", nil)
+	request.RemoteAddr = "127.0.0.1:54321"
+	request.Header.Set("Origin", "https://attacker.example")
+	request.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("preflight status = %d, want %d", response.Code, http.StatusForbidden)
+	}
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("preflight Access-Control-Allow-Origin = %q, want unset", got)
+	}
+}
+
+func TestSplunkExportLifecycleDoesNotExposeToken(t *testing.T) {
+	metrics, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	traces, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	newTestSplunkExportService(metrics, traces, nil).register(mux)
+
+	statusResponse := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "")
 	if statusResponse.Code != http.StatusOK {
 		t.Fatalf("status request = %d, body = %s", statusResponse.Code, statusResponse.Body.String())
 	}
@@ -44,7 +158,8 @@ func TestSplunkExportLifecycleDoesNotExposeToken(t *testing.T) {
 	}
 
 	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-		`{"realm":"us0","accessToken":"`+testSplunkAccessToken+`"}`, testObserverControlToken)
+		`{"realm":"us0","accessToken":"`+testSplunkAccessToken+`"}`)
+
 	if response.Code != http.StatusOK {
 		t.Fatalf("configure status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -63,7 +178,8 @@ func TestSplunkExportLifecycleDoesNotExposeToken(t *testing.T) {
 	}
 
 	response = splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/enabled",
-		`{"enabled":true}`, testObserverControlToken)
+		`{"enabled":true}`)
+
 	if response.Code != http.StatusOK {
 		t.Fatalf("enable status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -76,7 +192,8 @@ func TestSplunkExportLifecycleDoesNotExposeToken(t *testing.T) {
 	}
 
 	response = splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/forget",
-		`{}`, testObserverControlToken)
+		`{}`)
+
 	if response.Code != http.StatusOK {
 		t.Fatalf("forget status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -108,7 +225,7 @@ func TestSplunkExportStatusReflectsCIMDRegistrationEnvFlag(t *testing.T) {
 	}
 
 	statusFor := func(mux *http.ServeMux) splunkExportStatusResponse {
-		response := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
+		response := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "")
 		if response.Code != http.StatusOK {
 			t.Fatalf("status request = %d, body = %s", response.Code, response.Body.String())
 		}
@@ -286,7 +403,7 @@ func TestSplunkExportStatusRequiresBothSignalsInSameRealm(t *testing.T) {
 			mux := http.NewServeMux()
 			newTestSplunkExportService(metrics, traces, nil).register(mux)
 
-			response := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
+			response := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "")
 			if response.Code != http.StatusOK {
 				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 			}
@@ -324,7 +441,7 @@ func TestSplunkExportStatusRequiresTokenAndDestination(t *testing.T) {
 	mux := http.NewServeMux()
 	newTestSplunkExportService(metrics, traces, nil).register(mux)
 
-	response := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
+	response := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "")
 	if response.Code != http.StatusOK {
 		t.Fatalf("token-only status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -345,7 +462,7 @@ func TestSplunkExportStatusRequiresTokenAndDestination(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	response = splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
+	response = splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "")
 	if response.Code != http.StatusOK {
 		t.Fatalf("endpoint status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -362,7 +479,6 @@ func TestSplunkExportStatusRequiresTokenAndDestination(t *testing.T) {
 }
 
 func TestSplunkExportAcceptsOpaquePrintableAccessTokens(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	mux := http.NewServeMux()
@@ -384,7 +500,8 @@ func TestSplunkExportAcceptsOpaquePrintableAccessTokens(t *testing.T) {
 				t.Fatal(err)
 			}
 			response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-				string(body), testObserverControlToken)
+				string(body))
+
 			if response.Code != http.StatusOK {
 				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 			}
@@ -393,7 +510,6 @@ func TestSplunkExportAcceptsOpaquePrintableAccessTokens(t *testing.T) {
 }
 
 func TestSplunkExportDoesNotConfigureWhenConnectionTestFails(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	service := newTestSplunkExportService(metrics, traces, nil)
@@ -409,7 +525,8 @@ func TestSplunkExportDoesNotConfigureWhenConnectionTestFails(t *testing.T) {
 	service.register(mux)
 
 	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-		`{"realm":"us0","accessToken":"short"}`, testObserverControlToken)
+		`{"realm":"us0","accessToken":"short"}`)
+
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -423,7 +540,7 @@ func TestSplunkExportDoesNotConfigureWhenConnectionTestFails(t *testing.T) {
 		t.Fatalf("unexpected body: %s", response.Body.String())
 	}
 
-	statusResponse := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
+	statusResponse := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "")
 	var status splunkExportStatusResponse
 	if err := json.Unmarshal(statusResponse.Body.Bytes(), &status); err != nil {
 		t.Fatal(err)
@@ -451,7 +568,6 @@ func TestSplunkExportConnectionTestErrorsMapWithoutApplying(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 			metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 			traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 			service := newTestSplunkExportService(metrics, traces, nil)
@@ -462,7 +578,8 @@ func TestSplunkExportConnectionTestErrorsMapWithoutApplying(t *testing.T) {
 			service.register(mux)
 
 			response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-				`{"realm":"us1","accessToken":"candidate-token"}`, testObserverControlToken)
+				`{"realm":"us1","accessToken":"candidate-token"}`)
+
 			if response.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d, body = %s", response.Code, test.wantStatus, response.Body.String())
 			}
@@ -472,7 +589,7 @@ func TestSplunkExportConnectionTestErrorsMapWithoutApplying(t *testing.T) {
 			if config := traces.Config(); config.Realm != "" || config.AccessToken != "" {
 				t.Fatalf("failed probe configured traces export: %+v", config)
 			}
-			statusResponse := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
+			statusResponse := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "")
 			var status splunkExportStatusResponse
 			if err := json.Unmarshal(statusResponse.Body.Bytes(), &status); err != nil {
 				t.Fatal(err)
@@ -484,8 +601,7 @@ func TestSplunkExportConnectionTestErrorsMapWithoutApplying(t *testing.T) {
 	}
 }
 
-func TestSplunkExportRollbackUsesServerHeldSnapshotAndIsControlTokenOnly(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
+func TestSplunkExportRollbackUsesServerHeldSnapshotAndCallerHeldCapability(t *testing.T) {
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
 		Enabled:     true,
 		Realm:       "us0",
@@ -509,7 +625,8 @@ func TestSplunkExportRollbackUsesServerHeldSnapshotAndIsControlTokenOnly(t *test
 	requestedRollbackToken := strings.Repeat("R", 43)
 	invalidRollbackToken := splunkExportRequestWithRollbackToken(t, mux, http.MethodPost,
 		"/api/splunk/export", `{"realm":"us1","accessToken":"replacement-token"}`,
-		testObserverControlToken, "invalid")
+		"invalid")
+
 	if invalidRollbackToken.Code != http.StatusBadRequest {
 		t.Fatalf("invalid rollback token status = %d, body = %s",
 			invalidRollbackToken.Code, invalidRollbackToken.Body.String())
@@ -520,7 +637,8 @@ func TestSplunkExportRollbackUsesServerHeldSnapshotAndIsControlTokenOnly(t *test
 
 	configuredResponse := splunkExportRequestWithRollbackToken(t, mux, http.MethodPost,
 		"/api/splunk/export", `{"realm":"us1","accessToken":"replacement-token"}`,
-		testObserverControlToken, requestedRollbackToken)
+		requestedRollbackToken)
+
 	if configuredResponse.Code != http.StatusOK {
 		t.Fatalf("configure status = %d, body = %s", configuredResponse.Code, configuredResponse.Body.String())
 	}
@@ -538,13 +656,14 @@ func TestSplunkExportRollbackUsesServerHeldSnapshotAndIsControlTokenOnly(t *test
 	if !configured.Connected || configured.Realm != "us1" || configured.Enabled {
 		t.Fatalf("unexpected configured status: %+v", configured)
 	}
-	statusResponse := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
+	statusResponse := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "")
 	if strings.Contains(statusResponse.Body.String(), "rollbackToken") {
 		t.Fatalf("status response exposed rollback capability: %s", statusResponse.Body.String())
 	}
 
 	arbitraryRestore := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/rollback",
-		`{"realm":"us2","accessToken":"caller-supplied"}`, testObserverControlToken)
+		`{"realm":"us2","accessToken":"caller-supplied"}`)
+
 	if arbitraryRestore.Code != http.StatusBadRequest {
 		t.Fatalf("arbitrary rollback status = %d, body = %s",
 			arbitraryRestore.Code, arbitraryRestore.Body.String())
@@ -553,25 +672,9 @@ func TestSplunkExportRollbackUsesServerHeldSnapshotAndIsControlTokenOnly(t *test
 		t.Fatalf("arbitrary rollback changed metrics config: %+v", got)
 	}
 
-	sessionResponse := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "")
-	if sessionResponse.Code != http.StatusOK {
-		t.Fatalf("session status = %d, body = %s", sessionResponse.Code, sessionResponse.Body.String())
-	}
-	var session struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(sessionResponse.Body.Bytes(), &session); err != nil {
-		t.Fatal(err)
-	}
-	browserRollback := splunkBrowserExportRequest(t, mux, http.MethodPost, "/api/splunk/export/rollback",
-		fmt.Sprintf(`{"rollbackToken":%q}`, configured.RollbackToken), session.BrowserToken)
-	if browserRollback.Code != http.StatusUnauthorized {
-		t.Fatalf("browser rollback status = %d, body = %s", browserRollback.Code, browserRollback.Body.String())
-	}
-
 	rollbackResponse := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/rollback",
-		fmt.Sprintf(`{"rollbackToken":%q}`, configured.RollbackToken), testObserverControlToken)
+		fmt.Sprintf(`{"rollbackToken":%q}`, configured.RollbackToken))
+
 	if rollbackResponse.Code != http.StatusOK {
 		t.Fatalf("rollback status = %d, body = %s", rollbackResponse.Code, rollbackResponse.Body.String())
 	}
@@ -589,76 +692,14 @@ func TestSplunkExportRollbackUsesServerHeldSnapshotAndIsControlTokenOnly(t *test
 	}
 
 	replay := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/rollback",
-		fmt.Sprintf(`{"rollbackToken":%q}`, configured.RollbackToken), testObserverControlToken)
+		fmt.Sprintf(`{"rollbackToken":%q}`, configured.RollbackToken))
+
 	if replay.Code != http.StatusConflict {
 		t.Fatalf("rollback replay status = %d, body = %s", replay.Code, replay.Body.String())
 	}
 }
 
-func TestSplunkExportBrowserSessionPreservesPendingControlTokenRollback(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
-		Enabled:     true,
-		Realm:       "us0",
-		AccessToken: "previous-token",
-	})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{
-		Enabled:     true,
-		Realm:       "us0",
-		AccessToken: "previous-token",
-	})
-	refreshCalls := 0
-	service := newTestSplunkExportService(metrics, traces, func() (bool, error) {
-		refreshCalls++
-		return false, nil
-	})
-	mux := http.NewServeMux()
-	service.register(mux)
-
-	configuredResponse := splunkExportRequestWithRollbackToken(t, mux, http.MethodPost,
-		"/api/splunk/export", `{"realm":"us1","accessToken":"replacement-token"}`,
-		testObserverControlToken, strings.Repeat("R", 43))
-	if configuredResponse.Code != http.StatusOK {
-		t.Fatalf("configure status = %d, body = %s", configuredResponse.Code, configuredResponse.Body.String())
-	}
-	var configured splunkExportStatusResponse
-	if err := json.Unmarshal(configuredResponse.Body.Bytes(), &configured); err != nil {
-		t.Fatal(err)
-	}
-
-	sessionResponse := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "")
-	if sessionResponse.Code != http.StatusOK {
-		t.Fatalf("session status = %d, body = %s", sessionResponse.Code, sessionResponse.Body.String())
-	}
-	if refreshCalls != 0 {
-		t.Fatalf("browser session refreshed during pending rollback: got %d calls", refreshCalls)
-	}
-
-	rollbackResponse := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/rollback",
-		fmt.Sprintf(`{"rollbackToken":%q}`, configured.RollbackToken), testObserverControlToken)
-	if rollbackResponse.Code != http.StatusOK {
-		t.Fatalf("rollback status = %d, body = %s", rollbackResponse.Code, rollbackResponse.Body.String())
-	}
-
-	var session struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(sessionResponse.Body.Bytes(), &session); err != nil {
-		t.Fatal(err)
-	}
-	revisitResponse := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", `{}`, session.BrowserToken)
-	if revisitResponse.Code != http.StatusOK {
-		t.Fatalf("session revisit status = %d, body = %s", revisitResponse.Code, revisitResponse.Body.String())
-	}
-	if refreshCalls != 1 {
-		t.Fatalf("browser session refresh calls after rollback = %d, want 1", refreshCalls)
-	}
-}
-
 func TestSplunkExportRollbackCapabilityIsInvalidatedByALaterMutation(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	service := newTestSplunkExportService(metrics, traces, nil)
@@ -667,7 +708,8 @@ func TestSplunkExportRollbackCapabilityIsInvalidatedByALaterMutation(t *testing.
 
 	configuredResponse := splunkExportRequestWithRollbackToken(t, mux, http.MethodPost,
 		"/api/splunk/export", `{"realm":"us1","accessToken":"replacement-token"}`,
-		testObserverControlToken, strings.Repeat("R", 43))
+		strings.Repeat("R", 43))
+
 	if configuredResponse.Code != http.StatusOK {
 		t.Fatalf("configure status = %d, body = %s", configuredResponse.Code, configuredResponse.Body.String())
 	}
@@ -680,12 +722,14 @@ func TestSplunkExportRollbackCapabilityIsInvalidatedByALaterMutation(t *testing.
 	}
 
 	enabledResponse := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/enabled",
-		`{"enabled":true}`, testObserverControlToken)
+		`{"enabled":true}`)
+
 	if enabledResponse.Code != http.StatusOK {
 		t.Fatalf("enable status = %d, body = %s", enabledResponse.Code, enabledResponse.Body.String())
 	}
 	rollbackResponse := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/rollback",
-		fmt.Sprintf(`{"rollbackToken":%q}`, configured.RollbackToken), testObserverControlToken)
+		fmt.Sprintf(`{"rollbackToken":%q}`, configured.RollbackToken))
+
 	if rollbackResponse.Code != http.StatusConflict {
 		t.Fatalf("stale rollback status = %d, body = %s",
 			rollbackResponse.Code, rollbackResponse.Body.String())
@@ -696,7 +740,6 @@ func TestSplunkExportRollbackCapabilityIsInvalidatedByALaterMutation(t *testing.
 }
 
 func TestSplunkExportAllowsAColdCloudConnectionProbe(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	service := newTestSplunkExportService(metrics, traces, nil)
@@ -714,14 +757,14 @@ func TestSplunkExportAllowsAColdCloudConnectionProbe(t *testing.T) {
 	service.register(mux)
 
 	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-		`{"realm":"us1","accessToken":"opaque-token"}`, testObserverControlToken)
+		`{"realm":"us1","accessToken":"opaque-token"}`)
+
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
 }
 
 func TestSplunkExportRejectsConcurrentCloudMutations(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	service := newTestSplunkExportService(metrics, traces, func() (bool, error) { return false, nil })
@@ -745,7 +788,8 @@ func TestSplunkExportRejectsConcurrentCloudMutations(t *testing.T) {
 	firstResponse := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
 		firstResponse <- splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-			`{"realm":"us0","accessToken":"first"}`, testObserverControlToken)
+			`{"realm":"us0","accessToken":"first"}`)
+
 	}()
 	<-started
 
@@ -768,7 +812,7 @@ func TestSplunkExportRejectsConcurrentCloudMutations(t *testing.T) {
 			secondResponses <- mutationResponse{
 				path: mutation.path,
 				response: splunkExportRequest(t, mux, http.MethodPost, mutation.path,
-					mutation.body, testObserverControlToken),
+					mutation.body),
 			}
 		}()
 	}
@@ -800,7 +844,6 @@ func TestSplunkExportRejectsConcurrentCloudMutations(t *testing.T) {
 }
 
 func TestSplunkExportRejectsMutationsFromAStaleObserverVersion(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	service := newTestSplunkExportService(metrics, traces, nil)
@@ -814,7 +857,7 @@ func TestSplunkExportRejectsMutationsFromAStaleObserverVersion(t *testing.T) {
 
 	readStatus := func() splunkExportStatusResponse {
 		t.Helper()
-		response := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
+		response := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "")
 		if response.Code != http.StatusOK {
 			t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 		}
@@ -833,7 +876,7 @@ func TestSplunkExportRejectsMutationsFromAStaleObserverVersion(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return splunkExportRequest(t, mux, http.MethodPost, path, string(encoded), testObserverControlToken)
+		return splunkExportRequest(t, mux, http.MethodPost, path, string(encoded))
 	}
 
 	initial := readStatus()
@@ -931,7 +974,6 @@ func TestSplunkExportRejectsMutationsFromAStaleObserverVersion(t *testing.T) {
 }
 
 func TestSplunkExportRollbackWaitsForTheMutationThatCreatedItsCapability(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
 		Enabled: true, Realm: "us0", AccessToken: "previous-token",
 	})
@@ -954,14 +996,16 @@ func TestSplunkExportRollbackWaitsForTheMutationThatCreatedItsCapability(t *test
 	go func() {
 		configuredResponse <- splunkExportRequestWithRollbackToken(t, mux, http.MethodPost,
 			"/api/splunk/export", `{"realm":"us1","accessToken":"replacement-token"}`,
-			testObserverControlToken, rollbackToken)
+			rollbackToken)
+
 	}()
 	<-verificationStarted
 
 	rollbackResponse := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
 		rollbackResponse <- splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/rollback",
-			fmt.Sprintf(`{"rollbackToken":%q}`, rollbackToken), testObserverControlToken)
+			fmt.Sprintf(`{"rollbackToken":%q}`, rollbackToken))
+
 	}()
 	select {
 	case response := <-rollbackResponse:
@@ -986,7 +1030,6 @@ func TestSplunkExportRollbackWaitsForTheMutationThatCreatedItsCapability(t *test
 }
 
 func TestSplunkExportToggleAndForgetRollbackCannotOverwriteALaterMutation(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 	tests := []struct {
 		body string
@@ -1020,9 +1063,9 @@ func TestSplunkExportToggleAndForgetRollbackCannotOverwriteALaterMutation(t *tes
 					http.MethodPost,
 					test.path,
 					test.body,
-					testObserverControlToken,
-					rollbackToken,
-				)
+
+					rollbackToken)
+
 				if mutation.Code != http.StatusOK {
 					t.Fatalf("mutation status = %d, body = %s", mutation.Code, mutation.Body.String())
 				}
@@ -1036,13 +1079,15 @@ func TestSplunkExportToggleAndForgetRollbackCannotOverwriteALaterMutation(t *tes
 
 				if superseded {
 					later := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-						`{"realm":"us1","accessToken":"later-token"}`, testObserverControlToken)
+						`{"realm":"us1","accessToken":"later-token"}`)
+
 					if later.Code != http.StatusOK {
 						t.Fatalf("later mutation status = %d, body = %s", later.Code, later.Body.String())
 					}
 				}
 				rollback := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/rollback",
-					fmt.Sprintf(`{"rollbackToken":%q}`, rollbackToken), testObserverControlToken)
+					fmt.Sprintf(`{"rollbackToken":%q}`, rollbackToken))
+
 				if superseded && rollback.Code != http.StatusConflict {
 					t.Fatalf("stale rollback status = %d, body = %s", rollback.Code, rollback.Body.String())
 				}
@@ -1124,827 +1169,21 @@ func TestVerifySplunkCloudConnectionReportsRejectedToken(t *testing.T) {
 	}
 }
 
-func TestSplunkExportBrowserSessionAuthorizesSameOriginLoopbackMutations(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	mux := http.NewServeMux()
-	newTestSplunkExportService(metrics, traces, nil).register(mux)
-
-	sessionResponse := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "")
-	if sessionResponse.Code != http.StatusOK {
-		t.Fatalf("session status = %d, body = %s", sessionResponse.Code, sessionResponse.Body.String())
-	}
-	if got := sessionResponse.Header().Get("Access-Control-Allow-Origin"); got != "" {
-		t.Fatalf("browser session exposed through CORS: %q", got)
-	}
-	if got := sessionResponse.Header().Get("Cache-Control"); got != "no-store" {
-		t.Fatalf("browser session cache control = %q", got)
-	}
-	var session struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(sessionResponse.Body.Bytes(), &session); err != nil {
-		t.Fatal(err)
-	}
-	if !splunkBrowserTokenPattern.MatchString(session.BrowserToken) {
-		t.Fatalf("browser token has invalid shape: %q", session.BrowserToken)
-	}
-	if session.BrowserToken == testObserverControlToken {
-		t.Fatal("browser session exposed the Observer control token")
-	}
-	var sessionCookie *http.Cookie
-	for _, cookie := range sessionResponse.Result().Cookies() {
-		if cookie.Name == splunkBrowserCookiePrefix+"3000" {
-			sessionCookie = cookie
-			break
-		}
-	}
-	if sessionCookie == nil {
-		t.Fatal("browser session did not set its process-session cookie")
-	}
-	if !sessionCookie.HttpOnly || sessionCookie.SameSite != http.SameSiteStrictMode ||
-		sessionCookie.Path != "/api/splunk/export" || sessionCookie.Secure {
-		t.Fatalf("browser session cookie attributes = %#v", sessionCookie)
-	}
-	repeatedLaunchResponse := splunkBrowserExportRequestWithCookie(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "", sessionCookie)
-	if repeatedLaunchResponse.Code != http.StatusOK {
-		t.Fatalf("second-tab launch status = %d, body = %s",
-			repeatedLaunchResponse.Code, repeatedLaunchResponse.Body.String())
-	}
-	var repeatedSession struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(repeatedLaunchResponse.Body.Bytes(), &repeatedSession); err != nil {
-		t.Fatal(err)
-	}
-	if repeatedSession.BrowserToken != session.BrowserToken {
-		t.Fatal("second tab did not reattach to the process-lifetime browser session")
-	}
-	otherPortResponse := splunkBrowserExportRequestWithOriginAndCookie(t, mux, http.MethodPost,
-		"http://127.0.0.1:3001/api/splunk/export/browser/session",
-		splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "", sessionCookie)
-	if otherPortResponse.Code != http.StatusOK {
-		t.Fatalf("other-port local page status = %d, body = %s",
-			otherPortResponse.Code, otherPortResponse.Body.String())
-	}
-	var otherPortSession struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(otherPortResponse.Body.Bytes(), &otherPortSession); err != nil {
-		t.Fatal(err)
-	}
-	if otherPortSession.BrowserToken != session.BrowserToken {
-		t.Fatal("other-port local page did not attach to the process browser session")
-	}
-
-	secondSessionResponse := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", `{}`, session.BrowserToken)
-	if secondSessionResponse.Code != http.StatusOK {
-		t.Fatalf("renewed session status = %d, body = %s", secondSessionResponse.Code, secondSessionResponse.Body.String())
-	}
-	var secondSession struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(secondSessionResponse.Body.Bytes(), &secondSession); err != nil {
-		t.Fatal(err)
-	}
-	if !splunkBrowserTokenPattern.MatchString(secondSession.BrowserToken) {
-		t.Fatalf("reloaded browser token has invalid shape: %q", secondSession.BrowserToken)
-	}
-	if secondSession.BrowserToken != session.BrowserToken {
-		t.Fatal("browser session changed before the Observer process restarted")
-	}
-	for revisit := 0; revisit < 128; revisit++ {
-		revisitResponse := splunkBrowserExportRequest(t, mux, http.MethodPost,
-			"/api/splunk/export/browser/session", `{}`, session.BrowserToken)
-		if revisitResponse.Code != http.StatusOK {
-			t.Fatalf("browser session revisit %d status = %d, body = %s",
-				revisit, revisitResponse.Code, revisitResponse.Body.String())
-		}
-		var revisitSession struct {
-			BrowserToken string `json:"browserToken"`
-		}
-		if err := json.Unmarshal(revisitResponse.Body.Bytes(), &revisitSession); err != nil {
-			t.Fatal(err)
-		}
-		if revisitSession.BrowserToken != session.BrowserToken {
-			t.Fatalf("browser session changed on revisit %d", revisit)
-		}
-	}
-
-	connectResponse := splunkBrowserExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-		`{"realm":"us1","accessToken":"opaque-browser-token"}`, session.BrowserToken)
-	if connectResponse.Code != http.StatusOK {
-		t.Fatalf("connect status = %d, body = %s", connectResponse.Code, connectResponse.Body.String())
-	}
-	if strings.Contains(connectResponse.Body.String(), "rollbackToken") {
-		t.Fatalf("browser connect exposed control-token rollback capability: %s", connectResponse.Body.String())
-	}
-	if got := connectResponse.Header().Get(splunkBrowserTokenHeader); got != "" {
-		t.Fatalf("connect unexpectedly rotated the process-lifetime browser token: %q", got)
-	}
-	enableResponse := splunkBrowserExportRequest(t, mux, http.MethodPost, "/api/splunk/export/enabled",
-		`{"enabled":true}`, session.BrowserToken)
-	if enableResponse.Code != http.StatusOK {
-		t.Fatalf("enable status = %d, body = %s", enableResponse.Code, enableResponse.Body.String())
-	}
-	if got := enableResponse.Header().Get(splunkBrowserTokenHeader); got != "" {
-		t.Fatalf("enable unexpectedly rotated the process-lifetime browser token: %q", got)
-	}
-	forgetResponse := splunkBrowserExportRequest(t, mux, http.MethodPost, "/api/splunk/export/forget",
-		`{}`, session.BrowserToken)
-	if forgetResponse.Code != http.StatusOK {
-		t.Fatalf("forget status = %d, body = %s", forgetResponse.Code, forgetResponse.Body.String())
-	}
-}
-
-func TestSplunkExportBrowserSessionReplacesStaleSessionAfterObserverRestart(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	firstService := newTestSplunkExportService(metrics, traces, nil)
-	firstMux := http.NewServeMux()
-	firstService.register(firstMux)
-
-	firstResponse := splunkBrowserExportRequest(t, firstMux, http.MethodPost,
-		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "")
-	if firstResponse.Code != http.StatusOK {
-		t.Fatalf("initial session status = %d, body = %s", firstResponse.Code, firstResponse.Body.String())
-	}
-	var firstSession struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(firstResponse.Body.Bytes(), &firstSession); err != nil {
-		t.Fatal(err)
-	}
-
-	restartedService := newTestSplunkExportService(metrics, traces, nil)
-	restartedService.browserLaunch = strings.Repeat("C", 43)
-	restartedMux := http.NewServeMux()
-	restartedService.register(restartedMux)
-
-	renewedResponse := splunkBrowserExportRequest(t, restartedMux, http.MethodPost,
-		"/api/splunk/export/browser/session", `{}`, firstSession.BrowserToken)
-	if renewedResponse.Code != http.StatusOK {
-		t.Fatalf("post-restart stale session status = %d, body = %s",
-			renewedResponse.Code, renewedResponse.Body.String())
-	}
-	var newSession struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(renewedResponse.Body.Bytes(), &newSession); err != nil {
-		t.Fatal(err)
-	}
-	if newSession.BrowserToken == firstSession.BrowserToken {
-		t.Fatal("restarted Observer reused the prior process browser session")
-	}
-	var freshCookie *http.Cookie
-	for _, cookie := range renewedResponse.Result().Cookies() {
-		if cookie.Name == splunkBrowserCookiePrefix+"3000" {
-			freshCookie = cookie
-			break
-		}
-	}
-	if freshCookie == nil {
-		t.Fatal("new process session did not set a browser cookie")
-	}
-
-	staleHeaderResponse := splunkBrowserExportRequestWithCookie(t, restartedMux, http.MethodPost,
-		"/api/splunk/export/browser/session", `{}`, firstSession.BrowserToken, freshCookie)
-	if staleHeaderResponse.Code != http.StatusOK {
-		t.Fatalf("stale-header/fresh-cookie session status = %d, body = %s",
-			staleHeaderResponse.Code, staleHeaderResponse.Body.String())
-	}
-	var reattached struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(staleHeaderResponse.Body.Bytes(), &reattached); err != nil {
-		t.Fatal(err)
-	}
-	if reattached.BrowserToken != newSession.BrowserToken {
-		t.Fatalf("stale header masked fresh cookie: got %q, want %q",
-			reattached.BrowserToken, newSession.BrowserToken)
-	}
-
-	mutationResponse := splunkBrowserExportRequestWithCookie(t, restartedMux, http.MethodPost,
-		"/api/splunk/export", `{"realm":"us1","accessToken":"fresh-cookie-token"}`,
-		firstSession.BrowserToken, freshCookie)
-	if mutationResponse.Code != http.StatusOK {
-		t.Fatalf("stale-header/fresh-cookie mutation status = %d, body = %s",
-			mutationResponse.Code, mutationResponse.Body.String())
-	}
-}
-
-func TestSplunkExportBrowserSessionRemainsUsableWhenConfigurationRefreshFails(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	service := newTestSplunkExportService(metrics, traces, func() (bool, error) {
-		return false, errors.New("could not parse the configured env file")
-	})
-	mux := http.NewServeMux()
-	service.register(mux)
-
-	sessionResponse := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "")
-	if sessionResponse.Code != http.StatusOK {
-		t.Fatalf("session status = %d, body = %s", sessionResponse.Code, sessionResponse.Body.String())
-	}
-	var session struct {
-		BrowserToken string `json:"browserToken"`
-		Warning      string `json:"warning"`
-	}
-	if err := json.Unmarshal(sessionResponse.Body.Bytes(), &session); err != nil {
-		t.Fatal(err)
-	}
-	if !splunkBrowserTokenPattern.MatchString(session.BrowserToken) {
-		t.Fatalf("browser token has invalid shape: %q", session.BrowserToken)
-	}
-	if session.Warning != "could not parse the configured env file" {
-		t.Fatalf("warning = %q", session.Warning)
-	}
-
-	connectResponse := splunkBrowserExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-		`{"realm":"us1","accessToken":"opaque-browser-token"}`, session.BrowserToken)
-	if connectResponse.Code != http.StatusOK {
-		t.Fatalf("connect status = %d, body = %s", connectResponse.Code, connectResponse.Body.String())
-	}
-}
-
-func TestSplunkExportBrowserSessionReusesProcessSessionAcrossValidLaunchContexts(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	service := newTestSplunkExportService(metrics, traces, nil)
-	mux := http.NewServeMux()
-	service.register(mux)
-
-	requestBody := splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken)
-	firstResponse := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", requestBody, "")
-	if firstResponse.Code != http.StatusOK {
-		t.Fatalf("initial session status = %d, body = %s", firstResponse.Code, firstResponse.Body.String())
-	}
-	var firstSession struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(firstResponse.Body.Bytes(), &firstSession); err != nil {
-		t.Fatal(err)
-	}
-
-	// Model a response that was accepted by Observer but never reached the tab.
-	retryResponse := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", requestBody, "")
-	if retryResponse.Code != http.StatusOK {
-		t.Fatalf("retried session status = %d, body = %s", retryResponse.Code, retryResponse.Body.String())
-	}
-	var retriedSession struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(retryResponse.Body.Bytes(), &retriedSession); err != nil {
-		t.Fatal(err)
-	}
-	if retriedSession.BrowserToken != firstSession.BrowserToken {
-		t.Fatal("launch retry minted a different browser session")
-	}
-
-	secondContextResponse := splunkBrowserExportRequestWithOriginAndCookie(t, mux, http.MethodPost,
-		"http://localhost:3000/api/splunk/export/browser/session",
-		requestBody,
-		"", nil)
-	if secondContextResponse.Code != http.StatusOK {
-		t.Fatalf("second-context launch status = %d, body = %s",
-			secondContextResponse.Code, secondContextResponse.Body.String())
-	}
-	var secondContextSession struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(secondContextResponse.Body.Bytes(), &secondContextSession); err != nil {
-		t.Fatal(err)
-	}
-	if secondContextSession.BrowserToken != firstSession.BrowserToken {
-		t.Fatal("valid launch context did not reattach to the process session")
-	}
-}
-
-func TestSplunkExportBrowserSessionSerializesConcurrentValidLaunchContexts(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	started := make(chan struct{})
-	release := make(chan struct{})
-	var releaseOnce sync.Once
-	releaseRefresh := func() { releaseOnce.Do(func() { close(release) }) }
-	defer releaseRefresh()
-	refreshCalls := 0
-	service := newTestSplunkExportService(metrics, traces, func() (bool, error) {
-		refreshCalls++
-		if refreshCalls == 1 {
-			close(started)
-			<-release
-		}
-		return false, nil
-	})
-	mux := http.NewServeMux()
-	service.register(mux)
-
-	responses := make(chan *httptest.ResponseRecorder, 2)
-	requestSession := func() {
-		responses <- splunkBrowserExportRequest(t, mux, http.MethodPost,
-			"/api/splunk/export/browser/session",
-			splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "")
-	}
-	go requestSession()
-	<-started
-	go requestSession()
-
-	select {
-	case response := <-responses:
-		releaseRefresh()
-		<-responses
-		t.Fatalf("concurrent session returned before the active refresh completed: status = %d, body = %s",
-			response.Code, response.Body.String())
-	case <-time.After(100 * time.Millisecond):
-	}
-
-	releaseRefresh()
-	statuses := map[int]int{}
-	for range 2 {
-		response := <-responses
-		statuses[response.Code]++
-	}
-	if statuses[http.StatusOK] != 2 {
-		t.Fatalf("session statuses = %#v, want both valid launch contexts to succeed", statuses)
-	}
-	if refreshCalls != 2 {
-		t.Fatalf("refresh calls = %d, want 2", refreshCalls)
-	}
-}
-
-func TestSplunkExportBrowserSessionRecoversUnknownTokenWithValidLaunch(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	service := newTestSplunkExportService(metrics, traces, nil)
-	mux := http.NewServeMux()
-	service.register(mux)
-
-	sessionResponse := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "")
-	if sessionResponse.Code != http.StatusOK {
-		t.Fatalf("session status = %d, body = %s", sessionResponse.Code, sessionResponse.Body.String())
-	}
-	var session struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(sessionResponse.Body.Bytes(), &session); err != nil {
-		t.Fatal(err)
-	}
-	currentToken := session.BrowserToken
-	last := "A"
-	if strings.HasSuffix(currentToken, last) {
-		last = "B"
-	}
-	tamperedToken := currentToken[:len(currentToken)-1] + last
-	if service.hasValidBrowserToken(tamperedToken) {
-		t.Fatal("tampered browser session token was accepted")
-	}
-	response := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session",
-		splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), tamperedToken)
-	if response.Code != http.StatusOK {
-		t.Fatalf("tampered session status = %d, body = %s", response.Code, response.Body.String())
-	}
-	var recovered struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(response.Body.Bytes(), &recovered); err != nil {
-		t.Fatal(err)
-	}
-	if recovered.BrowserToken != currentToken {
-		t.Fatal("local page did not recover the active process browser session")
-	}
-
-	mutationResponse := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/enabled", `{"enabled":true}`, tamperedToken)
-	if mutationResponse.Code != http.StatusUnauthorized {
-		t.Fatalf("tampered mutation status = %d, body = %s",
-			mutationResponse.Code, mutationResponse.Body.String())
-	}
-}
-
-func TestSplunkExportBrowserSessionProtectsEnvManagedConfigurationBeforeForget(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
-		Enabled:     true,
-		Realm:       "us0",
-		AccessToken: testSplunkAccessToken,
-	})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{
-		Enabled:     true,
-		Realm:       "us0",
-		AccessToken: testSplunkAccessToken,
-	})
-	refreshCalls := 0
-	service := newTestSplunkExportService(metrics, traces, func() (bool, error) {
-		refreshCalls++
-		return true, nil
-	})
-	mux := http.NewServeMux()
-	service.register(mux)
-
-	sessionResponse := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "")
-	if sessionResponse.Code != http.StatusOK {
-		t.Fatalf("session status = %d, body = %s", sessionResponse.Code, sessionResponse.Body.String())
-	}
-	if refreshCalls != 1 {
-		t.Fatalf("refresh calls = %d, want 1", refreshCalls)
-	}
-	var session struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(sessionResponse.Body.Bytes(), &session); err != nil {
-		t.Fatal(err)
-	}
-
-	forgetResponse := splunkBrowserExportRequest(t, mux, http.MethodPost, "/api/splunk/export/forget",
-		`{}`, session.BrowserToken)
-	if forgetResponse.Code != http.StatusConflict {
-		t.Fatalf("forget status = %d, body = %s", forgetResponse.Code, forgetResponse.Body.String())
-	}
-	if !strings.Contains(forgetResponse.Body.String(), "remove SPLUNK_ACCESS_TOKEN") {
-		t.Fatalf("forget body = %s", forgetResponse.Body.String())
-	}
-	if got := metrics.Config(); got.Realm != "us0" || got.AccessToken != testSplunkAccessToken {
-		t.Fatalf("env-managed metrics config was changed: %+v", got)
-	}
-	if got := traces.Config(); got.Realm != "us0" || got.AccessToken != testSplunkAccessToken {
-		t.Fatalf("env-managed traces config was changed: %+v", got)
-	}
-}
-
-func TestSplunkExportBrowserSessionAuthorizesBareLoopbackPage(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	service := newTestSplunkExportService(metrics, traces, nil)
-	mux := http.NewServeMux()
-	service.register(mux)
-
-	response := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(""), "")
-	if response.Code != http.StatusOK {
-		t.Fatalf("session status = %d, body = %s", response.Code, response.Body.String())
-	}
-	var session struct {
-		BrowserToken string `json:"browserToken"`
-	}
-	if err := json.Unmarshal(response.Body.Bytes(), &session); err != nil {
-		t.Fatal(err)
-	}
-	if !splunkBrowserTokenPattern.MatchString(session.BrowserToken) {
-		t.Fatalf("browser token has invalid shape: %q", session.BrowserToken)
-	}
-
-	connectResponse := splunkBrowserExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-		`{"realm":"us1","accessToken":"opaque-browser-token"}`, session.BrowserToken)
-	if connectResponse.Code != http.StatusOK {
-		t.Fatalf("browser connect status = %d, body = %s",
-			connectResponse.Code, connectResponse.Body.String())
-	}
-}
-
-func TestSplunkExportBrowserSessionRejectsInvalidLaunchWhenProvided(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	service := newTestSplunkExportService(metrics, traces, nil)
-	mux := http.NewServeMux()
-	service.register(mux)
-
-	response := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session",
-		splunkBrowserLaunchRequestBody(strings.Repeat("A", 43)), "")
-	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong launch status = %d, body = %s", response.Code, response.Body.String())
-	}
-
-	service.browserLaunch = ""
-	response = splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "")
-	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("unconfigured launch status = %d, body = %s", response.Code, response.Body.String())
-	}
-}
-
-func TestSplunkExportBrowserSessionRejectsNonLocalOrCrossOriginRequests(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	mux := http.NewServeMux()
-	newTestSplunkExportService(metrics, traces, nil).register(mux)
-
-	for _, test := range []struct {
-		name       string
-		origin     string
-		remoteAddr string
-		marker     string
-		fetchSite  string
-	}{
-		{name: "cross origin", origin: "https://attacker.example", remoteAddr: "127.0.0.1:54321", marker: "1"},
-		{name: "remote client", origin: "http://127.0.0.1:3000", remoteAddr: "192.0.2.10:54321", marker: "1"},
-		{name: "missing marker", origin: "http://127.0.0.1:3000", remoteAddr: "127.0.0.1:54321"},
-		{name: "cross-site fetch metadata", origin: "http://127.0.0.1:3000", remoteAddr: "127.0.0.1:54321", marker: "1", fetchSite: "cross-site"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost,
-				"http://127.0.0.1:3000/api/splunk/export/browser/session",
-				strings.NewReader(splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken)))
-			request.RemoteAddr = test.remoteAddr
-			request.Header.Set("Content-Type", "application/json")
-			request.Header.Set("Origin", test.origin)
-			if test.marker != "" {
-				request.Header.Set(splunkBrowserRequestHeader, test.marker)
-			}
-			if test.fetchSite != "" {
-				request.Header.Set("Sec-Fetch-Site", test.fetchSite)
-			}
-			response := httptest.NewRecorder()
-			mux.ServeHTTP(response, request)
-			if response.Code != http.StatusForbidden {
-				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
-			}
-		})
-	}
-}
-
-func TestSplunkExportMutationsRequireControlToken(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	mux := http.NewServeMux()
-	newTestSplunkExportService(metrics, traces, nil).register(mux)
-
-	for name, token := range map[string]string{
-		"missing": "",
-		"wrong":   "wrong-control-token",
-	} {
-		t.Run(name, func(t *testing.T) {
-			response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-				`{"realm":"us0","accessToken":"`+testSplunkAccessToken+`"}`, token)
-			if response.Code != http.StatusUnauthorized {
-				t.Fatalf("status = %d, want %d", response.Code, http.StatusUnauthorized)
-			}
-		})
-	}
-}
-
-func TestSplunkExportConfigurationSnapshotIsControlTokenOnly(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
-		Enabled: true, Realm: "us1", AccessToken: "snapshot-token",
-	})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{
-		Enabled: true, Realm: "us1", AccessToken: "snapshot-token",
-	})
-	mux := http.NewServeMux()
-	newTestSplunkExportService(metrics, traces, nil).register(mux)
-
-	unauthorized := splunkExportRequest(
-		t,
-		mux,
-		http.MethodGet,
-		"/api/splunk/export/configuration",
-		"",
-		"",
-	)
-	if unauthorized.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthorized status = %d, body = %s", unauthorized.Code, unauthorized.Body.String())
-	}
-	if strings.Contains(unauthorized.Body.String(), "snapshot-token") {
-		t.Fatal("unauthorized response exposed the access token")
-	}
-
-	authorized := splunkExportRequest(
-		t,
-		mux,
-		http.MethodGet,
-		"/api/splunk/export/configuration",
-		"",
-		testObserverControlToken,
-	)
-	if authorized.Code != http.StatusOK {
-		t.Fatalf("authorized status = %d, body = %s", authorized.Code, authorized.Body.String())
-	}
-	if got := authorized.Header().Get("Cache-Control"); got != "no-store" {
-		t.Fatalf("cache control = %q", got)
-	}
-	var configuration splunkExportConfigurationResponse
-	if err := json.Unmarshal(authorized.Body.Bytes(), &configuration); err != nil {
-		t.Fatal(err)
-	}
-	if !configuration.Connected || !configuration.Enabled || configuration.Realm != "us1" ||
-		configuration.AccessToken != "snapshot-token" {
-		t.Fatalf("configuration = %+v", configuration)
-	}
-	if configuration.Changed {
-		t.Fatal("startup configuration was incorrectly marked as a user mutation")
-	}
-	if !splunkStateVersionPattern.MatchString(configuration.Version) {
-		t.Fatalf("configuration version = %q", configuration.Version)
-	}
-
-	publicStatus := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
-	if strings.Contains(publicStatus.Body.String(), "snapshot-token") {
-		t.Fatal("public status exposed the access token")
-	}
-
-	disable := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/enabled",
-		`{"enabled":false}`, testObserverControlToken)
-	if disable.Code != http.StatusOK {
-		t.Fatalf("disable status = %d, body = %s", disable.Code, disable.Body.String())
-	}
-	if strings.Contains(disable.Body.String(), "rollbackToken") {
-		t.Fatalf("ordinary control mutation exposed an unrequested rollback capability: %s", disable.Body.String())
-	}
-	changed := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export/configuration",
-		"", testObserverControlToken)
-	if err := json.Unmarshal(changed.Body.Bytes(), &configuration); err != nil {
-		t.Fatal(err)
-	}
-	if !configuration.Changed || configuration.Enabled {
-		t.Fatalf("changed configuration = %+v", configuration)
-	}
-}
-
-func TestSplunkExportShutdownSnapshotQuiescesCloudMutations(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
-		Enabled: true, Realm: "us1", AccessToken: "snapshot-token",
-	})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{
-		Enabled: true, Realm: "us1", AccessToken: "snapshot-token",
-	})
-	refreshCalls := 0
-	service := newTestSplunkExportService(metrics, traces, func() (bool, error) {
-		refreshCalls++
-		return false, nil
-	})
-	verificationCalls := 0
-	service.verifyConnection = func(context.Context, string, string) error {
-		verificationCalls++
-		return nil
-	}
-	mux := http.NewServeMux()
-	service.register(mux)
-
-	snapshot := splunkExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/shutdown-snapshot", `{}`, testObserverControlToken)
-	if snapshot.Code != http.StatusOK {
-		t.Fatalf("shutdown snapshot status = %d, body = %s", snapshot.Code, snapshot.Body.String())
-	}
-	var configuration splunkExportConfigurationResponse
-	if err := json.Unmarshal(snapshot.Body.Bytes(), &configuration); err != nil {
-		t.Fatal(err)
-	}
-	if !configuration.Connected || !configuration.Enabled || configuration.AccessToken != "snapshot-token" {
-		t.Fatalf("shutdown snapshot = %+v", configuration)
-	}
-
-	mutations := []struct {
-		body string
-		path string
-	}{
-		{path: "/api/splunk/export", body: `{"realm":"eu1","accessToken":"new-token"}`},
-		{path: "/api/splunk/export/enabled", body: `{"enabled":false}`},
-		{path: "/api/splunk/export/forget", body: `{}`},
-		{path: "/api/splunk/export/refresh", body: `{}`},
-	}
-	for _, mutation := range mutations {
-		response := splunkExportRequest(t, mux, http.MethodPost, mutation.path,
-			mutation.body, testObserverControlToken)
-		if response.Code != http.StatusServiceUnavailable {
-			t.Fatalf("quiesced %s status = %d, body = %s",
-				mutation.path, response.Code, response.Body.String())
-		}
-	}
-	if verificationCalls != 0 {
-		t.Fatalf("quiesced Connect ran %d connection verifications", verificationCalls)
-	}
-	if refreshCalls != 0 {
-		t.Fatalf("quiesced refresh ran %d configuration reloads", refreshCalls)
-	}
-
-	rollback := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/rollback",
-		`{"rollbackToken":"`+strings.Repeat("R", 43)+`"}`, testObserverControlToken)
-	if rollback.Code != http.StatusServiceUnavailable {
-		t.Fatalf("quiesced rollback status = %d, body = %s", rollback.Code, rollback.Body.String())
-	}
-	browserSession := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", `{"launchToken":""}`, "")
-	if browserSession.Code != http.StatusServiceUnavailable {
-		t.Fatalf("quiesced browser session status = %d, body = %s",
-			browserSession.Code, browserSession.Body.String())
-	}
-
-	status := splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
-	var current splunkExportStatusResponse
-	if err := json.Unmarshal(status.Body.Bytes(), &current); err != nil {
-		t.Fatal(err)
-	}
-	if !current.Connected || !current.Enabled || current.Realm != "us1" {
-		t.Fatalf("quiesced mutations changed Observer state: %+v", current)
-	}
-}
-
-func TestSplunkExportShutdownSnapshotCancelsInFlightConnectBeforeApply(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	service := newTestSplunkExportService(metrics, traces, nil)
-	verificationStarted := make(chan struct{})
-	releaseVerification := make(chan struct{})
-	var releaseOnce sync.Once
-	defer releaseOnce.Do(func() { close(releaseVerification) })
-	service.verifyConnection = func(context.Context, string, string) error {
-		close(verificationStarted)
-		<-releaseVerification
-		return nil
-	}
-	mux := http.NewServeMux()
-	service.register(mux)
-
-	connectResult := make(chan *httptest.ResponseRecorder, 1)
-	go func() {
-		connectResult <- splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-			`{"realm":"us1","accessToken":"new-token"}`, testObserverControlToken)
-	}()
-	<-verificationStarted
-
-	snapshotResult := make(chan *httptest.ResponseRecorder, 1)
-	go func() {
-		snapshotResult <- splunkExportRequest(t, mux, http.MethodPost,
-			"/api/splunk/export/shutdown-snapshot", `{}`, testObserverControlToken)
-	}()
-	deadline := time.Now().Add(time.Second)
-	for !service.mutationsQuiesced.Load() && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
-	if !service.mutationsQuiesced.Load() {
-		t.Fatal("shutdown snapshot did not quiesce mutations before waiting for Connect")
-	}
-	releaseOnce.Do(func() { close(releaseVerification) })
-
-	connect := <-connectResult
-	if connect.Code != http.StatusServiceUnavailable {
-		t.Fatalf("in-flight Connect status = %d, body = %s", connect.Code, connect.Body.String())
-	}
-	snapshot := <-snapshotResult
-	if snapshot.Code != http.StatusOK {
-		t.Fatalf("shutdown snapshot status = %d, body = %s", snapshot.Code, snapshot.Body.String())
-	}
-	var configuration splunkExportConfigurationResponse
-	if err := json.Unmarshal(snapshot.Body.Bytes(), &configuration); err != nil {
-		t.Fatal(err)
-	}
-	if configuration.Connected || configuration.AccessToken != "" {
-		t.Fatalf("shutdown snapshot included the cancelled Connect: %+v", configuration)
-	}
-}
-
-func TestSplunkExportControlFailsClosedWhenUnconfigured(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	mux := http.NewServeMux()
-	newTestSplunkExportService(metrics, traces, nil).register(mux)
-
-	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/forget", `{}`, "")
-	if response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want %d", response.Code, http.StatusServiceUnavailable)
-	}
-}
-
 func TestSplunkExportSetEnabledRequiresExplicitBoolean(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	mux := http.NewServeMux()
 	newTestSplunkExportService(metrics, traces, nil).register(mux)
 
 	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/enabled",
-		`{}`, testObserverControlToken)
+		`{}`)
+
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
 	}
 }
 
 func TestSplunkExportSetEnabledRequiresSameRealm(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
 		Realm:       "us0",
 		AccessToken: testSplunkAccessToken,
@@ -1957,14 +1196,14 @@ func TestSplunkExportSetEnabledRequiresSameRealm(t *testing.T) {
 	newTestSplunkExportService(metrics, traces, nil).register(mux)
 
 	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/enabled",
-		`{"enabled":true}`, testObserverControlToken)
+		`{"enabled":true}`)
+
 	if response.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d, body = %s", response.Code, http.StatusConflict, response.Body.String())
 	}
 }
 
 func TestSplunkExportSetEnabledRequiresSameToken(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
 		Realm:       "us0",
 		AccessToken: testSplunkAccessToken,
@@ -1977,14 +1216,14 @@ func TestSplunkExportSetEnabledRequiresSameToken(t *testing.T) {
 	newTestSplunkExportService(metrics, traces, nil).register(mux)
 
 	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/enabled",
-		`{"enabled":true}`, testObserverControlToken)
+		`{"enabled":true}`)
+
 	if response.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d, body = %s", response.Code, http.StatusConflict, response.Body.String())
 	}
 }
 
 func TestSplunkExportSetEnabledRejectsEndpointOverride(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
 		Realm:       "us0",
 		Endpoint:    "https://metrics.example.com/v2/datapoint/otlp",
@@ -1998,14 +1237,14 @@ func TestSplunkExportSetEnabledRejectsEndpointOverride(t *testing.T) {
 	newTestSplunkExportService(metrics, traces, nil).register(mux)
 
 	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/enabled",
-		`{"enabled":true}`, testObserverControlToken)
+		`{"enabled":true}`)
+
 	if response.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d, body = %s", response.Code, http.StatusConflict, response.Body.String())
 	}
 }
 
 func TestSplunkExportRejectsInvalidConfiguration(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	service := newTestSplunkExportService(metrics, traces, nil)
@@ -2039,7 +1278,8 @@ func TestSplunkExportRejectsInvalidConfiguration(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-				test.body, testObserverControlToken)
+				test.body)
+
 			if response.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
 			}
@@ -2051,7 +1291,6 @@ func TestSplunkExportRejectsInvalidConfiguration(t *testing.T) {
 }
 
 func TestSplunkExportRefreshUsesConfigurationRefresher(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	calls := 0
@@ -2061,7 +1300,7 @@ func TestSplunkExportRefreshUsesConfigurationRefresher(t *testing.T) {
 		return false, nil
 	}).register(mux)
 
-	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/refresh", `{}`, testObserverControlToken)
+	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/refresh", `{}`)
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -2071,7 +1310,6 @@ func TestSplunkExportRefreshUsesConfigurationRefresher(t *testing.T) {
 }
 
 func TestSplunkExportForgetRefusesEnvManagedConfiguration(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	mux := http.NewServeMux()
@@ -2091,12 +1329,12 @@ func TestSplunkExportForgetRefusesEnvManagedConfiguration(t *testing.T) {
 		return true, nil
 	}).register(mux)
 
-	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/refresh", `{}`, testObserverControlToken)
+	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/refresh", `{}`)
 	if response.Code != http.StatusOK {
 		t.Fatalf("refresh status = %d, body = %s", response.Code, response.Body.String())
 	}
 
-	response = splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/forget", `{}`, testObserverControlToken)
+	response = splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/forget", `{}`)
 	if response.Code != http.StatusConflict {
 		t.Fatalf("forget status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -2104,7 +1342,7 @@ func TestSplunkExportForgetRefusesEnvManagedConfiguration(t *testing.T) {
 		t.Fatalf("forget body = %s", response.Body.String())
 	}
 
-	response = splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "", "")
+	response = splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -2118,7 +1356,6 @@ func TestSplunkExportForgetRefusesEnvManagedConfiguration(t *testing.T) {
 }
 
 func TestSplunkExportRealmResolvesCanonicalDestinationsWithoutNetwork(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	service := newTestSplunkExportService(metrics, traces, nil)
@@ -2150,7 +1387,8 @@ func TestSplunkExportRealmResolvesCanonicalDestinationsWithoutNetwork(t *testing
 		t.Run(test.destination, func(t *testing.T) {
 			body, _ := json.Marshal(splunkExportRealmRequest{Destination: test.destination})
 			response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
-				string(body), testObserverControlToken)
+				string(body))
+
 			if response.Code != http.StatusOK {
 				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 			}
@@ -2169,7 +1407,6 @@ func TestSplunkExportRealmResolvesCanonicalDestinationsWithoutNetwork(t *testing
 }
 
 func TestSplunkExportRealmFetchesOnlyNormalizedCustomSplunkPage(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	service := newTestSplunkExportService(metrics, traces, nil)
@@ -2182,7 +1419,7 @@ func TestSplunkExportRealmFetchesOnlyNormalizedCustomSplunkPage(t *testing.T) {
 		if request.URL.String() != "https://pov-rexel-webshop.observability.splunkcloud.com/" {
 			t.Fatalf("URL = %s", request.URL)
 		}
-		for _, name := range []string{"Authorization", "Cookie", "X-SF-Token", splunkBrowserTokenHeader} {
+		for _, name := range []string{"Authorization", "Cookie", "X-SF-Token", "X-Obstudio-Browser-Token"} {
 			if value := request.Header.Get(name); value != "" {
 				t.Fatalf("%s header = %q", name, value)
 			}
@@ -2194,8 +1431,8 @@ func TestSplunkExportRealmFetchesOnlyNormalizedCustomSplunkPage(t *testing.T) {
 	service.register(mux)
 
 	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
-		`{"destination":"https://pov-rexel-webshop.observability.splunkcloud.com/supplied/path?secret=value#/signin"}`,
-		testObserverControlToken)
+		`{"destination":"https://pov-rexel-webshop.observability.splunkcloud.com/supplied/path?secret=value#/signin"}`)
+
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -2211,55 +1448,7 @@ func TestSplunkExportRealmFetchesOnlyNormalizedCustomSplunkPage(t *testing.T) {
 	}
 }
 
-func TestSplunkExportRealmSupportsControlAndBrowserAuthorizationWithoutSerialization(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	service := newTestSplunkExportService(metrics, traces, nil)
-	mux := http.NewServeMux()
-	service.register(mux)
-
-	unauthorized := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
-		`{"destination":"us1"}`, "")
-	if unauthorized.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthorized status = %d", unauthorized.Code)
-	}
-
-	session := splunkBrowserExportRequest(t, mux, http.MethodPost, "/api/splunk/export/browser/session",
-		splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "")
-	if session.Code != http.StatusOK {
-		t.Fatalf("session status = %d, body = %s", session.Code, session.Body.String())
-	}
-	var sessionResult map[string]string
-	if err := json.Unmarshal(session.Body.Bytes(), &sessionResult); err != nil {
-		t.Fatal(err)
-	}
-	browser := splunkBrowserExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
-		`{"destination":"EU0"}`, sessionResult["browserToken"])
-	if browser.Code != http.StatusOK {
-		t.Fatalf("browser status = %d, body = %s", browser.Code, browser.Body.String())
-	}
-
-	service.mutationMu.Lock()
-	result := make(chan *httptest.ResponseRecorder, 1)
-	go func() {
-		result <- splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
-			`{"destination":"us1"}`, testObserverControlToken)
-	}()
-	select {
-	case response := <-result:
-		if response.Code != http.StatusOK {
-			t.Fatalf("non-serialized status = %d, body = %s", response.Code, response.Body.String())
-		}
-	case <-time.After(time.Second):
-		service.mutationMu.Unlock()
-		t.Fatal("realm resolution waited for the cloud mutation lock")
-	}
-	service.mutationMu.Unlock()
-}
-
 func TestSplunkExportRealmRejectsInvalidDestinationsWithoutNetwork(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	service := newTestSplunkExportService(metrics, traces, nil)
@@ -2295,7 +1484,8 @@ func TestSplunkExportRealmRejectsInvalidDestinationsWithoutNetwork(t *testing.T)
 		t.Run(destination, func(t *testing.T) {
 			body, _ := json.Marshal(splunkExportRealmRequest{Destination: destination})
 			response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
-				string(body), testObserverControlToken)
+				string(body))
+
 			if response.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d, body = %s", response.Code, http.StatusBadRequest, response.Body.String())
 			}
@@ -2304,7 +1494,6 @@ func TestSplunkExportRealmRejectsInvalidDestinationsWithoutNetwork(t *testing.T)
 }
 
 func TestSplunkExportRealmRejectsUnsafeOrUnverifiableCustomPages(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	tests := []struct {
 		contentType string
 		body        string
@@ -2372,7 +1561,8 @@ func TestSplunkExportRealmRejectsUnsafeOrUnverifiableCustomPages(t *testing.T) {
 			service.register(mux)
 
 			response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/realm",
-				`{"destination":"https://customer.observability.splunkcloud.com"}`, testObserverControlToken)
+				`{"destination":"https://customer.observability.splunkcloud.com"}`)
+
 			if response.Code != http.StatusBadGateway {
 				t.Fatalf("status = %d, want %d, body = %s", response.Code, http.StatusBadGateway, response.Body.String())
 			}
@@ -2384,7 +1574,6 @@ func TestSplunkExportRealmRejectsUnsafeOrUnverifiableCustomPages(t *testing.T) {
 }
 
 func TestSplunkExportConfigurationRemainsRealmOnly(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	service := newTestSplunkExportService(metrics, traces, nil)
@@ -2397,8 +1586,8 @@ func TestSplunkExportConfigurationRemainsRealmOnly(t *testing.T) {
 	service.register(mux)
 
 	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-		`{"realm":"https://app.us1.observability.splunkcloud.com","accessToken":"token"}`,
-		testObserverControlToken)
+		`{"realm":"https://app.us1.observability.splunkcloud.com","accessToken":"token"}`)
+
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d, body = %s", response.Code, http.StatusBadRequest, response.Body.String())
 	}
@@ -2424,9 +1613,8 @@ func splunkExportRequest(
 	method string,
 	path string,
 	body string,
-	controlToken string,
 ) *httptest.ResponseRecorder {
-	return splunkExportRequestWithRollbackToken(t, handler, method, path, body, controlToken, "")
+	return splunkExportRequestWithRollbackToken(t, handler, method, path, body, "")
 }
 
 func splunkExportRequestWithRollbackToken(
@@ -2435,69 +1623,14 @@ func splunkExportRequestWithRollbackToken(
 	method string,
 	path string,
 	body string,
-	controlToken string,
 	rollbackToken string,
 ) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(method, path, bytes.NewBufferString(body))
-	request.Header.Set("Content-Type", "application/json")
-	if controlToken != "" {
-		request.Header.Set("Authorization", "Bearer "+controlToken)
-	}
-	if rollbackToken != "" {
-		request.Header.Set(splunkRollbackTokenHeader, rollbackToken)
-	}
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
-	return response
-}
-
-func splunkBrowserExportRequest(
-	t *testing.T,
-	handler http.Handler,
-	method string,
-	path string,
-	body string,
-	browserToken string,
-) *httptest.ResponseRecorder {
-	return splunkBrowserExportRequestWithCookie(t, handler, method, path, body, browserToken, nil)
-}
-
-func splunkBrowserExportRequestWithCookie(
-	t *testing.T,
-	handler http.Handler,
-	method string,
-	path string,
-	body string,
-	browserToken string,
-	browserCookie *http.Cookie,
-) *httptest.ResponseRecorder {
-	t.Helper()
-	return splunkBrowserExportRequestWithOriginAndCookie(t, handler, method,
-		"http://127.0.0.1:3000"+path, body, browserToken, browserCookie)
-}
-
-func splunkBrowserExportRequestWithOriginAndCookie(
-	t *testing.T,
-	handler http.Handler,
-	method string,
-	requestURL string,
-	body string,
-	browserToken string,
-	browserCookie *http.Cookie,
-) *httptest.ResponseRecorder {
-	t.Helper()
-	request := httptest.NewRequest(method, requestURL, bytes.NewBufferString(body))
 	request.RemoteAddr = "127.0.0.1:54321"
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Origin", "http://"+request.Host)
-	request.Header.Set("Sec-Fetch-Site", "same-origin")
-	request.Header.Set(splunkBrowserRequestHeader, "1")
-	if browserToken != "" {
-		request.Header.Set(splunkBrowserTokenHeader, browserToken)
-	}
-	if browserCookie != nil {
-		request.AddCookie(browserCookie)
+	if rollbackToken != "" {
+		request.Header.Set(splunkRollbackTokenHeader, rollbackToken)
 	}
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -2510,13 +1643,8 @@ func newTestSplunkExportService(
 	refresh SplunkExportConfigurationRefresher,
 ) *splunkExportService {
 	service := newSplunkExportService(metrics, traces, refresh)
-	service.browserLaunch = testSplunkBrowserLaunchToken
 	service.verifyConnection = func(context.Context, string, string) error { return nil }
 	return service
-}
-
-func splunkBrowserLaunchRequestBody(token string) string {
-	return fmt.Sprintf(`{"launchToken":%q}`, token)
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
