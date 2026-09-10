@@ -167,9 +167,9 @@ New targets default to `--repository-correlation=path`:
 
 | Mode | Repository data |
 |---|---|
-| `path` | Include repository and workspace paths; support exact-path queries. |
-| `name` | Include the repository name without filesystem paths. |
-| `off` | Disable normalized repository correlation. |
+| `path` | Includes repository and workspace paths; supports exact-path queries. |
+| `name` | Includes the repository name without filesystem paths. |
+| `off` | Disables normalized repository correlation. |
 
 Omitting the option for an existing target preserves its recorded mode. Raw
 provider telemetry is unchanged and may still contain a provider-supplied
