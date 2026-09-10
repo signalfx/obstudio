@@ -30,20 +30,6 @@ Trust model:
 - Does not manage a local background Observer process.
 - Does not call live Splunk APIs to create resources.
 
-Cloud onboarding skills:
-
-- `$connect-splunk-observability-cloud`
-- `$create-splunk-free-account`
-
-Trust model:
-
-- Opens the local Cloud view for credential entry outside agent context.
-- Never asks the user to put a Splunk access token in agent chat.
-- Can submit a Free Edition request to Splunk only after the user confirms the
-  signup details and explicitly accepts the Terms of Use.
-- Treats signup as an external write and does not automatically retry an
-  uncertain result.
-
 Observer and MCP controls:
 
 - MCP server config for `http://127.0.0.1:3000/mcp`
@@ -95,12 +81,6 @@ The managed Observer is intended to bind loopback-local endpoints, including
 MCP endpoint, and OTLP receivers should not be exposed on public interfaces by
 default.
 
-These listeners use one shared local trust boundary. Native clients do not
-authenticate as separate principals, so a local process that can reach an
-endpoint is trusted to use the operations it exposes. Browser MCP and mutation
-requests must pass the same-origin check, which prevents cross-site access but
-does not isolate other local processes.
-
 The bundled MCP server config points to `http://127.0.0.1:3000/mcp`. Observer
 command skills do not automatically follow non-default MCP endpoints; they
 verify or control only the default loopback Observer at `127.0.0.1:3000`.
@@ -148,9 +128,9 @@ The plugin includes several higher-trust surfaces:
 
 Destructive or control actions should require explicit user intent, ownership
 evidence when controlling a local process, and narrow permissions when the
-active host requires approval for localhost access. Observer command skills should
-inspect only the default loopback health endpoint and the Observer listener
-ports `127.0.0.1:3000`, `127.0.0.1:4317`, and `127.0.0.1:4318`.
+active host requires approval for localhost access. Observer command skills
+should inspect only the default loopback health endpoint and the Observer
+listener ports `127.0.0.1:3000`, `127.0.0.1:4317`, and `127.0.0.1:4318`.
 
 Cloud onboarding also requires explicit user intent. Keep access-token entry
 outside agent context, and submit a Free Edition request only after the user
@@ -188,12 +168,12 @@ enabled = false
 
 ### Claude Code
 
-Use Claude Code's plugin controls to disable Splunk Observability Studio or withhold SessionStart
-hook approval to prevent its managed bootstrap. Use Claude Code's MCP-server
-controls to prevent Claude from connecting to the local MCP endpoint, and its
-command permission prompts to withhold individual host-local commands. A
-disabled Claude MCP server does not stop a previously trusted SessionStart hook
-from managing an Observer, and withholding a later hook prompt does not prevent
-connection to an already running endpoint. Claude Code manages these controls
-under its own plugin and permission model; the Codex configuration examples
-above do not apply to Claude Code.
+Use Claude Code's plugin controls to disable Splunk Observability Studio or
+withhold SessionStart hook approval to prevent its managed bootstrap. Use
+Claude Code's MCP-server controls to prevent Claude from connecting to the
+local MCP endpoint, and its command permission prompts to withhold individual
+host-local commands. A disabled Claude MCP server does not stop a previously
+trusted SessionStart hook from managing an Observer, and withholding a later
+hook prompt does not prevent connection to an already running endpoint. Claude
+Code manages these controls under its own plugin and permission model; the
+Codex configuration examples above do not apply to Claude Code.

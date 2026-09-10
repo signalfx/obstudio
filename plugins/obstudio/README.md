@@ -26,6 +26,10 @@ For Claude Code:
 - `/obstudio:connect-splunk-observability-cloud`,
   `/obstudio:create-splunk-free-account`
 
+The `connect-splunk-observability-cloud` skill opens the Cloud view so you can
+connect an existing Splunk Observability Cloud organization. The
+`create-splunk-free-account` skill starts a Free Edition signup.
+
 ## Plugin contents
 
 The bundle includes the audit, instrumentation, verification, Cloud, and
