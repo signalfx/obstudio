@@ -850,7 +850,16 @@ def test_runtime_regressions_keep_python_setup_go_levels_and_node_startup() -> N
     assert "wrapper-only startup edits fail" in python
     assert "per-process setup below" in python
     assert "worker_process_init" in python
-    assert "keep provider setup out of `worker.py` import time" in python
+    for term in (
+        "while `worker.py` loads",
+        "create providers and instrument only inside each child's `worker_process_init`",
+        "Never lazy-import local setup",
+        "mask it with `PYTHONPATH`",
+        "real prefork child",
+        "Never pair current `LoggingInstrumentor` with an SDK `LoggingHandler`",
+        "one exported record per input, not one handler class",
+    ):
+        assert term in python
     assert "severity number (`WARN` is 13)" in go
     assert 'slog.Warn("runtime shutdown completed")' in kvstore_main
 

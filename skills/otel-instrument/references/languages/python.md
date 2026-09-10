@@ -70,24 +70,16 @@ LoggingInstrumentor().instrument(
 )
 ```
 
-The instrumentor installs the stdlib-to-OTel handler by default and protects it
-across later `basicConfig`, `dictConfig`, and `fileConfig` calls without
-replacing the application's console/file handlers. On
-`opentelemetry-instrumentation-logging` 0.64b0+ (paired with Python OTel
-1.43.0+), pass `inject_trace_context=True` to add `otelTraceID`, `otelSpanID`,
-`otelTraceSampled`, and `otelServiceName` to the original stdlib `LogRecord`
-without changing its format. Keep `set_logging_format=False` to preserve the
-existing stdout/file format. For an older locked instrumentation version, omit
-the unsupported `inject_trace_context` argument; the OTLP handler still derives
-correlation from the current OTel context independently. If the older
-stdout/file formatter itself must consume those fields, use
-`OTEL_PYTHON_LOG_CORRELATION=true` or `set_logging_format=True` and update an
-already-created formatter explicitly. That older option also asks
-`logging.basicConfig` to install the OTel format, which may be a no-op when
-handlers already exist and does not enable OTLP export. For a project pinned
-before Python OTel 1.40.0, inspect the installed APIs and retain the older SDK
-`LoggingHandler` compatibility path rather than upgrading dependencies solely
-to copy this example.
+The instrumentor owns the stdlib-to-OTel handler and preserves existing sinks
+across later logging reconfiguration. On instrumentation 0.64b0+ with Python
+OTel 1.43.0+, `inject_trace_context=True` adds OTel IDs to the original record;
+keep `set_logging_format=False`. For an older locked instrumentation version,
+omit the unsupported `inject_trace_context` argument; export correlation still
+uses active context. Use `OTEL_PYTHON_LOG_CORRELATION=true` or
+`set_logging_format=True` only when the original formatter needs those fields;
+this formatting option does not enable OTLP export. Before Python OTel 1.40.0,
+inspect the installed APIs and retain the SDK `LoggingHandler` compatibility
+path rather than upgrading solely for this example.
 
 ---
 
@@ -194,8 +186,10 @@ bridge only after the application has established its existing console/file
 handlers and before it begins serving.
 For Python services, this setup is required unless the user selected the
 zero-code exception above; wrapper-only commands are insufficient.
-For prefork Celery, keep provider setup out of `worker.py` import time. Invoke
-the setup module and `CeleryInstrumentor` from `worker_process_init` per child.
+For prefork Celery, import the side-effect-free setup callable and
+`CeleryInstrumentor` while `worker.py` loads, but create providers and instrument
+only inside each child's `worker_process_init`. Never lazy-import local setup
+there or mask it with `PYTHONPATH`; prove emission from a real prefork child.
 
 ### Existing provider reconciliation
 
@@ -407,7 +401,9 @@ provider or signal handler during reloads or per worker request.
 `LoggingInstrumentor` is the current stdlib-to-OTel bridge. Its handler is an
 additional path, and its guarded configuration wrappers let later application
 logging setup proceed before reattaching the OTel handler. Do not use
-`logging.basicConfig(force=True)`. On 0.64b0+/1.43.0+,
+`logging.basicConfig(force=True)`. Never pair current `LoggingInstrumentor` with
+an SDK `LoggingHandler`; it already owns the bridge. Prove one exported record
+per input, not one handler class. On 0.64b0+/1.43.0+,
 `inject_trace_context=True` injects the OTel fields without changing the
 existing text format; `set_logging_format=False` preserves that format. On an
 older locked version, omit the unsupported injection argument. The OTLP handler
