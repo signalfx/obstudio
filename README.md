@@ -14,7 +14,7 @@ Download the archive for your platform from
 and run the installer from that directory:
 
 ```bash
-./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot
+./obstudio install --target=codex
 ```
 
 Use a single target or a comma-separated list. The installer supports `codex`,
@@ -152,9 +152,12 @@ REST and MCP validation APIs are documented in
 Token telemetry is an explicit opt-in for Codex and Claude Code:
 
 ```bash
-obstudio token-telemetry enable --target=codex,claude-code
-obstudio token-telemetry status --target=codex,claude-code
-obstudio token-telemetry disable --target=codex,claude-code
+obstudio token-telemetry enable \
+  --target=codex,claude-code
+obstudio token-telemetry status \
+  --target=codex,claude-code
+obstudio token-telemetry disable \
+  --target=codex,claude-code
 ```
 
 `enable` takes ownership of recognized provider OTLP routes; there is no

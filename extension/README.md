@@ -36,8 +36,9 @@ After installing:
 For Devin Local, also add the running Observer. Copy the base URL from
 **Observer Status** and keep the `/mcp` suffix:
 
-```text
-devin mcp add -s user obstudio OBSERVER_BASE_URL/mcp
+```bash
+devin mcp add -s user obstudio \
+  OBSERVER_BASE_URL/mcp
 ```
 
 The `windsurf` target configures MCP for legacy Cascade. On Windows, enable
@@ -149,9 +150,12 @@ Agent integration does not change provider OTLP settings. Install the standalone
 or both:
 
 ```bash
-obstudio token-telemetry enable --target=codex,claude-code
-obstudio token-telemetry status --target=codex,claude-code
-obstudio token-telemetry disable --target=codex,claude-code
+obstudio token-telemetry enable \
+  --target=codex,claude-code
+obstudio token-telemetry status \
+  --target=codex,claude-code
+obstudio token-telemetry disable \
+  --target=codex,claude-code
 ```
 
 `enable` takes ownership of recognized provider OTLP routes; there is no force
@@ -196,20 +200,13 @@ diagnostics.
 | **Observer Status** | Inspect the runtime, logs, and recovery actions. |
 | **Start / Stop / Restart Observer** | Manage the extension-owned process or reconnect another local Observer. |
 
-The extension supports two local runtime settings:
+Extension settings use the `observability-studio.` prefix:
 
-```json
-{
-  "observability-studio.managedObserverPort": 41234,
-  "observability-studio.sharedObserverUrl": "http://127.0.0.1:3000"
-}
-```
-
-`managedObserverPort` moves the extension-managed UI, REST API, and MCP
-endpoint. Its OTLP receivers remain fixed at `4318` and `4317`.
-`sharedObserverUrl` reuses another loopback Observer; it must report the same
-version bundled with the extension. Send telemetry to that Observer's own
-receiver endpoints.
+- `managedObserverPort` moves the extension-managed UI, REST API, and MCP
+  endpoint. Its OTLP receivers remain fixed at `4318` and `4317`.
+- `sharedObserverUrl` reuses another loopback Observer. It must report the same
+  version bundled with the extension; send telemetry to that Observer's own
+  receiver endpoints.
 
 ## Security and data handling
 
