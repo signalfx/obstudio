@@ -7,26 +7,49 @@ validation evidence.
 ## Quick start
 
 Download and extract the archive for your platform from
-[GitHub Releases](https://github.com/signalfx/obstudio/releases/latest), then
-change into the extracted directory:
+[GitHub Releases](https://github.com/signalfx/obstudio/releases/latest). This
+guide uses the release binary as `./obstudio`; for a source build, use
+`./build/obstudio` instead. Choose how Observer will run.
+
+### Agent-managed Observer
+
+Stop any running Observer before installing in this mode; otherwise setup
+reuses the detected Observer. Then install the integration and let the agent
+start its own Observer:
 
 ```bash
 cd obstudio_<version>_<os>_<arch>
-```
-
-Install one agent integration:
-
-```bash
 ./obstudio install --target=codex
 ```
 
-Use a comma-separated list to install more than one target.
+Restart each configured agent and begin a new task. The generated MCP
+configuration starts Observer, so do not also launch a standalone Observer on
+the same ports.
 
-To configure every target in one run:
+### Shared standalone Observer
+
+Start one background Observer, then connect integrations to its MCP endpoint:
 
 ```bash
-./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot
+cd obstudio_<version>_<os>_<arch>
+./obstudio start
+./obstudio install --target=codex --shared-url=http://127.0.0.1:3000/mcp
 ```
+
+The shared Observer must be running when you pass `--shared-url`. If it is
+already running before installation, omitting the flag also lets setup detect
+it automatically. Restart each configured agent and begin a new task.
+
+To configure more than one target, replace `codex` in the command for your
+chosen model with a comma-separated list such as
+`codex,claude-code,cursor,kiro,windsurf,copilot`. Keep the `--shared-url` option
+when using the shared model. Use that model when multiple configured agents may
+run concurrently because only one agent-started Observer can use the default
+ports at a time.
+
+## Agent targets
+
+Use `--target=windsurf` for Windsurf or Devin Desktop.
 
 | Target | Skill command |
 |---|---|
@@ -34,19 +57,23 @@ To configure every target in one run:
 | `claude-code`, `cursor`, or `kiro` | `/otel-audit` |
 | `windsurf` with Devin Local | `/otel-audit` |
 | `windsurf` with legacy Cascade | `@otel-audit` |
-| `copilot` | Not installed by this target |
+| `copilot` | MCP only; no bundled skill |
 
-The `copilot` target configures MCP but does not install skills. The `windsurf`
-skill bundle is also available to Devin Local, which needs the running
-Observer added separately as described in the
-[extension guide](https://github.com/signalfx/obstudio/blob/main/extension/README.md#install).
+The `windsurf` skill bundle is available to Devin Local and legacy Cascade; the
+target configures Cascade automatically. For Devin Local, install the [Devin
+CLI](https://docs.devin.ai/cli), make sure `devin` is on `PATH`, and add the
+running Observer:
+
+```bash
+devin mcp add -s user obstudio OBSERVER_BASE_URL/mcp
+```
+
+Replace `OBSERVER_BASE_URL` with the Observer base URL and keep the `/mcp`
+suffix.
 
 Where supported, installation copies the bundled skills, `obstudio`, and
-`weaver` into the selected agent's managed directory. It also updates the MCP
-configuration. Restart each agent after installation and begin a new task.
-
-This guide runs the release binary as `./obstudio`. For a source build, use
-`./build/obstudio` instead.
+`weaver` into the selected agent's managed directory and updates its MCP
+configuration.
 
 ## Using the skills
 
@@ -71,7 +98,7 @@ and keep the skill name and arguments unchanged.
 ### Audit, select, and instrument
 
 1. Run `$otel-audit` from the service root.
-2. Open the returned tokenized local report link.
+2. Open the returned audit report.
 3. Select the findings to fix and copy the generated `$otel-instrument`
    command.
 4. Run that command without changing its finding IDs, decisions, or service
@@ -86,24 +113,21 @@ $otel-instrument --ids OTEL-001,OTEL-004
 
 Run `$otel-verify` later whenever application or runtime evidence has changed.
 
-- `.observe/otel-audit.json` contains the source-derived audit findings.
-- `.observe/otel.html` is the interactive audit and finding-selection report.
-- `.observe/otel-selection.json` records requested findings, their
-  dependency-complete instrumentation scope, and any decision answers.
-- `.observe/otel-instrumentation.md` is the developer-readable implementation
-  record; `.observe/otel-instrumentation.json` is its machine-readable form.
-- `.observe/otel-instrumentation.html` explains the changes, impact, and proof.
-- `.observe/otel-verify.md` is the verification report;
-  `.observe/otel-verify.json` is its machine-readable form in the canonical
-  audit flow.
+| Stage | Generated files |
+|---|---|
+| Audit | `.observe/otel-audit.json` and the interactive `.observe/otel.html` report |
+| Selection | `.observe/otel-selection.json`, including findings, decisions, and dependency-complete scope |
+| Instrumentation | `.observe/otel-instrumentation.md`, `.observe/otel-instrumentation.json`, and `.observe/otel-instrumentation.html` |
+| Verification | `.observe/otel-verify.md` and `.observe/otel-verify.json` |
 
-Audit and instrumentation are separate reports. Skills return user-clicked,
-tokenized local links and never open them automatically. JSON and Markdown
-artifacts remain local files. See
+Audit and instrumentation are separate reports. Their JSON and Markdown
+artifacts remain in `.observe/`. See
 [OTel Verify](https://github.com/signalfx/obstudio/blob/main/docs/otel-verify.md)
 for direct verification guidance.
 
-## Run Observer
+## Manage a shared Observer
+
+Skip this section when an agent starts Observer from its MCP configuration.
 
 Start Observer in the foreground:
 
@@ -124,41 +148,9 @@ Installing a new build does not restart a running Observer. The lifecycle
 commands manage only the standalone background process, not foreground or
 extension-managed instances.
 
-| Service | Default endpoint |
-|---|---|
-| Observer UI and REST API | `http://127.0.0.1:3000` |
-| MCP | `http://127.0.0.1:3000/mcp` |
-| OTLP/HTTP | `http://127.0.0.1:4318` |
-| OTLP/gRPC | `127.0.0.1:4317` |
-
-Use `./obstudio --observer-http-port 41234` to move the Observer UI, REST API,
-and MCP endpoint. The OTLP receiver ports remain `4318` and `4317` unless you
-change their environment variables.
-
-### Send service telemetry
-
-After installing an OpenTelemetry SDK or auto-instrumentation, run these
-commands in the shell that starts your service:
-
-```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
-export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
-export OTEL_TRACES_EXPORTER=otlp
-export OTEL_METRICS_EXPORTER=otlp
-export OTEL_LOGS_EXPORTER=otlp
-export OTEL_SERVICE_NAME=my-service
-```
-
-Start the service and exercise a real request. Observer accepts all three
-signals. Open the Observer UI to inspect services, traces, metrics, logs,
-semantic-convention findings, and dashboard previews.
-
-Use **Validation** after telemetry arrives. For agent-driven analysis, ask what
-is missing or incorrect; `observer_validation_analyze` uses the latest retained
-result and reports when it is stale. Ask to refresh validation when you need a
-new run. The
-[Observer guide](https://github.com/signalfx/obstudio/blob/main/observer/README.md)
-lists the common REST and MCP entry points.
+The [Observer guide](https://github.com/signalfx/obstudio/blob/main/observer/README.md)
+documents endpoints, service exporter setup, views, validation, runtime
+configuration, and APIs.
 
 ## Forward to Splunk Observability Cloud
 
@@ -186,90 +178,36 @@ The default env file is loaded automatically when present. Shell environment
 variables take precedence; use `./obstudio --env-file <path>` for another file.
 Forwarding requires an organization access token with ingest scope.
 
-Generating Terraform does not change Splunk. Publishing is a separate,
-confirmation-gated action:
-
-| Skill or action | Purpose |
-|---|---|
-| `$splunk-dashboard` | Generate dashboard Terraform and local preview data. |
-| `$splunk-configure` | Generate evidence-backed detector and dashboard Terraform. |
-| Open **Dashboards** | Compare generated layouts with current local telemetry. |
-| `$splunk-detector-publish` | Show a live diff and create confirmed detector gaps. |
-| `$splunk-dashboard-publish` | Show a live diff and create confirmed dashboard gaps. |
-
-Both generator skills write Terraform under `.observe/terraform/`.
-`$splunk-dashboard` also writes `.observe/dashboards.preview.json` for the
-local preview.
+Generating Terraform does not change Splunk; the publish skills described in
+[Using the skills](#using-the-skills) show a live diff and require confirmation
+before creating resources. Both generator skills write Terraform under
+`.observe/terraform/`. `$splunk-dashboard` also writes
+`.observe/dashboards.preview.json` for the local preview.
 
 The local dashboard preview is approximate because SignalFlow runs in Splunk
 Observability Cloud. Publisher skills require an API token with permission to
 create their resources; an ingest-only token is not sufficient.
 
-## CLI reference
-
-| Command | Purpose |
-|---|---|
-| `./obstudio install --target=<agent>` | Install skills and configure MCP. |
-| `./obstudio install --target=<agent> --shared-url=<observer-url>` | Install the integration and connect it to an already-running Observer. |
-| `./obstudio` | Run Observer in the foreground. |
-| `./obstudio start` | Start the managed background Observer. |
-| `./obstudio status` | Inspect the managed process and endpoints. |
-| `./obstudio restart` | Restart the managed process with current settings. |
-| `./obstudio stop` | Stop the managed process. |
-| `./obstudio --version` | Print the installed version. |
-| `./obstudio --help` | Show commands and flags. |
-
-## Environment variables
-
-Observer runtime:
-
-- `PORT` sets the Observer UI, REST API, and MCP port. Default: `3000`.
-- `OTLP_HTTP_PORT` sets the OTLP/HTTP receiver port. Default: `4318`.
-- `OTLP_GRPC_PORT` sets the OTLP/gRPC receiver port. Default: `4317`.
-- `OBSTUDIO_ENV_FILE` selects a startup env file. The default
-  `~/.obstudio/env` is loaded when present.
-- `OBSTUDIO_WORKSPACE_ROOT` sets the root for workspace-relative audit and
-  dashboard files. It defaults to the current directory.
-- `OBSTUDIO_AUDIT_REPORT` selects the audit shown in Overview. It defaults to
-  `.observe/otel-audit.json`.
-
-Splunk export:
-
-- `SPLUNK_REALM` identifies the realm used for default ingest endpoints.
-- `SPLUNK_ACCESS_TOKEN` supplies an ingest token for forwarding or an
-  API-write token for publisher skills.
-- `OBSTUDIO_SPLUNK_METRICS_EXPORT` and `OBSTUDIO_SPLUNK_TRACES_EXPORT` enable
-  their respective exporters. Both default to `false`.
-- `OBSTUDIO_SPLUNK_METRICS_ENDPOINT` and
-  `OBSTUDIO_SPLUNK_TRACES_ENDPOINT` override the full ingest endpoints.
-- `OBSTUDIO_SPLUNK_METRICS_TIMEOUT` and `OBSTUDIO_SPLUNK_TRACES_TIMEOUT` set
-  request timeouts. Both default to `5s`.
-
 ## Troubleshooting
 
-- **Observer will not start:** check the UI port and both OTLP ports.
-  Change only the listener that is in use.
 - **An agent cannot find skills or MCP:** restart the agent and open a new task.
   Existing processes keep their startup configuration.
 - **A configured local Observer does not connect:** confirm that it is
   reachable and its version is compatible with the client.
-- **Validation cannot run:** keep the bundled `weaver` executable beside
-  `obstudio`, or make it available on `PATH`.
-- **The extension shows Restart required:** open **Observer Status** and follow
-  its recovery action. The extension will not stop a process it cannot verify.
-- **A dashboard preview uses the wrong repository:** open the service as the
-  first workspace folder and restart Observer.
+
+For runtime startup, telemetry, or validation problems, see the Observer
+[troubleshooting section](https://github.com/signalfx/obstudio/blob/main/observer/README.md#troubleshooting).
+For editor-managed issues, see the extension's
+[troubleshooting section](https://github.com/signalfx/obstudio/blob/main/extension/README.md#troubleshooting).
 
 ## Security and data handling
 
-Observer stores telemetry in bounded local memory. Cloud export, Free Edition
-signup, and publisher skills are explicit external actions. The editor
-extension stores Cloud access tokens in IDE secret storage.
+Observer stores telemetry in bounded local memory.
 
-Review the full
+For the bundled plugin, review its
 [security](https://github.com/signalfx/obstudio/blob/main/plugins/obstudio/SECURITY.md)
 and [privacy](https://github.com/signalfx/obstudio/blob/main/plugins/obstudio/PRIVACY.md)
-contracts before enabling external actions.
+documentation.
 
 ## Resources
 

@@ -7,189 +7,54 @@ operationalizing telemetry.
 
 ## Quick start
 
-### Install a release
-
-Download the archive for your platform from
-[Releases](https://github.com/signalfx/obstudio/releases/latest), extract it,
-and change into the extracted directory:
+For an editor-integrated Observer, install the extension and follow the
+[extension guide](extension/README.md). To use the CLI instead, download and
+extract the archive for your platform from
+[Releases](https://github.com/signalfx/obstudio/releases/latest), then run:
 
 ```bash
 cd obstudio_<version>_<os>_<arch>
-```
-
-Install one agent integration:
-
-```bash
 ./obstudio install --target=codex
 ```
 
-Use a single target or a comma-separated list. The installer supports `codex`,
-`claude-code`, `cursor`, `kiro`, `windsurf`, and `copilot`. The current
-`copilot` target configures the local MCP connection but does not install the
-bundled skills.
-
-To configure every target in one run:
-
-```bash
-./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot
-```
-
-Keep the bundled `weaver` executable beside `obstudio`. Restart each selected
-agent after installation, then start a new task so it reloads the MCP
-configuration and any installed skills.
-
-Run Observer in the foreground with `./obstudio`, or manage a background
-process from the extracted directory:
-
-```bash
-./obstudio start
-./obstudio status
-./obstudio restart
-./obstudio stop
-```
-
-Installing a newer build does not restart a running Observer. Run
-`./obstudio restart` when you are ready to use the new binary.
-
-### Build from source
-
-Requirements: Go 1.25+, Node.js 22+, npm, and `uv`. Docker is optional and is
-used only by runtime evals.
-
-```bash
-make run
-```
-
-`make run` builds the binary and starts Observer with these endpoints:
-
-| Service | Default endpoint |
-|---|---|
-| Observer UI and REST API | `http://127.0.0.1:3000` |
-| MCP | `http://127.0.0.1:3000/mcp` |
-| OTLP/HTTP | `http://127.0.0.1:4318` |
-| OTLP/gRPC | `127.0.0.1:4317` |
-
-Use `./build/obstudio --observer-http-port <port>` to move the UI, REST API,
-and MCP endpoint. The OTLP ports remain `4318` and `4317`.
-
-For UI development, run the collector and client watcher in separate terminals:
-
-```bash
-make build-client
-cd observer
-go run -tags dev ./cmd/obstudio
-```
-
-```bash
-make dev
-```
-
-The development build serves client assets from disk and reloads open Observer
-tabs after a client rebuild. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full
-development workflow.
+Restart Codex after installation. If no Observer was already running, its MCP
+configuration starts one; otherwise setup reuses the detected Observer. See the
+[user guide](docs/USER.md) for other agents, shared setup, and configuration
+options. To build from source instead, run `make run`; see
+[CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites, UI development, testing,
+and release workflows.
 
 ## Using the skills
 
-The skills form one reviewable path from source code to production resources:
-**audit → select → instrument → verify → configure → publish**.
+Choose the skill that matches your task:
 
-- `$otel-audit` finds observability gaps without modifying application code.
-- `$otel-instrument` implements approved SDK, auto-instrumentation, and
-  custom-signal changes.
-- `$otel-verify` proves existing instrumentation with project, code, and
-  optional local OTLP checks.
-- `$splunk-dashboard` generates dashboard Terraform and previews it against
-  local telemetry.
-- `$splunk-configure` generates evidence-backed detector and dashboard
-  Terraform.
-- `$splunk-detector-publish` compares detector specs with Splunk and creates
-  confirmed gaps.
-- `$splunk-dashboard-publish` compares dashboards and charts with Splunk and
-  creates confirmed gaps.
-- `$connect-splunk-observability-cloud` opens the local Cloud view for secure
-  connection setup.
-- `$create-splunk-free-account` submits a consent-gated Splunk Observability
-  Cloud Free Edition signup.
+| Goal | Start with |
+|---|---|
+| Review a service and improve its telemetry | `$otel-audit` |
+| Recheck existing instrumentation | `$otel-verify` |
+| Generate detectors and dashboards | `$splunk-configure` |
+| Generate dashboards only | `$splunk-dashboard` |
+| Publish confirmed detector or dashboard gaps | `$splunk-detector-publish` or `$splunk-dashboard-publish` |
+| Connect an existing Splunk organization | `$connect-splunk-observability-cloud` |
+| Request a Free Edition organization | `$create-splunk-free-account` |
 
-The skill names above use Codex syntax. Use `/skill-name` in Claude Code,
-Cursor, Kiro, or Devin Local, and `@skill-name` in legacy Cascade. The
-deprecated `$splunk-sync` and `$splunk-dashboard-sync` aliases remain for
-compatibility; use the publisher names above for new work.
-
-### 1. Audit and select
-
-Run `$otel-audit` from the service root. It writes canonical audit data to
-`.observe/otel-audit.json` and a self-contained review UI to
-`.observe/otel.html`.
-
-Open the tokenized local link returned by the skill, choose the findings
-to address, and run the generated `$otel-instrument` command. Keep its finding
-IDs, decisions, and validated service root unchanged. You can also select known
-findings directly:
-
-```text
-$otel-instrument --ids OTEL-001,OTEL-004
-```
-
-### 2. Instrument and verify
-
-`$otel-instrument` records the validated selection before editing and runs
-`$otel-verify` by default after its implementation gate. It writes a separate
-`.observe/otel-instrumentation.html` report that connects each selected gap to
-the change, emitted telemetry, product impact, and proof.
-
-Run `$otel-verify` again whenever you need fresh evidence. Verification writes
-`.observe/otel-verify.json` and `.observe/otel-verify.md`. See
-[OTel Verify](docs/otel-verify.md) for the verification contract.
-
-HTML reports are served only through user-clicked, tokenized local links and
-are never opened automatically. JSON and Markdown reports remain local files.
-
-### 3. Configure and publish
-
-Use `$splunk-dashboard` for a dashboard-only workflow, or
-`$splunk-configure` to generate detector and dashboard Terraform from the audit
-and verification evidence. The publisher skills compare those specs with live
-Splunk state, show the diff, and require confirmation before creating missing
-resources.
+The audit report generates the scoped `$otel-instrument` command for the
+findings you select, and instrumentation runs verification by default. See the
+[user guide](docs/USER.md#using-the-skills) for the complete workflow and
+[example prompts](docs/examples.md) for common tasks.
 
 ## Observer
 
 Send OTLP data to `127.0.0.1:4317` or `http://127.0.0.1:4318`, then open
 `http://127.0.0.1:3000`. Observer provides focused views for services, traces,
 metrics, logs, semantic-convention validation, dashboard previews, and optional
-Splunk Observability Cloud export.
-
-REST and MCP validation APIs are documented in
-[observer/README.md](observer/README.md), along with retention and routing.
-
-### Collect coding-agent token telemetry
+Splunk Observability Cloud export. See the [Observer guide](observer/README.md)
+for runtime configuration, APIs, routing, retention, and troubleshooting.
 
 Token telemetry supports **Codex and Claude Code only** and is configured
 through the standalone `obstudio` CLI. See the
-[token-usage guide](observer/README.md#audit-token-usage-demo) for setup,
+[token-usage guide](observer/README.md#coding-agent-token-telemetry) for setup,
 routing, repository correlation, and troubleshooting.
-
-### Forward metrics and traces to Splunk
-
-Remote export is optional. Observer always accepts traces, metrics, and logs
-locally, but forwards only traces and metrics to Splunk Observability Cloud.
-Logs remain in the local Logs view.
-
-Create `~/.obstudio/env` with permissions `0600`:
-
-```dotenv
-OBSTUDIO_SPLUNK_METRICS_EXPORT=true
-OBSTUDIO_SPLUNK_TRACES_EXPORT=true
-SPLUNK_REALM=<your-realm>
-SPLUNK_ACCESS_TOKEN=<org-ingest-token>
-```
-
-The token must have ingest scope. Shell variables override the env file; pass
-`--env-file <path>` when starting Observer to select another file. Tokens are
-accepted only on writes and are not returned by status APIs. Endpoint and
-timeout overrides are documented in the
-[user guide](docs/USER.md#environment-variables).
 
 ## Repository map
 
@@ -204,27 +69,13 @@ timeout overrides are documented in the
 | `eval-reports/` | Latest summarized eval results. |
 | `docs/` | User, design, and workflow documentation. |
 
-Common commands:
-
-| Command | Purpose |
-|---|---|
-| `make build` | Build `obstudio` with embedded skills and client assets. |
-| `make run` | Build and start Observer. |
-| `make test` | Run Go tests. |
-| `make test-client` | Run React client tests. |
-| `make test-extension` | Run extension tests. |
-| `make test-all` | Run the main Go, client, extension, and skill-script suites. |
-| `make agent-policy-check` | Validate agent-policy and skill-discovery rules. |
-| `make help` | List the remaining build, eval, and release targets. |
-
-See [evals/README.md](evals/README.md) for skill evals and
-[CONTRIBUTING.md](CONTRIBUTING.md) for testing, pull requests, and releases.
+See [evals/README.md](evals/README.md) for skill evaluation.
 
 ## Security and privacy
 
-Review [Security](plugins/obstudio/SECURITY.md) and
-[Privacy](plugins/obstudio/PRIVACY.md) before enabling Cloud export, account
-creation, or publisher skills.
+See the plugin [security](plugins/obstudio/SECURITY.md) and
+[privacy](plugins/obstudio/PRIVACY.md) documentation for details about data
+handling and external connections.
 
 ## License
 

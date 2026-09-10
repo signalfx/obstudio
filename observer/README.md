@@ -6,13 +6,8 @@ makes the same evidence available through a browser UI, REST API, and MCP tools.
 
 ## Quick start
 
-From the repository root or from `observer/`:
-
-```bash
-make run
-```
-
-The `observer/Makefile` delegates to the root build, so the command behaves the
+From the repository root or from `observer/`, run `make run`. The
+`observer/Makefile` delegates to the root build, so the command behaves the
 same in either directory. To run an extracted release instead, use:
 
 ```bash
@@ -31,14 +26,9 @@ Observer starts these local endpoints:
 | OTLP/HTTP | `http://127.0.0.1:4318` |
 | OTLP/gRPC | `127.0.0.1:4317` |
 
-The UI port and receiver ports are independent. For example, move only the UI,
-REST, and MCP listener with:
-
-```bash
-PORT=41234 ./obstudio
-```
-
-Set `OTLP_HTTP_PORT` or `OTLP_GRPC_PORT` to move the corresponding receiver.
+The UI port and receiver ports are independent. Run `PORT=41234 ./obstudio` to
+move only the UI, REST, and MCP listener. Set `OTLP_HTTP_PORT` or
+`OTLP_GRPC_PORT` to move the corresponding receiver.
 
 ## Sending telemetry
 
@@ -105,26 +95,23 @@ JSON-RPC to `/mcp` directly. The core tools let an agent:
 retained result is stale, it returns that analysis with a freshness notice.
 Use `observer_validation_refresh` only when you explicitly want a new run.
 
-Additional account and Splunk tools appear when those features are available.
-
-## Audit token-usage demo
+## Coding-agent token telemetry
 
 Token telemetry supports **Codex and Claude Code only** and is configured
 through the standalone `obstudio` CLI. Installation does not change provider
 routing; enablement is explicit.
 
-Enable a provider and inspect the same target:
+Enable providers and inspect the same targets:
 
 ```bash
 ./obstudio token-telemetry enable --target=codex,claude-code
 ./obstudio token-telemetry status --target=codex,claude-code
 ```
 
-`enable` is the takeover action for recognized provider OTLP routes; there is
-no separate force flag. Observability Studio does not save replaced
-destinations for later restoration. `disable` removes only unchanged values
-managed by Observability Studio, and a route edited after enablement is left
-alone.
+Running `enable` replaces recognized provider OTLP routes; there is no separate
+force flag. Observability Studio does not save the replaced destinations.
+`disable` removes only unchanged values managed by Observability Studio and
+leaves later edits alone.
 
 The default sends logs to `http://127.0.0.1:4318/v1/logs` and derives the
 matching trace and metric endpoints.
@@ -159,7 +146,7 @@ For example:
 These modes do not rewrite raw provider telemetry, which can still include a
 provider-supplied working directory.
 
-### Run the demo
+### Verify token accounting
 
 1. Start Observer, enable the provider, and fully restart every affected Codex
    or Claude process. Start a new task or session.
@@ -178,25 +165,30 @@ provider-supplied working directory.
    - “How many tokens did the latest audit in repository
      `<repository-name-or-path>` use?”
 
-The agent calls `observer_token_usage_overview` for you. Its `status` says
-whether usable measurements were retained, `accountingStatus` describes token
-accounting completeness, and `repositoryCorrelationStatus` describes
-repository attribution. Unknown values are never treated as zero. Observer
-reconciles overlapping logs, spans, and metrics instead of adding them
-together. Repository filters exclude tasks whose association cannot be proven.
+The agent calls `observer_token_usage_overview` for you. Read its result as
+follows:
 
-Services lists telemetry producers, not operating-system processes. A routed
-Claude Desktop session commonly appears as `claude-code` or
-`claude-code-desktop`.
+- **Measurement:** `status` says whether Observer retained usable token data.
+  Unknown values remain unknown rather than being treated as zero.
+- **Accounting:** `accountingStatus` describes completeness. Observer
+  reconciles overlapping logs, spans, and metrics instead of adding duplicate
+  measurements.
+- **Repository attribution:** `repositoryCorrelationStatus` describes whether
+  Observer could associate the task with a repository. Repository filters
+  exclude tasks whose association cannot be proven.
+- **Live views:** Services lists telemetry producers, not operating-system
+  processes. Keep the provider process running while demonstrating its traces,
+  logs, metrics, and service entry; those signals leave the UI when it
+  disconnects.
+- **Completed usage:** Token accounting is retained separately after a process
+  disconnects. It remains queryable until Observer is cleared, exits, or
+  overwrites that bounded history.
+- **Trace retention:** Observer protects recent provider traces from unrelated
+  telemetry while the producer is connected. A compacted trace shows a
+  lower-bound span count such as `8+` without changing service aggregates or
+  validation results.
 
-Live provider traces, logs, and metrics leave the UI when that producer
-disconnects. Completed token accounting remains in a separate bounded history
-until Observer is cleared, exits, or overwrites it. Recent provider traces are
-also protected by bounded retention; a compacted trace shows a lower-bound span
-count such as `8+` without changing service aggregates or validation input.
-
-When the demo is complete, remove unchanged routes managed by Observability
-Studio:
+When finished, remove unchanged routes managed by Observability Studio:
 
 ```bash
 ./obstudio token-telemetry disable --target=codex,claude-code
@@ -208,37 +200,46 @@ keep token telemetry enabled without normalized repository attribution, use
 
 ### Provider notes
 
-- **Codex:** CLI, IDE, and Desktop processes share `~/.codex/config.toml` and
-  must each restart after an exporter change. Observability Studio manages
-  recognized exporter forms and fails without changing malformed, unsupported,
-  or duplicate definitions. Codex token histograms remain visible in Metrics,
-  but correlated task totals come from richer logs and task spans.
-- **Claude Code:** Observability Studio manages recognized signal-specific,
-  generic, and active detailed-beta routes while leaving unrelated settings
-  unchanged. A local override re-enables an inherited or configured disabled
-  OTel SDK.
-  Removing a managed local value can expose an unchanged higher-precedence
-  route; Observability Studio does not restore it.
+#### Codex
 
-Claude Desktop's active Setup profile takes precedence over user-level Claude
-Code settings, and `--target=claude-code` does not edit that profile. A Desktop
-session will not appear in Observer if the profile disables tracing or routes
-OTLP elsewhere, even when user-level status says enabled.
+By default, Codex CLI, IDE, and Desktop processes share
+`~/.codex/config.toml`; when `CODEX_HOME` is set, token setup uses
+`$CODEX_HOME/config.toml`. Restart each process after an exporter change.
 
-For a non-destructive Desktop test, keep any required organization profile and
-select an editable local Setup profile that enables telemetry and enhanced
-traces, uses OTLP/HTTP protobuf, and sends logs, traces, and metrics to
-`http://127.0.0.1:4318`. Restart the Desktop Code session after switching. If
-the profile is locked or must retain a corporate destination, use a separate
-Claude Code CLI process or ask its administrator to route through Observer.
-Observability Studio cannot override that destination.
+| Existing Codex configuration | What `enable` does |
+|---|---|
+| No exporter | Adds an Observability Studio-managed local exporter. |
+| Recognized inline assignment | Replaces and manages the complete exporter assignment. |
+| Canonical OTLP/HTTP table with an endpoint | Redirects and manages its endpoint and protocol entries while preserving headers and unrelated settings. |
+| Compatible canonical table without an endpoint | Completes the route and manages its endpoint and protocol entries. |
+| Unsupported, malformed, or multiply defined exporter | Stops without editing the configuration. |
+
+While enabled, Codex's exporters for logs, traces, and metrics point to Observer.
+`disable` removes unchanged managed routes and does not recover previous
+destinations. Codex token histograms remain visible in Metrics, but their
+current points do not have stable task or turn identifiers. Correlated totals
+therefore use the richer Codex logs and task spans.
+
+#### Claude Code
+
+- An active `ENABLE_BETA_TRACING_DETAILED` and `BETA_TRACING_ENDPOINT` pair
+  overrides the standard log and trace exporters. `enable` manages and
+  normalizes that active pair to Observer.
+- Existing generic OTLP endpoint and protocol values are redirected and
+  managed. Required signal-specific routes are written locally even when
+  matching values are inherited.
+- A local override re-enables an OTel SDK disabled by inherited or configured
+  settings. Existing interval, temporality, TLS, header, and unrelated settings
+  remain unchanged.
+- Removing a managed local override can expose an unchanged inherited or
+  higher-precedence route. Observability Studio does not restore that route.
 
 ## Optional Splunk Observability Cloud forwarding
 
 Observer can optionally forward received traces and metrics to Splunk while
 keeping the Observer UI available. Logs remain local. The
 [user guide](../docs/USER.md#forward-to-splunk-observability-cloud) provides
-the env-file example, credential scopes, endpoint overrides, and timeouts.
+the env-file example and credential scope.
 
 ## REST API
 
@@ -256,17 +257,12 @@ The REST API uses the Observer UI base URL. Common routes are:
   `GET /api/dashboards/preview`; and
 - retained telemetry deletion: `DELETE /api/data`.
 
-The UI also uses filter, finding, artifact, Cloud, and account routes.
-
 ## Environment variables
 
 `PORT`, `OTLP_HTTP_PORT`, and `OTLP_GRPC_PORT` move the three listeners
 independently. `OBSTUDIO_WORKSPACE_ROOT` selects the workspace used for audit
 and dashboard files, while `OBSTUDIO_AUDIT_REPORT` selects the audit shown in
 Overview. Use `./obstudio --env-file <path>` for another startup env file.
-
-See the [user guide](../docs/USER.md#environment-variables) for defaults and
-Splunk export settings.
 
 ## Troubleshooting
 
@@ -280,13 +276,33 @@ Splunk export settings.
   `obstudio`, or make `weaver` available on `PATH`.
 - **Agent telemetry is missing:** run
   `./obstudio token-telemetry status --target=<provider>`, restart the provider,
-  and confirm that provider telemetry and MCP both reach the same Observer. For
-  Claude Desktop, also inspect the active Setup profile.
+  and confirm that provider telemetry and MCP both reach the same Observer.
 - **Data disappeared:** Observer storage is bounded and in memory. Clear,
   process exit, overwrite, and provider disconnect affect the views described
   above.
 
-## Architecture
+### Claude Desktop telemetry
+
+Claude Desktop's active Setup profile takes precedence over user-level Claude
+Code settings. `--target=claude-code` neither inspects nor edits that profile.
+If the profile disables trace export or routes OTLP elsewhere, the running
+Desktop process will not appear in Observer even when user-level status is
+enabled. A routed session appears in Services under its reported resource name,
+commonly `claude-code` or `claude-code-desktop`.
+
+For a non-destructive test while keeping any required organization profile:
+
+1. Select an editable local Setup profile.
+2. Enable Claude telemetry and enhanced traces, use OTLP/HTTP protobuf, and
+   send logs, traces, and metrics to `http://127.0.0.1:4318`.
+3. Fully restart the Desktop Code session after switching profiles.
+
+If the profile is organization-locked or must retain a corporate destination,
+use a separate Claude Code CLI process or ask the profile administrator to
+route through Observer. Only that administrator can change a locked
+destination; Observability Studio cannot override or silently replace it.
+
+## Developing Observer
 
 OTLP/HTTP and OTLP/gRPC feed the bounded in-memory store. The Observer UI,
 REST API, and MCP tools query that same data.
