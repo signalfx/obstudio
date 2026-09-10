@@ -7293,29 +7293,6 @@ code {
   padding: 0;
 }
 
-.cloud-free-account--external {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 20px;
-  padding: 18px 20px;
-}
-
-.cloud-free-account__link {
-  display: inline-flex;
-  min-height: 44px;
-  box-sizing: border-box;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  white-space: nowrap;
-  text-decoration: none;
-}
-
-.cloud-free-account__link > span::before {
-  content: "\2197";
-}
-
 .cloud-free-account > header {
   margin: 20px 22px 18px;
 }
@@ -7744,15 +7721,6 @@ code {
 
   .cloud-free-account__prompt {
     padding: 18px;
-  }
-
-  .cloud-free-account--external {
-    grid-template-columns: 1fr;
-    padding: 18px;
-  }
-
-  .cloud-free-account__link {
-    width: 100%;
   }
 
   .cloud-free-account__form {

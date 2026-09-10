@@ -38,6 +38,62 @@ describe("CloudTab", () => {
       .toBe(false);
   });
 
+  it("renders and submits the embedded Free Edition form in the standalone browser", async () => {
+    let signupCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/splunk/export") {
+        return jsonResponse(disconnectedStatus());
+      }
+      if (path === "/api/splunk/free-account/region") {
+        const headers = new Headers(init?.headers);
+        expect(headers.get("X-Obstudio-Browser-Request")).toBe("1");
+        expect(init?.credentials).toBe("same-origin");
+        return jsonResponse({ region: "Europe (Ireland)" });
+      }
+      if (path === "/api/splunk/free-account") {
+        signupCalls += 1;
+        const headers = new Headers(init?.headers);
+        expect(init?.method).toBe("POST");
+        expect(init?.credentials).toBe("same-origin");
+        expect(headers.get("X-Obstudio-Browser-Request")).toBe("1");
+        expect(JSON.parse(String(init?.body))).toEqual({
+          email: "ada@example.com",
+          firstName: "Ada",
+          lastName: "Lovelace",
+          region: "Europe (Ireland)",
+          termsAccepted: true,
+        });
+        return jsonResponse({
+          accountSetupPending: true,
+          intakeAcknowledged: true,
+          realm: "eu0",
+          region: "Europe (Ireland)",
+        }, 202);
+      }
+      throw new Error(`unexpected request: ${path}`);
+    }));
+
+    render(<CloudTab />);
+
+    fireEvent.click(await screen.findByRole("button", {
+      name: "Get started with Observability Cloud Free Edition",
+    }));
+    const form = await screen.findByRole("form", { name: "Free Edition account" });
+    await waitFor(() => expect(
+      (within(form).getByRole("combobox", { name: "Region" }) as HTMLSelectElement).value,
+    ).toBe("Europe (Ireland)"));
+    fireEvent.change(within(form).getByLabelText("First name"), { target: { value: "Ada" } });
+    fireEvent.change(within(form).getByLabelText("Last name"), { target: { value: "Lovelace" } });
+    fireEvent.change(within(form).getByLabelText("Email"), { target: { value: "ada@example.com" } });
+    fireEvent.click(within(form).getByRole("checkbox", { name: /I accept the Observability Cloud/i }));
+    fireEvent.submit(form);
+
+    expect(await screen.findByRole("heading", { name: "Splunk received your Free Edition request." }))
+      .toBeTruthy();
+    expect(signupCalls).toBe(1);
+  });
+
   it("recovers standalone controls and Observer state after a transient initial status failure", async () => {
     let statusCalls = 0;
     let markInitialStatusAttempted: (() => void) | undefined;
@@ -412,11 +468,10 @@ describe("CloudTab", () => {
     expect(regionField.compareDocumentPosition(tokenField) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     expect(screen.queryByRole("form", { name: "Free Edition account" })).toBeNull();
-    const freeAccountLink = screen.getByRole("link", { name: "Start Free Edition" });
-    expect(freeAccountLink.getAttribute("href"))
-      .toBe("https://www.splunk.com/en_us/download/observability-cloud-free-edition.html");
-    expect(freeAccountLink.getAttribute("target")).toBe("_blank");
-    expect(freeAccountLink.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(screen.getByRole("button", {
+      name: "Get started with Observability Cloud Free Edition",
+    })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Start Free Edition" })).toBeNull();
     const help = document.getElementById("cloud-token-help");
     if (!help) throw new Error("Cloud connection help is missing");
     expect(help.textContent).toBe("More on realm and access tokens");
@@ -1165,8 +1220,6 @@ describe("CloudTab", () => {
     expect(css).toMatch(/\.cloud-free-account__prompt\s*\{[^}]*flex-direction:\s*column;[^}]*gap:\s*14px;[^}]*padding:\s*18px 20px;/s);
     expect(css).toMatch(/\.cloud-free-account__start\s*\{[^}]*width:\s*100%;[^}]*min-height:\s*44px;[^}]*border-radius:\s*24px;/s);
     expect(css).toMatch(/\.cloud-free-account__header\s*\{[^}]*padding:\s*18px 20px 16px;[^}]*text-align:\s*center;/s);
-    expect(css).toMatch(/\.cloud-free-account__link\s*\{[^}]*display:\s*inline-flex;[^}]*min-height:\s*44px;[^}]*align-items:\s*center;[^}]*justify-content:\s*center;/s);
-    expect(css).toMatch(/\.cloud-free-account__link > span::before\s*\{[^}]*content:\s*"\\2197";/s);
     expect(css).toMatch(/\.cloud-free-account__form\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*gap:\s*16px;[^}]*padding:\s*0 20px 20px;/s);
     expect(css).toMatch(/\.cloud-free-account__fields\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
     expect(css).toMatch(/\.cloud-free-account__terms input\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px;/s);

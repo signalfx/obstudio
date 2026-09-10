@@ -182,6 +182,8 @@ export class SplunkExportBrowserActionError extends Error {
   constructor(
     message: string,
     readonly statusCode: number,
+    readonly code?: string,
+    readonly retrySafe?: boolean,
   ) {
     super(message);
     this.name = "SplunkExportBrowserActionError";
@@ -205,14 +207,14 @@ export async function runSplunkExportBrowserAction(
     : action === "forget"
       ? "/api/splunk/export/forget"
       : "/api/splunk/export/enabled";
-  return postSplunkExportBrowserJSON(path, payload) as Promise<SplunkExportStatus>;
+  return postSplunkBrowserJSON(path, payload) as Promise<SplunkExportStatus>;
 }
 
 /** Resolve a pasted Splunk URL to its canonical realm without sending an access token. */
 export async function resolveSplunkCloudRealm(
   destination: string,
 ): Promise<string> {
-  const response = await postSplunkExportBrowserJSON(
+  const response = await postSplunkBrowserJSON(
     "/api/splunk/export/realm",
     { destination },
   );
@@ -227,22 +229,56 @@ export async function resolveSplunkCloudRealm(
   return realm;
 }
 
-async function postSplunkExportBrowserJSON(
+export interface SplunkFreeAccountRequest {
+  email: string;
+  firstName: string;
+  lastName: string;
+  region: string;
+  termsAccepted: true;
+}
+
+/** Detect the suggested Free Edition region from Observer's same-origin browser API. */
+export async function detectSplunkFreeAccountRegion(
+  signal?: AbortSignal,
+): Promise<{ region?: unknown }> {
+  const response = await fetchSplunkBrowserJSON("/api/splunk/free-account/region", { signal });
+  return typeof response === "object" && response !== null
+    ? response as { region?: unknown }
+    : {};
+}
+
+/** Submit a Free Edition request through Observer's same-origin browser API. */
+export async function submitSplunkFreeAccount(
+  request: SplunkFreeAccountRequest,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return postSplunkBrowserJSON("/api/splunk/free-account", request, signal);
+}
+
+async function postSplunkBrowserJSON(
   path: string,
   body: object,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    [splunkBrowserRequestHeader]: "1",
-  };
-  const response = await observerFetch(`${BASE}${path}`, {
+  return fetchSplunkBrowserJSON(path, {
     body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    signal,
+  });
+}
+
+async function fetchSplunkBrowserJSON(
+  path: string,
+  init: RequestInit = {},
+): Promise<unknown> {
+  const headers = new Headers(init.headers);
+  headers.set(splunkBrowserRequestHeader, "1");
+  const response = await observerFetch(`${BASE}${path}`, {
+    ...init,
     cache: "no-store",
     credentials: "same-origin",
     headers,
-    method: "POST",
-    signal,
   });
   let parsed: unknown;
   try {
@@ -251,12 +287,15 @@ async function postSplunkExportBrowserJSON(
     parsed = null;
   }
   if (!response.ok) {
-    const message = typeof parsed === "object"
-      && parsed !== null
-      && typeof (parsed as Record<string, unknown>).error === "string"
-      ? (parsed as Record<string, string>).error
+    const errorResponse = typeof parsed === "object" && parsed !== null
+      ? parsed as Record<string, unknown>
+      : {};
+    const message = typeof errorResponse.error === "string"
+      ? errorResponse.error
       : `Observer request failed with HTTP ${response.status}.`;
-    throw new SplunkExportBrowserActionError(message, response.status);
+    const code = typeof errorResponse.code === "string" ? errorResponse.code : undefined;
+    const retrySafe = typeof errorResponse.retrySafe === "boolean" ? errorResponse.retrySafe : undefined;
+    throw new SplunkExportBrowserActionError(message, response.status, code, retrySafe);
   }
   return parsed;
 }

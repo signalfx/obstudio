@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  detectSplunkFreeAccountRegion,
   disconnectSISCIMDSession,
   fetchSISCIMDSession,
   fetchSplunkExportStatus,
@@ -7,6 +8,7 @@ import {
   registerSISCIMDClient,
   resolveSplunkCloudRealm,
   runSplunkExportBrowserAction,
+  submitSplunkFreeAccount,
 } from "../api/client";
 import type { SISCIMDSessionStatus, SplunkExportSignalStatus, SplunkExportStatus } from "../api/types";
 import {
@@ -28,7 +30,6 @@ const maxFreeAccountLastNameLength = 40;
 const maxFreeAccountEmailLength = 80;
 const splunkRealmPattern = /^[a-z]{2,12}[0-9]+$/;
 const splunkAccessTokenTooLongMessage = "Access token must be 4,096 UTF-8 bytes or fewer.";
-const freeEditionURL = "https://www.splunk.com/en_us/download/observability-cloud-free-edition.html";
 const freeEditionTermsURL = "https://www.splunk.com/en_us/legal/splunk-observability-free-edition-terms.html";
 const realmHelpURL = "https://help.splunk.com/en/splunk-observability-cloud/administer/org-reference-info/view-your-realm-api-endpoints-and-organization";
 const ingestTokenHelpURL = "https://help.splunk.com/en/splunk-observability-cloud/administer/authentication-and-security/authentication-tokens/org-access-tokens";
@@ -390,8 +391,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
 
   useEffect(() => {
     if (
-      !bridge
-      || !controlAvailable
+      !controlAvailable
       || !cloudInitializationFinished
       || cloudConfigured
       || !freeAccountOpen
@@ -401,7 +401,10 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
 
     freeAccountRegionDetectionStarted.current = true;
     setFreeAccountRegionDetection("detecting");
-    void callBridge("detect-free-account-region").then((response) => {
+    const detection = bridge
+      ? callBridge("detect-free-account-region")
+      : detectSplunkFreeAccountRegion();
+    void detection.then((response) => {
       if (!mountedRef.current) return;
       const detectedRegion = parseFreeAccountRegion(response.region);
       if (detectedRegion === undefined) {
@@ -751,8 +754,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const createFreeAccount = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (
-      !bridge
-      || mutationsDisabled
+      mutationsDisabled
       || freeAccountRegionDetection === "detecting"
       || freeAccountRegionDetection === "idle"
       || freeAccountMutationState !== "idle"
@@ -795,14 +797,17 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     setFreeAccountSubmitError(null);
     setNotice(null);
     try {
-      const response = await callBridge("create-free-account", {
+      const request = {
         email,
         firstName,
         lastName,
         region: freeAccountRegion,
-        termsAccepted: true,
-      });
-      const result = parseFreeAccountResult(response.freeAccount);
+        termsAccepted: true as const,
+      };
+      const response = bridge
+        ? (await callBridge("create-free-account", request)).freeAccount
+        : await submitSplunkFreeAccount(request);
+      const result = parseFreeAccountResult(response);
       if (!result) {
         throw new FreeAccountOutcomeUnknownError("Observer did not confirm the Free Edition request.");
       }
@@ -1147,15 +1152,14 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           )}
           </section>
           {!cloudConfigured ? (
-            bridge ? (
-              <section
-                aria-labelledby={freeAccountSuccess
-                  ? "cloud-free-account-success-title"
-                  : freeAccountOpen
-                    ? "cloud-free-account-title"
-                    : "cloud-free-account-prompt-title"}
-                className="cloud-panel cloud-free-account cloud-free-account--signup"
-              >
+            <section
+              aria-labelledby={freeAccountSuccess
+                ? "cloud-free-account-success-title"
+                : freeAccountOpen
+                  ? "cloud-free-account-title"
+                  : "cloud-free-account-prompt-title"}
+              className="cloud-panel cloud-free-account cloud-free-account--signup"
+            >
                 {!freeAccountOpen && !freeAccountSuccess ? (
                   <div className="cloud-free-account__prompt">
                     <div>
@@ -1361,18 +1365,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                     </form>
                   ) : null}
                 </div>
-              </section>
-            ) : (
-              <section aria-labelledby="cloud-free-account-title" className="cloud-panel cloud-free-account cloud-free-account--external">
-                <div>
-                  <h3 id="cloud-free-account-title">Don't have an Observability Cloud account?</h3>
-                  <p>Create a free account with your own organization, then connect it here.</p>
-                </div>
-                <a className="cloud-button cloud-free-account__link" href={freeEditionURL} rel="noopener noreferrer" target="_blank">
-                  Start Free Edition<span aria-hidden="true" />
-                </a>
-              </section>
-            )
+            </section>
           ) : null}
         </div>
       </div>
