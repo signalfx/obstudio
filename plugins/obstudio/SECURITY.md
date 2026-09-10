@@ -1,11 +1,11 @@
-# Obstudio Plugin Security
+# Obstudio plugin security
 
 This document describes the current security model for the `obstudio` plugin
 when used with Codex or Claude Code. It is a behavior contract for this plugin
 package, not a guarantee about either host, model providers, package managers,
 operating system services, or user-invoked third-party tools.
 
-## Trust Boundary
+## Trust boundary
 
 The plugin contains instructions, skills, assets, materialized skill
 references, local Observer MCP configuration, and a SessionStart bootstrap
@@ -13,7 +13,7 @@ hook. The active host decides which skills to load, which tools to call, and
 which shell commands require approval according to its configuration and
 product policy.
 
-## Trust Levels
+## Trust levels
 
 Core workflow skills:
 
@@ -69,12 +69,10 @@ At full enablement, the plugin can help with:
 - generate local reports and Terraform artifacts;
 - connect to a local Observer MCP endpoint;
 - open, check, restart, or stop a managed Observer when the user asks;
-- open the local Cloud credential-entry view when the user asks;
-- submit a consent-gated Free Edition request when the user asks; and
 - publish confirmed Splunk dashboard or detector gaps when the user explicitly
   invokes publish skills and provides credentials.
 
-## Local Listener Exposure
+## Local listener exposure
 
 The managed Observer is intended to bind loopback-local endpoints, including
 `127.0.0.1:3000`, `127.0.0.1:4317`, and `127.0.0.1:4318`. The UI, REST API,
@@ -91,7 +89,7 @@ should request the narrow permission required by that host before probing. If
 permission is denied or the endpoint cannot be verified from the available
 context, report `sandbox-unverified`, not unhealthy.
 
-## Managed Bootstrap Boundary
+## Managed bootstrap boundary
 
 If the user trusts the SessionStart hook, the bootstrap may:
 
@@ -111,7 +109,7 @@ extension may stop it and start the bundled version. It revalidates the
 listener PID and executable before graceful or forced termination; ambiguous
 or non-Obstudio owners are left running and reported as requiring recovery.
 
-## Risky Surfaces
+## Risky surfaces
 
 The plugin includes several higher-trust surfaces:
 
@@ -120,8 +118,6 @@ The plugin includes several higher-trust surfaces:
   and should require evidence that the current plugin owns the process.
 - `splunk-detector-publish` and `splunk-dashboard-publish` can call live Splunk
   Observability Cloud APIs and create resources.
-- `create-splunk-free-account` can send signup details and coarse location data
-  to Splunk after explicit confirmation and Terms acceptance.
 - Configured OTLP exporters can send telemetry to configured endpoints.
 - Verification workflows can run project commands, tests, package managers,
   or local servers.
@@ -132,11 +128,7 @@ active host requires approval for localhost access. Observer command skills
 should inspect only the default loopback health endpoint and the Observer
 listener ports `127.0.0.1:3000`, `127.0.0.1:4317`, and `127.0.0.1:4318`.
 
-Cloud onboarding also requires explicit user intent. Keep access-token entry
-outside agent context, and submit a Free Edition request only after the user
-reviews the region and signup fields and explicitly accepts the Terms of Use.
-
-## User Controls
+## User controls
 
 Use your agent's plugin and MCP settings to disable the integration. Manage the
 Observer process separately with the Observer lifecycle commands.
