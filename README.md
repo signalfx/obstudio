@@ -188,46 +188,98 @@ https://ingest.<realm>.observability.splunkcloud.com/v2/trace/otlp
 Use `OBSTUDIO_SPLUNK_TRACES_ENDPOINT` to override the full endpoint. Use
 `OBSTUDIO_SPLUNK_TRACES_TIMEOUT` to override the default `5s` export timeout.
 Once traces are flowing, the service appears as an APM service in Splunk
-Observability Cloud and becomes a valid target for `$splunk-sync`.
+Observability Cloud and becomes a valid target for
+`$splunk-detector-publish`.
 
-## Using The Skills
+## Using the Skills
 
-From a service directory, invoke the relevant skill in Codex:
+Run skills from the service directory:
 
 ```text
 $otel-audit
 $otel-instrument
 $otel-verify
 $splunk-configure
-$splunk-sync
+$splunk-detector-publish
 ```
 
-Use `$otel-audit` to understand what is missing before editing. Use
-`$otel-instrument` when you are ready to add SDK setup, auto-instrumentation,
-and targeted custom signals. It runs the `$otel-verify` workflow by default
-after its implementation gate. The audit writes canonical
-`.observe/otel-audit.json` plus a self-contained `.observe/otel.html`; review
-and select findings through the returned localhost link, then copy and run the
-generated `$otel-instrument` command. The command carries the explicit finding
-IDs, decision answers, and validated service root. You can alternatively invoke
-`$otel-instrument --ids OTEL-001,OTEL-004` directly; the skill writes the same
-validated selection handoff before editing. Instrumentation writes a separate
-`.observe/otel-instrumentation.html` that maps selected gaps to code changes,
-exact telemetry, product impact, proof, and next actions; it does not turn the
-audit HTML into a change log. Both HTML reports are returned as user-clicked,
-tokenized `127.0.0.1` links and are never opened automatically. Markdown and
-JSON reports remain local-file links. The bundled renderer uses only the Python
-standard library, and both HTML reports have no Bun, Node, YAML parser, package,
-font, or external network dependency. Run `$otel-verify` after the canonical
-audit/selection and instrumentation handoff to recheck existing instrumentation
-and refresh proof in the instrumentation HTML. It produces
-`.observe/otel-verify.json` plus the readable `.observe/otel-verify.md`. See
-[OTel Verify](docs/otel-verify.md) for invocation and report-reading guidance.
-Use `$splunk-configure` after auditing to generate Splunk Observability Cloud
-detector Terraform — it reads the audit report, classifies metrics, and outputs
-ready-to-apply HCL with a `terraform.tfvars.example` for credentials. Use
-`$splunk-sync` to diff those specs against live Splunk detectors and create only
-the ones that don't exist yet.
+`$splunk-sync` remains available as a deprecated compatibility alias for
+`$splunk-detector-publish`. Use the canonical name for new workflows.
+
+### 1. Audit and select findings
+
+Run `$otel-audit` before editing the service. It identifies missing
+observability coverage and writes:
+
+- `.observe/otel-audit.json` — the canonical audit data.
+- `.observe/otel.html` — a self-contained report for reviewing and selecting
+  findings.
+
+Open the tokenized `127.0.0.1` link returned by the skill, select the findings
+to address, and copy the generated `$otel-instrument` command. The command
+includes the selected finding IDs, recorded decision answers, and validated
+service root.
+
+You can also select findings directly:
+
+```text
+$otel-instrument --ids OTEL-001,OTEL-004
+```
+
+Before changing code, `$otel-instrument` writes the same validated selection
+handoff used by the report-driven workflow.
+
+### 2. Instrument the service
+
+Use `$otel-instrument` to add SDK setup, auto-instrumentation, and targeted
+custom signals for the selected findings.
+
+After its implementation gate, the skill runs `$otel-verify` by default. It
+also writes `.observe/otel-instrumentation.html`, which maps each selected gap
+to:
+
+- The corresponding code changes.
+- The exact telemetry produced.
+- The expected product impact.
+- Verification evidence.
+- Recommended next actions.
+
+The instrumentation report is separate from the audit report; it does not
+repurpose the audit HTML as a change log.
+
+### 3. Verify the result
+
+Run `$otel-verify` after the canonical audit, selection, and instrumentation
+handoff when you need to recheck existing instrumentation or refresh the proof
+shown in the instrumentation report.
+
+Verification writes:
+
+- `.observe/otel-verify.json` — structured verification results.
+- `.observe/otel-verify.md` — a readable summary.
+
+See [OTel Verify](docs/otel-verify.md) for invocation and report-reading
+guidance.
+
+### 4. Generate and publish detector configuration
+
+After auditing, run `$splunk-configure` to generate Splunk Observability Cloud
+detector Terraform. It reads the audit report, classifies the available metrics,
+and produces ready-to-apply HCL plus a `terraform.tfvars.example` for
+credentials.
+
+Then run `$splunk-detector-publish` to compare the local detector specifications
+with live Splunk detectors and create only the missing detectors.
+
+### Report delivery and dependencies
+
+The audit and instrumentation HTML reports are returned as tokenized,
+user-clicked `127.0.0.1` links. Obstudio never opens them automatically.
+Markdown and JSON reports remain local-file links.
+
+The bundled HTML renderer uses only the Python standard library. It does not
+require Bun, Node.js, a YAML parser, additional packages, fonts, or external
+network access.
 
 ## Validation
 

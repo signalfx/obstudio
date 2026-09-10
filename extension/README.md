@@ -58,65 +58,129 @@ then opt in and restart the selected provider:
 obstudio token-telemetry enable --target=codex,claude-code
 ```
 
-The explicit enable command always takes over recognized provider OTLP routing;
-there is no separate force flag. Use `obstudio token-telemetry status` or
-`disable` with the same `--target` value to inspect the route or remove unchanged
-Obstudio-managed values. Replaced prior destinations are not retained for later
-disable or restored; values edited after enable are preserved. New targets default
-repository correlation to `path`, which supports exact path queries. Use
-`name` to omit filesystem paths or `off` to disable correlation. Omitting the flag
-for an already configured target preserves its recorded setting.
-Claude's `ENABLE_BETA_TRACING_DETAILED` and `BETA_TRACING_ENDPOINT` pair
-overrides the standard logs and traces exporters. Setup owns and normalizes an
-active pair to Observer. Existing generic Claude
-OTLP endpoint/protocol values are also redirected and owned, and required
-signal-specific routes are written locally even when matching values are
-inherited. A local override re-enables an inherited or configured disabled OTel
-SDK. Existing interval, temporality, TLS, header, and unrelated settings remain
-unchanged. Removing a local Claude override can expose an unchanged inherited or
-higher-precedence route again; Obstudio does not restore that route. For Codex,
-setup owns matching or nonmatching inline exporter
-assignments and canonical table endpoint/protocol values. When an exporter is
-absent, setup adds an Obstudio-owned local exporter. When a canonical
-`[otel.exporter.otlp-http]`, `[otel.trace_exporter.otlp-http]`, or
-`[otel.metrics_exporter.otlp-http]` table exists with no endpoint and uses the
-compatible `binary` protocol (or has no protocol), setup fills only its missing
-endpoint and protocol values. Unsupported, malformed, or multiply defined Codex
-exporter shapes fail closed instead of risking an invalid config.
-Codex uses the same `~/.codex/config.toml` for CLI, IDE, and Desktop processes,
-and each process must be restarted to load an exporter change. While enabled,
-its single log, trace, and metrics exporters point to Observer; disable removes
-the managed routes when their values are unchanged and does not recover prior destinations.
-Claude Desktop launches embedded Code sessions with its active Setup profile as
-higher-precedence managed settings. `--target=claude-code` does not inspect or
-edit that profile. If it routes OTLP to another collector or disables trace
-export, the running Desktop process will not appear in local Observer even when
-the user-level status is enabled. Services lists received telemetry producers,
-not running processes; a locally routed Desktop session appears under its
-reported resource name, commonly `claude-code` or `claude-code-desktop`.
+#### Route ownership and cleanup
 
-For a non-destructive Desktop test, keep any required organization profile and
-use an intentionally local, editable Setup profile that enables Claude
-telemetry and enhanced traces and routes OTLP/HTTP protobuf logs, traces, and
-metrics to `http://127.0.0.1:4318`. Fully restart the Desktop Code session after
-switching profiles. If the active profile is organization-locked or must keep a
-corporate OTLP destination, use a separately started Claude Code CLI process or
-ask the organization or profile administrator to route through Observer; only
-that administrator can change an organization-locked destination. Obstudio
-cannot override and does not silently replace that destination.
-Codex token histograms are visible in Metrics Explorer, but current points lack
-a stable thread or turn identifier and are not added to correlated task totals;
-the token-usage tool uses richer Codex logs and task spans instead.
-Observer retains recent native Codex and Claude traces in one shared bounded
-provider ring outside the generic span ring and de-duplicates them into trace
-views. A compacted trace is labeled as a retained lower bound such as `8+`; its
-representative spans do not alter raw service aggregates or validation input.
-The projection protects recent provider traces from unrelated ring pressure
-while the producer is connected; process disconnect removes its live traces,
-logs, and metrics from Observer views. Keep the provider process running while
-demonstrating those views. Completed token accounting is retained in a separate
-bounded history and remains queryable through `observer_token_usage_overview`
-after disconnect until Observer is cleared, exits, or overwrites that history.
+Running `enable` is an explicit request for Obstudio to take over every
+recognized OTLP route for the selected providers. There is no separate force
+flag. Use the same `--target` value to inspect or disable the route:
+
+```bash
+obstudio token-telemetry status --target=codex,claude-code
+obstudio token-telemetry disable --target=codex,claude-code
+```
+
+Obstudio does not save destinations that it replaces. Disabling removes only
+Obstudio-managed values that have not changed; it does not restore the previous
+route. If you edit a managed value after enabling, Obstudio preserves your edit.
+
+#### Repository correlation
+
+New targets use `--repository-correlation=path` by default. Choose the mode that
+fits your environment:
+
+| Mode | Behavior |
+|---|---|
+| `path` | Include the repository name plus canonical repository and active workspace paths; support exact-path queries. |
+| `name` | Correlate by repository name without including filesystem paths. |
+| `off` | Disable normalized repository attribution. |
+
+For an existing target, omitting `--repository-correlation` preserves its
+recorded mode. Raw provider telemetry is unchanged and may still include a
+provider-emitted working directory.
+
+#### Claude Code routing
+
+Claude's `ENABLE_BETA_TRACING_DETAILED` and `BETA_TRACING_ENDPOINT` settings
+override the standard logs and traces exporters. When this pair is active,
+Obstudio takes ownership of it and normalizes it to Observer.
+
+Obstudio also redirects and owns existing generic Claude OTLP endpoint and
+protocol settings. It writes the required signal-specific routes locally even
+when equivalent values are inherited. A local override re-enables the OTel SDK
+when an inherited or configured setting disables it.
+
+Existing export intervals, temporality preferences, TLS options, headers, and
+unrelated settings remain unchanged. Removing a local Claude override can
+reveal an unchanged inherited or higher-precedence route. Obstudio does not
+restore that route.
+
+#### Codex routing
+
+Obstudio owns recognized Codex exporter settings in either of these forms:
+
+- Inline exporter assignments, whether they already match Observer or point
+  somewhere else.
+- Endpoint and protocol values in the canonical exporter tables.
+
+If an exporter is absent, Obstudio adds an owned local exporter. It also supports
+these canonical tables:
+
+```toml
+[otel.exporter.otlp-http]
+[otel.trace_exporter.otlp-http]
+[otel.metrics_exporter.otlp-http]
+```
+
+When one of these tables has no endpoint and either uses the compatible
+`binary` protocol or omits the protocol, setup fills only the missing endpoint
+and protocol values. Unsupported, malformed, or multiply defined exporter
+configurations fail closed instead of risking an invalid configuration.
+
+Codex uses the same `~/.codex/config.toml` for CLI, IDE, and Desktop processes.
+Restart each process after an exporter change. While enabled, Codex has one
+exporter for each signal—logs, traces, and metrics—and all three point to
+Observer. Disabling removes unchanged Obstudio-managed routes but does not
+recover destinations that setup replaced.
+
+#### Claude Desktop profiles
+
+Claude Desktop passes its active Setup profile to embedded Code sessions as
+higher-precedence managed settings. `--target=claude-code` manages the
+user-level Claude Code configuration only; it does not inspect or edit that
+profile.
+
+A Desktop session will not appear in local Observer if its active profile routes
+OTLP to another collector or disables trace export, even when the user-level
+status is enabled. The Services view lists producers from which Observer has
+received telemetry, not running processes. A locally routed Desktop session
+commonly appears as `claude-code` or `claude-code-desktop`.
+
+For a non-destructive Desktop test:
+
+1. Keep any required organization profile in place.
+2. Use an intentionally local, editable Setup profile.
+3. Enable Claude telemetry and enhanced traces in that profile.
+4. Route OTLP/HTTP protobuf logs, traces, and metrics to
+   `http://127.0.0.1:4318`.
+5. Fully restart the Desktop Code session after switching profiles.
+
+If the active profile is organization-locked or must keep a corporate OTLP
+destination, use a separately started Claude Code CLI process or ask the
+organization or profile administrator to route through Observer. Only that
+administrator can change an organization-locked destination. Obstudio cannot
+override or silently replace it.
+
+#### Observer views and retention
+
+Codex token histograms are visible in Metrics Explorer, but current points do
+not have a stable thread or turn identifier. The
+`observer_token_usage_overview` tool therefore excludes them from correlated
+task totals and uses richer Codex logs and task spans instead.
+
+Observer keeps recent native Codex and Claude traces in a shared, bounded
+provider ring outside the generic span ring, then de-duplicates them in trace
+views. A compacted trace is labeled as a retained lower bound, such as `8+`.
+Its representative spans do not change raw service aggregates or validation
+input.
+
+This projection protects recent provider traces from unrelated ring pressure
+while the producer is connected. When the process disconnects, Observer removes
+its live traces, logs, and metrics from the views, so keep the provider process
+running during a demonstration.
+
+Completed token accounting is stored in a separate bounded history. It remains
+queryable through `observer_token_usage_overview` after disconnect until
+Observer is cleared, exits, or overwrites that history.
 
 ### Windsurf / Devin Desktop
 
