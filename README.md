@@ -11,7 +11,13 @@ operationalizing telemetry.
 
 Download the archive for your platform from
 [Releases](https://github.com/signalfx/obstudio/releases/latest), extract it,
-and run the installer from that directory:
+and change into the extracted directory:
+
+```bash
+cd obstudio_<version>_<os>_<arch>
+```
+
+Install one agent integration:
 
 ```bash
 ./obstudio install --target=codex
@@ -20,6 +26,12 @@ and run the installer from that directory:
 Use a single target or a comma-separated list. The installer supports `codex`,
 `claude-code`, `cursor`, `kiro`, `windsurf`, and `copilot`. GitHub Copilot gets
 the local MCP connection only because it does not support this skill layout.
+
+To configure every target in one run:
+
+```bash
+./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot
+```
 
 Keep the bundled `weaver` executable beside `obstudio`. Restart each selected
 agent after installation, then start a new task so it reloads its skills and

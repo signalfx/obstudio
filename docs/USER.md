@@ -7,14 +7,26 @@ evidence.
 ## Quick start
 
 Download and extract the archive for your platform from
-[GitHub Releases](https://github.com/signalfx/obstudio/releases/latest). From
-the extracted directory, install one agent integration:
+[GitHub Releases](https://github.com/signalfx/obstudio/releases/latest), then
+change into the extracted directory:
+
+```bash
+cd obstudio_<version>_<os>_<arch>
+```
+
+Install one agent integration:
 
 ```bash
 ./obstudio install --target=codex
 ```
 
 Use a comma-separated list to install more than one target.
+
+To configure every target in one run:
+
+```bash
+./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot
+```
 
 | Target | Skill command |
 |---|---|
