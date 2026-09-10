@@ -85,7 +85,8 @@ agents shown above; keep the skill name and arguments unchanged.
 
 Start with the audit:
 
-1. Run `otel-audit` with your agent's prefix.
+1. Run the audit command shown for your agent: `$otel-audit`, `/otel-audit`, or
+   `@otel-audit`.
 2. Open the returned local report and approve the findings to address.
 3. Run its generated `otel-instrument` command without changing the finding
    IDs, decisions, or service path.
