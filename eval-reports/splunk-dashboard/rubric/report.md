@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | splunk-dashboard |
-| Run ID | 20260909T080406572258Z |
+| Run ID | 20260910T010221551559Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-red/qual/dashboard-genai | dashboards/checkout-red | 1 | 100% (8/8), avg score 97 | 308.3K | 5.4m | - | - | - |
+| with_skill | dashboards/checkout-red/qual/dashboard-genai | dashboards/checkout-red | 1 | 100% (8/8), avg score 96 | 286.8K | 5.3m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-red/qual/dashboard-genai | dashboards/checkout-red | with_skill | codex | cumulative | measured | 1/1 recognized | 299091 | 269824 | unknown | 9249 | 2318 | unknown | 308340 |
+| with_skill | dashboards/checkout-red/qual/dashboard-genai | dashboards/checkout-red | with_skill | codex | cumulative | measured | 1/1 recognized | 278399 | 251008 | unknown | 8359 | 1483 | unknown | 286758 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-red/qual/dashboard-genai | dashboards/checkout-red | with_skill | codex | cumulative | measured | 1/1 recognized | 204539 | 150784 | unknown | 4336 | 1472 | unknown | 208875 |
+| with_skill | dashboards/checkout-red/qual/dashboard-genai | dashboards/checkout-red | with_skill | codex | cumulative | measured | 1/1 recognized | 297969 | 227328 | unknown | 5569 | 2550 | unknown | 303538 |
 
 ## Rubric Failures
 

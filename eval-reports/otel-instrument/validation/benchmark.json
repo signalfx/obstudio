@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20260909T102321489491Z",
+    "run_id": "20260910T004807004248Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -150,6 +150,22 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 13,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/kvstore/qual/instrument-container-topology",
+      "case": "go/kvstore",
+      "language": "go",
+      "service": "kvstore",
+      "prompt_count": 1,
+      "prompts": [
+        "container-topology"
+      ],
+      "definition_path": "evals/go/kvstore/eval/qual/instrument-container-topology.json",
+      "eval_dir": "evals/go/kvstore",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
       "runtime_check_count": 0
     },
     {
@@ -483,16 +499,16 @@
     }
   ],
   "summary": {
-    "eval_count": 28,
-    "case_count": 40,
-    "prompt_count": 40,
+    "eval_count": 29,
+    "case_count": 41,
+    "prompt_count": 41,
     "sanity_check_count": 0,
-    "rubric_check_count": 226,
+    "rubric_check_count": 231,
     "runtime_check_count": 9
   },
   "source": {
     "digest_version": 2,
-    "digest": "1b52b4d3e7fa742e0a7f608ee6308a19f85e6e6e3676ded92a1e2cd6d088c1f2",
+    "digest": "b5ef9e64c1890fbb14e827e956241947df9495c4df238798ea3759e5cb0c55e1",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -510,7 +526,7 @@
       "pytest-codex-evals/src/pytest_codex_evals/__init__.py": "b7a1a6542146ea0c4d860cbaacaba484b18b7556b04b11787e472bd051235d4f",
       "pytest-codex-evals/src/pytest_codex_evals/__main__.py": "307299fda7b77d22c64cb51430ec75e5f59d78e9c948786afb3b2544fe45e4b7",
       "pytest-codex-evals/src/pytest_codex_evals/ab.py": "316754af9db1b8b01ca95226e11e550d5f8e5545736127ccecce970da0ab4b9a",
-      "pytest-codex-evals/src/pytest_codex_evals/backends.py": "46f4abf6f0962f5d2d45c7941e7af1b957e967941221094ed4305df9cefb219f",
+      "pytest-codex-evals/src/pytest_codex_evals/backends.py": "328ce20c74c11e23239488641a19f6873b567dbb131af371e2fe44f79317a563",
       "pytest-codex-evals/src/pytest_codex_evals/cli.py": "4b13fa56a5a9f9a9676bd1e4ebc1ee5ed73574109ae6951b3e35392baa9b70ae",
       "pytest-codex-evals/src/pytest_codex_evals/config.py": "44034f807c6e95fb85558eec0669e47e0cb1f5fa4e1fe1a0951aaf5747fce926",
       "pytest-codex-evals/src/pytest_codex_evals/definitions/__init__.py": "fde160bf0ba46e9555037f2a61d24edd7b6dff5d81ccc9126c3c5e3b86d0eb66",
@@ -529,7 +545,7 @@
       "pytest-codex-evals/src/pytest_codex_evals/report.py": "840f53b6d840534981316ce436ad6f5d35f0a32b11c57701579de3f20a7d3154",
       "pytest-codex-evals/src/pytest_codex_evals/reports/__init__.py": "5cc2742d160817be1afd199ec8c92df25690d169e1a89e34fbc86510c43a6622",
       "pytest-codex-evals/src/pytest_codex_evals/reports/templates.py": "f73db35e6587630e49862e3c77e3c87e00e6e3e68ca421cd36ccb4fac73c44d7",
-      "pytest-codex-evals/src/pytest_codex_evals/runner.py": "07ca60c02101b25b74bebd2442999e80cf867b68cd7f22adfa1e2bd13d803763",
+      "pytest-codex-evals/src/pytest_codex_evals/runner.py": "74275d240159c77440a7829cf9c8568157bc44def5037a3db59e42773557a3f2",
       "pytest-codex-evals/src/pytest_codex_evals/schema_resources.py": "3664b9cdde07f3b67080336056dbf70faf175fe50f572e8cab5fd23889e81e45",
       "pytest-codex-evals/src/pytest_codex_evals/schemas/common.schema.json": "411ce7113bba10cfca0c3dfcd7704fc027e95ee67a585d7320f71032b240c479",
       "pytest-codex-evals/src/pytest_codex_evals/schemas/rubric.schema.json": "980d224a523ec0803d1608dd2c518a7297be62ec5db4f8451ea1210f1f1af9ec",
@@ -538,14 +554,14 @@
       "pytest-codex-evals/src/pytest_codex_evals/schemas/sanity.schema.json": "598666c521c62290a60a2b1f0e67eb8526ad80ebaa12f81e006c51454e7ddc8b",
       "pytest-codex-evals/src/pytest_codex_evals/trace.py": "b2ea2fbde127a030bac5098d54e0ca8aa0242db3106e52d99a7c36a8d1becf7c",
       "pytest-codex-evals/uv.lock": "4474921439df5db6da255d3b69b0ce1b0630c57b359146c4e8b03eefcecbd65e",
-      "skills/otel-instrument/SKILL.md": "f9e3bbe5f9af2e1d43b8552e5c426e94a69fc43a9269733ccf871e7b04ae719c",
+      "skills/otel-instrument/SKILL.md": "e8216d181b6c02a5e1ebd93c4f3170b95eb5b72cfdc101e15b44792cecd494ca",
       "skills/otel-instrument/references/genai-implementation.md": "dcc70b0cf3d8a25a9a893e75bca99efc02f868cf7be869dd9db75f77fd8c46a5",
       "skills/otel-instrument/references/incident-implementation.md": "91ac2017d56091c425c173e7c25c3f262af2d4d4564e9f3af580ebfabe7e66dc",
       "skills/otel-instrument/references/json-approval-handoff.md": "5c7a45d5df529c216dbc7adcaa05c3083adcc44c96c5ada63f391c73066503f6",
-      "skills/otel-instrument/references/languages/go.md": "e62c5a7b4c1e0a4ccf78a2879dbc3c2c34b78dade7a3247236865473406accb5",
+      "skills/otel-instrument/references/languages/go.md": "0119a83c738cbe80bf2b14a8e06ce76099b993c7e8b66cb8f31f9b4136de5d85",
       "skills/otel-instrument/references/languages/java.md": "5d33e338d2ab4dee2163989ac5c35398dbd90d2d480ba9880e6f7bb837019fbb",
-      "skills/otel-instrument/references/languages/node.md": "508927f8b26f779aa16ec35e280473a75bff2218c9bbca7db6027ff3e75407aa",
-      "skills/otel-instrument/references/languages/python.md": "918ebfd2962ffc16d68e7447cb3403538fcc0fbc327e3c03cc2a76e26ed35c91",
+      "skills/otel-instrument/references/languages/node.md": "f3207a583091076445bd5ce98ee5ed55c7d27d6d4a0148a24b38b8beda47bc46",
+      "skills/otel-instrument/references/languages/python.md": "830c13e38521588f45b31e28574042dd0568d950ea161e9ff8d12366847f3487",
       "skills/otel-instrument/references/project-runtime-validation.md": "6a45e047fa51ccfb3a75d85483a54fae354d7c2d01527eed7a8ac8ac0403bcc3",
       "skills/otel-instrument/references/signal-mapping-guide.md": "83a5e52a01a1c5b98530a3f7b320b410d364e2799a400b25a155ee1db780efed",
       "skills/otel-instrument/scripts/observe_report.py": "6b4fba79d00c6cda9e058e09f26a8d00ba0dd53c9c74bedac056b1533643116f",
@@ -835,10 +851,12 @@
       "evals/go/kvstore/kvstore/store.go": "eb8c09d0220e8816f3f6bb8a6fae9c86c44823048065ed12cf56cf9f6e6b98fd",
       "evals/go/kvstore/kvstore/store_test.go": "23532aff7f33ce9ce0937e10b915c0b3e136b6382c98c16aada5fcf711b0c96b",
       "evals/go/kvstore/spec.md": "4eb0f6f554cb707e1a3290b6b76a1f5e74af5100d2938fb2734e079798d29c7a",
+      "evals/go/kvstore/eval/inputs/runtime-topology.env": "7d965be3c008ad320943bd5b831701b9031da10100d5d9bafaa6b71ae679ee16",
+      "evals/go/kvstore/eval/qual/instrument-container-topology.json": "3b124e0456f0d072c666233fed65926208071b388cdbe769dbd45e83ab42901a",
       "evals/go/kvstore/eval/qual/instrument.json": "7c002c4e8fac4e49b1e2d40c8687849ef527c667ed8aaea85609f98f16f99612",
       "evals/go/kvstore/eval/runtime/App.Dockerfile": "a5fd8ddcda7b4d4aa9345c8b1f906ed8455a7e6b542731dd41ffad176f573d43",
-      "evals/go/kvstore/eval/runtime/docker-compose.yml": "cba3615b43dedeeaa3a39d66d367b718f1db82205091313a75c2be6f72b537e8",
-      "evals/go/kvstore/eval/runtime/instrument.json": "b55ccd4d28308084c21a16f5b29fc08df029ee8ac74906c1cbb56a330d1d0b21",
+      "evals/go/kvstore/eval/runtime/docker-compose.yml": "689002b5a918acf0838d43cf74ff8f3afdd4721b5b0a07f3abe405459f75e5e0",
+      "evals/go/kvstore/eval/runtime/instrument.json": "24ef33cd5326f46141b858808ec7b0feff16782e63ab1ab2c5f466b237bb3033",
       "evals/go/kvstore/eval/runtime/run-traffic.sh": "0ce27d46da8c0c21f7f79739bea2e567730fd522e3adb035a03cf18fe8a1578e",
       "evals/java/kafka-batch-consumer/README.md": "23a5dcf5ebdf24c356199041d54712966ba63a977523b352e559ae72994c3286",
       "evals/java/kafka-batch-consumer/eval/qual/instrument.json": "5b9e7f9c4988f66b8e31bb4a051962d3459112fc09d4b8468d2153434b8ecf43",
@@ -895,9 +913,11 @@
       "evals/node/express-basic/app.js": "e21a658ea62dd0aba6890cb8514a37eb08d10282ae078165473371db042934b5",
       "evals/node/express-basic/eval/qual/instrument.json": "802d9ee569010a83158645fe819bb6524c77bf4fe265a1013847440d7dec191d",
       "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
+      "evals/node/express-basic/eval/inputs/runtime-topology.env": "7d965be3c008ad320943bd5b831701b9031da10100d5d9bafaa6b71ae679ee16",
       "evals/node/express-basic/eval/runtime/App.Dockerfile": "647895132e893051a7d4e1c52a2d7ff1a25bb2f54ff5cab39c063c1234435bed",
-      "evals/node/express-basic/eval/runtime/docker-compose.yml": "0fb54e7e7ccc773c69313228218b6b6ec4b65edc09c20ac9f523518d06c43feb",
-      "evals/node/express-basic/eval/runtime/instrument.json": "7c7227eaea46150b0c85fc0e58966b51f8393b05b69ccc571d9eb73fca7e50e4",
+      "evals/node/express-basic/eval/runtime/docker-compose.yml": "9ad94288c73823f5f308bec08943302ae43fd76179bd4b8d3b0f4600b1eddfcd",
+      "evals/node/express-basic/eval/runtime/instrument.json": "f1c256e95527e54d12099c88831e19544371ccbd5ccdcef5f1bd80122294647d",
+      "evals/node/express-basic/eval/runtime/npm-signal-proxy.sh": "dae7daca4a420d324e8e7c551b58b35b8172cd7d7f821f776dc50922e842455c",
       "evals/node/express-basic/eval/runtime/run-traffic.sh": "d6a8d2d6d98eb10dc86af242acb5365649194db9e84f01c23aa350613ce0dc49",
       "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
       "evals/python/ai-assistant-demo/README.md": "fef16be3948e26460b7de715b05d2c14387c1fa974529b6c24a77a6666f52a4e",
@@ -924,10 +944,10 @@
       "evals/python/fastapi-celery/eval/qual/incident-readiness.json": "00ff6de8f476c9b1ad73820506afbbd3beb550e32944ef3e2bf88e62223ee07d",
       "evals/python/fastapi-celery/pyproject.toml": "486ece182067449ec1cbd8f0cdb18184cfe0278fedb7fee81e9c6975da0e1e79",
       "evals/python/fastapi-celery/worker.py": "ac138d80a191757a1dba95cc57d6f69628486e9aee73efa8925d605e72ccd65d",
-      "evals/python/fastapi-celery/eval/qual/instrument.json": "5591bdd562cbf0a85f139e38e3b5a29b537a6d837e1cfadef25302798debc026",
+      "evals/python/fastapi-celery/eval/qual/instrument.json": "077ccaf4ab5ccd7dd57ea9d3593512914799dedd745cdbbe43e8abe663eceb9a",
       "evals/python/fastapi-celery/eval/runtime/App.Dockerfile": "e9df52ba5a6154c8a6e3534bf2c65c68bea5c174f35f83343bb4528c461833ba",
       "evals/python/fastapi-celery/eval/runtime/docker-compose.yml": "84f0ae4ca53a77ff3c6c1e3608617b96adc735c494e33a7d192d5a6122d78630",
-      "evals/python/fastapi-celery/eval/runtime/instrument.json": "9936c697aa2bf390584a757d7d78a2cb5a8c2bfecf1120fa573534de15f1eeb9",
+      "evals/python/fastapi-celery/eval/runtime/instrument.json": "87c97822072ff356b774cf630b2c632138be36467a1373d2d01662719422787e",
       "evals/python/fastapi-celery/eval/runtime/run-traffic.sh": "dc4f502650d699e6bb819e2f86165c9e075586d9c089f71af8ba9a322565e245",
       "evals/python/flask-basic/Makefile": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe",
       "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
@@ -935,9 +955,10 @@
       "evals/python/flask-basic/eval/qual/instrument-operator-owned-logs-header.json": "1db94981343a93630552ac2c340277219123c078f8bb86a7231d5a113a3d7ac0",
       "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f",
       "evals/python/flask-basic/eval/qual/instrument.json": "ca9703069fada3cabe56a7385fae2773ff34b4ae18b0b934428c069242bd2403",
+      "evals/python/flask-basic/eval/inputs/runtime-topology.env": "7d965be3c008ad320943bd5b831701b9031da10100d5d9bafaa6b71ae679ee16",
       "evals/python/flask-basic/eval/runtime/App.Dockerfile": "d0fe3f537e8365ac5c554006235e38b164269aa9a47d3b0d5d7da0cdf77847fa",
-      "evals/python/flask-basic/eval/runtime/docker-compose.yml": "4c7171d8d771ca84936dd3eed7fad053a12a4f40f781d93e35646252e3c92870",
-      "evals/python/flask-basic/eval/runtime/instrument.json": "8be4dd5e1514f50741be9b52c246ecbfa7f777ea3dc1ecba7fa0e64a4a4d1f43",
+      "evals/python/flask-basic/eval/runtime/docker-compose.yml": "71c02ae46073d3239ef08c290b9d448b9a43c9978bd461902ae1318e223c8472",
+      "evals/python/flask-basic/eval/runtime/instrument.json": "fdc373900104cc5dc9daf1f01395730f8470fc978fad798538944f4d016f2b2f",
       "evals/python/flask-basic/eval/runtime/run-traffic.sh": "d6a8d2d6d98eb10dc86af242acb5365649194db9e84f01c23aa350613ce0dc49",
       "evals/python/mcp-ai-tool-demo/Makefile": "87d12c2866f8dbd360a98ed53448c98ee805fa7f55a7b61e03862734fa4f63a2",
       "evals/python/mcp-ai-tool-demo/README.md": "56f9c6b444d4fc18a62c0f8bed5dbcd21c81ac5753911d25a8d61cb2816b6d73",
@@ -1024,6 +1045,15 @@
         ]
       },
       {
+        "definition_path": "evals/go/kvstore/eval/qual/instrument-container-topology.json",
+        "fixture_dir": "evals/go/kvstore",
+        "prompt_id": "container-topology",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/runtime-topology.env"
+        ]
+      },
+      {
         "definition_path": "evals/go/kvstore/eval/qual/instrument.json",
         "fixture_dir": "evals/go/kvstore",
         "prompt_id": "direct",
@@ -1042,7 +1072,9 @@
         "fixture_dir": "evals/go/kvstore",
         "prompt_id": "runtime-preserving",
         "eval_kind": "runtime",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/runtime-topology.env"
+        ]
       },
       {
         "definition_path": "evals/java/kafka-batch-consumer/eval/qual/instrument.json",
@@ -1140,7 +1172,9 @@
         "fixture_dir": "evals/node/express-basic",
         "prompt_id": "runtime-preserving",
         "eval_kind": "runtime",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/runtime-topology.env"
+        ]
       },
       {
         "definition_path": "evals/python/ai-assistant-demo/eval/qual/instrument.json",
@@ -1221,7 +1255,9 @@
         "fixture_dir": "evals/python/flask-basic",
         "prompt_id": "runtime-preserving",
         "eval_kind": "runtime",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/runtime-topology.env"
+        ]
       },
       {
         "definition_path": "evals/python/mcp-ai-tool-demo/eval/qual/instrument.json",

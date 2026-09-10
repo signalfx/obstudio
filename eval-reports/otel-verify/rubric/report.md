@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-verify |
-| Run ID | 20260909T073441320713Z |
+| Run ID | 20260909T172158804033Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,22 +18,22 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/verify | go/chi-basic | 1 | 100% (4/4), avg score 98 | 1.3M | 9.8m | - | - | - |
-| with_skill | go/chi-basic/qual/verify-runtime-blocker | go/chi-basic | 1 | 100% (5/5), avg score 96 | 1.5M | 8.7m | - | - | - |
+| with_skill | go/chi-basic/qual/verify | go/chi-basic | 1 | 100% (4/4), avg score 100 | 835.7K | 5.7m | - | - | - |
+| with_skill | go/chi-basic/qual/verify-runtime-blocker | go/chi-basic | 1 | 100% (5/5), avg score 95 | 1.9M | 8.5m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1319530 | 1252992 | unknown | 10999 | 2672 | unknown | 1330529 |
-| with_skill | go/chi-basic/qual/verify-runtime-blocker | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1483000 | 1397632 | unknown | 13539 | 2900 | unknown | 1496539 |
+| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 824259 | 750080 | unknown | 11445 | 2877 | unknown | 835704 |
+| with_skill | go/chi-basic/qual/verify-runtime-blocker | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1898659 | 1808768 | unknown | 15010 | 3920 | unknown | 1913669 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 213476 | 155904 | unknown | 3955 | 1464 | unknown | 217431 |
-| with_skill | go/chi-basic/qual/verify-runtime-blocker | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 358941 | 302848 | unknown | 5332 | 1636 | unknown | 364273 |
+| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 101491 | 82432 | unknown | 2965 | 1041 | unknown | 104456 |
+| with_skill | go/chi-basic/qual/verify-runtime-blocker | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 145009 | 121088 | unknown | 5558 | 2448 | unknown | 150567 |
 
 ## Rubric Failures
 
