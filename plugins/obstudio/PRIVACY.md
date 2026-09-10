@@ -28,6 +28,10 @@ Cloud onboarding skills:
 These open a local credential handoff or submit a consent-gated Free Edition
 request when explicitly invoked.
 
+When the Free Edition form opens, Splunk derives coarse location from the
+request's network source IP to suggest a hosting region. Region detection does
+not submit a signup.
+
 Observer and MCP controls:
 
 - MCP server config for `http://127.0.0.1:3000/mcp`

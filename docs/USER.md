@@ -88,7 +88,8 @@ Run `$otel-verify` later whenever application or runtime evidence has changed.
 
 - `.observe/otel-audit.json` contains the source-derived audit findings.
 - `.observe/otel.html` is the interactive audit and finding-selection report.
-- `.observe/otel-selection.json` records approved finding IDs and decisions.
+- `.observe/otel-selection.json` records requested findings, their
+  dependency-complete instrumentation scope, and any decision answers.
 - `.observe/otel-instrumentation.md` is the developer-readable implementation
   record; `.observe/otel-instrumentation.json` is its machine-readable form.
 - `.observe/otel-instrumentation.html` explains the changes, impact, and proof.
