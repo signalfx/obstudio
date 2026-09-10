@@ -461,12 +461,22 @@ it('integration: extension.js exports activate and deactivate', { timeout: 120_0
 
 	// Verify status bar states are present
 	assert.ok(source.includes('loading~spin'), 'extension.js should contain starting spinner icon');
-	assert.ok(source.includes('pulse'), 'extension.js should contain running pulse icon');
+	assert.ok(
+		source.includes('Splunk Observability Studio is running \\u2014 click for options'),
+		'extension.js should contain the glyph-free running status label',
+	);
+	assert.equal(source.includes('$(pulse)'), false, 'extension.js should not contain the retired running pulse icon');
 	assert.ok(source.includes('circle-outline'), 'extension.js should contain stopped icon');
 
 	// Verify error and stopped webview pages are present
-	assert.ok(source.includes('Observer could not start'), 'extension.js should contain error webview heading');
-	assert.ok(source.includes('Observer is stopped'), 'extension.js should contain stopped webview message');
+	assert.ok(
+		source.includes('Splunk Observability Studio could not start'),
+		'extension.js should contain the branded error webview heading',
+	);
+	assert.ok(
+		source.includes('Splunk Observability Studio is stopped'),
+		'extension.js should contain the branded stopped webview message',
+	);
 
 	// Verify port conflict detection
 	assert.ok(source.includes('EADDRINUSE'), 'extension.js should handle EADDRINUSE port conflicts');

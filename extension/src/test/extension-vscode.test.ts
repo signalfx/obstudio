@@ -18,6 +18,7 @@ type RuntimeState = {
 	observerPort?: number;
 	observerUrl?: string;
 	panelHtml?: string;
+	panelTitle?: string;
 	panelVisible: boolean;
 	sharedMode: boolean;
 	statusBarCommand?: string;
@@ -2602,6 +2603,7 @@ suite('VS Code Host', () => {
 					return value.panelVisible
 						&& value.sharedMode
 						&& value.observerUrl === sharedObserver.baseUrl
+						&& value.panelTitle === 'Splunk Observability Studio – Telemetry Explorer'
 						&& typeof value.panelHtml === 'string'
 						&& value.panelHtml.includes('main.js');
 				},
@@ -2609,6 +2611,7 @@ suite('VS Code Host', () => {
 			);
 
 			assert.equal(state.panelVisible, true);
+			assert.equal(state.panelTitle, 'Splunk Observability Studio – Telemetry Explorer');
 			assert.equal(state.sharedMode, true);
 			assert.equal(state.observerUrl, sharedObserver.baseUrl);
 			assert.equal(state.panelHtml?.includes('<iframe '), false, 'observer UI should be the top-level webview');

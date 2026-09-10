@@ -157,6 +157,7 @@ const observerLifecycleState = createObserverLifecycleState();
 let lastObserverPanelRenderKey: string | undefined;
 
 const observerPanelViewType = 'observabilityStudioObserver';
+const observerPanelTitle = 'Splunk Observability Studio – Telemetry Explorer';
 const sharedObserverUrlSetting = 'sharedObserverUrl';
 const managedObserverPortSetting = 'managedObserverPort';
 const sisCimdRegistrationEnabledSetting = 'sisCimdRegistrationEnabled';
@@ -211,6 +212,7 @@ type InternalRuntimeState = {
 	observerPort?: number;
 	observerUrl?: string;
 	panelHtml?: string;
+	panelTitle?: string;
 	panelVisible: boolean;
 	sharedMode: boolean;
 	statusBarCommand?: string;
@@ -660,6 +662,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			observerPort: observerLifecycleState.port,
 			observerUrl: observerBaseUrl,
 			panelHtml: observerPanel?.webview.html,
+			panelTitle: observerPanel?.title,
 			panelVisible: observerPanel !== undefined,
 			sharedMode: observerUsesSharedServer,
 			statusBarCommand: getStatusBarCommandId(observerStatusBarItem),
@@ -1727,7 +1730,7 @@ async function openObserverPanel(context: vscode.ExtensionContext): Promise<void
 		lastObserverPanelRenderKey = undefined;
 		observerPanel = vscode.window.createWebviewPanel(
 			observerPanelViewType,
-			'Splunk Observability Studio – Telemetry Explorer',
+			observerPanelTitle,
 			vscode.ViewColumn.One,
 			{
 				enableScripts: true,
@@ -1781,7 +1784,7 @@ function configureObserverPanel(panel: vscode.WebviewPanel, context: vscode.Exte
 
 function applyObserverPanelPresentation(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): void {
 	const iconUri = vscode.Uri.joinPath(context.extensionUri, 'assets', 'observer-icon.png');
-	panel.title = 'Splunk Observability Studio – Telemetry Explorer';
+	panel.title = observerPanelTitle;
 	panel.iconPath = {
 		light: iconUri,
 		dark: iconUri,

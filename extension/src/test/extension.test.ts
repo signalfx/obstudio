@@ -1071,6 +1071,18 @@ test('observer webview panel uses the bundled observer icon', () => {
 	assert.match(source, /observer-icon\.png/);
 });
 
+test('observer webview panel uses the full product title', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+
+	assert.match(
+		source,
+		/const observerPanelTitle = 'Splunk Observability Studio – Telemetry Explorer';/,
+	);
+	assert.match(source, /createWebviewPanel\(\s*observerPanelViewType,\s*observerPanelTitle,/s);
+	assert.match(source, /panel\.title = observerPanelTitle;/);
+});
+
 test('managed observer startup restores cloud export without opening the Cloud tab', () => {
 	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
 	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
