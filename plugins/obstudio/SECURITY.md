@@ -138,42 +138,5 @@ reviews the region and signup fields and explicitly accepts the Terms of Use.
 
 ## User Controls
 
-Plugin management and MCP connectivity are separate controls. Disabling a
-plugin or withholding SessionStart-hook approval prevents plugin-managed
-bootstrap. Disabling an MCP server controls whether the host connects to that
-endpoint; it does not by itself stop an already trusted hook from starting an
-Observer, nor does it stop a pre-existing local Observer process.
-
-### Codex
-
-Disable the Obstudio MCP server in `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.obstudio]
-enabled = false
-url = "http://127.0.0.1:3000/mcp"
-```
-
-Disable a specific skill without deleting it:
-
-```toml
-[[skills.config]]
-path = "/path/to/obstudio/skills/observer-control/observer-restart/SKILL.md"
-enabled = false
-
-[[skills.config]]
-path = "/path/to/obstudio/skills/splunk-detector-publish/SKILL.md"
-enabled = false
-```
-
-### Claude Code
-
-Use Claude Code's plugin controls to disable Splunk Observability Studio or
-withhold SessionStart hook approval to prevent its managed bootstrap. Use
-Claude Code's MCP-server controls to prevent Claude from connecting to the
-local MCP endpoint, and its command permission prompts to withhold individual
-host-local commands. A disabled Claude MCP server does not stop a previously
-trusted SessionStart hook from managing an Observer, and withholding a later
-hook prompt does not prevent connection to an already running endpoint. Claude
-Code manages these controls under its own plugin and permission model; the
-Codex configuration examples above do not apply to Claude Code.
+Use your agent's plugin and MCP settings to disable the integration. Manage the
+Observer process separately with the Observer lifecycle commands.

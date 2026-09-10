@@ -6,7 +6,7 @@ operating system, and user-invoked tools have their own privacy behavior.
 
 ## What This Plugin Contains
 
-The plugin contains four capability groups.
+The plugin contains these capability groups.
 
 Core workflow skills:
 
@@ -19,22 +19,6 @@ Core workflow skills:
 These can read and write repo files through skills like instrumentation and can
 generate local reports and Terraform. They do not manage a local background
 Observer process and do not call live Splunk APIs to create resources.
-
-Cloud onboarding skills:
-
-- `$connect-splunk-observability-cloud`
-- `$create-splunk-free-account`
-
-These open a local credential handoff or submit a consent-gated Free Edition
-request when explicitly invoked.
-
-When the Free Edition form opens, Observer asks Splunk for coarse location from
-the request's network source IP to suggest a hosting region. That lookup does
-not submit a signup. Submission performs a fresh location lookup, then sends
-the entered first name, last name, and email, selected region, Terms acceptance,
-derived country, state, city, and postal code, a generated company value, and
-fixed public-form metadata for the developer role, trial type, phone, and
-marketing preferences.
 
 Observer and MCP controls:
 
@@ -70,8 +54,6 @@ required API permissions.
 - The plugin package does not publish dashboards or detectors to Splunk unless
   the user explicitly invokes the publish skills with usable Splunk
   credentials.
-- The plugin package does not submit a Free Edition request unless the user
-  explicitly accepts the Terms of Use and confirms the signup fields.
 
 Codex or Claude Code may still send prompts, file context, tool output, and
 user-approved command results according to that host's settings and product
