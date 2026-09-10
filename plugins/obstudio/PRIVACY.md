@@ -6,44 +6,11 @@ operating system, and user-invoked tools have their own privacy behavior.
 
 ## What this plugin contains
 
-The plugin contains these capability groups.
-
-Core workflow skills:
-
-- `$otel-audit`
-- `$otel-instrument`
-- `$otel-verify`
-- `$splunk-configure`
-- `$splunk-dashboard`
-
-These can read and write repo files through skills like instrumentation and can
-generate local reports and Terraform. They do not manage a local background
-Observer process and do not call live Splunk APIs to create resources.
-
-Observer and MCP controls:
-
-- MCP server config for `http://127.0.0.1:3000/mcp`
-- SessionStart bootstrap hook, if managed startup is kept enabled
-- `$observer-open`
-- `$observer-status`
-- `$observer-restart`
-- `$observer-stop`
-
-These interact with host-local endpoints, may download/start/manage the local
-Observer, and may need narrow elevated/outside-sandbox access for localhost
-health or control checks. Command skills are limited to the default loopback
-Observer and do not probe or control custom MCP endpoints automatically.
-
-Splunk publish skills:
-
-- `$splunk-detector-publish`
-- `$splunk-dashboard-publish`
-- `$splunk-sync` deprecated alias
-- `$splunk-dashboard-sync` deprecated alias
-
-These call Splunk Observability Cloud APIs when explicitly invoked, can create
-live dashboard or detector resources, and require Splunk credentials with the
-required API permissions.
+| Capability | Data and network behavior |
+|---|---|
+| Core workflow skills: `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, and `$splunk-dashboard` | Can read or edit repository files and generate local reports or Terraform. They do not manage a background Observer or create live Splunk resources. |
+| Observer and MCP controls: the bundled MCP configuration, SessionStart hook, and `$observer-open`, `$observer-status`, `$observer-restart`, and `$observer-stop` | Interact with local endpoints and may download, start, or manage Observer. Health or control checks may require narrow elevated access. The command skills use the default Observer endpoint and do not follow, probe, or control custom MCP endpoints automatically. |
+| Splunk publishers: `$splunk-detector-publish`, `$splunk-dashboard-publish`, and their deprecated `-sync` aliases | Call Splunk Observability Cloud APIs only when explicitly invoked. They can create dashboards or detectors and require credentials with the corresponding API permissions. |
 
 ## What the plugin does not add
 

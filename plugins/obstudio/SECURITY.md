@@ -15,62 +15,17 @@ product policy.
 
 ## Trust levels
 
-Core workflow skills:
+| Capability | Access |
+|---|---|
+| Core workflow skills: `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, and `$splunk-dashboard` | Can read or edit repository files, run project verification commands, and generate local reports or Terraform. These skills do not manage a background Observer or create live Splunk resources. |
+| Observer and MCP controls: the bundled MCP configuration, SessionStart hook, and `$observer-open`, `$observer-status`, `$observer-restart`, and `$observer-stop` | Can connect to local endpoints and may download, start, or manage Observer. Local health and control checks may require narrow elevated access. The command skills use the default Observer endpoint and do not follow, probe, or control custom MCP endpoints automatically. |
+| Splunk publishers: `$splunk-detector-publish`, `$splunk-dashboard-publish`, and their deprecated `-sync` aliases | Can call Splunk Observability Cloud APIs and create confirmed detector or dashboard gaps when explicitly invoked with credentials that have the required permissions. |
 
-- `$otel-audit`
-- `$otel-instrument`
-- `$otel-verify`
-- `$splunk-configure`
-- `$splunk-dashboard`
-
-Trust model:
-
-- Can read and write repo files through skills like instrumentation.
-- Can generate local reports and Terraform.
-- Does not manage a local background Observer process.
-- Does not call live Splunk APIs to create resources.
-
-Observer and MCP controls:
-
-- MCP server config for `http://127.0.0.1:3000/mcp`
-- SessionStart bootstrap hook, if managed startup is kept enabled
-- `$observer-open`
-- `$observer-status`
-- `$observer-restart`
-- `$observer-stop`
-
-Trust model:
-
-- Interacts with host-local endpoints.
-- May download, start, or manage the local Observer.
-- May need narrow elevated/outside-sandbox access for localhost health or
-  control checks.
-- Command skills are limited to the default loopback Observer and do not probe
-  or control custom MCP endpoints automatically.
-
-Splunk publish skills:
-
-- `$splunk-detector-publish`
-- `$splunk-dashboard-publish`
-- `$splunk-sync` deprecated alias
-- `$splunk-dashboard-sync` deprecated alias
-
-Trust model:
-
-- Calls Splunk Observability Cloud APIs when explicitly invoked.
-- Can create live dashboard or detector resources.
-- Requires Splunk credentials with the required API permissions.
-
-At full enablement, the plugin can help with:
-
-- read and analyze project files;
-- write instrumentation changes when `$otel-instrument` is explicitly invoked;
-- run verification commands needed for selected workflows;
-- generate local reports and Terraform artifacts;
-- connect to a local Observer MCP endpoint;
-- open, check, restart, or stop a managed Observer when the user asks;
-- publish confirmed Splunk dashboard or detector gaps when the user explicitly
-  invokes publish skills and provides credentials.
+Configured OTLP exporters can send telemetry to their configured destinations.
+Repository edits, project commands, process control, and Splunk publishing
+require explicit user intent and remain subject to the active host's approval
+policy. Process control should require ownership evidence, and local listener
+checks should use only the Observer health endpoint and ports documented below.
 
 ## Local listener exposure
 
@@ -109,25 +64,6 @@ extension may stop it and start the bundled version. It revalidates the
 listener PID and executable before graceful or forced termination; ambiguous
 owners or processes other than `obstudio` are left running and reported as
 requiring recovery.
-
-## Risky surfaces
-
-The plugin includes several higher-trust surfaces:
-
-- `otel-instrument` can edit application code and configuration.
-- `observer-restart` and `observer-stop` can control a local Observer process
-  and should require evidence that the current plugin owns the process.
-- `splunk-detector-publish` and `splunk-dashboard-publish` can call live Splunk
-  Observability Cloud APIs and create resources.
-- Configured OTLP exporters can send telemetry to configured endpoints.
-- Verification workflows can run project commands, tests, package managers,
-  or local servers.
-
-Destructive or control actions should require explicit user intent, ownership
-evidence when controlling a local process, and narrow permissions when the
-active host requires approval for localhost access. Observer command skills
-should inspect only the default loopback health endpoint and the Observer
-listener ports `127.0.0.1:3000`, `127.0.0.1:4317`, and `127.0.0.1:4318`.
 
 ## User controls
 

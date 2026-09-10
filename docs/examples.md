@@ -1,27 +1,27 @@
-# Example Prompts
+# Example prompts
 
 Use these prompts as starting points for common Observability Studio workflows.
 
-## Audit -- Gap Analysis
+## Audit: find gaps
 
-| Use Case | Prompt | Skill |
+| Use case | Prompt | Skill |
 |----------|--------|-------|
 | Identify observability gaps without making code changes | `$otel-audit` this service and show me the gaps | `$otel-audit` |
 | Assess a legacy service before planning instrumentation work | Run `$otel-audit` on this service -- I need a gap report before the sprint planning | `$otel-audit` |
 | Review and select gaps in the human report | Run `$otel-audit`, then open `.observe/otel.html` so I can select findings and copy the generated `$otel-instrument` command | `$otel-audit` |
 
-## Verify -- Prove Existing Instrumentation
+## Verify existing instrumentation
 
-| Use Case | Prompt | Skill |
+| Use case | Prompt | Skill |
 |----------|--------|-------|
 | Verify every signal and path from the audit and instrumentation reports | Run `$otel-verify` and tell me exactly what is working or unproven | `$otel-verify` |
 | Prove route-aware HTTP spans, request duration, and duplicate prevention | Verify the HTTP server instrumentation in the real local runtime | `$otel-verify` |
 | Capture local OTLP evidence in the Telemetry Explorer | Verify this instrumentation against my local Observability Studio collector | `$otel-verify` |
 | Recheck instrumentation without changing application code | Rerun the OTel verification report for this service | `$otel-verify` |
 
-## Detect -- Generate Alerts
+## Configure detectors
 
-| Use Case | Prompt | Skill |
+| Use case | Prompt | Skill |
 |----------|--------|-------|
 | Generate detectors from an existing audit report | Generate Splunk detectors from my audit report | `$splunk-configure` |
 | Target a specific detector category | Create latency detectors for this service | `$splunk-configure` |
@@ -30,9 +30,9 @@ Use these prompts as starting points for common Observability Studio workflows.
 | Full audit-to-detect pipeline | Audit this service, then generate detector Terraform | `$otel-audit` → `$splunk-configure` |
 | Explore what would be generated without writing files | What detectors would you create from the audit report? | `$splunk-configure` |
 
-## Sync -- Push Detector Gaps to Splunk
+## Publish detector gaps
 
-| Use Case | Prompt | Skill |
+| Use case | Prompt | Skill |
 |----------|--------|-------|
 | See which local detector specs are already live vs. missing | Show me which of my local detectors already exist in Splunk | `$splunk-detector-publish` |
 | Create only the missing detectors, skip existing ones | Sync my local detector Terraform to Splunk -- create only the gaps | `$splunk-detector-publish` |
@@ -40,9 +40,9 @@ Use these prompts as starting points for common Observability Studio workflows.
 | Re-run after a partial sync to fill in what failed | Resume the detector sync -- pick up where it left off | `$splunk-detector-publish` |
 | Full end-to-end pipeline: audit → configure → sync | Audit this service, generate detectors, then push the gaps to Splunk | `$otel-audit` → `$splunk-configure` → `$splunk-detector-publish` |
 
-## Visualize -- Generate Dashboards
+## Generate dashboards
 
-| Use Case | Prompt | Skill |
+| Use case | Prompt | Skill |
 |----------|--------|-------|
 | Generate dashboard Terraform from an existing audit report | Build a dashboard from my audit report | `$splunk-dashboard` |
 | Visualize the metrics a service emits | Visualize my metrics / create charts for this service | `$splunk-dashboard` |
@@ -50,9 +50,9 @@ Use these prompts as starting points for common Observability Studio workflows.
 | Full audit-to-dashboard pipeline | Audit this service, then generate dashboard Terraform | `$otel-audit` → `$splunk-dashboard` |
 | Preview the dashboard layout against live local telemetry | Open the Dashboards tab to preview my dashboard before pushing it | Observer **Dashboards** tab (`localhost:3000`) |
 
-## Sync -- Push Dashboard Gaps to Splunk
+## Publish dashboard gaps
 
-| Use Case | Prompt | Skill |
+| Use case | Prompt | Skill |
 |----------|--------|-------|
 | See which local dashboards/charts are already live vs. missing | Show me which of my local dashboards already exist in Splunk | `$splunk-dashboard-publish` |
 | Create only the missing dashboards and charts, skip existing ones | Sync my local dashboard Terraform to Splunk -- create only the gaps | `$splunk-dashboard-publish` |
@@ -61,9 +61,9 @@ Use these prompts as starting points for common Observability Studio workflows.
 | Re-run after a partial sync to fill in what failed | Resume the dashboard sync -- pick up where it left off | `$splunk-dashboard-publish` |
 | Full end-to-end pipeline: audit → dashboard → sync | Audit this service, generate a dashboard, then push the gaps to Splunk | `$otel-audit` → `$splunk-dashboard` → `$splunk-dashboard-publish` |
 
-## Export -- Forward Telemetry to Splunk
+## Forward telemetry to Splunk
 
-| Use Case | Prompt | Skill / Config |
+| Use case | Prompt | Skill or configuration |
 |----------|--------|----------------|
 | Forward metrics to Splunk while developing locally | How do I send my local metrics to Splunk O11y? | `USER.md` — metrics export config |
 | Make this service appear in Splunk APM | Forward my spans to Splunk so it shows up in APM | `USER.md` — trace export config |
@@ -71,9 +71,9 @@ Use these prompts as starting points for common Observability Studio workflows.
 | Apply a new ingest token without restarting obstudio | Update the Splunk ingest token for the running observer | MCP: `observer_splunk_metrics_export_configure` |
 | Send a test canary metric to verify connectivity | Send a test metric to confirm Splunk connectivity | MCP: `observer_splunk_metrics_export_test` |
 
-## Instrument -- Add or Adjust OTel Code
+## Add or adjust OpenTelemetry code
 
-| Use Case | Prompt | Skill |
+| Use case | Prompt | Skill |
 |----------|--------|-------|
 | Add OpenTelemetry to an uninstrumented service | Instrument the service with OpenTelemetry | `$otel-instrument` |
 | Implement only selected audit findings | `$otel-instrument --ids OTEL-001,OTEL-004` and leave every unselected finding unchanged | `$otel-instrument` |

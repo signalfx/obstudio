@@ -26,22 +26,20 @@ and release workflows.
 
 ## Using the skills
 
-Choose the skill that matches your task:
+Choose the skill that matches your task. Each skill links to its documentation:
 
 | Goal | Start with |
 |---|---|
-| Review a service and improve its telemetry | `$otel-audit` |
-| Recheck existing instrumentation | `$otel-verify` |
-| Generate detectors and dashboards | `$splunk-configure` |
-| Generate dashboards only | `$splunk-dashboard` |
-| Publish confirmed detector or dashboard gaps | `$splunk-detector-publish` or `$splunk-dashboard-publish` |
-| Connect an existing Splunk organization | `$connect-splunk-observability-cloud` |
-| Request a Free Edition organization | `$create-splunk-free-account` |
+| Review a service and improve its telemetry | [`$otel-audit`](skills/otel-audit/SKILL.md) |
+| Recheck existing instrumentation | [`$otel-verify`](skills/otel-verify/SKILL.md) |
+| Generate detectors and dashboards | [`$splunk-configure`](skills/splunk-configure/SKILL.md) |
+| Generate dashboards only | [`$splunk-dashboard`](skills/splunk-dashboard/SKILL.md) |
+| Publish confirmed detector or dashboard gaps | [`$splunk-detector-publish`](skills/splunk-detector-publish/SKILL.md) or [`$splunk-dashboard-publish`](skills/splunk-dashboard-publish/SKILL.md) |
+| Connect an existing Splunk organization | [`$connect-splunk-observability-cloud`](skills/connect-splunk-observability-cloud/SKILL.md) |
+| Request a Free Edition organization | [`$create-splunk-free-account`](skills/create-splunk-free-account/SKILL.md) |
 
-The audit report generates the scoped `$otel-instrument` command for the
-findings you select, and instrumentation runs verification by default. See the
-[user guide](docs/USER.md#using-the-skills) for the complete workflow and
-[example prompts](docs/examples.md) for common tasks.
+See the [user guide](docs/USER.md#using-the-skills) for the complete workflow
+and [example prompts](docs/examples.md) for common tasks.
 
 ## Observer
 

@@ -198,9 +198,7 @@ When finished, remove unchanged routes managed by Observability Studio:
 keep token telemetry enabled without normalized repository attribution, use
 `enable` with `--repository-correlation=off` instead.
 
-### Provider notes
-
-#### Codex
+### Codex
 
 By default, Codex CLI, IDE, and Desktop processes share
 `~/.codex/config.toml`; when `CODEX_HOME` is set, token setup uses
@@ -220,7 +218,7 @@ destinations. Codex token histograms remain visible in Metrics, but their
 current points do not have stable task or turn identifiers. Correlated totals
 therefore use the richer Codex logs and task spans.
 
-#### Claude Code
+### Claude Code
 
 - An active `ENABLE_BETA_TRACING_DETAILED` and `BETA_TRACING_ENDPOINT` pair
   overrides the standard log and trace exporters. `enable` manages and
