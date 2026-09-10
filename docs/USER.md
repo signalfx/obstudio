@@ -26,7 +26,8 @@ To configure every target in one run:
 
 ```bash
 ./obstudio install --target=codex,\
-claude-code,cursor,kiro,windsurf,copilot
+claude-code,cursor,kiro,\
+windsurf,copilot
 ```
 
 | Target | Skill command |

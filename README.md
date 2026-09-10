@@ -31,7 +31,8 @@ To configure every target in one run:
 
 ```bash
 ./obstudio install --target=codex,\
-claude-code,cursor,kiro,windsurf,copilot
+claude-code,cursor,kiro,\
+windsurf,copilot
 ```
 
 Keep the bundled `weaver` executable beside `obstudio`. Restart each selected
