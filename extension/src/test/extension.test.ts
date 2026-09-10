@@ -2111,6 +2111,11 @@ test('upgrade retirement verifies Observer health and the executable path before
 		/observerHealth\?\.owner !== extensionManagedObserverOwner[\s\S]*?observerHealth\.mode !== extensionManagedObserverMode/,
 	);
 	assert.ok(
+		retirement.indexOf('if (!processIsRunning(pid))')
+			< retirement.indexOf('observerHealth?.owner !== extensionManagedObserverOwner'),
+		'a dead recorded PID must be treated as stale before requiring a live Observer ownership marker',
+	);
+	assert.ok(
 		retirement.indexOf('observerHealth?.owner !== extensionManagedObserverOwner')
 			< retirement.indexOf('const processExecutablePath = await readProcessExecutablePath'),
 		'extension ownership must be established before inspecting or terminating the recorded PID',

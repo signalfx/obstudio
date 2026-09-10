@@ -129,11 +129,11 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("GET /api/query/validation/summary", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/status", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/latest", queryValidationLatest(validationService))
-	mux.HandleFunc("POST /api/validation/run", runValidation(validationService))
-	mux.HandleFunc("POST /api/validation/refresh", refreshValidation(validationService))
-	mux.HandleFunc("POST /api/validation/analyze", analyzeValidation(validationService))
+	mux.HandleFunc("POST /api/validation/run", localMutation(runValidation(validationService)))
+	mux.HandleFunc("POST /api/validation/refresh", localMutation(refreshValidation(validationService)))
+	mux.HandleFunc("POST /api/validation/analyze", localMutation(analyzeValidation(validationService)))
 	mux.HandleFunc("GET /api/query/validation/findings", queryValidationFindings(validationService))
-	mux.HandleFunc("DELETE /api/data", clearData(s, validationStore))
+	mux.HandleFunc("DELETE /api/data", localMutation(clearData(s, validationStore)))
 	if metricsController != nil && tracesController != nil {
 		newSplunkExportService(metricsController, tracesController, splunkExportRefresher).register(mux)
 	}
@@ -190,6 +190,17 @@ func writeSameOriginJSON(w http.ResponseWriter, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("[api] writeSameOriginJSON: %v", err)
 	}
+}
+
+func localMutation(next http.HandlerFunc) http.HandlerFunc {
+	return requireLocalObserverRequest(next, func(w http.ResponseWriter, status int, message string) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(status)
+		if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
+			log.Printf("[api] localMutation: %v", err)
+		}
+	})
 }
 
 // auditReportCSP locks down the workspace-controlled report served on the
@@ -398,10 +409,10 @@ func analyzeValidation(service *validator.Service) http.HandlerFunc {
 			}
 			statusCode, payload := validationHTTPErrorPayload(err, nextMethod, nextPath)
 			w.WriteHeader(statusCode)
-			writeJSON(w, payload)
+			writeSameOriginJSON(w, payload)
 			return
 		}
-		writeJSON(w, analysis)
+		writeSameOriginJSON(w, analysis)
 	}
 }
 
@@ -414,10 +425,10 @@ func refreshValidation(service *validator.Service) http.HandlerFunc {
 		if err != nil {
 			statusCode, payload := validationHTTPErrorPayload(err, http.MethodGet, "/api/query/validation/status")
 			w.WriteHeader(statusCode)
-			writeJSON(w, payload)
+			writeSameOriginJSON(w, payload)
 			return
 		}
-		writeJSON(w, analysis)
+		writeSameOriginJSON(w, analysis)
 	}
 }
 
@@ -427,10 +438,10 @@ func runValidation(service *validator.Service) http.HandlerFunc {
 		if err != nil {
 			statusCode, payload := validationHTTPErrorPayload(err, http.MethodGet, "/api/query/validation/status")
 			w.WriteHeader(statusCode)
-			writeJSON(w, payload)
+			writeSameOriginJSON(w, payload)
 			return
 		}
-		writeJSON(w, summary)
+		writeSameOriginJSON(w, summary)
 	}
 }
 
@@ -438,20 +449,30 @@ func clearData(s *store.Store, v *validator.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		s.Clear()
 		v.Clear()
-		writeJSON(w, map[string]string{"status": "cleared"})
+		writeSameOriginJSON(w, map[string]string{"status": "cleared"})
 	}
 }
 
 func corsPreflightHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/splunk/") {
+		requestedMethod := strings.ToUpper(strings.TrimSpace(r.Header.Get("Access-Control-Request-Method")))
+		if strings.HasPrefix(r.URL.Path, "/api/splunk/") || isMutationMethod(requestedMethod) {
 			http.Error(w, "cross-origin access is not allowed", http.StatusForbidden)
 			return
 		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func isMutationMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
 	}
 }
 

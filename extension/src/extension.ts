@@ -1359,6 +1359,9 @@ async function retireOtherExtensionManagedObserver(
 			? { pid, port: discoveryPort, status: 'restart-required', version: observerVersion }
 			: { status: 'not-applicable' };
 	}
+	if (!processIsRunning(pid)) {
+		return { status: 'retired' };
+	}
 	if (
 		observerHealth?.owner !== extensionManagedObserverOwner
 		|| observerHealth.mode !== extensionManagedObserverMode

@@ -1926,6 +1926,9 @@ func TestClearData(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("DELETE /api/data expected status 200, got %d", resp.StatusCode)
 	}
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("DELETE /api/data Access-Control-Allow-Origin = %q, want unset", got)
+	}
 
 	// Verify data is cleared
 	resp = mustGet(t, server.URL+"/api/query/stats")
@@ -1942,6 +1945,99 @@ func TestClearData(t *testing.T) {
 	}
 	if stats2.LogCount != 0 {
 		t.Errorf("expected 0 logs after clear, got %d", stats2.LogCount)
+	}
+}
+
+func TestMutatingRoutesRejectCrossOriginRequests(t *testing.T) {
+	routes := []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodDelete, path: "/api/data"},
+		{method: http.MethodPost, path: "/api/validation/run"},
+		{method: http.MethodPost, path: "/api/validation/refresh"},
+		{method: http.MethodPost, path: "/api/validation/analyze"},
+	}
+
+	for _, route := range routes {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			s := store.New()
+			s.AddSpansForConnection("", []store.Span{{
+				TraceID: "trace-cross-origin",
+				SpanID:  "span-cross-origin",
+			}})
+			validationStore := validator.NewStore()
+			runner := &fakeValidationRunner{}
+			runner.onRun = func(context.Context) validator.Summary {
+				startedAt := time.Now()
+				summary := validationStore.StartRun("run-cross-origin", startedAt)
+				validationStore.CompleteRun(
+					"run-cross-origin",
+					map[string]validator.Entity{},
+					validator.RunStats{},
+					startedAt,
+				)
+				return summary
+			}
+			mux := http.NewServeMux()
+			Register(mux, s, validationStore, runner)
+
+			request := httptest.NewRequest(
+				route.method,
+				"http://127.0.0.1:3000"+route.path,
+				strings.NewReader(`{"timeoutSeconds":5}`),
+			)
+			request.RemoteAddr = "127.0.0.1:54321"
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Origin", "https://attacker.example")
+			request.Header.Set("Sec-Fetch-Site", "cross-site")
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, request)
+
+			if response.Code != http.StatusForbidden {
+				t.Errorf("status = %d, want %d; body=%s", response.Code, http.StatusForbidden, response.Body.String())
+			}
+			if got := response.Header().Get("Access-Control-Allow-Origin"); got != "" {
+				t.Errorf("Access-Control-Allow-Origin = %q, want unset", got)
+			}
+			if route.path == "/api/data" && s.Stats().SpanCount != 1 {
+				t.Error("cross-origin request cleared telemetry")
+			}
+			if strings.HasPrefix(route.path, "/api/validation/") && runner.calls != 0 {
+				t.Errorf("cross-origin request invoked validator %d times", runner.calls)
+			}
+		})
+	}
+}
+
+func TestMutationPreflightsRejectCrossOriginAccess(t *testing.T) {
+	mux := http.NewServeMux()
+	Register(mux, store.New())
+
+	for _, route := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodDelete, path: "/api/data"},
+		{method: http.MethodPost, path: "/api/validation/run"},
+		{method: http.MethodPost, path: "/api/validation/refresh"},
+		{method: http.MethodPost, path: "/api/validation/analyze"},
+	} {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodOptions, "http://127.0.0.1:3000"+route.path, nil)
+			request.RemoteAddr = "127.0.0.1:54321"
+			request.Header.Set("Origin", "https://attacker.example")
+			request.Header.Set("Access-Control-Request-Method", route.method)
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, request)
+
+			if response.Code != http.StatusForbidden {
+				t.Errorf("status = %d, want %d", response.Code, http.StatusForbidden)
+			}
+			if got := response.Header().Get("Access-Control-Allow-Origin"); got != "" {
+				t.Errorf("Access-Control-Allow-Origin = %q, want unset", got)
+			}
+		})
 	}
 }
 
