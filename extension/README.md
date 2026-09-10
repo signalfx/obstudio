@@ -38,8 +38,9 @@ run the listed command from that directory.
 - **Windsurf or Devin Desktop:** run
   `./obstudio install --target=windsurf` from the extracted release.
 
-For Devin Local, also add the running Observer. Copy the base URL from
-**Observer Status** and keep the `/mcp` suffix:
+For Devin Local, make sure the [Devin CLI](https://docs.devin.ai/cli) (`devin`)
+is on `PATH`, then add the running Observer. Copy the base URL from **Observer
+Status** and keep the `/mcp` suffix:
 
 ```bash
 devin mcp add -s user obstudio OBSERVER_BASE_URL/mcp

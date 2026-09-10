@@ -202,6 +202,10 @@ Studio:
 ./obstudio token-telemetry disable --target=codex,claude-code
 ```
 
+`disable` also removes each target's saved repository-correlation setting. To
+keep token telemetry enabled without normalized repository attribution, use
+`enable` with `--repository-correlation=off` instead.
+
 ### Provider notes
 
 - **Codex:** CLI, IDE, and Desktop processes share `~/.codex/config.toml` and
@@ -247,6 +251,7 @@ The REST API uses the Observer UI base URL. Common routes are:
   `GET /api/query/logs`, and `GET /api/query/stats`;
 - validation: `GET /api/query/validation/summary`,
   `POST /api/validation/analyze`, and `POST /api/validation/refresh`;
+- live updates: `GET /api/ws` (WebSocket);
 - audit and dashboard data: `GET /api/audit/score` and
   `GET /api/dashboards/preview`; and
 - retained telemetry deletion: `DELETE /api/data`.

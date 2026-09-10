@@ -197,6 +197,10 @@ confirmation-gated action:
 | `$splunk-detector-publish` | Show a live diff and create confirmed detector gaps. |
 | `$splunk-dashboard-publish` | Show a live diff and create confirmed dashboard gaps. |
 
+Both generator skills write Terraform under `.observe/terraform/`.
+`$splunk-dashboard` also writes `.observe/dashboards.preview.json` for the
+local preview.
+
 The local dashboard preview is approximate because SignalFlow runs in Splunk
 Observability Cloud. Publisher skills require an API token with permission to
 create their resources; an ingest-only token is not sufficient.
@@ -206,6 +210,7 @@ create their resources; an ingest-only token is not sufficient.
 | Command | Purpose |
 |---|---|
 | `./obstudio install --target=<agent>` | Install skills and configure MCP. |
+| `./obstudio install --target=<agent> --shared-url=<observer-url>` | Install the integration and connect it to an already-running Observer. |
 | `./obstudio` | Run Observer in the foreground. |
 | `./obstudio start` | Start the managed background Observer. |
 | `./obstudio status` | Inspect the managed process and endpoints. |
