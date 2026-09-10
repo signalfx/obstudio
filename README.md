@@ -24,8 +24,9 @@ Install one agent integration:
 ```
 
 Use a single target or a comma-separated list. The installer supports `codex`,
-`claude-code`, `cursor`, `kiro`, `windsurf`, and `copilot`. GitHub Copilot gets
-the local MCP connection only because it does not support this skill layout.
+`claude-code`, `cursor`, `kiro`, `windsurf`, and `copilot`. The current
+`copilot` target configures the local MCP connection but does not install the
+bundled skills.
 
 To configure every target in one run:
 
@@ -34,8 +35,8 @@ To configure every target in one run:
 ```
 
 Keep the bundled `weaver` executable beside `obstudio`. Restart each selected
-agent after installation, then start a new task so it reloads its skills and
-MCP configuration.
+agent after installation, then start a new task so it reloads the MCP
+configuration and any installed skills.
 
 Run Observer in the foreground with `./obstudio`, or manage a background
 process from the extracted directory:

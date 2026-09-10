@@ -34,7 +34,7 @@ To configure every target in one run:
 | `claude-code`, `cursor`, or `kiro` | `/otel-audit` |
 | `windsurf` with Devin Local | `/otel-audit` |
 | `windsurf` with legacy Cascade | `@otel-audit` |
-| `copilot` | Not available |
+| `copilot` | Not installed by this target |
 
 The `copilot` target configures MCP but does not install skills. The `windsurf`
 skill bundle is also available to Devin Local, which needs the running
@@ -139,10 +139,8 @@ After installing an OpenTelemetry SDK or auto-instrumentation, run these
 commands in the shell that starts your service:
 
 ```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=\
-"http://127.0.0.1:4318"
-export OTEL_EXPORTER_OTLP_PROTOCOL=\
-"http/protobuf"
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
+export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
 export OTEL_TRACES_EXPORTER=otlp
 export OTEL_METRICS_EXPORTER=otlp
 export OTEL_LOGS_EXPORTER=otlp
