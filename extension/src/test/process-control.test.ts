@@ -205,8 +205,9 @@ test('force termination stops a real process on the current platform', { timeout
 			? path.resolve(value).toLowerCase()
 			: path.resolve(value);
 		assert.equal(normalizePath(executablePath), normalizePath(fs.realpathSync(process.execPath)));
+		const exitPromise = once(child, 'exit') as Promise<[number | null, NodeJS.Signals | null]>;
 		await forceTerminateProcess(child.pid);
-		const [exitCode, signal] = await once(child, 'exit') as [number | null, NodeJS.Signals | null];
+		const [exitCode, signal] = await exitPromise;
 		assert.equal(exitCode === null || exitCode !== 0, true);
 		if (process.platform !== 'win32') {
 			assert.equal(signal, 'SIGKILL');
