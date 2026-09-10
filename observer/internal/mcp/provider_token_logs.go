@@ -710,7 +710,7 @@ func selectClaudeMetricFallbacksForQuery(
 				}
 				if _, incompleteHistory := incompleteMetricSessions[key]; incompleteHistory {
 					built.task.AccountingStatus = "partial"
-					built.task.Normalization += "; cumulative metric evidence shows that this session predates retained Observer history, so the selected per-request subtotal may omit earlier prompts"
+					built.task.Normalization += "; cumulative metric evidence shows that this session predates retained Splunk Observability Studio history, so the selected per-request subtotal may omit earlier prompts"
 				}
 			}
 			filtered = append(filtered, built)

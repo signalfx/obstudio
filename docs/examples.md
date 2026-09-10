@@ -18,7 +18,7 @@ selection and an instrumentation report with finding-level changes and proof.
 |----------|--------|-------|
 | Verify every signal and path from the audit and instrumentation reports | Run `$otel-verify` and tell me exactly what is working or unproven | `$otel-verify` |
 | Prove route-aware HTTP spans, request duration, and duplicate prevention | Verify the HTTP server instrumentation in the real local runtime | `$otel-verify` |
-| Capture local OTLP evidence in the Telemetry Explorer | Verify this instrumentation against my local Obstudio collector | `$otel-verify` |
+| Capture local OTLP evidence in the Telemetry Explorer | Verify this instrumentation against my local Splunk Observability Studio collector | `$otel-verify` |
 | Recheck instrumentation without changing application code | Rerun the OTel verification report for this service | `$otel-verify` |
 
 ## Detect -- Generate Alerts
@@ -50,7 +50,7 @@ selection and an instrumentation report with finding-level changes and proof.
 | Visualize the metrics a service emits | Visualize my metrics / create charts for this service | `$splunk-dashboard` |
 | Get a RED-style overview dashboard | Generate a rate/errors/duration dashboard for the service | `$splunk-dashboard` |
 | Full audit-to-dashboard pipeline | Audit this service, then generate dashboard Terraform | `$otel-audit` → `$splunk-dashboard` |
-| Preview the dashboard layout against live local telemetry | Open the Dashboards tab to preview my dashboard before pushing it | Observer **Dashboards** tab (`localhost:3000`) |
+| Preview the dashboard layout against live local telemetry | Open the Dashboards tab to preview my dashboard before pushing it | Splunk Observability Studio **Dashboards** tab (`localhost:3000`) |
 
 ## Sync -- Push Dashboard Gaps to Splunk
 
@@ -70,7 +70,7 @@ selection and an instrumentation report with finding-level changes and proof.
 | Forward metrics to Splunk while developing locally | How do I send my local metrics to Splunk O11y? | `USER.md` — metrics export config |
 | Make this service appear in Splunk APM | Forward my spans to Splunk so it shows up in APM | `USER.md` — trace export config |
 | Check whether metrics are reaching Splunk | Is the Splunk metrics export working? | MCP: `observer_splunk_metrics_export_status` |
-| Apply a new ingest token without restarting obstudio | Update the Splunk ingest token for the running observer | MCP: `observer_splunk_metrics_export_configure` |
+| Apply a new ingest token without restarting `obstudio` | Update the Splunk ingest token for the running Splunk Observability Studio service | MCP: `observer_splunk_metrics_export_configure` |
 | Send a test canary metric to verify connectivity | Send a test metric to confirm Splunk connectivity | MCP: `observer_splunk_metrics_export_test` |
 
 ## Instrument -- Add or Adjust OTel Code

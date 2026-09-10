@@ -168,7 +168,7 @@ export function getObserverStoppedWebviewHtml(): string {
 		<div>Splunk Observability Studio is stopped.</div>
 		<p class="hint">
 			Use the Command Palette (Cmd+Shift+P) and run
-			<strong>Splunk Observability Studio: Start Observer</strong> to start it again.
+			<strong>Splunk Observability Studio: Start</strong> to start it again.
 		</p>
 	</div>
 </body>

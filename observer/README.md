@@ -1,4 +1,4 @@
-# Observer
+# Splunk Observability Studio
 
 Local OpenTelemetry Collector for Observability Studio — receives OTLP
 telemetry, stores it in memory, and exposes it via REST API, MCP (for AI
@@ -64,7 +64,7 @@ OTLP/HTTP + gRPC ──▶ In-memory Store
 
 ### Optional Splunk Observability Cloud forwarding
 
-Observer can forward received telemetry to Splunk Observability Cloud.
+Splunk Observability Studio can forward received telemetry to Splunk Observability Cloud.
 Metrics and traces are configured independently; both are disabled by default.
 
 **Shared credentials** (used by both metrics and traces):
@@ -134,7 +134,7 @@ AI agents can query telemetry via JSON-RPC at `/mcp`:
 ### Audit token-usage demo
 
 Installing the extension or plugin configures MCP but does not change provider
-OTLP settings. Start Observer, then explicitly opt in one or both providers:
+OTLP settings. Start Splunk Observability Studio, then explicitly opt in one or both providers:
 
 ```bash
 obstudio token-telemetry status --target=codex,claude-code
@@ -150,11 +150,11 @@ provider process started; reopening its URL does not refresh them. A later
 `status` uses the recorded custom endpoint unless `--endpoint` is supplied
 explicitly. Prompt text, tool content, and raw API bodies remain disabled by
 provider defaults. For Claude, setup also selects cumulative metric temporality
-when no preference exists so Observer can prove full-session metric totals. An
+when no preference exists so Splunk Observability Studio can prove full-session metric totals. An
 explicit user-owned temporality preference is preserved and is never adopted
 for cleanup. The explicit `enable` command takes over every recognized provider
-OTLP route, including routes that already match Observer. `disable` removes
-unchanged Obstudio-managed routes without restoring replaced prior destinations;
+OTLP route, including routes that already match Splunk Observability Studio. `disable` removes
+unchanged Splunk Observability Studio-managed routes without restoring replaced prior destinations;
 values edited after enable are preserved.
 
 Repository correlation defaults to `path` when no mode has been recorded.
@@ -168,21 +168,21 @@ an already configured target preserves its recorded mode. Codex task spans can
 provide a per-turn working directory directly. The plugin SessionStart hook
 supplies the equivalent session-to-repository association for Claude and a
 lifecycle fallback for Codex. These content-free correlation events are sent
-only to the configured loopback Observer logs endpoint and retained in a
+only to the configured loopback Splunk Observability Studio logs endpoint and retained in a
 dedicated bounded in-memory ring. `name` and `path` reject a non-loopback
 `--endpoint` before provider configuration is changed.
 
 The Codex and Claude plugin SessionStart hooks can start or reuse the detached
-Observer serving the plugin's direct HTTP MCP endpoint. The VS Code extension
-can instead run or connect to an Observer. Provider telemetry and MCP queries
-must target that same Observer process to share its bounded in-memory history.
+Splunk Observability Studio serving the plugin's direct HTTP MCP endpoint. The VS Code extension
+can instead run or connect to a Splunk Observability Studio instance. Provider telemetry and MCP queries
+must target that same Splunk Observability Studio process to share its bounded in-memory history.
 Stopping that process clears the ephemeral history.
 
 Keep the new provider process running while checking the Logs, Traces, Metrics,
 and Services views. Disconnecting it removes that process's live signals by
 design. After the task completes or the process exits, ask the token question
 in a fresh MCP-enabled task: the compact completed accounting history is kept
-separately from those live views until Observer is cleared, exits, or overwrites
+separately from those live views until Splunk Observability Studio is cleared, exits, or overwrites
 its bounded accounting ring.
 
 1. Run `$otel-audit` against a service as the only work in a fresh Codex turn, or run `/obstudio:otel-audit` as the only work in a fresh Claude prompt.
@@ -211,12 +211,12 @@ only their latest non-decreasing point. Metrics are exact only when monotonic
 cumulative input, cache-read, cache-creation, and output are all retained,
 including explicit zero values. Non-monotonic sums or same-series cumulative
 decreases remain available as raw metrics but are not interpreted as exact
-token consumption. Delta series remain partial because a newly started Observer
+token consumption. Delta series remain partial because a newly started Splunk Observability Studio
 cannot prove that it received earlier intervals.
 Exact matching logs or spans take precedence over metrics; exact metrics
 replace malformed or partial richer telemetry, while two partial sources are
 not combined into a guessed total. If cumulative metrics show that a Claude
-session predates retained Observer history, later exact per-request details
+session predates retained Splunk Observability Studio history, later exact per-request details
 remain a measured subtotal but session accounting stays partial; the overlapping
 metric value is not added to that subtotal.
 Codex
@@ -232,7 +232,7 @@ those records together; `providerEventCount` exposes how many raw events were
 considered. Completed provider-task snapshots, provider usage logs, and provider
 token metrics have dedicated bounded in-memory rings, so unrelated high-volume
 telemetry does not evict the accounting record. They remain available across
-agent-process disconnects and idle session resets while Observer remains
+agent-process disconnects and idle session resets while Splunk Observability Studio remains
 running.
 
 Repository queries use `repositoryName` or `repositoryPath`. The result reports
@@ -266,14 +266,14 @@ Claude usage reconstructed from request spans remains partial after an
 interaction root completes because separately batched child requests can still
 arrive. A complete cumulative session metric window can replace that subtotal
 and promote the result to exact without adding either source twice.
-The data remains ephemeral and is evicted by explicit clear, Observer exit, or
+The data remains ephemeral and is evicted by explicit clear, Splunk Observability Studio exit, or
 its dedicated bounded-ring overwrite. The tool's `limit` bounds returned task
 rows only; totals and measurement coverage include every retained matching
 task. `highestUsageTask` is also selected across every retained match and is
 `null` when any matched task has an unknown effective total, so an unknown
 measurement is never ranked as zero. Aggregate accounting becomes partial when completed-task retention has
 discarded history, and Claude cumulative metric series that began before the
-current Observer startup or most recent clear are partial rather than exact.
+current Splunk Observability Studio startup or most recent clear are partial rather than exact.
 Recent native Codex and Claude traces also use one shared bounded provider ring
 and are de-duplicated into trace list, detail, and MCP correlation queries. Each
 retained trace is capped at eight representative spans so one large trace
@@ -283,15 +283,15 @@ such as `8+`, and exact span-count or duration filters exclude it. Raw span
 counts, per-service duration/error aggregates, and validation snapshots do not
 include projected spans; the provider service name remains discoverable after
 raw-span eviction with aggregate fields left empty. Process disconnect removes
-that process's live traces, logs, and metrics from Observer views; bounded
+that process's live traces, logs, and metrics from Splunk Observability Studio views; bounded
 token-accounting history remains available to the token-usage tool until
-explicit clear, Observer exit, or accounting-ring overwrite.
+explicit clear, Splunk Observability Studio exit, or accounting-ring overwrite.
 
 The explicit setup command is the takeover action; there is no separate force
 mode. Every recognized Codex or Claude exporter, endpoint, and protocol route is
-owned and normalized to Observer, including matching, inherited, and explicit
+owned and normalized to Splunk Observability Studio, including matching, inherited, and explicit
 empty values; missing signal routes are added. Disable removes a managed value
-only while the current value still matches the one Obstudio wrote and preserves
+only while the current value still matches the one Splunk Observability Studio wrote and preserves
 values edited after enable. Replaced prior routes are not retained for later
 disable or restored:
 
@@ -312,7 +312,7 @@ present, it redirects those too. It also locally clears an active
 `OTEL_SDK_DISABLED` and redirects an active legacy detailed-beta endpoint.
 Unrelated settings, TLS material, headers, and existing interval or temporality
 preferences remain unchanged. Removing a local Claude override can expose an
-unchanged inherited or higher-precedence route again; Obstudio does not restore
+unchanged inherited or higher-precedence route again; Splunk Observability Studio does not restore
 that route.
 
 Disable also removes that target's repository-correlation opt-in. To keep token
@@ -324,9 +324,9 @@ ownership is stored in `~/.obstudio/token-telemetry.json`; use
 `OBSTUDIO_TOKEN_TELEMETRY_STATE_PATH` only when an isolated state location is
 required. Relative overrides and `~/...` resolve from the user home so the CLI
 and plugin hook address the same file regardless of working directory. For
-new provider configuration files and all ownership/recovery state, Obstudio
+new provider configuration files and all ownership/recovery state, Splunk Observability Studio
 uses user-only permissions (a protected current-user DACL on Windows). Existing
-Obstudio-owned state is hardened on replacement, while the mode or DACL of
+Splunk Observability Studio-owned state is hardened on replacement, while the mode or DACL of
 existing provider files is preserved. Commands serialize
 ownership changes and recover an interrupted config/state publish on the next
 enable, disable, or status command. Recovery journals and ownership deltas are
@@ -343,7 +343,7 @@ profile as higher-precedence managed settings. The `claude-code` target neither
 inspects nor edits that profile, so its status describes the user-level CLI
 configuration only. If the Desktop profile routes OTLP to another collector or
 disables trace export, opening Desktop or running a task sends no corresponding
-signal to local Observer. Services is derived from received telemetry rather
+signal to local Splunk Observability Studio. Services is derived from received telemetry rather
 than process discovery; a correctly routed Desktop session appears under its
 reported resource name, commonly `claude-code` or `claude-code-desktop`.
 
@@ -353,18 +353,18 @@ telemetry and enhanced traces and routes OTLP/HTTP protobuf logs, traces, and
 metrics to `http://127.0.0.1:4318`. Fully restart the Desktop Code session after
 switching profiles. If the active profile is organization-locked or must retain
 a corporate destination, use a separately started Claude Code CLI process or
-ask the organization or profile administrator to route through Observer; only
-that administrator can change an organization-locked destination. Obstudio
+ask the organization or profile administrator to route through Splunk Observability Studio; only
+that administrator can change an organization-locked destination. Splunk Observability Studio
 cannot override and does not silently replace the profile destination.
 
 Claude's legacy detailed-beta pair, `ENABLE_BETA_TRACING_DETAILED=1` plus a
 non-empty `BETA_TRACING_ENDPOINT`, sends logs and traces to that endpoint
 instead of the standard OTLP exporters. Enable owns an active pair, normalizes
-its endpoint to the Observer base URL, and removes both managed values on disable.
+its endpoint to Splunk Observability Studio base URL, and removes both managed values on disable.
 This also corrects a trailing slash that would otherwise make Claude append
 unsupported double-slash signal paths. Before enable, status reports that route
 as a conflict requiring takeover; after enable, all three standard signal routes
-and the active detailed route point to Observer.
+and the active detailed route point to Splunk Observability Studio.
 
 The same takeover rule applies to existing generic Claude OTLP routing and to
 all three Codex exporters. A missing Codex exporter is added. A canonical
@@ -378,15 +378,15 @@ is removed with that line and is not recovered by disable.
 Codex reads these settings from its shared `~/.codex/config.toml` across the
 CLI, IDE integrations, and Desktop. Start a new CLI process and fully restart
 the IDE or Desktop app-server after changing an exporter. While token telemetry
-is enabled, Codex's single logs, traces, and metrics exporters point to Observer;
+is enabled, Codex's single logs, traces, and metrics exporters point to Splunk Observability Studio;
 disable removes unchanged managed routes and does not recover previous destinations.
 
 Exact accounting requires complete provider-native usage from a correlated
 task boundary, correlated provider logs, or all four monotonic cumulative Claude
-session metric components to reach the same Observer. The opt-in command routes
-valid user-level provider settings to Observer, but a higher-precedence managed
+session metric components to reach the same Splunk Observability Studio. The opt-in command routes
+valid user-level provider settings to Splunk Observability Studio, but a higher-precedence managed
 profile or launcher environment can still supersede them. If a provider version
-emits no usable signal, the result remains `absent`/`unknown`; Observer does not
+emits no usable signal, the result remains `absent`/`unknown`; Splunk Observability Studio does not
 fabricate an exact value from a missing measurement.
 
 ## REST API

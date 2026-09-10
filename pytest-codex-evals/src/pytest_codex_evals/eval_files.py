@@ -198,7 +198,7 @@ def regular_source_file(path: Path) -> Path | None:
 
 
 def runtime_repository_source_files(repo_root: Path) -> list[Path]:
-    """Return canonical repository trees copied by the runtime Observer image."""
+    """Return canonical repository trees copied by the runtime Splunk Observability Studio image."""
 
     files = source_tree_files(
         repo_root / "observer",

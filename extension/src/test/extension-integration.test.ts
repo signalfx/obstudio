@@ -190,7 +190,7 @@ async function waitForHttpOrExit(url: string, child: ReturnType<typeof spawn>, t
 
 	while (Date.now() < deadline) {
 		if (child.exitCode !== null || child.killed) {
-			throw new Error(`Observer exited before becoming ready at ${url}.`);
+			throw new Error(`Splunk Observability Studio exited before becoming ready at ${url}.`);
 		}
 
 		try {
@@ -208,7 +208,7 @@ async function waitForHttpOrExit(url: string, child: ReturnType<typeof spawn>, t
 	}
 
 	if (child.exitCode !== null || child.killed) {
-		throw new Error(`Observer exited before becoming ready at ${url}.`);
+		throw new Error(`Splunk Observability Studio exited before becoming ready at ${url}.`);
 	}
 	if (lastError instanceof Error) {
 		throw lastError;
@@ -802,7 +802,7 @@ it('integration: installed VSIX smoke test starts the packaged observer and acce
 		assert.equal(
 			health.body.version,
 			installedPackage.version,
-			'installed VSIX and bundled Observer should report the same release version',
+			'installed VSIX and bundled Splunk Observability Studio should report the same release version',
 		);
 		assert.equal(health.body.endpoints.otlpHttp, otlpHttpUrl);
 		assert.equal(health.body.endpoints.otlpGrpc, `127.0.0.1:${otlpGrpcPort}`);

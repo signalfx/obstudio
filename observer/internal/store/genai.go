@@ -1100,7 +1100,7 @@ func isGenAIEvaluationOnlySpan(span Span) bool {
 	return true
 }
 
-// ClassifyGenAISpan returns the normalized GenAI role used by Observer's trace
+// ClassifyGenAISpan returns the normalized GenAI role used by Splunk Observability Studio's trace
 // projection.
 func ClassifyGenAISpan(span Span) GenAISpanKind {
 	return classifyGenAISpan(span)

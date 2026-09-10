@@ -338,7 +338,7 @@ func resolveInstallSharedObserver(
 		if !ok {
 			return "", false, nil
 		}
-		normalized, normalizeErr := normalizeSharedURL(detectedURL, "detected shared observer URL")
+		normalized, normalizeErr := normalizeSharedURL(detectedURL, "detected shared service URL")
 		if normalizeErr != nil {
 			return "", false, normalizeErr
 		}
@@ -351,7 +351,7 @@ func resolveInstallSharedObserver(
 	}
 	advertisedURL, ok := resolveMCPObserverWithClient(normalized, client)
 	if !ok {
-		return "", false, errors.New("could not verify the local Observer for --shared-url; ensure its health endpoint is reachable")
+		return "", false, errors.New("could not verify local Splunk Observability Studio for --shared-url; ensure its health endpoint is reachable")
 	}
 	return advertisedURL, false, nil
 }
@@ -494,7 +494,7 @@ func detectSharedObserverURL(healthURL string, client *http.Client) (string, boo
 		return "", false
 	}
 	if mcpURL := strings.TrimSpace(health.Endpoints["mcp"]); mcpURL != "" {
-		normalized, err := normalizeSharedURL(mcpURL, "detected shared observer URL")
+		normalized, err := normalizeSharedURL(mcpURL, "detected shared service URL")
 		if err != nil {
 			return "", false
 		}
@@ -504,7 +504,7 @@ func detectSharedObserverURL(healthURL string, client *http.Client) (string, boo
 }
 
 func fetchSharedObserverHealth(healthURL string, client *http.Client) (sharedObserverHealth, bool) {
-	if err := validateSharedURL(healthURL, "shared observer health URL"); err != nil {
+	if err := validateSharedURL(healthURL, "shared service health URL"); err != nil {
 		return sharedObserverHealth{}, false
 	}
 	if client == nil {
@@ -516,7 +516,7 @@ func fetchSharedObserverHealth(healthURL string, client *http.Client) (sharedObs
 	}
 	originalCheckRedirect := requestClient.CheckRedirect
 	requestClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if err := validateSharedURL(req.URL.String(), "shared observer health redirect"); err != nil {
+		if err := validateSharedURL(req.URL.String(), "shared service health redirect"); err != nil {
 			return err
 		}
 		if originalCheckRedirect != nil {
@@ -557,7 +557,7 @@ func detectSharedObserverURLFromStateFile(statePath string, client *http.Client)
 	if healthURL == "" {
 		return "", false
 	}
-	stateMCPURL, err := normalizeSharedURL(strings.TrimSpace(state.MCPURL), "shared observer state")
+	stateMCPURL, err := normalizeSharedURL(strings.TrimSpace(state.MCPURL), "shared service state")
 	if err != nil {
 		return "", false
 	}
@@ -566,7 +566,7 @@ func detectSharedObserverURLFromStateFile(statePath string, client *http.Client)
 		return "", false
 	}
 	advertisedRaw := health.Endpoints["mcp"]
-	advertisedMCPURL, err := normalizeSharedURL(advertisedRaw, "advertised shared observer URL")
+	advertisedMCPURL, err := normalizeSharedURL(advertisedRaw, "advertised shared service URL")
 	if err != nil || advertisedRaw != advertisedMCPURL || !sameSharedObserverEndpoint(stateMCPURL, advertisedMCPURL) {
 		return "", false
 	}
@@ -579,16 +579,16 @@ func sharedObserverStatePath() string {
 
 func readSharedObserverState(statePath string) (sharedObserverState, error) {
 	if err := validatePrivateConfigDirectory(filepath.Dir(statePath)); err != nil {
-		return sharedObserverState{}, fmt.Errorf("validate shared observer state parent %q: %w", filepath.Dir(statePath), err)
+		return sharedObserverState{}, fmt.Errorf("validate shared service state parent %q: %w", filepath.Dir(statePath), err)
 	}
 	data, err := readPrivateConfigFile(statePath)
 	if err != nil {
-		return sharedObserverState{}, fmt.Errorf("read private shared observer state %q: %w", statePath, err)
+		return sharedObserverState{}, fmt.Errorf("read private shared service state %q: %w", statePath, err)
 	}
 
 	var state sharedObserverState
 	if err := json.Unmarshal(data, &state); err != nil {
-		return sharedObserverState{}, fmt.Errorf("parse shared observer state %q: %w", statePath, err)
+		return sharedObserverState{}, fmt.Errorf("parse shared service state %q: %w", statePath, err)
 	}
 	return state, nil
 }
@@ -607,7 +607,7 @@ func resolveMCPObserverWithClient(sharedURL string, client *http.Client) (string
 	}
 	state, stateErr := readSharedObserverState(sharedObserverStatePath())
 	if stateErr == nil && strings.TrimSpace(state.HealthURL) != "" {
-		stateMCPURL, normalizeErr := normalizeSharedURL(strings.TrimSpace(state.MCPURL), "shared observer state")
+		stateMCPURL, normalizeErr := normalizeSharedURL(strings.TrimSpace(state.MCPURL), "shared service state")
 		if normalizeErr == nil && sameSharedObserverEndpoint(sharedURL, stateMCPURL) {
 			healthURL = strings.TrimSpace(state.HealthURL)
 		}
@@ -617,7 +617,7 @@ func resolveMCPObserverWithClient(sharedURL string, client *http.Client) (string
 		return sharedURL, false
 	}
 	advertisedRaw := strings.TrimSpace(health.Endpoints["mcp"])
-	advertisedURL, err := normalizeSharedURL(advertisedRaw, "advertised shared observer URL")
+	advertisedURL, err := normalizeSharedURL(advertisedRaw, "advertised shared service URL")
 	if err != nil || advertisedRaw != advertisedURL || !sameSharedObserverEndpoint(sharedURL, advertisedURL) {
 		return sharedURL, false
 	}
@@ -631,7 +631,7 @@ func sharedObserverHealthURLForMCPURL(mcpURL string) (string, error) {
 	}
 	trimmedPath := strings.TrimRight(parsed.Path, "/")
 	if !strings.HasSuffix(trimmedPath, "/mcp") {
-		return "", errors.New("shared Observer MCP URL does not end in /mcp")
+		return "", errors.New("shared Splunk Observability Studio MCP URL does not end in /mcp")
 	}
 	parsed.Path = strings.TrimSuffix(trimmedPath, "/mcp") + "/api/health"
 	parsed.RawPath = ""
@@ -646,10 +646,10 @@ func writeSharedObserverState(statePath string, state sharedObserverState) error
 
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal shared observer state %q: %w", statePath, err)
+		return fmt.Errorf("marshal shared service state %q: %w", statePath, err)
 	}
 	if err := writePrivateConfigAtomically(statePath, append(data, '\n')); err != nil {
-		return fmt.Errorf("write private shared observer state %q: %w", statePath, err)
+		return fmt.Errorf("write private shared service state %q: %w", statePath, err)
 	}
 	return nil
 }
@@ -674,7 +674,7 @@ func clearSharedObserverStateIfOwned(statePath string, state sharedObserverState
 
 func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string) error {
 	if sharedURL != "" {
-		normalized, err := normalizeSharedURL(sharedURL, "shared observer URL")
+		normalized, err := normalizeSharedURL(sharedURL, "shared service URL")
 		if err != nil {
 			return err
 		}
@@ -1505,11 +1505,11 @@ func normalizeSharedURL(raw, source string) (string, error) {
 }
 
 func sameSharedObserverEndpoint(left, right string) bool {
-	leftNormalized, err := normalizeSharedURL(left, "shared Observer endpoint")
+	leftNormalized, err := normalizeSharedURL(left, "shared Splunk Observability Studio endpoint")
 	if err != nil {
 		return false
 	}
-	rightNormalized, err := normalizeSharedURL(right, "advertised shared Observer endpoint")
+	rightNormalized, err := normalizeSharedURL(right, "advertised shared Splunk Observability Studio endpoint")
 	if err != nil {
 		return false
 	}

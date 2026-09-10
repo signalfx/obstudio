@@ -1349,8 +1349,8 @@ class BootstrapStateHealthTest(unittest.TestCase):
             start_obstudio_background.assert_not_called()
             emit_context.assert_called_once_with(
                 "Splunk Observability Studio MCP is explicitly disabled in Codex config. The plugin hook "
-                "left the managed Observer stopped, did not start or restart the "
-                "plugin-managed Observer, and bundled Splunk Observability Studio skills remain available."
+                "left managed Splunk Observability Studio stopped, did not start or restart the "
+                "plugin-managed Splunk Observability Studio service, and bundled Splunk Observability Studio skills remain available."
             )
             self.assertIn("enabled = false", config_path.read_text(encoding="utf-8"))
             state = json.loads((plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE).read_text(encoding="utf-8"))
@@ -1402,7 +1402,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
             emit_context.assert_called_once_with(
                 "Custom Splunk Observability Studio MCP endpoint detected in Codex config. The plugin hook "
                 "left the configured endpoint unchanged (http://127.0.0.1:4111/mcp), "
-                "did not start or restart the plugin-managed Observer, and bundled "
+                "did not start or restart the plugin-managed Splunk Observability Studio service, and bundled "
                 "Splunk Observability Studio skills remain available."
             )
             self.assertIn('url = "http://127.0.0.1:4111/mcp"', config_path.read_text(encoding="utf-8"))

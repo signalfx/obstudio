@@ -53,7 +53,7 @@ every variant into its own pytest item. Live runs are selected by eval kind:
 
 - `sanity`: quick skill-loading and final-output guards.
 - `rubric`: schema-constrained judge checks.
-- `runtime`: Docker/Observer trace and metric checks.
+- `runtime`: Docker/Splunk Observability Studio trace and metric checks.
 
 Sanity evals use the dummy `evals/sanity/skill-smoke/eval/sanity/` fixture by
 default so they do not spend time analyzing or modifying a real service.
@@ -90,9 +90,9 @@ only need to prove run health and skill isolation unless a check explicitly sets
 
 Runtime checks run through `eval-runtime`. The eval JSON only points at an
 eval-owned Compose file and declares telemetry
-expectations. Compose owns service topology, Observer startup, app startup, and
+expectations. Compose owns service topology, Splunk Observability Studio startup, app startup, and
 a profiled `traffic` service that generates requests with tools such as `siege`.
-The harness runs Compose, invokes `traffic`, queries the managed Observer API
+The harness runs Compose, invokes `traffic`, queries the managed Splunk Observability Studio API
 for trace and metric evidence, then tears the stack down.
 
 The harness also adds setup guards to every run:
@@ -212,7 +212,7 @@ execute a baseline side.
 - Keep sanity checks focused on behavior that can be proven from files,
   traces, commands, and final output.
 - Use runtime checks only for end-to-end telemetry proof that needs Docker and a
-  managed Observer.
+  managed Splunk Observability Studio.
 - Use rubric checks for style, semantic convention quality, and workflow
   correctness.
 - Keep full traces out of git; commit only durable eval definitions, harness

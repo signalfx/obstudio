@@ -175,7 +175,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         let nextStatus: unknown;
         let controlInitializationError: unknown;
         // The IDE's cimdRegistrationEnabled setting, when the bridge reports it, is the
-        // source of truth and overrides Observer's own env-var-driven flag below. That
+        // source of truth and overrides Splunk Observability Studio's own env-var-driven flag below. That
         // env var only matters when there is no IDE bridge to ask (e.g. standalone
         // `go run ./cmd/obstudio` + browser dev).
         let cimdRegistrationEnabledFromBridge: boolean | undefined;
@@ -206,7 +206,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         }
         if (!active) return;
         if (!nextStatus || !isSplunkExportStatus(nextStatus)) {
-          throw new Error("Observer returned an invalid cloud status.");
+          throw new Error("Splunk Observability Studio returned an invalid cloud status.");
         }
         setCIMDRegistrationEnabled(
           cimdRegistrationEnabledFromBridge ?? nextStatus.cimdRegistrationEnabled ?? false,
@@ -252,7 +252,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
 
   const connected = status?.connected === true;
   // Once the initial probe has completed, let an explicit user action retry the
-  // Observer even when that probe failed. The mutation endpoints accept an omitted
+  // Splunk Observability Studio even when that probe failed. The mutation endpoints accept an omitted
   // expectedVersion and still perform their normal validation.
   const controlAvailable = cloudInitializationFinished;
   const mutationsDisabled = busyAction !== null
@@ -323,10 +323,10 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       );
       if (result.applied && result.stateChanged) {
         setError(null);
-        setNotice("Cloud state refreshed from Observer.");
+        setNotice("Cloud state refreshed from Splunk Observability Studio.");
       }
     } catch {
-      // Normal polling will retry if the Observer is temporarily unavailable.
+      // Normal polling will retry if Splunk Observability Studio is temporarily unavailable.
     }
   }, [loadObserverStatus]);
 
@@ -508,7 +508,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         : await resolveSplunkCloudRealm(destination);
       const realm = typeof resolvedRealm === "string" ? resolvedRealm.trim().toLowerCase() : "";
       if (!splunkRealmPattern.test(realm)) {
-        throw new Error("Observer returned an invalid Splunk Observability Cloud realm.");
+        throw new Error("Splunk Observability Studio returned an invalid Splunk Observability Cloud realm.");
       }
       return realm;
     } catch (resolutionError) {
@@ -590,7 +590,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     }
 
     // No IDE bridge (e.g. standalone `go run ./cmd/obstudio` + browser dev): probe
-    // registration directly through Observer's own backend instead of the bridge.
+    // registration directly through Splunk Observability Studio's own backend instead of the bridge.
     if (busyAction) return;
     setBusyAction("setup-cimd");
     setError(null);
@@ -809,7 +809,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         : await submitSplunkFreeAccount(request);
       const result = parseFreeAccountResult(response);
       if (!result) {
-        throw new FreeAccountOutcomeUnknownError("Observer did not confirm the Free Edition request.");
+        throw new FreeAccountOutcomeUnknownError("Splunk Observability Studio did not confirm the Free Edition request.");
       }
       if (!result.intakeAcknowledged) {
         setFreeAccountMutationState("idle");
@@ -853,7 +853,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         setFreeAccountMutationState("idle");
         setFreeAccountSubmitError(`${errorMessage(
           submissionError,
-          "Observer could not confirm whether Splunk received the Free Edition request.",
+          "Splunk Observability Studio could not confirm whether Splunk received the Free Edition request.",
         )} No automatic retry was attempted. Check your email before submitting another request.`);
       } else {
         setFreeAccountMutationState("idle");
@@ -1480,7 +1480,7 @@ function isPotentialSplunkCloudDestination(value: string): boolean {
 
 function signalRow(label: string, signal: SplunkExportSignalStatus | undefined): SignalRow {
   if (!signal) {
-    return { detail: "No activity", label, status: "Waiting for Observer", tone: "idle" };
+    return { detail: "No activity", label, status: "Waiting for Splunk Observability Studio", tone: "idle" };
   }
   const detail = `${formatCount(signal.exportedItems, label === "Metrics" ? "point" : "span")} · ${formatCount(signal.exportedBatches, "batch", "batches")}`;
   if (!signal.enabled) {

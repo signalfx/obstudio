@@ -9,7 +9,7 @@
   "checks": [
     {
       "id": "observer-runtime-telemetry",
-      "description": "Docker runtime emits FastAPI traces to a running Observer.",
+      "description": "Docker runtime emits FastAPI traces to a running Splunk Observability Studio.",
       "compose_file": "docker-compose.yml",
       "timeout_seconds": 300,
       "expect": {

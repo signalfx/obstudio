@@ -78,7 +78,7 @@
     },
     {
       "id": "OBS-INTEGRATION",
-      "criterion": "Flag Claude Code, Codex, Cursor, Kiro, or Copilot integration changes that assume a shared target schema, overwrite target user state, or let one automatic target failure prevent later targets or the core Observer; require a mixed-target middle-failure proof."
+      "criterion": "Flag Claude Code, Codex, Cursor, Kiro, or Copilot integration changes that assume a shared target schema, overwrite target user state, or let one automatic target failure prevent later targets or the core Splunk Observability Studio; require a mixed-target middle-failure proof."
     }
   ],
   "cases": [
@@ -210,7 +210,7 @@
       "pull_request_goal": "Automatically configure Claude Code, Codex, Cursor, Kiro, and Copilot integrations.",
       "diff_summary": [
         "Serializes every target through one shared settings schema and replaces each target's complete configuration instead of merging user-owned fields.",
-        "The automatic loop returns when Cursor, the middle target, fails, so Kiro and Copilot are never attempted and the core Observer does not start.",
+        "The automatic loop returns when Cursor, the middle target, fails, so Kiro and Copilot are never attempted and the core Splunk Observability Studio does not start.",
         "Tests cover only an all-targets-success path."
       ],
       "expected": {
@@ -221,7 +221,7 @@
         ],
         "evidence": [
           "The implementation assumes incompatible targets share one schema and overwrites user-owned settings.",
-          "A middle automatic target failure prevents later targets and the Observer from continuing.",
+          "A middle automatic target failure prevents later targets and Splunk Observability Studio from continuing.",
           "There is no mixed-target middle-failure proof."
         ],
         "rationale": "Automatic integration setup must isolate target schemas and failures while preserving host state and core startup."
@@ -233,15 +233,15 @@
       "pull_request_goal": "Automatically configure Claude Code, Codex, Cursor, Kiro, and Copilot integrations.",
       "diff_summary": [
         "Uses a per-target schema and state-preserving merge for Claude Code, Codex, Cursor, Kiro, and Copilot.",
-        "Records failures per target while retaining successful configuration and continuing the automatic sequence and core Observer startup.",
-        "A mixed-target test proves Codex succeeds, Cursor fails in the middle, Kiro and Copilot still run, and the Observer starts without corrupting any target's user-owned state."
+        "Records failures per target while retaining successful configuration and continuing the automatic sequence and core Splunk Observability Studio startup.",
+        "A mixed-target test proves Codex succeeds, Cursor fails in the middle, Kiro and Copilot still run, and Splunk Observability Studio starts without corrupting any target's user-owned state."
       ],
       "expected": {
         "verdict": "acceptable",
         "rule_ids": [],
         "evidence": [
           "Each integration preserves its own schema and user-owned state.",
-          "The mixed-target test proves a middle failure does not prevent later targets or core Observer startup."
+          "The mixed-target test proves a middle failure does not prevent later targets or core Splunk Observability Studio startup."
         ],
         "rationale": "Automatic integration setup is isolated, state-preserving, and resilient across a realistic mixed-target failure."
       }
@@ -276,14 +276,14 @@
       "diff_summary": [
         "The shared rendering and state model are host-neutral, and host-specific commands are accessed through capability adapters; an unavailable command disables only its dependent action with host-scoped feedback.",
         "Interaction tests prove editable fields, every select option, primary actions, loading/error/recovery states, accessible names, keyboard/focus behavior, and live resizing at a recorded 280-by-360 minimum and at the normal panel size.",
-        "Rendered evidence covers light and dark themes plus supported zoom/text scaling without clipping, overlap, hidden actions, or avoidable horizontal scrolling, and smoke tests cover the materially distinct Visual Studio Code, Cursor, and Kiro paths while a missing middle-host capability leaves the other hosts and core Observer usable."
+        "Rendered evidence covers light and dark themes plus supported zoom/text scaling without clipping, overlap, hidden actions, or avoidable horizontal scrolling, and smoke tests cover the materially distinct Visual Studio Code, Cursor, and Kiro paths while a missing middle-host capability leaves the other hosts and core Splunk Observability Studio usable."
       ],
       "expected": {
         "verdict": "acceptable",
         "rule_ids": [],
         "evidence": [
           "The constrained and normal layouts, live resize, interactions, accessibility, state feedback, themes, and visual scaling have direct evidence.",
-          "Host-neutral UI and capability adapters localize an unavailable feature, while the materially distinct host matrix proves existing hosts and the Observer continue safely."
+          "Host-neutral UI and capability adapters localize an unavailable feature, while the materially distinct host matrix proves existing hosts and Splunk Observability Studio continue safely."
         ],
         "rationale": "The shared IDE UI has proportionate constrained-layout evidence and preserves compatible, isolated behavior across supported hosts."
       }

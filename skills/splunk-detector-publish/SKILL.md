@@ -452,7 +452,7 @@ reviewing and resolving the ambiguous live detectors manually.
 
 - `.observe/terraform/detectors.tf` missing — run `$splunk-configure` first
 - `SPLUNK_ACCESS_TOKEN` not set — stop and tell the user
-- No realm from `SPLUNK_REALM` or the connected Observer — stop and tell the user
+- No realm from `SPLUNK_REALM` or the connected Splunk Observability Studio — stop and tell the user
 - `service_name` not resolvable from `terraform.tfvars` or `.example` — prompt
   the user before fetching live detectors
 - All offsets returning HTTP 500 continuously (not intermittent) — likely an

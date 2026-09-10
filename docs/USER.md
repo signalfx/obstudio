@@ -51,7 +51,7 @@ The installer:
 1. Extracts skills and references from the binary to the agent's skill directory
 2. Copies `obstudio` and the bundled `weaver` runtime alongside the skills (stable path for MCP)
 3. Creates top-level discoverable skill entries in the agent skills root
-4. Configures the agent's MCP config to auto-start `obstudio` or reuse a shared Observer
+4. Configures the agent's MCP config to auto-start `obstudio` or reuse a shared Splunk Observability Studio
 
 After installation, restart the agent if it does not discover the new skills.
 
@@ -83,7 +83,7 @@ and creates relative symbolic links for skill discovery.
 |---------|-------------|
 | `obstudio` | Start the collector + stdio MCP server (OTLP receiver, Web UI, REST API, MCP) |
 | `obstudio install --target=<agent>[,<agent>...]` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`, `kiro`) |
-| `obstudio --observer-http-port <port>` | Override the Observer UI, REST API, and MCP HTTP port |
+| `obstudio --observer-http-port <port>` | Override Splunk Observability Studio UI, REST API, and MCP HTTP port |
 | `obstudio --env-file <path>` | Load startup environment values from a `KEY=VALUE` env file |
 | `obstudio --version` | Print version |
 | `obstudio --help` | Show all available commands |
@@ -144,7 +144,7 @@ Instrumentation and verification Markdown reports remain readable technical
 projections. JSON is the canonical audit, selection, instrumentation, and
 verification contract for the skill workflow.
 
-## Running the Full Observer
+## Running the Full Splunk Observability Studio
 
 For the complete experience (Web UI, OTLP receiver, HTTP MCP endpoint):
 
@@ -152,7 +152,7 @@ For the complete experience (Web UI, OTLP receiver, HTTP MCP endpoint):
 obstudio
 ```
 
-To override the Observer UI, REST API, and MCP HTTP port explicitly:
+To override Splunk Observability Studio UI, REST API, and MCP HTTP port explicitly:
 
 ```bash
 obstudio --observer-http-port 41234
@@ -161,67 +161,67 @@ obstudio --observer-http-port 41234
 The OTLP receiver ports stay fixed at `4318` and `4317`; these are also used by
 the editor extension.
 
-When a standalone Observer is already running, `obstudio install --target=<agent>`
+When a standalone Splunk Observability Studio is already running, `obstudio install --target=<agent>`
 auto-detects its current HTTP MCP endpoint from local runtime state, including
 nondefault `--observer-http-port` values. Use `--shared-url` only when you want
-to point an agent at a different already-running Observer explicitly.
+to point an agent at a different already-running Splunk Observability Studio explicitly.
 
-Manage a standalone Observer in the background:
+Manage a standalone Splunk Observability Studio in the background:
 
 ```text
-obstudio start    Start Observer
+obstudio start    Start Splunk Observability Studio
 obstudio status   Show its status
 obstudio restart  Restart and activate an installed update
-obstudio stop     Stop Observer
+obstudio stop     Stop Splunk Observability Studio
 ```
 
-Installing an update does not restart Observer. These commands do not control
-foreground or extension-managed Observers.
+Installing an update does not restart Splunk Observability Studio. These commands do not control
+foreground or extension-managed Splunk Observability Studio instances.
 
-Observer is local-only: its UI, REST API, and HTTP MCP endpoint must bind to a
-loopback host. `--shared-url` can select another loopback Observer, but remote
-Observers and reverse-proxy publication are not supported.
+Splunk Observability Studio is local-only: its UI, REST API, and HTTP MCP endpoint must bind to a
+loopback host. `--shared-url` can select another loopback Splunk Observability Studio, but remote
+Splunk Observability Studio instances and reverse-proxy publication are not supported.
 
-### v0.0.21 local Observer migration
+### v0.0.21 local Splunk Observability Studio migration
 
-v0.0.21 intentionally removes the authenticated remote/shared Observer mode
+v0.0.21 intentionally removes the authenticated remote/shared Splunk Observability Studio mode
 that v0.0.20 supported. Before upgrading a remotely published or LAN-bound
-Observer, move its UI, REST API, and MCP listener to `127.0.0.1` or `localhost`
+Splunk Observability Studio, move its UI, REST API, and MCP listener to `127.0.0.1` or `localhost`
 and update native clients to use that loopback URL. Remove reverse-proxy routes
 and `OBSTUDIO_PUBLIC_MCP_URL`, then rerun `obstudio install --target=<agent>` to
 replace older MCP entries containing an `Authorization` header. If a deployment
 cannot move to loopback yet, keep it on v0.0.20 until that migration is possible;
 v0.0.21 will reject the non-loopback listener instead of exposing unauthenticated
-mutation endpoints remotely. This restriction applies to the local Observer
+mutation endpoints remotely. This restriction applies to the local Splunk Observability Studio
 control surface, not to exporting telemetry to Splunk Observability Cloud.
 
 Native loopback clients do not need a bearer credential. This is a deliberate
 local-machine trust boundary, not same-user authentication: any process or OS
 account that can reach the loopback endpoint can invoke native MCP and mutation
-operations. Use Observer on a trusted single-user development machine or apply
+operations. Use Splunk Observability Studio on a trusted single-user development machine or apply
 OS-level isolation on a shared host. Browser mutations must come from the
-Observer's exact origin and include its browser-request marker; cross-origin
+Splunk Observability Studio's exact origin and include its browser-request marker; cross-origin
 requests and mutation preflights are rejected, and mutation responses do not
 use wildcard CORS. Splunk ingest tokens are write-only and are never returned
 by status, health, recovery, or lifecycle endpoints. Older MCP entries
-containing an Observer `Authorization` header are migrated by the next explicit
+containing an `Authorization` header for Splunk Observability Studio are migrated by the next explicit
 `obstudio install` or IDE integration-enable action.
 
 The editor extension stores a user-entered Cloud connection in IDE secret
-storage before applying it to Observer. If a request has an uncertain transport
+storage before applying it to Splunk Observability Studio. If a request has an uncertain transport
 outcome, a single-use scoped rollback capability restores the prior in-memory
-Observer configuration without exposing either the old or new ingest token.
-Freshly started extension-managed Observers are restored from IDE secret
-storage. During an extension upgrade, a healthy Observer reporting the current
-bundled version can be reused. If a different or unversioned Observer occupies
+Splunk Observability Studio configuration without exposing either the old or new ingest token.
+Freshly started extension-managed Splunk Observability Studio instances are restored from IDE secret
+storage. During an extension upgrade, a healthy Splunk Observability Studio reporting the current
+bundled version can be reused. If a different or unversioned Splunk Observability Studio occupies
 the selected managed port, that port is the lifecycle boundary when
 `sharedObserverUrl` is unset: the extension replaces the process regardless of
 whether VS Code, Cursor, Kiro, the CLI, or a standalone launch started it. It
-first verifies the Observer health identity, resolves the PID that actually
+first verifies Splunk Observability Studio health identity, resolves the PID that actually
 owns the listening port, requires an exact `obstudio` (`obstudio.exe` on
 Windows) executable name, and then reverifies the same PID and executable path
 immediately before stopping it. A stale or missing PID in shared state does not
-block replacement because the port owner is resolved directly. Other Observers
+block replacement because the port owner is resolved directly. Other Splunk Observability Studio instances
 on other ports and explicitly configured `sharedObserverUrl` processes remain
 running. macOS and Linux use `SIGTERM` followed by a revalidated `SIGKILL`
 fallback; Windows uses `taskkill` without `/F` followed by a revalidated `/F`
@@ -249,7 +249,7 @@ export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
 export OTEL_SERVICE_NAME=my-service
 ```
 
-Obstudio accepts OTLP traces, metrics, and logs and displays all three in the
+Splunk Observability Studio accepts OTLP traces, metrics, and logs and displays all three in the
 local Telemetry Explorer. Splunk Observability Cloud forwarding applies only to
 traces and metrics. Logs sent to `/v1/logs` remain in the local Explorer's Logs
 view, even when trace and metric forwarding are enabled.
@@ -257,7 +257,7 @@ Set `OTEL_LOGS_EXPORTER=none` before starting the application to opt out while
 leaving its existing console or file logging unchanged.
 
 To forward eligible incoming telemetry to Splunk Observability Cloud while
-still keeping the local Explorer experience, put the settings in Obstudio's
+still keeping the local Explorer experience, put the settings in Splunk Observability Studio's
 default env file:
 
 ```bash
@@ -287,7 +287,7 @@ env file.
 
 ### Trace / span export
 
-Obstudio also forwards spans to Splunk Observability Cloud via OTLP/HTTP,
+Splunk Observability Studio also forwards spans to Splunk Observability Cloud via OTLP/HTTP,
 making your service visible as a real **Splunk APM service** with
 `service.request.*` metrics, trace latency distributions, and dependency maps.
 
@@ -301,7 +301,7 @@ SPLUNK_ACCESS_TOKEN=<your-org-ingest-token>
 EOF
 ```
 
-With these set, Obstudio exports all received spans to
+With these set, Splunk Observability Studio exports all received spans to
 `https://ingest.<realm>.observability.splunkcloud.com/v2/trace/otlp` (OTLP/HTTP)
 alongside the local Explorer.
 
@@ -348,7 +348,7 @@ single-value tiles), and writes dashboard Terraform to
 `signalfx_dashboard`, and one `signalfx_*_chart` resource per panel placed on
 the real 12-column grid — plus `variables.tf`, `terraform.tfvars.example`, a
 `.observe/dashboards.md` report, and a `.observe/dashboards.preview.json`
-sidecar consumed by the Observer's Dashboards tab. No network call is made; the
+sidecar consumed by Splunk Observability Studio's Dashboards tab. No network call is made; the
 output is ready for `terraform apply` or `$splunk-dashboard-publish`.
 
 ### Dashboard preview (Dashboards tab)
@@ -416,7 +416,7 @@ the bundled `weaver` runtime beside it or ensure `weaver` is available on
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOST` | `127.0.0.1` | Bind address for all servers |
-| `PORT` | `3000` | Observer UI, REST API, and MCP HTTP port |
+| `PORT` | `3000` | Splunk Observability Studio UI, REST API, and MCP HTTP port |
 | `OBSTUDIO_ENV_FILE` | `~/.obstudio/env` if present | Env file to load before startup; ignored when missing unless explicitly set |
 | `OBSTUDIO_WORKSPACE_ROOT` | process CWD | Absolute path to the workspace directory. The editor extension sets this automatically to the open workspace folder. When set, `.observe/dashboards.preview.json` and similar workspace-relative paths are resolved relative to this root rather than the binary's install directory. Explicit `OBSTUDIO_DASHBOARDS_PREVIEW` paths are validated to be within this root. |
 | `OBSTUDIO_AUDIT_REPORT` | `.observe/otel-audit.json` under the workspace root | Path to the canonical `$otel-audit` report the Overview tab scores. Relative paths resolve against `OBSTUDIO_WORKSPACE_ROOT`; absolute paths must stay inside it, and paths containing `..` or pointing outside the workspace are rejected and fall back to the default. The human-readable `otel.html` is always read from the same directory as the JSON, so an override keeps a report and its data together. The Overview marks the score out of date when the workspace has moved to a different commit, or when any file outside the generated directories (`.observe`, `.git`, `node_modules`, build and cache directories) was modified after the report was written — which is what catches `$otel-instrument` editing source without committing. |

@@ -9,8 +9,8 @@ auditing, adding, and verifying OpenTelemetry instrumentation.
 
 | Skill | Purpose |
 |---|---|
-| `$create-splunk-free-account` | Submit one consent-gated Splunk Observability Cloud Free Edition signup in a GeoIP-selected region through Observer |
-| `$connect-splunk-observability-cloud` | Open the existing local Observer Cloud tab for secure URL and access-token entry |
+| `$create-splunk-free-account` | Submit one consent-gated Splunk Observability Cloud Free Edition signup in a GeoIP-selected region through Splunk Observability Studio |
+| `$connect-splunk-observability-cloud` | Open the existing local Splunk Observability Studio Cloud tab for secure URL and access-token entry |
 | `$otel-audit` | Scan a service for observability coverage gaps without modifying code |
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation, default local application logs, and optional custom spans or metrics |
 | `$otel-verify` | Prove existing instrumentation with app-code tests and optional local OTLP evidence |
@@ -50,7 +50,7 @@ under that directory and creates top-level discoverable skill entries such as
 server (VS Code user `mcp.json`) and installs no skill entries.
 After installation, restart the agent if it does not discover the new skills.
 
-For an Observer that should keep running independently of a terminal, use the
+For a Splunk Observability Studio instance that should keep running independently of a terminal, use the
 explicit managed background lifecycle:
 
 ```bash
@@ -60,9 +60,9 @@ obstudio restart
 obstudio stop
 ```
 
-Installation never restarts a running Observer. After installing a higher
+Installation never restarts a running Splunk Observability Studio. After installing a higher
 version, run `obstudio restart` when convenient to activate it. These commands
-control only an Observer launched by `obstudio start`; a foreground Observer is
+control only a Splunk Observability Studio instance launched by `obstudio start`; a foreground Splunk Observability Studio instance is
 still stopped with `Ctrl+C`, and the editor extension manages its own process.
 
 Kiro installs the bundle under `~/.kiro/skills/obstudio`, creates its
@@ -73,7 +73,7 @@ such as `/otel-audit`.
 Release archives are verified against `checksums.txt` published by the release
 pipeline before the Codex plugin bootstrapper extracts them.
 
-For the Codex plugin trust contract, including local Observer bootstrap,
+For the Codex plugin trust contract, including local Splunk Observability Studio bootstrap,
 localhost endpoints and Splunk publish behavior,
 see [plugins/obstudio/SECURITY.md](plugins/obstudio/SECURITY.md) and
 [plugins/obstudio/PRIVACY.md](plugins/obstudio/PRIVACY.md). The same plugin
@@ -95,7 +95,7 @@ The collector starts on:
 | OTLP/gRPC | localhost:4317 |
 | MCP endpoint | http://localhost:3000/mcp |
 
-Use `obstudio --observer-http-port <port>` to move the Observer UI, REST API,
+Use `obstudio --observer-http-port <port>` to move Splunk Observability Studio UI, REST API,
 and MCP endpoint to a different port. The OTLP receivers stay fixed at `4318`
 and `4317`; these are also used by the editor extension.
 
@@ -129,13 +129,13 @@ include it, and the reload-trigger endpoint it adds does not exist otherwise.
 
 ### Optional Splunk Metrics Forwarding
 
-Obstudio accepts OTLP traces, metrics, and logs and displays all three in the
+Splunk Observability Studio accepts OTLP traces, metrics, and logs and displays all three in the
 local Telemetry Explorer. Splunk Observability Cloud forwarding is opt-in and
 applies only to traces and metrics. Logs sent to `/v1/logs` remain in the local
 Explorer's Logs view, even when trace and metric forwarding are enabled.
 
 To forward received metrics to Splunk Observability Cloud, put the settings in
-Obstudio's default env file:
+Splunk Observability Studio's default env file:
 
 ```bash
 mkdir -p ~/.obstudio
@@ -155,7 +155,7 @@ Shell environment variables override values from the env file. Use
 `obstudio --env-file <path>` or `OBSTUDIO_ENV_FILE=<path>` to load a different
 env file.
 
-Obstudio forwards metrics over OTLP/HTTP protobuf to:
+Splunk Observability Studio forwards metrics over OTLP/HTTP protobuf to:
 
 ```text
 https://ingest.<realm>.observability.splunkcloud.com/v2/datapoint/otlp
@@ -179,7 +179,7 @@ EOF
 ```
 
 The same `SPLUNK_REALM` and `SPLUNK_ACCESS_TOKEN` values are used for both
-metrics and traces. Obstudio forwards traces over OTLP/HTTP protobuf to:
+metrics and traces. Splunk Observability Studio forwards traces over OTLP/HTTP protobuf to:
 
 ```text
 https://ingest.<realm>.observability.splunkcloud.com/v2/trace/otlp
@@ -300,7 +300,7 @@ obstudio/
 | `make eval-validation` | Validate eval JSONs without running Codex |
 | `make eval-sanity` | Run quick loaded-skill eval checks |
 | `make eval-rubric` | Run schema-constrained rubric eval checks |
-| `make eval-runtime` | Run Docker/Observer runtime eval checks |
+| `make eval-runtime` | Run Docker/Splunk Observability Studio runtime eval checks |
 | `make -C evals eval-*-test` / `make -C evals eval-*-report` | Split eval execution from report rendering |
 | `make eval-all` | Run validation, sanity, rubric, and runtime evals |
 | `make eval-all-ab` | Run validation plus A/B sanity, rubric, and runtime evals |
@@ -322,9 +322,9 @@ report locations.
 |---|---|
 | `obstudio` | Start the collector, web UI, REST API, OTLP receivers, and MCP server |
 | `obstudio install --target=<agent>[,<agent>...]` | Install skills and configure MCP for one or more supported agents |
-| `obstudio token-telemetry enable --target=codex[,claude-code] [--repository-correlation=off\|name\|path]` | Explicitly opt supported providers into local token logs, traces, and metrics; every recognized OTLP signal route is taken over for Observer, and new targets default repository correlation to `path` |
-| `obstudio token-telemetry status --target=codex[,claude-code]` | Show whether matching telemetry is Obstudio-managed, user-owned, partial, disabled, or conflicting |
-| `obstudio token-telemetry disable --target=codex[,claude-code]` | Remove unchanged Obstudio-managed routes; replaced prior destinations are not restored |
+| `obstudio token-telemetry enable --target=codex[,claude-code] [--repository-correlation=off\|name\|path]` | Explicitly opt supported providers into local token logs, traces, and metrics; every recognized OTLP signal route is taken over for Splunk Observability Studio, and new targets default repository correlation to `path` |
+| `obstudio token-telemetry status --target=codex[,claude-code]` | Show whether matching telemetry is Splunk Observability Studio-managed, user-owned, partial, disabled, or conflicting |
+| `obstudio token-telemetry disable --target=codex[,claude-code]` | Remove unchanged Splunk Observability Studio-managed routes; replaced prior destinations are not restored |
 | `obstudio --version` | Print version |
 
 ## Contributing

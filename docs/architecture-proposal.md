@@ -28,7 +28,7 @@ is just a distribution mechanism.
 │  │  │  Layer 1: Core                                      │  │  │
 │  │  │                                                     │  │  │
 │  │  │  ┌──────────────────┐    ┌──────────────────────┐   │  │  │
-│  │  │  │  Skills          │    │  Observer             │   │  │  │
+│  │  │  │  Skills          │    │  Splunk Observability Studio             │   │  │  │
 │  │  │  │                  │    │                       │   │  │  │
 │  │  │  │  instrument/     │    │  OTLP receiver        │   │  │  │
 │  │  │  │  terraform/      │    │    Storage            │   │  │  │
@@ -46,7 +46,7 @@ This layering exists so that each ring can be used, tested, and distributed
 independently:
 
 - **Layer 1 (Core)** works without Layer 2 or 3. A developer can run the
-Observer server directly and read skill files from disk.
+Splunk Observability Studio server directly and read skill files from disk.
 - **Layer 2 (obstudio)** works without Layer 3. A developer can `obstudio start`
 from any terminal, in any editor, with any AI agent.
 - **Layer 3 (Distribution)** is how obstudio reaches developers. The VS Code
@@ -68,7 +68,7 @@ product has zero dependency on any host environment.
 
 ---
 
-## Layer 1: Core (Skills + Observer)
+## Layer 1: Core (Skills + Splunk Observability Studio)
 
 The core is two independent primitives that compose together but have no
 dependency on each other or on any host environment.
@@ -100,9 +100,9 @@ skills/
 Skills are plain files. They require no runtime, no server, no binary. Any AI
 agent that can read files can use them. This is Layer 1 — it works on its own.
 
-### Observer — Local Telemetry Backend
+### Splunk Observability Studio — Local Telemetry Backend
 
-The Observer is a local server that receives, stores, and exposes OpenTelemetry
+Splunk Observability Studio is a local server that receives, stores, and exposes OpenTelemetry
 data. It provides four surfaces:
 
 
@@ -121,13 +121,13 @@ to read and create dashboards and charts (`GET`/`POST /v2/dashboard`, `/v2/chart
 `/v2/dashboardgroup`) via the Splunk REST API.
 
 
-The Observer is also Layer 1. It has no knowledge of skills, no CLI wrapper, and
+Splunk Observability Studio is also Layer 1. It has no knowledge of skills, no CLI wrapper, and
 no editor integration. It is a server that receives OTLP and answers questions
 about what it received.
 
 ### How They Compose
 
-Skills tell the agent *what to do*. The Observer tells the agent *what happened*.
+Skills tell the agent *what to do*. Splunk Observability Studio tells the agent *what happened*.
 Together they form a closed loop:
 
 ```
@@ -135,8 +135,8 @@ Together they form a closed loop:
 │  1. Agent reads $otel-audit → finds coverage gaps                │
 │  2. Agent reads $otel-instrument → adds OTel SDK + signals       │
 │  3. $otel-verify runs app-code and runtime scenarios             │
-│  4. App sends OTLP to Observer (localhost:4318)                  │
-│  5. Observer stores telemetry and may forward it to Splunk       │
+│  4. App sends OTLP to Splunk Observability Studio (localhost:4318)                  │
+│  5. Splunk Observability Studio stores telemetry and may forward it to Splunk       │
 │  6. $otel-verify queries evidence and writes its report          │
 │  7. Agent reads $splunk-configure → generates detectors.tf       │
 │  8. Agent reads $splunk-detector-publish → creates gap detectors │
@@ -174,7 +174,7 @@ telemetry and validate instrumentation results.
 
 | Capability               | Layer 1 (Core)      | Layer 2 (obstudio)                         |
 | ------------------------ | ------------------- | ------------------------------------------ |
-| Run Observer             | Manual server start | `obstudio start`                           |
+| Run Splunk Observability Studio             | Manual server start | `obstudio start`                           |
 | Install skills           | Manual file copy    | `obstudio install --target=<agent>`        |
 | Register with AI tools   | Manual config edit  | Handled by `obstudio install`              |
 | Lifecycle management     | None                | Start, stop, restart, health check         |
@@ -182,7 +182,7 @@ telemetry and validate instrumentation results.
 | Forward to Splunk O11y   | None                | `SPLUNK_ACCESS_TOKEN` + `SPLUNK_REALM`     |
 | Sync detectors to Splunk | None                | `$splunk-detector-publish` via Splunk REST API  |
 | Sync dashboards to Splunk | None               | `$splunk-dashboard-publish` via Splunk REST API |
-| Preview dashboards locally | None              | Observer **Dashboards** tab + `GET /api/dashboards/preview` |
+| Preview dashboards locally | None              | Splunk Observability Studio **Dashboards** tab + `GET /api/dashboards/preview` |
 
 
 ### Why Go
@@ -194,7 +194,7 @@ toolchains.
 ### MCP Tools
 
 The MCP server exposes tools that let agents inspect local telemetry and control
-the observer:
+Splunk Observability Studio:
 
 | MCP Tool                       | What It Does                                            |
 | ------------------------------ | ------------------------------------------------------- |
@@ -217,7 +217,7 @@ Splunk detector operations (`$splunk-detector-publish`) call the Splunk REST API
 directly (`GET`/`POST /v2/detector`) — they do not go through the obstudio MCP
 server. Dashboard publish (`$splunk-dashboard-publish`) likewise calls the REST
 API directly
-(`GET`/`POST /v2/dashboard`, `/v2/chart`, `/v2/dashboardgroup`). The Observer's
+(`GET`/`POST /v2/dashboard`, `/v2/chart`, `/v2/dashboardgroup`). Splunk Observability Studio's
 read-only `GET /api/dashboards/preview` endpoint is the one exception that *is*
 served by obstudio: it reads the `.observe/dashboards.preview.json` sidecar and
 resolves each panel against locally stored telemetry for the Dashboards tab.
@@ -281,11 +281,11 @@ specific to the VS Code environment:
 
 The extension does **not** contain:
 
-- OTLP ingest logic (Layer 1: Observer)
-- DuckDB or storage (Layer 1: Observer)
-- MCP protocol handling (Layer 1: Observer)
-- Telemetry query logic (Layer 1: Observer)
-- Web UI rendering (Layer 1: Observer)
+- OTLP ingest logic (Layer 1: Splunk Observability Studio)
+- DuckDB or storage (Layer 1: Splunk Observability Studio)
+- MCP protocol handling (Layer 1: Splunk Observability Studio)
+- Telemetry query logic (Layer 1: Splunk Observability Studio)
+- Web UI rendering (Layer 1: Splunk Observability Studio)
 - Skill content (Layer 1: Skills)
 
 Everything the extension does, the CLI does too. The extension is a convenience
@@ -514,7 +514,7 @@ Three ways to get the same product:
 | **Manual**            | `go install` or binary download | `obstudio start`         | Edit MCP config by hand            | Browser at `localhost:3000` |
 
 
-All three paths result in the same running product: same Observer, same MCP
+All three paths result in the same running product: same Splunk Observability Studio, same MCP
 tools, same skills, same web UI. The developer chooses based on preference. The
 extension is the most convenient for VS Code/Cursor users. The CLI is the most
 universal.
@@ -546,11 +546,11 @@ are shown explicitly so engineers can work independently.
 
 | Component    | Layer | Deliverable                                                                          | Depends On |
 | ------------ | ----- | ------------------------------------------------------------------------------------ | ---------- |
-| **Observer** | 1     | OTLP ingest, web UI, MCP server, Splunk metrics/traces forwarding                   | —          |
+| **Splunk Observability Studio** | 1     | OTLP ingest, web UI, MCP server, Splunk metrics/traces forwarding                   | —          |
 | **Skills**   | 1     | `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, `$splunk-detector-publish` (~~`$splunk-sync`~~ deprecated), `$splunk-dashboard`, `$splunk-dashboard-publish` (~~`$splunk-dashboard-sync`~~ deprecated) (REST-direct) | —          |
 
 
-Observer and Skills have no dependency on each other. They can be developed,
+Splunk Observability Studio and Skills have no dependency on each other. They can be developed,
 tested, and shipped by separate engineers or teams from day one.
 
 ### Integration components
@@ -558,13 +558,13 @@ tested, and shipped by separate engineers or teams from day one.
 
 | Component        | Layer | Deliverable                                    | Depends On       |
 | ---------------- | ----- | ---------------------------------------------- | ---------------- |
-| **obstudio CLI** | 2     | `obstudio start`, `obstudio register`          | Observer, Skills |
-| **Validator**    | 2     | OTel Weaver conformance checks via CLI and MCP | Observer         |
+| **obstudio CLI** | 2     | `obstudio start`, `obstudio register`          | Splunk Observability Studio, Skills |
+| **Validator**    | 2     | OTel Weaver conformance checks via CLI and MCP | Splunk Observability Studio         |
 
 
-The CLI composes Observer and Skills into a single binary and adds lifecycle
-management. The Validator needs Observer's telemetry store but is otherwise
-independent. Both can proceed once the Observer and Skills interfaces stabilize,
+The CLI composes Splunk Observability Studio and Skills into a single binary and adds lifecycle
+management. The Validator needs Splunk Observability Studio's telemetry store but is otherwise
+independent. Both can proceed once Splunk Observability Studio and Skills interfaces stabilize,
 and can run in parallel with each other.
 
 ### Distribution
@@ -589,6 +589,6 @@ carries forward the same design — same SQL schemas, same MCP tool definitions,
 same skill content — in a language the team ships in.
 
 The prototype also validated the extension model: the current VS Code extension
-already spawns the Observer as a child process and delegates all logic to it.
+already spawns Splunk Observability Studio as a child process and delegates all logic to it.
 The layered architecture makes this pattern explicit and extends it to every
 distribution channel.

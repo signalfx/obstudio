@@ -124,7 +124,7 @@ Use stable ids such as:
   one root merely to show all spans in one explorer view.
 - Assert expected parent edges, span status, required attributes, metric
   datapoints, log correlation, and redaction in-process when possible.
-- Query Obstudio or the collector while the harness is alive and record trace
+- Query Splunk Observability Studio or the collector while the harness is alive and record trace
   ids per scenario.
 - Use the shared full-runtime acceptance contract for agent/preload signals,
   framework-resolved route names, automatic metrics, runtime log bridges, and

@@ -237,7 +237,7 @@ def test_dashboard_skill_marks_api_token_sensitive():
 
 
 # The single source of truth for the preview chartType vocabulary: the types the
-# generator emits AND the Observer renderer understands. "event" was never emitted
+# generator emits AND Splunk Observability Studio renderer understands. "event" was never emitted
 # by any generator artifact and is intentionally excluded; "table" is emitted by the
 # classification/templates and rendered by DashboardPanel.tsx, so it is included.
 PREVIEW_CHART_TYPES = ("time_series", "single_value", "list", "heatmap", "text", "table")
@@ -255,9 +255,9 @@ CHECKOUT_RED_QUAL_RUBRIC = (
 
 def test_dashboard_skill_emits_preview_sidecar_contract():
     text = _read(SPLUNK_DASHBOARD)
-    assert ".observe/dashboards.preview.json" in text, "must write the Observer preview sidecar"
+    assert ".observe/dashboards.preview.json" in text, "must write Splunk Observability Studio preview sidecar"
     assert "schemaVersion" in text, "preview sidecar must declare schemaVersion"
-    # The chart types the generator emits and the Observer renderer understands.
+    # The chart types the generator emits and Splunk Observability Studio renderer understands.
     for chart_type in PREVIEW_CHART_TYPES:
         assert chart_type in text, f"preview sidecar chartType vocabulary missing: {chart_type}"
     # "event" is never produced by any generator artifact: it must not reappear in the
@@ -593,7 +593,7 @@ def test_splunk_realm_uses_env_pair_before_connected_observer_without_exposing_t
     remain outside skill context."""
     text = _read(SPLUNK_API_REF)
     assert "observer_splunk_connection_realm" in text, (
-        "splunk-api.md must use the Observer's realm-only tool for discovery"
+        "splunk-api.md must use Splunk Observability Studio's realm-only tool for discovery"
     )
     environment_realm = text.index("Use a non-empty `SPLUNK_REALM` when it is set")
     connected_realm = text.index("observer_splunk_connection_realm")
@@ -604,7 +604,7 @@ def test_splunk_realm_uses_env_pair_before_connected_observer_without_exposing_t
         "the realm tool must be limited to non-secret realm discovery"
     )
     assert "Direct REST calls always use `SPLUNK_ACCESS_TOKEN`" in text, (
-        "the connected Observer must not become a token source for publish skills"
+        "the connected Splunk Observability Studio must not become a token source for publish skills"
     )
 
 

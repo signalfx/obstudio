@@ -204,14 +204,14 @@ func localMutation(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // auditReportCSP locks down the workspace-controlled report served on the
-// Observer's own origin. It extends the policy the $otel-audit report server
+// Splunk Observability Studio's own origin. It extends the policy the $otel-audit report server
 // applies with a sandbox, because that server is an isolated origin and this
 // one also hosts the local APIs.
 // The sandbox directive is the important part: it puts the document in an
 // opaque origin, so its inline script cannot read same-origin API responses,
-// storage, or cookies belonging to the Observer, and cannot navigate the top
+// storage, or cookies belonging to Splunk Observability Studio, and cannot navigate the top
 // level. allow-scripts keeps the report interactive without granting it the
-// Observer's origin, which a policy built only from default-src would.
+// Splunk Observability Studio's origin, which a policy built only from default-src would.
 const auditReportCSP = "sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; " +
 	"script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
 
@@ -255,7 +255,7 @@ func queryAuditArtifact(resolver *audit.Resolver, name string) http.HandlerFunc 
 // as-is; nosniff keeps the content type from being guessed.
 //
 // Unlike the telemetry routes, this returns a file from the developer's working
-// tree, so it deliberately omits the wildcard CORS header: only the Observer UI
+// tree, so it deliberately omits the wildcard CORS header: only the Splunk Observability Studio UI
 // itself, which is same-origin, needs to read it.
 func queryAuditReport(resolver *audit.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -274,7 +274,7 @@ func queryAuditReport(resolver *audit.Resolver) http.HandlerFunc {
 			return
 		}
 
-		// The report is workspace-controlled markup served on the Observer's own
+		// The report is workspace-controlled markup served on Splunk Observability Studio's own
 		// origin, so it is locked down the same way the skill's own report server
 		// locks it down: inline style and script still work, but default-src
 		// 'none' denies network access, so a tampered report cannot call the

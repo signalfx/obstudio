@@ -1,9 +1,9 @@
-# Obstudio Codex and Claude Code Plugin
+# Splunk Observability Studio Codex and Claude Code Plugin
 
-This directory is the portable Obstudio plugin bundle for Codex and Claude Code.
+This directory is the portable Splunk Observability Studio plugin bundle for Codex and Claude Code.
 
 It packages the canonical skill sources from `../../skills/`, points both hosts
-at the local Observer MCP endpoint via [`.mcp.json`](./.mcp.json), and includes
+at the local Splunk Observability Studio MCP endpoint via [`.mcp.json`](./.mcp.json), and includes
 host-specific SessionStart hook manifests for first-run bootstrap.
 
 ## How to get started
@@ -14,8 +14,8 @@ host-specific SessionStart hook manifests for first-run bootstrap.
 
    | Action | Codex | Claude Code |
    | --- | --- | --- |
-   | Open the local Observer | `$observer-open` | `/obstudio:observer-open` |
-   | Check Observer health | `$observer-status` | `/obstudio:observer-status` |
+   | Open the local Splunk Observability Studio | `$observer-open` | `/obstudio:observer-open` |
+   | Check Splunk Observability Studio health | `$observer-status` | `/obstudio:observer-status` |
    | Get started with Observability Cloud Free Edition | `$create-splunk-free-account` | `/obstudio:create-splunk-free-account` |
    | Connect Observability Cloud | `$connect-splunk-observability-cloud` | `/obstudio:connect-splunk-observability-cloud` |
    | Audit observability gaps | `$otel-audit` | `/obstudio:otel-audit` |
@@ -26,26 +26,26 @@ Current scope:
 
 - bundled skills for Free Edition signup, secure Cloud connection handoff,
   audit, instrumentation, verification, and Splunk publish workflows
-- bundled observer control skills:
+- bundled Splunk Observability Studio control skills:
   - `observer-open`
   - `observer-status`
   - `observer-restart`
   - `observer-stop`
 - Codex marketplace entry under [`.agents/plugins/marketplace.json`](../../.agents/plugins/marketplace.json)
 - Claude Code marketplace entry under [`.claude-plugin/marketplace.json`](../../.claude-plugin/marketplace.json)
-- MCP server configuration for a local Observer at `http://127.0.0.1:3000/mcp`
+- MCP server configuration for a local Splunk Observability Studio at `http://127.0.0.1:3000/mcp`
 - one-time SessionStart hook manifests in
   [`hooks/codex-hooks.json`](./hooks/codex-hooks.json) and
   [`hooks/claude-hooks.json`](./hooks/claude-hooks.json), both calling the
   shared bootstrapper
 - [`hooks/bootstrap_obstudio.py`](./hooks/bootstrap_obstudio.py) downloads the
   release archive when needed, verifies the release checksum, and starts the
-  local Observer process for the bundled plugin MCP endpoint when the active
+  local Splunk Observability Studio process for the bundled plugin MCP endpoint when the active
   host permits managed local startup
 - the bootstrapper expects the release pipeline to publish a `checksums.txt`
   asset alongside the zip archives and validates the archive before extraction
 
-The bootstrap starts or reuses Observer but does not edit Codex or Claude Code
+The bootstrap starts or reuses Splunk Observability Studio but does not edit Codex or Claude Code
 OTLP settings. Provider token collection is a separate user opt-in. With the
 standalone release CLI installed, enable either provider and restart it:
 
@@ -60,7 +60,7 @@ repository correlation to `path`, which sends the repository name plus canonical
 repository and active workspace paths. Use `name` to omit filesystem paths, or
 `off` to disable correlation. Omitting the flag for an already configured target
 preserves its recorded mode. When enabled, the trusted SessionStart hook sends
-a content-free correlation event to the same loopback Observer; prompt and tool
+a content-free correlation event to the same loopback Splunk Observability Studio; prompt and tool
 content are not included.
 
 Shared workflow skill sources are canonical in the top-level `skills/`
@@ -92,6 +92,6 @@ Each staged plugin is intentionally self-contained for its host:
 
 - Both hosts can see the bundled skills immediately after installation.
 - The plugin’s bootstrap script can bootstrap the release archive and managed
-  local Observer runtime on first session start.
+  local Splunk Observability Studio runtime on first session start.
 - Each host asks you to review and trust the hook before it runs for the first
   time.

@@ -1,4 +1,4 @@
-# Observer Instructions
+# Splunk Observability Studio Instructions
 
 This file adds Go backend guidance to the repository-root `AGENTS.md`. Changes
 under `observer/client/` must also follow its nested instructions.

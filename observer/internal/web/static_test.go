@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -34,6 +35,13 @@ func TestStaticIndexReferencesObserverIcon(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(rootDir, "assets", "observer-icon.svg")); err != nil {
 		t.Fatalf("observer favicon asset missing: %v", err)
+	}
+	mainJS, err := os.ReadFile(filepath.Join(rootDir, "assets", "main.js"))
+	if err != nil {
+		t.Fatalf("read static main.js: %v", err)
+	}
+	if regexp.MustCompile(`\bObserver\b`).Match(mainJS) {
+		t.Fatal("static client bundle should not contain the legacy product display label")
 	}
 }
 
@@ -88,6 +96,6 @@ func TestStaticIndexNeverEmbedsObserverCredentials(t *testing.T) {
 		t.Fatalf("expected index response status 200, got %d", recorder.Code)
 	}
 	if strings.Contains(recorder.Body.String(), "__OBSTUDIO_CONTROL_TOKEN__") {
-		t.Fatal("index embedded an Observer control credential")
+		t.Fatal("index embedded a Splunk Observability Studio control credential")
 	}
 }

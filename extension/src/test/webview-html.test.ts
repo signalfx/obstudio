@@ -98,10 +98,10 @@ describe('getObserverErrorWebviewHtml', () => {
 		assert.ok(html.includes('Splunk Observability Studio could not start'));
 	});
 
-	it('shows a restart-required heading and the selected Observer port', () => {
+	it('shows a restart-required heading and the selected service port', () => {
 		const html = getObserverErrorWebviewHtml(
-			'Observer 0.0.18 on localhost port 3000 (PID 4321) is still running.',
-			'Restart VS Code, then start Observer.',
+			'Splunk Observability Studio 0.0.18 on localhost port 3000 (PID 4321) is still running.',
+			'Restart VS Code, then start Splunk Observability Studio.',
 			'Restart required',
 		);
 		assert.ok(html.includes('<h2>Restart required</h2>'));
@@ -112,13 +112,13 @@ describe('getObserverErrorWebviewHtml', () => {
 
 	it('includes restart hint', () => {
 		const html = getObserverErrorWebviewHtml('some error');
-		assert.ok(html.includes('Restart Observer'));
+		assert.ok(html.includes('Splunk Observability Studio: Restart'));
 		assert.ok(html.includes('output log'));
 	});
 
 	it('includes port-specific restart guidance for port conflicts', () => {
 		const html = getObserverErrorWebviewHtml(
-			'Observer UI port 3000 is already in use by "nginx (PID 42)".',
+			'Splunk Observability Studio UI port 3000 is already in use by "nginx (PID 42)".',
 			getObserverStartupHint('port-conflict'),
 		);
 		assert.ok(html.includes('freeing the conflicting port'));
@@ -155,7 +155,8 @@ describe('getObserverStoppedWebviewHtml', () => {
 
 	it('includes start hint', () => {
 		const html = getObserverStoppedWebviewHtml();
-		assert.ok(html.includes('Start Observer'));
+		assert.ok(html.includes('Splunk Observability Studio: Start'));
+		assert.ok(!/\bObserver\b/.test(html));
 	});
 
 	it('does not contain an iframe', () => {

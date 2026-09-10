@@ -125,7 +125,7 @@ test('listener PID inspection validates ports and accepts lsof or PowerShell out
 	assert.deepEqual(parseListeningProcessIds('warning\np0\n'), []);
 });
 
-test('Observer executable matching is exact and platform-aware', () => {
+test('Splunk Observability Studio executable matching is exact and platform-aware', () => {
 	assert.equal(isObserverExecutablePath('/opt/obstudio', 'darwin'), true);
 	assert.equal(isObserverExecutablePath('/opt/OBSTUDIO', 'darwin'), false);
 	assert.equal(isObserverExecutablePath('/opt/obstudio-helper', 'linux'), false);
@@ -226,7 +226,7 @@ test('listener PID inspection ignores another process using the same port on IPv
 	}
 });
 
-test('shared Observer state exposes a credential-free PID on the current platform', () => {
+test('shared Splunk Observability Studio state exposes a credential-free PID on the current platform', () => {
 	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-pid-state-'));
 	try {
 		const stateDirectory = path.join(homeDir, '.obstudio');

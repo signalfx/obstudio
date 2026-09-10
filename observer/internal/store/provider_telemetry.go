@@ -100,7 +100,7 @@ func ClassifyProviderUsageMetric(point MetricDataPoint) ProviderUsageMetricKind 
 	return ProviderUsageMetricUnknown
 }
 
-// ProviderRepositoryCorrelationFromLog recognizes Obstudio's correlation-only
+// ProviderRepositoryCorrelationFromLog recognizes Splunk Observability Studio's correlation-only
 // lifecycle event. The raw log remains in the generic log ring.
 func ProviderRepositoryCorrelationFromLog(record LogRecord) (ProviderRepositoryCorrelation, bool) {
 	eventName := normalizedProviderTelemetryString(record.Attributes["event.name"])

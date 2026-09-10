@@ -2,7 +2,7 @@
 name: create-splunk-free-account
 description: >-
   Submit a consent-gated Splunk Observability Cloud Free Edition signup intake
-  in a detected or user-selected supported signup region through Observer's
+  in a detected or user-selected supported signup region through Splunk Observability Studio's
   browserless MCP backend. Use when a user asks to create, provision, register,
   start, or sign up for a free Splunk Observability Cloud, Splunk O11y, or
   SignalFx account or organization, or explicitly asks to submit another
@@ -13,7 +13,7 @@ description: >-
 # Get started with Observability Cloud Free Edition
 
 Help the user get started with Observability Cloud Free Edition by submitting a
-consent-gated intake through Observer. The Observer backend supplies the
+consent-gated intake through Splunk Observability Studio. Its backend supplies the
 non-user fields and performs the external request.
 
 ## Guardrails
@@ -78,7 +78,7 @@ Resolve the signup region before presenting the intake fields:
   Region for this request before detection; a detected value alone is never
   consent to submit it.
 - If region detection is required but the tool is unavailable or returns no
-  supported public value, stop and explain that a compatible Observer backend
+  supported public value, stop and explain that a compatible Splunk Observability Studio backend
   is required. Do not infer region from laptop time, locale, local files,
   device inspection, or application telemetry.
 
@@ -184,20 +184,20 @@ Do not ask for company, phone, job title, country, state, city, or postal code. 
 ask the user to discover a region; detect and prefill it, then let the user
 replace that value if needed. For each submission, the backend generates a
 fresh six-letter lowercase company placeholder. For
-location, the read-only detection tool causes Observer to call Splunk's GeoIP
+location, the read-only detection tool causes Splunk Observability Studio to call Splunk's GeoIP
 endpoint without supplying an IP-address parameter. Splunk derives a coarse
 country, state, city, postal code, and sales region from the request's network
-source IP. Observer maps `data.countryName` to the signup payload's `country`,
+source IP. Splunk Observability Studio maps `data.countryName` to the signup payload's `country`,
 `data.region` to `state`, `data.city` to `city`, and `data.postalCode` to
 `postalCode`. It uses `data.countryCode` plus `data.salesRegion` (falling back
 to the response's root `region`) only to preselect the hosting region. It does
 not submit `latitude`, `longitude`, `metroCode`, `regionCode`, `salesRegion`,
-`countryCode`, or the root `region` as signup payload fields. Observer does not
+`countryCode`, or the root `region` as signup payload fields. Splunk Observability Studio does not
 call Cisco OpenDNS or receive a raw IP value, so it does not explicitly
 transmit, log, display, or retain one. Splunk still processes the normal
 request source IP. Region detection does not submit a signup. Realm selection
 does not inspect or use collected application telemetry. A remote or shared
-Observer can therefore reflect that Observer host's network rather than the
+A remote or shared Splunk Observability Studio instance can therefore reflect its host's network rather than the
 user's laptop.
 
 The backend applies supported country overrides first: United States to the
@@ -223,7 +223,7 @@ from the matching public form label shown for review, and state that reviewing
 or replacing that label or value still does not submit a signup. Explicitly
 name `latitude`, `longitude`, `metroCode`, `regionCode`, `salesRegion`,
 `countryCode`, and the root `region` as GeoIP response fields that are not
-submitted as signup payload fields. Also state that Observer does not call
+submitted as signup payload fields. Also state that Splunk Observability Studio does not call
 Cisco OpenDNS or obtain the raw IP value, while Splunk still processes the
 request's normal source IP for its GeoIP result.
 
@@ -245,12 +245,12 @@ with:
 }
 ```
 
-The Observer backend validates `termsAccepted: true` and then sends the public
+Splunk Observability Studio's backend validates `termsAccepted: true` and then sends the public
 form's upstream `privacyPolicyCheck` field as the string `"1"`. Do not ask the
 user for that internal field or pass it as an additional tool argument.
 
 If the submission tool is unavailable, stop and explain that the compatible
-Observer backend must be available. Do not fall back to a browser or a direct
+Splunk Observability Studio backend must be available. Do not fall back to a browser or a direct
 endpoint.
 
 If the user later explicitly asks to submit again, call the submission tool

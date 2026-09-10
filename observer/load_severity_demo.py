@@ -58,7 +58,7 @@ def main() -> None:
         print(f"posted_otlp_status={resp.status}", flush=True)
 
     print(f"Loaded severity demo logs into {ui_base} (service=severity-demo).", flush=True)
-    print("Emitter will stay alive so Observer does not evict the records. Press Ctrl+C to stop it.", flush=True)
+    print("Emitter will stay alive so Splunk Observability Studio does not evict the records. Press Ctrl+C to stop it.", flush=True)
 
     while True:
         time.sleep(60)

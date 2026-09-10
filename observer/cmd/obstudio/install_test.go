@@ -249,7 +249,7 @@ func TestTokenTelemetryEnableTakesOverClaudeGenericRoutingAlongsideCodex(t *test
 		t.Fatalf("read configured Claude settings: %v", readErr)
 	}
 	if got := enabledEnv["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != "http://127.0.0.1:4318" {
-		t.Fatalf("generic Claude endpoint = %#v, want Observer", got)
+		t.Fatalf("generic Claude endpoint = %#v, want Splunk Observability Studio", got)
 	}
 	if _, statErr := os.Stat(filepath.Join(home, ".codex", "config.toml")); statErr != nil {
 		t.Fatalf("Codex target was not configured: %v", statErr)
@@ -1103,7 +1103,7 @@ func TestTokenTelemetryCommandRejectsRemoteRepositoryCorrelationBeforeWriting(t 
 		"--repository-correlation", "path",
 	})
 	err := command.Execute()
-	if err == nil || !strings.Contains(err.Error(), "requires a loopback Observer") {
+	if err == nil || !strings.Contains(err.Error(), "requires a loopback Splunk Observability Studio") {
 		t.Fatalf("remote repository correlation error = %v", err)
 	}
 	for _, path := range []string{
@@ -1131,7 +1131,7 @@ func TestTokenTelemetryCommandRejectsRemoteDefaultRepositoryCorrelationBeforeWri
 		"--endpoint", "https://telemetry.example/v1/logs",
 	})
 	err := command.Execute()
-	if err == nil || !strings.Contains(err.Error(), "requires a loopback Observer") {
+	if err == nil || !strings.Contains(err.Error(), "requires a loopback Splunk Observability Studio") {
 		t.Fatalf("remote default repository correlation error = %v", err)
 	}
 	for _, path := range []string{
@@ -1282,7 +1282,7 @@ func TestTokenTelemetryStatusUsesCorrelationEndpointForManagedConfiguration(t *t
 			setRepositoryCorrelationMutation("codex", endpoint, "path"),
 			writeTokenTelemetryOwnership,
 		)
-		if err != nil || result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Observer") {
+		if err != nil || result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Splunk Observability Studio") {
 			t.Fatalf("enable Codex telemetry with missing metrics = %+v, err %v", result, err)
 		}
 		state, err := readTokenTelemetryOwnership(statePath)
@@ -1420,7 +1420,7 @@ func TestConfigureCodexTokenTelemetryAddsAndOwnsMetricsWhenUnconfigured(t *testi
 	if err != nil {
 		t.Fatalf("enable Codex token telemetry: %v", err)
 	}
-	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Observer") {
+	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Splunk Observability Studio") {
 		t.Fatalf("enable result = %+v, want managed logs, traces, and metrics", result)
 	}
 	configured, err := os.ReadFile(path)
@@ -1487,7 +1487,7 @@ func TestConfigureCodexTokenTelemetryCompletesEndpointlessExporterTables(t *test
 	if err != nil {
 		t.Fatalf("complete endpointless Codex exporters: %v", err)
 	}
-	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Observer") {
+	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Splunk Observability Studio") {
 		t.Fatalf("enable result = %+v, want managed logs, traces, and metrics", result)
 	}
 	configured, err := os.ReadFile(path)
@@ -1869,7 +1869,7 @@ func TestConfigureCodexTokenTelemetryUpgradesOwnedLogAndTraceBlockWithMetrics(t 
 	if err != nil {
 		t.Fatalf("upgrade legacy Codex token telemetry: %v", err)
 	}
-	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Observer") {
+	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Splunk Observability Studio") {
 		t.Fatalf("upgrade result = %+v, want managed metrics routing", result)
 	}
 	upgraded, err := os.ReadFile(path)
@@ -1913,8 +1913,8 @@ func TestConfigureCodexTokenTelemetryIgnoresUnrelatedMetricsExporterPrefix(t *te
 	if err != nil {
 		t.Fatalf("enable Codex token telemetry: %v", err)
 	}
-	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Observer") {
-		t.Fatalf("enable result = %+v, want Observer-owned metrics exporter", result)
+	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Splunk Observability Studio") {
+		t.Fatalf("enable result = %+v, want Splunk Observability Studio-owned metrics exporter", result)
 	}
 	configured, err := os.ReadFile(path)
 	if err != nil {
@@ -2102,8 +2102,8 @@ func TestConfigureCodexTokenTelemetryIsIdempotentAndCleanupRemovesManagedRoutes(
 	if err != nil {
 		t.Fatalf("inspect Codex token telemetry: %v", err)
 	}
-	if status.State != "enabled-managed" || !strings.Contains(status.Detail, "all Codex signal exporters target Observer") {
-		t.Fatalf("status = %+v, want all signals routed to Observer", status)
+	if status.State != "enabled-managed" || !strings.Contains(status.Detail, "all Codex signal exporters target Splunk Observability Studio") {
+		t.Fatalf("status = %+v, want all signals routed to Splunk Observability Studio", status)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -2866,7 +2866,7 @@ func TestOwnedCodexTokenTelemetryPreservesExternalOTelSectionContent(t *testing.
 	}
 
 	if _, err := enableCodexTokenTelemetry(path, statePath, secondEndpoint); err != nil {
-		t.Fatalf("update Obstudio-owned endpoint: %v", err)
+		t.Fatalf("update Splunk Observability Studio-owned endpoint: %v", err)
 	}
 	updated, err := os.ReadFile(path)
 	if err != nil {
@@ -2889,7 +2889,7 @@ func TestOwnedCodexTokenTelemetryPreservesExternalOTelSectionContent(t *testing.
 		t.Fatalf("cleanup changed the user-owned OTel setting's table semantics:\n%s", cleanedText)
 	}
 	if strings.Contains(cleanedText, "exporter") || strings.Contains(cleanedText, codexTokenTelemetryBlockStart) {
-		t.Fatalf("cleanup retained Obstudio-owned Codex settings:\n%s", cleanedText)
+		t.Fatalf("cleanup retained Splunk Observability Studio-owned Codex settings:\n%s", cleanedText)
 	}
 }
 
@@ -2985,7 +2985,7 @@ func TestEnableCodexTokenTelemetryUpgradesMatchingMarkerWithoutOwnershipState(t 
 	if err != nil {
 		t.Fatalf("enable matching marked Codex telemetry: %v", err)
 	}
-	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Observer") {
+	if result.State != "enabled-managed" || !strings.Contains(result.Detail, "Codex logs, traces, and metrics target Splunk Observability Studio") {
 		t.Fatalf("enable result = %+v, want an owned metrics-only upgrade", result)
 	}
 	status, err := inspectOwnedCodexTokenTelemetry(path, statePath, endpoint)
@@ -3161,7 +3161,7 @@ func TestEnableClaudeTokenTelemetryPreservesSettingsAndCleanupRemovesOnlyOwnedVa
 		}
 	}
 	if len(cleanedEnv) != len(initial["env"].(map[string]any)) {
-		t.Fatalf("cleanup left Obstudio-owned settings: %+v", cleanedEnv)
+		t.Fatalf("cleanup left Splunk Observability Studio-owned settings: %+v", cleanedEnv)
 	}
 }
 
@@ -3673,7 +3673,7 @@ func TestDisableClaudeTokenTelemetryPreservesModifiedOwnedSetting(t *testing.T) 
 		t.Fatalf("user-modified owned value was removed: %+v", cleanedEnv)
 	}
 	if _, exists := cleanedEnv["OTEL_LOGS_EXPORTER"]; exists {
-		t.Fatalf("unchanged Obstudio-owned values were retained: %+v", cleanedEnv)
+		t.Fatalf("unchanged Splunk Observability Studio-owned values were retained: %+v", cleanedEnv)
 	}
 }
 
@@ -3869,7 +3869,7 @@ func TestEnableClaudeTokenTelemetryPreservesTLSSettingsWhileTakingOverRouting(t 
 			}
 			if configuredEnv[key] != "/user-owned/credential.pem" ||
 				configuredEnv["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] != "http://127.0.0.1:4318/v1/logs" {
-				t.Fatalf("Claude TLS setting or Observer routing is wrong: %+v", configuredEnv)
+				t.Fatalf("Claude TLS setting or Splunk Observability Studio routing is wrong: %+v", configuredEnv)
 			}
 			if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
 				t.Fatalf("disable Claude token telemetry: %v", err)
@@ -3901,7 +3901,7 @@ func TestEnableClaudeTokenTelemetryPreservesDynamicHeadersHelper(t *testing.T) {
 	}
 	if config["otelHeadersHelper"] != "/usr/local/bin/corporate-otel-headers" ||
 		env["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] != "http://127.0.0.1:4318/v1/logs" {
-		t.Fatalf("headers helper or Observer routing is wrong: config=%+v env=%+v", config, env)
+		t.Fatalf("headers helper or Splunk Observability Studio routing is wrong: config=%+v env=%+v", config, env)
 	}
 	if _, err := disableClaudeTokenTelemetry(path, statePath, nil); err != nil {
 		t.Fatalf("disable Claude telemetry with headers helper: %v", err)
@@ -3986,7 +3986,7 @@ func TestClaudeDetailedBetaRoutingConflictRequiresActivePair(t *testing.T) {
 			wantConflict: true,
 		},
 		{
-			name: "matching Observer base endpoint",
+			name: "matching Splunk Observability Studio base endpoint",
 			env: map[string]any{
 				"ENABLE_BETA_TRACING_DETAILED": "1",
 				"BETA_TRACING_ENDPOINT":        "http://127.0.0.1:4318",
@@ -4123,7 +4123,7 @@ func TestClaudeDetailedBetaRoutingIsTakenOverAndRemoved(t *testing.T) {
 		t.Fatalf("read configured Claude settings: %v", readErr)
 	}
 	if configuredEnv["BETA_TRACING_ENDPOINT"] != "http://127.0.0.1:4318" {
-		t.Fatalf("detailed-beta endpoint was not redirected to Observer: %+v", configuredEnv)
+		t.Fatalf("detailed-beta endpoint was not redirected to Splunk Observability Studio: %+v", configuredEnv)
 	}
 	result, err := inspectClaudeTokenTelemetry(path, statePath, endpoint, nil)
 	if err != nil {
@@ -4178,7 +4178,7 @@ func TestClaudeDetailedBetaRoutingAtObserverIsOwnedAndRemoved(t *testing.T) {
 		t.Fatalf("read enabled Claude settings: %v", err)
 	}
 	if enabledEnv["ENABLE_BETA_TRACING_DETAILED"] != "1" || enabledEnv["BETA_TRACING_ENDPOINT"] != "http://127.0.0.1:4318" {
-		t.Fatalf("matching detailed-beta routing was not normalized to Observer: %+v", enabledEnv)
+		t.Fatalf("matching detailed-beta routing was not normalized to Splunk Observability Studio: %+v", enabledEnv)
 	}
 	ownership, err := readTokenTelemetryOwnership(statePath)
 	if err != nil {
@@ -4186,10 +4186,10 @@ func TestClaudeDetailedBetaRoutingAtObserverIsOwnedAndRemoved(t *testing.T) {
 	}
 	managed := ownership.Targets["claude-code"].Env
 	if managed["ENABLE_BETA_TRACING_DETAILED"] != "1" {
-		t.Fatalf("Obstudio did not own the detailed-beta flag: %+v", managed)
+		t.Fatalf("Splunk Observability Studio did not own the detailed-beta flag: %+v", managed)
 	}
 	if managed["BETA_TRACING_ENDPOINT"] != "http://127.0.0.1:4318" {
-		t.Fatalf("Obstudio did not own the detailed-beta endpoint: %+v", managed)
+		t.Fatalf("Splunk Observability Studio did not own the detailed-beta endpoint: %+v", managed)
 	}
 	disabled, err := disableClaudeTokenTelemetry(path, statePath, nil)
 	if err != nil {
@@ -5405,11 +5405,11 @@ func TestNormalizeSharedURL(t *testing.T) {
 func TestValidateSharedURLIncludesSourceLabel(t *testing.T) {
 	t.Parallel()
 
-	err := validateSharedURL("stdio://obstudio", "detected shared observer URL")
+	err := validateSharedURL("stdio://obstudio", "detected shared service URL")
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
-	if !strings.Contains(err.Error(), "invalid detected shared observer URL") {
+	if !strings.Contains(err.Error(), "invalid detected shared service URL") {
 		t.Fatalf("expected source label in error, got %q", err.Error())
 	}
 }
@@ -5431,7 +5431,7 @@ func TestDetectSharedObserverURL(t *testing.T) {
 
 	detected, ok := detectSharedObserverURL(server.URL, server.Client())
 	if !ok {
-		t.Fatal("expected shared observer to be detected")
+		t.Fatal("expected shared service to be detected")
 	}
 	if detected != "http://127.0.0.1:3000/mcp" {
 		t.Fatalf("unexpected detected URL: %s", detected)
@@ -5796,7 +5796,7 @@ func TestRemoveSkillSymlinks(t *testing.T) {
 		t.Fatalf("mkdir obstudio: %v", err)
 	}
 
-	// Obstudio-managed symlink -- should be removed.
+	// Splunk Observability Studio-managed symlink -- should be removed.
 	obstudioLink := filepath.Join(skillsRoot, "otel-audit")
 	if err := os.Symlink(filepath.Join("obstudio", "otel-audit"), obstudioLink); err != nil {
 		t.Fatalf("create obstudio symlink: %v", err)
@@ -5905,11 +5905,11 @@ func TestWriteSharedObserverStateAtomicallyReplacesExistingState(t *testing.T) {
 	}
 	info, err := os.Stat(statePath)
 	if err != nil {
-		t.Fatalf("stat shared observer state: %v", err)
+		t.Fatalf("stat shared service state: %v", err)
 	}
 	if runtime.GOOS != "windows" {
 		if mode := info.Mode().Perm(); mode != 0o600 {
-			t.Fatalf("shared observer state mode = %#o, want 0600", mode)
+			t.Fatalf("shared service state mode = %#o, want 0600", mode)
 		}
 	}
 	entries, err := os.ReadDir(stateDir)
@@ -5972,7 +5972,7 @@ func TestClearSharedObserverStateIfOwnedLeavesNewerStateAlone(t *testing.T) {
 		t.Fatalf("readSharedObserverState returned error: %v", err)
 	}
 	if got.PID != newer.PID || got.MCPURL != newer.MCPURL {
-		t.Fatalf("shared observer state was unexpectedly removed or replaced: %#v", got)
+		t.Fatalf("shared service state was unexpectedly removed or replaced: %#v", got)
 	}
 }
 
@@ -6195,7 +6195,7 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 	statePath := filepath.Join(homeDir, sharedObserverStateDirName, sharedObserverStateFileName)
 	healthyState, err := readSharedObserverState(statePath)
 	if err != nil {
-		t.Fatalf("read healthy shared observer state: %v", err)
+		t.Fatalf("read healthy shared service state: %v", err)
 	}
 	contender := exec.Command(installedBinary)
 	contender.Env = runEnv
@@ -6204,11 +6204,11 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 	}
 	stateAfterConflict, err := readSharedObserverState(statePath)
 	if err != nil {
-		t.Fatalf("read shared observer state after listener conflict: %v", err)
+		t.Fatalf("read shared service state after listener conflict: %v", err)
 	}
 	if stateAfterConflict.PID != healthyState.PID {
 		t.Fatalf(
-			"failed contender replaced healthy shared observer state: PID = %d, want %d",
+			"failed contender replaced healthy shared service state: PID = %d, want %d",
 			stateAfterConflict.PID,
 			healthyState.PID,
 		)

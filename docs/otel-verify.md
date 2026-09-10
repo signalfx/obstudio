@@ -3,12 +3,12 @@
 `otel-verify` proves whether existing OpenTelemetry instrumentation works. It
 uses the project's configured runtime, executes application code where
 possible, checks each declared signal and path, and can capture local OTLP or
-Obstudio evidence. It does not add instrumentation or silently repair
+Splunk Observability Studio evidence. It does not add instrumentation or silently repair
 application code.
 
 ## Install And Invoke
 
-The Obstudio installer includes `otel-verify` for every supported agent:
+The Splunk Observability Studio installer includes `otel-verify` for every supported agent:
 
 ```bash
 ./obstudio install --target=codex

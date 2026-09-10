@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage a self-contained Obstudio plugin bundle for Codex and Claude."""
+"""Stage a self-contained Splunk Observability Studio plugin bundle for Codex and Claude."""
 
 from __future__ import annotations
 

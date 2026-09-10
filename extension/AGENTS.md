@@ -7,7 +7,7 @@ This file adds editor-extension guidance to the repository-root `AGENTS.md`.
   config schema, transport, policy fields, or install layout onto another.
 - Automatic multi-target detection and configuration must isolate each target:
   report a failed target, preserve successful work and user-owned config, then
-  continue with later targets without stopping the Observer. Add a mixed-target
+  continue with later targets without stopping Splunk Observability Studio. Add a mixed-target
   regression with a failure in the middle whenever this orchestration changes.
 - For webview, status, notification, or other extension UI changes, prove the
   affected actions, editable fields/options, accessible keyboard/focus path,
@@ -23,7 +23,7 @@ This file adds editor-extension guidance to the repository-root `AGENTS.md`.
   change, prove the changed host and at least one unchanged existing host. A
   missing or failing host capability must disable or fail only the dependent
   feature with clear host-scoped feedback, without breaking other extension
-  UI, integration targets, or the core Observer.
+  UI, integration targets, or the core Splunk Observability Studio.
 - Keep observer lifecycle, webview, and packaging concerns in their existing
   modules and update the matching tests under `src/test/`.
 - Edit `src/`, build scripts, or package metadata rather than generated `out/`,

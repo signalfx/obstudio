@@ -47,17 +47,17 @@ func newLifecycleCommands() []*cobra.Command {
 
 func newStartCmd() *cobra.Command {
 	var config runConfig
-	cmd := &cobra.Command{Use: "start", Short: "Start a managed Observer in the background", RunE: func(*cobra.Command, []string) error {
+	cmd := &cobra.Command{Use: "start", Short: "Start managed Splunk Observability Studio in the background", RunE: func(*cobra.Command, []string) error {
 		return startManagedObserver(config)
 	}}
-	cmd.Flags().StringVar(&config.host, "host", "", "Bind address for the Observer UI, MCP HTTP endpoint, and OTLP/HTTP")
-	cmd.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Observer web UI, REST API, and MCP HTTP port")
+	cmd.Flags().StringVar(&config.host, "host", "", "Bind address for Splunk Observability Studio UI, MCP HTTP endpoint, and OTLP/HTTP")
+	cmd.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Splunk Observability Studio web UI, REST API, and MCP HTTP port")
 	cmd.Flags().StringVar(&config.envFile, "env-file", "", "Load KEY=VALUE settings from an env file before startup")
 	return cmd
 }
 
 func newStopCmd() *cobra.Command {
-	return &cobra.Command{Use: "stop", Short: "Stop the managed background Observer", RunE: func(*cobra.Command, []string) error {
+	return &cobra.Command{Use: "stop", Short: "Stop managed Splunk Observability Studio", RunE: func(*cobra.Command, []string) error {
 		release, err := acquireManagedLifecycleLock()
 		if err != nil {
 			return err
@@ -69,7 +69,7 @@ func newStopCmd() *cobra.Command {
 
 func newRestartCmd() *cobra.Command {
 	var config runConfig
-	cmd := &cobra.Command{Use: "restart", Short: "Restart the managed background Observer", RunE: func(*cobra.Command, []string) error {
+	cmd := &cobra.Command{Use: "restart", Short: "Restart managed Splunk Observability Studio", RunE: func(*cobra.Command, []string) error {
 		release, err := acquireManagedLifecycleLock()
 		if err != nil {
 			return err
@@ -82,7 +82,7 @@ func newRestartCmd() *cobra.Command {
 		if os.Getenv(disableSharedObserverDetectionEnv) == "" {
 			if _, managedState, healthErr := managedObserverHealth(http.DefaultClient); healthErr == nil {
 				if detected, configured := detectConfiguredSharedObserverURL(http.DefaultClient); configured && !managedEndpointsEqual(detected, managedState.MCPURL) {
-					return errors.New("another Observer is already running; stop it from its owner before using obstudio restart")
+					return errors.New("another Splunk Observability Studio instance is already running; stop it from its owner before using obstudio restart")
 				}
 			}
 		}
@@ -91,13 +91,13 @@ func newRestartCmd() *cobra.Command {
 		}
 		if os.Getenv(disableSharedObserverDetectionEnv) == "" {
 			if _, configured := detectConfiguredSharedObserverURL(http.DefaultClient); configured {
-				return errors.New("another Observer is already running; stop it from its owner before using obstudio restart")
+				return errors.New("another Splunk Observability Studio instance is already running; stop it from its owner before using obstudio restart")
 			}
 		}
 		return launchManagedObserver(launch)
 	}}
-	cmd.Flags().StringVar(&config.host, "host", "", "Bind address for the Observer UI, MCP HTTP endpoint, and OTLP/HTTP")
-	cmd.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Observer web UI, REST API, and MCP HTTP port")
+	cmd.Flags().StringVar(&config.host, "host", "", "Bind address for Splunk Observability Studio UI, MCP HTTP endpoint, and OTLP/HTTP")
+	cmd.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Splunk Observability Studio web UI, REST API, and MCP HTTP port")
 	cmd.Flags().StringVar(&config.envFile, "env-file", "", "Load KEY=VALUE settings from an env file before startup")
 	return cmd
 }
@@ -109,19 +109,19 @@ func managedEndpointsEqual(left, right string) bool {
 }
 
 func newStatusCmd() *cobra.Command {
-	return &cobra.Command{Use: "status", Short: "Show Observer status and ownership", RunE: func(*cobra.Command, []string) error {
+	return &cobra.Command{Use: "status", Short: "Show Splunk Observability Studio status and ownership", RunE: func(*cobra.Command, []string) error {
 		health, state, err := managedObserverHealth(http.DefaultClient)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				fmt.Println("Managed Observer is not running.")
+				fmt.Println("Managed Splunk Observability Studio is not running.")
 				return nil
 			}
-			return fmt.Errorf("managed Observer state exists but health is unavailable: %w", err)
+			return fmt.Errorf("managed Splunk Observability Studio state exists but health is unavailable: %w", err)
 		}
 		if health.Owner != "cli" || health.Mode != managedObserverMode {
-			return fmt.Errorf("Observer at %s is running under %s ownership in %s mode; managed CLI state is stale", state.BaseURL, health.Owner, health.Mode)
+			return fmt.Errorf("Splunk Observability Studio at %s is running under %s ownership in %s mode; managed CLI state is stale", state.BaseURL, health.Owner, health.Mode)
 		}
-		fmt.Printf("Observer %s is running (%s, PID %d)\n%s\n", health.Version, health.Mode, state.PID, state.BaseURL)
+		fmt.Printf("Splunk Observability Studio %s is running (%s, PID %d)\n%s\n", health.Version, health.Mode, state.PID, state.BaseURL)
 		return nil
 	}}
 }
@@ -134,15 +134,15 @@ func startManagedObserver(config runConfig) error {
 	defer release()
 	if health, _, healthErr := managedObserverHealth(http.DefaultClient); healthErr == nil {
 		if health.Mode == managedObserverMode {
-			return errors.New("managed Observer is already running")
+			return errors.New("managed Splunk Observability Studio is already running")
 		}
-		return fmt.Errorf("Observer is already running in %s mode; stop it from its owner before using obstudio start", health.Mode)
+		return fmt.Errorf("Splunk Observability Studio is already running in %s mode; stop it from its owner before using obstudio start", health.Mode)
 	} else if !errors.Is(healthErr, os.ErrNotExist) {
-		return fmt.Errorf("managed Observer state exists but health is unavailable; run `obstudio status` and retry or remove stale state after verifying the process is stopped: %w", healthErr)
+		return fmt.Errorf("managed Splunk Observability Studio state exists but health is unavailable; run `obstudio status` and retry or remove stale state after verifying the process is stopped: %w", healthErr)
 	}
 	if os.Getenv(disableSharedObserverDetectionEnv) == "" {
 		if _, ok := detectConfiguredSharedObserverURL(http.DefaultClient); ok {
-			return errors.New("Observer is already running; stop it from its owner before using obstudio start")
+			return errors.New("Splunk Observability Studio is already running; stop it from its owner before using obstudio start")
 		}
 	}
 	launch, err := prepareManagedLaunch(config, false)
@@ -167,7 +167,7 @@ func prepareManagedLaunch(config runConfig, restoreSaved bool) (preparedManagedL
 	managedEnv := currentManagedEnvironment()
 	workingDirectory, err := os.Getwd()
 	if err != nil {
-		return preparedManagedLaunch{}, fmt.Errorf("resolve managed Observer working directory: %w", err)
+		return preparedManagedLaunch{}, fmt.Errorf("resolve managed Splunk Observability Studio working directory: %w", err)
 	}
 	if restoreSaved {
 		if saved, loadErr := readManagedLaunch(); loadErr == nil {
@@ -177,14 +177,14 @@ func prepareManagedLaunch(config runConfig, restoreSaved bool) (preparedManagedL
 				workingDirectory = saved.WorkingDirectory
 			}
 		} else if !errors.Is(loadErr, os.ErrNotExist) {
-			return preparedManagedLaunch{}, fmt.Errorf("read managed Observer configuration: %w", loadErr)
+			return preparedManagedLaunch{}, fmt.Errorf("read managed Splunk Observability Studio configuration: %w", loadErr)
 		}
 	}
 	if info, statErr := os.Stat(workingDirectory); statErr != nil || !info.IsDir() {
 		if statErr == nil {
 			statErr = errors.New("not a directory")
 		}
-		return preparedManagedLaunch{}, fmt.Errorf("managed Observer working directory %q is unavailable: %w", workingDirectory, statErr)
+		return preparedManagedLaunch{}, fmt.Errorf("managed Splunk Observability Studio working directory %q is unavailable: %w", workingDirectory, statErr)
 	}
 	effectiveEnvFile := managedArgValue(args, "--env-file")
 	childBaseEnvironment := os.Environ()
@@ -196,10 +196,10 @@ func prepareManagedLaunch(config runConfig, restoreSaved bool) (preparedManagedL
 	effectiveConfig.observerHTTPPort = managedArgValue(args, "--observer-http-port")
 	resolvedConfig := resolveManagedRunConfig(effectiveConfig, managedEnv)
 	if !isLoopbackBindHost(resolvedConfig.host) {
-		return preparedManagedLaunch{}, errors.New("managed Observer requires a loopback --host; use foreground mode for LAN binding")
+		return preparedManagedLaunch{}, errors.New("managed Splunk Observability Studio requires a loopback --host; use foreground mode for LAN binding")
 	}
 	if !isLoopbackBindHost(resolvedConfig.otlpGRPCHost) {
-		return preparedManagedLaunch{}, errors.New("managed Observer requires a loopback OTLP_GRPC_HOST; use foreground mode for LAN binding")
+		return preparedManagedLaunch{}, errors.New("managed Splunk Observability Studio requires a loopback OTLP_GRPC_HOST; use foreground mode for LAN binding")
 	}
 	if err := validateRunConfig(resolvedConfig); err != nil {
 		return preparedManagedLaunch{}, err
@@ -268,7 +268,7 @@ func launchManagedObserverWithTimeout(launch preparedManagedLaunch, startTimeout
 	command.Stderr = logFile
 	configureManagedProcess(command)
 	if err := command.Start(); err != nil {
-		return fmt.Errorf("start managed Observer: %w", err)
+		return fmt.Errorf("start managed Splunk Observability Studio: %w", err)
 	}
 	exited := make(chan error, 1)
 	go func() { exited <- command.Wait() }()
@@ -279,36 +279,36 @@ func launchManagedObserverWithTimeout(launch preparedManagedLaunch, startTimeout
 			removeObserverStateForPID(managedControlStatePath(), command.Process.Pid)
 			removeObserverStateForPID(sharedObserverStatePath(), command.Process.Pid)
 			if waitErr == nil {
-				return fmt.Errorf("managed Observer exited before becoming healthy; see %s", logPath)
+				return fmt.Errorf("managed Splunk Observability Studio exited before becoming healthy; see %s", logPath)
 			}
-			return fmt.Errorf("managed Observer exited before becoming healthy: %w; see %s", waitErr, logPath)
+			return fmt.Errorf("managed Splunk Observability Studio exited before becoming healthy: %w; see %s", waitErr, logPath)
 		default:
 		}
 		if health, _, healthErr := managedObserverHealth(http.DefaultClient); healthErr == nil && health.Mode == managedObserverMode {
 			if err := writeManagedLaunch(launch.state); err != nil {
-				saveErr := fmt.Errorf("save managed Observer configuration: %w", err)
+				saveErr := fmt.Errorf("save managed Splunk Observability Studio configuration: %w", err)
 				if cleanupErr := stopManagedObserver(http.DefaultClient); cleanupErr != nil {
-					return errors.Join(saveErr, fmt.Errorf("cleanup managed Observer after save failure: %w", cleanupErr))
+					return errors.Join(saveErr, fmt.Errorf("cleanup managed Splunk Observability Studio after save failure: %w", cleanupErr))
 				}
 				return saveErr
 			}
 			_ = pruneManagedRuntimes(filepath.Dir(launch.executable))
-			fmt.Printf("Managed Observer %s started at %s\n", health.Version, health.Endpoints["rest"])
+			fmt.Printf("Managed Splunk Observability Studio %s started at %s\n", health.Version, health.Endpoints["rest"])
 			return nil
 		}
 		time.Sleep(managedLifecyclePollDelay)
 	}
 	if killErr := command.Process.Kill(); killErr != nil {
-		return fmt.Errorf("managed Observer did not become healthy and could not be terminated: %w; state was preserved; see %s", killErr, logPath)
+		return fmt.Errorf("managed Splunk Observability Studio did not become healthy and could not be terminated: %w; state was preserved; see %s", killErr, logPath)
 	}
 	select {
 	case <-exited:
 	case <-time.After(5 * time.Second):
-		return fmt.Errorf("managed Observer did not become healthy and termination was not confirmed; state was preserved; see %s", logPath)
+		return fmt.Errorf("managed Splunk Observability Studio did not become healthy and termination was not confirmed; state was preserved; see %s", logPath)
 	}
 	removeObserverStateForPID(managedControlStatePath(), command.Process.Pid)
 	removeObserverStateForPID(sharedObserverStatePath(), command.Process.Pid)
-	return fmt.Errorf("managed Observer did not become healthy; see %s", logPath)
+	return fmt.Errorf("managed Splunk Observability Studio did not become healthy; see %s", logPath)
 }
 
 func createManagedLaunchCapability() ([]string, func(), error) {
@@ -450,7 +450,7 @@ func acquireManagedLifecycleLock() (func(), error) {
 		locked, lockErr := tryLockManagedFile(file)
 		if lockErr != nil {
 			file.Close()
-			return nil, fmt.Errorf("lock managed Observer lifecycle: %w", lockErr)
+			return nil, fmt.Errorf("lock managed Splunk Observability Studio lifecycle: %w", lockErr)
 		}
 		if locked {
 			return func() {
@@ -460,7 +460,7 @@ func acquireManagedLifecycleLock() (func(), error) {
 		}
 		if time.Now().After(deadline) {
 			file.Close()
-			return nil, errors.New("another managed Observer lifecycle command is still running")
+			return nil, errors.New("another managed Splunk Observability Studio lifecycle command is still running")
 		}
 		time.Sleep(managedLifecyclePollDelay)
 	}
@@ -499,13 +499,13 @@ func stopManagedObserver(client *http.Client) error {
 	health, state, err := managedObserverHealth(client)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			fmt.Println("Managed Observer is not running.")
+			fmt.Println("Managed Splunk Observability Studio is not running.")
 			return nil
 		}
-		return fmt.Errorf("managed Observer health is unavailable; refusing to assume it stopped: %w", err)
+		return fmt.Errorf("managed Splunk Observability Studio health is unavailable; refusing to assume it stopped: %w", err)
 	}
 	if health.Owner != "cli" || health.Mode != managedObserverMode {
-		return fmt.Errorf("refusing to stop Observer owned by %s in %s mode", health.Owner, health.Mode)
+		return fmt.Errorf("refusing to stop Splunk Observability Studio owned by %s in %s mode", health.Owner, health.Mode)
 	}
 	endpoint, err := lifecycleEndpoint(state.HealthURL, managedStopPath)
 	if err != nil {
@@ -527,17 +527,17 @@ func stopManagedObserver(client *http.Client) error {
 	}
 	response.Body.Close()
 	if response.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("managed Observer stop returned HTTP %d", response.StatusCode)
+		return fmt.Errorf("managed Splunk Observability Studio stop returned HTTP %d", response.StatusCode)
 	}
 	deadline := time.Now().Add(managedStopTimeout)
 	for time.Now().Before(deadline) {
 		if _, stateErr := os.Stat(managedControlStatePath()); errors.Is(stateErr, os.ErrNotExist) {
-			fmt.Println("Managed Observer stopped.")
+			fmt.Println("Managed Splunk Observability Studio stopped.")
 			return nil
 		}
 		time.Sleep(managedLifecyclePollDelay)
 	}
-	return errors.New("managed Observer did not stop before the deadline")
+	return errors.New("managed Splunk Observability Studio did not stop before the deadline")
 }
 
 func stageManagedRuntime(executable string) (string, error) {
@@ -887,15 +887,15 @@ func managedObserverHealth(client *http.Client) (sharedObserverHealth, sharedObs
 	}
 	response, err := requestClient.Get(state.HealthURL)
 	if err != nil {
-		return sharedObserverHealth{}, state, errors.New("Observer is not running")
+		return sharedObserverHealth{}, state, errors.New("Splunk Observability Studio is not running")
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return sharedObserverHealth{}, state, errors.New("Observer is not running")
+		return sharedObserverHealth{}, state, errors.New("Splunk Observability Studio is not running")
 	}
 	var health sharedObserverHealth
 	if err := json.NewDecoder(response.Body).Decode(&health); err != nil || health.Kind != "obstudio" || health.APIVersion != "v1" {
-		return sharedObserverHealth{}, state, errors.New("Observer health response is invalid")
+		return sharedObserverHealth{}, state, errors.New("Splunk Observability Studio health response is invalid")
 	}
 	return health, state, nil
 }
@@ -903,12 +903,12 @@ func managedObserverHealth(client *http.Client) (sharedObserverHealth, sharedObs
 func lifecycleEndpoint(healthURL, path string) (string, error) {
 	parsed, err := url.Parse(healthURL)
 	if err != nil || parsed.Scheme != "http" || parsed.User != nil {
-		return "", errors.New("managed Observer requires a loopback HTTP endpoint")
+		return "", errors.New("managed Splunk Observability Studio requires a loopback HTTP endpoint")
 	}
 	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
 	ip := net.ParseIP(host)
 	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
-		return "", errors.New("managed Observer endpoint is not loopback")
+		return "", errors.New("managed Splunk Observability Studio endpoint is not loopback")
 	}
 	parsed.Path, parsed.RawQuery, parsed.Fragment = path, "", ""
 	return parsed.String(), nil

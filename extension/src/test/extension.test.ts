@@ -271,7 +271,7 @@ test('free account region contract matches the public Splunk form values', () =>
 	}
 });
 
-test('Observer cloud errors expose only allowlisted signup metadata', () => {
+test('Splunk Observability Studio cloud errors expose only allowlisted signup metadata', () => {
 	const error = observerCloudResponseError(502, {
 		code: 'outcome_unknown',
 		error: 'The signup outcome is unknown.',
@@ -292,7 +292,7 @@ test('Free Edition proxy 5xx responses are treated as unknown submission outcome
 	assert.equal(
 		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(
 			503,
-			'Observer control unavailable',
+			'Splunk Observability Studio control unavailable',
 			'observer_control_unavailable',
 			true,
 		)),
@@ -331,7 +331,7 @@ test('Free Edition proxy 5xx responses are treated as unknown submission outcome
 	assert.equal(freeAccountSubmissionFailureIsOutcomeUnknown(new Error('network failure')), false);
 });
 
-test('Free Edition success requires a complete acknowledged Observer result', () => {
+test('Free Edition success requires a complete acknowledged Splunk Observability Studio result', () => {
 	for (const [region, realm] of [
 		['us', 'us1'],
 		['Europe (Ireland)', 'eu0'],
@@ -480,7 +480,7 @@ test('Codex TOML parsing treats array tables as distinct scope boundaries', () =
 	assert.equal(codexObstudioHasNoAuthorization(nestedArray ?? ''), false);
 });
 
-test('Observer-mutating Cloud actions serialize with lifecycle transitions', () => {
+test('Splunk Observability Studio-mutating Cloud actions serialize with lifecycle transitions', () => {
 	for (const action of ['connect', 'create-free-account', 'forget', 'initialize', 'set-enabled'] as const) {
 		assert.equal(cloudBridgeActionRequiresLifecycleSerialization(action), true, action);
 	}
@@ -507,7 +507,7 @@ test('Observer-mutating Cloud actions serialize with lifecycle transitions', () 
 	);
 });
 
-test('Free Edition actions use the generic IDE host transport and fixed Observer routes', () => {
+test('Free Edition actions use the generic IDE host transport and fixed Splunk Observability Studio routes', () => {
 	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
 	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
 	const hostSource = fs.readFileSync(
@@ -581,7 +581,7 @@ test('observer cloud response parsing preserves non-JSON route errors for compat
 	);
 });
 
-test('Observer rollback is skipped after authoritative cloud mutation rejections', () => {
+test('Splunk Observability Studio rollback is skipped after authoritative cloud mutation rejections', () => {
 	for (const statusCode of [400, 401, 404, 409]) {
 		assert.equal(
 			shouldRestoreObserverAfterCloudMutationFailure(
@@ -614,8 +614,8 @@ test('stored cloud restore never applies credentials after transient verificatio
 
 	for (const error of [
 		new ObserverCloudResponseError(400, 'invalid stored connection'),
-		new ObserverCloudResponseError(500, 'Observer apply failed'),
-		new Error('Observer transport failed'),
+		new ObserverCloudResponseError(500, 'Splunk Observability Studio apply failed'),
+		new Error('Splunk Observability Studio transport failed'),
 	]) {
 		await assert.rejects(
 			() => verifyStoredSplunkCloudConnection(async () => { throw error; }),
@@ -826,7 +826,7 @@ test('IDE telemetry uses the same local and remote payload limits as HTTP snapsh
 	}
 });
 
-test('IDE telemetry maps Observer HTTP URLs to WebSocket URLs', () => {
+test('IDE telemetry maps Splunk Observability Studio HTTP URLs to WebSocket URLs', () => {
 	assert.equal(webSocketURL('http://127.0.0.1:3000'), 'ws://127.0.0.1:3000/api/ws');
 	assert.equal(webSocketURL('https://observer.example.test/base'), 'wss://observer.example.test/base/api/ws');
 	assert.throws(() => webSocketURL('file:///tmp/observer'), /HTTP or HTTPS/);
@@ -901,7 +901,7 @@ test('resolveBackend returns observer binary when it exists', () => {
 		assert.deepEqual(backend.args, []);
 		assert.equal(backend.cwd, path.dirname(binary));
 		assert.equal(backend.env.WEAVER_PATH, weaver);
-		assert.equal(backend.label, 'observer');
+		assert.equal(backend.label, 'Splunk Observability Studio');
 	});
 });
 
@@ -943,7 +943,7 @@ test('build output layout uses an .exe suffix for Windows targets', () => {
 	});
 });
 
-test('release Observer builds embed the exact VSIX version', () => {
+test('release Splunk Observability Studio builds embed the exact VSIX version', () => {
 	withTempExtensionRoot((extensionRoot) => {
 		const paths = getBuildPaths(extensionRoot);
 		assert.deepEqual(
@@ -960,14 +960,14 @@ test('release Observer builds embed the exact VSIX version', () => {
 	});
 });
 
-test('extension Observer builds default to the extension manifest version', () => {
+test('extension Splunk Observability Studio builds default to the extension manifest version', () => {
 	const packageVersion = JSON.parse(
 		fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf8'),
 	) as { version: string };
 	assert.equal(observerBuildVersion({}), packageVersion.version);
 	assert.throws(
 		() => observerBuildVersion({ OBSTUDIO_OBSERVER_VERSION: '1.2.3 -X unsafe=value' }),
-		/Invalid Observer build version/,
+		/Invalid Splunk Observability Studio build version/,
 	);
 });
 
@@ -978,6 +978,31 @@ test('package metadata declares an extension icon that exists', () => {
 	assert.equal(typeof packageJSON.icon, 'string');
 	assert.ok(packageJSON.icon);
 	assert.equal(fs.existsSync(path.join(extensionRoot, packageJSON.icon!)), true);
+});
+
+test('package metadata has no legacy product display labels', () => {
+	const packageJSON = JSON.parse(
+		fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf-8'),
+	) as {
+		contributes?: {
+			commands?: Array<{ category?: string; title?: string }>;
+			configuration?: {
+				properties?: Record<string, { description?: string; markdownDescription?: string }>;
+				title?: string;
+			};
+		};
+		displayName?: string;
+	};
+	const displayCopy = [
+		packageJSON.displayName,
+		packageJSON.contributes?.configuration?.title,
+		...Object.values(packageJSON.contributes?.configuration?.properties ?? {})
+			.flatMap((property) => [property.description, property.markdownDescription]),
+		...(packageJSON.contributes?.commands ?? [])
+			.flatMap((command) => [command.category, command.title]),
+	].filter((value): value is string => typeof value === 'string');
+
+	assert.equal(displayCopy.some((value) => /\bObserver\b/.test(value)), false);
 });
 
 test('package metadata keeps the VS Code minimum aligned with the API types', () => {
@@ -1093,7 +1118,7 @@ test('managed observer startup restores cloud export without opening the Cloud t
 	);
 });
 
-test('extension treats shared Observer cloud initialization as read-only', () => {
+test('extension treats shared Splunk Observability Studio cloud initialization as read-only', () => {
 	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
 	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
 
@@ -1147,7 +1172,7 @@ test('cloud export preference survives managed observer restarts', async () => {
 	]);
 });
 
-test('transient stored verification failure leaves the managed Observer disconnected', async () => {
+test('transient stored verification failure leaves the managed Splunk Observability Studio disconnected', async () => {
 	const disconnected = cloudStatus(false, false, false);
 	let setEnabledCalled = false;
 
@@ -1199,25 +1224,25 @@ test('cloud export restore skips local storage when observer is already configur
 	assert.equal(readConnection, false);
 });
 
-test('shared Observer initialization never restores this profile\'s stored cloud connection', async () => {
+test('shared Splunk Observability Studio initialization never restores this profile\'s stored cloud connection', async () => {
 	const refreshed = cloudStatus(false, false, false);
 	let readConnection = false;
 
 	const result = await restoreSplunkCloudConnectionFromStorage({
 		configure: async () => {
-			throw new Error('shared Observer should not be configured automatically');
+			throw new Error('shared Splunk Observability Studio should not be configured automatically');
 		},
 		readConnection: async () => {
 			readConnection = true;
 			return { accessToken: 'private_profile_token', realm: 'us1' };
 		},
 		readExportEnabled: () => {
-			throw new Error('shared Observer preference should not be read');
+			throw new Error('shared Splunk Observability Studio preference should not be read');
 		},
 		refresh: async () => refreshed,
 		restoreStoredConnection: false,
 		setEnabled: async () => {
-			throw new Error('shared Observer preference should not be applied');
+			throw new Error('shared Splunk Observability Studio preference should not be applied');
 		},
 	});
 
@@ -1225,7 +1250,7 @@ test('shared Observer initialization never restores this profile\'s stored cloud
 	assert.equal(readConnection, false);
 });
 
-test('shared Observer initialization reads cloud status without mutating its configuration', async () => {
+test('shared Splunk Observability Studio initialization reads cloud status without mutating its configuration', async () => {
 	const calls: string[] = [];
 	const status = cloudStatus(true, true, true);
 
@@ -1237,7 +1262,7 @@ test('shared Observer initialization reads cloud status without mutating its con
 		},
 		refreshManagedStatus: async () => {
 			calls.push('refresh');
-			throw new Error('shared Observer configuration must not be refreshed');
+			throw new Error('shared Splunk Observability Studio configuration must not be refreshed');
 		},
 	});
 
@@ -1245,7 +1270,7 @@ test('shared Observer initialization reads cloud status without mutating its con
 	assert.deepEqual(calls, ['read']);
 });
 
-test('managed Observer initialization refreshes its owned cloud configuration', async () => {
+test('managed Splunk Observability Studio initialization refreshes its owned cloud configuration', async () => {
 	const calls: string[] = [];
 	const status = cloudStatus(true, false, true);
 
@@ -1253,7 +1278,7 @@ test('managed Observer initialization refreshes its owned cloud configuration', 
 		isManagedObserver: true,
 		readStatus: async () => {
 			calls.push('read');
-			throw new Error('managed Observer should refresh its owned configuration');
+			throw new Error('managed Splunk Observability Studio should refresh its owned configuration');
 		},
 		refreshManagedStatus: async () => {
 			calls.push('refresh');
@@ -1386,7 +1411,7 @@ test('a late writer does not retry a newer rejected preference', async () => {
 	assert.equal(store.read(() => persisted), true);
 });
 
-test('cloud connect stores credentials before mutating Observer', async () => {
+test('cloud connect stores credentials before mutating Splunk Observability Studio', async () => {
 	const previous = { connectionValue: 'previous', exportEnabled: true };
 	const status = cloudStatus(true, false, true);
 	const rollbackToken = 'R'.repeat(43);
@@ -1416,7 +1441,7 @@ test('cloud connect stores credentials before mutating Observer', async () => {
 	assert.deepEqual(calls, ['readStoredState', 'storeConnectedState', 'configureObserver']);
 });
 
-test('cloud connect restores storage without touching Observer when secure storage fails', async () => {
+test('cloud connect restores storage without touching Splunk Observability Studio when secure storage fails', async () => {
 	const previous = { connectionValue: 'previous', exportEnabled: true };
 	const calls: string[] = [];
 	await assert.rejects(
@@ -1447,7 +1472,7 @@ test('cloud connect restores storage without touching Observer when secure stora
 	assert.deepEqual(calls, ['readStoredState', 'storeConnectedState', 'restoreStoredState']);
 });
 
-test('cloud connect restores both durable and Observer state after an uncertain mutation', async () => {
+test('cloud connect restores both durable and Splunk Observability Studio state after an uncertain mutation', async () => {
 	const configureFailure = new Error('connection reset after request upload');
 	const rollbackToken = 'R'.repeat(43);
 	const previous = { connectionValue: 'previous', exportEnabled: true };
@@ -1509,7 +1534,7 @@ test('cloud connect does not roll back an authoritative configure rejection', as
 	assert.equal(rollbackCalled, false);
 });
 
-test('cloud connect leaves newer Observer state intact when uncertain rollback conflicts', async () => {
+test('cloud connect leaves newer Splunk Observability Studio state intact when uncertain rollback conflicts', async () => {
 	const configureFailure = new Error('request timed out after upload');
 
 	await assert.rejects(
@@ -1529,7 +1554,7 @@ test('cloud connect leaves newer Observer state intact when uncertain rollback c
 	);
 });
 
-test('cloud export enable rolls local state back without rewriting Observer after a 4xx rejection', async () => {
+test('cloud export enable rolls local state back without rewriting Splunk Observability Studio after a 4xx rejection', async () => {
 	const previous = { connectionValue: 'stored', exportEnabled: false };
 	const rejection = new ObserverCloudResponseError(409, 'request rejected');
 	const calls: string[] = [];
@@ -1541,7 +1566,7 @@ test('cloud export enable rolls local state back without rewriting Observer afte
 				return previous;
 			},
 			rollbackObserver: async () => {
-				throw new Error('authoritative rejection must not roll back Observer state');
+				throw new Error('authoritative rejection must not roll back Splunk Observability Studio state');
 			},
 			rollbackToken: 'R'.repeat(43),
 			restoreStoredExportEnabled: async (enabled) => {
@@ -1567,7 +1592,7 @@ test('cloud export enable rolls local state back without rewriting Observer afte
 	]);
 });
 
-test('cloud export enable uses its scoped Observer rollback after an uncertain server failure', async () => {
+test('cloud export enable uses its scoped Splunk Observability Studio rollback after an uncertain server failure', async () => {
 	const previous = { connectionValue: 'stored', exportEnabled: false };
 	const failure = new ObserverCloudResponseError(500, 'server failed');
 	const calls: string[] = [];
@@ -1599,7 +1624,7 @@ test('cloud export enable uses its scoped Observer rollback after an uncertain s
 	]);
 });
 
-test('cloud forget uses its scoped Observer rollback after an uncertain failure', async () => {
+test('cloud forget uses its scoped Splunk Observability Studio rollback after an uncertain failure', async () => {
 	const previous = { connectionValue: 'stored', exportEnabled: true };
 	const failure = new ObserverCloudResponseError(500, 'server failed');
 	const calls: string[] = [];
@@ -1637,7 +1662,7 @@ test('cloud forget uses its scoped Observer rollback after an uncertain failure'
 	]);
 });
 
-test('cloud export recovery does not overwrite a newer Observer winner', async () => {
+test('cloud export recovery does not overwrite a newer Splunk Observability Studio winner', async () => {
 	const failure = new Error('connection reset');
 	await assert.rejects(
 		() => setSplunkCloudExportEnabledWithStorage({
@@ -1711,7 +1736,7 @@ function cloudConfiguration(
 	};
 }
 
-test('extension unload paths stop only the extension-owned Observer process', () => {
+test('extension unload paths stop only the extension-owned Splunk Observability Studio process', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf-8');
 
 	assert.match(source, /export\s+async\s+function\s+deactivate\(\):\s*Promise<void>\s*\{/);
@@ -1731,7 +1756,7 @@ test('extension unload paths stop only the extension-owned Observer process', ()
 
 test('resolveBackend throws when the observer binary is missing', () => {
 	withTempExtensionRoot((extensionRoot) => {
-		assert.throws(() => resolveBackend(extensionRoot), /observer binary not found/);
+		assert.throws(() => resolveBackend(extensionRoot), /Splunk Observability Studio binary not found/);
 	});
 });
 
@@ -1787,7 +1812,7 @@ test('normalizeObserverBaseUrl rejects URL credentials and fragments', () => {
 	}
 });
 
-test('buildObserverValidatorSummaryUrl uses a normalized loopback Observer URL', () => {
+test('buildObserverValidatorSummaryUrl uses a normalized loopback Splunk Observability Studio URL', () => {
 	assert.equal(
 		buildObserverValidatorSummaryUrl('http://127.0.0.1:3000/mcp'),
 		'http://127.0.0.1:3000/api/query/validation/summary',
@@ -1798,7 +1823,7 @@ test('buildObserverValidatorSummaryUrl uses a normalized loopback Observer URL',
 	);
 });
 
-test('buildObserverHealthUrl uses a normalized loopback Observer URL', () => {
+test('buildObserverHealthUrl uses a normalized loopback Splunk Observability Studio URL', () => {
 	assert.equal(
 		buildObserverHealthUrl('http://127.0.0.1:3000/mcp'),
 		'http://127.0.0.1:3000/api/health',
@@ -1919,7 +1944,7 @@ test('readSharedObserverDiscovery rejects plaintext non-local shared observer st
 	}
 });
 
-test('local Observer operations accept only loopback hosts', () => {
+test('local Splunk Observability Studio operations accept only loopback hosts', () => {
 	for (const hostname of [
 		'localhost',
 		'127.0.0.1',
@@ -1942,7 +1967,7 @@ test('local Observer operations accept only loopback hosts', () => {
 	}
 });
 
-test('shared Observer URLs normalize wildcard listeners and reject every non-loopback host', () => {
+test('shared Splunk Observability Studio URLs normalize wildcard listeners and reject every non-loopback host', () => {
 	assert.equal(normalizeSharedObserverBaseUrl('http://0.0.0.0:3001'), 'http://127.0.0.1:3001');
 	assert.equal(normalizeSharedObserverBaseUrl('http://[::]:3001/mcp'), 'http://[::1]:3001');
 	assert.equal(normalizeSharedObserverBaseUrl('http://LOCALHOST.:3001/mcp'), 'http://localhost:3001');
@@ -2038,7 +2063,7 @@ test('shared startup validates health without a credential or feature probe', ()
 	assert.doesNotMatch(probe, /challenge|proof|token|Authorization/i);
 });
 
-test('upgrade retirement verifies Observer health and the executable path before terminating a PID', () => {
+test('upgrade retirement verifies Splunk Observability Studio health and the executable path before terminating a PID', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
 	const startupStart = source.indexOf('async function startObserver(');
 	const startupEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', startupStart);
@@ -2058,12 +2083,12 @@ test('upgrade retirement verifies Observer health and the executable path before
 	assert.ok(
 		retirement.indexOf('if (!observerHealthVerified)')
 			< retirement.indexOf('const listenerInspection = await inspectListeningProcess(managedPort)'),
-		'Observer health must be verified before inspecting the managed-port listener',
+		'Splunk Observability Studio health must be verified before inspecting the managed-port listener',
 	);
 	assert.match(
 		retirement,
 		/const listenerInspection = await inspectListeningProcess\(managedPort\)[\s\S]*?const listener = listenerInspection\.process[\s\S]*?isObserverExecutablePath\(processExecutablePath\)/,
-		'the listener PID must resolve to the Observer executable',
+		'the listener PID must resolve to the Splunk Observability Studio executable',
 	);
 	assert.ok(
 		retirement.indexOf('const preStopInspection = await inspectListeningProcess(managedPort)')
@@ -2145,7 +2170,7 @@ test('upgrade retirement treats a vacated managed port as already retired', () =
 	}
 });
 
-test('all local Observer reuse paths use the same bundled-version compatibility rule', () => {
+test('all local Splunk Observability Studio reuse paths use the same bundled-version compatibility rule', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
 	const startupStart = source.indexOf('async function startObserver(');
 	const startupEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', startupStart);
@@ -2177,7 +2202,7 @@ test('manual lifecycle and panel commands settle configuration-triggered restart
 	assert.match(
 		openBody,
 		/await openObserverPanel\(context\);/,
-		'Open Observer must not resolve before its panel startup attempt finishes',
+		'Open Splunk Observability Studio must not resolve before its panel startup attempt finishes',
 	);
 	const stopStart = source.indexOf("registerCommand('observability-studio.stopObserver', async () => {");
 	const stopBody = source.slice(stopStart, source.indexOf('\n\t});', stopStart));

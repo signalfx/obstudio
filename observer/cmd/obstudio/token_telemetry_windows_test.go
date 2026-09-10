@@ -185,7 +185,7 @@ func TestObstudioTokenTelemetryStateHardensExistingDACLOnWindows(t *testing.T) {
 			}
 			setSharedWindowsConfigDACL(t, path)
 			if err := test.write(path); err != nil {
-				t.Fatalf("replace Obstudio-owned file: %v", err)
+				t.Fatalf("replace Splunk Observability Studio-owned file: %v", err)
 			}
 
 			descriptor, dacl := readWindowsConfigDACL(t, path)
@@ -194,7 +194,7 @@ func TestObstudioTokenTelemetryStateHardensExistingDACLOnWindows(t *testing.T) {
 				t.Fatal(err)
 			}
 			if control&windows.SE_DACL_PROTECTED == 0 || dacl.AceCount != 1 {
-				t.Fatalf("Obstudio-owned file did not receive a protected current-user-only DACL: %s", descriptor.String())
+				t.Fatalf("Splunk Observability Studio-owned file did not receive a protected current-user-only DACL: %s", descriptor.String())
 			}
 		})
 	}

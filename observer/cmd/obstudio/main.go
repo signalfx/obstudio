@@ -102,8 +102,8 @@ func newRootCmd(config *runConfig) *cobra.Command {
 		SilenceUsage: true,
 	}
 
-	root.Flags().StringVar(&config.host, "host", "", "Bind address for the Observer UI, MCP HTTP endpoint, and OTLP/HTTP; also the OTLP/gRPC default")
-	root.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Observer web UI, REST API, and MCP HTTP port")
+	root.Flags().StringVar(&config.host, "host", "", "Bind address for Splunk Observability Studio UI, MCP HTTP endpoint, and OTLP/HTTP; also the OTLP/gRPC default")
+	root.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Splunk Observability Studio web UI, REST API, and MCP HTTP port")
 	root.Flags().StringVar(&config.envFile, "env-file", "", "Load KEY=VALUE settings from an env file before startup")
 
 	root.AddCommand(newInstallCmd())
@@ -244,29 +244,29 @@ func run(config runConfig) error {
 
 	observerStatePath := sharedObserverStatePath()
 	if err := writeSharedObserverState(observerStatePath, observerState); err != nil {
-		log.Printf("failed to write shared observer state: %v", err)
+		log.Printf("failed to write shared service state: %v", err)
 	} else {
 		defer func() {
 			if err := clearSharedObserverStateIfOwned(observerStatePath, observerState); err != nil {
-				log.Printf("failed to clear shared observer state: %v", err)
+				log.Printf("failed to clear shared service state: %v", err)
 			}
 		}()
 	}
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
 		managedPath := managedControlStatePath()
 		if err := writeSharedObserverState(managedPath, observerState); err != nil {
-			log.Printf("failed to write managed Observer state: %v", err)
+			log.Printf("failed to write managed Splunk Observability Studio state: %v", err)
 			_ = mainListener.Close()
 			webCleanup()
 			validatorManager.Shutdown(ctx)
 			rcv.Shutdown(ctx)
 			splunkExportController.Shutdown(ctx)
 			splunkTracesController.Shutdown(ctx)
-			return fmt.Errorf("write managed Observer state: %w", err)
+			return fmt.Errorf("write managed Splunk Observability Studio state: %w", err)
 		} else {
 			defer func() {
 				if err := clearSharedObserverStateIfOwned(managedPath, observerState); err != nil {
-					log.Printf("failed to clear managed Observer state: %v", err)
+					log.Printf("failed to clear managed Splunk Observability Studio state: %v", err)
 				}
 			}()
 		}
@@ -788,10 +788,10 @@ func validateRunConfig(config runConfig) error {
 	allowDockerRuntimeEvalNonLoopback := envOr("OBSTUDIO_MODE", "") == dockerRuntimeEvalMode &&
 		envBool(dockerRuntimeEvalAllowNonLoopbackBindEnv)
 	if !isLoopbackBindHost(config.host) && !allowDockerRuntimeEvalNonLoopback {
-		return errors.New("Observer UI, REST API, MCP, and OTLP/HTTP require a loopback --host")
+		return errors.New("Splunk Observability Studio UI, REST API, MCP, and OTLP/HTTP require a loopback --host")
 	}
 	if !isLoopbackBindHost(config.otlpGRPCHost) {
-		return errors.New("Observer OTLP/gRPC requires a loopback --otlp-grpc-host")
+		return errors.New("Splunk Observability Studio OTLP/gRPC requires a loopback --otlp-grpc-host")
 	}
 	if publicMCPURL := strings.TrimSpace(config.publicMCPURL); publicMCPURL != "" {
 		if len(publicMCPURL) > observerPublicMCPURLMaxLength {
@@ -806,7 +806,7 @@ func validateRunConfig(config runConfig) error {
 		label    string
 		value    string
 	}{
-		{flagName: "--observer-http-port", label: "Observer UI, REST API, and MCP HTTP", value: config.observerHTTPPort},
+		{flagName: "--observer-http-port", label: "Splunk Observability Studio UI, REST API, and MCP HTTP", value: config.observerHTTPPort},
 		{flagName: "--otlp-http-port", label: "OTLP/HTTP", value: config.otlpHTTPPort},
 		{flagName: "--otlp-grpc-port", label: "OTLP/gRPC", value: config.otlpGRPCPort},
 	}

@@ -2792,7 +2792,7 @@ func TestAuditScoreUnavailableWithoutReport(t *testing.T) {
 	}
 }
 
-// The report is workspace-controlled markup served on the Observer's own
+// The report is workspace-controlled markup served on Splunk Observability Studio's own
 // origin, so it must carry the same lockdown the skill's report server applies.
 func TestAuditReportCarriesContentSecurityPolicy(t *testing.T) {
 	server := newAuditServer(t, auditJSONFixture, "<h1>report</h1><script>fetch('/api/query/traces')</script>")
@@ -2820,13 +2820,13 @@ func TestAuditReportCarriesContentSecurityPolicy(t *testing.T) {
 	if got := resp.Header.Get("Referrer-Policy"); got != "no-referrer" {
 		t.Errorf("Referrer-Policy = %q, want no-referrer", got)
 	}
-	// The sandbox is what denies the report the Observer's origin; without it
+	// The sandbox is what denies the report Splunk Observability Studio's origin; without it
 	// inline script could still reach same-origin API documents.
 	if !strings.Contains(csp, "sandbox allow-scripts") {
 		t.Errorf("CSP %q must sandbox the report into an opaque origin", csp)
 	}
 	if strings.Contains(csp, "allow-same-origin") {
-		t.Errorf("CSP %q must not grant the report the Observer origin", csp)
+		t.Errorf("CSP %q must not grant the report Splunk Observability Studio origin", csp)
 	}
 }
 

@@ -161,7 +161,7 @@ eval-rubric-test eval-rubric-report:
 eval-rubric-ab: ## Run rubric grading with baseline
 	$(MAKE) -C $(EVALS_DIR) $@
 
-eval-runtime: ## Run Docker/Observer runtime checks; pass AB=1 or WITH=ab to include baseline
+eval-runtime: ## Run Docker/Splunk Observability Studio runtime checks; pass AB=1 or WITH=ab to include baseline
 	$(MAKE) -C $(EVALS_DIR) $@
 
 eval-runtime-test eval-runtime-report:

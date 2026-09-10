@@ -87,7 +87,7 @@ function buildClientAssets(paths, run = execFileSync) {
 function observerBuildVersion(env = process.env) {
 	const version = String(env.OBSTUDIO_OBSERVER_VERSION ?? extensionVersion).trim();
 	if (!OBSERVER_VERSION_PATTERN.test(version)) {
-		throw new Error(`Invalid Observer build version "${version}"`);
+		throw new Error(`Invalid Splunk Observability Studio build version "${version}"`);
 	}
 	return version;
 }

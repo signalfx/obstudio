@@ -3842,14 +3842,14 @@ func TestToolsCallTokenUsageOverviewKeepsPostStartClaudeSubtotalPartialWhenSessi
 	data := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"conversationId": "preexisting-session"})
 	tasks := toSliceAny(data["tasks"])
 	if len(tasks) != 1 || data["accountingStatus"] != "partial" {
-		t.Fatalf("post-start Claude subtotal hid incomplete pre-Observer session history: %+v", data)
+		t.Fatalf("post-start Claude subtotal hid incomplete pre-Splunk Observability Studio session history: %+v", data)
 	}
 	task := toMapAny(tasks[0])
 	usage := toMapAny(task["usage"])
 	if task["status"] != "measured" || task["accountingStatus"] != "partial" || task["providerEventCount"] != float64(1) || task["providerMetricCount"] != float64(0) {
 		t.Fatalf("known post-start Claude subtotal or source precedence is wrong: %+v", task)
 	}
-	if normalization, _ := task["normalization"].(string); !strings.Contains(normalization, "session predates retained Observer history") {
+	if normalization, _ := task["normalization"].(string); !strings.Contains(normalization, "session predates retained Splunk Observability Studio history") {
 		t.Fatalf("session-history limitation is not explained: %+v", task)
 	}
 	if usage["effectiveTotalTokens"] != float64(12) {
@@ -3893,7 +3893,7 @@ func TestSelectClaudeMetricFallbacksCarriesIncompleteSessionHistoryToLogsAndSpan
 			if len(selected) != 1 || len(metrics) != 0 || selected[0].task.AccountingStatus != "partial" {
 				t.Fatalf("incomplete session-history evidence was not carried to %s: logs=%+v spans=%+v metrics=%+v", test.name, logs, spans, metrics)
 			}
-			if !strings.Contains(selected[0].task.Normalization, "session predates retained Observer history") {
+			if !strings.Contains(selected[0].task.Normalization, "session predates retained Splunk Observability Studio history") {
 				t.Fatalf("%s history limitation is not explained: %+v", test.name, selected[0].task)
 			}
 		})

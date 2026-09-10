@@ -129,7 +129,7 @@ async function resolveSharedObserverPorts(ports: SharedObserverPorts): Promise<R
 		const configured = ports[name];
 		if (configured !== undefined) {
 			if (used.has(configured)) {
-				throw new Error(`Shared Observer test port ${configured} is configured more than once.`);
+				throw new Error(`Shared Splunk Observability Studio test port ${configured} is configured more than once.`);
 			}
 			used.add(configured);
 			return configured;
@@ -180,7 +180,7 @@ async function waitForHttpOrExit(url: string, child: cp.ChildProcess, timeoutMs:
 
 	while (Date.now() < deadline) {
 		if (child.exitCode !== null || child.killed) {
-			throw new Error(`Observer exited before becoming ready at ${url}.`);
+			throw new Error(`Splunk Observability Studio exited before becoming ready at ${url}.`);
 		}
 
 		try {
@@ -198,7 +198,7 @@ async function waitForHttpOrExit(url: string, child: cp.ChildProcess, timeoutMs:
 	}
 
 	if (child.exitCode !== null || child.killed) {
-		throw new Error(`Observer exited before becoming ready at ${url}.`);
+		throw new Error(`Splunk Observability Studio exited before becoming ready at ${url}.`);
 	}
 	if (lastError instanceof Error) {
 		throw lastError;
@@ -285,7 +285,7 @@ async function startSlowSharedObserver(delayMs: number, version: string): Promis
 		}
 
 		response.setHeader('Content-Type', 'text/html; charset=utf-8');
-		response.end('<!doctype html><title>Observer</title>');
+		response.end('<!doctype html><title>Splunk Observability Studio</title>');
 	});
 
 	await new Promise<void>((resolve, reject) => {
@@ -383,7 +383,7 @@ async function startDiscoverableSharedObserver(
 		}
 
 		response.setHeader('Content-Type', 'text/html; charset=utf-8');
-		response.end('<!doctype html><title>Observer</title>');
+		response.end('<!doctype html><title>Splunk Observability Studio</title>');
 	});
 
 	await new Promise<void>((resolve, reject) => {
@@ -983,7 +983,7 @@ suite('VS Code Host', () => {
 		);
 	});
 
-	test('fresh activation shows the Observer status bar item and wires it to the status menu', async function () {
+	test('fresh activation shows the Splunk Observability Studio status bar item and wires it to the status menu', async function () {
 		this.timeout(30_000);
 
 		await getExtension();
@@ -1110,7 +1110,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('extension reuses a CLI-managed Observer without control credentials', async function () {
+	test('extension reuses a CLI-managed Splunk Observability Studio without control credentials', async function () {
 		this.timeout(45_000);
 
 		const extension = await getExtension();
@@ -1180,7 +1180,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('Free Edition signup works through CLI-managed Observer state without credentials', async function () {
+	test('Free Edition signup works through CLI-managed Splunk Observability Studio state without credentials', async function () {
 		this.timeout(45_000);
 
 		const extension = await getExtension();
@@ -1241,7 +1241,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('fresh install starts its bundled Observer with credential-free Cloud controls', async function () {
+	test('fresh install starts its bundled Splunk Observability Studio with credential-free Cloud controls', async function () {
 		this.timeout(45_000);
 		if (process.platform === 'win32') {
 			this.skip();
@@ -1309,7 +1309,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('stale state with a dead Observer PID does not block managed startup', async function () {
+	test('stale state with a dead Splunk Observability Studio PID does not block managed startup', async function () {
 		this.timeout(45_000);
 		if (process.platform === 'win32') {
 			this.skip();
@@ -1390,7 +1390,7 @@ suite('VS Code Host', () => {
 	});
 
 	for (const legacyVersion of ['0.0.18', '0.0.20'] as const) {
-		test(`upgrade automatically replaces a pre-marker v${legacyVersion} extension Observer`, async function () {
+		test(`upgrade automatically replaces a pre-marker v${legacyVersion} extension Splunk Observability Studio`, async function () {
 			this.timeout(45_000);
 
 			const extension = await getExtension();
@@ -1447,7 +1447,7 @@ suite('VS Code Host', () => {
 					legacyVersion === '0.0.18' ? 'OBSTUDIO_V018_BINARY_PATH' : 'OBSTUDIO_V020_BINARY_PATH'
 				]?.trim();
 				if (process.env.CI) {
-					assert.ok(exactLegacyBinary, `CI must provide the exact v${legacyVersion} Observer binary`);
+					assert.ok(exactLegacyBinary, `CI must provide the exact v${legacyVersion} Splunk Observability Studio binary`);
 				}
 				if (exactLegacyBinary) {
 					fs.mkdirSync(path.dirname(legacyBackendPath), { recursive: true });
@@ -1531,7 +1531,7 @@ suite('VS Code Host', () => {
 				);
 				legacyProcess = undefined;
 				const unrelatedHealth = await fetchJson(`${unrelatedObserver.baseUrl}/api/health`);
-				assert.equal(unrelatedHealth.kind, 'obstudio', 'an Observer on another port must remain running');
+				assert.equal(unrelatedHealth.kind, 'obstudio', 'a Splunk Observability Studio instance on another port must remain running');
 
 				const currentHealth = await fetchJson(`${baseUrl}/api/health`);
 				assert.equal(currentHealth.version, String(extension.packageJSON.version));
@@ -1578,7 +1578,7 @@ suite('VS Code Host', () => {
 			}
 		});
 
-		test(`upgrade automatically replaces a CLI-started v${legacyVersion} Observer on the managed port`, async function () {
+		test(`upgrade automatically replaces a CLI-started v${legacyVersion} Splunk Observability Studio on the managed port`, async function () {
 			this.timeout(45_000);
 
 			const extension = await getExtension();
@@ -1627,7 +1627,7 @@ suite('VS Code Host', () => {
 					legacyVersion === '0.0.18' ? 'OBSTUDIO_V018_BINARY_PATH' : 'OBSTUDIO_V020_BINARY_PATH'
 				]?.trim();
 				if (process.env.CI) {
-					assert.ok(exactLegacyBinary, `CI must provide the exact v${legacyVersion} Observer binary`);
+					assert.ok(exactLegacyBinary, `CI must provide the exact v${legacyVersion} Splunk Observability Studio binary`);
 				}
 				if (exactLegacyBinary) {
 					fs.mkdirSync(path.dirname(legacyBackendPath), { recursive: true });
@@ -1737,7 +1737,7 @@ suite('VS Code Host', () => {
 		});
 	}
 
-	test('upgrade continues when a verified legacy Observer vacates the managed port during retirement', async function () {
+	test('upgrade continues when a verified legacy Splunk Observability Studio vacates the managed port during retirement', async function () {
 		this.timeout(45_000);
 
 		const extension = await getExtension();
@@ -1824,7 +1824,7 @@ suite('VS Code Host', () => {
 			);
 			assert.equal(upgradedState.sharedMode, false);
 			const legacyPid = legacyProcess.pid;
-			assert.ok(legacyPid !== undefined, 'the legacy Observer should have a process ID');
+			assert.ok(legacyPid !== undefined, 'the legacy Splunk Observability Studio should have a process ID');
 			assert.equal(
 				legacyProcess.exitCode,
 				null,
@@ -1875,7 +1875,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('upgrade ignores an outdated CLI Observer on another port and enables Cloud on the managed port', async function () {
+	test('upgrade ignores an outdated CLI Splunk Observability Studio on another port and enables Cloud on the managed port', async function () {
 		this.timeout(45_000);
 
 		const extension = await getExtension();
@@ -1898,7 +1898,7 @@ suite('VS Code Host', () => {
 		try {
 			const exactLegacyBinary = process.env.OBSTUDIO_V020_BINARY_PATH?.trim();
 			if (process.env.CI) {
-				assert.ok(exactLegacyBinary, 'CI must provide the exact v0.0.20 Observer binary');
+				assert.ok(exactLegacyBinary, 'CI must provide the exact v0.0.20 Splunk Observability Studio binary');
 			}
 			if (exactLegacyBinary) {
 				fs.mkdirSync(path.dirname(legacyBackendPath), { recursive: true });
@@ -1972,7 +1972,7 @@ suite('VS Code Host', () => {
 				20_000,
 			);
 			assert.equal(state.sharedMode, false);
-			assert.equal(legacyProcess.exitCode, null, 'an Observer on another port must not be terminated');
+			assert.equal(legacyProcess.exitCode, null, 'a Splunk Observability Studio instance on another port must not be terminated');
 			const response = await vscode.commands.executeCommand<{
 				freeAccount?: { intakeAcknowledged?: boolean };
 			}>('observability-studio.internal.createFreeAccountForTest');
@@ -2009,7 +2009,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('upgrade blocks Cloud controls when the managed-port listener is not an Observer executable', async function () {
+	test('upgrade blocks Cloud controls when the managed-port listener is not a Splunk Observability Studio executable', async function () {
 		this.timeout(45_000);
 
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-restart-required-home-'));
@@ -2106,7 +2106,7 @@ suite('VS Code Host', () => {
 				20_000,
 			);
 			assert.equal(failedState.sharedMode, false);
-			assert.equal(legacyProcess.exitCode, null, 'a non-Observer executable must not be terminated');
+			assert.equal(legacyProcess.exitCode, null, 'a non-Splunk Observability Studio executable must not be terminated');
 		} finally {
 			if (legacyProcess !== undefined) {
 				await terminateChild(legacyProcess);
@@ -2142,7 +2142,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('upgrade resolves a missing PID and force-stops a slow standalone Observer on the managed port', async function () {
+	test('upgrade resolves a missing PID and force-stops a slow standalone Splunk Observability Studio on the managed port', async function () {
 		this.timeout(45_000);
 
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-missing-pid-home-'));
@@ -2393,8 +2393,8 @@ suite('VS Code Host', () => {
 			);
 
 			const prompt = prompts.find((item) => item.message.includes('Enable Codex integration for Splunk Observability Studio?'));
-			assert.ok(prompt, 'expected the Codex integration prompt after changing the shared Observer URL');
-			assert.equal(prompt?.detail, `Install bundled skills and configure Codex to use the local Observer at ${secondSharedMcpUrl}.`);
+			assert.ok(prompt, 'expected the Codex integration prompt after changing the shared Splunk Observability Studio URL');
+			assert.equal(prompt?.detail, `Install bundled skills and configure Codex to use the local Splunk Observability Studio service at ${secondSharedMcpUrl}.`);
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await firstSharedObserver.dispose();
@@ -2426,9 +2426,9 @@ suite('VS Code Host', () => {
 						return false;
 					}
 					return typeof value.panelHtml === 'string'
-						&& value.panelHtml.includes('Observer could not start')
+						&& value.panelHtml.includes('Splunk Observability Studio could not start')
 						&& value.panelHtml.includes(`http://127.0.0.1:${conflictPort}`)
-						&& value.panelHtml.includes(`Observer UI port ${conflictPort}`)
+						&& value.panelHtml.includes(`Splunk Observability Studio UI port ${conflictPort}`)
 						&& value.panelHtml.includes('is already in use')
 						&& value.panelHtml.includes('observability-studio.managedObserverPort')
 						&& !value.panelHtml.includes('/api/health')
@@ -2465,7 +2465,7 @@ suite('VS Code Host', () => {
 					&& value.observerPort === undefined
 					&& value.observerUrl === undefined
 					&& typeof value.panelHtml === 'string'
-					&& value.panelHtml.includes(`Observer UI port ${conflictPort}`)
+					&& value.panelHtml.includes(`Splunk Observability Studio UI port ${conflictPort}`)
 					&& value.panelHtml.includes('is already in use')
 					&& value.panelHtml.includes('after freeing the conflicting port')
 				),
@@ -2498,7 +2498,7 @@ suite('VS Code Host', () => {
 						return false;
 					}
 					return typeof value.panelHtml === 'string'
-						&& value.panelHtml.includes('Observer could not start')
+						&& value.panelHtml.includes('Splunk Observability Studio could not start')
 						&& value.panelHtml.includes('observability-studio.managedObserverPort')
 						&& value.panelHtml.includes('4318')
 						&& value.panelHtml.includes('OTLP/HTTP');
@@ -2512,7 +2512,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('configured shared observer hides raw health probe details when it is unreachable', async function () {
+	test('configured shared service hides raw health probe details when it is unreachable', async function () {
 		this.timeout(45_000);
 
 		await getExtension();
@@ -2532,9 +2532,9 @@ suite('VS Code Host', () => {
 						return false;
 					}
 					return typeof value.panelHtml === 'string'
-						&& value.panelHtml.includes('Observer could not start')
+						&& value.panelHtml.includes('Splunk Observability Studio could not start')
 						&& value.panelHtml.includes(`http://127.0.0.1:${unreachablePort}`)
-						&& value.panelHtml.includes('could not reach the configured shared observer')
+						&& value.panelHtml.includes('could not reach the configured shared service')
 						&& value.panelHtml.includes('observability-studio.sharedObserverUrl')
 						&& !value.panelHtml.includes('/api/health')
 						&& !value.panelHtml.includes('ECONNREFUSED');
@@ -3000,7 +3000,7 @@ suite('VS Code Host', () => {
 
 			const prompt = prompts.find((item) => item.message.includes('Enable Codex integration for Splunk Observability Studio?'));
 			assert.ok(prompt, 'expected the Codex integration prompt to be shown');
-			assert.equal(prompt?.detail, `Install bundled skills and configure Codex to use the local Observer at ${sharedMcpUrl}.`);
+			assert.equal(prompt?.detail, `Install bundled skills and configure Codex to use the local Splunk Observability Studio service at ${sharedMcpUrl}.`);
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();

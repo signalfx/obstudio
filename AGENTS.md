@@ -87,13 +87,13 @@ Before handing work back:
   host. For a host-specific change, prove the changed host and at least one
   unchanged existing host. A missing or failing host capability must affect
   only the dependent feature, present clear host-scoped feedback, and leave
-  unrelated plugins, integrations, and the core Observer usable.
+  unrelated plugins, integrations, and the core Splunk Observability Studio usable.
 - For plugin or agent-integration changes, preserve existing public contracts
   and user-owned configuration. Prove the new or changed path alongside at
   least one existing path. When discovery, shared state, lifecycle, execution,
   or multi-target orchestration changes, include a failure case where the
   affected plugin or integration fails without preventing unrelated plugins,
-  later integration targets, or the core Observer from continuing safely when
+  later integration targets, or the core Splunk Observability Studio from continuing safely when
   the host supports that isolation.
 - In the handoff, list changed behavior, exact validation commands and results,
   skipped checks with reasons, and any residual risk.
@@ -218,7 +218,7 @@ require explicit versioning, migration, and rollback guidance.
 Flag changes to Claude Code, Codex, Cursor, Kiro, Copilot, or other agent/editor
 integrations that assume a shared schema, overwrite unrelated settings,
 servers, skills, or policy fields, or allow one automatic target failure to
-prevent later targets or stop the core Observer. The safe path preserves every
+prevent later targets or stop the core Splunk Observability Studio. The safe path preserves every
 target's schema and user-owned state, keeps successful targets configured,
 reports failures per target, and proves a mixed-target path where a middle
 integration fails while earlier and later integrations continue. Explicit
@@ -244,7 +244,7 @@ make test-pytest-plugin
 
 Skill evals follow the OpenAI eval-skill maintenance pattern: run real tasks,
 grade quick sanity checks, use schema-constrained rubric grading, and
-optionally run Docker/Observer runtime checks.
+optionally run Docker/Splunk Observability Studio runtime checks.
 Eval files live under `evals/`; see `evals/README.md` for the full command and
 reporting model.
 
@@ -292,7 +292,7 @@ Outputs:
 - Use rubric checks for semantic convention quality, workflow correctness,
   code minimality, and judgment-heavy requirements.
 - Use runtime checks for end-to-end telemetry proof only when Docker and a
-  managed Observer are expected.
+  managed Splunk Observability Studio are expected.
 - Load only the reference file needed for the detected language.
 
 ## Confluence Document Updates
@@ -309,8 +309,8 @@ Outputs:
 
 | Skill | Purpose |
 |---|---|
-| `$create-splunk-free-account` | Submit one consent-gated Free Edition signup in a GeoIP-selected region through Observer |
-| `$connect-splunk-observability-cloud` | Open the existing local Observer Cloud tab for secure organization connection |
+| `$create-splunk-free-account` | Submit one consent-gated Free Edition signup in a GeoIP-selected region through Splunk Observability Studio |
+| `$connect-splunk-observability-cloud` | Open the existing local Splunk Observability Studio Cloud tab for secure organization connection |
 | `$otel-audit` | Read-only observability coverage scan |
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation and targeted custom signals |
 | `$otel-verify` | Prove instrumentation with project-runtime, app-code, and optional OTLP checks |
