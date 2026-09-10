@@ -35,6 +35,8 @@ const ingestTokenHelpURL = "https://help.splunk.com/en/splunk-observability-clou
 const observabilityDocsURL = "https://docs.splunk.com/Observability/get-started/welcome.html#nav-Welcome-to-Splunk-Observability-Cloud";
 const observabilityCloudDemoURL = "https://www.splunk.com/en_us/resources/videos/watch-splunks-observability-cloud-demo.html";
 const observabilityDataCourseURL = "https://education.splunk.com/elearning/getting-data-into-splunk-observability-cloud-elearning";
+const freeAccountSetupPendingTitle = "Splunk received your Free Edition request.";
+const freeAccountSetupPendingCopy = "Splunk needs extra time to finish setting up the account. If a confirmation email does not arrive within 24 hours, contact Splunk Support.";
 const freeAccountRegionOptions = [
   { label: "United States", realm: "us1", value: "us" },
   { label: "Europe", realm: "eu0", value: "Europe (Ireland)" },
@@ -364,7 +366,11 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   ], [status]);
 
   useEffect(() => {
-    if (!cloudConfigured || freeAccountMutationStateRef.current === "pending") return;
+    if (
+      !cloudConfigured
+      || freeAccountMutationStateRef.current === "pending"
+      || freeAccountSetupPending
+    ) return;
     freeAccountSubmissionInFlight.current = false;
     setFreeAccountFirstName("");
     setFreeAccountLastName("");
@@ -380,7 +386,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     setFreeAccountSetupPending(false);
     setFreeAccountSubmitError(null);
     setFreeAccountMutationState("idle");
-  }, [cloudConfigured]);
+  }, [cloudConfigured, freeAccountSetupPending]);
 
   useEffect(() => {
     if (
@@ -889,7 +895,9 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           {!displayedError && !freeAccountSubmitError && notice ? <div className="cloud-alert cloud-alert--success" role="status">{notice}</div> : null}
           {!displayedError && !freeAccountSubmitError && !notice && cloudConfigured && freeAccountSuccess ? (
             <div className="cloud-alert cloud-alert--success" role="status">
-              Thank you for registering. Your free edition account is on its way! You will receive an email within 10 minutes.
+              {freeAccountSetupPending
+                ? `${freeAccountSetupPendingTitle} ${freeAccountSetupPendingCopy}`
+                : "Thank you for registering. Your free edition account is on its way! You will receive an email within 10 minutes."}
             </div>
           ) : null}
         </div>
@@ -1175,12 +1183,12 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                     <div className="cloud-free-account__outcome cloud-free-account__outcome--success">
                       <h3 id="cloud-free-account-success-title" ref={freeAccountSuccessRef} tabIndex={-1}>
                         {freeAccountSetupPending
-                          ? "Splunk received your Free Edition request."
+                          ? freeAccountSetupPendingTitle
                           : "Thank you for registering. Your free edition account is on its way!"}
                       </h3>
                       <p className="cloud-free-account__confirmation-copy">
                         {freeAccountSetupPending
-                          ? "Splunk needs extra time to finish setting up the account. If a confirmation email does not arrive within 24 hours, contact Splunk Support."
+                          ? freeAccountSetupPendingCopy
                           : "You will receive an email within 10 minutes. Check your spam folder if it doesn’t arrive. If you still need help, please reach out to Splunk Support."}
                       </p>
                       <div className="cloud-free-account__outcome-actions">

@@ -1327,6 +1327,47 @@ describe("CloudTab", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("keeps the pending setup message when another session configures Cloud after signup", async () => {
+    const bridge = installBridge({ deferHTTPResponses: true });
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { status: disconnectedStatus() });
+    const form = await fillValidFreeAccountForm();
+    fireEvent.submit(form);
+    const signupRequest = await bridge.next("create-free-account");
+    vi.useFakeTimers();
+    bridge.respond(signupRequest, {
+      freeAccount: {
+        accountSetupPending: true,
+        intakeAcknowledged: true,
+        realm: "eu0",
+        region: "Europe (Ireland)",
+      },
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("heading", {
+      name: "Splunk received your Free Edition request.",
+    })).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    const statusRequest = bridge.httpRequests()[0];
+    expect(statusRequest?.path).toBe("/api/splunk/export");
+    bridge.respondHTTP(statusRequest, connectedStatus(false, "us1"));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("status").textContent).toBe(
+      "Splunk received your Free Edition request. Splunk needs extra time to finish setting up the account. If a confirmation email does not arrive within 24 hours, contact Splunk Support.",
+    );
+    expect(screen.queryByText(/within 10 minutes/)).toBeNull();
+  });
+
   it("preserves signup edits made while the submitted request is pending", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
@@ -2817,6 +2858,7 @@ type HostHTTPRequest = {
 
 function installBridge(options: {
   autoRegion?: false | string;
+  deferHTTPResponses?: boolean;
   httpError?: string;
   httpStatus?: SplunkExportStatus;
 } = {}) {
@@ -2863,6 +2905,7 @@ function installBridge(options: {
           path: envelope.request.path,
           requestId: envelope.requestId,
         });
+        if (options.deferHTTPResponses) return;
         void Promise.resolve().then(() => {
           if (options.httpError !== undefined) {
             dispatchResponse(envelope.requestId!, false, undefined, options.httpError);
@@ -2930,6 +2973,14 @@ function installBridge(options: {
     },
     reject(request: BridgeRequest, message: string, metadata: { code?: string; retrySafe?: boolean } = {}) {
       dispatchResponse(request.requestId, false, undefined, message, metadata);
+    },
+    respondHTTP(request: HostHTTPRequest, body: unknown, status = 200) {
+      dispatchResponse(request.requestId, true, {
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json" },
+        status,
+        statusText: status === 200 ? "OK" : "Error",
+      });
     },
   };
 }
