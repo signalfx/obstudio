@@ -2055,17 +2055,49 @@ test('upgrade retirement verifies Observer health and the executable path before
 	);
 	assert.ok(
 		retirement.indexOf('const preStopListener = await readListeningProcess(managedPort)')
+			< retirement.indexOf('const replacementProbe = await probeObserver('),
+		'the listener must be fixed before refreshing the health identity',
+	);
+	assert.ok(
+		retirement.indexOf('const replacementProbe = await probeObserver(')
+			< retirement.indexOf('const confirmedListener = await readListeningProcess(managedPort)'),
+		'health must be refreshed before the final listener identity check',
+	);
+	assert.match(
+		retirement,
+		/const replacementProbe = await probeObserver\(\s*observerEndpointRolesForBase\(buildManagedObserverBaseUrl\(managedPort\)\),\s*500,\s*\{ requireStableOtlp: false \}/,
+		'the refreshed health identity must come from the canonical managed listener, not a state-file URL',
+	);
+	assert.ok(
+		retirement.indexOf('const confirmedListener = await readListeningProcess(managedPort)')
 			< retirement.indexOf('await gracefullyTerminateProcess(pid)'),
 		'the port owner and executable must be reverified immediately before graceful termination',
 	);
 	assert.match(
 		retirement,
-		/preStopListener\.pid !== pid[\s\S]*?processExecutablePathsEqual\(preStopListener\.executablePath, processExecutablePath\)/,
+		/confirmedListener\.pid !== pid[\s\S]*?processExecutablePathsEqual\(confirmedListener\.executablePath, processExecutablePath\)/,
+	);
+	assert.ok(
+		retirement.indexOf('const forceStopInspection = await inspectListeningProcess(managedPort)')
+			< retirement.indexOf('const currentProcessExecutablePath = await readProcessExecutablePath(pid)'),
+		'the managed port must be checked before falling back to process identity',
 	);
 	assert.ok(
 		retirement.indexOf('const currentProcessExecutablePath = await readProcessExecutablePath(pid)')
 			< retirement.indexOf('await forceTerminateProcess(pid)'),
-		'the same PID and executable must be reverified before forced termination',
+		'the original PID and executable path must be reverified before forced termination',
+	);
+	assert.match(
+		retirement,
+		/forceStopInspection\.status === 'ambiguous'[\s\S]*?forceStopInspection\.status === 'unavailable'/,
+	);
+	assert.match(
+		retirement,
+		/forceStopInspection\.status === 'unique'[\s\S]*?forceStopInspection\.process\.pid !== pid/,
+	);
+	assert.match(
+		retirement,
+		/currentProcessExecutablePath === undefined[\s\S]*?processExecutablePathsEqual\(currentProcessExecutablePath, processExecutablePath\)/,
 	);
 	assert.doesNotMatch(
 		retirement,

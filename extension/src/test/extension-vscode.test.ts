@@ -514,7 +514,11 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 	fs.chmodSync(binaryPath, 0o755);
 }
 
-function writeNativeLegacyObserverProcessFixture(binaryPath: string, version: string): void {
+function writeNativeLegacyObserverProcessFixture(
+	binaryPath: string,
+	version: string,
+	options: { shutdownDelayMs?: number } = {},
+): void {
 	const sourcePath = `${binaryPath}.go`;
 	const source = `package main
 
@@ -525,6 +529,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func env(name, fallback string) string {
@@ -615,6 +620,7 @@ func main() {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 	_ = observerServer.Close()
+	time.Sleep(time.Duration(${options.shutdownDelayMs ?? 0}) * time.Millisecond)
 	_ = otlpHTTPServer.Close()
 	_ = otlpGRPCListener.Close()
 }
@@ -1947,7 +1953,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('upgrade resolves a missing PID and replaces a standalone Observer on the managed port', async function () {
+	test('upgrade resolves a missing PID and force-stops a slow standalone Observer on the managed port', async function () {
 		this.timeout(45_000);
 
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-missing-pid-home-'));
@@ -1987,7 +1993,11 @@ suite('VS Code Host', () => {
 		);
 
 		try {
-			writeNativeLegacyObserverProcessFixture(legacyBackendPath, '0.0.18');
+			writeNativeLegacyObserverProcessFixture(
+				legacyBackendPath,
+				'0.0.18',
+				{ shutdownDelayMs: 7_000 },
+			);
 			legacyProcess = cp.spawn(legacyBackendPath, [], {
 				env: {
 					...process.env,
@@ -2031,10 +2041,16 @@ suite('VS Code Host', () => {
 			);
 			assert.equal(upgradedState.sharedMode, false);
 			await waitFor(
-				() => Promise.resolve(legacyProcess?.exitCode),
-				(exitCode) => exitCode !== null && exitCode !== undefined,
+				() => Promise.resolve(Boolean(
+					legacyProcess
+					&& (legacyProcess.exitCode !== null || legacyProcess.signalCode !== null),
+				)),
+				(exited) => exited,
 				5_000,
 			);
+			if (process.platform !== 'win32') {
+				assert.equal(legacyProcess.signalCode, 'SIGKILL');
+			}
 			legacyProcess = undefined;
 			const currentHealth = await fetchJson(`${baseUrl}/api/health`);
 			assert.equal(currentHealth.owner, 'vscode-extension');

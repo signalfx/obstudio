@@ -103,6 +103,7 @@ import { ObserverWebviewTelemetry } from './observer-webview-telemetry';
 import {
 	forceTerminateProcess,
 	gracefullyTerminateProcess,
+	inspectListeningProcess,
 	isObserverExecutablePath,
 	processIsRunning,
 	processExecutablePathsEqual,
@@ -1119,6 +1120,15 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			if (retirement.status === 'restart-required') {
 				throw observerRestartRequiredError(retirement, bundleVersion);
 			}
+			if (retirement.status === 'not-applicable') {
+				observerUsesSharedServer = true;
+				setObserverEndpoints(managedEndpoints);
+				appendObserverOutputLine(`Reusing Observer at ${managedObserverBaseUrl}`);
+				if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
+					syncObserverUi();
+				}
+				return;
+			}
 			if (retirement.status !== 'retired') {
 				throw observerRestartRequiredError({
 					port: managedPort,
@@ -1344,7 +1354,7 @@ async function retireMismatchedManagedPortObserver(
 ): Promise<ManagedPortObserverRetirement> {
 	const discoveryPort = observerPortFromUrl(discovery.baseUrl);
 	const observerHealthVerified = observerHealth !== undefined;
-	const observerVersion = observerHealth?.version;
+	let observerVersion = observerHealth?.version;
 	if (observerHealthVerified && observerVersion === bundleVersion) {
 		return { status: 'not-applicable' };
 	}
@@ -1434,6 +1444,37 @@ async function retireMismatchedManagedPortObserver(
 		);
 		return restartRequired();
 	}
+	const replacementProbe = await probeObserver(
+		observerEndpointRolesForBase(buildManagedObserverBaseUrl(managedPort)),
+		500,
+		{ requireStableOtlp: false },
+	);
+	if (replacementProbe.status !== 'ready') {
+		appendObserverOutputLine(
+			`Could not refresh the Observer identity on localhost port ${managedPort}; refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	if (replacementProbe.health.version === bundleVersion) {
+		appendObserverOutputLine(
+			`Observer on managed port ${managedPort} already reports bundled version ${bundleVersion}; reusing it.`,
+		);
+		return { status: 'not-applicable' };
+	}
+	observerVersion = replacementProbe.health.version;
+	const confirmedListener = await readListeningProcess(managedPort);
+	if (
+		confirmedListener === undefined
+		|| confirmedListener.pid !== pid
+		|| confirmedListener.executablePath === undefined
+		|| !isObserverExecutablePath(confirmedListener.executablePath)
+		|| !processExecutablePathsEqual(confirmedListener.executablePath, processExecutablePath)
+	) {
+		appendObserverOutputLine(
+			`Observer ownership changed while verifying localhost port ${managedPort}; refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
 
 	appendObserverOutputLine(
 		`Replacing Observer ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} (PID ${pid}) `
@@ -1468,12 +1509,42 @@ async function retireMismatchedManagedPortObserver(
 			+ `${outdatedManagedObserverShutdownTimeoutMs}ms; forcing it to stop.`,
 		);
 	}
+	const forceStopInspection = await inspectListeningProcess(managedPort);
+	if (
+		forceStopInspection.status === 'ambiguous'
+		|| forceStopInspection.status === 'unavailable'
+	) {
+		appendObserverOutputLine(
+			`Could not determine the owner of managed port ${managedPort}; refusing to force-stop Observer PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	if (
+		forceStopInspection.status === 'unique'
+		&& (
+			forceStopInspection.process.pid !== pid
+			|| (forceStopInspection.process.executablePath !== undefined
+				&& (!isObserverExecutablePath(forceStopInspection.process.executablePath)
+					|| !processExecutablePathsEqual(
+						forceStopInspection.process.executablePath,
+						processExecutablePath,
+					)))
+		)
+	) {
+		appendObserverOutputLine(
+			`A different process now owns managed port ${managedPort}; refusing to force-stop Observer PID ${pid}.`,
+		);
+		return restartRequired();
+	}
 	const currentProcessExecutablePath = await readProcessExecutablePath(pid);
 	if (
 		currentProcessExecutablePath === undefined
 		|| !isObserverExecutablePath(currentProcessExecutablePath)
 		|| !processExecutablePathsEqual(currentProcessExecutablePath, processExecutablePath)
 	) {
+		if (!processIsRunning(pid)) {
+			return { status: 'retired' };
+		}
 		appendObserverOutputLine(
 			`Could not reverify Observer ${observerVersion ?? '(unversioned)'} PID ${pid}; refusing a forced stop.`,
 		);

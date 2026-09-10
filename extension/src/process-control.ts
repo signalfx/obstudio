@@ -25,6 +25,12 @@ export type ListeningProcess = {
 	pid: number;
 };
 
+export type ListeningProcessInspection =
+	| { status: 'ambiguous' }
+	| { status: 'none' }
+	| { status: 'unavailable' }
+	| { process: ListeningProcess; status: 'unique' };
+
 export function listeningProcessInspectionPlan(
 	port: number,
 	platform: NodeJS.Platform = process.platform,
@@ -39,7 +45,8 @@ export function listeningProcessInspectionPlan(
 				'-NoProfile',
 				'-NonInteractive',
 				'-Command',
-				`Get-NetTCPConnection -State Listen -LocalPort ${port} -ErrorAction SilentlyContinue `
+				`Get-NetTCPConnection -State Listen -LocalAddress 127.0.0.1 -LocalPort ${port} `
+					+ '-ErrorAction SilentlyContinue '
 					+ '| Select-Object -ExpandProperty OwningProcess -Unique '
 					+ '| ForEach-Object { [Console]::Out.WriteLine($_) }',
 			],
@@ -48,7 +55,7 @@ export function listeningProcessInspectionPlan(
 	if (platform === 'darwin' || platform === 'linux') {
 		return {
 			command: platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof',
-			args: ['-nP', '-a', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'],
+			args: ['-nP', '-a', `-iTCP@127.0.0.1:${port}`, '-sTCP:LISTEN', '-Fp'],
 		};
 	}
 	throw new Error(`Cannot inspect listening processes on unsupported platform ${platform}.`);
@@ -90,39 +97,67 @@ export function processExecutablePathsEqual(
 	return normalize(firstPath) === normalize(secondPath);
 }
 
-export async function readListeningProcess(port: number): Promise<ListeningProcess | undefined> {
+export async function inspectListeningProcess(port: number): Promise<ListeningProcessInspection> {
 	let plan: ListeningProcessInspectionPlan;
 	try {
 		plan = listeningProcessInspectionPlan(port);
 	} catch {
-		return undefined;
+		return { status: 'unavailable' };
 	}
-	const processIds = await new Promise<number[]>((resolve) => {
+	const commandResult = await new Promise<
+		| { error?: cp.ExecFileException; status: 'completed'; stderr: string; stdout: string }
+		| { status: 'unavailable' }
+	>((resolve) => {
 		try {
 			cp.execFile(plan.command, plan.args, {
 				encoding: 'utf8',
 				maxBuffer: 64 * 1024,
 				timeout: 10_000,
 				windowsHide: true,
-			}, (error, stdout) => {
-				if (error !== null) {
-					resolve([]);
-					return;
-				}
-				resolve(parseListeningProcessIds(stdout));
+			}, (error, stdout, stderr) => {
+				resolve({
+					...(error === null ? {} : { error }),
+					status: 'completed',
+					stderr,
+					stdout,
+				});
 			});
 		} catch {
-			resolve([]);
+			resolve({ status: 'unavailable' });
 		}
 	});
-	if (processIds.length !== 1) {
-		return undefined;
+	if (commandResult.status === 'unavailable') {
+		return commandResult;
+	}
+	if (commandResult.error !== undefined) {
+		const noLsofMatches = path.basename(plan.command) === 'lsof'
+			&& String(commandResult.error.code) === '1'
+			&& commandResult.stdout.trim() === ''
+			&& commandResult.stderr.trim() === '';
+		if (!noLsofMatches) {
+			return { status: 'unavailable' };
+		}
+	}
+	const processIds = parseListeningProcessIds(commandResult.stdout);
+	if (processIds.length === 0) {
+		return { status: 'none' };
+	}
+	if (processIds.length > 1) {
+		return { status: 'ambiguous' };
 	}
 	const pid = processIds[0];
 	return {
-		executablePath: await readProcessExecutablePath(pid),
-		pid,
+		process: {
+			executablePath: await readProcessExecutablePath(pid),
+			pid,
+		},
+		status: 'unique',
 	};
+}
+
+export async function readListeningProcess(port: number): Promise<ListeningProcess | undefined> {
+	const inspection = await inspectListeningProcess(port);
+	return inspection.status === 'unique' ? inspection.process : undefined;
 }
 
 export function processInspectionPlan(

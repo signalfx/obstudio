@@ -11,6 +11,7 @@ import {
 	forceTerminateProcess,
 	forceTerminationPlan,
 	gracefulTerminationPlan,
+	inspectListeningProcess,
 	isObserverExecutablePath,
 	listeningProcessInspectionPlan,
 	normalizeLinuxExecutableLink,
@@ -92,11 +93,11 @@ test('PID inspection uses native commands on every supported platform', () => {
 
 test('listener PID inspection uses native commands on every supported platform', () => {
 	assert.deepEqual(listeningProcessInspectionPlan(39871, 'darwin'), {
-		args: ['-nP', '-a', '-iTCP:39871', '-sTCP:LISTEN', '-Fp'],
+		args: ['-nP', '-a', '-iTCP@127.0.0.1:39871', '-sTCP:LISTEN', '-Fp'],
 		command: '/usr/sbin/lsof',
 	});
 	assert.deepEqual(listeningProcessInspectionPlan(39871, 'linux'), {
-		args: ['-nP', '-a', '-iTCP:39871', '-sTCP:LISTEN', '-Fp'],
+		args: ['-nP', '-a', '-iTCP@127.0.0.1:39871', '-sTCP:LISTEN', '-Fp'],
 		command: '/usr/bin/lsof',
 	});
 	const windowsPlan = listeningProcessInspectionPlan(39871, 'win32');
@@ -105,7 +106,10 @@ test('listener PID inspection uses native commands on every supported platform',
 		'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
 	);
 	assert.deepEqual(windowsPlan.args.slice(0, 3), ['-NoProfile', '-NonInteractive', '-Command']);
-	assert.match(windowsPlan.args[3], /Get-NetTCPConnection -State Listen -LocalPort 39871/);
+	assert.match(
+		windowsPlan.args[3],
+		/Get-NetTCPConnection -State Listen -LocalAddress 127\.0\.0\.1 -LocalPort 39871/,
+	);
 	assert.match(windowsPlan.args[3], /OwningProcess/);
 });
 
@@ -161,6 +165,61 @@ test('listener PID inspection resolves a real loopback listener', { timeout: 10_
 		await new Promise<void>((resolve, reject) => {
 			server.close((error) => error === undefined ? resolve() : reject(error));
 		});
+	}
+});
+
+test('listener inspection distinguishes an unused loopback port from an unavailable inspection', { timeout: 10_000 }, async () => {
+	const reservation = net.createServer();
+	await new Promise<void>((resolve, reject) => {
+		reservation.once('error', reject);
+		reservation.listen(0, '127.0.0.1', resolve);
+	});
+	const address = reservation.address();
+	assert.ok(address !== null && typeof address !== 'string');
+	await new Promise<void>((resolve, reject) => {
+		reservation.close((error) => error === undefined ? resolve() : reject(error));
+	});
+	assert.deepEqual(await inspectListeningProcess(address.port), { status: 'none' });
+});
+
+test('listener PID inspection ignores another process using the same port on IPv6', { timeout: 10_000 }, async (t) => {
+	const ipv4Server = net.createServer();
+	await new Promise<void>((resolve, reject) => {
+		ipv4Server.once('error', reject);
+		ipv4Server.listen(0, '127.0.0.1', resolve);
+	});
+	const address = ipv4Server.address();
+	assert.ok(address !== null && typeof address !== 'string');
+	const ipv6Child = cp.spawn(process.execPath, [
+		'-e',
+		`require('node:net').createServer().listen(${address.port}, '::1', () => process.stdout.write('ready\\n'))`,
+	], {
+		stdio: ['ignore', 'pipe', 'pipe'],
+		windowsHide: true,
+	});
+	let childReady = false;
+	try {
+		const outcome = await Promise.race([
+			once(ipv6Child.stdout!, 'data').then(() => 'ready' as const),
+			once(ipv6Child, 'exit').then(() => 'exit' as const),
+		]);
+		if (outcome === 'exit') {
+			t.skip('IPv6 loopback listeners are unavailable on this host');
+			return;
+		}
+		childReady = true;
+		const listener = await readListeningProcess(address.port);
+		assert.ok(listener !== undefined);
+		assert.equal(listener.pid, process.pid);
+	} finally {
+		await new Promise<void>((resolve, reject) => {
+			ipv4Server.close((error) => error === undefined ? resolve() : reject(error));
+		});
+		if (childReady && ipv6Child.exitCode === null && ipv6Child.signalCode === null) {
+			const exited = once(ipv6Child, 'exit');
+			ipv6Child.kill('SIGKILL');
+			await exited;
+		}
 	}
 });
 
