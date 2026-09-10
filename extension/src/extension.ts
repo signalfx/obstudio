@@ -1144,13 +1144,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		if (existingObserver.status === 'mismatch') {
 			appendObserverOutputLine(`Observer health probe mismatch at ${managedObserverBaseUrl}: ${existingObserver.reason}`);
 			logObserverLifecycle(`Run ${runId}: existing service on ${managedObserverBaseUrl} did not match observer health: ${existingObserver.reason}`);
-			const wrappedError = new Error(
-				`Cannot use ${managedObserverBaseUrl}: ${formatObserverProbeMismatchMessage(managedObserverBaseUrl, 'managed-reuse')} ` +
-				`Stop the conflicting service or configure observability-studio.${managedObserverPortSetting} ` +
-				`or observability-studio.${sharedObserverUrlSetting}.`,
-			);
-			Object.assign(wrappedError, { startupHint: getObserverProbeMismatchHint('managed-reuse') });
-			throw wrappedError;
+			logObserverLifecycle(`Run ${runId}: checking whether managed port ${managedPort} remains occupied.`);
 		}
 
 		const backend = resolveBackend(context.extensionPath);

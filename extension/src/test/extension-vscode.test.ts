@@ -552,6 +552,12 @@ func main() {
 	otlpGRPCPort := env("OTLP_GRPC_PORT", "4317")
 	controlToken := os.Getenv("OBSTUDIO_CONTROL_TOKEN")
 	baseURL := "http://" + host + ":" + port
+	freeAccountStatus := http.StatusMethodNotAllowed
+	freeAccountError := "method not allowed"
+	if ${JSON.stringify(version)} == "0.0.20" {
+		freeAccountStatus = http.StatusUnauthorized
+		freeAccountError = "unauthorized"
+	}
 	status := map[string]any{
 		"connected": false,
 		"enabled": false,
@@ -579,7 +585,7 @@ func main() {
 		case request.URL.Path == "/api/splunk/export" && request.Method == http.MethodGet:
 			sendJSON(response, http.StatusOK, status)
 		case request.URL.Path == "/api/splunk/free-account" && request.Method == http.MethodPost:
-			sendJSON(response, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			sendJSON(response, freeAccountStatus, map[string]string{"error": freeAccountError})
 		case request.Header.Get("Authorization") != "Bearer "+controlToken:
 			sendJSON(response, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		default:
@@ -656,6 +662,37 @@ async function startConflictingHttpService(port: number): Promise<SharedObserver
 	return {
 		baseUrl: `http://127.0.0.1:${port}`,
 		dispose: async () => {
+			await new Promise<void>((resolve, reject) => {
+				server.close((error) => {
+					if (error) {
+						reject(error);
+						return;
+					}
+					resolve();
+				});
+			});
+		},
+	};
+}
+
+async function startUnresponsiveHttpService(port: number): Promise<SharedObserverHandle> {
+	const sockets = new Set<net.Socket>();
+	const server = net.createServer((socket) => {
+		sockets.add(socket);
+		socket.once('close', () => sockets.delete(socket));
+	});
+
+	await new Promise<void>((resolve, reject) => {
+		server.once('error', reject);
+		server.listen(port, '127.0.0.1', () => resolve());
+	});
+
+	return {
+		baseUrl: `http://127.0.0.1:${port}`,
+		dispose: async () => {
+			for (const socket of sockets) {
+				socket.destroy();
+			}
 			await new Promise<void>((resolve, reject) => {
 				server.close((error) => {
 					if (error) {
@@ -2239,11 +2276,47 @@ suite('VS Code Host', () => {
 					return typeof value.panelHtml === 'string'
 						&& value.panelHtml.includes('Observer could not start')
 						&& value.panelHtml.includes(`http://127.0.0.1:${conflictPort}`)
-						&& value.panelHtml.includes('not Splunk Observability Studio')
+						&& value.panelHtml.includes(`Observer UI port ${conflictPort}`)
+						&& value.panelHtml.includes('is already in use')
 						&& value.panelHtml.includes('observability-studio.managedObserverPort')
 						&& !value.panelHtml.includes('/api/health')
 						&& value.panelHtml.includes('after freeing the conflicting port');
 				},
+				20_000,
+			);
+			assert.equal(failedState.sharedMode, false);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await conflictService.dispose();
+		}
+	});
+
+	test('managed observer reports an occupied port when its health endpoint cannot respond', async function () {
+		this.timeout(30_000);
+
+		await getExtension();
+		const conflictPort = await getAvailablePort();
+		const conflictService = await startUnresponsiveHttpService(conflictPort);
+		const config = vscode.workspace.getConfiguration('observability-studio');
+
+		try {
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', conflictPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+			await vscode.commands.executeCommand('observability-studio.openObserver');
+			const failedState = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(
+					value
+					&& value.observerPort === undefined
+					&& value.observerUrl === undefined
+					&& typeof value.panelHtml === 'string'
+					&& value.panelHtml.includes(`Observer UI port ${conflictPort}`)
+					&& value.panelHtml.includes('is already in use')
+					&& value.panelHtml.includes('after freeing the conflicting port')
+				),
 				20_000,
 			);
 			assert.equal(failedState.sharedMode, false);
