@@ -175,7 +175,7 @@ Restart every affected Codex or Claude process after a routing change. Codex
 CLI, IDE, and Desktop processes share `~/.codex/config.toml`. Claude Desktop's
 active Setup profile has higher precedence than user-level Claude Code settings,
 and the `claude-code` target does not edit that profile. For a Desktop test, use
-an editable profile that enables telemetry and detailed traces, sends OTLP/HTTP
+an editable profile that enables telemetry and enhanced traces, sends OTLP/HTTP
 protobuf logs, traces, and metrics to `http://127.0.0.1:4318`, and then restart
 the Code session. Otherwise, use a separate Claude Code CLI process or ask the
 administrator to change an organization-locked profile.
