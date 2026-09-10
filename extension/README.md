@@ -37,8 +37,7 @@ instructions in the
 
 ## Run your first audit
 
-From the service root, enter the audit command in your coding-agent chat, not
-in a terminal:
+From the service root, enter the audit command in your coding-agent chat:
 
 | Agent | Command form |
 |---|---|

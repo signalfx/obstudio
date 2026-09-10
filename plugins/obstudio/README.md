@@ -17,9 +17,15 @@ host-specific SessionStart hook manifests for first-run bootstrap.
 | --- | --- | --- |
 | Open Observer | `$observer-open` | `/obstudio:observer-open` |
 | Check Observer status | `$observer-status` | `/obstudio:observer-status` |
+| Restart Observer | `$observer-restart` | `/obstudio:observer-restart` |
+| Stop Observer | `$observer-stop` | `/obstudio:observer-stop` |
 | Find telemetry gaps | `$otel-audit` | `/obstudio:otel-audit` |
 | Implement selected telemetry improvements | `$otel-instrument` | `/obstudio:otel-instrument` |
 | Verify instrumentation | `$otel-verify` | `/obstudio:otel-verify` |
+| Generate detectors and dashboards | `$splunk-configure` | `/obstudio:splunk-configure` |
+| Generate dashboards only | `$splunk-dashboard` | `/obstudio:splunk-dashboard` |
+| Publish detector gaps | `$splunk-detector-publish` | `/obstudio:splunk-detector-publish` |
+| Publish dashboard gaps | `$splunk-dashboard-publish` | `/obstudio:splunk-dashboard-publish` |
 | Connect an existing Splunk organization | `$connect-splunk-observability-cloud` | `/obstudio:connect-splunk-observability-cloud` |
 | Request a Free Edition organization | `$create-splunk-free-account` | `/obstudio:create-splunk-free-account` |
 
