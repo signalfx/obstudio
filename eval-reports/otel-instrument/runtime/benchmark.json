@@ -443,7 +443,7 @@
   "failures": [],
   "source": {
     "digest_version": 2,
-    "digest": "7c296a14fe333346eca8a8315b849f65a41daa789454ee1f80e210858329b219",
+    "digest": "f1b08e0642c0870136c902442417b9173662d215748fe139a17119df329c67a8",
     "eval_kinds": [
       "runtime"
     ],
@@ -550,9 +550,9 @@
       "observer/cmd/obstudio/embed.go": "c03df1eb5339c062d8de86cb91f142cefecae6754952e4b2c077f8fb36bcb110",
       "observer/cmd/obstudio/env_file_test.go": "14a6c74358c81dc000e1aa0cbb366034347721a3b8bfd390e92cb0fe505939c6",
       "observer/cmd/obstudio/install.go": "02485516ca5807ea7b9d14da8d7d64bc5aedcef46fee06075f1fd6c0d56c5b79",
-      "observer/cmd/obstudio/install_test.go": "cb8aa78243bfec37b58e625b3828163bd6e3d84096bdbc33eb499895ab8cfd68",
+      "observer/cmd/obstudio/install_test.go": "9faa823797d22182de285f906a73e34bd177a917928cb4cdef248ba9ac9808dd",
       "observer/cmd/obstudio/lifecycle.go": "db8aa1369eab56c099aec629a0a1cb50cdc3d9587e8d78efb808bf7b02378993",
-      "observer/cmd/obstudio/lifecycle_test.go": "d6828718e661a5e033101336f395b1a069582a0071ac563566de0c9575f1cd3a",
+      "observer/cmd/obstudio/lifecycle_test.go": "111b733f87dd2a18b2a57d31ed53c8981163b184c492360ca8c28403d19799ef",
       "observer/cmd/obstudio/lifecycle_unix.go": "d47061f333807234befcf22787c90e9421ec30cf89f28869229fb0fee78bbbed",
       "observer/cmd/obstudio/lifecycle_windows.go": "12b9f4ec432f420e9fe58ead7ccce61bcb70e37c6c6fa4f5494780690276a603",
       "observer/cmd/obstudio/main.go": "2207eacb02b9aaa75570a96df47524edee6cc0af033de2bd5f761fd3840d9cdb",
