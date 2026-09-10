@@ -118,10 +118,8 @@ explicit opt-in.
 Enable a provider and inspect the same target:
 
 ```bash
-./obstudio token-telemetry enable \
-  --target=codex,claude-code
-./obstudio token-telemetry status \
-  --target=codex,claude-code
+./obstudio token-telemetry enable --target=codex,claude-code
+./obstudio token-telemetry status --target=codex,claude-code
 ```
 
 `enable` is the takeover action for recognized provider OTLP routes; there is
@@ -146,9 +144,7 @@ New targets default to `path`. For an existing target, omitting
 For example:
 
 ```bash
-./obstudio token-telemetry enable \
-  --target=claude-code \
-  --repository-correlation=name
+./obstudio token-telemetry enable --target=claude-code --repository-correlation=name
 ```
 
 These modes do not rewrite raw provider telemetry, which can still include a
@@ -193,8 +189,7 @@ count such as `8+` without changing service aggregates or validation input.
 When the demo is complete, remove unchanged routes managed by Obstudio:
 
 ```bash
-./obstudio token-telemetry disable \
-  --target=codex,claude-code
+./obstudio token-telemetry disable --target=codex,claude-code
 ```
 
 ### Provider notes

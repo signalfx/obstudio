@@ -161,18 +161,20 @@ run it from that directory to enable token telemetry for Codex, Claude Code, or
 both:
 
 ```bash
-./obstudio token-telemetry enable \
-  --target=codex,claude-code
-./obstudio token-telemetry status \
-  --target=codex,claude-code
-./obstudio token-telemetry disable \
-  --target=codex,claude-code
+./obstudio token-telemetry enable --target=codex,claude-code
+./obstudio token-telemetry status --target=codex,claude-code
 ```
 
 `enable` takes ownership of recognized provider OTLP routes; there is no force
 flag. Replaced destinations are not retained or restored. `disable` removes
 only unchanged Obstudio-managed values, and values edited after enablement are
 preserved.
+
+To stop collection later, remove unchanged routes managed by Obstudio:
+
+```bash
+./obstudio token-telemetry disable --target=codex,claude-code
+```
 
 New targets default to `--repository-correlation=path`:
 

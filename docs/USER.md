@@ -25,9 +25,7 @@ Use a comma-separated list to install more than one target.
 To configure every target in one run:
 
 ```bash
-./obstudio install --target=codex,\
-claude-code,cursor,kiro,\
-windsurf,copilot
+./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot
 ```
 
 | Target | Skill command |
@@ -167,17 +165,19 @@ Agent installation does not change Codex or Claude Code exporter settings.
 Enable token telemetry explicitly:
 
 ```bash
-./obstudio token-telemetry enable \
-  --target=codex,claude-code
-./obstudio token-telemetry status \
-  --target=codex,claude-code
-./obstudio token-telemetry disable \
-  --target=codex,claude-code
+./obstudio token-telemetry enable --target=codex,claude-code
+./obstudio token-telemetry status --target=codex,claude-code
 ```
 
 `enable` takes ownership of recognized provider OTLP routes; it has no separate
 force flag. Previous destinations are not saved or restored. `disable` removes
 only unchanged Obstudio-managed values, while later edits remain untouched.
+
+To stop collection later, remove unchanged routes managed by Obstudio:
+
+```bash
+./obstudio token-telemetry disable --target=codex,claude-code
+```
 
 New targets use repository correlation mode `path`. Use `name` to omit
 filesystem paths or `off` to disable normalized correlation. Omitting the flag

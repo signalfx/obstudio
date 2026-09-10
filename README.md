@@ -30,9 +30,7 @@ the local MCP connection only because it does not support this skill layout.
 To configure every target in one run:
 
 ```bash
-./obstudio install --target=codex,\
-claude-code,cursor,kiro,\
-windsurf,copilot
+./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot
 ```
 
 Keep the bundled `weaver` executable beside `obstudio`. Restart each selected
@@ -172,18 +170,20 @@ These commands assume the extracted release directory. Source builds use
 `./build/obstudio` instead.
 
 ```bash
-./obstudio token-telemetry enable \
-  --target=codex,claude-code
-./obstudio token-telemetry status \
-  --target=codex,claude-code
-./obstudio token-telemetry disable \
-  --target=codex,claude-code
+./obstudio token-telemetry enable --target=codex,claude-code
+./obstudio token-telemetry status --target=codex,claude-code
 ```
 
 `enable` takes ownership of recognized provider OTLP routes; there is no
 separate force flag. Replaced destinations are not saved or restored. `disable`
 removes only unchanged Obstudio-managed values, while values edited after
 enablement are preserved.
+
+To stop collection later, remove unchanged routes managed by Obstudio:
+
+```bash
+./obstudio token-telemetry disable --target=codex,claude-code
+```
 
 New targets default to `--repository-correlation=path`, which supports exact
 path queries. Use `name` to omit filesystem paths or `off` to disable normalized

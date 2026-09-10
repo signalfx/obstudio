@@ -49,10 +49,8 @@ OTLP settings. Provider token collection is a separate opt-in. From an
 extracted standalone release, enable either provider and restart it:
 
 ```bash
-./obstudio token-telemetry enable \
-  --target=codex,claude-code
-./obstudio token-telemetry status \
-  --target=codex,claude-code
+./obstudio token-telemetry enable --target=codex,claude-code
+./obstudio token-telemetry status --target=codex,claude-code
 ```
 
 `enable` takes ownership of recognized provider OTLP routes; there is no force

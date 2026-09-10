@@ -261,9 +261,8 @@ func TestInstallGuidesChangeIntoExtractedArchiveDirectory(t *testing.T) {
 			if !strings.Contains(content, "cd obstudio_") {
 				t.Fatalf("%s should show changing into the extracted release directory before running the installer", tc.path)
 			}
-			installExamples := strings.ReplaceAll(content, "\\\n", "")
-			if !strings.Contains(installExamples, "./obstudio install --target=codex,claude-code,cursor,kiro") {
-				t.Fatalf("%s should show the all-agents install command", tc.path)
+			if !strings.Contains(content, "./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot") {
+				t.Fatalf("%s should show the portable one-line all-agents install command", tc.path)
 			}
 		})
 	}
