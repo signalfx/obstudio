@@ -43,7 +43,7 @@ Set `OTLP_HTTP_PORT` or `OTLP_GRPC_PORT` to move the corresponding receiver.
 ## Sending telemetry
 
 Install your application's OpenTelemetry SDK or auto-instrumentation first.
-Then configure its OTLP/HTTP protobuf exporters for Observer:
+Then run these commands in the shell that starts your application:
 
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318

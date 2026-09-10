@@ -123,8 +123,8 @@ change their environment variables.
 
 ### Send service telemetry
 
-After installing an OpenTelemetry SDK or auto-instrumentation, configure its
-OTLP/HTTP protobuf exporters:
+After installing an OpenTelemetry SDK or auto-instrumentation, run these
+commands in the shell that starts your service:
 
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
