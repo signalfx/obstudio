@@ -4,7 +4,8 @@ services:
       context: ../../../../..
       dockerfile: evals/runtime/observer.Dockerfile
     ports:
-      - "3000"
+      - target: 3000
+        host_ip: 127.0.0.1
     environment:
       - HOST=0.0.0.0
       - PORT=3000

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1436,200 +1435,6 @@ func TestQueryHealthReturnsServerMetadataAndEndpoints(t *testing.T) {
 	}
 }
 
-func TestQueryHealthReturnsChallengeBoundProofWithoutExposingControlToken(t *testing.T) {
-	s := store.New()
-	s.SetEndpoints(store.Endpoints{REST: "http://127.0.0.1:3000"})
-	const (
-		controlToken = "configured-control-token"
-		proofSecret  = "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
-	)
-
-	mux := http.NewServeMux()
-	Register(mux, s, HealthProofConfig{ControlToken: controlToken, ProofSecret: proofSecret})
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	challenge, err := NewHealthProofChallenge()
-	if err != nil {
-		t.Fatalf("generate health proof challenge: %v", err)
-	}
-	requestURL, err := url.Parse(server.URL + "/api/health")
-	if err != nil {
-		t.Fatalf("parse health URL: %v", err)
-	}
-	query := requestURL.Query()
-	query.Set(HealthProofChallengeQuery, challenge)
-	requestURL.RawQuery = query.Encode()
-
-	resp := mustGet(t, requestURL.String())
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read health response: %v", err)
-	}
-	if bytes.Contains(body, []byte(controlToken)) {
-		t.Fatal("health response exposed the Observer control token")
-	}
-	if bytes.Contains(body, []byte(proofSecret)) {
-		t.Fatal("health response exposed the health proof secret")
-	}
-	var health healthResponse
-	if err := json.Unmarshal(body, &health); err != nil {
-		t.Fatalf("decode health response: %v", err)
-	}
-	mcpURL := "http://127.0.0.1:3000/mcp"
-	if !VerifyHealthChallengeProof(proofSecret, controlToken, challenge, mcpURL, health.ChallengeProof) {
-		t.Fatal("health response challenge proof did not verify")
-	}
-	if VerifyHealthChallengeProof(proofSecret, controlToken, challenge, "http://127.0.0.1:3999/mcp", health.ChallengeProof) {
-		t.Fatal("health response challenge proof verified for a different MCP endpoint")
-	}
-}
-
-func TestQueryHealthProofBindsCanonicalConnectionURLForWildcardListener(t *testing.T) {
-	s := store.New()
-	s.SetEndpoints(store.Endpoints{REST: "http://0.0.0.0:3000"})
-	const (
-		controlToken  = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-		proofSecret   = "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
-		connectionURL = "http://127.0.0.1:3000/mcp"
-	)
-
-	mux := http.NewServeMux()
-	Register(mux, s, HealthProofConfig{
-		ControlToken: controlToken,
-		ProofSecret:  proofSecret,
-		MCPURL:       connectionURL,
-	})
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	challenge, err := NewHealthProofChallenge()
-	if err != nil {
-		t.Fatalf("generate health proof challenge: %v", err)
-	}
-	requestURL := server.URL + "/api/health?" + url.Values{
-		HealthProofChallengeQuery: []string{challenge},
-	}.Encode()
-	resp := mustGet(t, requestURL)
-	defer resp.Body.Close()
-	var health healthResponse
-	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
-		t.Fatalf("decode health response: %v", err)
-	}
-	if !VerifyHealthChallengeProof(proofSecret, controlToken, challenge, connectionURL, health.ChallengeProof) {
-		t.Fatal("health proof did not verify for the canonical connection URL")
-	}
-	if health.Endpoints["mcp"] != connectionURL {
-		t.Fatalf("advertised MCP endpoint = %q, want %q", health.Endpoints["mcp"], connectionURL)
-	}
-}
-
-func TestQueryHealthAdvertisesAndSignsConfiguredPublicMCPEndpoint(t *testing.T) {
-	s := store.New()
-	s.SetEndpoints(store.Endpoints{REST: "http://127.0.0.1:3000"})
-	const (
-		controlToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-		proofSecret  = "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
-		publicMCPURL = "https://observer.example.test/team/mcp"
-	)
-	mux := http.NewServeMux()
-	Register(mux, s, HealthProofConfig{ControlToken: controlToken, ProofSecret: proofSecret, MCPURL: publicMCPURL})
-	server := httptest.NewServer(mux)
-	defer server.Close()
-	challenge, err := NewHealthProofChallenge()
-	if err != nil {
-		t.Fatalf("generate health proof challenge: %v", err)
-	}
-	requestURL := server.URL + "/api/health?" + url.Values{
-		HealthProofChallengeQuery: []string{challenge},
-	}.Encode()
-	resp := mustGet(t, requestURL)
-	defer resp.Body.Close()
-	var health healthResponse
-	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
-		t.Fatalf("decode health response: %v", err)
-	}
-	if health.Endpoints["mcp"] != publicMCPURL {
-		t.Fatalf("advertised MCP endpoint = %q, want %q", health.Endpoints["mcp"], publicMCPURL)
-	}
-	if !VerifyHealthChallengeProof(proofSecret, controlToken, challenge, publicMCPURL, health.ChallengeProof) {
-		t.Fatal("health proof did not verify for configured public MCP endpoint")
-	}
-}
-
-func TestQueryHealthWithoutChallengeRemainsUnauthenticated(t *testing.T) {
-	s := store.New()
-	s.SetEndpoints(store.Endpoints{REST: "http://127.0.0.1:3000"})
-
-	mux := http.NewServeMux()
-	Register(mux, s, HealthProofConfig{
-		ControlToken: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		ProofSecret:  "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI",
-	})
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	resp := mustGet(t, server.URL+"/api/health")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("health status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var health healthResponse
-	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
-		t.Fatalf("decode health response: %v", err)
-	}
-	if health.ChallengeProof != "" {
-		t.Fatalf("ordinary health response included challenge proof %q", health.ChallengeProof)
-	}
-}
-
-func TestHealthChallengeProofUsesIndependentSecretWithConfiguredControlToken(t *testing.T) {
-	challenge, err := NewHealthProofChallenge()
-	if err != nil {
-		t.Fatalf("generate health proof challenge: %v", err)
-	}
-	const (
-		controlToken = "configured-control-token"
-		proofSecret  = "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
-		mcpURL       = "http://127.0.0.1:3000/mcp"
-	)
-	proof := HealthChallengeProof(proofSecret, controlToken, challenge, mcpURL)
-	if proof == "" {
-		t.Fatal("independent health proof secret did not produce a proof")
-	}
-	if !VerifyHealthChallengeProof(proofSecret, controlToken, challenge, mcpURL, proof) {
-		t.Fatal("existing configured control token proof did not verify")
-	}
-	if VerifyHealthChallengeProof(proofSecret, "different-token", challenge, mcpURL, proof) {
-		t.Fatal("existing configured control token proof verified with a different token")
-	}
-	if VerifyHealthChallengeProof(
-		"Q0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0M",
-		controlToken,
-		challenge,
-		mcpURL,
-		proof,
-	) {
-		t.Fatal("health proof verified with a different proof secret")
-	}
-}
-
-func TestHealthChallengeProofRejectsWeakProofSecret(t *testing.T) {
-	challenge, err := NewHealthProofChallenge()
-	if err != nil {
-		t.Fatalf("generate health proof challenge: %v", err)
-	}
-	if proof := HealthChallengeProof(
-		"configured-control-token",
-		"configured-control-token",
-		challenge,
-		"http://127.0.0.1:3000/mcp",
-	); proof != "" {
-		t.Fatalf("weak non-canonical proof secret produced public verifier %q", proof)
-	}
-}
-
 func TestQueryHealthHandlesNilStore(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux, nil)
@@ -2121,6 +1926,9 @@ func TestClearData(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("DELETE /api/data expected status 200, got %d", resp.StatusCode)
 	}
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("DELETE /api/data Access-Control-Allow-Origin = %q, want unset", got)
+	}
 
 	// Verify data is cleared
 	resp = mustGet(t, server.URL+"/api/query/stats")
@@ -2137,6 +1945,99 @@ func TestClearData(t *testing.T) {
 	}
 	if stats2.LogCount != 0 {
 		t.Errorf("expected 0 logs after clear, got %d", stats2.LogCount)
+	}
+}
+
+func TestMutatingRoutesRejectCrossOriginRequests(t *testing.T) {
+	routes := []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodDelete, path: "/api/data"},
+		{method: http.MethodPost, path: "/api/validation/run"},
+		{method: http.MethodPost, path: "/api/validation/refresh"},
+		{method: http.MethodPost, path: "/api/validation/analyze"},
+	}
+
+	for _, route := range routes {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			s := store.New()
+			s.AddSpansForConnection("", []store.Span{{
+				TraceID: "trace-cross-origin",
+				SpanID:  "span-cross-origin",
+			}})
+			validationStore := validator.NewStore()
+			runner := &fakeValidationRunner{}
+			runner.onRun = func(context.Context) validator.Summary {
+				startedAt := time.Now()
+				summary := validationStore.StartRun("run-cross-origin", startedAt)
+				validationStore.CompleteRun(
+					"run-cross-origin",
+					map[string]validator.Entity{},
+					validator.RunStats{},
+					startedAt,
+				)
+				return summary
+			}
+			mux := http.NewServeMux()
+			Register(mux, s, validationStore, runner)
+
+			request := httptest.NewRequest(
+				route.method,
+				"http://127.0.0.1:3000"+route.path,
+				strings.NewReader(`{"timeoutSeconds":5}`),
+			)
+			request.RemoteAddr = "127.0.0.1:54321"
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Origin", "https://attacker.example")
+			request.Header.Set("Sec-Fetch-Site", "cross-site")
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, request)
+
+			if response.Code != http.StatusForbidden {
+				t.Errorf("status = %d, want %d; body=%s", response.Code, http.StatusForbidden, response.Body.String())
+			}
+			if got := response.Header().Get("Access-Control-Allow-Origin"); got != "" {
+				t.Errorf("Access-Control-Allow-Origin = %q, want unset", got)
+			}
+			if route.path == "/api/data" && s.Stats().SpanCount != 1 {
+				t.Error("cross-origin request cleared telemetry")
+			}
+			if strings.HasPrefix(route.path, "/api/validation/") && runner.calls != 0 {
+				t.Errorf("cross-origin request invoked validator %d times", runner.calls)
+			}
+		})
+	}
+}
+
+func TestMutationPreflightsRejectCrossOriginAccess(t *testing.T) {
+	mux := http.NewServeMux()
+	Register(mux, store.New())
+
+	for _, route := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodDelete, path: "/api/data"},
+		{method: http.MethodPost, path: "/api/validation/run"},
+		{method: http.MethodPost, path: "/api/validation/refresh"},
+		{method: http.MethodPost, path: "/api/validation/analyze"},
+	} {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodOptions, "http://127.0.0.1:3000"+route.path, nil)
+			request.RemoteAddr = "127.0.0.1:54321"
+			request.Header.Set("Origin", "https://attacker.example")
+			request.Header.Set("Access-Control-Request-Method", route.method)
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, request)
+
+			if response.Code != http.StatusForbidden {
+				t.Errorf("status = %d, want %d", response.Code, http.StatusForbidden)
+			}
+			if got := response.Header().Get("Access-Control-Allow-Origin"); got != "" {
+				t.Errorf("Access-Control-Allow-Origin = %q, want unset", got)
+			}
+		})
 	}
 }
 

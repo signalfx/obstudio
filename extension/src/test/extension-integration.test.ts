@@ -696,7 +696,10 @@ it('integration: installed VSIX smoke test starts the packaged observer and acce
 			context.vsixFile = prebuiltVsixFile;
 		} else {
 			try {
-				const vsixFile = buildVsixWithArgs(['--target', target]);
+				const vsixFile = buildVsixWithArgs(
+					['--target', target],
+					{ ...process.env, OBSTUDIO_EXTENSION_VERSION: 'v0.0.1' },
+				);
 				context.ownsVsix = true;
 				context.vsixFile = vsixFile;
 			} catch (error) {
@@ -718,8 +721,13 @@ it('integration: installed VSIX smoke test starts the packaged observer and acce
 		fs.mkdirSync(extensionsDir, { recursive: true });
 		fs.mkdirSync(userDataDir, { recursive: true });
 
-		const vscodeExecutablePath = await downloadAndUnzipVSCode();
-		const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(vscodeExecutablePath);
+		const vscodeExecutablePath = await downloadAndUnzipVSCode(
+			process.env.OBSTUDIO_VSCODE_TEST_VERSION?.trim() || undefined,
+		);
+		const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(
+			vscodeExecutablePath,
+			{ reuseMachineInstall: true },
+		);
 		execFileSync(
 			cli,
 			[
@@ -741,6 +749,10 @@ it('integration: installed VSIX smoke test starts the packaged observer and acce
 		);
 
 		const installedExtensionDir = findInstalledExtensionDir(extensionsDir);
+		const installedPackage = JSON.parse(
+			fs.readFileSync(path.join(installedExtensionDir, 'package.json'), 'utf-8'),
+		) as { version?: string };
+		assert.match(installedPackage.version ?? '', /^\d+\.\d+\.\d+$/);
 		const binaryPath = path.join(
 			installedExtensionDir,
 			'dist',
@@ -777,6 +789,11 @@ it('integration: installed VSIX smoke test starts the packaged observer and acce
 		const health = await requestJson(`${baseUrl}/api/health`, { method: 'GET' });
 		assert.equal(health.statusCode, 200);
 		assert.equal(health.body.kind, 'obstudio');
+		assert.equal(
+			health.body.version,
+			installedPackage.version,
+			'installed VSIX and bundled Observer should report the same release version',
+		);
 		assert.equal(health.body.endpoints.otlpHttp, otlpHttpUrl);
 		assert.equal(health.body.endpoints.otlpGrpc, `127.0.0.1:${otlpGrpcPort}`);
 

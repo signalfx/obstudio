@@ -182,7 +182,8 @@ block's closing fence without a trailing explanation.
 
 Do not ask for company, phone, job title, country, state, city, or postal code. Do not
 ask the user to discover a region; detect and prefill it, then let the user
-replace that value if needed. The backend fixes the company to `dev`. For
+replace that value if needed. For each submission, the backend generates a
+fresh six-letter lowercase company placeholder. For
 location, the read-only detection tool causes Observer to call Splunk's GeoIP
 endpoint without supplying an IP-address parameter. Splunk derives a coarse
 country, state, city, postal code, and sales region from the request's network
@@ -263,6 +264,17 @@ one user instruction into repeated calls.
 
 ## Interpret and report the result
 
+- Check `accountSetupPending` before selecting the response. On
+  `accountSetupPending: true`, the HTTP 200 response is an acknowledged request
+  whose account setup needs more time. Reply with exactly the following
+  Markdown, with no text before or after it:
+
+  ```markdown
+  **Splunk received your Free Edition request.**
+
+  Splunk needs extra time to finish setting up the account. If a confirmation email does not arrive within 24 hours, contact Splunk Support.
+  ```
+
 - On `intakeAcknowledged: true`, treat the field only as the internal signal for
   the success response. Reply with exactly the following approved official
   confirmation Markdown, with no text before or after it:
@@ -288,7 +300,8 @@ one user instruction into repeated calls.
   represents only an intake acknowledgment.
 
   In an offline or synthetic behavior evaluation that supplies an assumed raw
-  success result, do not print, quote, or summarize that assumed result. If the
+  success result, do not print, quote, or summarize that assumed result. Use
+  the pending template above when `accountSetupPending` is true. If the
   evaluation asks to model the submission call, explicitly name
   `observer_splunk_free_account_create` with its one JSON argument object first;
   a bare JSON object is not a modeled tool call. Then emit only the exact

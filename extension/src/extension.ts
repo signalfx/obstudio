@@ -9,21 +9,18 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
 	createAgentIntegrationConfigFingerprint,
-	authorizationHeadersMatchControlToken,
-	codexObstudioAuthorizationMatchesControlToken,
+	codexObstudioHasNoAuthorization,
 	getCodexObstudioSection,
 	getCodexObstudioUrl,
-	installAgentIntegrationWithStableCredentials,
+	hasNoAuthorizationHeader,
 	shouldRefreshOwnedAgentIntegrationConfig,
 	type AgentIntegrationConfigFingerprint,
-	type AgentIntegrationInstallCredentials,
 	type AgentIntegrationManagedConfig,
 } from './agent-integration-config';
 import {
 	buildObserverHealthUrl,
 	buildObserverValidatorSummaryUrl,
-	createObserverHealthProofChallenge,
-	isLocalObserverControlHost,
+	isLoopbackObserverHost,
 	type ObserverHealth,
 	type SharedObserverDiscovery,
 	normalizeObserverBaseUrl,
@@ -31,11 +28,8 @@ import {
 	normalizeSharedObserverHealthUrl,
 	normalizeSharedObserverMCPUrl,
 	observerPortFromUrl,
-	observerHealthProofChallengeQuery,
 	readSharedObserverDiscovery,
 	resolveBackend,
-	verifiedSharedObserverMCPUrl,
-	verifySharedObserverControlToken,
 } from './backend';
 import {
 	AsyncOperationQueue,
@@ -71,9 +65,7 @@ import {
 } from './startup-errors';
 import {
 	auditReportUrl,
-	captureSplunkCloudState,
 	cloudBridgeActionRequiresLifecycleSerialization,
-	cloudControlRemainsAvailableAfterInitializationError,
 	cloudStatusConnected,
 	connectSplunkCloudWithStorage,
 	forgetSplunkCloudWithStorage,
@@ -84,8 +76,6 @@ import {
 	observerCloudResponseError,
 	parseFreeAccountSubmissionResult,
 	parseObserverCloudResponseBody,
-	persistSplunkCloudStateWithRollback,
-	requestObserverCloudMutationWithTokenRefresh,
 	parseStoredSplunkCloudConnection,
 	restoreSplunkCloudConnectionFromStorage,
 	setSplunkCloudExportEnabledWithStorage,
@@ -110,6 +100,16 @@ import {
 	type ObserverHostResponseEnvelope,
 } from './observer-webview-host';
 import { ObserverWebviewTelemetry } from './observer-webview-telemetry';
+import {
+	forceTerminateProcess,
+	gracefullyTerminateProcess,
+	inspectListeningProcess,
+	isObserverExecutablePath,
+	processIsRunning,
+	processExecutablePathsEqual,
+	readListeningProcess,
+	readProcessExecutablePath,
+} from './process-control';
 import {
 	authorizeWithSISCIMD,
 	computeSISCIMDSessionStatus,
@@ -138,11 +138,8 @@ const splunkCloudConnectionStore = new SplunkCloudConnectionStore();
 const splunkCloudExportPreferenceStore = new SplunkCloudExportPreferenceStore();
 let observerStatusBarItem: vscode.StatusBarItem | undefined;
 let observerUsesSharedServer = false;
-let observerSharedControlToken: string | undefined;
-let observerSharedHealthProofSecret: string | undefined;
 let observerWebviewRootUri: vscode.Uri | undefined;
 let observerPanelTelemetry: ObserverWebviewTelemetry | undefined;
-let activeExtensionContext: vscode.ExtensionContext | undefined;
 let observerDeactivationStarted = false;
 const observerHostRequestCancellations = new Map<string, () => void>();
 let sisCIMDOAuthFlowPromise: Promise<boolean> | undefined;
@@ -175,17 +172,19 @@ const sisCimdOAuthDefaultIssuer = 'https://127.0.0.1:9090/test-tenant/sis/v1/rg/
 const sisCimdOAuthDefaultClientId = 'https://127.0.0.1:9192/oauth/client-metadata.json';
 const managedObserverHost = '127.0.0.1';
 const defaultManagedObserverPort = 3000;
+const managedObserverStateFileName = 'managed-control.json';
 const observerKind = 'obstudio';
 const observerAPIVersion = 'v1';
-let managedObserverControlToken = '';
-let managedObserverHealthProofSecret = '';
+const extensionManagedObserverOwner = 'vscode-extension';
+const extensionManagedObserverMode = 'managed';
 const sharedObserverStartupWindowMs = 15_000;
 const observerCloudRequestTimeoutMs = 15_000;
 const observerCloudRollbackTokenHeader = 'X-Obstudio-Cloud-Rollback-Token';
-const observerShutdownPreferenceCaptureTimeoutMs = 500;
 const observerShutdownTerminationTimeoutMs = 2_000;
 const observerShutdownPostExitDelayMs = 300;
 const observerExtensionUnloadDeadlineMs = 4_500;
+const outdatedManagedObserverShutdownTimeoutMs = 5_000;
+const outdatedManagedObserverForceShutdownTimeoutMs = 2_000;
 const agentIntegrationPromptDismissedPrefix = 'agentIntegrationPromptDismissed.';
 const agentSkillsBundleVersionPrefix = 'agentSkillsBundleVersion.';
 const agentIntegrationConfigFingerprintPrefix = 'agentIntegrationConfigFingerprint.v1.';
@@ -194,10 +193,12 @@ const freeAccountRequestTimeoutMs = 30_000;
 
 // The extension exposes a stable OTLP endpoint so instrumented apps can target a
 // predictable localhost port.
-const observerOtlpHttpPort = 4318;
-const observerOtlpGrpcPort = 4317;
-const observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHttpPort}`;
-const observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
+const defaultObserverOtlpHttpPort = 4318;
+const defaultObserverOtlpGrpcPort = 4317;
+let observerOtlpHttpPort = defaultObserverOtlpHttpPort;
+let observerOtlpGrpcPort = defaultObserverOtlpGrpcPort;
+let observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHttpPort}`;
+let observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
 const splunkFreeEditionUrl = 'https://www.splunk.com/en_us/download/observability-cloud-free-edition.html';
 const splunkFreeEditionTermsUrl = 'https://www.splunk.com/en_us/legal/splunk-observability-free-edition-terms.html';
 const splunkRealmHelpUrl = 'https://help.splunk.com/en/splunk-observability-cloud/administer/org-reference-info/view-your-realm-api-endpoints-and-organization';
@@ -282,6 +283,25 @@ function sharedDiscoveryMatchesRestBase(
 		&& discovered.pathname === intended.pathname;
 }
 
+function readManagedObserverDiscovery(): SharedObserverDiscovery | undefined {
+	const homeDir = os.homedir();
+	return readSharedObserverDiscovery(
+		homeDir,
+		path.join(homeDir, '.obstudio', managedObserverStateFileName),
+	);
+}
+
+function preferredObserverDiscoveryForBase(
+	restBaseUrl: string,
+	...discoveries: Array<SharedObserverDiscovery | undefined>
+): SharedObserverDiscovery | undefined {
+	const matching = discoveries.filter(
+		(discovery): discovery is SharedObserverDiscovery => discovery !== undefined
+			&& sharedDiscoveryMatchesRestBase(discovery, restBaseUrl),
+	);
+	return matching[0];
+}
+
 function setObserverEndpoints(endpoints: ObserverEndpointRoles | undefined): void {
 	observerEndpoints = endpoints;
 	observerBaseUrl = endpoints?.restBaseUrl;
@@ -289,17 +309,12 @@ function setObserverEndpoints(endpoints: ObserverEndpointRoles | undefined): voi
 
 type ObserverProbeOptions = {
 	requireStableOtlp: boolean;
-	sharedDiscovery?: SharedObserverDiscovery;
-	rejectedControlToken?: string;
 };
 
 type ObserverProbeResult =
 	| {
 		health: ObserverHealth;
 		status: 'ready';
-		verifiedControlToken?: string;
-		verifiedHealthProofSecret?: string;
-		verifiedMCPUrl?: string;
 	}
 	| { error: Error; status: 'unavailable' }
 	| { reason: string; status: 'mismatch' };
@@ -312,7 +327,40 @@ type PortReservation = {
 
 type StartupHintCarrier = {
 	startupHint?: string;
+	startupTitle?: string;
 };
+
+type ManagedPortObserverRetirement =
+	| { status: 'ignored' }
+	| { status: 'not-applicable' }
+	| { pid?: number; port?: number; status: 'restart-required'; version?: string }
+	| { status: 'retired' };
+
+function observerRestartRequiredError(
+	retirement: Extract<ManagedPortObserverRetirement, { status: 'restart-required' }>,
+	bundleVersion: string,
+): Error {
+	const portLabel = retirement.port === undefined
+		? 'an unknown localhost port'
+		: `localhost port ${retirement.port}`;
+	const pidLabel = retirement.pid === undefined
+		? 'PID unavailable'
+		: `PID ${retirement.pid}`;
+	const restartMessage = retirement.version === undefined
+		? `Observer on ${portLabel} (${pidLabel}) could not be verified as bundled Observer ${bundleVersion}. `
+			+ 'Cloud controls are unavailable until it is stopped.'
+		: `Observer ${retirement.version} on ${portLabel} (${pidLabel}) does not match bundled Observer ${bundleVersion}. `
+			+ 'Cloud controls are unavailable until it is stopped.';
+	const restartError = new Error(restartMessage);
+	Object.assign(restartError, {
+		startupHint: 'Restart VS Code, then run Splunk Observability Studio: Start Observer. '
+			+ (retirement.pid === undefined
+				? 'If it remains running, stop the Observer on the displayed port and retry.'
+				: 'If it remains running, stop the displayed PID and retry.'),
+		startupTitle: 'Restart required',
+	});
+	return restartError;
+}
 
 const agentIntegrationSpecs: AgentIntegrationSpec[] = [
 	{
@@ -353,11 +401,10 @@ const agentIntegrationSpecs: AgentIntegrationSpec[] = [
 ];
 
 export async function activate(context: vscode.ExtensionContext) {
-	activeExtensionContext = context;
 	observerDeactivationStarted = false;
 	observerOutputChannel = vscode.window.createOutputChannel('Splunk Observability Studio');
 	context.subscriptions.push(observerOutputChannel);
-	logObserverLifecycle('Extension activated.');
+	logObserverLifecycle(`Extension ${getBundleVersion(context)} activated.`);
 
 	context.subscriptions.push(
 		vscode.window.registerWebviewPanelSerializer(observerPanelViewType, {
@@ -413,8 +460,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			logObserverLifecycle(`Skipping automatic agent integration prompt: ${getErrorMessage(error)}`);
 		});
 
-	const openObserverDisposable = vscode.commands.registerCommand('observability-studio.openObserver', () => {
-		openObserverPanel(context);
+	const openObserverDisposable = vscode.commands.registerCommand('observability-studio.openObserver', async () => {
+		await settleObserverConfigurationRestart();
+		await openObserverPanel(context);
 	});
 
 	const statusMenuDisposable = vscode.commands.registerCommand('observability-studio.statusMenu', async () => {
@@ -478,6 +526,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	const startDisposable = vscode.commands.registerCommand('observability-studio.startObserver', async () => {
+		await settleObserverConfigurationRestart();
 		if (observerLifecycleState.status === 'running') {
 			void vscode.window.showInformationMessage('Observer is already running.');
 		}
@@ -500,20 +549,23 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	const stopDisposable = vscode.commands.registerCommand('observability-studio.stopObserver', async () => {
+		await settleObserverConfigurationRestart();
 		if (
 			observerProcess === undefined
 			&& observerStartupPromise === undefined
 			&& observerBaseUrl === undefined
+			&& observerLifecycleState.status === 'stopped'
 		) {
 			void vscode.window.showInformationMessage('Observer is not running.');
 			return;
 		}
-		await stopObserver(context);
+		await stopObserver();
 		void vscode.window.showInformationMessage('Observer stopped.');
 	});
 
 	const restartDisposable = vscode.commands.registerCommand('observability-studio.restartObserver', async () => {
-		await stopObserver(context);
+		await settleObserverConfigurationRestart();
+		await stopObserver();
 		try {
 			await ensureObserverRunning(context);
 			refreshObserverPanel();
@@ -618,6 +670,50 @@ export async function activate(context: vscode.ExtensionContext) {
 				: buildObserverValidatorSummaryUrl(observerBaseUrl),
 		}),
 	);
+	const internalTestDisposables = context.extensionMode === vscode.ExtensionMode.Test
+		? [
+			vscode.commands.registerCommand(
+				'observability-studio.internal.createFreeAccountForTest',
+				() => performCloudBridgeAction(context, {
+					action: 'create-free-account',
+					payload: {
+						email: 'ada@example.com',
+						firstName: 'Ada',
+						lastName: 'Lovelace',
+						region: 'us',
+						termsAccepted: true,
+					},
+				}),
+			),
+			vscode.commands.registerCommand(
+				'observability-studio.internal.resolveCloudRealmForTest',
+				() => performCloudBridgeAction(context, {
+					action: 'resolve-realm',
+					payload: { destination: 'https://app.us1.signalfx.com' },
+				}),
+			),
+			vscode.commands.registerCommand(
+				'observability-studio.internal.setObserverOtlpPortsForTest',
+				(value?: { grpc?: unknown; http?: unknown }) => {
+					if (observerLifecycleState.status !== 'stopped' || observerStartupPromise !== undefined) {
+						throw new Error(
+							'Observer must be stopped before changing test OTLP ports '
+							+ `(status=${observerLifecycleState.status}, startup=${observerStartupPromise === undefined ? 'idle' : 'active'}).`,
+						);
+					}
+					const nextHttpPort = parseInternalTestPort(value?.http, defaultObserverOtlpHttpPort);
+					const nextGrpcPort = parseInternalTestPort(value?.grpc, defaultObserverOtlpGrpcPort);
+					if (nextHttpPort === nextGrpcPort) {
+						throw new Error('Observer test OTLP ports must be distinct.');
+					}
+					observerOtlpHttpPort = nextHttpPort;
+					observerOtlpGrpcPort = nextGrpcPort;
+					observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHttpPort}`;
+					observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
+				},
+			),
+		]
+		: [];
 
 	context.subscriptions.push(openObserverDisposable);
 	context.subscriptions.push(statusMenuDisposable);
@@ -636,6 +732,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(internalResetAgentIntegrationPromptStateDisposable);
 	context.subscriptions.push(internalWaitForAgentIntegrationRefreshDisposable);
 	context.subscriptions.push(internalStateDisposable);
+	context.subscriptions.push(...internalTestDisposables);
 	context.subscriptions.push(observerStatusBarItem);
 	context.subscriptions.push({
 		dispose: () => {
@@ -648,11 +745,7 @@ export async function activate(context: vscode.ExtensionContext) {
 export async function deactivate(): Promise<void> {
 	observerDeactivationStarted = true;
 	sisCIMDOAuthAbortController?.abort();
-	try {
-		await shutdownObserverForExtensionUnload(activeExtensionContext, 'Extension deactivated');
-	} finally {
-		activeExtensionContext = undefined;
-	}
+	await shutdownObserverForExtensionUnload('Extension deactivated');
 }
 
 function isSISCIMDRegistrationEnabled(): boolean {
@@ -835,42 +928,43 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		if (observerOutputChannel === undefined) {
 			throw new Error('Observer output channel is not initialized.');
 		}
+		const bundleVersion = getBundleVersion(context);
+		const discoveredState = readSharedObserverDiscovery(
+			os.homedir(),
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
+		);
+		const managedState = readManagedObserverDiscovery();
 
 		const sharedObserverUrl = getConfiguredSharedObserverUrl();
 		if (sharedObserverUrl !== undefined) {
 			observerUsesSharedServer = true;
 			appendObserverOutputLine(`Using configured shared observer at ${sharedObserverUrl}`);
-			const discoveredState = readSharedObserverDiscovery(
-				os.homedir(),
-				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
+			const configuredDiscovery = preferredObserverDiscoveryForBase(
+				sharedObserverUrl,
+				discoveredState,
+				managedState,
 			);
-			const configuredDiscovery = discoveredState !== undefined
-				&& sharedDiscoveryMatchesRestBase(discoveredState, sharedObserverUrl)
-				? discoveredState
-				: undefined;
 			const configuredEndpoints = configuredDiscovery === undefined
 				? observerEndpointRolesForBase(sharedObserverUrl)
 				: observerEndpointRolesForDiscovery(configuredDiscovery, sharedObserverUrl);
 			setObserverEndpoints(configuredEndpoints);
 			syncObserverUi();
-			const readyProbe = await waitForObserverReady(configuredEndpoints, {
-				requireStableOtlp: false,
-				...(configuredDiscovery === undefined ? {} : { sharedDiscovery: configuredDiscovery }),
-			}, runId);
-			if (readyProbe.verifiedControlToken !== undefined) {
-				adoptVerifiedObserverMCPEndpoint(readyProbe);
-			}
-			const environmentControl = readyProbe.verifiedControlToken === undefined
-				? await verifyEnvironmentControlToken(configuredEndpoints)
-				: undefined;
-			observerSharedControlToken = readyProbe.verifiedControlToken
-				?? environmentControl?.controlToken
-				?? '';
-			observerSharedHealthProofSecret = readyProbe.verifiedHealthProofSecret
-				?? environmentControl?.healthProofSecret;
+			const configuredProbe = await waitForObserverReady(
+				configuredEndpoints,
+				{ requireStableOtlp: false },
+				runId,
+			);
 			const sharedPort = observerPortFromUrl(configuredEndpoints.restBaseUrl);
 			if (sharedPort === undefined) {
 				throw new Error(`Observer URL does not resolve to a usable port: ${sharedObserverUrl}`);
+			}
+			if (configuredProbe.health.version !== bundleVersion) {
+				throw observerRestartRequiredError({
+					pid: configuredDiscovery?.pid,
+					port: sharedPort,
+					status: 'restart-required',
+					version: configuredProbe.health.version,
+				}, bundleVersion);
 			}
 			if (completeObserverStart(observerLifecycleState, runId, sharedPort)) {
 				syncObserverUi();
@@ -878,19 +972,19 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			return;
 		}
 
-		const discoveredObserver = readSharedObserverDiscovery(
-			os.homedir(),
-			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
-		);
+		const discoveredObserver = discoveredState === undefined
+			? undefined
+			: preferredObserverDiscoveryForBase(
+				discoveredState.baseUrl,
+				discoveredState,
+				managedState,
+			);
 		if (discoveredObserver !== undefined) {
 			const discoveredEndpoints = observerEndpointRolesForDiscovery(discoveredObserver);
 			let discoveryProbe = await probeObserver(
 				discoveredEndpoints,
 				500,
-				{
-					requireStableOtlp: true,
-					sharedDiscovery: discoveredObserver,
-				},
+				{ requireStableOtlp: true },
 			);
 			assertObserverRunCurrent(observerLifecycleState, runId);
 			while (
@@ -904,24 +998,32 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				discoveryProbe = await probeObserver(
 					discoveredEndpoints,
 					500,
-					{
-						requireStableOtlp: true,
-						sharedDiscovery: discoveredObserver,
-					},
+					{ requireStableOtlp: true },
 				);
 				assertObserverRunCurrent(observerLifecycleState, runId);
 			}
+			const retirement = await retireMismatchedManagedPortObserver(
+				discoveredObserver,
+				discoveryProbe.status === 'ready' ? discoveryProbe.health : undefined,
+				getConfiguredManagedObserverPort(),
+				bundleVersion,
+			);
+			assertObserverRunCurrent(observerLifecycleState, runId);
+			if (retirement.status === 'restart-required') {
+				throw observerRestartRequiredError(retirement, bundleVersion);
+			}
 			let discoveryDetail: string;
-			if (discoveryProbe.status === 'ready') {
+			if (retirement.status === 'retired') {
+				discoveryDetail = 'the mismatched Observer on the managed port was stopped';
+			} else if (retirement.status === 'ignored') {
+				discoveryDetail = `Observer ${discoveryProbe.status === 'ready'
+					? discoveryProbe.health.version || '(unversioned)'
+					: '(unversioned)'} does not match bundled Observer ${bundleVersion}`;
+			} else if (discoveryProbe.status === 'ready') {
 				setObserverEndpoints(discoveredEndpoints);
-				if (discoveryProbe.verifiedControlToken !== undefined) {
-					adoptVerifiedObserverMCPEndpoint(discoveryProbe);
-				}
 				const discoveredPort = observerPortFromUrl(discoveredEndpoints.restBaseUrl);
 				if (discoveredPort !== undefined) {
 					observerUsesSharedServer = true;
-					observerSharedControlToken = discoveryProbe.verifiedControlToken ?? '';
-					observerSharedHealthProofSecret = discoveryProbe.verifiedHealthProofSecret;
 					appendObserverOutputLine(`Reusing discovered shared observer at ${discoveredObserver.baseUrl}`);
 					if (completeObserverStart(observerLifecycleState, runId, discoveredPort)) {
 						syncObserverUi();
@@ -942,31 +1044,107 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		const managedPort = getConfiguredManagedObserverPort();
 		const managedObserverBaseUrl = buildManagedObserverBaseUrl(managedPort);
 		const managedEndpoints = observerEndpointRolesForBase(managedObserverBaseUrl);
+		const managedDiscovery = managedState;
+		if (
+			managedDiscovery !== undefined
+			&& sharedDiscoveryMatchesRestBase(managedDiscovery, managedObserverBaseUrl)
+		) {
+			const managedObserverEndpoints = observerEndpointRolesForDiscovery(
+				managedDiscovery,
+				managedObserverBaseUrl,
+			);
+			const managedProbe = await probeObserver(
+				managedObserverEndpoints,
+				500,
+				{ requireStableOtlp: true },
+			);
+			assertObserverRunCurrent(observerLifecycleState, runId);
+			if (managedProbe.status === 'ready') {
+				const retirement = await retireMismatchedManagedPortObserver(
+					managedDiscovery,
+					managedProbe.health,
+					managedPort,
+					bundleVersion,
+				);
+				assertObserverRunCurrent(observerLifecycleState, runId);
+				if (retirement.status === 'restart-required') {
+					throw observerRestartRequiredError(retirement, bundleVersion);
+				}
+				if (retirement.status === 'not-applicable') {
+					setObserverEndpoints(managedObserverEndpoints);
+					observerUsesSharedServer = true;
+					appendObserverOutputLine(
+						`Reusing Observer at ${managedObserverEndpoints.restBaseUrl}`,
+					);
+					if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
+						syncObserverUi();
+					}
+					return;
+				}
+				appendObserverOutputLine(
+					`The previous Observer at ${managedObserverEndpoints.restBaseUrl} was stopped before managed startup.`,
+				);
+			} else {
+				const managedDetail = managedProbe.status === 'mismatch'
+					? managedProbe.reason
+					: getErrorMessage(managedProbe.error);
+				appendObserverOutputLine(
+					`Ignoring stale or incompatible Observer state for ${managedObserverBaseUrl}: ${managedDetail}`,
+				);
+			}
+		}
 		const existingObserver = await probeObserver(managedEndpoints, 500, { requireStableOtlp: true });
 		assertObserverRunCurrent(observerLifecycleState, runId);
 
 		if (existingObserver.status === 'ready') {
-			observerUsesSharedServer = true;
-			observerSharedControlToken = '';
-			observerSharedHealthProofSecret = undefined;
-			setObserverEndpoints(managedEndpoints);
-			appendObserverOutputLine(`Reusing shared observer at ${managedObserverBaseUrl}`);
-			if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
-				syncObserverUi();
+			if (existingObserver.health.version === bundleVersion) {
+				observerUsesSharedServer = true;
+				setObserverEndpoints(managedEndpoints);
+				appendObserverOutputLine(`Reusing shared observer at ${managedObserverBaseUrl}`);
+				if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
+					syncObserverUi();
+				}
+				return;
 			}
-			return;
+			const retirement = await retireMismatchedManagedPortObserver(
+				{
+					baseUrl: managedObserverBaseUrl,
+					healthUrl: managedEndpoints.healthUrl,
+					mcpUrl: managedEndpoints.mcpUrl,
+				},
+				existingObserver.health,
+				managedPort,
+				bundleVersion,
+			);
+			assertObserverRunCurrent(observerLifecycleState, runId);
+			if (retirement.status === 'restart-required') {
+				throw observerRestartRequiredError(retirement, bundleVersion);
+			}
+			if (retirement.status === 'not-applicable') {
+				observerUsesSharedServer = true;
+				setObserverEndpoints(managedEndpoints);
+				appendObserverOutputLine(`Reusing Observer at ${managedObserverBaseUrl}`);
+				if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
+					syncObserverUi();
+				}
+				return;
+			}
+			if (retirement.status !== 'retired') {
+				throw observerRestartRequiredError({
+					port: managedPort,
+					status: 'restart-required',
+					version: existingObserver.health.version,
+				}, bundleVersion);
+			}
+			appendObserverOutputLine(
+				`The previous Observer at ${managedObserverBaseUrl} was stopped before managed startup.`,
+			);
 		}
 
 		if (existingObserver.status === 'mismatch') {
 			appendObserverOutputLine(`Observer health probe mismatch at ${managedObserverBaseUrl}: ${existingObserver.reason}`);
 			logObserverLifecycle(`Run ${runId}: existing service on ${managedObserverBaseUrl} did not match observer health: ${existingObserver.reason}`);
-			const wrappedError = new Error(
-				`Cannot use ${managedObserverBaseUrl}: ${formatObserverProbeMismatchMessage(managedObserverBaseUrl, 'managed-reuse')} ` +
-				`Stop the conflicting service or configure observability-studio.${managedObserverPortSetting} ` +
-				`or observability-studio.${sharedObserverUrlSetting}.`,
-			);
-			Object.assign(wrappedError, { startupHint: getObserverProbeMismatchHint('managed-reuse') });
-			throw wrappedError;
+			logObserverLifecycle(`Run ${runId}: checking whether managed port ${managedPort} remains occupied.`);
 		}
 
 		const backend = resolveBackend(context.extensionPath);
@@ -1003,44 +1181,38 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		assertObserverRunCurrent(observerLifecycleState, runId);
 		logObserverLifecycle(`Run ${runId}: OTLP ports ready (HTTP ${otlpHttpPort}, gRPC ${otlpGrpcPort}).`);
 		observerUsesSharedServer = false;
-		observerSharedControlToken = undefined;
-		observerSharedHealthProofSecret = undefined;
-		managedObserverControlToken = '';
-		managedObserverHealthProofSecret = '';
 		setObserverEndpoints(managedEndpoints);
 
 		appendObserverOutputLine(`Starting ${backend.label} on ${managedObserverBaseUrl}`);
 		appendObserverOutputLine(`OTLP/HTTP receiver listening on ${observerOtlpHttpEndpoint}`);
 		appendObserverOutputLine(`OTLP/gRPC receiver listening on ${observerOtlpGrpcEndpoint}`);
-		const managedObserverEnvironment = { ...process.env };
-		const managedLaunchControlToken = crypto.randomBytes(32).toString('base64url');
-		const managedLaunchHealthProofSecret = crypto.randomBytes(32).toString('base64url');
+		const managedObserverEnvironment: NodeJS.ProcessEnv = {
+			...process.env,
+			...backend.env,
+			HOST: managedObserverHost,
+			OTLP_HOST: managedObserverHost,
+			OTLP_PORT: String(otlpHttpPort),
+			OTLP_HTTP_PORT: String(otlpHttpPort),
+			OTLP_GRPC_PORT: String(otlpGrpcPort),
+			PORT: String(observerPort),
+			OBSTUDIO_OWNER: extensionManagedObserverOwner,
+			OBSTUDIO_MODE: extensionManagedObserverMode,
+			// Pass the workspace root so the preview resolver locates
+			// .observe/dashboards.preview.json relative to the open
+			// workspace rather than the binary's install directory.
+			...(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+				? { OBSTUDIO_WORKSPACE_ROOT: vscode.workspace.workspaceFolders[0].uri.fsPath }
+				: {}),
+		};
+		// Never pass obsolete remote-control credentials or public endpoints to
+		// the loopback-only Observer, even if VS Code inherited them.
 		delete managedObserverEnvironment.OBSTUDIO_CONTROL_TOKEN;
 		delete managedObserverEnvironment.OBSTUDIO_HEALTH_PROOF_SECRET;
 		delete managedObserverEnvironment.OBSTUDIO_PUBLIC_MCP_URL;
-
 		try {
 			startedProcess = cp.spawn(backend.command, backend.args, {
 				cwd: backend.cwd,
-				env: {
-					...managedObserverEnvironment,
-					...backend.env,
-					HOST: managedObserverHost,
-					OTLP_HOST: managedObserverHost,
-					OTLP_PORT: String(otlpHttpPort),
-					OTLP_HTTP_PORT: String(otlpHttpPort),
-					OTLP_GRPC_PORT: String(otlpGrpcPort),
-					PORT: String(observerPort),
-					OBSTUDIO_CONTROL_TOKEN: managedLaunchControlToken,
-					OBSTUDIO_HEALTH_PROOF_SECRET: managedLaunchHealthProofSecret,
-					OBSTUDIO_HIDE_CLOUD_BROWSER_LAUNCH_TOKEN: 'true',
-					// Pass the workspace root so the preview resolver locates
-					// .observe/dashboards.preview.json relative to the open
-					// workspace rather than the binary's install directory.
-					...(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-						? { OBSTUDIO_WORKSPACE_ROOT: vscode.workspace.workspaceFolders[0].uri.fsPath }
-						: {}),
-				},
+				env: managedObserverEnvironment,
 				stdio: ['ignore', 'pipe', 'pipe'],
 			});
 		} catch (error) {
@@ -1075,10 +1247,6 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			if (finishObserverRun(observerLifecycleState, runId)) {
 				setObserverEndpoints(undefined);
 				observerUsesSharedServer = false;
-				observerSharedControlToken = undefined;
-				observerSharedHealthProofSecret = undefined;
-				managedObserverControlToken = '';
-				managedObserverHealthProofSecret = '';
 				syncObserverUi();
 			}
 		});
@@ -1098,38 +1266,17 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			if (failObserverStart(observerLifecycleState, runId, startupMessage, startupFailure.hint)) {
 				setObserverEndpoints(undefined);
 				observerUsesSharedServer = false;
-				observerSharedControlToken = undefined;
-				observerSharedHealthProofSecret = undefined;
-				managedObserverControlToken = '';
-				managedObserverHealthProofSecret = '';
 				syncObserverUi();
 				void vscode.window.showErrorMessage(`Splunk Observability Studio failed to start observer: ${startupMessage}`);
 			}
 		});
 
-		await waitForObserverReady(managedEndpoints, { requireStableOtlp: true }, runId);
-		const managedLaunchDiscovery: SharedObserverDiscovery = {
-			baseUrl: managedEndpoints.restBaseUrl,
-			controlToken: managedLaunchControlToken,
-			healthProofSecret: managedLaunchHealthProofSecret,
-			healthUrl: managedEndpoints.healthUrl,
-			mcpUrl: managedEndpoints.mcpUrl,
-		};
-		const managedProof = await probeObserver(managedEndpoints, 500, {
-			requireStableOtlp: true,
-			sharedDiscovery: managedLaunchDiscovery,
-		});
-		managedObserverControlToken = managedProof.status === 'ready'
-			? managedProof.verifiedControlToken ?? ''
-			: '';
-		managedObserverHealthProofSecret = managedProof.status === 'ready'
-			? managedProof.verifiedHealthProofSecret ?? ''
-			: '';
-		if (managedProof.status === 'ready' && managedProof.verifiedControlToken !== undefined) {
-			adoptVerifiedObserverMCPEndpoint(managedProof);
-		}
-		if (managedObserverControlToken === '') {
-			appendObserverOutputLine('Observer launch control could not be authenticated; protected cloud actions are disabled.');
+		const startedProbe = await waitForObserverReady(managedEndpoints, { requireStableOtlp: true }, runId);
+		if (startedProbe.health.version !== bundleVersion) {
+			throw new Error(
+				`Bundled Observer reported version ${String(startedProbe.health.version)}, `
+				+ `expected ${bundleVersion}.`,
+			);
 		}
 		logObserverLifecycle(`Run ${runId}: observer is accepting connections at ${managedObserverBaseUrl}.`);
 		const startupCompleted = await observerCloudLifecycleOperations.run(async () => {
@@ -1170,13 +1317,15 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			&& typeof (error as { startupHint?: unknown }).startupHint === 'string'
 			? (error as { startupHint: string }).startupHint
 			: getObserverStartupHint('generic');
-		if (failObserverStart(observerLifecycleState, runId, startupMessage, startupHint)) {
+		const startupTitle = typeof error === 'object'
+			&& error !== null
+			&& 'startupTitle' in error
+			&& typeof (error as { startupTitle?: unknown }).startupTitle === 'string'
+			? (error as { startupTitle: string }).startupTitle
+			: undefined;
+		if (failObserverStart(observerLifecycleState, runId, startupMessage, startupHint, startupTitle)) {
 			setObserverEndpoints(undefined);
 			observerUsesSharedServer = false;
-			observerSharedControlToken = undefined;
-			observerSharedHealthProofSecret = undefined;
-			managedObserverControlToken = '';
-			managedObserverHealthProofSecret = '';
 			logObserverLifecycle(`Run ${runId}: startup failed: ${startupMessage}`);
 			syncObserverUi();
 		}
@@ -1191,7 +1340,276 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 	return observerStartupPromise;
 }
 
-async function stopObserver(context?: vscode.ExtensionContext): Promise<void> {
+async function retireMismatchedManagedPortObserver(
+	discovery: SharedObserverDiscovery,
+	observerHealth: ObserverHealth | undefined,
+	managedPort: number,
+	bundleVersion: string,
+): Promise<ManagedPortObserverRetirement> {
+	const discoveryPort = observerPortFromUrl(discovery.baseUrl);
+	const observerHealthVerified = observerHealth !== undefined;
+	let observerVersion = observerHealth?.version;
+	if (observerHealthVerified && observerVersion === bundleVersion) {
+		return { status: 'not-applicable' };
+	}
+	if (discoveryPort !== managedPort) {
+		if (!observerHealthVerified) {
+			return { status: 'not-applicable' };
+		}
+		appendObserverOutputLine(
+			`Observer ${observerVersion ?? '(unversioned)'} at ${discovery.baseUrl} does not match `
+			+ `bundled Observer ${bundleVersion}; leaving the other port untouched.`,
+		);
+		return {
+			status: 'ignored',
+		};
+	}
+	if (!observerHealthVerified) {
+		return { status: 'not-applicable' };
+	}
+	const listenerInspection = await inspectListeningProcess(managedPort);
+	if (listenerInspection.status === 'none') {
+		return { status: 'retired' };
+	}
+	if (listenerInspection.status !== 'unique') {
+		appendObserverOutputLine(
+			`Observer at ${discovery.baseUrl} has no unique inspectable listener; refusing to stop it automatically.`,
+		);
+		return {
+			pid: discovery.pid,
+			port: discoveryPort,
+			status: 'restart-required',
+			version: observerVersion,
+		};
+	}
+	const listener = listenerInspection.process;
+	const { executablePath: processExecutablePath, pid } = listener;
+	if (discovery.pid !== undefined && discovery.pid !== pid) {
+		appendObserverOutputLine(
+			`Ignoring stale Observer PID ${discovery.pid}; localhost port ${managedPort} belongs to PID ${pid}.`,
+		);
+	}
+	if (pid === process.pid) {
+		return { pid, port: discoveryPort, status: 'restart-required', version: observerVersion };
+	}
+	if (!processIsRunning(pid)) {
+		return { status: 'retired' };
+	}
+	if (processExecutablePath === undefined) {
+		if (!processIsRunning(pid)) {
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Observer PID ${pid} could not be inspected; refusing to stop it automatically.`,
+		);
+		return {
+			pid,
+			port: observerPortFromUrl(discovery.baseUrl),
+			status: 'restart-required',
+			version: observerVersion,
+		};
+	}
+	if (!isObserverExecutablePath(processExecutablePath)) {
+		appendObserverOutputLine(
+			`Observer health was returned from ${discovery.baseUrl}, but localhost port ${managedPort} `
+			+ `belongs to ${processExecutablePath}; refusing to stop PID ${pid} automatically.`,
+		);
+		return {
+			pid,
+			port: discoveryPort,
+			status: 'restart-required',
+			version: observerVersion,
+		};
+	}
+	const restartRequired = (): ManagedPortObserverRetirement => ({
+		pid,
+		port: discoveryPort,
+		status: 'restart-required',
+		version: observerVersion,
+	});
+
+	const preStopInspection = await inspectListeningProcess(managedPort);
+	if (preStopInspection.status === 'none') {
+		return { status: 'retired' };
+	}
+	if (preStopInspection.status !== 'unique') {
+		appendObserverOutputLine(
+			`Could not reverify Observer ${observerVersion ?? '(unversioned)'} on localhost port ${managedPort}; `
+			+ `refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	const preStopListener = preStopInspection.process;
+	if (
+		preStopListener.pid !== pid
+		|| preStopListener.executablePath === undefined
+		|| !isObserverExecutablePath(preStopListener.executablePath)
+		|| !processExecutablePathsEqual(preStopListener.executablePath, processExecutablePath)
+	) {
+		appendObserverOutputLine(
+			`Could not reverify Observer ${observerVersion ?? '(unversioned)'} on localhost port ${managedPort}; `
+			+ `refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	const replacementProbe = await probeObserver(
+		observerEndpointRolesForBase(buildManagedObserverBaseUrl(managedPort)),
+		500,
+		{ requireStableOtlp: false },
+	);
+	if (replacementProbe.status !== 'ready') {
+		const replacementProbeInspection = await inspectListeningProcess(managedPort);
+		if (replacementProbeInspection.status === 'none') {
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Could not refresh the Observer identity on localhost port ${managedPort}; refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	if (replacementProbe.health.version === bundleVersion) {
+		appendObserverOutputLine(
+			`Observer on managed port ${managedPort} already reports bundled version ${bundleVersion}; reusing it.`,
+		);
+		return { status: 'not-applicable' };
+	}
+	observerVersion = replacementProbe.health.version;
+	const confirmedInspection = await inspectListeningProcess(managedPort);
+	if (confirmedInspection.status === 'none') {
+		return { status: 'retired' };
+	}
+	if (confirmedInspection.status !== 'unique') {
+		appendObserverOutputLine(
+			`Observer ownership changed while verifying localhost port ${managedPort}; refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	const confirmedListener = confirmedInspection.process;
+	if (
+		confirmedListener.pid !== pid
+		|| confirmedListener.executablePath === undefined
+		|| !isObserverExecutablePath(confirmedListener.executablePath)
+		|| !processExecutablePathsEqual(confirmedListener.executablePath, processExecutablePath)
+	) {
+		appendObserverOutputLine(
+			`Observer ownership changed while verifying localhost port ${managedPort}; refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+
+	appendObserverOutputLine(
+		`Replacing Observer ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} (PID ${pid}) `
+		+ `with bundled Observer ${bundleVersion}.`,
+	);
+	let gracefulTerminationRequested = false;
+	try {
+		await gracefullyTerminateProcess(pid);
+		gracefulTerminationRequested = true;
+	} catch (error) {
+		if (!processIsRunning(pid)) {
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Could not request a graceful stop for Observer ${observerVersion ?? '(unversioned)'} on managed port `
+			+ `${managedPort}: ${getErrorMessage(error)}. Proceeding to the verified forced-stop fallback.`,
+		);
+	}
+
+	if (gracefulTerminationRequested) {
+		if (await waitForProcessExit(
+			pid,
+			outdatedManagedObserverShutdownTimeoutMs,
+		)) {
+			appendObserverOutputLine(
+				`Stopped Observer ${observerVersion ?? '(unversioned)'} on managed port ${managedPort}.`,
+			);
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Observer ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} did not stop after `
+			+ `${outdatedManagedObserverShutdownTimeoutMs}ms; forcing it to stop.`,
+		);
+	}
+	const forceStopInspection = await inspectListeningProcess(managedPort);
+	if (
+		forceStopInspection.status === 'ambiguous'
+		|| forceStopInspection.status === 'unavailable'
+	) {
+		appendObserverOutputLine(
+			`Could not determine the owner of managed port ${managedPort}; refusing to force-stop Observer PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	if (
+		forceStopInspection.status === 'unique'
+		&& (
+			forceStopInspection.process.pid !== pid
+			|| (forceStopInspection.process.executablePath !== undefined
+				&& (!isObserverExecutablePath(forceStopInspection.process.executablePath)
+					|| !processExecutablePathsEqual(
+						forceStopInspection.process.executablePath,
+						processExecutablePath,
+					)))
+		)
+	) {
+		appendObserverOutputLine(
+			`A different process now owns managed port ${managedPort}; refusing to force-stop Observer PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	const currentProcessExecutablePath = await readProcessExecutablePath(pid);
+	if (
+		currentProcessExecutablePath === undefined
+		|| !isObserverExecutablePath(currentProcessExecutablePath)
+		|| !processExecutablePathsEqual(currentProcessExecutablePath, processExecutablePath)
+	) {
+		if (!processIsRunning(pid)) {
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Could not reverify Observer ${observerVersion ?? '(unversioned)'} PID ${pid}; refusing a forced stop.`,
+		);
+		return restartRequired();
+	}
+	try {
+		await forceTerminateProcess(pid);
+	} catch (error) {
+		if (!processIsRunning(pid)) {
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Could not force-stop Observer ${observerVersion ?? '(unversioned)'} on managed port `
+			+ `${managedPort}: ${getErrorMessage(error)}`,
+		);
+		return restartRequired();
+	}
+	if (await waitForProcessExit(
+		pid,
+		outdatedManagedObserverForceShutdownTimeoutMs,
+	)) {
+		appendObserverOutputLine(
+			`Force-stopped Observer ${observerVersion ?? '(unversioned)'} on managed port ${managedPort}.`,
+		);
+		return { status: 'retired' };
+	}
+	appendObserverOutputLine(
+		`Observer ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} is still running after a forced stop.`,
+	);
+	return restartRequired();
+}
+
+async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (!processIsRunning(pid)) {
+			return true;
+		}
+		await delay(50);
+	}
+	return !processIsRunning(pid);
+}
+
+async function stopObserver(): Promise<void> {
 	if (observerStopOperation.current !== undefined) {
 		logObserverLifecycle('Stop requested while shutdown is already in progress; waiting for existing shutdown.');
 		return observerStopOperation.current;
@@ -1200,13 +1618,14 @@ async function stopObserver(context?: vscode.ExtensionContext): Promise<void> {
 	const queuedStop = observerCloudLifecycleOperations.run(async () => {
 		const proc = observerProcess;
 		if (proc === undefined && observerStartupPromise === undefined && observerBaseUrl === undefined) {
+			if (observerLifecycleState.status !== 'stopped') {
+				stopObserverRun(observerLifecycleState);
+				observerUsesSharedServer = false;
+				syncObserverUi();
+			}
 			logObserverLifecycle('Stop requested but observer is already idle.');
 			return;
 		}
-		if (context !== undefined) {
-			await persistManagedObserverCloudState(context);
-		}
-
 		logObserverLifecycle(
 			`Stopping observer (status=${observerLifecycleState.status}, pid=${proc?.pid ?? 'none'}, port=${observerLifecycleState.port ?? 'none'}, url=${observerBaseUrl ?? 'none'}).`,
 		);
@@ -1215,10 +1634,6 @@ async function stopObserver(context?: vscode.ExtensionContext): Promise<void> {
 		observerStartupPromise = undefined;
 		setObserverEndpoints(undefined);
 		observerUsesSharedServer = false;
-		observerSharedControlToken = undefined;
-		observerSharedHealthProofSecret = undefined;
-		managedObserverControlToken = '';
-		managedObserverHealthProofSecret = '';
 		syncObserverUi();
 
 		if (proc === undefined) {
@@ -1245,13 +1660,12 @@ async function stopObserver(context?: vscode.ExtensionContext): Promise<void> {
 }
 
 async function shutdownObserverForExtensionUnload(
-	context: vscode.ExtensionContext | undefined,
 	reason: string,
 ): Promise<void> {
 	logObserverLifecycle(`${reason}; stopping observer process.`);
 	try {
 		const stopped = await operationCompletesWithin(
-			stopObserver(context),
+			stopObserver(),
 			observerExtensionUnloadDeadlineMs,
 		);
 		if (!stopped) {
@@ -1283,10 +1697,6 @@ function forceDisposeObserverForExtensionUnload(
 	observerStopOperation.clear();
 	setObserverEndpoints(undefined);
 	observerUsesSharedServer = false;
-	observerSharedControlToken = undefined;
-	observerSharedHealthProofSecret = undefined;
-	managedObserverControlToken = '';
-	managedObserverHealthProofSecret = '';
 	syncObserverUi();
 	terminateObserverProcess(proc, signal);
 }
@@ -1383,7 +1793,7 @@ function refreshObserverPanel(): void {
 		return;
 	}
 
-	const renderKey = `${observerLifecycleState.status}:${observerLifecycleState.port ?? 'none'}:${observerLifecycleState.startupError ?? 'none'}:${observerLifecycleState.startupHint ?? 'none'}:${observerBaseUrl ?? 'none'}:${observerUsesSharedServer ? 'shared' : 'local'}`;
+	const renderKey = `${observerLifecycleState.status}:${observerLifecycleState.port ?? 'none'}:${observerLifecycleState.startupError ?? 'none'}:${observerLifecycleState.startupHint ?? 'none'}:${observerLifecycleState.startupTitle ?? 'none'}:${observerBaseUrl ?? 'none'}:${observerUsesSharedServer ? 'shared' : 'local'}`;
 	if (renderKey === lastObserverPanelRenderKey) {
 		return;
 	}
@@ -1411,6 +1821,7 @@ function refreshObserverPanel(): void {
 			observerPanel.webview.html = getObserverErrorWebviewHtml(
 				observerLifecycleState.startupError ?? 'Observer could not start.',
 				observerLifecycleState.startupHint ?? getObserverStartupHint('generic'),
+				observerLifecycleState.startupTitle ?? 'Observer could not start',
 			);
 			return;
 		case 'starting':
@@ -1488,10 +1899,11 @@ async function handleObserverWebviewMessage(
 			delivered = await postObserverHostResponse(panel, message.requestId, true, result).catch(() => false);
 		}
 		if (!delivered && !observerDeactivationStarted && freeAccountSignup) {
-			void vscode.window.showInformationMessage(
-				'Thank you for registering. Your free edition account is on its way. ' +
-				'You will receive an email within 10 minutes; check your spam folder if it does not arrive.',
-			);
+			void vscode.window.showInformationMessage(freeAccountSetupIsPending(result)
+				? 'Splunk received your Free Edition request but needs extra time to finish setting up the account. ' +
+					'If a confirmation email does not arrive within 24 hours, contact Splunk Support.'
+				: 'Thank you for registering. Your free edition account is on its way. ' +
+					'You will receive an email within 10 minutes; check your spam folder if it does not arrive.');
 		}
 	} catch (error) {
 		let delivered = false;
@@ -1520,6 +1932,16 @@ async function handleObserverWebviewMessage(
 
 function isFreeAccountSignupRequest(request: ObserverHostRequest): boolean {
 	return request.kind === 'cloud' && request.action === 'create-free-account';
+}
+
+function freeAccountSetupIsPending(value: unknown): boolean {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+	const freeAccount = (value as { freeAccount?: unknown }).freeAccount;
+	return typeof freeAccount === 'object'
+		&& freeAccount !== null
+		&& (freeAccount as { accountSetupPending?: unknown }).accountSetupPending === true;
 }
 
 async function performObserverHostRequest(
@@ -1580,13 +2002,10 @@ async function performCloudBridgeActionExclusive(
 				const [status, cimdSession] = await Promise.all([
 					refreshSplunkCloudConnection(context),
 					currentSISCIMDSessionStatus(context),
-				]);
-				return { cimdRegistrationEnabled, cimdSession, status };
-			} catch (error) {
-				if (!cloudControlRemainsAvailableAfterInitializationError(error)) {
-					throw error;
-				}
-				const [status, cimdSession] = await Promise.all([
+					]);
+					return { cimdRegistrationEnabled, cimdSession, status };
+				} catch (error) {
+					const [status, cimdSession] = await Promise.all([
 					getObserverCloudJSON('/api/splunk/export'),
 					currentSISCIMDSessionStatus(context),
 				]);
@@ -1825,12 +2244,9 @@ function cloudConnectionFromRequest(
 
 function cloudExpectedVersionFromRequest(
 	request: { action: CloudBridgeAction; payload?: ObserverHostCloudPayload },
-): string {
+): string | undefined {
 	const expectedVersion = request.payload?.expectedVersion;
-	if (typeof expectedVersion !== 'string') {
-		throw new Error('Observer cloud state version is missing.');
-	}
-	return expectedVersion;
+	return typeof expectedVersion === 'string' ? expectedVersion : undefined;
 }
 
 async function refreshSplunkCloudConnection(context: vscode.ExtensionContext): Promise<unknown> {
@@ -1860,45 +2276,6 @@ async function refreshObserverCloudStatus(): Promise<unknown> {
 	return postObserverCloudJSON('/api/splunk/export/refresh', {});
 }
 
-async function persistManagedObserverCloudState(context: vscode.ExtensionContext): Promise<void> {
-	try {
-		await captureSplunkCloudState({
-			isManagedObserver: observerProcess !== undefined,
-			readConfiguration: () => postObserverControlledCloudJSON(
-				'/api/splunk/export/shutdown-snapshot',
-				{},
-				observerShutdownPreferenceCaptureTimeoutMs,
-			),
-			timeoutMs: observerShutdownPreferenceCaptureTimeoutMs,
-			writeState: async (state) => {
-				await persistSplunkCloudStateWithRollback({
-					next: {
-						connectionValue: state === undefined
-							? undefined
-							: JSON.stringify(state.connection),
-						exportEnabled: state?.exportEnabled,
-					},
-					readState: () => readStoredCloudConnectionState(context),
-					timeoutMs: observerShutdownPreferenceCaptureTimeoutMs,
-					waitForWrite: (operation) => operationCompletesWithin(
-						operation,
-						observerShutdownPreferenceCaptureTimeoutMs,
-					),
-					writeState: (next) => restoreStoredCloudConnectionState(
-						context,
-						next.connectionValue,
-						next.exportEnabled,
-					),
-				});
-			},
-		});
-	} catch (error) {
-		appendObserverOutputLine(
-			`[splunk-export] could not preserve cloud configuration before shutdown: ${getErrorMessage(error)}`,
-		);
-	}
-}
-
 async function restoreManagedObserverCloudConnection(context: vscode.ExtensionContext): Promise<void> {
 	try {
 		const status = await refreshSplunkCloudConnection(context);
@@ -1914,7 +2291,7 @@ async function restoreManagedObserverCloudConnection(context: vscode.ExtensionCo
 
 async function forgetSplunkCloudConnection(
 	context: vscode.ExtensionContext,
-	expectedVersion: string,
+	expectedVersion: string | undefined,
 ): Promise<unknown> {
 	const rollbackToken = crypto.randomBytes(32).toString('base64url');
 	return forgetSplunkCloudWithStorage({
@@ -2018,8 +2395,8 @@ async function requestObserverHostHTTP(
 	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
 		throw new Error('Observer requests require HTTP or HTTPS.');
 	}
-	if (url.protocol === 'http:' && !isLocalObserverControlHost(url.hostname)) {
-		throw new Error('Observer requests require HTTPS for a non-local Observer.');
+	if (!isLoopbackObserverHost(url.hostname)) {
+		throw new Error('Observer requests require a loopback Observer.');
 	}
 
 	const payload = body === undefined ? undefined : Buffer.from(body, 'utf8');
@@ -2065,63 +2442,15 @@ async function getObserverCloudJSON(
 	}
 
 	const url = buildObserverApiUrl(pathname);
-	if (
-		url.protocol === 'http:'
-		&& !isLocalObserverControlHost(url.hostname)
-	) {
-		throw new Error('Cloud connection reads require HTTPS for a non-local Observer.');
+	if (!isLoopbackObserverHost(url.hostname)) {
+		throw new Error('Observer cloud requests require a loopback Observer.');
 	}
 
-	const response = await requestObserverCloudJSON(url, undefined, undefined, timeoutMs);
+	const response = await requestObserverCloudJSON(url, undefined, timeoutMs);
 	if (response.statusCode >= 200 && response.statusCode < 300) {
 		return response.body;
 	}
 	throw observerCloudResponseError(response.statusCode, response.body);
-}
-
-async function postObserverControlledCloudJSON(
-	pathname: string,
-	body: Record<string, unknown>,
-	timeoutMs = observerCloudRequestTimeoutMs,
-): Promise<unknown> {
-	return requestObserverControlledCloudJSON(pathname, body, timeoutMs);
-}
-
-async function requestObserverControlledCloudJSON(
-	pathname: string,
-	body: Record<string, unknown> | undefined,
-	timeoutMs: number,
-): Promise<unknown> {
-	if (observerBaseUrl === undefined || observerLifecycleState.status !== 'running') {
-		throw new Error('Observer is not running.');
-	}
-	const url = buildObserverApiUrl(pathname);
-	if (url.protocol === 'http:' && !isLocalObserverControlHost(url.hostname)) {
-		throw new Error('Cloud control requires HTTPS for a non-local Observer.');
-	}
-	const sharedObserverUrl = observerUsesSharedServer ? observerBaseUrl : undefined;
-	return requestObserverCloudMutationWithTokenRefresh({
-		currentToken: activeObserverControlToken,
-		refreshToken: sharedObserverUrl !== undefined
-			? async (usedToken) => {
-				const refreshedToken = await refreshSharedObserverControlToken(
-					sharedObserverUrl,
-					usedToken,
-					getConfiguredSharedObserverUrl() !== undefined,
-				);
-				if (refreshedToken !== undefined) {
-					observerSharedControlToken = refreshedToken;
-				}
-				return refreshedToken;
-			}
-			: undefined,
-		send: (controlToken) => requestObserverCloudJSON(
-			buildObserverApiUrl(pathname),
-			body,
-			controlToken,
-			timeoutMs,
-		),
-	});
 }
 
 async function requestObserverFreeAccountJSON(
@@ -2137,23 +2466,20 @@ async function requestObserverFreeAccountJSON(
 		);
 	}
 	const url = buildObserverApiUrl(pathname);
-	if (url.protocol === 'http:' && !isLocalObserverControlHost(url.hostname)) {
+	if (!isLoopbackObserverHost(url.hostname)) {
 		throw new ObserverCloudRequestError(
-			'Free Edition signup requires HTTPS for a non-local Observer.',
+			'Free Edition signup requires a loopback Observer.',
 			'insecure_observer',
-			true,
-		);
-	}
-	if (activeObserverControlToken() === '') {
-		throw new ObserverCloudRequestError(
-			'Free Edition signup requires OBSTUDIO_CONTROL_TOKEN and OBSTUDIO_HEALTH_PROOF_SECRET when using a shared Observer.',
-			'control_token_missing',
 			true,
 		);
 	}
 
 	try {
-		return await requestObserverControlledCloudJSON(pathname, body, timeoutMs);
+		const response = await requestObserverCloudJSON(url, body, timeoutMs);
+		if (response.statusCode >= 200 && response.statusCode < 300) {
+			return response.body;
+		}
+		throw observerCloudResponseError(response.statusCode, response.body);
 	} catch (error) {
 		if (error instanceof ObserverCloudRequestError) {
 			throw error;
@@ -2188,43 +2514,24 @@ async function postObserverCloudJSON(
 	}
 
 	const url = buildObserverApiUrl(pathname);
-	if (
-		url.protocol === 'http:'
-		&& !isLocalObserverControlHost(url.hostname)
-	) {
-		throw new Error('Cloud connection changes require HTTPS for a non-local Observer.');
+	if (!isLoopbackObserverHost(url.hostname)) {
+		throw new Error('Cloud connection changes require a loopback Observer.');
 	}
-	const sharedObserverUrl = observerUsesSharedServer ? observerBaseUrl : undefined;
-
-	return requestObserverCloudMutationWithTokenRefresh({
-		currentToken: activeObserverControlToken,
-		refreshToken: sharedObserverUrl !== undefined
-			? async (usedToken) => {
-				const refreshedToken = await refreshSharedObserverControlToken(
-					sharedObserverUrl,
-					usedToken,
-					getConfiguredSharedObserverUrl() !== undefined,
-				);
-				if (refreshedToken !== undefined) {
-					observerSharedControlToken = refreshedToken;
-				}
-				return refreshedToken;
-			}
-				: undefined,
-		send: (controlToken) => requestObserverCloudJSON(
-			buildObserverApiUrl(pathname),
-			body,
-			controlToken,
-			observerCloudRequestTimeoutMs,
-			rollbackToken,
-		),
-	});
+	const response = await requestObserverCloudJSON(
+		url,
+		body,
+		observerCloudRequestTimeoutMs,
+		rollbackToken,
+	);
+	if (response.statusCode >= 200 && response.statusCode < 300) {
+		return response.body;
+	}
+	throw observerCloudResponseError(response.statusCode, response.body);
 }
 
 async function requestObserverCloudJSON(
 	url: URL,
 	body: Record<string, unknown> | undefined,
-	controlToken: string | undefined,
 	timeoutMs = observerCloudRequestTimeoutMs,
 	rollbackToken?: string,
 ): Promise<{ body: unknown; statusCode: number }> {
@@ -2232,9 +2539,6 @@ async function requestObserverCloudJSON(
 	const headers: http.OutgoingHttpHeaders = {
 		Accept: 'application/json',
 	};
-	if (controlToken !== undefined) {
-		headers.Authorization = `Bearer ${controlToken}`;
-	}
 	if (rollbackToken !== undefined) {
 		headers[observerCloudRollbackTokenHeader] = rollbackToken;
 	}
@@ -2310,119 +2614,6 @@ function cloudBridgeErrorMetadata(error: unknown): { code?: string; retrySafe?: 
 	return {};
 }
 
-function activeObserverControlToken(): string {
-	if (!observerUsesSharedServer) {
-		return managedObserverControlToken;
-	}
-	return observerSharedControlToken ?? '';
-}
-
-function activeObserverHealthProofSecret(): string {
-	if (!observerUsesSharedServer) {
-		return managedObserverHealthProofSecret;
-	}
-	return observerSharedHealthProofSecret ?? '';
-}
-
-function sharedObserverControlTokenFromEnv(): string | undefined {
-	const token = process.env.OBSTUDIO_CONTROL_TOKEN?.trim();
-	return token === '' || token === undefined ? undefined : token;
-}
-
-function sharedObserverHealthProofSecretFromEnv(): string | undefined {
-	const secret = process.env.OBSTUDIO_HEALTH_PROOF_SECRET?.trim();
-	return secret === '' || secret === undefined ? undefined : secret;
-}
-
-async function verifyEnvironmentControlToken(
-	endpoints: ObserverEndpointRoles,
-	rejectedToken?: string,
-): Promise<{ controlToken: string; healthProofSecret: string } | undefined> {
-	const controlToken = sharedObserverControlTokenFromEnv();
-	const healthProofSecret = sharedObserverHealthProofSecretFromEnv();
-	if (controlToken === undefined || healthProofSecret === undefined || controlToken === rejectedToken) {
-		return undefined;
-	}
-	const probe = await probeObserver(endpoints, 500, {
-		requireStableOtlp: false,
-		rejectedControlToken: rejectedToken,
-		sharedDiscovery: {
-			baseUrl: endpoints.restBaseUrl,
-			controlToken,
-			healthProofSecret,
-			healthUrl: endpoints.healthUrl,
-			mcpUrl: endpoints.mcpUrl,
-		},
-	});
-	if (probe.status !== 'ready' || probe.verifiedControlToken === undefined) {
-		return undefined;
-	}
-	adoptVerifiedObserverMCPEndpoint(probe);
-	return {
-		controlToken: probe.verifiedControlToken,
-		healthProofSecret,
-	};
-}
-
-async function refreshSharedObserverControlToken(
-	observerUrl: string,
-	rejectedToken: string,
-	allowEnvironmentToken: boolean,
-): Promise<string | undefined> {
-	const currentEndpoints = observerEndpoints !== undefined
-		&& observerEndpoints.restBaseUrl === normalizeObserverBaseUrl(observerUrl)
-		? observerEndpoints
-		: observerEndpointRolesForBase(observerUrl);
-	const discovery = readSharedObserverDiscovery(
-		os.homedir(),
-		process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
-	);
-	if (
-		discovery?.controlToken !== undefined
-		&& discovery.controlToken !== rejectedToken
-		&& sharedDiscoveryMatchesRestBase(discovery, currentEndpoints.restBaseUrl)
-	) {
-		const refreshedEndpoints = observerEndpointRolesForDiscovery(
-			discovery,
-			currentEndpoints.restBaseUrl,
-		);
-		const probe = await probeObserver(refreshedEndpoints, 500, {
-			requireStableOtlp: false,
-			rejectedControlToken: rejectedToken,
-			sharedDiscovery: discovery,
-		});
-		if (probe.status === 'ready' && probe.verifiedControlToken !== undefined) {
-			adoptVerifiedObserverMCPEndpoint(probe);
-			observerSharedHealthProofSecret = probe.verifiedHealthProofSecret;
-			return probe.verifiedControlToken;
-		}
-	}
-	if (!allowEnvironmentToken) {
-		return undefined;
-	}
-	const environmentControl = await verifyEnvironmentControlToken(currentEndpoints, rejectedToken);
-	if (environmentControl === undefined) {
-		return undefined;
-	}
-	observerSharedHealthProofSecret = environmentControl.healthProofSecret;
-	return environmentControl.controlToken;
-}
-
-function adoptVerifiedObserverMCPEndpoint(
-	probe: Extract<ObserverProbeResult, { status: 'ready' }>,
-): void {
-	if (
-		probe.verifiedControlToken !== undefined
-		&& probe.verifiedMCPUrl !== undefined
-		&& observerEndpoints !== undefined
-	) {
-		setObserverEndpoints({
-			...observerEndpoints,
-			mcpUrl: probe.verifiedMCPUrl,
-		});
-	}
-}
-
 function buildObserverApiUrl(pathname: string): URL {
 	if (observerBaseUrl === undefined) {
 		throw new Error('Observer is not running.');
@@ -2468,17 +2659,14 @@ async function ensurePortAvailable(reservation: PortReservation): Promise<number
 }
 
 async function identifyPortOwner(port: number): Promise<string | undefined> {
-	return new Promise((resolve) => {
-		cp.exec(`lsof -i :${port} -sTCP:LISTEN -n -P 2>/dev/null`, { timeout: 3000 }, (error, stdout) => {
-			if (error || !stdout) { resolve(undefined); return; }
-			const lines = stdout.trim().split('\n');
-			if (lines.length < 2) { resolve(undefined); return; }
-			const fields = lines[1].split(/\s+/);
-			const command = fields[0];
-			const pid = fields[1];
-			resolve(command && pid ? `${command} (PID ${pid})` : undefined);
-		});
-	});
+	const listener = await readListeningProcess(port);
+	if (listener === undefined) {
+		return undefined;
+	}
+	const command = listener.executablePath === undefined
+		? 'process'
+		: path.basename(listener.executablePath);
+	return `${command} (PID ${listener.pid})`;
 }
 
 async function waitForObserverReady(
@@ -2553,15 +2741,7 @@ async function probeObserver(
 	options: ObserverProbeOptions,
 ): Promise<ObserverProbeResult> {
 	return new Promise((resolve) => {
-		const observerUrl = endpoints.restBaseUrl;
-		const proofChallenge = options.sharedDiscovery?.controlToken !== undefined
-			&& options.sharedDiscovery.healthProofSecret !== undefined
-			? createObserverHealthProofChallenge()
-			: undefined;
 		const target = new URL(endpoints.healthUrl);
-		if (proofChallenge !== undefined) {
-			target.searchParams.set(observerHealthProofChallengeQuery, proofChallenge);
-		}
 		const client = target.protocol === 'https:' ? https : http;
 		let settled = false;
 
@@ -2607,38 +2787,7 @@ async function probeObserver(
 					return;
 				}
 
-				const health = parsed as ObserverHealth;
-				const verifiedControlToken = proofChallenge === undefined
-					|| options.sharedDiscovery === undefined
-					? undefined
-					: verifySharedObserverControlToken(
-						observerUrl,
-						options.sharedDiscovery,
-						proofChallenge,
-						health,
-						options.rejectedControlToken,
-						endpoints.mcpUrl,
-					);
-				if (proofChallenge !== undefined && verifiedControlToken === undefined) {
-					finish(() => resolve({
-						status: 'mismatch',
-						reason: 'Observer control proof could not be verified',
-					}));
-					return;
-				}
-				const verifiedMCPUrl = verifiedControlToken === undefined
-					? undefined
-					: verifiedSharedObserverMCPUrl(observerUrl, health, endpoints.mcpUrl);
-				const verifiedHealthProofSecret = verifiedControlToken === undefined
-					? undefined
-					: options.sharedDiscovery?.healthProofSecret?.trim();
-				finish(() => resolve({
-					status: 'ready',
-					health,
-					...(verifiedControlToken === undefined ? {} : { verifiedControlToken }),
-					...(verifiedHealthProofSecret === undefined ? {} : { verifiedHealthProofSecret }),
-					...(verifiedMCPUrl === undefined ? {} : { verifiedMCPUrl }),
-				}));
+				finish(() => resolve({ status: 'ready', health: parsed as ObserverHealth }));
 			});
 		});
 
@@ -2720,8 +2869,16 @@ async function waitForObserverConfigurationRestartCompletion(): Promise<void> {
 	}
 }
 
+async function settleObserverConfigurationRestart(): Promise<void> {
+	try {
+		await waitForObserverConfigurationRestartCompletion();
+	} catch (error) {
+		logObserverLifecycle(`Prior Observer configuration restart failed: ${getErrorMessage(error)}`);
+	}
+}
+
 async function restartObserver(context: vscode.ExtensionContext): Promise<void> {
-	await stopObserver(context);
+	await stopObserver();
 	try {
 		await ensureObserverRunning(context);
 		refreshObserverPanel();
@@ -2769,6 +2926,16 @@ function delay(ms: number): Promise<void> {
 
 function buildManagedObserverBaseUrl(port: number): string {
 	return `http://${managedObserverHost}:${port}`;
+}
+
+function parseInternalTestPort(value: unknown, fallback: number): number {
+	if (value === undefined) {
+		return fallback;
+	}
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0 || value > 65_535) {
+		throw new Error('Observer test OTLP ports must be integers between 1 and 65535.');
+	}
+	return value;
 }
 
 function getConfiguredManagedObserverPort(): number {
@@ -2938,7 +3105,6 @@ function readAgentIntegrationManagedConfig(spec: AgentIntegrationSpec): AgentInt
 function getAgentIntegrationConfigState(
 	spec: AgentIntegrationSpec,
 	mcpUrl: string,
-	controlToken = activeObserverControlToken(),
 ): AgentIntegrationConfigState {
 	const configPath = spec.configPath(os.homedir());
 	if (!fs.existsSync(configPath)) {
@@ -2969,10 +3135,7 @@ function getAgentIntegrationConfigState(
 			return remoteTypeMatches
 				&& server.url === mcpUrl
 				&& !hasIncompatibleRemoteFields
-				&& authorizationHeadersMatchControlToken(
-					server.headers,
-					controlToken,
-				)
+				&& hasNoAuthorizationHeader(server.headers)
 				? 'matching'
 				: 'different';
 		}
@@ -2983,10 +3146,7 @@ function getAgentIntegrationConfigState(
 			return 'missing';
 		}
 		return getCodexObstudioUrl(section) === mcpUrl
-			&& codexObstudioAuthorizationMatchesControlToken(
-				section,
-				controlToken,
-			)
+			&& codexObstudioHasNoAuthorization(section)
 			? 'matching'
 			: 'different';
 	} catch {
@@ -3042,14 +3202,10 @@ function needsAgentIntegrationUpdate(spec: AgentIntegrationSpec, mcpUrl: string,
 async function recordAgentIntegrationConfigFingerprint(
 	context: vscode.ExtensionContext,
 	spec: AgentIntegrationSpec,
-	credentials: AgentIntegrationInstallCredentials,
+	mcpUrl: string,
 	expectedConfig: AgentIntegrationManagedConfig,
 ): Promise<void> {
-	if (getAgentIntegrationConfigState(
-		spec,
-		credentials.mcpUrl,
-		credentials.controlToken,
-	) !== 'matching') {
+	if (getAgentIntegrationConfigState(spec, mcpUrl) !== 'matching') {
 		throw new Error(`${spec.label} MCP configuration could not be verified after installation.`);
 	}
 	const managedConfig = readAgentIntegrationManagedConfig(spec);
@@ -3122,14 +3278,13 @@ async function configureDetectedAgentIntegrations(
 	return configured;
 }
 
-function refreshOwnedAgentIntegrationCredentials(
+function refreshOwnedAgentIntegrationConfig(
 	context: vscode.ExtensionContext,
 	specs: AgentIntegrationSpec[],
 	mcpUrl: string,
 ): Promise<string[]> {
-	const controlToken = activeObserverControlToken().trim();
 	const operationKey = crypto.createHash('sha256')
-		.update(`${mcpUrl}\0${controlToken}\0${specs.map((spec) => spec.target).join(',')}`)
+		.update(`${mcpUrl}\0${specs.map((spec) => spec.target).join(',')}`)
 		.digest('hex');
 	if (agentIntegrationRefreshOperation !== undefined) {
 		if (agentIntegrationRefreshOperation.key === operationKey) {
@@ -3139,11 +3294,7 @@ function refreshOwnedAgentIntegrationCredentials(
 
 	const previousRefresh = agentIntegrationRefreshOperation?.promise;
 	const runRefresh = async (): Promise<string[]> => {
-		if (
-			controlToken === ''
-			|| observerEndpoints?.mcpUrl !== mcpUrl
-			|| activeObserverControlToken().trim() !== controlToken
-		) {
+		if (observerEndpoints?.mcpUrl !== mcpUrl) {
 			return [];
 		}
 		const shouldRefresh = (spec: AgentIntegrationSpec): boolean => (
@@ -3164,14 +3315,13 @@ function refreshOwnedAgentIntegrationCredentials(
 			refreshable,
 			false,
 			true,
-			() => observerEndpoints?.mcpUrl === mcpUrl
-				&& activeObserverControlToken().trim() === controlToken,
+			() => observerEndpoints?.mcpUrl === mcpUrl,
 			shouldRefresh,
 		);
 		if (refreshed.length > 0) {
 			const labelList = formatAgentLabelList(refreshed);
 			void vscode.window.showInformationMessage(
-				`${labelList} Observer credentials refreshed. Restart ${labelList} before starting a new task.`,
+				`${labelList} Observer configuration refreshed. Restart ${labelList} before starting a new task.`,
 			);
 		}
 		return refreshed;
@@ -3199,9 +3349,9 @@ async function maybeOfferDetectedAgentIntegrations(context: vscode.ExtensionCont
 	const mcpUrl = observerEndpoints.mcpUrl;
 	const detectedSpecs = getDetectedAgentIntegrations();
 	try {
-		await refreshOwnedAgentIntegrationCredentials(context, detectedSpecs, mcpUrl);
+		await refreshOwnedAgentIntegrationConfig(context, detectedSpecs, mcpUrl);
 	} catch (error) {
-		appendObserverOutputLine(`Automatic agent credential refresh failed: ${getErrorMessage(error)}`);
+		appendObserverOutputLine(`Automatic agent configuration refresh failed: ${getErrorMessage(error)}`);
 	}
 	if (
 		offerGeneration !== agentIntegrationPromptGeneration
@@ -3346,63 +3496,35 @@ async function configureAgentMCPNow(
 		if (!shouldContinue()) {
 			return false;
 		}
-		const installedCredentials = await installAgentIntegrationWithStableCredentials({
-			readCredentials: async () => {
-				await ensureObserverRunning(context);
-				if (observerEndpoints === undefined) {
-					throw new Error('Observer MCP URL is not available.');
-				}
-				return {
-					controlToken: activeObserverControlToken(),
-					healthProofSecret: activeObserverHealthProofSecret(),
-					mcpUrl: observerEndpoints.mcpUrl,
-				};
-			},
-			install: async (credentials) => {
-				outputChannel.appendLine(`Enabling ${label} integration for ${credentials.mcpUrl}`);
-				const installOutput = await execFile(
-					backend.command,
-					['install', '--target', target, '--shared-url', credentials.mcpUrl],
-					backend.cwd,
-					{
-						OBSTUDIO_CONTROL_TOKEN: credentials.controlToken,
-						OBSTUDIO_HEALTH_PROOF_SECRET: credentials.healthProofSecret,
-					},
-				);
-				if (installOutput.length > 0) {
-					outputChannel.append(installOutput);
-					if (!installOutput.endsWith('\n')) {
-						outputChannel.appendLine('');
-					}
-				}
-			},
-			captureInstalledConfig: (credentials) => {
-				if (getAgentIntegrationConfigState(
-					spec,
-					credentials.mcpUrl,
-					credentials.controlToken,
-				) !== 'matching') {
-					throw new Error(`${spec.label} MCP configuration could not be verified after installation.`);
-				}
-				const installedConfig = readAgentIntegrationManagedConfig(spec);
-				if (installedConfig === undefined) {
-					throw new Error(`${spec.label} MCP configuration could not be fingerprinted after installation.`);
-				}
-				return installedConfig;
-			},
-			isManagedConfigUnchanged: (expectedConfig) => {
-				const currentConfig = readAgentIntegrationManagedConfig(spec);
-				return currentConfig?.mcpUrl === expectedConfig.mcpUrl
-					&& currentConfig.fingerprintMaterial === expectedConfig.fingerprintMaterial;
-			},
-			recordInstalledConfig: (installedConfig, credentials) => (
-				recordAgentIntegrationConfigFingerprint(context, spec, credentials, installedConfig)
-			),
-		});
+		const mcpUrl = observerEndpoints.mcpUrl;
+		outputChannel.appendLine(`Enabling ${label} integration for ${mcpUrl}`);
+		const installOutput = await execFile(
+			backend.command,
+			['install', '--target', target, '--shared-url', mcpUrl],
+			backend.cwd,
+			backend.env,
+		);
+		if (installOutput.length > 0) {
+			outputChannel.append(installOutput);
+			if (!installOutput.endsWith('\n')) {
+				outputChannel.appendLine('');
+			}
+		}
+		if (!shouldContinue() || observerEndpoints?.mcpUrl !== mcpUrl) {
+			throw new Error('Observer MCP endpoint changed during integration setup; retry with the active Observer.');
+		}
+		if (getAgentIntegrationConfigState(spec, mcpUrl) !== 'matching') {
+			throw new Error(`${spec.label} MCP configuration could not be verified after installation.`);
+		}
+		const installedConfig = readAgentIntegrationManagedConfig(spec);
+		if (installedConfig === undefined) {
+			throw new Error(`${spec.label} MCP configuration could not be fingerprinted after installation.`);
+		}
+		await recordAgentIntegrationConfigFingerprint(context, spec, mcpUrl, installedConfig);
 		await context.globalState.update(integrationPromptDismissalKey(target), undefined);
 		// Record the bundle version so that future version changes trigger a re-install.
 		await recordSkillsBundleVersion(context, target);
-		outputChannel.appendLine(`${label} integration enabled for ${installedCredentials.mcpUrl}`);
+		outputChannel.appendLine(`${label} integration enabled for ${mcpUrl}`);
 		if (showSuccessMessage) {
 			void vscode.window.showInformationMessage(
 				`${label} integration enabled. Restart ${label} to load the bundled skills.`,

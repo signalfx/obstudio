@@ -178,22 +178,56 @@ obstudio stop     Stop Observer
 Installing an update does not restart Observer. These commands do not control
 foreground or extension-managed Observers.
 
-When publishing a shared Observer through an HTTPS reverse proxy, set
-`OBSTUDIO_PUBLIC_MCP_URL` to its complete public MCP URL (for example,
-`https://observer.example.com/mcp`). The Observer advertises and authenticates
-that URL so installers and extensions can use the protected endpoint safely.
-Every HTTP MCP `GET`, `POST`, and `DELETE` request requires the Observer control
-token as a bearer token, including requests sent over loopback. Normal local
-discovery writes this authorization header into the agent configuration.
+Observer is local-only: its UI, REST API, and HTTP MCP endpoint must bind to a
+loopback host. `--shared-url` can select another loopback Observer, but remote
+Observers and reverse-proxy publication are not supported.
 
-Observer also generates an independent health-proof secret and stores it in its
-private local runtime state. For an explicit remote `--shared-url`, provide both
-the same `OBSTUDIO_CONTROL_TOKEN` and `OBSTUDIO_HEALTH_PROOF_SECRET` while running
-`obstudio install`; the installer uses the proof secret to verify the control
-token before storing the authorization header. A configured health-proof secret
-must be the canonical, unpadded base64url encoding of 32 random bytes and must
-not reuse the control token. Reverse proxies must forward the `Authorization`
-header to Observer.
+### v0.0.21 local Observer migration
+
+v0.0.21 intentionally removes the authenticated remote/shared Observer mode
+that v0.0.20 supported. Before upgrading a remotely published or LAN-bound
+Observer, move its UI, REST API, and MCP listener to `127.0.0.1` or `localhost`
+and update native clients to use that loopback URL. Remove reverse-proxy routes
+and `OBSTUDIO_PUBLIC_MCP_URL`, then rerun `obstudio install --target=<agent>` to
+replace older MCP entries containing an `Authorization` header. If a deployment
+cannot move to loopback yet, keep it on v0.0.20 until that migration is possible;
+v0.0.21 will reject the non-loopback listener instead of exposing unauthenticated
+mutation endpoints remotely. This restriction applies to the local Observer
+control surface, not to exporting telemetry to Splunk Observability Cloud.
+
+Native loopback clients do not need a bearer credential. This is a deliberate
+local-machine trust boundary, not same-user authentication: any process or OS
+account that can reach the loopback endpoint can invoke native MCP and mutation
+operations. Use Observer on a trusted single-user development machine or apply
+OS-level isolation on a shared host. Browser mutations must come from the
+Observer's exact origin and include its browser-request marker; cross-origin
+requests and mutation preflights are rejected, and mutation responses do not
+use wildcard CORS. Splunk ingest tokens are write-only and are never returned
+by status, health, recovery, or lifecycle endpoints. Older MCP entries
+containing an Observer `Authorization` header are migrated by the next explicit
+`obstudio install` or IDE integration-enable action.
+
+The editor extension stores a user-entered Cloud connection in IDE secret
+storage before applying it to Observer. If a request has an uncertain transport
+outcome, a single-use scoped rollback capability restores the prior in-memory
+Observer configuration without exposing either the old or new ingest token.
+Freshly started extension-managed Observers are restored from IDE secret
+storage. During an extension upgrade, a healthy Observer reporting the current
+bundled version can be reused. If a different or unversioned Observer occupies
+the selected managed port, that port is the lifecycle boundary when
+`sharedObserverUrl` is unset: the extension replaces the process regardless of
+whether VS Code, Cursor, Kiro, the CLI, or a standalone launch started it. It
+first verifies the Observer health identity, resolves the PID that actually
+owns the listening port, requires an exact `obstudio` (`obstudio.exe` on
+Windows) executable name, and then reverifies the same PID and executable path
+immediately before stopping it. A stale or missing PID in shared state does not
+block replacement because the port owner is resolved directly. Other Observers
+on other ports and explicitly configured `sharedObserverUrl` processes remain
+running. macOS and Linux use `SIGTERM` followed by a revalidated `SIGKILL`
+fallback; Windows uses `taskkill` without `/F` followed by a revalidated `/F`
+fallback. If health, port ownership, or executable verification fails, Cloud
+controls remain unavailable and the panel shows **Restart required** with the
+known port and PID instead of stopping an uncertain process.
 
 | Service | URL |
 |---------|-----|

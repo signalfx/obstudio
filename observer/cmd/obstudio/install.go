@@ -18,8 +18,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/signalfx/obstudio/observer/internal/api"
 )
 
 type mcpConfigFormat string
@@ -68,11 +66,10 @@ type agentTarget struct {
 }
 
 type codexMCPServer struct {
-	URL           string
-	Command       string
-	Args          []string
-	Authorization string
-	Headers       []codexMCPHeader
+	URL     string
+	Command string
+	Args    []string
+	Headers []codexMCPHeader
 }
 
 type codexMCPHeader struct {
@@ -82,23 +79,20 @@ type codexMCPHeader struct {
 }
 
 type sharedObserverHealth struct {
-	APIVersion     string            `json:"apiVersion"`
-	ChallengeProof string            `json:"challengeProof,omitempty"`
-	Endpoints      map[string]string `json:"endpoints"`
-	Kind           string            `json:"kind"`
-	Mode           string            `json:"mode"`
-	Owner          string            `json:"owner"`
-	Version        string            `json:"version"`
+	APIVersion string            `json:"apiVersion"`
+	Endpoints  map[string]string `json:"endpoints"`
+	Kind       string            `json:"kind"`
+	Mode       string            `json:"mode"`
+	Owner      string            `json:"owner"`
+	Version    string            `json:"version"`
 }
 
 type sharedObserverState struct {
-	BaseURL           string    `json:"baseUrl,omitempty"`
-	ControlToken      string    `json:"controlToken,omitempty"`
-	HealthProofSecret string    `json:"healthProofSecret,omitempty"`
-	HealthURL         string    `json:"healthUrl,omitempty"`
-	MCPURL            string    `json:"mcpUrl,omitempty"`
-	PID               int       `json:"pid,omitempty"`
-	UpdatedAt         time.Time `json:"updatedAt,omitempty"`
+	BaseURL   string    `json:"baseUrl,omitempty"`
+	HealthURL string    `json:"healthUrl,omitempty"`
+	MCPURL    string    `json:"mcpUrl,omitempty"`
+	PID       int       `json:"pid,omitempty"`
+	UpdatedAt time.Time `json:"updatedAt,omitempty"`
 }
 
 var targets = map[string]agentTarget{
@@ -239,7 +233,7 @@ func runInstall(target, sharedURL string) error {
 	if !ok {
 		return fmt.Errorf("unknown target: %s (supported: %s)", target, supportedTargets())
 	}
-	resolvedSharedURL, controlToken, autodetectedSharedURL, err := resolveInstallSharedObserver(
+	resolvedSharedURL, autodetectedSharedURL, err := resolveInstallSharedObserver(
 		sharedURL,
 		http.DefaultClient,
 	)
@@ -307,7 +301,7 @@ func runInstall(target, sharedURL string) error {
 	}
 
 	mcpFile := t.mcpConfig.path()
-	if err := configureMCP(t.mcpConfig, installedBinary, resolvedSharedURL, controlToken); err != nil {
+	if err := configureMCP(t.mcpConfig, installedBinary, resolvedSharedURL); err != nil {
 		return fmt.Errorf("failed to configure MCP: %w", err)
 	}
 	if resolvedSharedURL == "" {
@@ -335,34 +329,31 @@ func runInstall(target, sharedURL string) error {
 func resolveInstallSharedObserver(
 	requestedURL string,
 	client *http.Client,
-) (resolvedURL, controlToken string, autodetected bool, err error) {
+) (resolvedURL string, autodetected bool, err error) {
 	if requestedURL == "" {
 		if os.Getenv(disableSharedObserverDetectionEnv) != "" {
-			return "", "", false, nil
+			return "", false, nil
 		}
-		detectedURL, detectedToken, ok := detectInstallSharedObserverURL(client)
-		detectedToken = strings.TrimSpace(detectedToken)
-		if !ok || detectedToken == "" {
-			return "", "", false, nil
+		detectedURL, ok := detectInstallSharedObserverURL(client)
+		if !ok {
+			return "", false, nil
 		}
 		normalized, normalizeErr := normalizeSharedURL(detectedURL, "detected shared observer URL")
 		if normalizeErr != nil {
-			return "", "", false, normalizeErr
+			return "", false, normalizeErr
 		}
-		return normalized, detectedToken, true, nil
+		return normalized, true, nil
 	}
 
 	normalized, err := normalizeSharedURL(requestedURL, "--shared-url")
 	if err != nil {
-		return "", "", false, err
+		return "", false, err
 	}
-	advertisedURL, verifiedToken := resolveMCPControlWithClient(normalized, client)
-	if verifiedToken == "" {
-		return "", "", false, errors.New(
-			"could not verify Observer control for --shared-url; use its private shared state or set OBSTUDIO_CONTROL_TOKEN and OBSTUDIO_HEALTH_PROOF_SECRET, then ensure its health endpoint is reachable",
-		)
+	advertisedURL, ok := resolveMCPObserverWithClient(normalized, client)
+	if !ok {
+		return "", false, errors.New("could not verify the local Observer for --shared-url; ensure its health endpoint is reachable")
 	}
-	return advertisedURL, verifiedToken, false, nil
+	return advertisedURL, false, nil
 }
 
 func managedObserverMatchesURL(sharedURL string, client *http.Client) bool {
@@ -397,7 +388,7 @@ func canonicalManagedEndpoint(raw string) (string, error) {
 	return strings.ToLower(parsed.Scheme) + "://" + net.JoinHostPort(host, port) + strings.TrimRight(parsed.EscapedPath(), "/"), nil
 }
 
-func detectInstallSharedObserverURL(client *http.Client) (string, string, bool) {
+func detectInstallSharedObserverURL(client *http.Client) (string, bool) {
 	return detectInstallSharedObserverURLFromSources(
 		sharedObserverStatePath(),
 		defaultSharedObserverHealth,
@@ -409,31 +400,15 @@ func detectInstallSharedObserverURLFromSources(
 	statePath string,
 	fallbackHealthURL string,
 	client *http.Client,
-) (string, string, bool) {
-	if detectedURL, controlToken, ok := detectSharedObserverURLFromStateFile(statePath, client); ok {
-		return detectedURL, controlToken, true
-	}
-
-	controlToken := strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN"))
-	proofSecret := strings.TrimSpace(os.Getenv(observerHealthProofSecretEnv))
-	if controlToken == "" || proofSecret == "" {
-		return "", "", false
+) (string, bool) {
+	if detectedURL, ok := detectSharedObserverURLFromStateFile(statePath, client); ok {
+		return detectedURL, true
 	}
 	detectedURL, ok := detectSharedObserverURL(fallbackHealthURL, client)
 	if !ok {
-		return "", "", false
+		return "", false
 	}
-	advertisedURL, ok := proveSharedObserverControlToken(
-		fallbackHealthURL,
-		detectedURL,
-		controlToken,
-		proofSecret,
-		client,
-	)
-	if !ok {
-		return "", "", false
-	}
-	return advertisedURL, controlToken, true
+	return detectedURL, true
 }
 
 func detectConfiguredSharedObserverURL(client *http.Client) (string, bool) {
@@ -514,7 +489,7 @@ func copySiblingWeaverRuntime(exePath, destDir string) (bool, error) {
 }
 
 func detectSharedObserverURL(healthURL string, client *http.Client) (string, bool) {
-	health, ok := fetchSharedObserverHealth(healthURL, "", client)
+	health, ok := fetchSharedObserverHealth(healthURL, client)
 	if !ok {
 		return "", false
 	}
@@ -528,20 +503,9 @@ func detectSharedObserverURL(healthURL string, client *http.Client) (string, boo
 	return defaultSharedObserverMCPURL, true
 }
 
-func fetchSharedObserverHealth(healthURL, challenge string, client *http.Client) (sharedObserverHealth, bool) {
+func fetchSharedObserverHealth(healthURL string, client *http.Client) (sharedObserverHealth, bool) {
 	if err := validateSharedURL(healthURL, "shared observer health URL"); err != nil {
 		return sharedObserverHealth{}, false
-	}
-	requestURL := healthURL
-	if challenge != "" {
-		parsed, err := url.Parse(healthURL)
-		if err != nil {
-			return sharedObserverHealth{}, false
-		}
-		query := parsed.Query()
-		query.Set(api.HealthProofChallengeQuery, challenge)
-		parsed.RawQuery = query.Encode()
-		requestURL = parsed.String()
 	}
 	if client == nil {
 		client = http.DefaultClient
@@ -550,27 +514,21 @@ func fetchSharedObserverHealth(healthURL, challenge string, client *http.Client)
 	if requestClient.Timeout == 0 {
 		requestClient.Timeout = sharedObserverHealthTimeout
 	}
-	if challenge != "" {
-		requestClient.CheckRedirect = func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
+	originalCheckRedirect := requestClient.CheckRedirect
+	requestClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if err := validateSharedURL(req.URL.String(), "shared observer health redirect"); err != nil {
+			return err
 		}
-	} else {
-		originalCheckRedirect := requestClient.CheckRedirect
-		requestClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-			if err := validateSharedURL(req.URL.String(), "shared observer health redirect"); err != nil {
-				return err
-			}
-			if originalCheckRedirect != nil {
-				return originalCheckRedirect(req, via)
-			}
-			if len(via) >= 10 {
-				return fmt.Errorf("stopped after 10 redirects")
-			}
-			return nil
+		if originalCheckRedirect != nil {
+			return originalCheckRedirect(req, via)
 		}
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after 10 redirects")
+		}
+		return nil
 	}
 
-	resp, err := requestClient.Get(requestURL)
+	resp, err := requestClient.Get(healthURL)
 	if err != nil {
 		return sharedObserverHealth{}, false
 	}
@@ -589,73 +547,27 @@ func fetchSharedObserverHealth(healthURL, challenge string, client *http.Client)
 	return health, true
 }
 
-func detectSharedObserverURLFromStateFile(statePath string, client *http.Client) (string, string, bool) {
+func detectSharedObserverURLFromStateFile(statePath string, client *http.Client) (string, bool) {
 	state, err := readSharedObserverState(statePath)
-	if err != nil {
-		return "", "", false
-	}
-
-	healthURL := strings.TrimSpace(state.HealthURL)
-	controlToken := strings.TrimSpace(state.ControlToken)
-	proofSecret := strings.TrimSpace(state.HealthProofSecret)
-	if healthURL == "" || controlToken == "" || proofSecret == "" {
-		return "", "", false
-	}
-	stateMCPURL, err := normalizeSharedURL(strings.TrimSpace(state.MCPURL), "shared observer state")
-	if err != nil {
-		return "", "", false
-	}
-	advertisedMCPURL, ok := proveSharedObserverControlToken(
-		healthURL,
-		stateMCPURL,
-		controlToken,
-		proofSecret,
-		client,
-	)
-	if !ok {
-		return "", "", false
-	}
-	return advertisedMCPURL, controlToken, true
-}
-
-func sharedObserverControlTokenProofValid(
-	healthURL string,
-	mcpProofURL string,
-	controlToken string,
-	proofSecret string,
-	client *http.Client,
-) bool {
-	_, ok := proveSharedObserverControlToken(healthURL, mcpProofURL, controlToken, proofSecret, client)
-	return ok
-}
-
-func proveSharedObserverControlToken(
-	healthURL string,
-	intendedMCPURL string,
-	controlToken string,
-	proofSecret string,
-	client *http.Client,
-) (string, bool) {
-	challenge, err := api.NewHealthProofChallenge()
 	if err != nil {
 		return "", false
 	}
-	health, ok := fetchSharedObserverHealth(healthURL, challenge, client)
+
+	healthURL := strings.TrimSpace(state.HealthURL)
+	if healthURL == "" {
+		return "", false
+	}
+	stateMCPURL, err := normalizeSharedURL(strings.TrimSpace(state.MCPURL), "shared observer state")
+	if err != nil {
+		return "", false
+	}
+	health, ok := fetchSharedObserverHealth(healthURL, client)
 	if !ok {
 		return "", false
 	}
 	advertisedRaw := health.Endpoints["mcp"]
 	advertisedMCPURL, err := normalizeSharedURL(advertisedRaw, "advertised shared observer URL")
-	if err != nil || advertisedRaw != advertisedMCPURL || !sameSharedObserverControlEndpoint(intendedMCPURL, advertisedMCPURL) {
-		return "", false
-	}
-	if !api.VerifyHealthChallengeProof(
-		proofSecret,
-		controlToken,
-		challenge,
-		advertisedRaw,
-		health.ChallengeProof,
-	) {
+	if err != nil || advertisedRaw != advertisedMCPURL || !sameSharedObserverEndpoint(stateMCPURL, advertisedMCPURL) {
 		return "", false
 	}
 	return advertisedMCPURL, true
@@ -681,58 +593,35 @@ func readSharedObserverState(statePath string) (sharedObserverState, error) {
 	return state, nil
 }
 
-func resolveMCPControlToken(sharedURL string) string {
-	_, controlToken := resolveMCPControl(sharedURL)
-	return controlToken
+func resolveMCPObserver(sharedURL string) (string, bool) {
+	return resolveMCPObserverWithClient(sharedURL, http.DefaultClient)
 }
 
-func resolveMCPControl(sharedURL string) (string, string) {
-	return resolveMCPControlWithClient(sharedURL, http.DefaultClient)
-}
-
-func resolveMCPControlWithClient(sharedURL string, client *http.Client) (string, string) {
+func resolveMCPObserverWithClient(sharedURL string, client *http.Client) (string, bool) {
 	if sharedURL == "" {
-		return "", ""
+		return "", false
 	}
 	healthURL, err := sharedObserverHealthURLForMCPURL(sharedURL)
 	if err != nil {
-		return sharedURL, ""
+		return sharedURL, false
 	}
 	state, stateErr := readSharedObserverState(sharedObserverStatePath())
-	stateMatchesEndpoint := false
 	if stateErr == nil && strings.TrimSpace(state.HealthURL) != "" {
 		stateMCPURL, normalizeErr := normalizeSharedURL(strings.TrimSpace(state.MCPURL), "shared observer state")
-		if normalizeErr == nil && sameSharedObserverControlEndpoint(sharedURL, stateMCPURL) {
+		if normalizeErr == nil && sameSharedObserverEndpoint(sharedURL, stateMCPURL) {
 			healthURL = strings.TrimSpace(state.HealthURL)
-			stateMatchesEndpoint = true
 		}
 	}
-	if token := strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")); token != "" {
-		proofSecret := strings.TrimSpace(os.Getenv(observerHealthProofSecretEnv))
-		if proofSecret == "" && stateMatchesEndpoint {
-			proofSecret = strings.TrimSpace(state.HealthProofSecret)
-		}
-		if advertisedURL, ok := proveSharedObserverControlToken(healthURL, sharedURL, token, proofSecret, client); ok {
-			return advertisedURL, token
-		}
-	}
-
-	if stateErr != nil {
-		return sharedURL, ""
-	}
-	controlToken := strings.TrimSpace(state.ControlToken)
-	proofSecret := strings.TrimSpace(state.HealthProofSecret)
-	advertisedURL, ok := proveSharedObserverControlToken(
-		healthURL,
-		sharedURL,
-		controlToken,
-		proofSecret,
-		client,
-	)
+	health, ok := fetchSharedObserverHealth(healthURL, client)
 	if !ok {
-		return sharedURL, ""
+		return sharedURL, false
 	}
-	return advertisedURL, controlToken
+	advertisedRaw := strings.TrimSpace(health.Endpoints["mcp"])
+	advertisedURL, err := normalizeSharedURL(advertisedRaw, "advertised shared observer URL")
+	if err != nil || advertisedRaw != advertisedURL || !sameSharedObserverEndpoint(sharedURL, advertisedURL) {
+		return sharedURL, false
+	}
+	return advertisedURL, true
 }
 
 func sharedObserverHealthURLForMCPURL(mcpURL string) (string, error) {
@@ -783,17 +672,13 @@ func clearSharedObserverStateIfOwned(statePath string, state sharedObserverState
 	return nil
 }
 
-func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string, controlTokens ...string) error {
+func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string) error {
 	if sharedURL != "" {
 		normalized, err := normalizeSharedURL(sharedURL, "shared observer URL")
 		if err != nil {
 			return err
 		}
 		sharedURL = normalized
-	}
-	controlToken := ""
-	if len(controlTokens) > 0 {
-		controlToken = strings.TrimSpace(controlTokens[0])
 	}
 	var err error
 	switch target.format {
@@ -810,11 +695,8 @@ func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string, controlT
 				server["type"] = "http"
 			}
 			server["url"] = sharedURL
-			if controlToken != "" {
-				server["headers"] = map[string]any{"Authorization": "Bearer " + controlToken}
-			}
 		}
-		err = upsertJSONMCPServer(target.path(), target.serversKey, server, target.preserveFields, target.preserveSameURLFields, controlToken != "")
+		err = upsertJSONMCPServer(target.path(), target.serversKey, server, target.preserveFields, target.preserveSameURLFields)
 	case mcpConfigTOML:
 		server := codexMCPServer{}
 		if sharedURL == "" {
@@ -822,11 +704,8 @@ func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string, controlT
 			server.Args = []string{}
 		} else {
 			server.URL = sharedURL
-			if controlToken != "" {
-				server.Authorization = "Bearer " + controlToken
-			}
 		}
-		err = upsertCodexMCPServer(target.path(), server, controlToken != "")
+		err = upsertCodexMCPServer(target.path(), server)
 	default:
 		return fmt.Errorf("unsupported MCP config format: %s", target.format)
 	}
@@ -1034,12 +913,9 @@ func renderCodexManagedBlock(server codexMCPServer) string {
 
 	if server.URL != "" {
 		lines = append(lines, fmt.Sprintf("url = %q", server.URL))
-		headers := make([]string, 0, len(server.Headers)+1)
+		headers := make([]string, 0, len(server.Headers))
 		for _, header := range server.Headers {
 			headers = append(headers, fmt.Sprintf("%s = %s", header.TOMLKey, header.TOMLValue))
-		}
-		if server.Authorization != "" {
-			headers = append(headers, fmt.Sprintf("Authorization = %q", server.Authorization))
 		}
 		if len(headers) > 0 {
 			lines = append(lines, "http_headers = { "+strings.Join(headers, ", ")+" }")
@@ -1588,8 +1464,8 @@ func validateSharedURL(raw, source string) error {
 	if parsed.Fragment != "" || strings.Contains(raw, "#") {
 		return fmt.Errorf("invalid %s: URL must not include a fragment", source)
 	}
-	if parsed.Scheme == "http" && !isLoopbackSharedObserverHost(parsed.Hostname()) {
-		return fmt.Errorf("invalid %s: URL must use HTTPS unless the host is loopback", source)
+	if !isLoopbackSharedObserverHost(parsed.Hostname()) {
+		return fmt.Errorf("invalid %s: host must be loopback", source)
 	}
 	return nil
 }
@@ -1628,7 +1504,7 @@ func normalizeSharedURL(raw, source string) (string, error) {
 	return parsed.String(), nil
 }
 
-func sameSharedObserverControlEndpoint(left, right string) bool {
+func sameSharedObserverEndpoint(left, right string) bool {
 	leftNormalized, err := normalizeSharedURL(left, "shared Observer endpoint")
 	if err != nil {
 		return false

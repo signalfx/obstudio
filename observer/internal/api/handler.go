@@ -2,10 +2,6 @@
 package api
 
 import (
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,84 +37,13 @@ type ExporterInfo struct {
 
 type healthResponse struct {
 	ServerInfo
-	ChallengeProof string            `json:"challengeProof,omitempty"`
-	Endpoints      map[string]string `json:"endpoints"`
+	Endpoints map[string]string `json:"endpoints"`
 }
 
-// HealthProofConfig enables challenge-bound health proofs without using the
-// Observer control token as a public verifier.
-type HealthProofConfig struct {
-	ControlToken string
-	ProofSecret  string
-	MCPURL       string
-}
-
-const (
-	HealthProofChallengeQuery = "obstudioHealthChallenge"
-	healthProofChallengeBytes = 32
-	healthProofDomain         = "obstudio-health-proof-v2\x00"
-)
-
-// NewHealthProofChallenge returns a fresh challenge suitable for a single
-// health-discovery request.
-func NewHealthProofChallenge() (string, error) {
-	challenge := make([]byte, healthProofChallengeBytes)
-	if _, err := rand.Read(challenge); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(challenge), nil
-}
-
-// HealthChallengeProof authenticates the configured control token, a challenge,
-// and its intended MCP connection endpoint with an independent proof secret. It
-// returns an empty proof for malformed inputs.
-func HealthChallengeProof(proofSecret, controlToken, challenge, mcpEndpoint string) string {
-	proofSecret = strings.TrimSpace(proofSecret)
-	controlToken = strings.TrimSpace(controlToken)
-	proofSecretBytes, ok := decodeHealthProofSecret(proofSecret)
-	if !ok || controlToken == "" || !validHealthProofChallenge(challenge) || mcpEndpoint == "" {
-		return ""
-	}
-	controlTokenDigest := sha256.Sum256([]byte(controlToken))
-	mac := hmac.New(sha256.New, proofSecretBytes)
-	_, _ = mac.Write([]byte(healthProofDomain))
-	_, _ = mac.Write(controlTokenDigest[:])
-	_, _ = mac.Write([]byte{0})
-	_, _ = mac.Write([]byte(challenge))
-	_, _ = mac.Write([]byte{0})
-	_, _ = mac.Write([]byte(mcpEndpoint))
-	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-}
-
-func decodeHealthProofSecret(secret string) ([]byte, bool) {
-	decoded, err := base64.RawURLEncoding.DecodeString(secret)
-	return decoded, err == nil &&
-		len(decoded) == healthProofChallengeBytes &&
-		base64.RawURLEncoding.EncodeToString(decoded) == secret
-}
-
-// VerifyHealthChallengeProof verifies a proof in constant time.
-func VerifyHealthChallengeProof(proofSecret, controlToken, challenge, mcpEndpoint, proof string) bool {
-	expected := HealthChallengeProof(proofSecret, controlToken, challenge, mcpEndpoint)
-	if expected == "" {
-		return false
-	}
-	expectedBytes, err := base64.RawURLEncoding.DecodeString(expected)
-	if err != nil {
-		return false
-	}
-	proofBytes, err := base64.RawURLEncoding.DecodeString(proof)
-	if err != nil {
-		return false
-	}
-	return hmac.Equal(expectedBytes, proofBytes)
-}
-
-func validHealthProofChallenge(challenge string) bool {
-	decoded, err := base64.RawURLEncoding.DecodeString(challenge)
-	return err == nil &&
-		len(decoded) == healthProofChallengeBytes &&
-		base64.RawURLEncoding.EncodeToString(decoded) == challenge
+// EndpointConfig overrides externally advertised endpoints without adding
+// credentials to health discovery.
+type EndpointConfig struct {
+	MCPURL string
 }
 
 // Register adds the REST API routes to the given mux.
@@ -132,7 +57,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	var tracesController *otlp.SplunkTracesExportController
 	var splunkExportRefresher SplunkExportConfigurationRefresher
 	var freeAccountSubmitter freeaccount.Submitter
-	var healthProofConfig HealthProofConfig
+	var endpointConfig EndpointConfig
 	info := ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
@@ -175,15 +100,15 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			if value != nil {
 				freeAccountSubmitter = value
 			}
-		case HealthProofConfig:
-			healthProofConfig = value
+		case EndpointConfig:
+			endpointConfig = value
 		}
 	}
 	validationService := validator.NewService(validationStore, runner)
 	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig)
 	auditResolver := audit.NewResolver(auditConfig)
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
-	mux.HandleFunc("GET /api/health", queryHealth(s, info, healthProofConfig))
+	mux.HandleFunc("GET /api/health", queryHealth(s, info, endpointConfig))
 	mux.HandleFunc("GET /api/query/traces", queryTraces(s))
 	mux.HandleFunc("GET /api/query/traces/filter-values", queryTraceFilterValues(s))
 	mux.HandleFunc("GET /api/query/traces/{traceId}", queryTraceDetail(s))
@@ -204,19 +129,17 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("GET /api/query/validation/summary", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/status", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/latest", queryValidationLatest(validationService))
-	mux.HandleFunc("POST /api/validation/run", runValidation(validationService))
-	mux.HandleFunc("POST /api/validation/refresh", refreshValidation(validationService))
-	mux.HandleFunc("POST /api/validation/analyze", analyzeValidation(validationService))
+	mux.HandleFunc("POST /api/validation/run", localMutation(runValidation(validationService)))
+	mux.HandleFunc("POST /api/validation/refresh", localMutation(refreshValidation(validationService)))
+	mux.HandleFunc("POST /api/validation/analyze", localMutation(analyzeValidation(validationService)))
 	mux.HandleFunc("GET /api/query/validation/findings", queryValidationFindings(validationService))
-	mux.HandleFunc("DELETE /api/data", clearData(s, validationStore))
+	mux.HandleFunc("DELETE /api/data", localMutation(clearData(s, validationStore)))
 	if metricsController != nil && tracesController != nil {
 		newSplunkExportService(metricsController, tracesController, splunkExportRefresher).register(mux)
 	}
 	if freeAccountSubmitter != nil {
 		newFreeAccountAPI(freeAccountSubmitter).register(mux)
 	}
-	// Registration, login, and session routes are all gated by OBSTUDIO_CONTROL_TOKEN --
-	// see requireObserverControlToken and registerSISCIMDLoginRoutes's doc comment.
 	registerSISCIMDLoginRoutes(mux)
 }
 
@@ -267,6 +190,17 @@ func writeSameOriginJSON(w http.ResponseWriter, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("[api] writeSameOriginJSON: %v", err)
 	}
+}
+
+func localMutation(next http.HandlerFunc) http.HandlerFunc {
+	return requireLocalObserverRequest(next, func(w http.ResponseWriter, status int, message string) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(status)
+		if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
+			log.Printf("[api] localMutation: %v", err)
+		}
+	})
 }
 
 // auditReportCSP locks down the workspace-controlled report served on the
@@ -401,8 +335,8 @@ func queryValidationStatus(service *validator.Service) http.HandlerFunc {
 	}
 }
 
-func queryHealth(s *store.Store, info ServerInfo, proofConfig HealthProofConfig) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func queryHealth(s *store.Store, info ServerInfo, endpointConfig EndpointConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		var endpoints store.Endpoints
 		if s != nil {
 			endpoints = s.Endpoints()
@@ -422,19 +356,13 @@ func queryHealth(s *store.Store, info ServerInfo, proofConfig HealthProofConfig)
 				"rest":     endpoints.REST,
 			},
 		}
-		proofMCPURL := strings.TrimSpace(proofConfig.MCPURL)
-		if proofMCPURL == "" {
-			proofMCPURL = mcpEndpoint
+		publicMCPURL := strings.TrimSpace(endpointConfig.MCPURL)
+		if publicMCPURL == "" {
+			publicMCPURL = mcpEndpoint
 		}
-		if proofMCPURL != "" {
-			response.Endpoints["mcp"] = proofMCPURL
+		if publicMCPURL != "" {
+			response.Endpoints["mcp"] = publicMCPURL
 		}
-		response.ChallengeProof = HealthChallengeProof(
-			strings.TrimSpace(proofConfig.ProofSecret),
-			strings.TrimSpace(proofConfig.ControlToken),
-			r.URL.Query().Get(HealthProofChallengeQuery),
-			proofMCPURL,
-		)
 		writeJSON(w, response)
 	}
 }
@@ -481,10 +409,10 @@ func analyzeValidation(service *validator.Service) http.HandlerFunc {
 			}
 			statusCode, payload := validationHTTPErrorPayload(err, nextMethod, nextPath)
 			w.WriteHeader(statusCode)
-			writeJSON(w, payload)
+			writeSameOriginJSON(w, payload)
 			return
 		}
-		writeJSON(w, analysis)
+		writeSameOriginJSON(w, analysis)
 	}
 }
 
@@ -497,10 +425,10 @@ func refreshValidation(service *validator.Service) http.HandlerFunc {
 		if err != nil {
 			statusCode, payload := validationHTTPErrorPayload(err, http.MethodGet, "/api/query/validation/status")
 			w.WriteHeader(statusCode)
-			writeJSON(w, payload)
+			writeSameOriginJSON(w, payload)
 			return
 		}
-		writeJSON(w, analysis)
+		writeSameOriginJSON(w, analysis)
 	}
 }
 
@@ -510,10 +438,10 @@ func runValidation(service *validator.Service) http.HandlerFunc {
 		if err != nil {
 			statusCode, payload := validationHTTPErrorPayload(err, http.MethodGet, "/api/query/validation/status")
 			w.WriteHeader(statusCode)
-			writeJSON(w, payload)
+			writeSameOriginJSON(w, payload)
 			return
 		}
-		writeJSON(w, summary)
+		writeSameOriginJSON(w, summary)
 	}
 }
 
@@ -521,16 +449,30 @@ func clearData(s *store.Store, v *validator.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		s.Clear()
 		v.Clear()
-		writeJSON(w, map[string]string{"status": "cleared"})
+		writeSameOriginJSON(w, map[string]string{"status": "cleared"})
 	}
 }
 
 func corsPreflightHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		requestedMethod := strings.ToUpper(strings.TrimSpace(r.Header.Get("Access-Control-Request-Method")))
+		if strings.HasPrefix(r.URL.Path, "/api/splunk/") || isMutationMethod(requestedMethod) {
+			http.Error(w, "cross-origin access is not allowed", http.StatusForbidden)
+			return
+		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func isMutationMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
 	}
 }
 

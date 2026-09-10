@@ -5,6 +5,7 @@ package freeaccount
 import (
 	"bytes"
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,21 +20,23 @@ import (
 )
 
 const (
-	defaultSignupURL         = "https://www.splunk.com/api/bin/observability/sfx-signup"
-	defaultGeoURL            = "https://www.splunk.com/api/bin/user/location"
-	defaultCountry           = "United States"
-	defaultState             = "California"
-	defaultRealm             = "us1"
-	defaultMarketRegion      = "AMER"
-	signupRegionUS           = "us"
-	signupRegionIreland      = "Europe (Ireland)"
-	signupRegionAustralia    = "apac-au"
-	maxResponseBytes         = 64 * 1024
-	maxFirstNameLength       = 40
-	maxLastNameLength        = 40
-	maxEmailLength           = 80
-	profanityResponseMessage = "Profanity not allowed into the form values"
-	successfulSignupMessage  = "Thank you for registering. Your free edition account is on its way!\n\n" +
+	defaultSignupURL           = "https://www.splunk.com/api/bin/observability/sfx-signup"
+	defaultGeoURL              = "https://www.splunk.com/api/bin/user/location"
+	defaultCountry             = "United States"
+	defaultState               = "California"
+	defaultRealm               = "us1"
+	defaultMarketRegion        = "AMER"
+	signupRegionUS             = "us"
+	signupRegionIreland        = "Europe (Ireland)"
+	signupRegionAustralia      = "apac-au"
+	maxResponseBytes           = 64 * 1024
+	maxFirstNameLength         = 40
+	maxLastNameLength          = 40
+	maxEmailLength             = 80
+	profanityResponseMessage   = "Profanity not allowed into the form values"
+	accountSetupPendingMessage = "Splunk received your Free Edition request but needs extra time to finish setting up the account. " +
+		"If a confirmation email does not arrive within 24 hours, contact Splunk Support."
+	successfulSignupMessage = "Thank you for registering. Your free edition account is on its way!\n\n" +
 		"You will receive an email within 10 minutes. Check your spam folder if it doesn’t arrive. If you still need help, please reach out to Splunk Support.\n\n" +
 		"[Observability Docs.](https://docs.splunk.com/Observability/get-started/welcome.html#nav-Welcome-to-Splunk-Observability-Cloud) Get guidance on how to use Splunk Observability.\n\n" +
 		"[Observability Cloud Demo.](https://www.splunk.com/en_us/resources/videos/watch-splunks-observability-cloud-demo.html) Watch Splunk Observability Cloud work in real-time.\n\n" +
@@ -44,6 +47,7 @@ type signupResponseClassification string
 
 const (
 	signupResponseAcknowledged signupResponseClassification = "acknowledged"
+	signupResponseSetupPending signupResponseClassification = "setup_pending"
 	signupResponseDeniedPerson signupResponseClassification = "denied_person"
 	signupResponseProfanity    signupResponseClassification = "profanity"
 	signupResponseRejected     signupResponseClassification = "rejected"
@@ -60,6 +64,7 @@ type ErrorCode string
 const (
 	ErrorCodeValidation     ErrorCode = "validation_error"
 	ErrorCodeRejected       ErrorCode = "submission_rejected"
+	ErrorCodePreparation    ErrorCode = "submission_preparation_failed"
 	ErrorCodeOutcomeUnknown ErrorCode = "outcome_unknown"
 	ErrorCodeCanceled       ErrorCode = "request_canceled"
 )
@@ -94,10 +99,11 @@ type RegionResult struct {
 // result does not claim that the upstream system finished provisioning an
 // organization.
 type Result struct {
-	IntakeAcknowledged bool   `json:"intakeAcknowledged"`
-	Realm              string `json:"realm"`
-	Region             string `json:"region"`
-	Message            string `json:"message"`
+	IntakeAcknowledged  bool   `json:"intakeAcknowledged"`
+	AccountSetupPending bool   `json:"accountSetupPending,omitempty"`
+	Realm               string `json:"realm"`
+	Region              string `json:"region"`
+	Message             string `json:"message"`
 }
 
 // Submitter is implemented by the shared signup service used by REST and MCP.
@@ -128,6 +134,7 @@ type Service struct {
 	geoTimeout    time.Duration
 	signupTimeout time.Duration
 	diagnostics   *log.Logger
+	companyRandom io.Reader
 }
 
 // New creates a Free Edition signup service.
@@ -151,6 +158,7 @@ func New(config Config) *Service {
 		geoTimeout:    durationDefault(config.GeoTimeout, 3*time.Second),
 		signupTimeout: durationDefault(config.SignupTimeout, 15*time.Second),
 		diagnostics:   diagnostics,
+		companyRandom: cryptorand.Reader,
 	}
 }
 
@@ -457,13 +465,17 @@ func (s *Service) submitOnce(ctx context.Context, identity identity, location si
 			destination, _ = destinationForLocation(location)
 		}
 	}
+	company, err := randomCompanyName(s.companyRandom)
+	if err != nil {
+		return Result{}, preparationError()
+	}
 	payload := signupPayload{
 		FirstName:          identity.firstName,
 		LastName:           identity.lastName,
 		EmailAddress:       identity.email,
 		Title:              "Developer",
 		BusinessPhone:      "",
-		Company:            "dev",
+		Company:            company,
 		Country:            location.country,
 		State:              location.state,
 		City:               location.city,
@@ -518,6 +530,14 @@ func (s *Service) submitOnce(ctx context.Context, identity identity, location si
 			Region:             destination.formRegion,
 			Message:            successfulSignupMessage,
 		}, nil
+	case signupResponseSetupPending:
+		return Result{
+			IntakeAcknowledged:  true,
+			AccountSetupPending: true,
+			Realm:               destination.realm,
+			Region:              destination.formRegion,
+			Message:             accountSetupPendingMessage,
+		}, nil
 	case signupResponseDeniedPerson:
 		return Result{}, newError(
 			ErrorCodeRejected,
@@ -541,6 +561,18 @@ func (s *Service) submitOnce(ctx context.Context, identity identity, location si
 	}
 }
 
+func randomCompanyName(random io.Reader) (string, error) {
+	const alphabet = "abcdefghijklmnopqrstuvwxyz"
+	value := make([]byte, 6)
+	if _, err := io.ReadFull(random, value); err != nil {
+		return "", err
+	}
+	for index := range value {
+		value[index] = alphabet[int(value[index])%len(alphabet)]
+	}
+	return string(value), nil
+}
+
 func (s *Service) recordSignupResponseDiagnostic(statusCode int, classification signupResponseClassification) {
 	s.diagnostics.Printf("[freeaccount] signup_response status=%d classification=%s", statusCode, classification)
 }
@@ -551,7 +583,10 @@ func classifySignupResponse(statusCode int, body []byte) signupResponseClassific
 	if acceptedStatus && signupIntakeAcknowledged(body) {
 		return signupResponseAcknowledged
 	}
-	if (acceptedStatus || rejectedStatus) && signupDenied(body) {
+	if acceptedStatus && signupDenied(body) {
+		return signupResponseSetupPending
+	}
+	if rejectedStatus && signupDenied(body) {
 		return signupResponseDeniedPerson
 	}
 	if (acceptedStatus || rejectedStatus) && signupProfanity(body) {
@@ -618,6 +653,14 @@ func outcomeUnknownError() *Error {
 		ErrorCodeOutcomeUnknown,
 		"The signup outcome is unknown. Check your email before trying again.",
 		false,
+	)
+}
+
+func preparationError() *Error {
+	return newError(
+		ErrorCodePreparation,
+		"Could not prepare the Free Edition signup. Please try again.",
+		true,
 	)
 }
 
