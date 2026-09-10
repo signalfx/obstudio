@@ -128,6 +128,12 @@ route edited after enablement is left alone.
 The default sends logs to `http://127.0.0.1:4318/v1/logs` and derives the
 matching trace and metric endpoints.
 
+If Observer uses a custom OTLP/HTTP port, pass its full logs endpoint:
+
+```bash
+./obstudio token-telemetry enable --target=codex,claude-code --endpoint=http://127.0.0.1:14318/v1/logs
+```
+
 ### Choose repository correlation
 
 New targets default to `path`. For an existing target, omitting

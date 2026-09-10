@@ -28,9 +28,13 @@ Cloud onboarding skills:
 These open a local credential handoff or submit a consent-gated Free Edition
 request when explicitly invoked.
 
-When the Free Edition form opens, Splunk derives coarse location from the
-request's network source IP to suggest a hosting region. Region detection does
-not submit a signup.
+When the Free Edition form opens, Observer asks Splunk for coarse location from
+the request's network source IP to suggest a hosting region. That lookup does
+not submit a signup. Submission performs a fresh location lookup, then sends
+the entered first name, last name, and email, selected region, Terms acceptance,
+derived country, state, city, and postal code, a generated company value, and
+fixed public-form metadata for the developer role, trial type, phone, and
+marketing preferences.
 
 Observer and MCP controls:
 
