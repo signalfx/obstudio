@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -44,8 +45,15 @@ class StageObstudioPluginTest(unittest.TestCase):
     def test_staged_plugin_excludes_skill_tests_and_caches(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio"
+            canonical_skills = Path(tempdir) / "skills"
+            shutil.copytree(STAGE.CANONICAL_SKILLS_ROOT, canonical_skills)
+            for cache_name in (".pytest_cache", ".mypy_cache", ".ruff_cache"):
+                cache_file = canonical_skills / "otel-instrument" / cache_name / "cache" / "entry"
+                cache_file.parent.mkdir(parents=True)
+                cache_file.write_text("cache", encoding="utf-8")
 
-            STAGE.stage_plugin(output)
+            with mock.patch.object(STAGE, "CANONICAL_SKILLS_ROOT", canonical_skills):
+                STAGE.stage_plugin(output)
 
             skill_files = [path for path in (output / "skills").rglob("*") if path.is_file()]
             self.assertTrue((output / "skills" / "otel-instrument" / "scripts" / "validate_gap_closure.py").is_file())
