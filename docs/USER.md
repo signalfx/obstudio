@@ -214,15 +214,19 @@ Observer configuration without exposing either the old or new ingest token.
 Freshly started extension-managed Observers are restored from IDE secret
 storage. During an extension upgrade, a healthy Observer reporting the current
 bundled version can be reused. If a different or unversioned Observer occupies
-the selected managed port, VS Code stops it only after verifying the
-shared-state PID and the process's exact non-symlinked executable path inside
-another installed Splunk extension package. Only that verified extension
-process is stopped. Other Observers on other ports remain running; an outdated
-one is ignored while the extension starts or reuses the bundled version on the
-selected managed port. macOS and Linux use `SIGTERM` followed by `SIGKILL`;
-Windows uses `taskkill` without `/F` followed by a revalidated `/F` fallback.
-If an outdated process on the selected port cannot be verified or stopped,
-the extension does not reuse it or enable Cloud controls until the user stops it.
+the selected managed port, VS Code stops it only after its health response
+identifies a VS Code-managed launch and after verifying the shared-state PID
+and exact non-symlinked executable path inside another installed Splunk
+extension package. Older releases did not publish that ownership marker, so a
+v0.0.18 or v0.0.20 process is left running and the panel shows **Restart
+required** with its port and PID until the user stops it. This avoids mistaking
+a manually launched packaged binary for an extension-owned process. Other
+Observers on other ports remain running; an outdated one is ignored while the
+extension starts or reuses the bundled version on the selected managed port.
+For a marked extension process, macOS and Linux use `SIGTERM` followed by
+`SIGKILL`; Windows uses `taskkill` without `/F` followed by a revalidated `/F`
+fallback. If any ownership or executable check fails, Cloud controls remain
+unavailable until the user stops the old process.
 
 | Service | URL |
 |---------|-----|

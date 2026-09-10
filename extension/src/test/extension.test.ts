@@ -2018,6 +2018,8 @@ test('shared Observer URLs normalize wildcard listeners and reject every non-loo
 
 test('managed startup strips obsolete control credentials and public endpoints', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	assert.match(source, /OBSTUDIO_OWNER: extensionManagedObserverOwner/);
+	assert.match(source, /OBSTUDIO_MODE: extensionManagedObserverMode/);
 	assert.match(
 		source,
 		/delete managedObserverEnvironment\.OBSTUDIO_CONTROL_TOKEN;[\s\S]*?delete managedObserverEnvironment\.OBSTUDIO_HEALTH_PROOF_SECRET;[\s\S]*?delete managedObserverEnvironment\.OBSTUDIO_PUBLIC_MCP_URL;[\s\S]*?cp\.spawn/,
@@ -2106,7 +2108,12 @@ test('upgrade retirement verifies Observer health and the executable path before
 	);
 	assert.match(
 		retirement,
-		/if \(!observerHealthVerified\) \{[\s\S]*?return restartRequired\(\);[\s\S]*?const preStopExecutablePath = await readProcessExecutablePath/,
+		/observerHealth\?\.owner !== extensionManagedObserverOwner[\s\S]*?observerHealth\.mode !== extensionManagedObserverMode/,
+	);
+	assert.ok(
+		retirement.indexOf('observerHealth?.owner !== extensionManagedObserverOwner')
+			< retirement.indexOf('const processExecutablePath = await readProcessExecutablePath'),
+		'extension ownership must be established before inspecting or terminating the recorded PID',
 	);
 	assert.ok(
 		retirement.indexOf('const preStopExecutablePath = await readProcessExecutablePath')
@@ -2130,7 +2137,7 @@ test('all local Observer reuse paths use the same bundled-version compatibility 
 	assert.match(startup, /configuredProbe\.health\.version !== bundleVersion/);
 	assert.match(
 		startup,
-		/managedProbe\.status === 'ready'[\s\S]*?retireOtherExtensionManagedObserver\([\s\S]*?managedProbe\.health\.version/,
+		/managedProbe\.status === 'ready'[\s\S]*?retireOtherExtensionManagedObserver\([\s\S]*?managedProbe\.health/,
 	);
 	assert.match(startup, /existingObserver\.health\.version !== bundleVersion/);
 	assert.match(startup, /startedProbe\.health\.version !== bundleVersion/);

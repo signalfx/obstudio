@@ -173,6 +173,8 @@ const defaultManagedObserverPort = 3000;
 const managedObserverStateFileName = 'managed-control.json';
 const observerKind = 'obstudio';
 const observerAPIVersion = 'v1';
+const extensionManagedObserverOwner = 'vscode-extension';
+const extensionManagedObserverMode = 'managed';
 const sharedObserverStartupWindowMs = 15_000;
 const observerCloudRequestTimeoutMs = 15_000;
 const observerCloudRollbackTokenHeader = 'X-Obstudio-Cloud-Rollback-Token';
@@ -1001,8 +1003,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			const retirement = await retireOtherExtensionManagedObserver(
 				context,
 				discoveredObserver,
-				discoveryProbe.status === 'ready',
-				discoveryProbe.status === 'ready' ? discoveryProbe.health.version : undefined,
+				discoveryProbe.status === 'ready' ? discoveryProbe.health : undefined,
 				getConfiguredManagedObserverPort(),
 			);
 			assertObserverRunCurrent(observerLifecycleState, runId);
@@ -1060,8 +1061,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				const retirement = await retireOtherExtensionManagedObserver(
 					context,
 					managedDiscovery,
-					true,
-					managedProbe.health.version,
+					managedProbe.health,
 					managedPort,
 				);
 				assertObserverRunCurrent(observerLifecycleState, runId);
@@ -1171,6 +1171,8 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			OTLP_HTTP_PORT: String(otlpHttpPort),
 			OTLP_GRPC_PORT: String(otlpGrpcPort),
 			PORT: String(observerPort),
+			OBSTUDIO_OWNER: extensionManagedObserverOwner,
+			OBSTUDIO_MODE: extensionManagedObserverMode,
 			// Pass the workspace root so the preview resolver locates
 			// .observe/dashboards.preview.json relative to the open
 			// workspace rather than the binary's install directory.
@@ -1317,12 +1319,13 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 async function retireOtherExtensionManagedObserver(
 	context: vscode.ExtensionContext,
 	discovery: SharedObserverDiscovery,
-	observerHealthVerified: boolean,
-	observerVersion: string | undefined,
+	observerHealth: ObserverHealth | undefined,
 	managedPort: number,
 ): Promise<OtherExtensionObserverRetirement> {
 	const discoveryPort = observerPortFromUrl(discovery.baseUrl);
 	const bundleVersion = getBundleVersion(context);
+	const observerHealthVerified = observerHealth !== undefined;
+	const observerVersion = observerHealth?.version;
 	if (observerHealthVerified && observerVersion === bundleVersion) {
 		return { status: 'not-applicable' };
 	}
@@ -1355,6 +1358,21 @@ async function retireOtherExtensionManagedObserver(
 		return observerHealthVerified
 			? { pid, port: discoveryPort, status: 'restart-required', version: observerVersion }
 			: { status: 'not-applicable' };
+	}
+	if (
+		observerHealth?.owner !== extensionManagedObserverOwner
+		|| observerHealth.mode !== extensionManagedObserverMode
+	) {
+		appendObserverOutputLine(
+			`Observer PID ${pid} at ${discovery.baseUrl} does not carry the VS Code extension ownership marker; `
+			+ 'refusing to stop it automatically.',
+		);
+		return {
+			pid,
+			port: discoveryPort,
+			status: 'restart-required',
+			version: observerVersion,
+		};
 	}
 	const processExecutablePath = await readProcessExecutablePath(pid);
 	if (processExecutablePath === undefined) {
@@ -1408,13 +1426,6 @@ async function retireOtherExtensionManagedObserver(
 		status: 'restart-required',
 		version: otherExtensionObserver.version,
 	});
-	if (!observerHealthVerified) {
-		appendObserverOutputLine(
-			`Observer from installed extension ${otherExtensionObserver.version} could not be verified at `
-			+ `${discovery.baseUrl}; refusing to stop it automatically.`,
-		);
-		return restartRequired();
-	}
 
 	const preStopExecutablePath = await readProcessExecutablePath(otherExtensionObserver.pid);
 	const preStopObserver = preStopExecutablePath === undefined
