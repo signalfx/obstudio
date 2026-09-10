@@ -132,17 +132,6 @@ The plugin can run project commands selected by the user or required by the
 invoked skill workflow. Package managers, tests, application runtimes, and
 configured exporters may perform their own network requests.
 
-Free Edition region detection requests coarse location data based on the
-request's public IP so the user can review a supported hosting region. It does
-not submit a signup. After the user supplies their first name, last name, and
-email, selects a region, and explicitly accepts the Terms of Use, the signup
-action sends those values and the derived country, state, city, and postal code
-to Splunk. The request also includes a generated placeholder company name and
-fixed public-form metadata such as the developer role, trial type, and
-marketing opt-out values. Each submission performs a fresh location lookup,
-sends one signup request, and does not automatically retry that signup request
-after an uncertain result.
-
 The Splunk publish skills call Splunk Observability Cloud APIs only when the
 user explicitly invokes them and provides usable credentials. Those skills
 should show the live diff and confirmed gaps before creating dashboards,
