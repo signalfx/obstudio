@@ -171,13 +171,13 @@ SPLUNK_REALM=<your-realm>
 SPLUNK_ACCESS_TOKEN=<org-ingest-token>
 ```
 
-Protect the file, then restart a managed background Observer. If Observer is
-running in the foreground, stop it and launch it again instead.
-
 ```bash
 chmod 600 ~/.obstudio/env
-./obstudio restart
 ```
+
+Then reload Observer. For an agent-managed Observer, fully restart the coding
+agent and begin a new task. For a standalone background Observer, run
+`./obstudio restart`. For a foreground Observer, stop it and launch it again.
 
 The default env file is loaded automatically when present. Shell environment
 variables take precedence; use `./obstudio --env-file <path>` for another file.
