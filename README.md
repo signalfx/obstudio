@@ -30,7 +30,8 @@ Choose the skill that matches your task. Each skill links to its documentation:
 
 | Goal | Start with |
 |---|---|
-| Review a service and improve its telemetry | [`$otel-audit`](skills/otel-audit/SKILL.md) |
+| Review a service and identify telemetry gaps | [`$otel-audit`](skills/otel-audit/SKILL.md) |
+| Implement selected telemetry improvements | [`$otel-instrument`](skills/otel-instrument/SKILL.md) |
 | Recheck existing instrumentation | [`$otel-verify`](skills/otel-verify/SKILL.md) |
 | Generate detectors and dashboards | [`$splunk-configure`](skills/splunk-configure/SKILL.md) |
 | Generate dashboards only | [`$splunk-dashboard`](skills/splunk-dashboard/SKILL.md) |
