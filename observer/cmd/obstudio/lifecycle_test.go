@@ -102,9 +102,10 @@ func TestManagedServeFailureReturnsErrorAndCleansState(t *testing.T) {
 	originalListen := listenObserverHTTP
 	listenObserverHTTP = func(string, string) (net.Listener, error) { return failingObserverListener{}, nil }
 	t.Cleanup(func() { listenObserverHTTP = originalListen })
+	ports := pickSmokePorts(t, 3)
 	err = run(runConfig{
-		host: "127.0.0.1", observerHTTPPort: strconv.Itoa(pickSmokePort(t)),
-		otlpHTTPPort: strconv.Itoa(pickSmokePort(t)), otlpGRPCHost: "127.0.0.1", otlpGRPCPort: strconv.Itoa(pickSmokePort(t)),
+		host: "127.0.0.1", observerHTTPPort: strconv.Itoa(ports[0]),
+		otlpHTTPPort: strconv.Itoa(ports[1]), otlpGRPCHost: "127.0.0.1", otlpGRPCPort: strconv.Itoa(ports[2]),
 	})
 	if err == nil || !strings.Contains(err.Error(), "forced listener failure") {
 		t.Fatalf("managed serve failure = %v", err)
@@ -727,8 +728,9 @@ func TestManagedLifecycleRealBinary(t *testing.T) {
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build lifecycle binary: %v\n%s", err, output)
 	}
-	httpPorts := []int{pickSmokePort(t), pickSmokePort(t)}
-	otlpHTTPPort, otlpGRPCPort := pickSmokePort(t), pickSmokePort(t)
+	ports := pickSmokePorts(t, 4)
+	httpPorts := ports[:2]
+	otlpHTTPPort, otlpGRPCPort := ports[2], ports[3]
 	baseEnv := append(os.Environ(), smokeHomeEnv(home)...)
 	baseEnv = append(baseEnv, disableSharedObserverDetectionEnv+"=1")
 	envFile := filepath.Join(t.TempDir(), "observer.env")
@@ -852,7 +854,8 @@ func TestManagedUpgradeActivatesOnlyAfterRestart(t *testing.T) {
 		return binary
 	}
 	v1, v2 := buildBinary("upgrade-v1"), buildBinary("upgrade-v2")
-	httpPort, otlpHTTPPort, otlpGRPCPort := pickSmokePort(t), pickSmokePort(t), pickSmokePort(t)
+	ports := pickSmokePorts(t, 3)
+	httpPort, otlpHTTPPort, otlpGRPCPort := ports[0], ports[1], ports[2]
 	baseEnv := append(os.Environ(), smokeHomeEnv(home)...)
 	baseEnv = append(baseEnv, disableSharedObserverDetectionEnv+"=1",
 		"OTLP_HTTP_PORT="+strconv.Itoa(otlpHTTPPort), "OTLP_GRPC_PORT="+strconv.Itoa(otlpGRPCPort))
