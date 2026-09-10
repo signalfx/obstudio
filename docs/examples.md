@@ -1,8 +1,6 @@
 # Example Prompts
 
-Interactive, self-contained output examples are available in
-[example reports](https://github.com/signalfx/obstudio/blob/main/docs/example-reports/README.md): an audit report with scope
-selection and an instrumentation report with finding-level changes and proof.
+Use these prompts as starting points for common Observability Studio workflows.
 
 ## Audit -- Gap Analysis
 

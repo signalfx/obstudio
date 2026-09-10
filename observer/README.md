@@ -146,6 +146,10 @@ New targets default to `path`. For an existing target, omitting
 | `name` | Repository name without filesystem paths. |
 | `off` | No normalized repository correlation. |
 
+Claude Code repository correlation requires the Observability Studio plugin's
+SessionStart hook to emit a session association event. Codex can also derive
+repository context from working-directory data in its task spans.
+
 For example:
 
 ```bash
