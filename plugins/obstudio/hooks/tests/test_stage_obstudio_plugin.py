@@ -41,6 +41,24 @@ class StageObstudioPluginTest(unittest.TestCase):
             self.assertFalse((output / "skills" / "otel-instrument").is_symlink())
             self.assertFalse(any(path.is_symlink() for path in output.rglob("*")))
 
+    def test_staged_plugin_excludes_skill_tests_and_caches(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            output = Path(tempdir) / "obstudio"
+
+            STAGE.stage_plugin(output)
+
+            skill_files = [path for path in (output / "skills").rglob("*") if path.is_file()]
+            self.assertTrue((output / "skills" / "otel-instrument" / "scripts" / "validate_gap_closure.py").is_file())
+            self.assertFalse(any(path.name == "tests" or "tests" in path.parts for path in skill_files))
+            self.assertFalse(any(path.name.startswith("test_") for path in skill_files))
+            self.assertFalse(
+                any(
+                    cache_name in path.parts
+                    for path in skill_files
+                    for cache_name in (".pytest_cache", ".mypy_cache", ".ruff_cache")
+                )
+            )
+
     def test_host_stage_omits_other_host_metadata(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio-codex"

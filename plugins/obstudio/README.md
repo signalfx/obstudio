@@ -82,15 +82,22 @@ make stage-obstudio-plugin
 
 The staged directories are `.release/plugins/obstudio-codex` and
 `.release/plugins/obstudio-claude`. To also write the corresponding
-`obstudio-codex.zip` and `obstudio-claude.zip` archives, run:
+versioned `obstudio_codex_<version>.zip` and
+`obstudio_claude_<version>.zip` archives, pass the release tag:
 
 ```bash
-make package-obstudio-plugin
+make package-obstudio-plugin RELEASE_TAG=v0.0.20
 ```
+
+The archives are written to `.release/plugins/` with the leading `v` removed
+from the filename, for example `obstudio_codex_0.0.20.zip` and
+`obstudio_claude_0.0.20.zip`.
 
 Each staged plugin is intentionally self-contained for its host:
 
 - Both hosts can see the bundled skills immediately after installation.
+- Published staged bundles omit skill test suites and local tool caches; those
+  files remain in the repository for development and CI.
 - The plugin’s bootstrap script can bootstrap the release archive and managed
   local Observer runtime on first session start.
 - Each host asks you to review and trust the hook before it runs for the first
