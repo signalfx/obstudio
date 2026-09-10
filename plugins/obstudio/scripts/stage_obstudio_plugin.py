@@ -60,6 +60,7 @@ PLUGIN_SKILL_ENTRIES = (
 
 PLUGIN_SHARED_PATHS = (
     ".mcp.json",
+    "LICENSE",
     "PRIVACY.md",
     "README.md",
     "SECURITY.md",
