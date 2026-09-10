@@ -5,8 +5,6 @@ the proof without leaving your editor. The extension bundles agent skills and a
 local Observer for traces, metrics, logs, services, validation, dashboard
 previews, and optional Splunk Observability Cloud export.
 
-![Audit, selection, instrumentation, and verification workflow](assets/marketplace-skills-workflow.gif)
-
 ## Install
 
 | Editor | Install from |
@@ -52,6 +50,8 @@ Open the returned report and follow the next step it recommends. The
 [user guide](https://github.com/signalfx/obstudio/blob/main/docs/USER.md#using-the-skills)
 explains the complete audit, instrumentation, verification, and publishing
 workflow.
+
+![Audit, selection, instrumentation, and verification workflow](assets/marketplace-skills-workflow.gif)
 
 ## Inspect the proof
 
