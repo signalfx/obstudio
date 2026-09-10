@@ -1822,10 +1822,21 @@ suite('VS Code Host', () => {
 				20_000,
 			);
 			assert.equal(upgradedState.sharedMode, false);
+			const legacyPid = legacyProcess.pid;
+			assert.ok(legacyPid !== undefined, 'the legacy Observer should have a process ID');
 			assert.equal(
 				legacyProcess.exitCode,
 				null,
 				'the extension should continue once the legacy process no longer owns any managed ports',
+			);
+			assert.equal(
+				legacyProcess.signalCode,
+				null,
+				'the extension must not terminate the legacy process after it vacates the managed ports',
+			);
+			assert.doesNotThrow(
+				() => process.kill(legacyPid, 0),
+				'the legacy process should remain alive after relinquishing the managed ports',
 			);
 			const currentHealth = await fetchJson(`${baseUrl}/api/health`);
 			assert.equal(currentHealth.version, String(extension.packageJSON.version));
