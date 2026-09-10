@@ -162,9 +162,9 @@ Extension settings use the `observability-studio.` prefix:
 
 - `managedObserverPort` moves the extension-managed UI, REST API, and MCP
   endpoint. Its OTLP receivers remain fixed at `4318` and `4317`.
-- `sharedObserverUrl` reuses another local Observer. It must report the same
-  version bundled with the extension; send telemetry to that Observer's own
-  receiver endpoints.
+- `sharedObserverUrl` reuses another Observer running on this machine. Use
+  `localhost` or `127.0.0.1` in the URL. It must report the same version bundled
+  with the extension; send telemetry to that Observer's own receiver endpoints.
 
 ## Security and data handling
 
@@ -173,9 +173,10 @@ Cloud export. A separately managed local Observer follows its own
 configuration. Cloud export sends traces and metrics, not logs, and the
 extension stores its access token in IDE secret storage.
 
-See the extension's [security](https://github.com/signalfx/obstudio/blob/main/plugins/obstudio/SECURITY.md)
+For the bundled Codex and Claude Code plugin, see its
+[security](https://github.com/signalfx/obstudio/blob/main/plugins/obstudio/SECURITY.md)
 and [privacy](https://github.com/signalfx/obstudio/blob/main/plugins/obstudio/PRIVACY.md)
-contracts for its trust and telemetry-handling details.
+contracts.
 
 ## Troubleshooting
 

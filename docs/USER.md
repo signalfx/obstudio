@@ -39,7 +39,7 @@ To configure every target in one run:
 The `copilot` target configures MCP but does not install skills. The `windsurf`
 skill bundle is also available to Devin Local, which needs the running
 Observer added separately as described in the
-[extension guide](../extension/README.md#install).
+[extension guide](https://github.com/signalfx/obstudio/blob/main/extension/README.md#install).
 
 Where supported, installation copies the bundled skills, `obstudio`, and
 `weaver` into the selected agent's managed directory. It also updates the MCP
@@ -99,8 +99,9 @@ Run `$otel-verify` later whenever application or runtime evidence has changed.
 
 Audit and instrumentation are separate reports. Skills return user-clicked,
 tokenized local links and never open them automatically. JSON and Markdown
-artifacts remain local files. See [OTel Verify](otel-verify.md) for direct
-verification guidance.
+artifacts remain local files. See
+[OTel Verify](https://github.com/signalfx/obstudio/blob/main/docs/otel-verify.md)
+for direct verification guidance.
 
 ## Run Observer
 
@@ -155,8 +156,9 @@ semantic-convention findings, and dashboard previews.
 Use **Validation** after telemetry arrives. For agent-driven analysis, ask what
 is missing or incorrect; `observer_validation_analyze` uses the latest retained
 result and reports when it is stale. Ask to refresh validation when you need a
-new run. The [Observer guide](../observer/README.md) lists the common REST and
-MCP entry points.
+new run. The
+[Observer guide](https://github.com/signalfx/obstudio/blob/main/observer/README.md)
+lists the common REST and MCP entry points.
 
 ## Forward to Splunk Observability Cloud
 
@@ -259,13 +261,14 @@ Observer stores telemetry in bounded local memory. Cloud export, Free Edition
 signup, and publisher skills are explicit external actions. The editor
 extension stores Cloud access tokens in IDE secret storage.
 
-Review the full [security](../plugins/obstudio/SECURITY.md) and
-[privacy](../plugins/obstudio/PRIVACY.md) contracts before enabling external
-actions.
+Review the full
+[security](https://github.com/signalfx/obstudio/blob/main/plugins/obstudio/SECURITY.md)
+and [privacy](https://github.com/signalfx/obstudio/blob/main/plugins/obstudio/PRIVACY.md)
+contracts before enabling external actions.
 
 ## Resources
 
-- [Observer guide](../observer/README.md)
+- [Observer guide](https://github.com/signalfx/obstudio/blob/main/observer/README.md)
 - [Prompt examples](examples.md)
-- [Skill sources](../skills/)
-- [Contributing](../CONTRIBUTING.md)
+- [Skill sources](https://github.com/signalfx/obstudio/tree/main/skills)
+- [Contributing](https://github.com/signalfx/obstudio/blob/main/CONTRIBUTING.md)

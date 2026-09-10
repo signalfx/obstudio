@@ -1,7 +1,7 @@
 # Example Prompts
 
 Interactive, self-contained output examples are available in
-[example-reports](example-reports/README.md): an audit report with scope
+[example reports](https://github.com/signalfx/obstudio/blob/main/docs/example-reports/README.md): an audit report with scope
 selection and an instrumentation report with finding-level changes and proof.
 
 ## Audit -- Gap Analysis
