@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ValidationFinding, ValidationSummary } from "../api/types";
 import { buildValidationIssues } from "../validation/utils";
@@ -10,6 +10,7 @@ import { FindingsTab } from "./FindingsTab";
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 function makeFinding(overrides: Partial<ValidationFinding>): ValidationFinding {
@@ -51,6 +52,19 @@ function makeSummary(): ValidationSummary {
 }
 
 describe("FindingsTab", () => {
+  it("marks standalone validation runs as same-origin browser mutations", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(<FindingsTab issues={[]} summary={makeSummary()} />);
+
+    fireEvent.click(view.getByRole("button", { name: "Re-validate" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/validation/run");
+    expect(new Headers(init.headers).get("X-Obstudio-Browser-Request")).toBe("1");
+  });
+
   it("renders signal mini-tabs and defaults to the first available signal with no detail selection", () => {
     const view = render(
       <FindingsTab
