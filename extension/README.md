@@ -122,15 +122,15 @@ these canonical tables:
 ```
 
 When one of these tables has no endpoint and either uses the compatible
-`binary` protocol or omits the protocol, setup fills only the missing endpoint
-and protocol values. Unsupported, malformed, or multiply defined exporter
-configurations fail closed instead of risking an invalid configuration.
+`binary` protocol or omits the protocol, Obstudio fills only the missing
+endpoint and protocol values. Unsupported, malformed, or multiply defined
+exporter configurations fail closed instead of risking an invalid configuration.
 
 Codex uses the same `~/.codex/config.toml` for CLI, IDE, and Desktop processes.
 Restart each process after an exporter change. While enabled, Codex has one
 exporter for each signal—logs, traces, and metrics—and all three point to
 Observer. Disabling removes unchanged Obstudio-managed routes but does not
-recover destinations that setup replaced.
+recover destinations that Obstudio replaced.
 
 #### Claude Desktop profiles
 
