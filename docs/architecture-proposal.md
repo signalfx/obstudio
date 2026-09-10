@@ -1,4 +1,4 @@
-# Observability Studio — Layered Architecture
+# Splunk Observability Studio — Layered Architecture
 
 > **Status:** Historical design proposal. For current commands, supported
 > agents, and distribution instructions, use the root `README.md` and
@@ -6,7 +6,7 @@
 
 ## The Layering Principle
 
-Observability Studio is a layered product where each layer is independently useful and the outermost layer
+Splunk Observability Studio is a layered product where each layer is independently useful and the outermost layer
 is just a distribution mechanism.
 
 ```
@@ -383,7 +383,7 @@ The architectural pattern across all of these:
 obstudio follows this pattern. The Go binary is the product. The extension is
 one of several distribution channels.
 
-### Why This Matters for Observability Studio
+### Why This Matters for Splunk Observability Studio
 
 OTelMe demonstrates that the VS Code marketplace already has demand for local
 OpenTelemetry tooling. obstudio differs in two ways:

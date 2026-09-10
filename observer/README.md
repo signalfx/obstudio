@@ -1,6 +1,6 @@
 # Splunk Observability Studio
 
-Local OpenTelemetry Collector for Observability Studio — receives OTLP
+Local OpenTelemetry Collector for Splunk Observability Studio — receives OTLP
 telemetry, stores it in memory, and exposes it via REST API, MCP (for AI
 agents), and a browser-based Telemetry Explorer.
 

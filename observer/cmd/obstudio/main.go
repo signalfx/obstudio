@@ -1,4 +1,4 @@
-// Package main implements the Observability Studio CLI entry point.
+// Package main implements the Splunk Observability Studio CLI entry point.
 package main
 
 import (
@@ -87,7 +87,7 @@ func main() {
 func newRootCmd(config *runConfig) *cobra.Command {
 	root := &cobra.Command{
 		Use:     "obstudio",
-		Short:   "Observability Studio -- local OTel collector, MCP server, and skill installer",
+		Short:   "Splunk Observability Studio -- local OTel collector, MCP server, and skill installer",
 		Version: version,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := loadConfiguredEnvFile(config.envFile); err != nil {

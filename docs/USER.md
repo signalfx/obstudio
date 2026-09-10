@@ -1,4 +1,4 @@
-# Observability Studio -- User Guide
+# Splunk Observability Studio -- User Guide
 
 ## Installation
 

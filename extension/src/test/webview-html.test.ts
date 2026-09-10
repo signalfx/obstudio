@@ -30,7 +30,7 @@ describe('getObserverWebviewHtml', () => {
 			'vscode-webview://extension-id/main.js',
 			'vscode-webview://extension-id/main.css',
 		);
-		assert.ok(html.includes('<title>Splunk Observability Studio — Telemetry Explorer</title>'));
+		assert.ok(html.includes('<title>Splunk Observability Studio – Telemetry Explorer</title>'));
 	});
 
 	it('uses a strict CSP without network, frame, or clipboard capabilities', () => {

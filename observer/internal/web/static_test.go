@@ -23,7 +23,7 @@ func TestStaticIndexReferencesObserverIcon(t *testing.T) {
 	if !strings.Contains(string(indexBytes), `/assets/observer-icon.svg`) {
 		t.Fatal("static index should reference the observer favicon asset")
 	}
-	if !strings.Contains(string(indexBytes), `<title>Splunk Observability Studio — Telemetry Explorer</title>`) {
+	if !strings.Contains(string(indexBytes), `<title>Splunk Observability Studio – Telemetry Explorer</title>`) {
 		t.Fatal("static index should use the full product title")
 	}
 	if !strings.Contains(string(indexBytes), `/assets/main.js?v=0.0.8`) {

@@ -1,4 +1,4 @@
-Observability Studio is a local OpenTelemetry workspace that helps instrument
+Splunk Observability Studio is a local OpenTelemetry workspace that helps instrument
 application code using OpenTelemetry SDKs, verify the telemetry emitted by that
 instrumentation, forward telemetry to Splunk Observability Cloud, and generate
 and sync detector and dashboard specs to close monitoring and visualization gaps.
@@ -33,14 +33,14 @@ real APM services in the org while the developer is still iterating locally.
 |                 |                       OTLP       
 |                 |                        |         
 |                 |                        v         
-| +-------------+ |               +-----------------+
-| |             | |               |                 |
-| |    Studio   | |               |      Local      |
-| |  Extension  |<-------WS-------|    Splunk Observability Studio     |
-| |             | |               |                 |
-| |             | |               |                 |
-| +-------------+ |               +-----------------+
+| +-------------+ |               +-------------------------------+
+| |             | |               |                               |
+| |    Studio   | |               |             Local             |
+| |  Extension  |<-------WS-------|  Splunk Observability Studio  |
+| |             | |               |                               |
+| |             | |               |                               |
+| +-------------+ |               +-------------------------------+
 +-----------------+                                  
 ```
 
-### Splunk Observability Studio Extension Protocol (OEP)
+### Splunk Observability Studio Extension Protocol

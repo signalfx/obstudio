@@ -25,7 +25,7 @@ export function getObserverWebviewHtml(
 		content="default-src 'none'; img-src ${escapeHtml(cspSource)} data:; script-src ${escapeHtml(cspSource)}; style-src ${escapeHtml(cspSource)} 'unsafe-inline'; font-src ${escapeHtml(cspSource)}; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none';"
 	>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Splunk Observability Studio — Telemetry Explorer</title>
+	<title>Splunk Observability Studio – Telemetry Explorer</title>
 	<link rel="stylesheet" href="${escapeHtml(styleUri)}">
 </head>
 <body>

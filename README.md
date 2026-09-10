@@ -1,6 +1,6 @@
-# Observability Studio
+# Splunk Observability Studio
 
-Observability Studio is a local OpenTelemetry workspace for receiving,
+Splunk Observability Studio is a local OpenTelemetry workspace for receiving,
 exploring, and validating telemetry while developing services. It includes a
 Go collector, REST API, MCP server, React UI, and repo-scoped agent skills for
 auditing, adding, and verifying OpenTelemetry instrumentation.

@@ -1,4 +1,4 @@
-# Observability Studio Skills -- Product Requirements Document
+# Splunk Observability Studio Skills -- Product Requirements Document
 
 **Author**: Tigran Najaryan, with AI skill specifications by Platform Engineering
 **Status**: Draft
@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-Observability Studio is a developer tool that helps instrument (make
+Splunk Observability Studio is a developer tool that helps instrument (make
 observable) applications and services, verify the telemetry emitted by
 instrumentation, and iterate and improve instrumentation quickly.
 
@@ -53,7 +53,7 @@ feel like an ad platform.
 
 ## 2. Architecture
 
-Observability Studio follows a layered architecture where each layer is
+Splunk Observability Studio follows a layered architecture where each layer is
 independently useful. See `docs/architecture-proposal.md` for the full
 design.
 
