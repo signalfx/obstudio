@@ -1,435 +1,288 @@
-# Observability Studio -- User Guide
+# Obstudio user guide
 
-## Installation
+Obstudio gives coding agents an OpenTelemetry workflow and provides a local
+Observer for inspecting the resulting traces, metrics, logs, and validation
+evidence.
 
-Download the binary for your platform and run the installer:
+## Quick start
 
-```bash
-# macOS (Apple Silicon)
-curl -LO https://github.com/signalfx/obstudio/releases/latest/download/obstudio_darwin_arm64.zip
-unzip obstudio_darwin_arm64.zip
-
-# macOS (Intel)
-curl -LO https://github.com/signalfx/obstudio/releases/latest/download/obstudio_darwin_amd64.zip
-unzip obstudio_darwin_amd64.zip
-
-# Linux (x86_64)
-curl -LO https://github.com/signalfx/obstudio/releases/latest/download/obstudio_linux_amd64.zip
-unzip obstudio_linux_amd64.zip
-```
-
-After unzipping the release, change into the directory created by `unzip` and
-run the installer:
+Download and extract the archive for your platform from
+[GitHub Releases](https://github.com/signalfx/obstudio/releases/latest). From
+the extracted directory, install one agent integration:
 
 ```bash
-cd obstudio_<version>_<os>_<arch>
-./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot
+./obstudio install --target=codex
 ```
 
-This installs the included skills and configures the MCP server for all
-supported agents. Pass a single `codex`, `claude-code`, `cursor`, `kiro`,
-`windsurf`, or `copilot` value when you only want to configure one agent.
-`copilot` has no agent-skills mechanism, so it configures only the MCP server
-and installs no skill entries.
+Use a comma-separated list to install more than one target.
 
-The Codex plugin bootstrapper also expects the release pipeline to publish a
-`checksums.txt` file alongside the zip archives and validates the archive
-before extraction.
+| Target | Skill command |
+|---|---|
+| `codex` | `$otel-audit` |
+| `claude-code`, `cursor`, or `kiro` | `/otel-audit` |
+| `windsurf` with Devin Local | `/otel-audit` |
+| `windsurf` with legacy Cascade | `@otel-audit` |
+| `copilot` | Not available |
 
-### Supported Targets
+The `copilot` target configures MCP but does not install skills. The `windsurf`
+skill bundle is also available to Devin Local, which needs the running
+Observer added separately as described in the
+[extension guide](../extension/README.md#install).
 
-| Target | Skills directory | MCP config |
-|--------|-----------------|------------|
-| `cursor` | `~/.cursor/skills/obstudio/` | `~/.cursor/mcp.json` |
-| `claude-code` | `~/.claude/skills/obstudio/` | `~/.claude.json` |
-| `codex` | `~/.codex/skills/obstudio/` | `~/.codex/config.toml` |
-| `kiro` | `~/.kiro/skills/obstudio/` | `~/.kiro/settings/mcp.json` |
-| `windsurf` | `~/.codeium/windsurf/skills/obstudio/` | `~/.codeium/windsurf/mcp_config.json` |
-| `copilot` | _(none)_ | `<VS Code user config>/Code/User/mcp.json` |
+Where supported, installation copies the bundled skills, `obstudio`, and
+`weaver` into the selected agent's managed directory. It also updates the MCP
+configuration. Restart each agent after installation and begin a new task.
 
-The installer:
-1. Extracts skills and references from the binary to the agent's skill directory
-2. Copies `obstudio` and the bundled `weaver` runtime alongside the skills (stable path for MCP)
-3. Creates top-level discoverable skill entries in the agent skills root
-4. Configures the agent's MCP config to auto-start `obstudio` or reuse a shared Observer
+This guide runs the release binary as `./obstudio`. For a source build, use
+`./build/obstudio` instead.
 
-After installation, restart the agent if it does not discover the new skills.
+## Using the skills
 
-### Installed Skill Layout
+The normal workflow is
+**audit → select → instrument → verify → configure → publish**.
 
-For each target, `<skills-root>` is the parent of the managed `obstudio/`
-directory listed above. The installer copies the same bundle into `obstudio/`
-and creates relative symbolic links for skill discovery.
+- `$otel-audit` finds observability gaps without changing application code.
+- `$otel-instrument` implements approved SDK, auto-instrumentation, and
+  custom-signal changes.
+- `$otel-verify` rechecks instrumentation and refreshes proof.
+- `$splunk-dashboard` generates dashboard Terraform and a local preview.
+- `$splunk-configure` generates detector and dashboard Terraform from audit
+  evidence.
+- `$splunk-detector-publish` compares detectors with Splunk and creates
+  confirmed gaps.
+- `$splunk-dashboard-publish` compares dashboards and charts with Splunk and
+  creates confirmed gaps.
+
+The skill names above use Codex syntax. Use the prefix shown for your target
+and keep the skill name and arguments unchanged.
+
+### Audit, select, and instrument
+
+1. Run `$otel-audit` from the service root.
+2. Open the returned tokenized local report link.
+3. Select the findings to fix and copy the generated `$otel-instrument`
+   command.
+4. Run that command without changing its finding IDs, decisions, or service
+   path.
+5. Review the verification proof that `$otel-instrument` produces by default.
+
+If you already know the finding IDs, you can select them directly:
 
 ```text
-<skills-root>/
-  obstudio/
-    obstudio[.exe]             # CLI and MCP server binary
-    weaver[.exe]               # validation runtime
-    otel-audit/SKILL.md        # bundled otel-audit skill
-    otel-instrument/SKILL.md   # bundled otel-instrument skill
-    otel-verify/SKILL.md       # bundled otel-verify skill
-    ...                        # additional bundled skills
-    references/                # shared reference material
-  otel-audit -> obstudio/otel-audit
-  otel-instrument -> obstudio/otel-instrument
-  otel-verify -> obstudio/otel-verify
-  ...                          # one discovery link per bundled skill
+$otel-instrument --ids OTEL-001,OTEL-004
 ```
 
-## CLI Reference
+Run `$otel-verify` later whenever application or runtime evidence has changed.
 
-| Command | Description |
-|---------|-------------|
-| `obstudio` | Start the collector + stdio MCP server (OTLP receiver, Web UI, REST API, MCP) |
-| `obstudio install --target=<agent>[,<agent>...]` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`, `kiro`) |
-| `obstudio --observer-http-port <port>` | Override the Observer UI, REST API, and MCP HTTP port |
-| `obstudio --env-file <path>` | Load startup environment values from a `KEY=VALUE` env file |
-| `obstudio --version` | Print version |
-| `obstudio --help` | Show all available commands |
+- `.observe/otel-audit.json` contains the source-derived audit findings.
+- `.observe/otel.html` is the interactive audit and finding-selection report.
+- `.observe/otel-selection.json` records approved finding IDs and decisions.
+- `.observe/otel-instrumentation.md` is the developer-readable implementation
+  record; `.observe/otel-instrumentation.json` is its machine-readable form.
+- `.observe/otel-instrumentation.html` explains the changes, impact, and proof.
+- `.observe/otel-verify.md` is the verification report;
+  `.observe/otel-verify.json` is its machine-readable form in the canonical
+  audit flow.
 
-## Using Skills
+Audit and instrumentation are separate reports. Skills return user-clicked,
+tokenized local links and never open them automatically. JSON and Markdown
+artifacts remain local files. See [OTel Verify](otel-verify.md) for direct
+verification guidance.
 
-Once installed, open any project in your agent and use:
+## Run Observer
 
-| Command | What it does |
-|---------|-------------|
-| `/otel-audit` | Analyze gaps and write canonical `.observe/otel-audit.json` plus interactive `.observe/otel.html` |
-| `/otel-instrument` | Implement canonical audit selections and write instrumentation JSON plus interactive `.observe/otel-instrumentation.html` |
-| `/otel-verify` | Write bound verification JSON and refresh instrumentation proof in the instrumentation HTML |
-
-Or use natural language:
-
-```
-instrument this service with OpenTelemetry
-audit this service for observability gaps
-verify this service's OpenTelemetry instrumentation
-```
-
-Claude Code, Cursor, and Kiro use the slash-command syntax shown above; Kiro
-also discovers the same Agent Skills from natural-language requests. Codex
-uses the equivalent `$otel-audit`, `$otel-instrument`, and `$otel-verify`
-syntax. `$otel-instrument` runs the verification workflow by default after its
-implementation gate unless you explicitly opt out or a concrete prerequisite
-blocks it. See the
-[OTel Verify guide](https://github.com/signalfx/obstudio/blob/main/docs/otel-verify.md)
-for how to run verification directly and read the generated report. The
-complete report schema remains in the canonical
-[report flow contract](https://github.com/signalfx/obstudio/blob/main/skills/references/report-flow-contract.md#verification-report-contract).
-
-When an audit and validated selection are present, the normal review loop is
-JSON-backed and HTML-first:
-
-1. Run `$otel-audit` and open the returned loopback `otel.html` link.
-2. Select and expand findings, then copy the generated `$otel-instrument`
-   command. The command carries the explicit finding IDs, decision answers,
-   and validated service root.
-3. Run `$otel-instrument`. Alternatively, invoke
-   `$otel-instrument --ids OTEL-001,OTEL-004` directly; it writes the same
-   validated selection handoff before editing.
-4. Open the returned loopback `otel-instrumentation.html` link for the
-   code-to-telemetry-to-product change report. The same local report server
-   keeps `otel.html` available for the unchanged audit view.
-5. No separate verification rerun is needed after instrumentation because
-   `$otel-instrument` runs the verification workflow. Run `$otel-verify`
-   directly only later when runtime evidence has changed and proof needs to be
-   refreshed. Instrumentation and verification JSON sidecars keep that view
-   deterministic.
-
-Generated HTML links use a restricted server bound to `127.0.0.1`; the skills
-do not open a browser automatically. Markdown and JSON artifacts remain local
-file links.
-
-Instrumentation and verification Markdown reports remain readable technical
-projections. JSON is the canonical audit, selection, instrumentation, and
-verification contract for the skill workflow.
-
-## Running the Full Observer
-
-For the complete experience (Web UI, OTLP receiver, HTTP MCP endpoint):
+Start Observer in the foreground:
 
 ```bash
-obstudio
+./obstudio
 ```
 
-To override the Observer UI, REST API, and MCP HTTP port explicitly:
+Or manage a background process:
 
 ```bash
-obstudio --observer-http-port 41234
+./obstudio start
+./obstudio status
+./obstudio restart
+./obstudio stop
 ```
 
-The OTLP receiver ports stay fixed at `4318` and `4317`; these are also used by
-the editor extension.
+Installing a new build does not restart a running Observer. The lifecycle
+commands manage only the standalone background process, not foreground or
+extension-managed instances.
 
-When a standalone Observer is already running, `obstudio install --target=<agent>`
-auto-detects its current HTTP MCP endpoint from local runtime state, including
-nondefault `--observer-http-port` values. Use `--shared-url` only when you want
-to point an agent at a different already-running Observer explicitly.
+| Service | Default endpoint |
+|---|---|
+| Observer UI and REST API | `http://127.0.0.1:3000` |
+| MCP | `http://127.0.0.1:3000/mcp` |
+| OTLP/HTTP | `http://127.0.0.1:4318` |
+| OTLP/gRPC | `127.0.0.1:4317` |
 
-Manage a standalone Observer in the background:
+Use `./obstudio --observer-http-port 41234` to move the Observer UI, REST API,
+and MCP endpoint. The OTLP receiver ports remain `4318` and `4317` unless you
+change their environment variables.
 
-```text
-obstudio start    Start Observer
-obstudio status   Show its status
-obstudio restart  Restart and activate an installed update
-obstudio stop     Stop Observer
-```
+### Send service telemetry
 
-Installing an update does not restart Observer. These commands do not control
-foreground or extension-managed Observers.
-
-Observer is local-only: its UI, REST API, and HTTP MCP endpoint must bind to a
-loopback host. `--shared-url` can select another loopback Observer, but remote
-Observers and reverse-proxy publication are not supported.
-
-### v0.0.21 local Observer migration
-
-v0.0.21 intentionally removes the authenticated remote/shared Observer mode
-that v0.0.20 supported. Before upgrading a remotely published or LAN-bound
-Observer, move its UI, REST API, and MCP listener to `127.0.0.1` or `localhost`
-and update native clients to use that loopback URL. Remove reverse-proxy routes
-and `OBSTUDIO_PUBLIC_MCP_URL`, then rerun `obstudio install --target=<agent>` to
-replace older MCP entries containing an `Authorization` header. If a deployment
-cannot move to loopback yet, keep it on v0.0.20 until that migration is possible;
-v0.0.21 will reject the non-loopback listener instead of exposing unauthenticated
-mutation endpoints remotely. This restriction applies to the local Observer
-control surface, not to exporting telemetry to Splunk Observability Cloud.
-
-Native loopback clients do not need a bearer credential. This is a deliberate
-local-machine trust boundary, not same-user authentication: any process or OS
-account that can reach the loopback endpoint can invoke native MCP and mutation
-operations. Use Observer on a trusted single-user development machine or apply
-OS-level isolation on a shared host. Browser mutations must come from the
-Observer's exact origin and include its browser-request marker; cross-origin
-requests and mutation preflights are rejected, and mutation responses do not
-use wildcard CORS. Splunk ingest tokens are write-only and are never returned
-by status, health, recovery, or lifecycle endpoints. Older MCP entries
-containing an Observer `Authorization` header are migrated by the next explicit
-`obstudio install` or IDE integration-enable action.
-
-The editor extension stores a user-entered Cloud connection in IDE secret
-storage before applying it to Observer. If a request has an uncertain transport
-outcome, a single-use scoped rollback capability restores the prior in-memory
-Observer configuration without exposing either the old or new ingest token.
-Freshly started extension-managed Observers are restored from IDE secret
-storage. During an extension upgrade, a healthy Observer reporting the current
-bundled version can be reused. If a different or unversioned Observer occupies
-the selected managed port, that port is the lifecycle boundary when
-`sharedObserverUrl` is unset: the extension replaces the process regardless of
-whether VS Code, Cursor, Kiro, the CLI, or a standalone launch started it. It
-first verifies the Observer health identity, resolves the PID that actually
-owns the listening port, requires an exact `obstudio` (`obstudio.exe` on
-Windows) executable name, and then reverifies the same PID and executable path
-immediately before stopping it. A stale or missing PID in shared state does not
-block replacement because the port owner is resolved directly. Other Observers
-on other ports and explicitly configured `sharedObserverUrl` processes remain
-running. macOS and Linux use `SIGTERM` followed by a revalidated `SIGKILL`
-fallback; Windows uses `taskkill` without `/F` followed by a revalidated `/F`
-fallback. If health, port ownership, or executable verification fails, Cloud
-controls remain unavailable and the panel shows **Restart required** with the
-known port and PID instead of stopping an uncertain process.
-
-| Service | URL |
-|---------|-----|
-| Telemetry Explorer | http://localhost:3000 |
-| OTLP/HTTP receiver | http://localhost:4318 |
-| OTLP/gRPC receiver | localhost:4317 |
-| MCP endpoint | http://localhost:3000/mcp |
-
-In the Telemetry Explorer, use the `Live` button or press `P` while the Explorer
-is focused to pause or resume live updates.
-
-Configure your app to send telemetry:
+After installing an OpenTelemetry SDK or auto-instrumentation, configure its
+OTLP/HTTP protobuf exporters:
 
 ```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
 export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_TRACES_EXPORTER=otlp
+export OTEL_METRICS_EXPORTER=otlp
 export OTEL_LOGS_EXPORTER=otlp
-export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
 export OTEL_SERVICE_NAME=my-service
 ```
 
-Obstudio accepts OTLP traces, metrics, and logs and displays all three in the
-local Telemetry Explorer. Splunk Observability Cloud forwarding applies only to
-traces and metrics. Logs sent to `/v1/logs` remain in the local Explorer's Logs
-view, even when trace and metric forwarding are enabled.
-Set `OTEL_LOGS_EXPORTER=none` before starting the application to opt out while
-leaving its existing console or file logging unchanged.
+Start the service and exercise a real request. Observer accepts all three
+signals. Open the Observer UI to inspect services, traces, metrics, logs,
+semantic-convention findings, and dashboard previews.
 
-To forward eligible incoming telemetry to Splunk Observability Cloud while
-still keeping the local Explorer experience, put the settings in Obstudio's
-default env file:
+Use **Validation** after telemetry arrives. For agent-driven analysis, ask what
+is missing or incorrect; `observer_validation_analyze` uses the latest retained
+result and reports when it is stale. Ask to refresh validation when you need a
+new run. The [Observer guide](../observer/README.md) lists the common REST and
+MCP entry points.
+
+## Collect coding-agent token telemetry
+
+Agent installation does not change Codex or Claude Code exporter settings.
+Enable token telemetry explicitly:
 
 ```bash
-mkdir -p ~/.obstudio
-chmod 700 ~/.obstudio
-cat > ~/.obstudio/env <<'EOF'
-OBSTUDIO_SPLUNK_METRICS_EXPORT=true
-SPLUNK_REALM=<your-realm>
-SPLUNK_ACCESS_TOKEN=<your-org-ingest-token>
-EOF
-chmod 600 ~/.obstudio/env
-obstudio
+./obstudio token-telemetry enable \
+  --target=codex,claude-code
+./obstudio token-telemetry status \
+  --target=codex,claude-code
+./obstudio token-telemetry disable \
+  --target=codex,claude-code
 ```
 
-### Metrics export
+`enable` takes ownership of recognized provider OTLP routes; it has no separate
+force flag. Previous destinations are not saved or restored. `disable` removes
+only unchanged Obstudio-managed values, while later edits remain untouched.
 
-Metrics are forwarded via OTLP/HTTP protobuf to
-`https://ingest.<realm>.observability.splunkcloud.com/v2/datapoint/otlp`.
-Set `OBSTUDIO_SPLUNK_METRICS_ENDPOINT` to override the full endpoint. Explicit
-endpoint values are used exactly as configured.
-The token must be an org access token with ingest scope. Splunk's documented
-OTLP/HTTP authentication header is `X-SF-Token`.
+New targets use repository correlation mode `path`. Use `name` to omit
+filesystem paths or `off` to disable normalized correlation. Omitting the flag
+for an existing target preserves its recorded mode. Raw provider telemetry is
+unchanged and can still include a provider-supplied working directory.
 
-Shell environment variables override values from the env file. Use
-`obstudio --env-file <path>` or `OBSTUDIO_ENV_FILE=<path>` to load a different
-env file.
+Restart every affected Codex or Claude process after changing routing. Claude
+Desktop Setup profiles can override user-level Claude Code settings and are not
+edited by `--target=claude-code`. See the
+[token-usage demo](../observer/README.md#audit-token-usage-demo) for a complete
+test, Desktop setup, retention behavior, and result interpretation.
 
-### Trace / span export
+## Forward to Splunk Observability Cloud
 
-Obstudio also forwards spans to Splunk Observability Cloud via OTLP/HTTP,
-making your service visible as a real **Splunk APM service** with
-`service.request.*` metrics, trace latency distributions, and dependency maps.
+Observer can forward received traces and metrics while keeping the Observer UI
+available. Logs remain local.
 
-Add the following to the env file (same token as metrics):
+Create `~/.obstudio/env` with these values:
 
-```bash
-cat >> ~/.obstudio/env <<'EOF'
+```dotenv
+OBSTUDIO_SPLUNK_METRICS_EXPORT=true
 OBSTUDIO_SPLUNK_TRACES_EXPORT=true
 SPLUNK_REALM=<your-realm>
-SPLUNK_ACCESS_TOKEN=<your-org-ingest-token>
-EOF
+SPLUNK_ACCESS_TOKEN=<org-ingest-token>
 ```
 
-With these set, Obstudio exports all received spans to
-`https://ingest.<realm>.observability.splunkcloud.com/v2/trace/otlp` (OTLP/HTTP)
-alongside the local Explorer.
+Protect the file, then restart a managed background Observer. If Observer is
+running in the foreground, stop it and launch it again instead.
 
-After spans flow in, Splunk APM materialises:
-- `service.request.count`, `service.request.duration`, and related metrics per
-  operation on the instrumented service
-- Dependency maps showing calls between services
-- Trace search and exemplar traces in the Splunk O11y UI
-
-### Detector sync
-
-Once your service is live in Splunk APM and you have local detector Terraform
-from `$splunk-configure`, use `$splunk-detector-publish` to close the loop:
-
-```
-$splunk-detector-publish
+```bash
+chmod 600 ~/.obstudio/env
+./obstudio restart
 ```
 
-This diffs `.observe/terraform/detectors.tf` against live Splunk Observability
-Cloud detectors for the same service, classifies each local spec as COVERED /
-GAP / UNCERTAIN, shows a confirmation diff, and creates only the genuine gaps
-via the Splunk Observability Cloud REST API (`POST /v2/detector`). A resume
-ledger is written to `.observe/detector-sync.md` so re-runs are idempotent.
+The default env file is loaded automatically when present. Shell environment
+variables take precedence; use `./obstudio --env-file <path>` for another file.
+Forwarding requires an organization access token with ingest scope.
 
-`$splunk-detector-publish` calls the Splunk REST API directly using
-`SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` — the same variables already required
-for metrics and traces forwarding. No additional configuration is needed.
+Generating Terraform does not change Splunk. Publishing is a separate,
+confirmation-gated action:
 
-See the `$splunk-detector-publish` skill for the full process and coverage model.
+| Skill or action | Purpose |
+|---|---|
+| `$splunk-dashboard` | Generate dashboard Terraform and local preview data. |
+| `$splunk-configure` | Generate evidence-backed detector and dashboard Terraform. |
+| Open **Dashboards** | Compare generated layouts with current local telemetry. |
+| `$splunk-detector-publish` | Show a live diff and create confirmed detector gaps. |
+| `$splunk-dashboard-publish` | Show a live diff and create confirmed dashboard gaps. |
 
-### Dashboard generation
+The local dashboard preview is approximate because SignalFlow runs in Splunk
+Observability Cloud. Publisher skills require an API token with permission to
+create their resources; an ingest-only token is not sufficient.
 
-Alongside detectors, you can turn the same audit report into Splunk
-Observability Cloud **dashboards**:
+## CLI reference
 
-```
-$splunk-dashboard
-```
+| Command | Purpose |
+|---|---|
+| `./obstudio install --target=<agent>` | Install skills and configure MCP. |
+| `./obstudio` | Run Observer in the foreground. |
+| `./obstudio start` | Start the managed background Observer. |
+| `./obstudio status` | Inspect the managed process and endpoints. |
+| `./obstudio restart` | Restart the managed process with current settings. |
+| `./obstudio stop` | Stop the managed process. |
+| `./obstudio token-telemetry <action>` | Enable, inspect, or disable provider routing. |
+| `./obstudio --version` | Print the installed version. |
+| `./obstudio --help` | Show commands and flags. |
 
-This reads `.observe/otel-audit.json`, groups the service's metrics into RED-style
-panels (latency/duration, error rate, throughput, plus saturation and KPI
-single-value tiles), and writes dashboard Terraform to
-`.observe/terraform/dashboards.tf` — a `signalfx_dashboard_group`, one or more
-`signalfx_dashboard`, and one `signalfx_*_chart` resource per panel placed on
-the real 12-column grid — plus `variables.tf`, `terraform.tfvars.example`, a
-`.observe/dashboards.md` report, and a `.observe/dashboards.preview.json`
-sidecar consumed by the Observer's Dashboards tab. No network call is made; the
-output is ready for `terraform apply` or `$splunk-dashboard-publish`.
+## Environment variables
 
-### Dashboard preview (Dashboards tab)
+Observer runtime:
 
-Open the **Dashboards** tab in the Telemetry Explorer (or `?tab=dashboards`, or
-press `6`) to preview each generated dashboard's grid layout against the OTLP
-telemetry currently in the local store. The preview is honest about its limits:
-SignalFlow `program_text` runs on Splunk's backend, so the tab parses each
-panel's `{ metric, filters, aggregation }`, plots the matching *local* series in
-the dashboard's real grid, and carries an explicit **"Approximate · local-data
-preview"** badge. Panels whose metric is not currently being emitted show an
-empty card naming the metric and filters rather than a fabricated chart. The tab
-reads `.observe/dashboards.preview.json` on each refresh, so regenerating the
-dashboard and pressing Refresh updates the preview.
+- `PORT` sets the Observer UI, REST API, and MCP port. Default: `3000`.
+- `OTLP_HTTP_PORT` sets the OTLP/HTTP receiver port. Default: `4318`.
+- `OTLP_GRPC_PORT` sets the OTLP/gRPC receiver port. Default: `4317`.
+- `OBSTUDIO_ENV_FILE` selects a startup env file. The default
+  `~/.obstudio/env` is loaded when present.
+- `OBSTUDIO_WORKSPACE_ROOT` sets the root for workspace-relative audit and
+  dashboard files. It defaults to the current directory.
+- `OBSTUDIO_AUDIT_REPORT` selects the audit shown in Overview. It defaults to
+  `.observe/otel-audit.json`.
 
-### Dashboard sync
+Splunk export:
 
-Once you have local dashboard Terraform from `$splunk-dashboard`, use
-`$splunk-dashboard-publish` to push only the gaps:
+- `SPLUNK_REALM` identifies the realm used for default ingest endpoints.
+- `SPLUNK_ACCESS_TOKEN` supplies an ingest token for forwarding or an
+  API-write token for publisher skills.
+- `OBSTUDIO_SPLUNK_METRICS_EXPORT` and `OBSTUDIO_SPLUNK_TRACES_EXPORT` enable
+  their respective exporters. Both default to `false`.
+- `OBSTUDIO_SPLUNK_METRICS_ENDPOINT` and
+  `OBSTUDIO_SPLUNK_TRACES_ENDPOINT` override the full ingest endpoints.
+- `OBSTUDIO_SPLUNK_METRICS_TIMEOUT` and `OBSTUDIO_SPLUNK_TRACES_TIMEOUT` set
+  request timeouts. Both default to `5s`.
 
-```
-$splunk-dashboard-publish
-```
+## Troubleshooting
 
-This diffs `.observe/terraform/dashboards.tf` against live Splunk Observability
-Cloud dashboards for the same service and classifies the dashboard group, each
-dashboard, and each chart as COVERED / GAP / UNCERTAIN with a concrete reason on
-every row. After you confirm, it creates the gaps **chart-first** — `POST
-/v2/chart` for each missing chart to collect chart IDs, then `POST /v2/dashboard`
-referencing those IDs with grid placement (creating the group via `POST
-/v2/dashboardgroup` first when it is missing) — and recovers orphaned charts if
-the dashboard create fails. A resume ledger is written to
-`.observe/dashboard-sync.md` (with the per-verdict reason and app links) so
-re-runs are idempotent. It uses `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM`
-directly and needs no extra configuration.
+- **Observer will not start:** check the UI port and both OTLP ports.
+  Change only the listener that is in use.
+- **An agent cannot find skills or MCP:** restart the agent and open a new task.
+  Existing processes keep their startup configuration.
+- **A configured local Observer does not connect:** confirm that it is
+  reachable and its version is compatible with the client.
+- **Validation cannot run:** keep the bundled `weaver` executable beside
+  `obstudio`, or make it available on `PATH`.
+- **The extension shows Restart required:** open **Observer Status** and follow
+  its recovery action. The extension will not stop a process it cannot verify.
+- **A dashboard preview uses the wrong repository:** open the service as the
+  first workspace folder and restart Observer.
 
-See the `$splunk-dashboard` and `$splunk-dashboard-publish` skills for the full
-classification and coverage model.
+## Security and data handling
 
-## Validation
+Observer stores telemetry in bounded local memory. Cloud export, Free Edition
+signup, and publisher skills are explicit external actions. The editor
+extension stores Cloud access tokens in IDE secret storage.
 
-When telemetry is flowing, open the **Validation** tab in the Telemetry
-Explorer to run semantic validation against the current in-memory
-snapshot. The latest retained result is summarized in the tab and
-surfaced through the dedicated validation workflow.
+Review the full [security](../plugins/obstudio/SECURITY.md) and
+[privacy](../plugins/obstudio/PRIVACY.md) contracts before enabling external
+actions.
 
-Validation is also available programmatically:
+## Resources
 
-| Surface | Entry points |
-|---------|--------------|
-| REST | `GET /api/query/validation/summary`, `GET /api/query/validation/latest`, `POST /api/validation/run`, `POST /api/validation/refresh` |
-| MCP | `observer_validation_status`, `observer_validation_analyze`, `observer_validation_refresh` |
-
-Use `observer_validation_analyze` for most questions about missing
-telemetry or semantic convention issues. Use
-`observer_validation_refresh` only when you explicitly want to rerun
-validation against the current snapshot.
-
-If you move `obstudio` manually instead of using `obstudio install`, keep
-the bundled `weaver` runtime beside it or ensure `weaver` is available on
-`PATH`.
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HOST` | `127.0.0.1` | Bind address for all servers |
-| `PORT` | `3000` | Observer UI, REST API, and MCP HTTP port |
-| `OBSTUDIO_ENV_FILE` | `~/.obstudio/env` if present | Env file to load before startup; ignored when missing unless explicitly set |
-| `OBSTUDIO_WORKSPACE_ROOT` | process CWD | Absolute path to the workspace directory. The editor extension sets this automatically to the open workspace folder. When set, `.observe/dashboards.preview.json` and similar workspace-relative paths are resolved relative to this root rather than the binary's install directory. Explicit `OBSTUDIO_DASHBOARDS_PREVIEW` paths are validated to be within this root. |
-| `OBSTUDIO_AUDIT_REPORT` | `.observe/otel-audit.json` under the workspace root | Path to the canonical `$otel-audit` report the Overview tab scores. Relative paths resolve against `OBSTUDIO_WORKSPACE_ROOT`; absolute paths must stay inside it, and paths containing `..` or pointing outside the workspace are rejected and fall back to the default. The human-readable `otel.html` is always read from the same directory as the JSON, so an override keeps a report and its data together. The Overview marks the score out of date when the workspace has moved to a different commit, or when any file outside the generated directories (`.observe`, `.git`, `node_modules`, build and cache directories) was modified after the report was written — which is what catches `$otel-instrument` editing source without committing. |
-| `SPLUNK_REALM` / `OBSTUDIO_SPLUNK_REALM` | unset | Splunk Observability Cloud realm — used for both metrics and trace export endpoints |
-| `SPLUNK_ACCESS_TOKEN` | unset | Splunk org access token (`X-SF-Token` header). **For metrics and traces forwarding**, use an org ingest token. **For `$splunk-detector-publish` and `$splunk-dashboard-publish`**, the token must have **API write** permissions (the ability to create and update detectors and dashboards via the Splunk Observability Cloud REST API) — an ingest-only token is not sufficient for those skills. |
-| `OBSTUDIO_SPLUNK_METRICS_EXPORT` / `SPLUNK_METRICS_EXPORT` | `false` | Forward received OTLP metrics to Splunk Observability Cloud |
-| `OBSTUDIO_SPLUNK_METRICS_ENDPOINT` | unset | Full OTLP/HTTP metrics endpoint override |
-| `OBSTUDIO_SPLUNK_METRICS_TIMEOUT` | `5s` | Splunk metrics export request timeout |
-| `OBSTUDIO_SPLUNK_TRACES_EXPORT` / `SPLUNK_TRACES_EXPORT` | `false` | Forward received OTLP spans to Splunk Observability Cloud (activates APM service visibility) |
-| `OBSTUDIO_SPLUNK_TRACES_ENDPOINT` | auto from realm | Full OTLP/HTTP traces endpoint override |
-| `OBSTUDIO_SPLUNK_TRACES_TIMEOUT` | `5s` | Splunk traces export request timeout |
-
-## Example Prompts
-
-See [examples.md](examples.md) (installed alongside skills) for a full
-table of use cases, prompts, and which skill handles each one.
+- [Observer guide](../observer/README.md)
+- [Prompt examples](examples.md)
+- [Skill sources](../skills/)
+- [Contributing](../CONTRIBUTING.md)

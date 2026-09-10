@@ -8,12 +8,13 @@ application code.
 
 ## Install And Invoke
 
-The Obstudio installer includes `otel-verify` for every supported agent:
+The Obstudio installer includes `otel-verify` for every skill-capable target:
 
 ```bash
 ./obstudio install --target=codex
-# Or: --target=claude-code / --target=cursor / --target=kiro
 ```
+
+Use the corresponding target when another supported agent will run the skill.
 
 After installation, restart the agent if it does not discover the new skill.
 Then invoke it using that agent's syntax:
@@ -21,15 +22,11 @@ Then invoke it using that agent's syntax:
 | Agent | Invocation |
 |---|---|
 | Codex | `$otel-verify` |
-| Claude Code | `/otel-verify` |
-| Cursor | `/otel-verify` |
-| Kiro | `/otel-verify` |
+| Claude Code, Cursor, Kiro, or Devin Local | `/otel-verify` |
+| Legacy Cascade | `@otel-verify` |
 
-Natural-language requests also select the skill, for example:
-
-```text
-verify this service's OpenTelemetry instrumentation
-```
+Natural-language requests also select the skill. For example: “Verify this
+service's OpenTelemetry instrumentation.”
 
 `otel-instrument` invokes the verification workflow by default after its
 implementation gate. It may omit verification only when the user explicitly
@@ -47,8 +44,8 @@ Verification reads:
 
 - `.observe/otel-audit.json` for the canonical audit baseline and acceptance
   scenarios.
-- `.observe/otel-selection.json` for explicitly requested finding IDs and dependency-
-  complete verification scope.
+- `.observe/otel-selection.json` for explicitly requested finding IDs and the
+  dependency-complete verification scope.
 - `.observe/otel-instrumentation.json` for canonical added, modified, or removed
   signals, finding closure, and prior validation results.
 
@@ -92,13 +89,12 @@ code emits the signal.
 
 ## Read The Report
 
-Open the returned loopback `otel-instrumentation.html` link for the combined
-change, impact, and proof view, the returned loopback `otel.html` link for the
-original audit and approval context, or the local-file
-`.observe/otel-verify.md` link for verification detail. The workflow starts or
-reuses a restricted `127.0.0.1` report server but does not open either HTML
-page automatically. Start with `Result` and `Bottom line`, then read these
-sections in order:
+Open the returned local `otel-instrumentation.html` link for the combined
+change, impact, and proof view. Use `otel.html` for the original audit and
+approval context, and `.observe/otel-verify.md` for verification detail. The
+workflow starts or reuses a restricted `127.0.0.1` report server but does not
+open either HTML page automatically. Start with `Result` and `Bottom line`,
+then read these sections in order:
 
 1. `What Changed` summarizes the telemetry or runtime behavior under test.
 2. `Tested And Working` contains one row per exact added, modified, or removed

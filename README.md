@@ -47,7 +47,7 @@ used only by runtime evals.
 make run
 ```
 
-`make run` builds the binary and starts Observer. It listens on loopback:
+`make run` builds the binary and starts Observer with these endpoints:
 
 | Service | Default endpoint |
 |---|---|
@@ -56,8 +56,8 @@ make run
 | OTLP/HTTP | `http://127.0.0.1:4318` |
 | OTLP/gRPC | `127.0.0.1:4317` |
 
-Use `obstudio --observer-http-port <port>` to move the UI, REST API, and MCP
-endpoint. The OTLP ports remain `4318` and `4317`.
+Use `./build/obstudio --observer-http-port <port>` to move the UI, REST API,
+and MCP endpoint. The OTLP ports remain `4318` and `4317`.
 
 For UI development, run the collector and client watcher in separate terminals:
 
@@ -75,30 +75,33 @@ The development build serves client assets from disk and reloads open Observer
 tabs after a client rebuild. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full
 development workflow.
 
-## OpenTelemetry workflow
+## Using the skills
 
 The skills form one reviewable path from source code to production resources:
+**audit → select → instrument → verify → configure → publish**.
 
-```text
-audit → select → instrument → verify → configure → publish
-```
+- `$otel-audit` finds observability gaps without modifying application code.
+- `$otel-instrument` implements approved SDK, auto-instrumentation, and
+  custom-signal changes.
+- `$otel-verify` proves existing instrumentation with project, code, and
+  optional local OTLP checks.
+- `$splunk-dashboard` generates dashboard Terraform and previews it against
+  local telemetry.
+- `$splunk-configure` generates evidence-backed detector and dashboard
+  Terraform.
+- `$splunk-detector-publish` compares detector specs with Splunk and creates
+  confirmed gaps.
+- `$splunk-dashboard-publish` compares dashboards and charts with Splunk and
+  creates confirmed gaps.
+- `$connect-splunk-observability-cloud` opens the local Cloud view for secure
+  connection setup.
+- `$create-splunk-free-account` submits a consent-gated Splunk Observability
+  Cloud Free Edition signup.
 
-| Skill | Purpose |
-|---|---|
-| `$otel-audit` | Find observability gaps without modifying application code. |
-| `$otel-instrument` | Implement approved SDK, auto-instrumentation, and custom-signal changes. |
-| `$otel-verify` | Prove existing instrumentation with project, code, and optional local OTLP checks. |
-| `$splunk-dashboard` | Generate dashboard Terraform and preview it against local telemetry. |
-| `$splunk-configure` | Generate evidence-backed detector and dashboard Terraform. |
-| `$splunk-detector-publish` | Diff detector specs against Splunk and create confirmed gaps. |
-| `$splunk-dashboard-publish` | Diff dashboards and charts against Splunk and create confirmed gaps. |
-| `$connect-splunk-observability-cloud` | Open the local Cloud view for secure connection setup. |
-| `$create-splunk-free-account` | Submit a consent-gated Splunk Observability Cloud Free Edition signup. |
-
-The table uses Codex syntax. Use `/skill-name` in Claude Code, Cursor, Kiro, or
-Devin Local, and `@skill-name` in legacy Cascade. The deprecated
-`$splunk-sync` and `$splunk-dashboard-sync` aliases remain for compatibility;
-use the publisher names above for new work.
+The skill names above use Codex syntax. Use `/skill-name` in Claude Code,
+Cursor, Kiro, or Devin Local, and `@skill-name` in legacy Cascade. The
+deprecated `$splunk-sync` and `$splunk-dashboard-sync` aliases remain for
+compatibility; use the publisher names above for new work.
 
 ### 1. Audit and select
 
@@ -106,7 +109,7 @@ Run `$otel-audit` from the service root. It writes canonical audit data to
 `.observe/otel-audit.json` and a self-contained review UI to
 `.observe/otel.html`.
 
-Open the tokenized `127.0.0.1` link returned by the skill, choose the findings
+Open the tokenized local link returned by the skill, choose the findings
 to address, and run the generated `$otel-instrument` command. Keep its finding
 IDs, decisions, and validated service root unchanged. You can also select known
 findings directly:
@@ -126,7 +129,7 @@ Run `$otel-verify` again whenever you need fresh evidence. Verification writes
 `.observe/otel-verify.json` and `.observe/otel-verify.md`. See
 [OTel Verify](docs/otel-verify.md) for the verification contract.
 
-HTML reports are served only through user-clicked, tokenized loopback links and
+HTML reports are served only through user-clicked, tokenized local links and
 are never opened automatically. JSON and Markdown reports remain local files.
 
 ### 3. Configure and publish
@@ -151,12 +154,15 @@ REST and MCP validation APIs are documented in
 
 Token telemetry is an explicit opt-in for Codex and Claude Code:
 
+These commands assume the extracted release directory. Source builds use
+`./build/obstudio` instead.
+
 ```bash
-obstudio token-telemetry enable \
+./obstudio token-telemetry enable \
   --target=codex,claude-code
-obstudio token-telemetry status \
+./obstudio token-telemetry status \
   --target=codex,claude-code
-obstudio token-telemetry disable \
+./obstudio token-telemetry disable \
   --target=codex,claude-code
 ```
 
@@ -192,10 +198,11 @@ SPLUNK_REALM=<your-realm>
 SPLUNK_ACCESS_TOKEN=<org-ingest-token>
 ```
 
-The token must have ingest scope. Shell variables override the env file, and
-`obstudio --env-file <path>` selects another file. Tokens are accepted only on
-writes and are not returned by status APIs. Endpoint and timeout overrides are
-documented in the [user guide](docs/USER.md#environment-variables).
+The token must have ingest scope. Shell variables override the env file; pass
+`--env-file <path>` when starting Observer to select another file. Tokens are
+accepted only on writes and are not returned by status APIs. Endpoint and
+timeout overrides are documented in the
+[user guide](docs/USER.md#environment-variables).
 
 ## Repository map
 
@@ -228,8 +235,7 @@ See [evals/README.md](evals/README.md) for skill evals and
 
 ## Security and privacy
 
-Observer is a loopback-only development tool. Review
-[Security](plugins/obstudio/SECURITY.md) and
+Review [Security](plugins/obstudio/SECURITY.md) and
 [Privacy](plugins/obstudio/PRIVACY.md) before enabling Cloud export, account
 creation, or publisher skills.
 

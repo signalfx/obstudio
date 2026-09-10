@@ -6,7 +6,7 @@ operating system, and user-invoked tools have their own privacy behavior.
 
 ## What This Plugin Contains
 
-The plugin contains three capability groups.
+The plugin contains four capability groups.
 
 Core workflow skills:
 
@@ -19,6 +19,14 @@ Core workflow skills:
 These can read and write repo files through skills like instrumentation and can
 generate local reports and Terraform. They do not manage a local background
 Observer process and do not call live Splunk APIs to create resources.
+
+Cloud onboarding skills:
+
+- `$connect-splunk-observability-cloud`
+- `$create-splunk-free-account`
+
+These open a local credential handoff or submit a consent-gated Free Edition
+request when explicitly invoked.
 
 Observer and MCP controls:
 
@@ -54,6 +62,8 @@ required API permissions.
 - The plugin package does not publish dashboards or detectors to Splunk unless
   the user explicitly invokes the publish skills with usable Splunk
   credentials.
+- The plugin package does not submit a Free Edition request unless the user
+  explicitly accepts the Terms of Use and confirms the signup fields.
 
 Codex or Claude Code may still send prompts, file context, tool output, and
 user-approved command results according to that host's settings and product
@@ -121,6 +131,17 @@ They are removed by ring overwrite, explicit Observer clear, or process exit.
 The plugin can run project commands selected by the user or required by the
 invoked skill workflow. Package managers, tests, application runtimes, and
 configured exporters may perform their own network requests.
+
+Free Edition region detection requests coarse location data based on the
+request's public IP so the user can review a supported hosting region. It does
+not submit a signup. After the user supplies their first name, last name, and
+email, selects a region, and explicitly accepts the Terms of Use, the signup
+action sends those values and the derived country, state, city, and postal code
+to Splunk. The request also includes a generated placeholder company name and
+fixed public-form metadata such as the developer role, trial type, and
+marketing opt-out values. Each submission performs a fresh location lookup,
+sends one signup request, and does not automatically retry that signup request
+after an uncertain result.
 
 The Splunk publish skills call Splunk Observability Cloud APIs only when the
 user explicitly invokes them and provides usable credentials. Those skills

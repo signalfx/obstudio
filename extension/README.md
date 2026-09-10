@@ -24,14 +24,19 @@ After installing:
 3. Fully restart the agent and start a new task so it reloads its skills and
    local MCP connection.
 
-| Agent | Setup |
-|---|---|
-| Cursor | **Enable Cursor Integration** |
-| Kiro | **Enable Kiro Integration** |
-| Claude Code in VS Code | **Enable Claude Code Integration** |
-| Codex in VS Code | **Enable Codex Integration** |
-| GitHub Copilot | Run `obstudio install --target=copilot`; this target configures MCP only. |
-| Windsurf / Devin Desktop | Run `obstudio install --target=windsurf`. |
+The extension provides the Cursor, Kiro, Claude Code, and Codex commands below.
+For Copilot or Windsurf, download and extract the standalone CLI from
+[GitHub Releases](https://github.com/signalfx/obstudio/releases/latest), then
+run the listed command from that directory.
+
+- **Cursor:** run **Enable Cursor Integration**.
+- **Kiro:** run **Enable Kiro Integration**.
+- **Claude Code in VS Code:** run **Enable Claude Code Integration**.
+- **Codex in VS Code:** run **Enable Codex Integration**.
+- **GitHub Copilot:** run `./obstudio install --target=copilot` from the
+  extracted release. This target configures MCP only.
+- **Windsurf or Devin Desktop:** run
+  `./obstudio install --target=windsurf` from the extracted release.
 
 For Devin Local, also add the running Observer. Copy the base URL from
 **Observer Status** and keep the `/mcp` suffix:
@@ -56,43 +61,45 @@ Enter skill commands in your coding-agent chat, not in a terminal:
 | Legacy Cascade | `@otel-audit` |
 
 The skills form one guided path:
+**audit → select → instrument → verify → configure → publish**.
 
-```text
-audit → select → instrument → verify → configure → publish
-```
+- `$otel-audit` finds observability gaps without changing application code.
+- `$otel-instrument` implements approved SDK, auto-instrumentation, and
+  custom-signal changes.
+- `$otel-verify` rechecks instrumentation with project, code, and optional
+  local OTLP proof.
+- `$splunk-dashboard` generates dashboard Terraform and previews it against
+  local telemetry.
+- `$splunk-configure` generates evidence-backed detector and dashboard
+  Terraform.
+- `$splunk-detector-publish` compares detector specs with Splunk and creates
+  confirmed gaps.
+- `$splunk-dashboard-publish` compares dashboards and charts with Splunk and
+  creates confirmed gaps.
+- `$connect-splunk-observability-cloud` opens the Cloud view for secure
+  connection setup.
+- `$create-splunk-free-account` submits a consent-gated Free Edition signup.
 
-| Skill | Use it to... |
-|---|---|
-| `$otel-audit` | Find observability gaps without changing application code. |
-| `$otel-instrument` | Implement approved SDK, auto-instrumentation, and custom-signal changes. |
-| `$otel-verify` | Recheck instrumentation with project, code, and optional local OTLP proof. |
-| `$splunk-dashboard` | Generate dashboard Terraform and preview it against local telemetry. |
-| `$splunk-configure` | Generate evidence-backed detector and dashboard Terraform. |
-| `$splunk-detector-publish` | Diff detector specs against Splunk and create confirmed gaps. |
-| `$splunk-dashboard-publish` | Diff dashboards and charts against Splunk and create confirmed gaps. |
-| `$connect-splunk-observability-cloud` | Open the Cloud view for secure connection setup. |
-| `$create-splunk-free-account` | Submit a consent-gated Free Edition signup. |
-
-The table uses Codex `$` syntax. Replace `$` with `/` or `@` for the agents
-shown above; keep the skill name and arguments unchanged.
+The skill names above use Codex `$` syntax. Replace `$` with `/` or `@` for the
+agents shown above; keep the skill name and arguments unchanged.
 
 Start with the audit:
 
 1. Run `otel-audit` with your agent's prefix.
-2. Open the returned loopback report and approve the findings to address.
+2. Open the returned local report and approve the findings to address.
 3. Run its generated `otel-instrument` command without changing the finding
    IDs, decisions, or service path.
 4. Review the verification that runs by default.
 5. Generate Terraform, inspect the live diff, and publish only confirmed gaps.
 
 The audit and instrumentation reports are separate, self-contained HTML files.
-The skills return tokenized `127.0.0.1` links and never open them automatically.
+The skills return tokenized local links and never open them automatically.
 Structured JSON and Markdown reports remain in the service's `.observe/`
 directory.
 
 ## Inspect the proof
 
-An extension-managed Observer exposes these loopback endpoints:
+An extension-managed Observer exposes these default endpoints:
 
 | Service | Default endpoint |
 |---|---|
@@ -145,16 +152,19 @@ by signal and severity.
 
 ## Collect coding-agent token telemetry
 
-Agent integration does not change provider OTLP settings. Install the standalone
-`obstudio` CLI, then explicitly enable token telemetry for Codex, Claude Code,
-or both:
+The integration commands listed above install skills and MCP configuration
+only. There is currently no editor command for token telemetry. Download and
+extract the standalone `obstudio` CLI from
+[GitHub Releases](https://github.com/signalfx/obstudio/releases/latest), then
+run it from that directory to enable token telemetry for Codex, Claude Code, or
+both:
 
 ```bash
-obstudio token-telemetry enable \
+./obstudio token-telemetry enable \
   --target=codex,claude-code
-obstudio token-telemetry status \
+./obstudio token-telemetry status \
   --target=codex,claude-code
-obstudio token-telemetry disable \
+./obstudio token-telemetry disable \
   --target=codex,claude-code
 ```
 
@@ -204,21 +214,17 @@ Extension settings use the `observability-studio.` prefix:
 
 - `managedObserverPort` moves the extension-managed UI, REST API, and MCP
   endpoint. Its OTLP receivers remain fixed at `4318` and `4317`.
-- `sharedObserverUrl` reuses another loopback Observer. It must report the same
+- `sharedObserverUrl` reuses another local Observer. It must report the same
   version bundled with the extension; send telemetry to that Observer's own
   receiver endpoints.
 
 ## Security and data handling
 
-An extension-managed Observer listens on loopback and keeps received telemetry
-local unless you enable Cloud export. Another local Observer follows its own
+An extension-managed Observer keeps received telemetry local unless you enable
+Cloud export. A separately managed local Observer follows its own
 configuration. Cloud export sends traces and metrics, not logs, and the
 extension stores its access token in IDE secret storage.
 
-Account creation and publisher skills are explicit external actions. Free
-Edition signup sends the entered name, email, hosting region, and Terms
-acceptance to Splunk; Splunk derives coarse location from the request's source
-IP to suggest a region. Publishers show a live diff and require confirmation.
 See the extension's [security](https://github.com/signalfx/obstudio/blob/main/plugins/obstudio/SECURITY.md)
 and [privacy](https://github.com/signalfx/obstudio/blob/main/plugins/obstudio/PRIVACY.md)
 contracts for its trust and telemetry-handling details.
@@ -228,8 +234,8 @@ contracts for its trust and telemetry-handling details.
 - If Observer cannot start, check the selected UI/MCP port and the fixed OTLP
   ports `4318` and `4317`. Changing `managedObserverPort` does not move the OTLP
   receivers; stop the conflicting process or reuse another local Observer.
-- If `sharedObserverUrl` does not connect, confirm that it uses `localhost` or a
-  loopback IP and that its Observer version matches the extension.
+- If `sharedObserverUrl` does not connect, confirm that the configured local
+  Observer is reachable and its version matches the extension.
 - After enabling an integration or changing token routing, fully restart the
   agent and start a new task. Existing processes keep their startup settings.
 - Dashboard previews use the first workspace folder captured when Observer
