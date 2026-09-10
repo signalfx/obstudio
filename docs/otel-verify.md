@@ -91,19 +91,9 @@ code emits the signal.
 Open the returned local `otel-instrumentation.html` link for the combined
 change, impact, and proof view. Use `.observe/otel.html` for the original audit
 and approval context, and `.observe/otel-verify.md` for verification detail.
-The workflow serves both HTML reports locally but does not open either one
-automatically. Start with `Result` and `Bottom line`, then read these sections
-in order:
-
-1. `What Changed` summarizes the telemetry or runtime behavior under test.
-2. `Tested And Working` contains one row per exact added, modified, or removed
-   OTel item, how it was tested, and the direct evidence.
-3. `Not Working Or Not Proven` names failed, blocked, or unconfigured items and
-   the next action required.
-4. `Proof` explains the strength of the evidence, such as an application test,
-   focused harness, actual runtime, or OTLP query.
-5. `Technical Details` records commands and diagnostics needed to reproduce a
-   result or investigate a gap.
+Start with `Result` and `Bottom line`. `What Changed` shows the scope;
+`Tested And Working` and `Not Working Or Not Proven` cover each telemetry item;
+and `Proof` and `Technical Details` provide evidence and reproduction steps.
 
 Interpret the report-level result as follows:
 
