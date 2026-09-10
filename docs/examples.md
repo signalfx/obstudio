@@ -18,7 +18,7 @@ selection and an instrumentation report with finding-level changes and proof.
 |----------|--------|-------|
 | Verify every signal and path from the audit and instrumentation reports | Run `$otel-verify` and tell me exactly what is working or unproven | `$otel-verify` |
 | Prove route-aware HTTP spans, request duration, and duplicate prevention | Verify the HTTP server instrumentation in the real local runtime | `$otel-verify` |
-| Capture local OTLP evidence in the Telemetry Explorer | Verify this instrumentation against my local Obstudio collector | `$otel-verify` |
+| Capture local OTLP evidence in the Telemetry Explorer | Verify this instrumentation against my local Observability Studio collector | `$otel-verify` |
 | Recheck instrumentation without changing application code | Rerun the OTel verification report for this service | `$otel-verify` |
 
 ## Detect -- Generate Alerts

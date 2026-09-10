@@ -3,12 +3,13 @@
 `otel-verify` proves whether existing OpenTelemetry instrumentation works. It
 uses the project's configured runtime, executes application code where
 possible, checks each declared signal and path, and can capture local OTLP or
-Obstudio evidence. It does not add instrumentation or silently repair
-application code.
+Observability Studio evidence. It does not add instrumentation or silently
+repair application code.
 
 ## Install and invoke
 
-The Obstudio installer includes `otel-verify` for every skill-capable target:
+The Observability Studio installer includes `otel-verify` for every
+skill-capable target:
 
 ```bash
 ./obstudio install --target=codex
@@ -91,7 +92,7 @@ code emits the signal.
 Open the returned local `otel-instrumentation.html` link for the combined
 change, impact, and proof view. Use `.observe/otel.html` for the original audit
 and approval context, and `.observe/otel-verify.md` for verification detail.
-Start with `Result` and `Bottom line`. `What Changed` shows the scope;
+`Result` gives the overall outcome. `What Changed` shows the scope;
 `Tested And Working` and `Not Working Or Not Proven` cover each telemetry item;
 and `Proof` and `Technical Details` provide evidence and reproduction steps.
 

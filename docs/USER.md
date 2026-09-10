@@ -1,8 +1,8 @@
-# Obstudio user guide
+# Observability Studio user guide
 
-Obstudio gives coding agents an OpenTelemetry workflow and provides a local
-Observer for inspecting the resulting traces, metrics, logs, and validation
-evidence.
+Observability Studio gives coding agents an OpenTelemetry workflow and provides
+a local Observer for inspecting the resulting traces, metrics, logs, and
+validation evidence.
 
 ## Quick start
 

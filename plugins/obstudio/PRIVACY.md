@@ -1,4 +1,4 @@
-# Obstudio plugin privacy
+# Observability Studio plugin privacy
 
 This document describes the current data flows for the `obstudio` plugin when
 used with Codex or Claude Code. The host, model provider, package managers,
@@ -61,10 +61,10 @@ behavior.
 
 ## Bootstrap and local Observer
 
-When the SessionStart hook is reviewed and trusted, Obstudio may bootstrap the
-managed Observer. The bootstrap may download an Obstudio release binary,
-verify `checksums.txt`, extract the release into plugin data, and start a local
-Observer process.
+When the SessionStart hook is reviewed and trusted, Observability Studio may
+bootstrap the managed Observer. The bootstrap may download an Observability
+Studio release binary, verify `checksums.txt`, extract the release into plugin
+data, and start a local Observer process.
 
 When token telemetry is enabled and no repository-correlation mode has been
 recorded, correlation defaults to `path`; `off` disables it and `name` omits

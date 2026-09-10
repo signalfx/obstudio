@@ -1,8 +1,8 @@
 # Observer
 
-Observer is Obstudio's local OpenTelemetry collector and explorer. It receives
-OTLP traces, metrics, and logs, keeps them in bounded memory, and makes the
-same evidence available through a browser UI, REST API, and MCP tools.
+Observer is Observability Studio's local OpenTelemetry collector and explorer.
+It receives OTLP traces, metrics, and logs, keeps them in bounded memory, and
+makes the same evidence available through a browser UI, REST API, and MCP tools.
 
 ## Quick start
 
@@ -55,8 +55,8 @@ export OTEL_SERVICE_NAME=my-service
 ```
 
 Exporter packages and environment-variable support vary by language. The
-Obstudio skills can audit and configure a service when you do not already have
-an OpenTelemetry setup.
+Observability Studio skills can audit and configure a service when you do not
+already have an OpenTelemetry setup.
 
 Start the application, exercise a real request, and open
 `http://127.0.0.1:3000`. Use **Live** or press `P` while the UI is focused
@@ -121,9 +121,10 @@ Enable a provider and inspect the same target:
 ```
 
 `enable` is the takeover action for recognized provider OTLP routes; there is
-no separate force flag. Obstudio does not save replaced destinations for later
-restoration. `disable` removes only unchanged Obstudio-managed values, and a
-route edited after enablement is left alone.
+no separate force flag. Observability Studio does not save replaced
+destinations for later restoration. `disable` removes only unchanged values
+managed by Observability Studio, and a route edited after enablement is left
+alone.
 
 The default sends logs to `http://127.0.0.1:4318/v1/logs` and derives the
 matching trace and metric endpoints.
@@ -139,7 +140,7 @@ If Observer uses a custom OTLP/HTTP port, pass its full logs endpoint:
 New targets default to `path`. For an existing target, omitting
 `--repository-correlation` preserves its recorded setting.
 
-| Mode | Data added by Obstudio |
+| Mode | Data added by Observability Studio |
 |---|---|
 | `path` | Repository name plus canonical repository and workspace paths; supports exact-path queries. |
 | `name` | Repository name without filesystem paths. |
@@ -190,7 +191,8 @@ until Observer is cleared, exits, or overwrites it. Recent provider traces are
 also protected by bounded retention; a compacted trace shows a lower-bound span
 count such as `8+` without changing service aggregates or validation input.
 
-When the demo is complete, remove unchanged routes managed by Obstudio:
+When the demo is complete, remove unchanged routes managed by Observability
+Studio:
 
 ```bash
 ./obstudio token-telemetry disable --target=codex,claude-code
@@ -199,15 +201,16 @@ When the demo is complete, remove unchanged routes managed by Obstudio:
 ### Provider notes
 
 - **Codex:** CLI, IDE, and Desktop processes share `~/.codex/config.toml` and
-  must each restart after an exporter change. Obstudio manages recognized
-  exporter forms and fails without changing malformed, unsupported, or
-  duplicate definitions. Codex token histograms remain visible in Metrics, but
-  correlated task totals come from richer logs and task spans.
-- **Claude Code:** Obstudio manages recognized signal-specific, generic, and
-  active detailed-beta routes while leaving unrelated settings unchanged. A
-  local override re-enables an inherited or configured disabled OTel SDK.
+  must each restart after an exporter change. Observability Studio manages
+  recognized exporter forms and fails without changing malformed, unsupported,
+  or duplicate definitions. Codex token histograms remain visible in Metrics,
+  but correlated task totals come from richer logs and task spans.
+- **Claude Code:** Observability Studio manages recognized signal-specific,
+  generic, and active detailed-beta routes while leaving unrelated settings
+  unchanged. A local override re-enables an inherited or configured disabled
+  OTel SDK.
   Removing a managed local value can expose an unchanged higher-precedence
-  route; Obstudio does not restore it.
+  route; Observability Studio does not restore it.
 
 Claude Desktop's active Setup profile takes precedence over user-level Claude
 Code settings, and `--target=claude-code` does not edit that profile. A Desktop
@@ -220,7 +223,7 @@ traces, uses OTLP/HTTP protobuf, and sends logs, traces, and metrics to
 `http://127.0.0.1:4318`. Restart the Desktop Code session after switching. If
 the profile is locked or must retain a corporate destination, use a separate
 Claude Code CLI process or ask its administrator to route through Observer.
-Obstudio cannot override that destination.
+Observability Studio cannot override that destination.
 
 ## Optional Splunk Observability Cloud forwarding
 

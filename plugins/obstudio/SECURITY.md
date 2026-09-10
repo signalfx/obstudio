@@ -1,4 +1,4 @@
-# Obstudio plugin security
+# Observability Studio plugin security
 
 This document describes the current security model for the `obstudio` plugin
 when used with Codex or Claude Code. It is a behavior contract for this plugin
@@ -93,7 +93,7 @@ context, report `sandbox-unverified`, not unhealthy.
 
 If the user trusts the SessionStart hook, the bootstrap may:
 
-- download an Obstudio release binary;
+- download an Observability Studio release binary;
 - verify it against `checksums.txt`;
 - extract the release into plugin data;
 - use the bundled plugin `.mcp.json` endpoint policy;
@@ -107,7 +107,8 @@ The editor extension also owns the Observer version on its configured managed
 port. If that port contains a verified `obstudio` running another version, the
 extension may stop it and start the bundled version. It revalidates the
 listener PID and executable before graceful or forced termination; ambiguous
-or non-Obstudio owners are left running and reported as requiring recovery.
+owners or processes other than `obstudio` are left running and reported as
+requiring recovery.
 
 ## Risky surfaces
 

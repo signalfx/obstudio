@@ -1,6 +1,7 @@
-# Obstudio Codex and Claude Code Plugin
+# Observability Studio plugin for Codex and Claude Code
 
-This directory is the portable Obstudio plugin bundle for Codex and Claude Code.
+This directory is the portable Observability Studio plugin bundle for Codex and
+Claude Code.
 
 It packages the canonical skill sources from `../../skills/`, points both hosts
 at the local Observer MCP endpoint via [`.mcp.json`](./.mcp.json), and includes
