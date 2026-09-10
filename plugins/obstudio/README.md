@@ -17,7 +17,7 @@ host-specific SessionStart hook manifests for first-run bootstrap.
 | --- | --- | --- |
 | Open Observer | `$observer-open` | `/obstudio:observer-open` |
 | Check Observer status | `$observer-status` | `/obstudio:observer-status` |
-| Audit telemetry | `$otel-audit` | `/obstudio:otel-audit` |
+| Find telemetry gaps | `$otel-audit` | `/obstudio:otel-audit` |
 | Implement selected telemetry improvements | `$otel-instrument` | `/obstudio:otel-instrument` |
 | Verify instrumentation | `$otel-verify` | `/obstudio:otel-verify` |
 | Connect an existing Splunk organization | `$connect-splunk-observability-cloud` | `/obstudio:connect-splunk-observability-cloud` |
