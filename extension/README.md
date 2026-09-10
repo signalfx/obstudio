@@ -42,8 +42,7 @@ For Devin Local, also add the running Observer. Copy the base URL from
 **Observer Status** and keep the `/mcp` suffix:
 
 ```bash
-devin mcp add -s user obstudio \
-  OBSERVER_BASE_URL/mcp
+devin mcp add -s user obstudio OBSERVER_BASE_URL/mcp
 ```
 
 The `windsurf` target configures MCP for legacy Cascade. On Windows, enable
