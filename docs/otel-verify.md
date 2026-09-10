@@ -6,7 +6,7 @@ possible, checks each declared signal and path, and can capture local OTLP or
 Obstudio evidence. It does not add instrumentation or silently repair
 application code.
 
-## Install And Invoke
+## Install and invoke
 
 The Obstudio installer includes `otel-verify` for every skill-capable target:
 
@@ -38,7 +38,7 @@ Run `otel-verify` directly when you want to recheck existing instrumentation,
 refresh verification after runtime or dependency changes, or prove telemetry
 without making application-code changes.
 
-## Inputs And Output
+## Inputs and output
 
 Verification reads:
 
@@ -63,11 +63,10 @@ canonical verification result and is cryptographically bound to the exact
 normalized instrumentation overlay. `.observe/otel.html` remains the audit and
 approval surface. The workflow refreshes `.observe/otel-instrumentation.html`
 with implementation impact and verification proof instead of mixing downstream
-state into the audit. Until `$splunk-configure` moves to canonical verification
-JSON in the follow-up workflow, it continues to use `Working` metric rows in
+state into the audit. `$splunk-configure` uses `Working` metric rows in
 `.observe/otel-verify.md` as detector-generation evidence.
 
-## What Verification Proves
+## What verification proves
 
 Verification starts with the repository's configured runtime rather than a
 convenient global toolchain. It then gathers the strongest safe evidence
@@ -87,14 +86,14 @@ Source code alone is not proof that a signal works. Generated SDK-only
 telemetry may prove an export contract, but it does not prove that application
 code emits the signal.
 
-## Read The Report
+## Read the report
 
 Open the returned local `otel-instrumentation.html` link for the combined
-change, impact, and proof view. Use `otel.html` for the original audit and
-approval context, and `.observe/otel-verify.md` for verification detail. The
-workflow starts or reuses a restricted `127.0.0.1` report server but does not
-open either HTML page automatically. Start with `Result` and `Bottom line`,
-then read these sections in order:
+change, impact, and proof view. Use `.observe/otel.html` for the original audit
+and approval context, and `.observe/otel-verify.md` for verification detail.
+The workflow serves both HTML reports locally but does not open either one
+automatically. Start with `Result` and `Bottom line`, then read these sections
+in order:
 
 1. `What Changed` summarizes the telemetry or runtime behavior under test.
 2. `Tested And Working` contains one row per exact added, modified, or removed
