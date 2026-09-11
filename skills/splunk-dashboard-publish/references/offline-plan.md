@@ -5,9 +5,9 @@ placeholders, or the user requests a dry-run plan without live queries. This
 mode never reads environment credentials, calls the Splunk API, or creates,
 updates, or deletes remote objects.
 
-The final response is incomplete unless it includes all three: the exact
-normalized per-chart `programText`, a concrete Reason on every diff row, and a
-planned dashboard JSON body with the literal `"tags": ["obstudio"]` marker.
+The final response is incomplete unless it shows exact chart `programText`/
+`options`, a Reason per diff row, and literal `"tags": ["obstudio"]` in the
+dashboard body.
 
 ## Parse And Normalize
 
@@ -17,8 +17,8 @@ Parse `.observe/terraform/dashboards.tf` into a three-level graph:
 2. Each `signalfx_dashboard`: HCL label, `name`, `description`,
    `dashboard_group`, and every `chart` placement (`chart_id`, `column`, `row`,
    `width`, `height`).
-3. Each `signalfx_*_chart`: HCL label, `name`, chart type, `program_text`, or
-   `markdown` for text charts.
+3. Each chart: HCL resource/label, `name`, optional `plot_type`/`color_by`, and
+   `program_text` (or text `markdown`).
 
 Read `../../references/terraform-normalization.md` and normalize every
 `program_text`: reproduce Terraform `<<-EOF` dedent, trim blank edges, and
@@ -36,15 +36,16 @@ placeholder SignalFlow as ready to publish.
 Before the diff, render concrete normalization evidence:
 
 ```markdown
-### Normalized Chart Programs
-| Local chart | REST type | Exact normalized programText |
-|---|---|---|
+### Normalized Chart Programs And Options
+| Local chart | REST type | Exact options | Exact normalized programText |
+|---|---|---|---|
 ```
 
-Include one row for every non-text chart. Print its complete resolved
-SignalFlow exactly as it would appear in `programText`, with no `${var.*}`,
-heredoc indentation, placeholder such as `<normalized SignalFlow>`, or ellipsis.
-For a text chart, show the exact normalized markdown separately and state that
+Include every non-text chart with complete resolved SignalFlow as `programText`
+and literal JSON from `chart_options`. Preserve explicit options; default only
+absent fields; only `TimeSeriesChart` gets `defaultPlotType`; stop on
+unsupported values. Permit no `${var.*}`, heredoc indentation, placeholder such
+as `<normalized SignalFlow>`, or ellipsis. For text, show exact markdown and say
 its POST body omits `programText`.
 
 ## Offline Classification
@@ -90,7 +91,9 @@ No live state was fetched. Confirm? (yes/no)
 The prompt is informational in offline mode: stop after it. A `yes` cannot
 authorize offline mutation or convert planned candidates into live GAPs. A later
 online run must fetch and reclassify fresh state, show a new diff with the
-resolved realm and exact orphan deletions, and obtain confirmation again.
+resolved realm and exact orphan deletions, and obtain confirmation again. The
+final response must explicitly state each of those fresh-fetch, new-diff, and
+renewed-confirmation requirements.
 
 ## Planned Creation Graph And Bodies
 
@@ -107,10 +110,9 @@ Describe what a later confirmed online run would do:
    mutate the COVERED dashboard, or mutate UNCERTAIN. This sole permitted
    COVERED mutation does not make the dashboard a GAP.
 
-Show the planned chart body shape from `chart-wire-contract.md`, then list the
-exact `name`, REST type, and complete normalized `programText` for each planned
-non-text chart. Never substitute a placeholder for the concrete per-chart
-SignalFlow.
+Show every planned chart body with exact `name`, normalized `programText`, and
+literal `options` from `chart_options`; text uses exact `markdown`. Do not show
+only a shape or placeholder.
 
 Show this planned dashboard body under a visible `### Planned Dashboard Body`
 heading, including the ownership marker:
@@ -137,13 +139,12 @@ cleanup ran offline.
 
 ## Response
 
-Return the parsed object counts, normalized chart identities, complete
-three-level diff, planned bodies/order, explicit offline limitation, and the
-confirmation boundary. State that no network call or remote mutation ran and
-that live reclassification plus a new explicit confirmation is required. The
-response must include the `Normalized Chart Programs` table rather than only a
-count of unresolved variables. Before finalizing, search the response for the
-literal `"tags": ["obstudio"]`; if it is absent, add the planned dashboard body.
+Return counts, three-level diff, bodies/order, offline boundary. State no
+network/mutation ran; live work must re-fetch, reclassify, show
+a new diff, and confirm again. Include the `Normalized Chart Programs And
+Options` table with literal per-chart `options`. The final must state
+unsupported option values stop planning, never replaced by defaults. Verify literal
+`"tags": ["obstudio"]`; add missing bodies.
 A future-live response is incomplete unless it says: create GAPs only; the sole
 COVERED mutation is this append-only PUT preserving existing chart placements
 and order; never otherwise mutate COVERED or UNCERTAIN; and after dashboard

@@ -11,8 +11,9 @@ verdict and its own concrete reason.
 
 Matching dashboards by name alone is unreliable (the live search returns many
 org-wide results; names vary across teams). Match on **structural identity**: the
-group name, the dashboard name + its panel-metric set, and per-chart
-`{ metric, filters, chartType }` read from the live `programText`/`charts[]`.
+group name, the dashboard name + its panel-metric set, and per-chart identity.
+Metric, filter, and chart type come from the live `programText`/`charts[]`;
+normalized visualization options come from the live chart `options`.
 
 ## Level 1 — Dashboard group
 
@@ -68,17 +69,21 @@ A local chart is **COVERED** only when ALL hold for a single live chart:
    both dimension keys are equivalent.
 3. **Same chart type** — the local chart type (`time_series`, `single_value`,
    etc.) matches the live chart's `options.type`.
+4. **Same normalized visualization options** — the local `color_by` and, for
+   time-series charts, `plot_type` map to the live `options.colorBy` and
+   `options.defaultPlotType`. Compare only fields defined by the local wire
+   contract, and treat a missing required live option as UNCERTAIN.
 
 Reason (COVERED):
-`chart COVERED: metric http.server.request.duration + filter service.name=<svc> + type time_series all matched live chart C-456`.
+`chart COVERED: metric http.server.request.duration + filter service.name=<svc> + type time_series + options colorBy=Dimension, defaultPlotType=LineChart all matched live chart C-456`.
 
 A local chart is **GAP** when no live chart in the matched dashboard satisfies all
-three. Reason:
-`panel GAP: no live chart with metric=<m> + filter service.name=<svc> + type <t> in dashboard D-123; will create and add`.
+four. Reason:
+`panel GAP: no live chart with metric=<m> + filter service.name=<svc> + type <t> + normalized options in dashboard D-123; will create and add`.
 
 A local chart is **UNCERTAIN** when the metric matches a live chart but the
 service filter is absent / uses a different dimension key / is a wildcard, or the
-chart type differs, or the local `${var.*}` could not be resolved. Reason names
+chart type or normalized options differ, or the local `${var.*}` could not be resolved. Reason names
 the specific divergence, e.g.
 `chart UNCERTAIN: metric matches live chart C-456 but its programText has no service.name/sf_service filter — cannot confirm scope`.
 

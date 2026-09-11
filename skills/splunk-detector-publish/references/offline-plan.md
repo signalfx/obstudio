@@ -9,8 +9,10 @@ updates, or deletes a remote detector.
 
 Parse every `signalfx_detector` in `.observe/terraform/detectors.tf` in HCL
 declaration order. Capture its HCL label, resolved name, rules (`severity`,
-`detect_label`, and resolved `notifications` values), metric, and resolved
-service filter.
+`detect_label`, resolved notifications, and `disabled`), metric, and resolved service
+filter. Preserve each rule's explicit boolean `disabled` value. Use `false`
+only when the attribute is absent; if a present value cannot be resolved to a
+boolean, stop rather than silently enabling the rule.
 
 Read `../../references/terraform-normalization.md`. Dedent each `<<-EOF`
 `program_text`, trim blank edges, and resolve every `${var.*}` from tfvars and
@@ -82,11 +84,12 @@ Show a planned body for every local detector with concrete values:
 ```
 
 HCL `program_text` becomes REST `programText`; HCL `detect_label` becomes REST
-`detectLabel`. Do not substitute `<...>` placeholders in the actual response:
-each body must show the detector's resolved name, exact normalized program,
-every rule severity/detect label, every resolved notification value, and literal
-`"tags": ["obstudio"]`. If a notification remains unresolved, report the
-missing value and stop before confirmation.
+`detectLabel`; HCL `disabled` remains the same JSON boolean. Do not substitute
+`<...>` placeholders in the actual response: each body must show the detector's
+resolved name, exact normalized program, every rule severity/detect label,
+every resolved notification value, preserved-or-defaulted `disabled` value, and
+literal `"tags": ["obstudio"]`. If a notification remains unresolved, report
+the missing value and stop before confirmation.
 
 The future live sequence is one `POST /v2/detector` per freshly confirmed GAP,
 sequentially. Explain that 409 is resolved by GET/reuse as COVERED and that no

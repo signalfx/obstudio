@@ -41,6 +41,7 @@ resource "signalfx_detector" "high_error_rate" {
     detect_label  = "High Payment Error Rate"
     severity      = "Critical"
     notifications = []
+    disabled      = true
   }
 }
 

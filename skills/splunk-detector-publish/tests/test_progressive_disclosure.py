@@ -1,5 +1,6 @@
-from pathlib import Path
+import json
 import re
+from pathlib import Path
 
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
@@ -111,6 +112,63 @@ def test_live_reference_preserves_fresh_idempotent_response_contract() -> None:
         'rule["notifications"]',
     ):
         assert required in text
+
+
+def test_rule_disabled_is_preserved_across_parse_and_offline_payload_guidance() -> None:
+    skill = _normalized(SKILL)
+    offline_text = OFFLINE.read_text(encoding="utf-8")
+    offline = " ".join(offline_text.split())
+
+    assert "explicit boolean `disabled` value" in skill
+    assert "defaulting `disabled` to `false` only when the attribute is absent" in skill
+    assert "Preserve each rule's explicit boolean `disabled` value" in offline
+    assert "if a present value cannot be resolved to a boolean, stop" in offline
+    assert "HCL `disabled` remains the same JSON boolean" in offline
+
+    planned_body = re.search(r"```json\n(.*?)\n```", offline_text, re.DOTALL)
+    assert planned_body is not None
+    assert json.loads(planned_body.group(1))["rules"][0]["disabled"] is False
+
+
+def test_live_payload_preserves_true_false_and_defaults_only_when_absent() -> None:
+    live = LIVE.read_text(encoding="utf-8")
+    payload_example = re.search(r"```python\n(.*?)\n```", live, re.DOTALL)
+    assert payload_example is not None
+
+    namespace = {
+        "resolved_name": "detector",
+        "normalized_program_text": "A = data('metric')",
+        "rules": [
+                {
+                    "severity": "Critical",
+                    "detect_label": "disabled",
+                    "notifications": ["critical@example.com"],
+                    "disabled": True,
+                },
+                {
+                    "severity": "Major",
+                    "detect_label": "enabled",
+                    "notifications": ["major@example.com"],
+                    "disabled": False,
+                },
+                {
+                    "severity": "Minor",
+                    "detect_label": "default",
+                    "notifications": [],
+                },
+        ],
+        "hcl_label": "detector",
+    }
+    exec(payload_example.group(1), namespace)
+
+    assert [rule["disabled"] for rule in namespace["body"]["rules"]] == [
+        True,
+        False,
+        False,
+    ]
+    live_compact = " ".join(live.split())
+    assert "Preserve explicit `disabled = true` and `disabled = false`" in live_compact
+    assert "default to `false` only when `disabled` is absent" in live_compact
 
 
 def test_routed_references_resolve_inside_the_skill_catalog() -> None:

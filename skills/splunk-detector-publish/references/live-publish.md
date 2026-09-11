@@ -76,7 +76,7 @@ body = {
             "severity": rule["severity"],
             "detectLabel": rule["detect_label"],
             "notifications": rule["notifications"],
-            "disabled": False,
+            "disabled": rule["disabled"] if "disabled" in rule else False,
         }
         for rule in rules
     ],
@@ -88,9 +88,11 @@ body = {
 Never send raw HCL `program_text`, an unresolved `${var.*}`, unresolved
 notification expressions, or snake_case `detect_label`. Resolve notification
 values with the same tfvars/default precedence used for `program_text` and
-stop before confirmation if any value is unresolved. Never update/delete a
-detector or POST a COVERED/UNCERTAIN row. Keep writes sequential so each
-response is attributable.
+stop before confirmation if any value is unresolved. Preserve explicit
+`disabled = true` and `disabled = false` from each Terraform rule; default to
+`false` only when `disabled` is absent, and stop if a present value cannot be
+resolved to a boolean. Never update/delete a detector or POST a
+COVERED/UNCERTAIN row. Keep writes sequential so each response is attributable.
 
 Apply the shared status contract:
 

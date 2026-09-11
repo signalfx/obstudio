@@ -23,7 +23,8 @@ Use the shared skip-on-500 pagination rules for:
 - `GET /v2/dashboardgroup` for `id`, `name`;
 - `GET /v2/dashboard` for `id`, `name`, `groupId`, and placed `charts[]`;
 - `GET /v2/chart/{id}` only for charts in candidate-matched dashboards whose
-  `programText` and `options.type` are needed.
+  `programText`, `options.type`, and normalized visualization options
+  (`colorBy`/`defaultPlotType` where applicable) are needed.
 
 An empty successful live list means local objects are GAPs. Do not turn a
 failed/incomplete fetch into an empty list or false GAP. Only HTTP 500 pages are
@@ -71,9 +72,11 @@ dashboard itself as GAP. Execute in this order:
 
 1. Create each GAP group with `POST /v2/dashboardgroup` body
    `{name, description}`; reuse the ID of a COVERED group.
-2. Reuse a matching saved orphan ID when its name plus normalized
-   `programText` fingerprint or metric+filter+type matches exactly. Otherwise
-   create the GAP chart with `POST /v2/chart`.
+2. Reuse a matching saved orphan ID only when its name plus normalized
+   `programText` and visualization-options fingerprint or its
+   metric+filter+type+normalized-options fingerprint matches exactly. If a
+   required live option is missing or diverges, treat the orphan as
+   nonmatching and create the confirmed GAP chart with `POST /v2/chart`.
 3. Immediately after each chart POST, write/rewrite the in-progress
    `.observe/dashboard-sync.md` ledger with that chart ID under `Orphan charts`.
    Do not wait until the final report.

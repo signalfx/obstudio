@@ -1,6 +1,8 @@
 from pathlib import Path
 import re
 
+import pytest
+
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 SKILLS_DIR = SKILL_DIR.parent
@@ -81,7 +83,10 @@ def test_offline_reference_is_non_mutating_and_self_contained() -> None:
         "Orphan charts",
         "stop after it",
         "inside the `Reason` cell itself",
-        "Normalized Chart Programs",
+        "### Normalized Chart Programs And Options",
+        "Exact options",
+        "literal JSON from `chart_options`",
+        "stop on unsupported values",
         "placeholder such as `<normalized SignalFlow>`",
         "final response is incomplete unless",
         'literal `"tags": ["obstudio"]`',
@@ -118,11 +123,15 @@ def test_connected_dry_run_uses_live_read_only_classification() -> None:
     assert "perform the read-only live fetch" in entrypoint
     assert "later non-dry-run must re-fetch" in entrypoint
     assert "a connected dry run never writes one" in entrypoint
+    assert "normalized visualization options" in entrypoint
+    assert "colorBy" in entrypoint
+    assert "defaultPlotType" in live
     assert "A connected dry run never writes a ledger" in live
 
 
 def test_live_reference_preserves_status_idempotency_and_orphan_contracts() -> None:
     text = " ".join(LIVE.read_text(encoding="utf-8").split())
+    coverage = " ".join(COVERAGE.read_text(encoding="utf-8").split())
 
     for required in (
         "skip-on-500",
@@ -136,8 +145,117 @@ def test_live_reference_preserves_status_idempotency_and_orphan_contracts() -> N
         "DELETE /v2/chart/{id}",
         "re-fetches and reclassifies live state",
         "Never include the access token",
+        "visualization-options fingerprint",
+        "required live option is missing or diverges",
     ):
         assert required in text
+    for required in (
+        "normalized options",
+        "Same normalized visualization options",
+        "defaultPlotType",
+        "treat a missing required live option as UNCERTAIN",
+    ):
+        assert required in coverage
+
+
+def _chart_options():
+    text = CHART_WIRE.read_text(encoding="utf-8")
+    blocks = re.findall(r"```python\n(.*?)```", text, flags=re.DOTALL)
+    block = next(block for block in blocks if "def chart_options" in block)
+    namespace = {}
+    exec(block, namespace)
+    return namespace["chart_options"]
+
+
+def test_chart_wire_preserves_explicit_visualization_options() -> None:
+    chart_options = _chart_options()
+
+    assert chart_options(
+        "time_series", plot_type="AreaChart", color_by="Metric"
+    ) == {
+        "type": "TimeSeriesChart",
+        "colorBy": "Metric",
+        "defaultPlotType": "AreaChart",
+    }
+    assert chart_options("single_value", color_by="Dimension") == {
+        "type": "SingleValue",
+        "colorBy": "Dimension",
+    }
+    assert chart_options("TimeSeriesChart", plot_type="AreaChart") == {
+        "type": "TimeSeriesChart",
+        "colorBy": "Dimension",
+        "defaultPlotType": "AreaChart",
+    }
+    assert chart_options("SingleValue", color_by="Dimension") == {
+        "type": "SingleValue",
+        "colorBy": "Dimension",
+    }
+    assert chart_options("signalfx_time_chart", plot_type="ColumnChart")[
+        "defaultPlotType"
+    ] == "ColumnChart"
+    assert chart_options("signalfx_single_value_chart", color_by="Dimension") == {
+        "type": "SingleValue",
+        "colorBy": "Dimension",
+    }
+    assert chart_options("signalfx_list_chart") == {
+        "type": "List",
+        "colorBy": "Dimension",
+    }
+    assert chart_options("signalfx_heatmap_chart") == {"type": "Heatmap"}
+    assert chart_options("signalfx_text_chart") == {"type": "Text"}
+    assert chart_options("signalfx_table_chart") == {"type": "TableChart"}
+    assert chart_options("time_series", color_by="Scale")["colorBy"] == "Scale"
+    assert chart_options("single_value", color_by="Scale")["colorBy"] == "Scale"
+
+
+def test_chart_wire_defaults_only_absent_options_and_rejects_invalid_values() -> None:
+    chart_options = _chart_options()
+
+    assert chart_options("time_series") == {
+        "type": "TimeSeriesChart",
+        "colorBy": "Dimension",
+        "defaultPlotType": "LineChart",
+    }
+    assert chart_options("single_value") == {
+        "type": "SingleValue",
+        "colorBy": "Metric",
+    }
+    assert chart_options("list") == {"type": "List", "colorBy": "Dimension"}
+    for chart_type in ("single_value", "list", "heatmap", "text", "table"):
+        assert "defaultPlotType" not in chart_options(chart_type)
+
+    with pytest.raises(ValueError, match="unsupported plot_type"):
+        chart_options("time_series", plot_type="SplineChart")
+    with pytest.raises(ValueError, match="unsupported plot_type"):
+        chart_options("time_series", plot_type="")
+    with pytest.raises(ValueError, match="plot_type is unsupported"):
+        chart_options("single_value", plot_type="LineChart")
+    with pytest.raises(ValueError, match="unsupported color_by"):
+        chart_options("time_series", color_by="Value")
+    with pytest.raises(ValueError, match="unsupported color_by"):
+        chart_options("single_value", color_by="")
+    with pytest.raises(ValueError, match="unsupported color_by"):
+        chart_options("heatmap", color_by="Dimension")
+    with pytest.raises(ValueError, match="unsupported chart type"):
+        chart_options("GaugeChart")
+
+
+def test_parse_contract_carries_visualization_options_into_wire_mapping() -> None:
+    for path in (SKILL, OFFLINE):
+        text = path.read_text(encoding="utf-8")
+        assert "HCL resource/label" in text
+        assert "`plot_type`/`color_by`" in text
+
+    wire = CHART_WIRE.read_text(encoding="utf-8")
+    normalized_wire = " ".join(wire.split())
+    assert "`signalfx_time_chart`, `signalfx_single_value_chart`" in wire
+    assert "list, heatmap, text, or table `signalfx_*_chart` resources" in (
+        normalized_wire
+    )
+    assert '{name, programText, options, packageSpecifications: "signalfx"}' in wire
+    assert "show exact per-chart `options`" in normalized_wire
+    assert "unsupported values stop, never default" in normalized_wire
+    assert "`defaultPlotType` is `TimeSeriesChart`-only" in normalized_wire
 
 
 def test_put_404_requires_a_new_confirmed_diff() -> None:
