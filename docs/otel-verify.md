@@ -3,17 +3,19 @@
 `otel-verify` proves whether existing OpenTelemetry instrumentation works. It
 uses the project's configured runtime, executes application code where
 possible, checks each declared signal and path, and can capture local OTLP or
-Splunk Observability Studio evidence. It does not add instrumentation or silently repair
-application code.
+Splunk Observability Studio evidence. It does not add instrumentation or silently
+repair application code.
 
-## Install And Invoke
+## Install and invoke
 
-The Splunk Observability Studio installer includes `otel-verify` for every supported agent:
+The Splunk Observability Studio installer includes `otel-verify` for every
+skill-capable target:
 
 ```bash
 ./obstudio install --target=codex
-# Or: --target=claude-code / --target=cursor / --target=kiro
 ```
+
+Use the corresponding target when another supported agent will run the skill.
 
 After installation, restart the agent if it does not discover the new skill.
 Then invoke it using that agent's syntax:
@@ -21,15 +23,11 @@ Then invoke it using that agent's syntax:
 | Agent | Invocation |
 |---|---|
 | Codex | `$otel-verify` |
-| Claude Code | `/otel-verify` |
-| Cursor | `/otel-verify` |
-| Kiro | `/otel-verify` |
+| Claude Code, Cursor, Kiro, or Devin Local | `/otel-verify` |
+| Legacy Cascade | `@otel-verify` |
 
-Natural-language requests also select the skill, for example:
-
-```text
-verify this service's OpenTelemetry instrumentation
-```
+Natural-language requests also select the skill. For example: “Verify this
+service's OpenTelemetry instrumentation.”
 
 `otel-instrument` invokes the verification workflow by default after its
 implementation gate. It may omit verification only when the user explicitly
@@ -41,14 +39,14 @@ Run `otel-verify` directly when you want to recheck existing instrumentation,
 refresh verification after runtime or dependency changes, or prove telemetry
 without making application-code changes.
 
-## Inputs And Output
+## Inputs and output
 
 Verification reads:
 
 - `.observe/otel-audit.json` for the canonical audit baseline and acceptance
   scenarios.
-- `.observe/otel-selection.json` for explicitly requested finding IDs and dependency-
-  complete verification scope.
+- `.observe/otel-selection.json` for explicitly requested finding IDs and the
+  dependency-complete verification scope.
 - `.observe/otel-instrumentation.json` for canonical added, modified, or removed
   signals, finding closure, and prior validation results.
 
@@ -66,11 +64,10 @@ canonical verification result and is cryptographically bound to the exact
 normalized instrumentation overlay. `.observe/otel.html` remains the audit and
 approval surface. The workflow refreshes `.observe/otel-instrumentation.html`
 with implementation impact and verification proof instead of mixing downstream
-state into the audit. Until `$splunk-configure` moves to canonical verification
-JSON in the follow-up workflow, it continues to use `Working` metric rows in
+state into the audit. `$splunk-configure` uses `Working` metric rows in
 `.observe/otel-verify.md` as detector-generation evidence.
 
-## What Verification Proves
+## What verification proves
 
 Verification starts with the repository's configured runtime rather than a
 convenient global toolchain. It then gathers the strongest safe evidence
@@ -90,25 +87,14 @@ Source code alone is not proof that a signal works. Generated SDK-only
 telemetry may prove an export contract, but it does not prove that application
 code emits the signal.
 
-## Read The Report
+## Read the report
 
-Open the returned loopback `otel-instrumentation.html` link for the combined
-change, impact, and proof view, the returned loopback `otel.html` link for the
-original audit and approval context, or the local-file
-`.observe/otel-verify.md` link for verification detail. The workflow starts or
-reuses a restricted `127.0.0.1` report server but does not open either HTML
-page automatically. Start with `Result` and `Bottom line`, then read these
-sections in order:
-
-1. `What Changed` summarizes the telemetry or runtime behavior under test.
-2. `Tested And Working` contains one row per exact added, modified, or removed
-   OTel item, how it was tested, and the direct evidence.
-3. `Not Working Or Not Proven` names failed, blocked, or unconfigured items and
-   the next action required.
-4. `Proof` explains the strength of the evidence, such as an application test,
-   focused harness, actual runtime, or OTLP query.
-5. `Technical Details` records commands and diagnostics needed to reproduce a
-   result or investigate a gap.
+Open the returned local `otel-instrumentation.html` link for the combined
+change, impact, and proof view. Use `.observe/otel.html` for the original audit
+and approval context, and `.observe/otel-verify.md` for verification detail.
+`Result` gives the overall outcome. `What Changed` shows the scope;
+`Tested And Working` and `Not Working Or Not Proven` cover each telemetry item;
+and `Proof` and `Technical Details` provide evidence and reproduction steps.
 
 Interpret the report-level result as follows:
 

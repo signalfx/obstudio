@@ -1,51 +1,18 @@
-# Splunk Observability Studio Plugin Privacy
+# Splunk Observability Studio plugin privacy
 
 This document describes the current data flows for the `obstudio` plugin when
 used with Codex or Claude Code. The host, model provider, package managers,
 operating system, and user-invoked tools have their own privacy behavior.
 
-## What This Plugin Contains
+## What this plugin contains
 
-The plugin contains three capability groups.
+| Capability | Data and network behavior |
+|---|---|
+| Core workflow skills: `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, and `$splunk-dashboard` | Can read or edit repository files and generate local reports or Terraform. They do not manage a background Splunk Observability Studio instance or create live Splunk resources. |
+| Splunk Observability Studio and MCP controls: the bundled MCP configuration, SessionStart hook, and `$observer-open`, `$observer-status`, `$observer-restart`, and `$observer-stop` | Interact with local endpoints and may download, start, or manage Splunk Observability Studio. Health or control checks may require narrow elevated access. The command skills use the default Splunk Observability Studio endpoint and do not follow, probe, or control custom MCP endpoints automatically. |
+| Splunk publishers: `$splunk-detector-publish`, `$splunk-dashboard-publish`, and their deprecated `-sync` aliases | Call Splunk Observability Cloud APIs only when explicitly invoked. They can create dashboards or detectors and require credentials with the corresponding API permissions. |
 
-Core workflow skills:
-
-- `$otel-audit`
-- `$otel-instrument`
-- `$otel-verify`
-- `$splunk-configure`
-- `$splunk-dashboard`
-
-These can read and write repo files through skills like instrumentation and can
-generate local reports and Terraform. They do not manage a local background
-Splunk Observability Studio process and do not call live Splunk APIs to create resources.
-
-Splunk Observability Studio and MCP controls:
-
-- MCP server config for `http://127.0.0.1:3000/mcp`
-- SessionStart bootstrap hook, if managed startup is kept enabled
-- `$observer-open`
-- `$observer-status`
-- `$observer-restart`
-- `$observer-stop`
-
-These interact with host-local endpoints, may download/start/manage the local
-Splunk Observability Studio, and may need narrow elevated/outside-sandbox access for localhost
-health or control checks. Command skills are limited to the default loopback
-Splunk Observability Studio and do not probe or control custom MCP endpoints automatically.
-
-Splunk publish skills:
-
-- `$splunk-detector-publish`
-- `$splunk-dashboard-publish`
-- `$splunk-sync` deprecated alias
-- `$splunk-dashboard-sync` deprecated alias
-
-These call Splunk Observability Cloud APIs when explicitly invoked, can create
-live dashboard or detector resources, and require Splunk credentials with the
-required API permissions.
-
-## What the Plugin Does Not Add
+## What the plugin does not add
 
 - The plugin package does not enable token telemetry or repository correlation
   unless the user explicitly opts in with `obstudio token-telemetry enable`.
@@ -59,19 +26,20 @@ Codex or Claude Code may still send prompts, file context, tool output, and
 user-approved command results according to that host's settings and product
 behavior.
 
-## Bootstrap and Local Splunk Observability Studio
+## Bootstrap and local Splunk Observability Studio
 
-When the SessionStart hook is reviewed and trusted, Splunk Observability Studio may bootstrap the
-managed Splunk Observability Studio. The bootstrap may download a Splunk Observability Studio release binary,
-verify `checksums.txt`, extract the release into plugin data, and start a local
-Splunk Observability Studio process.
+When the SessionStart hook is reviewed and trusted, it may bootstrap the managed
+Splunk Observability Studio runtime. The bootstrap may download a release
+binary, verify `checksums.txt`, extract the release into plugin data, and start
+a local process.
 
 When token telemetry is enabled and no repository-correlation mode has been
 recorded, correlation defaults to `path`; `off` disables it and `name` omits
 filesystem paths. The SessionStart hook sends one content-free OTLP log to the
-configured loopback Splunk Observability Studio. In `name` mode it contains the provider,
-session or task identity, hook type, and repository name. In `path` mode it
-additionally contains the canonical repository path and active workspace path.
+configured loopback Splunk Observability Studio instance. In `name` mode it
+contains the provider, session or task identity, hook type, and repository
+name. In `path` mode it additionally contains the canonical repository path and
+active workspace path.
 It does not contain prompts, tool arguments, tool results, or file contents.
 The hook rejects non-loopback correlation endpoints, and a failed correlation
 send does not prevent the host session from starting.
@@ -81,7 +49,7 @@ Raw provider telemetry is preserved and may independently contain fields such
 as a provider-emitted working directory; use the provider's telemetry controls
 when raw-signal collection must also be disabled.
 
-The managed Splunk Observability Studio may bind host-local endpoints such as:
+The managed instance may bind host-local endpoints such as:
 
 - `http://127.0.0.1:3000/`
 - `http://127.0.0.1:3000/api/health`
@@ -89,18 +57,16 @@ The managed Splunk Observability Studio may bind host-local endpoints such as:
 - `127.0.0.1:4317`
 - `127.0.0.1:4318`
 
-These endpoints are intended for local development. Plugin/hook controls and
-MCP-server controls have different effects: disable the plugin or withhold
-SessionStart-hook approval to prevent plugin-managed startup; disable the MCP
-server to prevent the host from connecting to the endpoint. Disabling Claude
-Code's MCP server alone does not stop a previously trusted bootstrap hook from
-starting a Splunk Observability Studio instance, nor does it stop a pre-existing local process.
+These endpoints are intended for local development. Disable managed startup in
+the plugin to prevent it from starting Splunk Observability Studio.
+Disconnecting the MCP integration does not stop an instance that is already
+running.
 
-Splunk Observability Studio command skills do not automatically follow a non-default MCP endpoint.
-They verify or control only the default loopback Splunk Observability Studio at
-`127.0.0.1:3000`.
+Splunk Observability Studio command skills do not automatically follow a
+non-default MCP endpoint. They verify or control only the default loopback
+instance at `127.0.0.1:3000`.
 
-## Local Data
+## Local data
 
 The skills may create local `.observe/` reports, JSON sidecars, Terraform
 files, and temporary local report servers bound to `127.0.0.1` for reviewing
@@ -108,15 +74,15 @@ generated HTML reports. Markdown, JSON, and Terraform artifacts remain local
 files unless the user explicitly shares them or invokes tooling that sends them
 elsewhere.
 
-OTLP data received by the local Splunk Observability Studio stays local unless the user configures
-forwarding or export endpoints such as Splunk Observability Cloud ingest or
-another OTLP destination.
+OTLP data received by the local Splunk Observability Studio instance stays local
+unless the user configures forwarding or export endpoints such as Splunk
+Observability Cloud ingest or another OTLP destination.
 
 Provider usage records, completed task accounting, token metrics, and optional
 repository-correlation events are retained in separate bounded in-memory rings.
-They are removed by ring overwrite, explicit Splunk Observability Studio clear, or process exit.
+They are removed by ring overwrite, an explicit clear, or process exit.
 
-## External Calls
+## External calls
 
 The plugin can run project commands selected by the user or required by the
 invoked skill workflow. Package managers, tests, application runtimes, and
@@ -131,7 +97,7 @@ Host-local checks are optional, one-time verification or control probes. Codex
 and Claude Code may prompt for user approval before a shell command accesses
 host-local endpoints. Health checks use
 `http://127.0.0.1:3000/api/health`, not the MCP endpoint. Control or listener
-checks should be limited to the default loopback Splunk Observability Studio ports:
+checks should be limited to the default Splunk Observability Studio loopback ports:
 `127.0.0.1:3000`, `127.0.0.1:4317`, and `127.0.0.1:4318`.
 
 If elevated access is denied or the endpoint cannot be verified from the
@@ -141,13 +107,3 @@ Splunk Observability Studio is unhealthy.
 If a project command, package manager, test runtime, OTLP exporter, or user
 configuration performs network access, that traffic belongs to the selected
 tooling or project configuration, not to plugin telemetry code.
-
-## Host-Specific Controls
-
-Codex users can configure the plugin's MCP server and skill enablement through
-Codex configuration and approve the hook under Codex's trust model. Claude Code
-users can enable or disable the plugin and approve its SessionStart hook to
-control managed startup; they can independently use Claude's MCP-server and
-command permissions to control connection and host-local command access. These
-host controls do not all govern the same capability, and this document does not
-itself configure or enforce them.
