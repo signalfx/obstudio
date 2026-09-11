@@ -413,7 +413,7 @@ func splunkExporterCanaryMetric(metricName string) pmetric.Metrics {
 
 	metric := sm.Metrics().AppendEmpty()
 	metric.SetName(metricName)
-	metric.SetDescription("Obstudio Splunk metrics exporter connectivity canary")
+	metric.SetDescription("Splunk Observability Studio metrics exporter connectivity canary")
 	metric.SetUnit("1")
 	dp := metric.SetEmptyGauge().DataPoints().AppendEmpty()
 	now := pcommon.NewTimestampFromTime(time.Now())

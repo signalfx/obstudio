@@ -236,15 +236,24 @@ func TestReleaseWorkspaceIsGitIgnored(t *testing.T) {
 	}
 }
 
-func TestInstallGuidesChangeIntoExtractedArchiveDirectory(t *testing.T) {
+func TestInstallGuidesUsePortableReleaseCommands(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name string
-		path string
+		name           string
+		path           string
+		installCommand string
 	}{
-		{name: "README", path: filepath.Join("..", "..", "..", "README.md")},
-		{name: "USER guide", path: filepath.Join("..", "..", "..", "docs", "USER.md")},
+		{
+			name:           "README",
+			path:           filepath.Join("..", "..", "..", "README.md"),
+			installCommand: "./obstudio install --target=codex",
+		},
+		{
+			name:           "USER guide",
+			path:           filepath.Join("..", "..", "..", "docs", "USER.md"),
+			installCommand: "./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -261,8 +270,8 @@ func TestInstallGuidesChangeIntoExtractedArchiveDirectory(t *testing.T) {
 			if !strings.Contains(content, "cd obstudio_") {
 				t.Fatalf("%s should show changing into the extracted release directory before running the installer", tc.path)
 			}
-			if !strings.Contains(content, "./obstudio install --target=codex,claude-code,cursor,kiro") {
-				t.Fatalf("%s should show the all-agents install command", tc.path)
+			if !strings.Contains(content, tc.installCommand) {
+				t.Fatalf("%s should show the portable install command %q", tc.path, tc.installCommand)
 			}
 		})
 	}

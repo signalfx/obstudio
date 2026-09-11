@@ -29,9 +29,15 @@ SUCCESS_TIMING = (
     "You will receive an email within 10 minutes. Check your spam folder if it "
     "doesn’t arrive. If you still need help, please reach out to Splunk Support."
 )
+PENDING_TITLE = "Splunk received your Free Edition request."
+PENDING_TIMING = (
+    "Splunk needs extra time to finish setting up the account. If a confirmation "
+    "email does not arrive within 24 hours, contact Splunk Support."
+)
 QUAL_DIR = ROOT / "evals" / "plugins" / "obstudio" / "eval" / "qual"
 MISSING_INPUT_EVAL = QUAL_DIR / "free-account.json"
 ACCEPTED_EVAL = QUAL_DIR / "free-account-accepted.json"
+SETUP_PENDING_EVAL = QUAL_DIR / "free-account-setup-pending.json"
 RESUBMIT_SAME_EMAIL_EVAL = QUAL_DIR / "free-account-resubmit-same-email.json"
 UNKNOWN_EVAL = QUAL_DIR / "free-account-outcome-unknown.json"
 UNAVAILABLE_EVAL = QUAL_DIR / "free-account-tool-unavailable.json"
@@ -183,7 +189,7 @@ def test_free_account_skill_pins_backend_mapping_and_one_call_per_request() -> N
     text = _normalized(SKILL)
 
     for required in (
-        "company to `dev`",
+        "fresh six-letter lowercase company placeholder",
         "without supplying an IP-address parameter",
         "request's network source IP",
         "United States to the public `us` value and internal US1 destination",
@@ -205,7 +211,7 @@ def test_free_account_skill_pins_backend_mapping_and_one_call_per_request() -> N
         "privacyPolicyCheck` field as the string `\"1\"`",
         "include the exact public tool value and internal destination for every country override and market group",
         "Explicitly distinguish the detector's returned public tool value from the matching public form label shown for review",
-        "Observer does not call Cisco OpenDNS or obtain the raw IP value",
+        "Splunk Observability Studio does not call Cisco OpenDNS or obtain the raw IP value",
         "does not inspect or use collected application telemetry",
         "United States / California / empty city and postal code / the public `us` value / internal US1 destination",
         "explicitly asks to submit another intake with the same details or email",
@@ -282,6 +288,10 @@ def test_free_account_skill_uses_official_confirmation_without_extra_claims() ->
         "approved official confirmation template",
         "Outside that exact template",
         "`intakeAcknowledged: true`",
+        "Check `accountSetupPending` before selecting the response",
+        "On `accountSetupPending: true`",
+        PENDING_TITLE,
+        PENDING_TIMING,
         "treat the field only as the internal signal for the success response",
         "Reply with exactly the following approved official confirmation Markdown",
         SUCCESS_TITLE,
@@ -351,6 +361,23 @@ def test_free_account_accepted_eval_requires_one_call_and_no_overclaim() -> None
     assert "organization or account already exists" in rubric
     assert "does not model a second create call or retry" in rubric
     assert "Splunk acknowledged receiving signup intake" not in rubric
+
+
+def test_free_account_setup_pending_eval_requires_pending_confirmation() -> None:
+    task, rubric = _eval_contract(SETUP_PENDING_EVAL)
+
+    assert '"accountSetupPending":true' in task
+    assert '"intakeAcknowledged":true' in task
+    assert '"region":"Europe (Ireland)"' in task
+    assert '"realm":"eu0"' in task
+    assert "exactly one observer_splunk_free_account_create call" in rubric
+    assert "does not model a retry or second create call" in rubric
+    assert PENDING_TITLE in rubric
+    assert PENDING_TIMING in rubric
+    assert "no other user-facing text" in rubric
+    assert "does not call it a rejection, failure, error" in rubric
+    assert "Does not use the ordinary ten-minute success template" in rubric
+    assert "does not propose the public web form" in rubric
 
 
 def test_free_account_resubmit_eval_allows_one_new_call_for_same_email() -> None:
@@ -425,7 +452,7 @@ def test_free_account_unavailable_eval_requires_observer_without_fallback() -> N
     assert "observer_splunk_free_account_create is unavailable" in task
     assert "first name, last name, and email" in task
     assert "do not invoke tools" in task
-    assert "compatible Observer backend" in rubric
+    assert "compatible Splunk Observability Studio backend" in rubric
     assert "must be running or available" in rubric
     assert "Does not fall back to the Splunk web form" in rubric
     assert "without claiming that it submitted or created an account" in rubric
@@ -442,7 +469,7 @@ def test_free_account_skill_documents_splunk_source_ip_location_flow() -> None:
         "request's network source IP",
         "does not call Cisco OpenDNS or receive a raw IP value",
         "does not explicitly transmit, log, display, or retain one",
-        "remote or shared Observer",
+        "remote or shared Splunk Observability Studio instance",
         "United States to the public `us` value and internal US1 destination",
         "Ireland, Germany, and the United Kingdom",
         "public `Europe (Ireland)` value shown as `Europe` and internal EU0",
@@ -472,14 +499,14 @@ def test_free_account_location_privacy_eval_matches_skill_contract() -> None:
 
     assert "Offline privacy explanation only" in task
     assert "do not invoke signup or network tools" in task
-    assert "If I give Obstudio only my first name, last name, and email" in task
+    assert "If I give Splunk Observability Studio only my first name, last name, and email" in task
     assert "Can I replace the detected region" in task
     assert "Does region detection itself submit a signup" in task
-    assert "Does Obstudio obtain, explicitly transmit, log, display, or keep my raw IP address" in task
+    assert "Does Splunk Observability Studio obtain, explicitly transmit, log, display, or keep my raw IP address" in task
     assert "without an explicit IP-address parameter" in rubric
     assert "request's network source IP" in rubric
     assert "does not call Cisco OpenDNS or receive, explicitly transmit, log, display, or retain" in rubric
-    assert "remote/shared Observer" in rubric
+    assert "remote/shared Splunk Observability Studio instance" in rubric
     assert "United States to public `us` / US1" in rubric
     assert "Ireland/Germany/United Kingdom to public `Europe (Ireland)` / EU0" in rubric
     assert "Australia/New Zealand/Japan/Singapore to public `apac-au` / AU0" in rubric

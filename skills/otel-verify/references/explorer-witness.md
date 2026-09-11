@@ -1,7 +1,7 @@
 # Explorer Witness Contract
 
 Use this contract whenever verification claims that telemetry is visible in
-Obstudio or another local trace/metric/log explorer.
+Splunk Observability Studio or another local trace/metric/log explorer.
 
 ## Lifecycle
 

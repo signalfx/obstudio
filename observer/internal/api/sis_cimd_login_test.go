@@ -109,7 +109,7 @@ func startMockSISForLogin(t *testing.T) *mockSISForLogin {
 	clientID := mock.server.URL + "/oauth/client-metadata.json"
 	mock.metadata = map[string]any{
 		"client_id":      clientID,
-		"client_name":    "Obstudio (CIMD)",
+		"client_name":    "Splunk Observability Studio (CIMD)",
 		"grant_types":    []string{"authorization_code", "refresh_token"},
 		"redirect_uris":  []string{sisCIMDRedirectURI},
 		"response_types": []string{"code"},
@@ -162,7 +162,7 @@ func resetGlobalSISCIMDLoginState(t *testing.T) {
 // simulateBrowserFollowingAuthorizationURL performs the same two hops a real browser
 // tab would after window.open(authorizationURL): fetch the authorization URL (the mock
 // IDP-equivalent redirect straight to our loopback callback), then let that redirect
-// resolve, delivering the code to Observer's callback listener. Cookies are irrelevant
+// resolve, delivering the code to Splunk Observability Studio's callback listener. Cookies are irrelevant
 // here since sisCIMDCallbackListener validates via the OAuth `state` query parameter,
 // not a cookie.
 func simulateBrowserFollowingAuthorizationURL(t *testing.T, authorizationURL string) *http.Response {
@@ -200,14 +200,11 @@ func TestSISCIMDLoginSucceedsAfterCallback(t *testing.T) {
 	resetGlobalSISCIMDLoginState(t)
 	mock := startMockSISForLogin(t)
 	setSISCIMDLoginConfigEnv(t, mock.config())
-	// registerSISCIMDLoginRoutes reads OBSTUDIO_CONTROL_TOKEN when it wires the gate, so
-	// this must be set before that call, not just before the request.
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 	loginMux := http.NewServeMux()
 	registerSISCIMDLoginRoutes(loginMux)
 
-	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "", testObserverControlToken)
+	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "")
 	if startResponse.Code != http.StatusOK {
 		t.Fatalf("login start status = %d, body = %s", startResponse.Code, startResponse.Body.String())
 	}
@@ -216,7 +213,7 @@ func TestSISCIMDLoginSucceedsAfterCallback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pending := splunkExportRequest(t, loginMux, http.MethodGet, "/api/splunk/cimd/session", "", testObserverControlToken)
+	pending := splunkExportRequest(t, loginMux, http.MethodGet, "/api/splunk/cimd/session", "")
 	var pendingStatus sisCIMDSessionStatus
 	if err := json.Unmarshal(pending.Body.Bytes(), &pendingStatus); err != nil {
 		t.Fatal(err)
@@ -247,7 +244,7 @@ func TestSISCIMDLoginSucceedsAfterCallback(t *testing.T) {
 		t.Fatal("access token leaked into an HTTP response body")
 	}
 
-	disconnect := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/session/disconnect", "", testObserverControlToken)
+	disconnect := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/session/disconnect", "")
 	var disconnected sisCIMDSessionStatus
 	if err := json.Unmarshal(disconnect.Body.Bytes(), &disconnected); err != nil {
 		t.Fatal(err)
@@ -261,12 +258,11 @@ func TestSISCIMDLoginIgnoresADriveByCallbackRequestWithTheWrongState(t *testing.
 	resetGlobalSISCIMDLoginState(t)
 	mock := startMockSISForLogin(t)
 	setSISCIMDLoginConfigEnv(t, mock.config())
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 	loginMux := http.NewServeMux()
 	registerSISCIMDLoginRoutes(loginMux)
 
-	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "", testObserverControlToken)
+	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "")
 	var start sisCIMDLoginStartResult
 	if err := json.Unmarshal(startResponse.Body.Bytes(), &start); err != nil {
 		t.Fatal(err)
@@ -306,12 +302,11 @@ func TestSISCIMDLoginClaimsOnlyTheFirstOfTwoConcurrentValidCallbacks(t *testing.
 	resetGlobalSISCIMDLoginState(t)
 	mock := startMockSISForLogin(t)
 	setSISCIMDLoginConfigEnv(t, mock.config())
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 	loginMux := http.NewServeMux()
 	registerSISCIMDLoginRoutes(loginMux)
 
-	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "", testObserverControlToken)
+	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "")
 	var start sisCIMDLoginStartResult
 	if err := json.Unmarshal(startResponse.Body.Bytes(), &start); err != nil {
 		t.Fatal(err)
@@ -377,12 +372,11 @@ func TestSISCIMDLoginCancelsAnInFlightExchangeOnDisconnect(t *testing.T) {
 	mock.tokenRequestBlock = make(chan struct{})
 	t.Cleanup(func() { close(mock.tokenRequestBlock) }) // let the mock's handler return so Close() doesn't hang
 	setSISCIMDLoginConfigEnv(t, mock.config())
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 	loginMux := http.NewServeMux()
 	registerSISCIMDLoginRoutes(loginMux)
 
-	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "", testObserverControlToken)
+	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "")
 	var start sisCIMDLoginStartResult
 	if err := json.Unmarshal(startResponse.Body.Bytes(), &start); err != nil {
 		t.Fatal(err)
@@ -411,14 +405,14 @@ func TestSISCIMDLoginCancelsAnInFlightExchangeOnDisconnect(t *testing.T) {
 	}
 
 	// The exchange is now genuinely in flight (blocked in the mock's token handler,
-	// which never releases it in this test). Disconnecting here must cancel Observer's
+	// which never releases it in this test). Disconnecting here must cancel Splunk Observability Studio's
 	// outbound request rather than leave it running in the background -- otherwise SIS
-	// could still mint a token after Observer has already reported disconnection.
+	// could still mint a token after Splunk Observability Studio has already reported disconnection.
 	globalSISCIMDLoginState.disconnect()
 
 	// If the exchange were left to run instead of being cancelled, this would hang until
 	// the mock's block channel closes at test cleanup -- it only completes promptly here
-	// because disconnect cancelled Observer's own outbound request.
+	// because disconnect cancelled Splunk Observability Studio's own outbound request.
 	select {
 	case response := <-callbackDone:
 		if response == nil {
@@ -464,12 +458,11 @@ func TestSISCIMDLoginStatusExpiresAConnectedSession(t *testing.T) {
 	resetGlobalSISCIMDLoginState(t)
 	mock := startMockSISForLogin(t)
 	setSISCIMDLoginConfigEnv(t, mock.config())
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 	loginMux := http.NewServeMux()
 	registerSISCIMDLoginRoutes(loginMux)
 
-	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "", testObserverControlToken)
+	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "")
 	var start sisCIMDLoginStartResult
 	if err := json.Unmarshal(startResponse.Body.Bytes(), &start); err != nil {
 		t.Fatal(err)
@@ -487,7 +480,7 @@ func TestSISCIMDLoginStatusExpiresAConnectedSession(t *testing.T) {
 		t.Fatalf("phase after expiry = %q, want disconnected", expired.Phase)
 	}
 
-	session := splunkExportRequest(t, loginMux, http.MethodGet, "/api/splunk/cimd/session", "", testObserverControlToken)
+	session := splunkExportRequest(t, loginMux, http.MethodGet, "/api/splunk/cimd/session", "")
 	var sessionStatus sisCIMDSessionStatus
 	if err := json.Unmarshal(session.Body.Bytes(), &sessionStatus); err != nil {
 		t.Fatal(err)
@@ -540,12 +533,11 @@ func TestSISCIMDLoginFailsOnOAuthError(t *testing.T) {
 	mock := startMockSISForLogin(t)
 	mock.authorizeErr = "access_denied"
 	setSISCIMDLoginConfigEnv(t, mock.config())
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 	loginMux := http.NewServeMux()
 	registerSISCIMDLoginRoutes(loginMux)
 
-	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "", testObserverControlToken)
+	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "")
 	var start sisCIMDLoginStartResult
 	if err := json.Unmarshal(startResponse.Body.Bytes(), &start); err != nil {
 		t.Fatal(err)
@@ -570,12 +562,11 @@ func TestSISCIMDLoginTokenExchangeFailureDoesNotReflectResponseBody(t *testing.T
 	const leakedSecret = "leaked-secret-error-description-xyz"
 	mock.tokenErrorBody = fmt.Sprintf(`{"error":"invalid_grant","error_description":%q}`, leakedSecret)
 	setSISCIMDLoginConfigEnv(t, mock.config())
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 	loginMux := http.NewServeMux()
 	registerSISCIMDLoginRoutes(loginMux)
 
-	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "", testObserverControlToken)
+	startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "")
 	var start sisCIMDLoginStartResult
 	if err := json.Unmarshal(startResponse.Body.Bytes(), &start); err != nil {
 		t.Fatal(err)
@@ -619,12 +610,11 @@ func TestSISCIMDLoginRejectsAMismatchedGrantedScope(t *testing.T) {
 			mock := startMockSISForLogin(t)
 			mock.tokenResponse["scope"] = tc.grantedScope
 			setSISCIMDLoginConfigEnv(t, mock.config())
-			t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 			loginMux := http.NewServeMux()
 			registerSISCIMDLoginRoutes(loginMux)
 
-			startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "", testObserverControlToken)
+			startResponse := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "")
 			var start sisCIMDLoginStartResult
 			if err := json.Unmarshal(startResponse.Body.Bytes(), &start); err != nil {
 				t.Fatal(err)
@@ -644,11 +634,10 @@ func TestSISCIMDLoginRejectsAMismatchedGrantedScope(t *testing.T) {
 	}
 }
 
-func TestSISCIMDLoginRoutesRequireControlToken(t *testing.T) {
+func TestSISCIMDLoginRoutesRejectCrossOriginRequests(t *testing.T) {
 	resetGlobalSISCIMDLoginState(t)
 	mock := startMockSISForLogin(t)
 	setSISCIMDLoginConfigEnv(t, mock.config())
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 	loginMux := http.NewServeMux()
 	registerSISCIMDLoginRoutes(loginMux)
@@ -661,9 +650,14 @@ func TestSISCIMDLoginRoutesRequireControlToken(t *testing.T) {
 		{http.MethodGet, "/api/splunk/cimd/session"},
 		{http.MethodPost, "/api/splunk/cimd/session/disconnect"},
 	} {
-		response := splunkExportRequest(t, loginMux, route.method, route.path, "", "")
-		if response.Code != http.StatusUnauthorized {
-			t.Fatalf("%s %s without a token = %d, want 401", route.method, route.path, response.Code)
+		request := httptest.NewRequest(route.method, "http://127.0.0.1:3000"+route.path, nil)
+		request.RemoteAddr = "127.0.0.1:54321"
+		request.Header.Set("Origin", "https://attacker.example")
+		request.Header.Set("Sec-Fetch-Site", "cross-site")
+		response := httptest.NewRecorder()
+		loginMux.ServeHTTP(response, request)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("%s %s cross-origin = %d, want 403", route.method, route.path, response.Code)
 		}
 	}
 }
@@ -672,18 +666,17 @@ func TestSISCIMDLoginRejectsAConcurrentLoginAttempt(t *testing.T) {
 	resetGlobalSISCIMDLoginState(t)
 	mock := startMockSISForLogin(t)
 	setSISCIMDLoginConfigEnv(t, mock.config())
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 
 	loginMux := http.NewServeMux()
 	registerSISCIMDLoginRoutes(loginMux)
 
-	first := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "", testObserverControlToken)
+	first := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "")
 	if first.Code != http.StatusOK {
 		t.Fatalf("first login start status = %d, body = %s", first.Code, first.Body.String())
 	}
 	defer globalSISCIMDLoginState.disconnect()
 
-	second := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "", testObserverControlToken)
+	second := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/cimd/login", "")
 	if second.Code != http.StatusConflict {
 		t.Fatalf("second login start status = %d, want 409", second.Code)
 	}

@@ -13,7 +13,11 @@ const {
 	resolveVsceTarget,
 	vsceExecOptions,
 } = require('../../build-vsix.js') as {
-	buildObserverEnvironment: (env?: NodeJS.ProcessEnv, target?: string | null) => NodeJS.ProcessEnv;
+	buildObserverEnvironment: (
+		env?: NodeJS.ProcessEnv,
+		target?: string | null,
+		releaseVersion?: string | null,
+	) => NodeJS.ProcessEnv;
 	buildVsceArgs: (options?: { releaseVersion?: string | null; extraArgs?: string[] }) => string[];
 	MARKETPLACE_BASE_CONTENT_URL: string;
 	MARKETPLACE_BASE_IMAGES_URL: string;
@@ -143,13 +147,20 @@ test('resolveVsceTarget rejects unsupported targets', () => {
 	assert.throws(() => resolveVsceTarget('linux-arm64'), /Unsupported VS Code target/);
 });
 
-test('buildObserverEnvironment exports the cross-compile target for prepublish builds', () => {
-	const env = buildObserverEnvironment({ PATH: '/usr/bin' }, 'darwin-x64');
+test('buildObserverEnvironment exports the release version and cross-compile target for prepublish builds', () => {
+	const env = buildObserverEnvironment({ PATH: '/usr/bin' }, 'darwin-x64', '1.2.3');
 	assert.equal(env.OBSTUDIO_GOOS, 'darwin');
 	assert.equal(env.OBSTUDIO_GOARCH, 'amd64');
 	assert.equal(env.OBSTUDIO_OBSERVER_BINARY_NAME, 'obstudio');
+	assert.equal(env.OBSTUDIO_OBSERVER_VERSION, '1.2.3');
 	assert.equal(env.OBSTUDIO_VSCODE_TARGET, 'darwin-x64');
 	assert.equal(env.PATH, '/usr/bin');
+});
+
+test('buildObserverEnvironment exports a release version without an explicit target', () => {
+	const env = buildObserverEnvironment({ PATH: '/usr/bin' }, null, '2.3.4');
+	assert.equal(env.OBSTUDIO_OBSERVER_VERSION, '2.3.4');
+	assert.equal(env.OBSTUDIO_GOOS, undefined);
 });
 
 test('vsceExecOptions enables shell execution on Windows cmd shims only', () => {

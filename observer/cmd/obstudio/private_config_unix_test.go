@@ -133,7 +133,7 @@ func TestWritePrivateConfigAtomicallyRejectsSymlinkTargetBeforeWriting(t *testin
 func TestReadSharedObserverStateRejectsInsecureFileMode(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), sharedObserverStateFileName)
 	if err := os.WriteFile(statePath, []byte("{}"), 0o644); err != nil {
-		t.Fatalf("write shared observer state: %v", err)
+		t.Fatalf("write shared service state: %v", err)
 	}
 	if _, err := readSharedObserverState(statePath); err == nil || !strings.Contains(err.Error(), "want 0600") {
 		t.Fatalf("read error = %v, want insecure-mode rejection", err)
@@ -159,7 +159,7 @@ func TestReadSharedObserverStateRejectsUntrustedParent(t *testing.T) {
 	directory := t.TempDir()
 	statePath := filepath.Join(directory, sharedObserverStateFileName)
 	if err := os.WriteFile(statePath, []byte("{}"), 0o600); err != nil {
-		t.Fatalf("write shared observer state: %v", err)
+		t.Fatalf("write shared service state: %v", err)
 	}
 	if err := os.Chmod(directory, 0o770); err != nil {
 		t.Fatalf("make state parent group-writable: %v", err)

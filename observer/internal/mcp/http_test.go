@@ -15,28 +15,37 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/store"
 )
 
-const httpTestControlToken = "observer-http-control-secret"
-
 func newHTTPTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", httpTestControlToken)
 
 	mux := http.NewServeMux()
 	Register(mux, store.New())
 	return httptest.NewServer(mux)
 }
 
-func authorizeHTTPRequest(request *http.Request) {
-	request.Header.Set("Authorization", "Bearer "+httpTestControlToken)
-}
+func TestHTTPLocalNativeClientDoesNotNeedObserverControlCredentials(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "obsolete-local-secret")
+	mux := http.NewServeMux()
+	Register(mux, store.New())
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`
 
-func assertHTTPUnauthorized(t *testing.T, response *httptest.ResponseRecorder) {
-	t.Helper()
-	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", response.Code, http.StatusUnauthorized)
+	localRequest := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	localRequest.RemoteAddr = "127.0.0.1:54321"
+	localRequest.Header.Set("Content-Type", "application/json")
+	localResponse := httptest.NewRecorder()
+	mux.ServeHTTP(localResponse, localRequest)
+	if localResponse.Code != http.StatusOK {
+		t.Fatalf("local MCP status = %d, want %d; body=%s", localResponse.Code, http.StatusOK, localResponse.Body.String())
 	}
-	if got := response.Header().Get("WWW-Authenticate"); got != `Bearer realm="obstudio"` {
-		t.Fatalf("WWW-Authenticate = %q, want bearer challenge", got)
+
+	crossOriginRequest := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:3000/mcp", strings.NewReader(body))
+	crossOriginRequest.RemoteAddr = "127.0.0.1:54321"
+	crossOriginRequest.Header.Set("Content-Type", "application/json")
+	crossOriginRequest.Header.Set("Origin", "http://127.0.0.1:4000")
+	crossOriginResponse := httptest.NewRecorder()
+	mux.ServeHTTP(crossOriginResponse, crossOriginRequest)
+	if crossOriginResponse.Code != http.StatusForbidden {
+		t.Fatalf("cross-origin MCP status = %d, want %d; body=%s", crossOriginResponse.Code, http.StatusForbidden, crossOriginResponse.Body.String())
 	}
 }
 
@@ -49,7 +58,6 @@ func TestHTTPGetStreamReturnsEventStream(t *testing.T) {
 		t.Fatalf("new request: %v", err)
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	authorizeHTTPRequest(req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -93,7 +101,6 @@ func TestHTTPInitializeReturnsSessionIDAndSupportsSessionRequests(t *testing.T) 
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
-	authorizeHTTPRequest(req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -132,7 +139,6 @@ func TestHTTPInitializeReturnsSessionIDAndSupportsSessionRequests(t *testing.T) 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Mcp-Session-Id", sessionID)
-	authorizeHTTPRequest(req)
 
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -178,7 +184,6 @@ func TestHTTPDeleteTerminatesSession(t *testing.T) {
 		t.Fatalf("new initialize request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	authorizeHTTPRequest(req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -190,48 +195,17 @@ func TestHTTPDeleteTerminatesSession(t *testing.T) {
 		t.Fatalf("expected Mcp-Session-Id header")
 	}
 
-	unauthorizedDelete, err := http.NewRequest(http.MethodDelete, server.URL+"/mcp", nil)
-	if err != nil {
-		t.Fatalf("new unauthorized delete request: %v", err)
-	}
-	unauthorizedDelete.Header.Set("Mcp-Session-Id", sessionID)
-	unauthorizedDeleteResponse, err := http.DefaultClient.Do(unauthorizedDelete)
-	if err != nil {
-		t.Fatalf("unauthorized delete /mcp: %v", err)
-	}
-	unauthorizedDeleteResponse.Body.Close()
-	if unauthorizedDeleteResponse.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("unauthorized delete status = %d, want %d", unauthorizedDeleteResponse.StatusCode, http.StatusUnauthorized)
-	}
-
 	toolsList := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      2,
 		"method":  "tools/list",
 	}
 	toolsBody, _ := json.Marshal(toolsList)
-	requestAfterUnauthorizedDelete, err := http.NewRequest(http.MethodPost, server.URL+"/mcp", bytes.NewReader(toolsBody))
-	if err != nil {
-		t.Fatalf("new tools/list request after unauthorized delete: %v", err)
-	}
-	requestAfterUnauthorizedDelete.Header.Set("Content-Type", "application/json")
-	requestAfterUnauthorizedDelete.Header.Set("Mcp-Session-Id", sessionID)
-	authorizeHTTPRequest(requestAfterUnauthorizedDelete)
-	responseAfterUnauthorizedDelete, err := http.DefaultClient.Do(requestAfterUnauthorizedDelete)
-	if err != nil {
-		t.Fatalf("tools/list after unauthorized delete: %v", err)
-	}
-	responseAfterUnauthorizedDelete.Body.Close()
-	if responseAfterUnauthorizedDelete.StatusCode != http.StatusOK {
-		t.Fatalf("status after unauthorized delete = %d, want %d", responseAfterUnauthorizedDelete.StatusCode, http.StatusOK)
-	}
-
 	req, err = http.NewRequest(http.MethodDelete, server.URL+"/mcp", nil)
 	if err != nil {
 		t.Fatalf("new delete request: %v", err)
 	}
 	req.Header.Set("Mcp-Session-Id", sessionID)
-	authorizeHTTPRequest(req)
 
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -248,7 +222,6 @@ func TestHTTPDeleteTerminatesSession(t *testing.T) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Mcp-Session-Id", sessionID)
-	authorizeHTTPRequest(req)
 
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -276,7 +249,6 @@ func TestHTTPAllowsPostWithoutSessionForExistingClients(t *testing.T) {
 		t.Fatalf("new tools/list request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	authorizeHTTPRequest(req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -297,55 +269,11 @@ func TestHTTPAllowsPostWithoutSessionForExistingClients(t *testing.T) {
 	}
 }
 
-func TestHTTPRequiresControlTokenBeforeDispatch(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", httpTestControlToken)
-	s := store.New()
-	s.AddLogsForConnection("test", []store.LogRecord{{Body: "must remain"}})
-	mux := http.NewServeMux()
-	Register(mux, s)
-
-	toolsListBody := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
-	toolsListRequest := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(toolsListBody))
-	toolsListResponse := httptest.NewRecorder()
-	mux.ServeHTTP(toolsListResponse, toolsListRequest)
-	assertHTTPUnauthorized(t, toolsListResponse)
-
-	clearBody := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"observer_clear","arguments":{}}}`)
-	clearRequest := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(clearBody))
-	clearRequest.Header.Set("Authorization", "Bearer wrong-token")
-	clearResponse := httptest.NewRecorder()
-	mux.ServeHTTP(clearResponse, clearRequest)
-	assertHTTPUnauthorized(t, clearResponse)
-	if got := s.Stats().LogCount; got != 1 {
-		t.Fatalf("log count = %d after unauthorized clear, want 1", got)
-	}
-
-	streamRequest := httptest.NewRequest(http.MethodGet, "/mcp", nil)
-	streamResponse := httptest.NewRecorder()
-	mux.ServeHTTP(streamResponse, streamRequest)
-	assertHTTPUnauthorized(t, streamResponse)
-}
-
-func TestHTTPFailsClosedWithoutConfiguredControlToken(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
-	mux := http.NewServeMux()
-	Register(mux, store.New())
-	request := httptest.NewRequest(
-		http.MethodPost,
-		"/mcp",
-		strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`),
-	)
-	request.Header.Set("Authorization", "Bearer any-token")
-	response := httptest.NewRecorder()
-	mux.ServeHTTP(response, request)
-	assertHTTPUnauthorized(t, response)
-}
-
-func TestHTTPOptionsDoesNotRequireControlToken(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", httpTestControlToken)
+func TestHTTPOptionsAllowsLocalNativeClient(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux, store.New())
 	request := httptest.NewRequest(http.MethodOptions, "/mcp", nil)
+	request.RemoteAddr = "127.0.0.1:54321"
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, request)
 	if response.Code != http.StatusNoContent {
@@ -353,82 +281,7 @@ func TestHTTPOptionsDoesNotRequireControlToken(t *testing.T) {
 	}
 }
 
-func TestHTTPFreeAccountToolRequiresControlTokenEvenFromLoopback(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "observer-control-secret")
-	submitter := &fakeMCPFreeAccountSubmitter{result: freeaccount.Result{
-		IntakeAcknowledged: true,
-		Realm:              "au0",
-		Region:             "apac-au",
-		Message:            "Thank you for registering. Your free edition account is on its way!",
-	}}
-	mux := http.NewServeMux()
-	Register(mux, store.New(), submitter)
-	body := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"observer_splunk_free_account_create","arguments":{"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com","termsAccepted":true}}}`)
-
-	remoteRequest := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
-	remoteRequest.RemoteAddr = "198.51.100.20:41234"
-	remoteResponse := httptest.NewRecorder()
-	mux.ServeHTTP(remoteResponse, remoteRequest)
-	assertHTTPUnauthorized(t, remoteResponse)
-
-	localBrowserRequest := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
-	localBrowserRequest.RemoteAddr = "127.0.0.1:41235"
-	localBrowserRequest.Header.Set("Origin", "http://127.0.0.1:5173")
-	localBrowserResponse := httptest.NewRecorder()
-	mux.ServeHTTP(localBrowserResponse, localBrowserRequest)
-	assertHTTPUnauthorized(t, localBrowserResponse)
-	if submitter.calls != 0 {
-		t.Fatalf("loopback browser submitter calls = %d, want 0 without control token", submitter.calls)
-	}
-
-	forwardedRequest := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
-	forwardedRequest.RemoteAddr = "127.0.0.1:41236"
-	forwardedRequest.Header.Set("X-Forwarded-For", "198.51.100.20")
-	forwardedResponse := httptest.NewRecorder()
-	mux.ServeHTTP(forwardedResponse, forwardedRequest)
-	assertHTTPUnauthorized(t, forwardedResponse)
-	if submitter.calls != 0 {
-		t.Fatalf("forwarded loopback submitter calls = %d, want 0 without control token", submitter.calls)
-	}
-
-	localRequest := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
-	localRequest.RemoteAddr = "127.0.0.1:41237"
-	localResponse := httptest.NewRecorder()
-	mux.ServeHTTP(localResponse, localRequest)
-	assertHTTPUnauthorized(t, localResponse)
-	if submitter.calls != 0 {
-		t.Fatalf("loopback submitter calls = %d, want 0 without control token", submitter.calls)
-	}
-
-	authorizedRequest := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
-	authorizedRequest.RemoteAddr = "198.51.100.20:41238"
-	authorizedRequest.Header.Set("Authorization", "Bearer observer-control-secret")
-	authorizedResponse := httptest.NewRecorder()
-	mux.ServeHTTP(authorizedResponse, authorizedRequest)
-	if submitter.calls != 1 {
-		t.Fatalf("authorized remote submitter calls = %d, want 1", submitter.calls)
-	}
-
-	detectBody := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"observer_splunk_free_account_region_detect","arguments":{}}}`)
-	unauthorizedDetect := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(detectBody))
-	unauthorizedDetectResponse := httptest.NewRecorder()
-	mux.ServeHTTP(unauthorizedDetectResponse, unauthorizedDetect)
-	assertHTTPUnauthorized(t, unauthorizedDetectResponse)
-	if submitter.detectionCalls != 0 {
-		t.Fatalf("unauthenticated detection calls = %d, want 0", submitter.detectionCalls)
-	}
-
-	authorizedDetect := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(detectBody))
-	authorizedDetect.Header.Set("Authorization", "Bearer observer-control-secret")
-	authorizedDetectResponse := httptest.NewRecorder()
-	mux.ServeHTTP(authorizedDetectResponse, authorizedDetect)
-	if submitter.detectionCalls != 1 {
-		t.Fatalf("authorized detection calls = %d, want 1", submitter.detectionCalls)
-	}
-}
-
 func TestHTTPFreeAccountToolPropagatesCanceledRequestContext(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "observer-control-secret")
 	submitter := &fakeMCPFreeAccountSubmitter{
 		err: &freeaccount.Error{
 			Code:      freeaccount.ErrorCodeCanceled,
@@ -443,7 +296,6 @@ func TestHTTPFreeAccountToolPropagatesCanceledRequestContext(t *testing.T) {
 	cancel()
 	request := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body)).WithContext(ctx)
 	request.RemoteAddr = "127.0.0.1:43123"
-	request.Header.Set("Authorization", "Bearer observer-control-secret")
 	response := httptest.NewRecorder()
 
 	mux.ServeHTTP(response, request)
@@ -465,7 +317,6 @@ func TestHTTPRejectsMalformedJSONWithRPCParseError(t *testing.T) {
 		t.Fatalf("new malformed request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	authorizeHTTPRequest(req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -504,7 +355,6 @@ func TestHTTPPreservesLargeNumericRequestID(t *testing.T) {
 		t.Fatalf("new request: %v", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
-	authorizeHTTPRequest(request)
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
@@ -524,8 +374,6 @@ func TestHTTPPreservesLargeNumericRequestID(t *testing.T) {
 }
 
 func TestHTTPRejectsInvalidRequestIDTypes(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", httpTestControlToken)
-
 	for name, id := range map[string]string{
 		"boolean": "true",
 		"object":  `{}`,
@@ -539,7 +387,7 @@ func TestHTTPRejectsInvalidRequestIDTypes(t *testing.T) {
 				"/mcp",
 				strings.NewReader(`{"jsonrpc":"2.0","id":`+id+`,"method":"tools/list"}`),
 			)
-			authorizeHTTPRequest(request)
+			request.RemoteAddr = "127.0.0.1:54321"
 			response := httptest.NewRecorder()
 			mux.ServeHTTP(response, request)
 
@@ -565,7 +413,6 @@ func TestHTTPDeleteRequiresSessionHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new delete request: %v", err)
 	}
-	authorizeHTTPRequest(req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -578,7 +425,7 @@ func TestHTTPDeleteRequiresSessionHeader(t *testing.T) {
 	}
 }
 
-func TestHTTPLocalhostOriginIsAccepted(t *testing.T) {
+func TestHTTPSameOriginIsAccepted(t *testing.T) {
 	server := newHTTPTestServer(t)
 	defer server.Close()
 
@@ -586,8 +433,7 @@ func TestHTTPLocalhostOriginIsAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
-	req.Header.Set("Origin", "http://localhost:3000")
-	authorizeHTTPRequest(req)
+	req.Header.Set("Origin", server.URL)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -596,7 +442,16 @@ func TestHTTPLocalhostOriginIsAccepted(t *testing.T) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 for localhost origin, got %d", resp.StatusCode)
+		t.Fatalf("expected 200 for same origin, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPLocalhostTrailingDotSameOriginIsAccepted(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "http://localhost.:3000/mcp", nil)
+	request.RemoteAddr = "127.0.0.1:54321"
+	request.Header.Set("Origin", "http://localhost.:3000")
+	if !originAllowed(request) {
+		t.Fatal("localhost. same-origin MCP request was rejected")
 	}
 }
 
@@ -609,7 +464,6 @@ func TestHTTPRejectsRemoteOrigins(t *testing.T) {
 		t.Fatalf("new request: %v", err)
 	}
 	req.Header.Set("Origin", "https://example.com")
-	authorizeHTTPRequest(req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

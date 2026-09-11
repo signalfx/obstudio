@@ -737,7 +737,7 @@ describe("OverviewTab staleness and failures", () => {
       expect(container.querySelector(".overview-score--empty")).toBeTruthy();
     });
     const meta = container.querySelector(".overview-score__meta")?.textContent ?? "";
-    expect(meta).toContain("Could not reach the Observer");
+    expect(meta).toContain("Could not reach Splunk Observability Studio");
     expect(meta).toContain("audit may already exist");
     // It must not instruct the user to generate a report that may exist.
     expect(meta).not.toContain("Run $otel-audit to generate one");

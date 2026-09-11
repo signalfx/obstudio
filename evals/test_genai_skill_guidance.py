@@ -67,7 +67,7 @@ def test_genai_reference_requires_span_first_trace_explorer_contract():
     text = _read(GENAI_REF)
     instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
     reference_required_terms = [
-        "Obstudio GenAI Trace UI Contract",
+        "Splunk Observability Studio GenAI Trace UI Contract",
         "span-first",
         "selected-trace summary",
         "gen_ai.usage.input_tokens",
@@ -79,7 +79,7 @@ def test_genai_reference_requires_span_first_trace_explorer_contract():
         "stream close reason family",
     ]
     instrument_required_terms = [
-        "local span-first trace explorers such as Obstudio",
+        "local span-first trace explorers such as Splunk Observability Studio",
         "metrics alone are not enough",
         "gen_ai.usage.input_tokens",
         "gen_ai.usage.output_tokens",

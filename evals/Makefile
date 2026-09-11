@@ -94,13 +94,13 @@ eval-rubric: eval-rubric-test eval-rubric-report ## Run schema-constrained rubri
 eval-rubric-ab: AB=1
 eval-rubric-ab: eval-rubric ## Run rubric grading with baseline
 
-eval-runtime-test: ## Run Docker/Observer runtime checks and write raw JSON
+eval-runtime-test: ## Run Docker/Splunk Observability Studio runtime checks and write raw JSON
 	@uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_RUNTIME_TARGET) $(EVAL_RUNTIME_FILTER) $(EVAL_KIND_FLAGS) --codex-eval-kind runtime $(EVAL_PROGRESS_FLAG)
 
 eval-runtime-report: ## Render the latest runtime report from raw JSON
 	@uv run codex-eval-harness report $(EVAL_REPORT_FLAGS) --kind runtime
 
-eval-runtime: eval-runtime-test eval-runtime-report ## Run Docker/Observer runtime checks; pass AB=1 or WITH=ab to include baseline
+eval-runtime: eval-runtime-test eval-runtime-report ## Run Docker/Splunk Observability Studio runtime checks; pass AB=1 or WITH=ab to include baseline
 
 eval-runtime-ab: AB=1
 eval-runtime-ab: eval-runtime ## Run runtime checks with baseline

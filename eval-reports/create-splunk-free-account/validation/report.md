@@ -24,4 +24,5 @@ This report validates eval JSON, eval directory availability, and skill source a
 | plugins/obstudio/qual/free-account-outcome-unknown | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-outcome-unknown.json | 0 | 6 | 0 |
 | plugins/obstudio/qual/free-account-region-review-gate | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-region-review-gate.json | 0 | 5 | 0 |
 | plugins/obstudio/qual/free-account-resubmit-same-email | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-resubmit-same-email.json | 0 | 6 | 0 |
+| plugins/obstudio/qual/free-account-setup-pending | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-setup-pending.json | 0 | 5 | 0 |
 | plugins/obstudio/qual/free-account-tool-unavailable | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-tool-unavailable.json | 0 | 5 | 0 |

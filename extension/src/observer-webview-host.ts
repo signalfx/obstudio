@@ -11,7 +11,7 @@ import {
 	type CloudBridgeAction,
 	type SkillDocsId,
 } from './cloud-bridge';
-import { isLocalObserverControlHost } from './backend';
+import { isLoopbackObserverHost } from './backend';
 
 export type ObserverHostCloudPayload = {
 	accessToken?: string;
@@ -92,7 +92,7 @@ const allowedGetPaths = new Set([
 const allowedPostPaths = new Set(['/api/validation/run']);
 
 export function observerHostResponseByteLimit(url: URL): number {
-	return isLocalObserverControlHost(url.hostname)
+	return isLoopbackObserverHost(url.hostname)
 		? maxLocalObserverHostResponseBytes
 		: maxRemoteObserverHostResponseBytes;
 }
@@ -136,7 +136,7 @@ export function collectObserverHostHTTPResponse(
 			size += buffer.length;
 			if (size > responseByteLimit) {
 				const error = new Error(
-					`Observer response exceeded ${responseByteLimit / (1 << 20)} MiB.`,
+					`Splunk Observability Studio response exceeded ${responseByteLimit / (1 << 20)} MiB.`,
 				);
 				request.destroy(error);
 				fail(error);
@@ -146,7 +146,7 @@ export function collectObserverHostHTTPResponse(
 		};
 		const onEnd = () => {
 			if (!response.complete) {
-				fail(new Error('Observer response ended before the message was complete.'));
+				fail(new Error('Splunk Observability Studio response ended before the message was complete.'));
 				return;
 			}
 			const contentType = response.headers['content-type'];
@@ -161,8 +161,8 @@ export function collectObserverHostHTTPResponse(
 			}));
 		};
 		const onError = (error: Error) => fail(error);
-		const onAborted = () => fail(new Error('Observer response was aborted before completion.'));
-		const onClose = () => fail(new Error('Observer response closed before completion.'));
+		const onAborted = () => fail(new Error('Splunk Observability Studio response was aborted before completion.'));
+		const onClose = () => fail(new Error('Splunk Observability Studio response closed before completion.'));
 
 		response.on('data', onData);
 		response.once('end', onEnd);
@@ -245,7 +245,6 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 			return isObserverHostCloudPayload(value)
 				&& hasOnlyCloudPayloadKeys(value, ['accessToken', 'expectedVersion', 'realm'])
 				&& typeof value.accessToken === 'string'
-				&& typeof value.expectedVersion === 'string'
 				&& typeof value.realm === 'string';
 		case 'resolve-realm':
 			return isObserverHostCloudPayload(value)
@@ -277,25 +276,24 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 		case 'set-enabled':
 			return isObserverHostCloudPayload(value)
 				&& hasOnlyCloudPayloadKeys(value, ['enabled', 'expectedVersion'])
-				&& typeof value.enabled === 'boolean'
-				&& typeof value.expectedVersion === 'string';
+				&& typeof value.enabled === 'boolean';
 		case 'open-skill-docs':
 			return isObserverHostCloudPayload(value)
 				&& hasOnlyCloudPayloadKeys(value, ['skill'])
 				&& isSkillDocsId(value.skill);
 		case 'forget':
-			return isObserverHostCloudPayload(value)
-				&& hasOnlyCloudPayloadKeys(value, ['expectedVersion'])
-				&& typeof value.expectedVersion === 'string';
+			return value === undefined
+				|| (isObserverHostCloudPayload(value)
+					&& hasOnlyCloudPayloadKeys(value, ['expectedVersion']));
 		case 'disconnect-cimd':
 		case 'login-cimd':
 		case 'setup-cimd':
-			// Unlike the other mutating actions above, these carry no CIMD-specific
-			// payload of their own -- only the expectedVersion runAction() always
-			// attaches for optimistic-concurrency checks.
-			return isObserverHostCloudPayload(value)
-				&& hasOnlyCloudPayloadKeys(value, ['expectedVersion'])
-				&& typeof value.expectedVersion === 'string';
+			// These carry no CIMD-specific payload. A known Splunk Observability Studio state version is
+			// included when available, but initialization failures must not block a
+			// deliberate retry.
+			return value === undefined
+				|| (isObserverHostCloudPayload(value)
+					&& hasOnlyCloudPayloadKeys(value, ['expectedVersion']));
 		case 'detect-free-account-region':
 		case 'initialize':
 		case 'open-audit-report':

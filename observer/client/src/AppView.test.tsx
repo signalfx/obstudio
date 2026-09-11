@@ -150,22 +150,17 @@ function stubCloudStatusFetch(status: SplunkExportStatus = {
   cimdRegistrationEnabled: false,
   metrics: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
   traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
-}, withBrowserSession = true): void {
-  if (withBrowserSession) {
-    window.sessionStorage.setItem("obstudio.cloud.browser-session.v1", "A".repeat(43));
-  }
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => ({
+}): void {
+  vi.stubGlobal("fetch", vi.fn(async () => ({
     ok: true,
     status: 200,
     statusText: "OK",
-    json: async () => withBrowserSession && String(input) === "/api/splunk/export/browser/session"
-      ? { browserToken: "B".repeat(43) }
-      : status,
+    json: async () => status,
   })));
 }
 
 beforeEach(() => {
-  stubCloudStatusFetch(undefined, false);
+  stubCloudStatusFetch();
   Object.defineProperty(HTMLElement.prototype, "clientHeight", {
     configurable: true,
     value: 400,
@@ -510,7 +505,7 @@ describe("AppView main tab keyboard navigation", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     const overviewTab = screen.getByRole("tab", { name: /overview/i });
     const metricsTab = screen.getByRole("tab", { name: /metrics/i });
 
@@ -531,7 +526,7 @@ describe("AppView main tab keyboard navigation", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "ArrowRight" });
 
     const overviewTab = screen.getByRole("tab", { name: /overview/i });
@@ -545,7 +540,7 @@ describe("AppView main tab keyboard navigation", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "ArrowLeft" });
 
     const cloudTab = screen.getByRole("tab", { name: /cloud/i });
@@ -558,7 +553,7 @@ describe("AppView main tab keyboard navigation", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "End" });
 
     const cloudTab = screen.getByRole("tab", { name: /cloud/i });
@@ -571,7 +566,7 @@ describe("AppView main tab keyboard navigation", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "End" });
     fireEvent.keyDown(tablist, { key: "Home" });
 
@@ -584,7 +579,7 @@ describe("AppView main tab keyboard navigation", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
 
     // overview → metrics → traces → logs → services (4 ArrowRights)
     fireEvent.keyDown(tablist, { key: "ArrowRight" });

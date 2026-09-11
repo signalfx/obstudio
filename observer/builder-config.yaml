@@ -1,6 +1,6 @@
 dist:
   name: obstudio
-  description: Observability Studio — local OpenTelemetry collector
+  description: Splunk Observability Studio — local OpenTelemetry collector
   output_path: ./build
   otelcol_version: 0.149.0
 

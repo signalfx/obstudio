@@ -10,7 +10,7 @@
         "eval/inputs/otel-selection.json",
         "eval/inputs/otel-verify.json"
       ],
-      "task": "Create ./service/.observe and copy the four canonical JSON files from ./service/eval/inputs into it. Use $otel-verify read-only to validate the complete bound audit -> selection -> instrumentation -> verify proof packet. Preserve the supplied canonical .observe/otel-verify.json proof rather than changing application code or inventing a removed telemetry item for a signal this fixture never emitted. Write the reader-first compatibility verification report, describe the captured trace as the generated trace without exposing a trace ID, and report the exact validated result."
+      "task": "Create ./service/.observe and copy the four canonical JSON files from ./service/eval/inputs into it. Use $otel-verify read-only to validate the complete bound audit -> selection -> instrumentation -> verify proof packet. Preserve the supplied canonical .observe/otel-verify.json proof rather than changing application code or inventing a removed telemetry item for a signal this fixture never emitted. Write the reader-first compatibility verification report, describe the captured trace as the generated trace without exposing a trace ID, use the full product name Splunk Observability Studio for any explorer evidence source, and report the exact validated result."
     }
   ],
   "judge_inputs": [
@@ -21,6 +21,6 @@
   "rubric": [
     "Runs the canonical bound-flow validator and preserves exact audit_sha256, selection_sha256, and instrumentation_sha256 bindings rather than treating the four JSON files independently.",
     "Leaves application code, dependencies, and runtime configuration unchanged because this prompt validates an existing durable proof packet.",
-    "Writes a reader-first .observe/otel-verify.md that says generated trace rather than exposing raw trace or span identifiers."
+    "Writes a reader-first .observe/otel-verify.md that says generated trace rather than exposing raw trace or span identifiers, and uses Splunk Observability Studio when naming any explorer evidence source."
   ]
 }

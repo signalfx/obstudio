@@ -589,7 +589,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 					"limit":             {Type: "integer", Minimum: intPtr(1), Maximum: intPtr(100), Default: 20, Description: "Maximum number of metric groups to return."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Metrics Overview", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Metrics Overview", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_metric_detail",
@@ -603,7 +603,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 					"serviceName":    {Type: "string", Description: "Optional case-insensitive service.name filter."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Metric Detail", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Metric Detail", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_traces_overview",
@@ -619,7 +619,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 					"spanPreviewCount": {Type: "integer", Minimum: intPtr(0), Maximum: intPtr(12), Default: 5, Description: "Maximum number of spans to include in each trace preview."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Traces Overview", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Traces Overview", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_trace_detail",
@@ -631,11 +631,11 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 					"traceId":    {Type: "string", Description: "Lowercase hex traceId to fetch."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Trace Detail", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Trace Detail", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_token_usage_overview",
-			Description: "Answer questions about recent agent or task token usage retained in Observer's bounded in-memory history. Provider-native Codex response.completed logs, Claude api_request logs, and completed native task/request spans are normalized without adding logs and spans together. Returns normalized input, cached input, cache-creation input, output, reasoning output, provider-reported total, independently derived total, effective total, measurement coverage, trace/task identity, repository attribution, and accountingStatus. Use this when the user asks how many tokens a recent task or audit used, requests cache or reasoning breakdowns, compares provider and derived totals, asks which recent task used the most tokens, provides a Codex thread or Claude session ID, or asks about usage for a repository name or absolute path. highestUsageTask is computed across every retained match rather than only returned rows, and is null when any matched task has an unknown effective total. accountingStatus=exact describes token accounting only; repositoryCorrelationStatus separately describes repository attribution. Codex task traces can provide per-turn cwd, while explicit provider lifecycle events correlate Claude sessions when repository correlation is enabled. accountingStatus=exact requires one complete provider accounting source correlated to a completed native task boundary, or all four provider-native Claude cumulative metric components for an explicitly queried session. Delta metrics measure only their retained export window and remain partial. Codex logs are reconciled against the completed turn total; when retained logs are incomplete or evicted, the completed task span is authoritative. An explicit thread/session query omits a still-in-progress prompt when completed tasks for that conversation are retained. Uncorrelated, partial, estimated, and unknown are reported distinctly. Null means unknown and is distinct from an explicit zero. Raw provider events remain available as logs. Enclosing span summaries are de-duplicated from model-call spans, and evaluation-only judge branches are excluded.",
+			Description: "Answer questions about recent agent or task token usage retained in Splunk Observability Studio's bounded in-memory history. Provider-native Codex response.completed logs, Claude api_request logs, and completed native task/request spans are normalized without adding logs and spans together. Returns normalized input, cached input, cache-creation input, output, reasoning output, provider-reported total, independently derived total, effective total, measurement coverage, trace/task identity, repository attribution, and accountingStatus. Use this when the user asks how many tokens a recent task or audit used, requests cache or reasoning breakdowns, compares provider and derived totals, asks which recent task used the most tokens, provides a Codex thread or Claude session ID, or asks about usage for a repository name or absolute path. highestUsageTask is computed across every retained match rather than only returned rows, and is null when any matched task has an unknown effective total. accountingStatus=exact describes token accounting only; repositoryCorrelationStatus separately describes repository attribution. Codex task traces can provide per-turn cwd, while explicit provider lifecycle events correlate Claude sessions when repository correlation is enabled. accountingStatus=exact requires one complete provider accounting source correlated to a completed native task boundary, or all four provider-native Claude cumulative metric components for an explicitly queried session. Delta metrics measure only their retained export window and remain partial. Codex logs are reconciled against the completed turn total; when retained logs are incomplete or evicted, the completed task span is authoritative. An explicit thread/session query omits a still-in-progress prompt when completed tasks for that conversation are retained. Uncorrelated, partial, estimated, and unknown are reported distinctly. Null means unknown and is distinct from an explicit zero. Raw provider events remain available as logs. Enclosing span summaries are de-duplicated from model-call spans, and evaluation-only judge branches are excluded.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 				Properties: map[string]jsonSchema{
@@ -653,7 +653,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 					"repositoryPath": {Type: "string", Description: "Optional absolute repository or workspace path filter. Canonical repository paths and provider worktree paths are both matched when retained."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Agent Token Usage", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Agent Token Usage", ReadOnlyHint: true, IdempotentHint: true},
 			Meta: map[string]any{
 				TokenAccountingProtocolMetaKey: TokenAccountingProtocolVersion,
 			},
@@ -671,7 +671,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 					"traceId":      {Type: "string", Description: "Optional traceId to find logs correlated with a specific trace."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Logs Overview", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Logs Overview", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_validation_status",
@@ -679,7 +679,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 			},
-			Annotations: toolAnnot{Title: "Observer Validation Status", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Validation Status", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_validation_analyze",
@@ -700,7 +700,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 					"traceId":        {Type: "string", Description: "Optional exact trace id filter."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Validation Analyze"},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Validation Analyze"},
 		},
 		{
 			Name:        "observer_validation_refresh",
@@ -720,23 +720,23 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 					"traceId":        {Type: "string", Description: "Optional exact trace id filter."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Validation Refresh"},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Validation Refresh"},
 		},
 		{
 			Name:        "observer_clear",
-			Description: "Clear all telemetry data (traces, metrics, logs) from the in-memory store. Use this only when the user explicitly asks to clear or reset the observer state.",
+			Description: "Clear all telemetry data (traces, metrics, logs) from the in-memory store. Use this only when the user explicitly asks to clear or reset Splunk Observability Studio state.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 			},
-			Annotations: toolAnnot{Title: "Observer Clear Data", DestructiveHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Clear Data", DestructiveHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_status",
-			Description: "Return the collector's listening endpoints (OTLP HTTP, OTLP gRPC, REST/Web UI) and current telemetry stats. Use this when the user asks whether telemetry is arriving, what ports to send OTLP to, or whether the observer backend is up.",
+			Description: "Return the collector's listening endpoints (OTLP HTTP, OTLP gRPC, REST/Web UI) and current telemetry stats. Use this when the user asks whether telemetry is arriving, what ports to send OTLP to, or whether Splunk Observability Studio is up.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 			},
-			Annotations: toolAnnot{Title: "Observer Status", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Status", ReadOnlyHint: true, IdempotentHint: true},
 		},
 	}
 	if len(freeAccountEnabled) > 0 && freeAccountEnabled[0] {
@@ -753,7 +753,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 			},
 		}, toolDef{
 			Name:        "observer_splunk_free_account_create",
-			Description: "Submit one Splunk Observability Cloud Free Edition signup after the user explicitly accepts the Free Edition Terms of Use at https://www.splunk.com/en_us/legal/splunk-observability-free-edition-terms.html. Splunk derives coarse GeoIP country, state, city, postal code, and market region from Observer's request source; Observer supplies those matching form fields and maps the market to a supported signup region with a United States fallback. The optional region field lets the user override only the destination using the exact value from Splunk's public signup form. The result returns both that public-form region value and the corresponding technical realm. Ask for only the user's first name, last name, and email address, set termsAccepted only from explicit consent, and never call this tool speculatively or automatically retry it. Explicit acceptance is sent upstream as privacyPolicyCheck=1. A successful result confirms only that Splunk acknowledged intake; Observer cannot verify provisioning or email delivery.",
+			Description: "Submit one Splunk Observability Cloud Free Edition signup after the user explicitly accepts the Free Edition Terms of Use at https://www.splunk.com/en_us/legal/splunk-observability-free-edition-terms.html. Splunk derives coarse GeoIP country, state, city, postal code, and market region from Splunk Observability Studio's request source; Splunk Observability Studio supplies those matching form fields and maps the market to a supported signup region with a United States fallback. The optional region field lets the user override only the destination using the exact value from Splunk's public signup form. The result returns both that public-form region value and the corresponding technical realm. Ask for only the user's first name, last name, and email address, set termsAccepted only from explicit consent, and never call this tool speculatively or automatically retry it. Explicit acceptance is sent upstream as privacyPolicyCheck=1. A successful result confirms only that Splunk acknowledged intake; Splunk Observability Studio cannot verify provisioning or email delivery.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 				Required: []string{"firstName", "lastName", "email", "termsAccepted"},
@@ -778,7 +778,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 		tools = append(tools,
 			toolDef{
 				Name:        "observer_splunk_connection_realm",
-				Description: "Return only the non-secret Splunk Observability Cloud realm stored with the current SOS connection. Use this realm as the default when the user has not supplied one. This tool never returns an access token or token metadata.",
+				Description: "Return only the non-secret Splunk Observability Cloud realm stored with the current Splunk Observability Studio connection. Use this realm as the default when the user has not supplied one. This tool never returns an access token or token metadata.",
 				InputSchema: jsonSchema{Type: "object", AdditionalProperties: &f},
 				Annotations: toolAnnot{Title: "Splunk Connection Realm", ReadOnlyHint: true, IdempotentHint: true},
 			},
@@ -790,7 +790,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 			},
 			toolDef{
 				Name:        "observer_splunk_metrics_export_configure",
-				Description: "Update the Splunk Observability Cloud metrics forwarding configuration at runtime. Use this to enable, disable, or change the realm, endpoint, or access token without restarting obstudio.",
+				Description: "Update the Splunk Observability Cloud metrics forwarding configuration at runtime. Use this to enable, disable, or change the realm, endpoint, or access token without restarting Splunk Observability Studio.",
 				InputSchema: jsonSchema{
 					Type: "object", AdditionalProperties: &f,
 					Properties: map[string]jsonSchema{

@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | sanity |
 | Skill | splunk-dashboard |
-| Run ID | 20260702T194810597252Z |
+| Run ID | 20260911T020832878259Z |
 | Agent model | gpt-5.5 |
 | Workers | 1 |
 | Config | evals/codex-evals.toml |
@@ -16,9 +16,17 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-red/sanity/dashboard | dashboards/checkout-red | 1 | 100% (10/10) | 342.8K | 5.8m | - | - | - |
-| with_skill | sanity/skill-smoke/sanity/dashboard | sanity/skill-smoke | 2 | 100% (4/4) | 35.1K | 4.7m | - | - | - |
-| with_skill | sanity/skill-smoke/sanity/dashboard-no-audit | sanity/skill-smoke | 1 | 100% (4/4) | 81.7K | 3.3m | - | - | - |
+| with_skill | dashboards/checkout-red/sanity/dashboard | dashboards/checkout-red | 1 | 100% (11/11) | 483.6K | 4.7m | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/dashboard | sanity/skill-smoke | 2 | 100% (6/6) | 80.8K | 37.9s | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/dashboard-no-audit | sanity/skill-smoke | 1 | 100% (5/5) | 63.0K | 31.8s | - | - | - |
+
+## Agent Token Usage
+
+| Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
+|---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| with_skill | dashboards/checkout-red/sanity/dashboard | dashboards/checkout-red | with_skill | codex | cumulative | measured | 1/1 recognized | 471757 | 425600 | unknown | 11852 | 4690 | unknown | 483609 |
+| with_skill | sanity/skill-smoke/sanity/dashboard | sanity/skill-smoke | with_skill | codex | cumulative | measured | 2/2 recognized | 80560 | 56832 | unknown | 221 | 0 | unknown | 80781 |
+| with_skill | sanity/skill-smoke/sanity/dashboard-no-audit | sanity/skill-smoke | with_skill | codex | cumulative | measured | 1/1 recognized | 62394 | 49280 | unknown | 570 | 298 | unknown | 62964 |
 
 ## Sanity Failures
 

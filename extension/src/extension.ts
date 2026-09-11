@@ -9,21 +9,18 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
 	createAgentIntegrationConfigFingerprint,
-	authorizationHeadersMatchControlToken,
-	codexObstudioAuthorizationMatchesControlToken,
+	codexObstudioHasNoAuthorization,
 	getCodexObstudioSection,
 	getCodexObstudioUrl,
-	installAgentIntegrationWithStableCredentials,
+	hasNoAuthorizationHeader,
 	shouldRefreshOwnedAgentIntegrationConfig,
 	type AgentIntegrationConfigFingerprint,
-	type AgentIntegrationInstallCredentials,
 	type AgentIntegrationManagedConfig,
 } from './agent-integration-config';
 import {
 	buildObserverHealthUrl,
 	buildObserverValidatorSummaryUrl,
-	createObserverHealthProofChallenge,
-	isLocalObserverControlHost,
+	isLoopbackObserverHost,
 	type ObserverHealth,
 	type SharedObserverDiscovery,
 	normalizeObserverBaseUrl,
@@ -31,11 +28,8 @@ import {
 	normalizeSharedObserverHealthUrl,
 	normalizeSharedObserverMCPUrl,
 	observerPortFromUrl,
-	observerHealthProofChallengeQuery,
 	readSharedObserverDiscovery,
 	resolveBackend,
-	verifiedSharedObserverMCPUrl,
-	verifySharedObserverControlToken,
 } from './backend';
 import {
 	AsyncOperationQueue,
@@ -71,9 +65,7 @@ import {
 } from './startup-errors';
 import {
 	auditReportUrl,
-	captureSplunkCloudState,
 	cloudBridgeActionRequiresLifecycleSerialization,
-	cloudControlRemainsAvailableAfterInitializationError,
 	cloudStatusConnected,
 	connectSplunkCloudWithStorage,
 	forgetSplunkCloudWithStorage,
@@ -84,8 +76,6 @@ import {
 	observerCloudResponseError,
 	parseFreeAccountSubmissionResult,
 	parseObserverCloudResponseBody,
-	persistSplunkCloudStateWithRollback,
-	requestObserverCloudMutationWithTokenRefresh,
 	parseStoredSplunkCloudConnection,
 	restoreSplunkCloudConnectionFromStorage,
 	setSplunkCloudExportEnabledWithStorage,
@@ -110,6 +100,16 @@ import {
 	type ObserverHostResponseEnvelope,
 } from './observer-webview-host';
 import { ObserverWebviewTelemetry } from './observer-webview-telemetry';
+import {
+	forceTerminateProcess,
+	gracefullyTerminateProcess,
+	inspectListeningProcess,
+	isObserverExecutablePath,
+	processIsRunning,
+	processExecutablePathsEqual,
+	readListeningProcess,
+	readProcessExecutablePath,
+} from './process-control';
 import {
 	authorizeWithSISCIMD,
 	computeSISCIMDSessionStatus,
@@ -138,11 +138,8 @@ const splunkCloudConnectionStore = new SplunkCloudConnectionStore();
 const splunkCloudExportPreferenceStore = new SplunkCloudExportPreferenceStore();
 let observerStatusBarItem: vscode.StatusBarItem | undefined;
 let observerUsesSharedServer = false;
-let observerSharedControlToken: string | undefined;
-let observerSharedHealthProofSecret: string | undefined;
 let observerWebviewRootUri: vscode.Uri | undefined;
 let observerPanelTelemetry: ObserverWebviewTelemetry | undefined;
-let activeExtensionContext: vscode.ExtensionContext | undefined;
 let observerDeactivationStarted = false;
 const observerHostRequestCancellations = new Map<string, () => void>();
 let sisCIMDOAuthFlowPromise: Promise<boolean> | undefined;
@@ -160,6 +157,7 @@ const observerLifecycleState = createObserverLifecycleState();
 let lastObserverPanelRenderKey: string | undefined;
 
 const observerPanelViewType = 'observabilityStudioObserver';
+const observerPanelTitle = 'Splunk Observability Studio – Telemetry Explorer';
 const sharedObserverUrlSetting = 'sharedObserverUrl';
 const managedObserverPortSetting = 'managedObserverPort';
 const sisCimdRegistrationEnabledSetting = 'sisCimdRegistrationEnabled';
@@ -175,17 +173,19 @@ const sisCimdOAuthDefaultIssuer = 'https://127.0.0.1:9090/test-tenant/sis/v1/rg/
 const sisCimdOAuthDefaultClientId = 'https://127.0.0.1:9192/oauth/client-metadata.json';
 const managedObserverHost = '127.0.0.1';
 const defaultManagedObserverPort = 3000;
+const managedObserverStateFileName = 'managed-control.json';
 const observerKind = 'obstudio';
 const observerAPIVersion = 'v1';
-let managedObserverControlToken = '';
-let managedObserverHealthProofSecret = '';
+const extensionManagedObserverOwner = 'vscode-extension';
+const extensionManagedObserverMode = 'managed';
 const sharedObserverStartupWindowMs = 15_000;
 const observerCloudRequestTimeoutMs = 15_000;
 const observerCloudRollbackTokenHeader = 'X-Obstudio-Cloud-Rollback-Token';
-const observerShutdownPreferenceCaptureTimeoutMs = 500;
 const observerShutdownTerminationTimeoutMs = 2_000;
 const observerShutdownPostExitDelayMs = 300;
 const observerExtensionUnloadDeadlineMs = 4_500;
+const outdatedManagedObserverShutdownTimeoutMs = 5_000;
+const outdatedManagedObserverForceShutdownTimeoutMs = 2_000;
 const agentIntegrationPromptDismissedPrefix = 'agentIntegrationPromptDismissed.';
 const agentSkillsBundleVersionPrefix = 'agentSkillsBundleVersion.';
 const agentIntegrationConfigFingerprintPrefix = 'agentIntegrationConfigFingerprint.v1.';
@@ -194,10 +194,12 @@ const freeAccountRequestTimeoutMs = 30_000;
 
 // The extension exposes a stable OTLP endpoint so instrumented apps can target a
 // predictable localhost port.
-const observerOtlpHttpPort = 4318;
-const observerOtlpGrpcPort = 4317;
-const observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHttpPort}`;
-const observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
+const defaultObserverOtlpHttpPort = 4318;
+const defaultObserverOtlpGrpcPort = 4317;
+let observerOtlpHttpPort = defaultObserverOtlpHttpPort;
+let observerOtlpGrpcPort = defaultObserverOtlpGrpcPort;
+let observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHttpPort}`;
+let observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
 const splunkFreeEditionUrl = 'https://www.splunk.com/en_us/download/observability-cloud-free-edition.html';
 const splunkFreeEditionTermsUrl = 'https://www.splunk.com/en_us/legal/splunk-observability-free-edition-terms.html';
 const splunkRealmHelpUrl = 'https://help.splunk.com/en/splunk-observability-cloud/administer/org-reference-info/view-your-realm-api-endpoints-and-organization';
@@ -210,6 +212,7 @@ type InternalRuntimeState = {
 	observerPort?: number;
 	observerUrl?: string;
 	panelHtml?: string;
+	panelTitle?: string;
 	panelVisible: boolean;
 	sharedMode: boolean;
 	statusBarCommand?: string;
@@ -282,6 +285,25 @@ function sharedDiscoveryMatchesRestBase(
 		&& discovered.pathname === intended.pathname;
 }
 
+function readManagedObserverDiscovery(): SharedObserverDiscovery | undefined {
+	const homeDir = os.homedir();
+	return readSharedObserverDiscovery(
+		homeDir,
+		path.join(homeDir, '.obstudio', managedObserverStateFileName),
+	);
+}
+
+function preferredObserverDiscoveryForBase(
+	restBaseUrl: string,
+	...discoveries: Array<SharedObserverDiscovery | undefined>
+): SharedObserverDiscovery | undefined {
+	const matching = discoveries.filter(
+		(discovery): discovery is SharedObserverDiscovery => discovery !== undefined
+			&& sharedDiscoveryMatchesRestBase(discovery, restBaseUrl),
+	);
+	return matching[0];
+}
+
 function setObserverEndpoints(endpoints: ObserverEndpointRoles | undefined): void {
 	observerEndpoints = endpoints;
 	observerBaseUrl = endpoints?.restBaseUrl;
@@ -289,17 +311,12 @@ function setObserverEndpoints(endpoints: ObserverEndpointRoles | undefined): voi
 
 type ObserverProbeOptions = {
 	requireStableOtlp: boolean;
-	sharedDiscovery?: SharedObserverDiscovery;
-	rejectedControlToken?: string;
 };
 
 type ObserverProbeResult =
 	| {
 		health: ObserverHealth;
 		status: 'ready';
-		verifiedControlToken?: string;
-		verifiedHealthProofSecret?: string;
-		verifiedMCPUrl?: string;
 	}
 	| { error: Error; status: 'unavailable' }
 	| { reason: string; status: 'mismatch' };
@@ -312,7 +329,40 @@ type PortReservation = {
 
 type StartupHintCarrier = {
 	startupHint?: string;
+	startupTitle?: string;
 };
+
+type ManagedPortObserverRetirement =
+	| { status: 'ignored' }
+	| { status: 'not-applicable' }
+	| { pid?: number; port?: number; status: 'restart-required'; version?: string }
+	| { status: 'retired' };
+
+function observerRestartRequiredError(
+	retirement: Extract<ManagedPortObserverRetirement, { status: 'restart-required' }>,
+	bundleVersion: string,
+): Error {
+	const portLabel = retirement.port === undefined
+		? 'an unknown localhost port'
+		: `localhost port ${retirement.port}`;
+	const pidLabel = retirement.pid === undefined
+		? 'PID unavailable'
+		: `PID ${retirement.pid}`;
+	const restartMessage = retirement.version === undefined
+		? `Splunk Observability Studio on ${portLabel} (${pidLabel}) could not be verified as bundled version ${bundleVersion}. `
+			+ 'Cloud controls are unavailable until it is stopped.'
+		: `Splunk Observability Studio ${retirement.version} on ${portLabel} (${pidLabel}) does not match bundled version ${bundleVersion}. `
+			+ 'Cloud controls are unavailable until it is stopped.';
+	const restartError = new Error(restartMessage);
+	Object.assign(restartError, {
+		startupHint: 'Restart VS Code, then run Splunk Observability Studio: Start. '
+			+ (retirement.pid === undefined
+				? 'If it remains running, stop Splunk Observability Studio on the displayed port and retry.'
+				: 'If it remains running, stop the displayed PID and retry.'),
+		startupTitle: 'Restart required',
+	});
+	return restartError;
+}
 
 const agentIntegrationSpecs: AgentIntegrationSpec[] = [
 	{
@@ -353,18 +403,17 @@ const agentIntegrationSpecs: AgentIntegrationSpec[] = [
 ];
 
 export async function activate(context: vscode.ExtensionContext) {
-	activeExtensionContext = context;
 	observerDeactivationStarted = false;
 	observerOutputChannel = vscode.window.createOutputChannel('Splunk Observability Studio');
 	context.subscriptions.push(observerOutputChannel);
-	logObserverLifecycle('Extension activated.');
+	logObserverLifecycle(`Extension ${getBundleVersion(context)} activated.`);
 
 	context.subscriptions.push(
 		vscode.window.registerWebviewPanelSerializer(observerPanelViewType, {
 			async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel) {
 				observerPanel = webviewPanel;
 				configureObserverPanel(webviewPanel, context);
-				logObserverLifecycle('Restored observer webview panel.');
+				logObserverLifecycle('Restored Splunk Observability Studio webview panel.');
 				webviewPanel.webview.html = getObserverLoadingWebviewHtml();
 				try {
 					await ensureObserverRunning(context);
@@ -384,7 +433,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		void enqueueObserverConfigurationRestart(context).catch((error) => {
-			logObserverLifecycle(`Observer configuration restart failed: ${getErrorMessage(error)}`);
+			logObserverLifecycle(`Splunk Observability Studio configuration restart failed: ${getErrorMessage(error)}`);
 		});
 	}));
 
@@ -401,7 +450,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		const message = getErrorMessage(error);
-		appendObserverOutputLine(`Observer startup failed: ${message}`);
+		appendObserverOutputLine(`Splunk Observability Studio startup failed: ${message}`);
 		void vscode.window.showErrorMessage(`Splunk Observability Studio could not start: ${message}`);
 	});
 	void ensureObserverRunning(context)
@@ -413,23 +462,24 @@ export async function activate(context: vscode.ExtensionContext) {
 			logObserverLifecycle(`Skipping automatic agent integration prompt: ${getErrorMessage(error)}`);
 		});
 
-	const openObserverDisposable = vscode.commands.registerCommand('observability-studio.openObserver', () => {
-		openObserverPanel(context);
+	const openObserverDisposable = vscode.commands.registerCommand('observability-studio.openObserver', async () => {
+		await settleObserverConfigurationRestart();
+		await openObserverPanel(context);
 	});
 
 	const statusMenuDisposable = vscode.commands.registerCommand('observability-studio.statusMenu', async () => {
 		if (observerLifecycleState.status === 'running') {
 			const pick = await vscode.window.showQuickPick(
 				[
-					{ label: '$(window) Open Observer', id: 'open' },
-					{ label: '$(debug-restart) Restart Observer', id: 'restart' },
-					{ label: '$(debug-stop) Stop Observer', id: 'stop' },
+					{ label: '$(window) Open', id: 'open' },
+					{ label: '$(debug-restart) Restart', id: 'restart' },
+					{ label: '$(debug-stop) Stop', id: 'stop' },
 					{ label: '$(output) Show Output Log', id: 'log' },
 				],
 				{
 					placeHolder: observerUsesSharedServer
-						? `Observer is reusing ${observerBaseUrl ?? 'a shared backend'}`
-						: `Observer is running at ${observerBaseUrl ?? `http://${managedObserverHost}:${observerLifecycleState.port ?? '?'}`}`,
+						? `Splunk Observability Studio is reusing ${observerBaseUrl ?? 'a shared backend'}`
+						: `Splunk Observability Studio is running at ${observerBaseUrl ?? `http://${managedObserverHost}:${observerLifecycleState.port ?? '?'}`}`,
 				},
 			);
 			if (pick?.id === 'open') {
@@ -444,11 +494,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		} else if (observerLifecycleState.status === 'starting') {
 			const pick = await vscode.window.showQuickPick(
 				[
-					{ label: '$(debug-stop) Stop Observer', id: 'stop' },
-					{ label: '$(debug-restart) Restart Observer', id: 'restart' },
+					{ label: '$(debug-stop) Stop', id: 'stop' },
+					{ label: '$(debug-restart) Restart', id: 'restart' },
 					{ label: '$(output) Show Output Log', id: 'log' },
 				],
-				{ placeHolder: 'Observer is starting...' },
+				{ placeHolder: 'Splunk Observability Studio is starting...' },
 			);
 			if (pick?.id === 'stop') {
 				void vscode.commands.executeCommand('observability-studio.stopObserver');
@@ -460,13 +510,13 @@ export async function activate(context: vscode.ExtensionContext) {
 		} else {
 			const pick = await vscode.window.showQuickPick(
 				[
-					{ label: '$(play) Start Observer', id: 'start' },
+					{ label: '$(play) Start', id: 'start' },
 					{ label: '$(output) Show Output Log', id: 'log' },
 				],
 				{
 					placeHolder: observerLifecycleState.startupError
-						? `Observer failed: ${observerLifecycleState.startupError}`
-						: 'Observer is stopped',
+						? `Splunk Observability Studio failed: ${observerLifecycleState.startupError}`
+						: 'Splunk Observability Studio is stopped',
 				},
 			);
 			if (pick?.id === 'start') {
@@ -478,11 +528,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	const startDisposable = vscode.commands.registerCommand('observability-studio.startObserver', async () => {
+		await settleObserverConfigurationRestart();
 		if (observerLifecycleState.status === 'running') {
-			void vscode.window.showInformationMessage('Observer is already running.');
+			void vscode.window.showInformationMessage('Splunk Observability Studio is already running.');
 		}
 		if (observerLifecycleState.status === 'starting') {
-			void vscode.window.showInformationMessage('Observer is already starting.');
+			void vscode.window.showInformationMessage('Splunk Observability Studio is already starting.');
 		}
 		try {
 			await ensureObserverRunning(context);
@@ -500,20 +551,23 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	const stopDisposable = vscode.commands.registerCommand('observability-studio.stopObserver', async () => {
+		await settleObserverConfigurationRestart();
 		if (
 			observerProcess === undefined
 			&& observerStartupPromise === undefined
 			&& observerBaseUrl === undefined
+			&& observerLifecycleState.status === 'stopped'
 		) {
-			void vscode.window.showInformationMessage('Observer is not running.');
+			void vscode.window.showInformationMessage('Splunk Observability Studio is not running.');
 			return;
 		}
-		await stopObserver(context);
-		void vscode.window.showInformationMessage('Observer stopped.');
+		await stopObserver();
+		void vscode.window.showInformationMessage('Splunk Observability Studio stopped.');
 	});
 
 	const restartDisposable = vscode.commands.registerCommand('observability-studio.restartObserver', async () => {
-		await stopObserver(context);
+		await settleObserverConfigurationRestart();
+		await stopObserver();
 		try {
 			await ensureObserverRunning(context);
 			refreshObserverPanel();
@@ -608,6 +662,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			observerPort: observerLifecycleState.port,
 			observerUrl: observerBaseUrl,
 			panelHtml: observerPanel?.webview.html,
+			panelTitle: observerPanel?.title,
 			panelVisible: observerPanel !== undefined,
 			sharedMode: observerUsesSharedServer,
 			statusBarCommand: getStatusBarCommandId(observerStatusBarItem),
@@ -618,6 +673,50 @@ export async function activate(context: vscode.ExtensionContext) {
 				: buildObserverValidatorSummaryUrl(observerBaseUrl),
 		}),
 	);
+	const internalTestDisposables = context.extensionMode === vscode.ExtensionMode.Test
+		? [
+			vscode.commands.registerCommand(
+				'observability-studio.internal.createFreeAccountForTest',
+				() => performCloudBridgeAction(context, {
+					action: 'create-free-account',
+					payload: {
+						email: 'ada@example.com',
+						firstName: 'Ada',
+						lastName: 'Lovelace',
+						region: 'us',
+						termsAccepted: true,
+					},
+				}),
+			),
+			vscode.commands.registerCommand(
+				'observability-studio.internal.resolveCloudRealmForTest',
+				() => performCloudBridgeAction(context, {
+					action: 'resolve-realm',
+					payload: { destination: 'https://app.us1.signalfx.com' },
+				}),
+			),
+			vscode.commands.registerCommand(
+				'observability-studio.internal.setObserverOtlpPortsForTest',
+				(value?: { grpc?: unknown; http?: unknown }) => {
+					if (observerLifecycleState.status !== 'stopped' || observerStartupPromise !== undefined) {
+						throw new Error(
+							'Splunk Observability Studio must be stopped before changing test OTLP ports '
+							+ `(status=${observerLifecycleState.status}, startup=${observerStartupPromise === undefined ? 'idle' : 'active'}).`,
+						);
+					}
+					const nextHttpPort = parseInternalTestPort(value?.http, defaultObserverOtlpHttpPort);
+					const nextGrpcPort = parseInternalTestPort(value?.grpc, defaultObserverOtlpGrpcPort);
+					if (nextHttpPort === nextGrpcPort) {
+						throw new Error('Splunk Observability Studio test OTLP ports must be distinct.');
+					}
+					observerOtlpHttpPort = nextHttpPort;
+					observerOtlpGrpcPort = nextGrpcPort;
+					observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHttpPort}`;
+					observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
+				},
+			),
+		]
+		: [];
 
 	context.subscriptions.push(openObserverDisposable);
 	context.subscriptions.push(statusMenuDisposable);
@@ -636,6 +735,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(internalResetAgentIntegrationPromptStateDisposable);
 	context.subscriptions.push(internalWaitForAgentIntegrationRefreshDisposable);
 	context.subscriptions.push(internalStateDisposable);
+	context.subscriptions.push(...internalTestDisposables);
 	context.subscriptions.push(observerStatusBarItem);
 	context.subscriptions.push({
 		dispose: () => {
@@ -648,11 +748,7 @@ export async function activate(context: vscode.ExtensionContext) {
 export async function deactivate(): Promise<void> {
 	observerDeactivationStarted = true;
 	sisCIMDOAuthAbortController?.abort();
-	try {
-		await shutdownObserverForExtensionUnload(activeExtensionContext, 'Extension deactivated');
-	} finally {
-		activeExtensionContext = undefined;
-	}
+	await shutdownObserverForExtensionUnload('Extension deactivated');
 }
 
 function isSISCIMDRegistrationEnabled(): boolean {
@@ -793,7 +889,7 @@ async function clearSISSession(context: vscode.ExtensionContext): Promise<boolea
 }
 
 // ---------------------------------------------------------------------------
-// Observer process lifecycle
+// Splunk Observability Studio process lifecycle
 // ---------------------------------------------------------------------------
 
 async function ensureObserverRunning(context: vscode.ExtensionContext): Promise<void> {
@@ -802,16 +898,16 @@ async function ensureObserverRunning(context: vscode.ExtensionContext): Promise<
 		return observerStartupPromise;
 	}
 	if (observerStopOperation.current !== undefined) {
-		logObserverLifecycle('Start requested while stop is in progress; waiting for observer shutdown.');
+		logObserverLifecycle('Start requested while stop is in progress; waiting for Splunk Observability Studio shutdown.');
 		await observerStopOperation.current;
 	}
 	if (observerLifecycleState.status === 'running' && observerBaseUrl !== undefined) {
-		logObserverLifecycle(`Start requested while observer is already running at ${observerBaseUrl}.`);
+		logObserverLifecycle(`Start requested while Splunk Observability Studio is already running at ${observerBaseUrl}.`);
 		return;
 	}
 
 	if (observerOutputChannel === undefined) {
-		throw new Error('Observer output channel is not initialized.');
+		throw new Error('Splunk Observability Studio output channel is not initialized.');
 	}
 
 	return startObserver(context);
@@ -828,49 +924,50 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 	const runId = beginObserverStart(observerLifecycleState);
 	let startedProcess: cp.ChildProcess | undefined;
 
-	logObserverLifecycle(`Starting observer run ${runId}.`);
+	logObserverLifecycle(`Starting Splunk Observability Studio run ${runId}.`);
 	syncObserverUi();
 
 	const startupPromise = (async () => {
 		if (observerOutputChannel === undefined) {
-			throw new Error('Observer output channel is not initialized.');
+			throw new Error('Splunk Observability Studio output channel is not initialized.');
 		}
+		const bundleVersion = getBundleVersion(context);
+		const discoveredState = readSharedObserverDiscovery(
+			os.homedir(),
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
+		);
+		const managedState = readManagedObserverDiscovery();
 
 		const sharedObserverUrl = getConfiguredSharedObserverUrl();
 		if (sharedObserverUrl !== undefined) {
 			observerUsesSharedServer = true;
-			appendObserverOutputLine(`Using configured shared observer at ${sharedObserverUrl}`);
-			const discoveredState = readSharedObserverDiscovery(
-				os.homedir(),
-				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
+			appendObserverOutputLine(`Using configured shared Splunk Observability Studio service at ${sharedObserverUrl}`);
+			const configuredDiscovery = preferredObserverDiscoveryForBase(
+				sharedObserverUrl,
+				discoveredState,
+				managedState,
 			);
-			const configuredDiscovery = discoveredState !== undefined
-				&& sharedDiscoveryMatchesRestBase(discoveredState, sharedObserverUrl)
-				? discoveredState
-				: undefined;
 			const configuredEndpoints = configuredDiscovery === undefined
 				? observerEndpointRolesForBase(sharedObserverUrl)
 				: observerEndpointRolesForDiscovery(configuredDiscovery, sharedObserverUrl);
 			setObserverEndpoints(configuredEndpoints);
 			syncObserverUi();
-			const readyProbe = await waitForObserverReady(configuredEndpoints, {
-				requireStableOtlp: false,
-				...(configuredDiscovery === undefined ? {} : { sharedDiscovery: configuredDiscovery }),
-			}, runId);
-			if (readyProbe.verifiedControlToken !== undefined) {
-				adoptVerifiedObserverMCPEndpoint(readyProbe);
-			}
-			const environmentControl = readyProbe.verifiedControlToken === undefined
-				? await verifyEnvironmentControlToken(configuredEndpoints)
-				: undefined;
-			observerSharedControlToken = readyProbe.verifiedControlToken
-				?? environmentControl?.controlToken
-				?? '';
-			observerSharedHealthProofSecret = readyProbe.verifiedHealthProofSecret
-				?? environmentControl?.healthProofSecret;
+			const configuredProbe = await waitForObserverReady(
+				configuredEndpoints,
+				{ requireStableOtlp: false },
+				runId,
+			);
 			const sharedPort = observerPortFromUrl(configuredEndpoints.restBaseUrl);
 			if (sharedPort === undefined) {
-				throw new Error(`Observer URL does not resolve to a usable port: ${sharedObserverUrl}`);
+				throw new Error(`Splunk Observability Studio URL does not resolve to a usable port: ${sharedObserverUrl}`);
+			}
+			if (configuredProbe.health.version !== bundleVersion) {
+				throw observerRestartRequiredError({
+					pid: configuredDiscovery?.pid,
+					port: sharedPort,
+					status: 'restart-required',
+					version: configuredProbe.health.version,
+				}, bundleVersion);
 			}
 			if (completeObserverStart(observerLifecycleState, runId, sharedPort)) {
 				syncObserverUi();
@@ -878,19 +975,19 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			return;
 		}
 
-		const discoveredObserver = readSharedObserverDiscovery(
-			os.homedir(),
-			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
-		);
+		const discoveredObserver = discoveredState === undefined
+			? undefined
+			: preferredObserverDiscoveryForBase(
+				discoveredState.baseUrl,
+				discoveredState,
+				managedState,
+			);
 		if (discoveredObserver !== undefined) {
 			const discoveredEndpoints = observerEndpointRolesForDiscovery(discoveredObserver);
 			let discoveryProbe = await probeObserver(
 				discoveredEndpoints,
 				500,
-				{
-					requireStableOtlp: true,
-					sharedDiscovery: discoveredObserver,
-				},
+				{ requireStableOtlp: true },
 			);
 			assertObserverRunCurrent(observerLifecycleState, runId);
 			while (
@@ -904,25 +1001,33 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				discoveryProbe = await probeObserver(
 					discoveredEndpoints,
 					500,
-					{
-						requireStableOtlp: true,
-						sharedDiscovery: discoveredObserver,
-					},
+					{ requireStableOtlp: true },
 				);
 				assertObserverRunCurrent(observerLifecycleState, runId);
 			}
+			const retirement = await retireMismatchedManagedPortObserver(
+				discoveredObserver,
+				discoveryProbe.status === 'ready' ? discoveryProbe.health : undefined,
+				getConfiguredManagedObserverPort(),
+				bundleVersion,
+			);
+			assertObserverRunCurrent(observerLifecycleState, runId);
+			if (retirement.status === 'restart-required') {
+				throw observerRestartRequiredError(retirement, bundleVersion);
+			}
 			let discoveryDetail: string;
-			if (discoveryProbe.status === 'ready') {
+			if (retirement.status === 'retired') {
+				discoveryDetail = 'the mismatched Splunk Observability Studio service on the managed port was stopped';
+			} else if (retirement.status === 'ignored') {
+				discoveryDetail = `Splunk Observability Studio ${discoveryProbe.status === 'ready'
+					? discoveryProbe.health.version || '(unversioned)'
+					: '(unversioned)'} does not match bundled version ${bundleVersion}`;
+			} else if (discoveryProbe.status === 'ready') {
 				setObserverEndpoints(discoveredEndpoints);
-				if (discoveryProbe.verifiedControlToken !== undefined) {
-					adoptVerifiedObserverMCPEndpoint(discoveryProbe);
-				}
 				const discoveredPort = observerPortFromUrl(discoveredEndpoints.restBaseUrl);
 				if (discoveredPort !== undefined) {
 					observerUsesSharedServer = true;
-					observerSharedControlToken = discoveryProbe.verifiedControlToken ?? '';
-					observerSharedHealthProofSecret = discoveryProbe.verifiedHealthProofSecret;
-					appendObserverOutputLine(`Reusing discovered shared observer at ${discoveredObserver.baseUrl}`);
+					appendObserverOutputLine(`Reusing discovered shared Splunk Observability Studio service at ${discoveredObserver.baseUrl}`);
 					if (completeObserverStart(observerLifecycleState, runId, discoveredPort)) {
 						syncObserverUi();
 					}
@@ -935,38 +1040,114 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				discoveryDetail = getErrorMessage(discoveryProbe.error);
 			}
 			appendObserverOutputLine(
-				`Ignoring stale or incompatible shared observer state for ${discoveredObserver.baseUrl}: ${discoveryDetail}`,
+				`Ignoring stale or incompatible shared Splunk Observability Studio state for ${discoveredObserver.baseUrl}: ${discoveryDetail}`,
 			);
 		}
 
 		const managedPort = getConfiguredManagedObserverPort();
 		const managedObserverBaseUrl = buildManagedObserverBaseUrl(managedPort);
 		const managedEndpoints = observerEndpointRolesForBase(managedObserverBaseUrl);
+		const managedDiscovery = managedState;
+		if (
+			managedDiscovery !== undefined
+			&& sharedDiscoveryMatchesRestBase(managedDiscovery, managedObserverBaseUrl)
+		) {
+			const managedObserverEndpoints = observerEndpointRolesForDiscovery(
+				managedDiscovery,
+				managedObserverBaseUrl,
+			);
+			const managedProbe = await probeObserver(
+				managedObserverEndpoints,
+				500,
+				{ requireStableOtlp: true },
+			);
+			assertObserverRunCurrent(observerLifecycleState, runId);
+			if (managedProbe.status === 'ready') {
+				const retirement = await retireMismatchedManagedPortObserver(
+					managedDiscovery,
+					managedProbe.health,
+					managedPort,
+					bundleVersion,
+				);
+				assertObserverRunCurrent(observerLifecycleState, runId);
+				if (retirement.status === 'restart-required') {
+					throw observerRestartRequiredError(retirement, bundleVersion);
+				}
+				if (retirement.status === 'not-applicable') {
+					setObserverEndpoints(managedObserverEndpoints);
+					observerUsesSharedServer = true;
+					appendObserverOutputLine(
+						`Reusing Splunk Observability Studio at ${managedObserverEndpoints.restBaseUrl}`,
+					);
+					if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
+						syncObserverUi();
+					}
+					return;
+				}
+				appendObserverOutputLine(
+					`The previous Splunk Observability Studio service at ${managedObserverEndpoints.restBaseUrl} was stopped before managed startup.`,
+				);
+			} else {
+				const managedDetail = managedProbe.status === 'mismatch'
+					? managedProbe.reason
+					: getErrorMessage(managedProbe.error);
+				appendObserverOutputLine(
+					`Ignoring stale or incompatible Splunk Observability Studio state for ${managedObserverBaseUrl}: ${managedDetail}`,
+				);
+			}
+		}
 		const existingObserver = await probeObserver(managedEndpoints, 500, { requireStableOtlp: true });
 		assertObserverRunCurrent(observerLifecycleState, runId);
 
 		if (existingObserver.status === 'ready') {
-			observerUsesSharedServer = true;
-			observerSharedControlToken = '';
-			observerSharedHealthProofSecret = undefined;
-			setObserverEndpoints(managedEndpoints);
-			appendObserverOutputLine(`Reusing shared observer at ${managedObserverBaseUrl}`);
-			if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
-				syncObserverUi();
+			if (existingObserver.health.version === bundleVersion) {
+				observerUsesSharedServer = true;
+				setObserverEndpoints(managedEndpoints);
+				appendObserverOutputLine(`Reusing shared Splunk Observability Studio service at ${managedObserverBaseUrl}`);
+				if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
+					syncObserverUi();
+				}
+				return;
 			}
-			return;
+			const retirement = await retireMismatchedManagedPortObserver(
+				{
+					baseUrl: managedObserverBaseUrl,
+					healthUrl: managedEndpoints.healthUrl,
+					mcpUrl: managedEndpoints.mcpUrl,
+				},
+				existingObserver.health,
+				managedPort,
+				bundleVersion,
+			);
+			assertObserverRunCurrent(observerLifecycleState, runId);
+			if (retirement.status === 'restart-required') {
+				throw observerRestartRequiredError(retirement, bundleVersion);
+			}
+			if (retirement.status === 'not-applicable') {
+				observerUsesSharedServer = true;
+				setObserverEndpoints(managedEndpoints);
+				appendObserverOutputLine(`Reusing Splunk Observability Studio at ${managedObserverBaseUrl}`);
+				if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
+					syncObserverUi();
+				}
+				return;
+			}
+			if (retirement.status !== 'retired') {
+				throw observerRestartRequiredError({
+					port: managedPort,
+					status: 'restart-required',
+					version: existingObserver.health.version,
+				}, bundleVersion);
+			}
+			appendObserverOutputLine(
+				`The previous Splunk Observability Studio service at ${managedObserverBaseUrl} was stopped before managed startup.`,
+			);
 		}
 
 		if (existingObserver.status === 'mismatch') {
-			appendObserverOutputLine(`Observer health probe mismatch at ${managedObserverBaseUrl}: ${existingObserver.reason}`);
-			logObserverLifecycle(`Run ${runId}: existing service on ${managedObserverBaseUrl} did not match observer health: ${existingObserver.reason}`);
-			const wrappedError = new Error(
-				`Cannot use ${managedObserverBaseUrl}: ${formatObserverProbeMismatchMessage(managedObserverBaseUrl, 'managed-reuse')} ` +
-				`Stop the conflicting service or configure observability-studio.${managedObserverPortSetting} ` +
-				`or observability-studio.${sharedObserverUrlSetting}.`,
-			);
-			Object.assign(wrappedError, { startupHint: getObserverProbeMismatchHint('managed-reuse') });
-			throw wrappedError;
+			appendObserverOutputLine(`Splunk Observability Studio health probe mismatch at ${managedObserverBaseUrl}: ${existingObserver.reason}`);
+			logObserverLifecycle(`Run ${runId}: existing service on ${managedObserverBaseUrl} did not match Splunk Observability Studio health: ${existingObserver.reason}`);
+			logObserverLifecycle(`Run ${runId}: checking whether managed port ${managedPort} remains occupied.`);
 		}
 
 		const backend = resolveBackend(context.extensionPath);
@@ -974,7 +1155,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		try {
 			observerPort = await ensurePortAvailable({
 				port: managedPort,
-				role: 'Observer UI',
+				role: 'Splunk Observability Studio UI',
 				settingName: managedObserverPortSetting,
 			});
 		} catch (error) {
@@ -1003,44 +1184,38 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		assertObserverRunCurrent(observerLifecycleState, runId);
 		logObserverLifecycle(`Run ${runId}: OTLP ports ready (HTTP ${otlpHttpPort}, gRPC ${otlpGrpcPort}).`);
 		observerUsesSharedServer = false;
-		observerSharedControlToken = undefined;
-		observerSharedHealthProofSecret = undefined;
-		managedObserverControlToken = '';
-		managedObserverHealthProofSecret = '';
 		setObserverEndpoints(managedEndpoints);
 
 		appendObserverOutputLine(`Starting ${backend.label} on ${managedObserverBaseUrl}`);
 		appendObserverOutputLine(`OTLP/HTTP receiver listening on ${observerOtlpHttpEndpoint}`);
 		appendObserverOutputLine(`OTLP/gRPC receiver listening on ${observerOtlpGrpcEndpoint}`);
-		const managedObserverEnvironment = { ...process.env };
-		const managedLaunchControlToken = crypto.randomBytes(32).toString('base64url');
-		const managedLaunchHealthProofSecret = crypto.randomBytes(32).toString('base64url');
+		const managedObserverEnvironment: NodeJS.ProcessEnv = {
+			...process.env,
+			...backend.env,
+			HOST: managedObserverHost,
+			OTLP_HOST: managedObserverHost,
+			OTLP_PORT: String(otlpHttpPort),
+			OTLP_HTTP_PORT: String(otlpHttpPort),
+			OTLP_GRPC_PORT: String(otlpGrpcPort),
+			PORT: String(observerPort),
+			OBSTUDIO_OWNER: extensionManagedObserverOwner,
+			OBSTUDIO_MODE: extensionManagedObserverMode,
+			// Pass the workspace root so the preview resolver locates
+			// .observe/dashboards.preview.json relative to the open
+			// workspace rather than the binary's install directory.
+			...(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+				? { OBSTUDIO_WORKSPACE_ROOT: vscode.workspace.workspaceFolders[0].uri.fsPath }
+				: {}),
+		};
+		// Never pass obsolete remote-control credentials or public endpoints to
+		// the loopback-only Splunk Observability Studio, even if VS Code inherited them.
 		delete managedObserverEnvironment.OBSTUDIO_CONTROL_TOKEN;
 		delete managedObserverEnvironment.OBSTUDIO_HEALTH_PROOF_SECRET;
 		delete managedObserverEnvironment.OBSTUDIO_PUBLIC_MCP_URL;
-
 		try {
 			startedProcess = cp.spawn(backend.command, backend.args, {
 				cwd: backend.cwd,
-				env: {
-					...managedObserverEnvironment,
-					...backend.env,
-					HOST: managedObserverHost,
-					OTLP_HOST: managedObserverHost,
-					OTLP_PORT: String(otlpHttpPort),
-					OTLP_HTTP_PORT: String(otlpHttpPort),
-					OTLP_GRPC_PORT: String(otlpGrpcPort),
-					PORT: String(observerPort),
-					OBSTUDIO_CONTROL_TOKEN: managedLaunchControlToken,
-					OBSTUDIO_HEALTH_PROOF_SECRET: managedLaunchHealthProofSecret,
-					OBSTUDIO_HIDE_CLOUD_BROWSER_LAUNCH_TOKEN: 'true',
-					// Pass the workspace root so the preview resolver locates
-					// .observe/dashboards.preview.json relative to the open
-					// workspace rather than the binary's install directory.
-					...(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-						? { OBSTUDIO_WORKSPACE_ROOT: vscode.workspace.workspaceFolders[0].uri.fsPath }
-						: {}),
-				},
+				env: managedObserverEnvironment,
 				stdio: ['ignore', 'pipe', 'pipe'],
 			});
 		} catch (error) {
@@ -1054,7 +1229,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			throw wrappedError;
 		}
 		assertObserverRunCurrent(observerLifecycleState, runId);
-		logObserverLifecycle(`Run ${runId}: spawned observer PID ${startedProcess.pid ?? 'unknown'}.`);
+		logObserverLifecycle(`Run ${runId}: spawned Splunk Observability Studio PID ${startedProcess.pid ?? 'unknown'}.`);
 
 		observerProcess = startedProcess;
 
@@ -1067,18 +1242,14 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		});
 
 		startedProcess.on('exit', (code, signal) => {
-			appendObserverOutputLine(`Observer exited with code=${code ?? 'null'} signal=${signal ?? 'null'}`);
-			logObserverLifecycle(`Run ${runId}: observer process exited with code=${code ?? 'null'} signal=${signal ?? 'null'}.`);
+			appendObserverOutputLine(`Splunk Observability Studio exited with code=${code ?? 'null'} signal=${signal ?? 'null'}`);
+			logObserverLifecycle(`Run ${runId}: Splunk Observability Studio process exited with code=${code ?? 'null'} signal=${signal ?? 'null'}.`);
 			if (observerProcess === startedProcess) {
 				observerProcess = undefined;
 			}
 			if (finishObserverRun(observerLifecycleState, runId)) {
 				setObserverEndpoints(undefined);
 				observerUsesSharedServer = false;
-				observerSharedControlToken = undefined;
-				observerSharedHealthProofSecret = undefined;
-				managedObserverControlToken = '';
-				managedObserverHealthProofSecret = '';
 				syncObserverUi();
 			}
 		});
@@ -1090,48 +1261,27 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				platform: process.platform,
 			});
 			const startupMessage = startupFailure.message;
-			appendObserverOutputLine(`Failed to start observer: ${startupMessage}`);
-			logObserverLifecycle(`Run ${runId}: observer process error: ${startupMessage}`);
+			appendObserverOutputLine(`Failed to start Splunk Observability Studio: ${startupMessage}`);
+			logObserverLifecycle(`Run ${runId}: Splunk Observability Studio process error: ${startupMessage}`);
 			if (observerProcess === startedProcess) {
 				observerProcess = undefined;
 			}
 			if (failObserverStart(observerLifecycleState, runId, startupMessage, startupFailure.hint)) {
 				setObserverEndpoints(undefined);
 				observerUsesSharedServer = false;
-				observerSharedControlToken = undefined;
-				observerSharedHealthProofSecret = undefined;
-				managedObserverControlToken = '';
-				managedObserverHealthProofSecret = '';
 				syncObserverUi();
-				void vscode.window.showErrorMessage(`Splunk Observability Studio failed to start observer: ${startupMessage}`);
+				void vscode.window.showErrorMessage(`Splunk Observability Studio could not start: ${startupMessage}`);
 			}
 		});
 
-		await waitForObserverReady(managedEndpoints, { requireStableOtlp: true }, runId);
-		const managedLaunchDiscovery: SharedObserverDiscovery = {
-			baseUrl: managedEndpoints.restBaseUrl,
-			controlToken: managedLaunchControlToken,
-			healthProofSecret: managedLaunchHealthProofSecret,
-			healthUrl: managedEndpoints.healthUrl,
-			mcpUrl: managedEndpoints.mcpUrl,
-		};
-		const managedProof = await probeObserver(managedEndpoints, 500, {
-			requireStableOtlp: true,
-			sharedDiscovery: managedLaunchDiscovery,
-		});
-		managedObserverControlToken = managedProof.status === 'ready'
-			? managedProof.verifiedControlToken ?? ''
-			: '';
-		managedObserverHealthProofSecret = managedProof.status === 'ready'
-			? managedProof.verifiedHealthProofSecret ?? ''
-			: '';
-		if (managedProof.status === 'ready' && managedProof.verifiedControlToken !== undefined) {
-			adoptVerifiedObserverMCPEndpoint(managedProof);
+		const startedProbe = await waitForObserverReady(managedEndpoints, { requireStableOtlp: true }, runId);
+		if (startedProbe.health.version !== bundleVersion) {
+			throw new Error(
+				`Bundled Splunk Observability Studio reported version ${String(startedProbe.health.version)}, `
+				+ `expected ${bundleVersion}.`,
+			);
 		}
-		if (managedObserverControlToken === '') {
-			appendObserverOutputLine('Observer launch control could not be authenticated; protected cloud actions are disabled.');
-		}
-		logObserverLifecycle(`Run ${runId}: observer is accepting connections at ${managedObserverBaseUrl}.`);
+		logObserverLifecycle(`Run ${runId}: Splunk Observability Studio is accepting connections at ${managedObserverBaseUrl}.`);
 		const startupCompleted = await observerCloudLifecycleOperations.run(async () => {
 			if (!completeObserverStart(observerLifecycleState, runId, observerPort)) {
 				if (observerProcess === startedProcess) {
@@ -1170,13 +1320,15 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			&& typeof (error as { startupHint?: unknown }).startupHint === 'string'
 			? (error as { startupHint: string }).startupHint
 			: getObserverStartupHint('generic');
-		if (failObserverStart(observerLifecycleState, runId, startupMessage, startupHint)) {
+		const startupTitle = typeof error === 'object'
+			&& error !== null
+			&& 'startupTitle' in error
+			&& typeof (error as { startupTitle?: unknown }).startupTitle === 'string'
+			? (error as { startupTitle: string }).startupTitle
+			: undefined;
+		if (failObserverStart(observerLifecycleState, runId, startupMessage, startupHint, startupTitle)) {
 			setObserverEndpoints(undefined);
 			observerUsesSharedServer = false;
-			observerSharedControlToken = undefined;
-			observerSharedHealthProofSecret = undefined;
-			managedObserverControlToken = '';
-			managedObserverHealthProofSecret = '';
 			logObserverLifecycle(`Run ${runId}: startup failed: ${startupMessage}`);
 			syncObserverUi();
 		}
@@ -1191,7 +1343,276 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 	return observerStartupPromise;
 }
 
-async function stopObserver(context?: vscode.ExtensionContext): Promise<void> {
+async function retireMismatchedManagedPortObserver(
+	discovery: SharedObserverDiscovery,
+	observerHealth: ObserverHealth | undefined,
+	managedPort: number,
+	bundleVersion: string,
+): Promise<ManagedPortObserverRetirement> {
+	const discoveryPort = observerPortFromUrl(discovery.baseUrl);
+	const observerHealthVerified = observerHealth !== undefined;
+	let observerVersion = observerHealth?.version;
+	if (observerHealthVerified && observerVersion === bundleVersion) {
+		return { status: 'not-applicable' };
+	}
+	if (discoveryPort !== managedPort) {
+		if (!observerHealthVerified) {
+			return { status: 'not-applicable' };
+		}
+		appendObserverOutputLine(
+			`Splunk Observability Studio ${observerVersion ?? '(unversioned)'} at ${discovery.baseUrl} does not match `
+			+ `bundled version ${bundleVersion}; leaving the other port untouched.`,
+		);
+		return {
+			status: 'ignored',
+		};
+	}
+	if (!observerHealthVerified) {
+		return { status: 'not-applicable' };
+	}
+	const listenerInspection = await inspectListeningProcess(managedPort);
+	if (listenerInspection.status === 'none') {
+		return { status: 'retired' };
+	}
+	if (listenerInspection.status !== 'unique') {
+		appendObserverOutputLine(
+			`Splunk Observability Studio at ${discovery.baseUrl} has no unique inspectable listener; refusing to stop it automatically.`,
+		);
+		return {
+			pid: discovery.pid,
+			port: discoveryPort,
+			status: 'restart-required',
+			version: observerVersion,
+		};
+	}
+	const listener = listenerInspection.process;
+	const { executablePath: processExecutablePath, pid } = listener;
+	if (discovery.pid !== undefined && discovery.pid !== pid) {
+		appendObserverOutputLine(
+			`Ignoring stale Splunk Observability Studio PID ${discovery.pid}; localhost port ${managedPort} belongs to PID ${pid}.`,
+		);
+	}
+	if (pid === process.pid) {
+		return { pid, port: discoveryPort, status: 'restart-required', version: observerVersion };
+	}
+	if (!processIsRunning(pid)) {
+		return { status: 'retired' };
+	}
+	if (processExecutablePath === undefined) {
+		if (!processIsRunning(pid)) {
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Splunk Observability Studio PID ${pid} could not be inspected; refusing to stop it automatically.`,
+		);
+		return {
+			pid,
+			port: observerPortFromUrl(discovery.baseUrl),
+			status: 'restart-required',
+			version: observerVersion,
+		};
+	}
+	if (!isObserverExecutablePath(processExecutablePath)) {
+		appendObserverOutputLine(
+			`Splunk Observability Studio health was returned from ${discovery.baseUrl}, but localhost port ${managedPort} `
+			+ `belongs to ${processExecutablePath}; refusing to stop PID ${pid} automatically.`,
+		);
+		return {
+			pid,
+			port: discoveryPort,
+			status: 'restart-required',
+			version: observerVersion,
+		};
+	}
+	const restartRequired = (): ManagedPortObserverRetirement => ({
+		pid,
+		port: discoveryPort,
+		status: 'restart-required',
+		version: observerVersion,
+	});
+
+	const preStopInspection = await inspectListeningProcess(managedPort);
+	if (preStopInspection.status === 'none') {
+		return { status: 'retired' };
+	}
+	if (preStopInspection.status !== 'unique') {
+		appendObserverOutputLine(
+			`Could not reverify Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on localhost port ${managedPort}; `
+			+ `refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	const preStopListener = preStopInspection.process;
+	if (
+		preStopListener.pid !== pid
+		|| preStopListener.executablePath === undefined
+		|| !isObserverExecutablePath(preStopListener.executablePath)
+		|| !processExecutablePathsEqual(preStopListener.executablePath, processExecutablePath)
+	) {
+		appendObserverOutputLine(
+			`Could not reverify Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on localhost port ${managedPort}; `
+			+ `refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	const replacementProbe = await probeObserver(
+		observerEndpointRolesForBase(buildManagedObserverBaseUrl(managedPort)),
+		500,
+		{ requireStableOtlp: false },
+	);
+	if (replacementProbe.status !== 'ready') {
+		const replacementProbeInspection = await inspectListeningProcess(managedPort);
+		if (replacementProbeInspection.status === 'none') {
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Could not refresh Splunk Observability Studio identity on localhost port ${managedPort}; refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	if (replacementProbe.health.version === bundleVersion) {
+		appendObserverOutputLine(
+			`Splunk Observability Studio on managed port ${managedPort} already reports bundled version ${bundleVersion}; reusing it.`,
+		);
+		return { status: 'not-applicable' };
+	}
+	observerVersion = replacementProbe.health.version;
+	const confirmedInspection = await inspectListeningProcess(managedPort);
+	if (confirmedInspection.status === 'none') {
+		return { status: 'retired' };
+	}
+	if (confirmedInspection.status !== 'unique') {
+		appendObserverOutputLine(
+			`Splunk Observability Studio ownership changed while verifying localhost port ${managedPort}; refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	const confirmedListener = confirmedInspection.process;
+	if (
+		confirmedListener.pid !== pid
+		|| confirmedListener.executablePath === undefined
+		|| !isObserverExecutablePath(confirmedListener.executablePath)
+		|| !processExecutablePathsEqual(confirmedListener.executablePath, processExecutablePath)
+	) {
+		appendObserverOutputLine(
+			`Splunk Observability Studio ownership changed while verifying localhost port ${managedPort}; refusing to stop PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+
+	appendObserverOutputLine(
+		`Replacing Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} (PID ${pid}) `
+		+ `with bundled version ${bundleVersion}.`,
+	);
+	let gracefulTerminationRequested = false;
+	try {
+		await gracefullyTerminateProcess(pid);
+		gracefulTerminationRequested = true;
+	} catch (error) {
+		if (!processIsRunning(pid)) {
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Could not request a graceful stop for Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port `
+			+ `${managedPort}: ${getErrorMessage(error)}. Proceeding to the verified forced-stop fallback.`,
+		);
+	}
+
+	if (gracefulTerminationRequested) {
+		if (await waitForProcessExit(
+			pid,
+			outdatedManagedObserverShutdownTimeoutMs,
+		)) {
+			appendObserverOutputLine(
+				`Stopped Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port ${managedPort}.`,
+			);
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} did not stop after `
+			+ `${outdatedManagedObserverShutdownTimeoutMs}ms; forcing it to stop.`,
+		);
+	}
+	const forceStopInspection = await inspectListeningProcess(managedPort);
+	if (
+		forceStopInspection.status === 'ambiguous'
+		|| forceStopInspection.status === 'unavailable'
+	) {
+		appendObserverOutputLine(
+			`Could not determine the owner of managed port ${managedPort}; refusing to force-stop Splunk Observability Studio PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	if (
+		forceStopInspection.status === 'unique'
+		&& (
+			forceStopInspection.process.pid !== pid
+			|| (forceStopInspection.process.executablePath !== undefined
+				&& (!isObserverExecutablePath(forceStopInspection.process.executablePath)
+					|| !processExecutablePathsEqual(
+						forceStopInspection.process.executablePath,
+						processExecutablePath,
+					)))
+		)
+	) {
+		appendObserverOutputLine(
+			`A different process now owns managed port ${managedPort}; refusing to force-stop Splunk Observability Studio PID ${pid}.`,
+		);
+		return restartRequired();
+	}
+	const currentProcessExecutablePath = await readProcessExecutablePath(pid);
+	if (
+		currentProcessExecutablePath === undefined
+		|| !isObserverExecutablePath(currentProcessExecutablePath)
+		|| !processExecutablePathsEqual(currentProcessExecutablePath, processExecutablePath)
+	) {
+		if (!processIsRunning(pid)) {
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Could not reverify Splunk Observability Studio ${observerVersion ?? '(unversioned)'} PID ${pid}; refusing a forced stop.`,
+		);
+		return restartRequired();
+	}
+	try {
+		await forceTerminateProcess(pid);
+	} catch (error) {
+		if (!processIsRunning(pid)) {
+			return { status: 'retired' };
+		}
+		appendObserverOutputLine(
+			`Could not force-stop Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port `
+			+ `${managedPort}: ${getErrorMessage(error)}`,
+		);
+		return restartRequired();
+	}
+	if (await waitForProcessExit(
+		pid,
+		outdatedManagedObserverForceShutdownTimeoutMs,
+	)) {
+		appendObserverOutputLine(
+			`Force-stopped Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port ${managedPort}.`,
+		);
+		return { status: 'retired' };
+	}
+	appendObserverOutputLine(
+		`Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} is still running after a forced stop.`,
+	);
+	return restartRequired();
+}
+
+async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (!processIsRunning(pid)) {
+			return true;
+		}
+		await delay(50);
+	}
+	return !processIsRunning(pid);
+}
+
+async function stopObserver(): Promise<void> {
 	if (observerStopOperation.current !== undefined) {
 		logObserverLifecycle('Stop requested while shutdown is already in progress; waiting for existing shutdown.');
 		return observerStopOperation.current;
@@ -1200,29 +1621,26 @@ async function stopObserver(context?: vscode.ExtensionContext): Promise<void> {
 	const queuedStop = observerCloudLifecycleOperations.run(async () => {
 		const proc = observerProcess;
 		if (proc === undefined && observerStartupPromise === undefined && observerBaseUrl === undefined) {
-			logObserverLifecycle('Stop requested but observer is already idle.');
+			if (observerLifecycleState.status !== 'stopped') {
+				stopObserverRun(observerLifecycleState);
+				observerUsesSharedServer = false;
+				syncObserverUi();
+			}
+			logObserverLifecycle('Stop requested but Splunk Observability Studio is already idle.');
 			return;
 		}
-		if (context !== undefined) {
-			await persistManagedObserverCloudState(context);
-		}
-
 		logObserverLifecycle(
-			`Stopping observer (status=${observerLifecycleState.status}, pid=${proc?.pid ?? 'none'}, port=${observerLifecycleState.port ?? 'none'}, url=${observerBaseUrl ?? 'none'}).`,
+			`Stopping Splunk Observability Studio (status=${observerLifecycleState.status}, pid=${proc?.pid ?? 'none'}, port=${observerLifecycleState.port ?? 'none'}, url=${observerBaseUrl ?? 'none'}).`,
 		);
 		stopObserverRun(observerLifecycleState);
 		observerProcess = undefined;
 		observerStartupPromise = undefined;
 		setObserverEndpoints(undefined);
 		observerUsesSharedServer = false;
-		observerSharedControlToken = undefined;
-		observerSharedHealthProofSecret = undefined;
-		managedObserverControlToken = '';
-		managedObserverHealthProofSecret = '';
 		syncObserverUi();
 
 		if (proc === undefined) {
-			logObserverLifecycle('No observer process existed; shutdown completed after clearing in-flight startup state.');
+			logObserverLifecycle('No Splunk Observability Studio process existed; shutdown completed after clearing in-flight startup state.');
 			return;
 		}
 
@@ -1245,27 +1663,26 @@ async function stopObserver(context?: vscode.ExtensionContext): Promise<void> {
 }
 
 async function shutdownObserverForExtensionUnload(
-	context: vscode.ExtensionContext | undefined,
 	reason: string,
 ): Promise<void> {
-	logObserverLifecycle(`${reason}; stopping observer process.`);
+	logObserverLifecycle(`${reason}; stopping Splunk Observability Studio process.`);
 	try {
 		const stopped = await operationCompletesWithin(
-			stopObserver(context),
+			stopObserver(),
 			observerExtensionUnloadDeadlineMs,
 		);
 		if (!stopped) {
 			forceDisposeObserverForExtensionUnload(`${reason}; shutdown deadline exceeded`, 'SIGKILL');
 		}
 	} catch (error) {
-		logObserverLifecycle(`${reason}; observer shutdown failed: ${getErrorMessage(error)}`);
+		logObserverLifecycle(`${reason}; Splunk Observability Studio shutdown failed: ${getErrorMessage(error)}`);
 		forceDisposeObserverForExtensionUnload(`${reason}; shutdown failed`, 'SIGKILL');
 	}
 }
 
 function disposeObserverForExtensionUnload(reason: string): void {
 	if (observerDeactivationStarted) {
-		logObserverLifecycle(`${reason}; asynchronous deactivation already owns observer shutdown.`);
+		logObserverLifecycle(`${reason}; asynchronous deactivation already owns Splunk Observability Studio shutdown.`);
 		return;
 	}
 	forceDisposeObserverForExtensionUnload(reason);
@@ -1275,7 +1692,7 @@ function forceDisposeObserverForExtensionUnload(
 	reason: string,
 	signal: NodeJS.Signals = 'SIGTERM',
 ): void {
-	logObserverLifecycle(`${reason}; terminating observer process.`);
+	logObserverLifecycle(`${reason}; terminating Splunk Observability Studio process.`);
 	const proc = observerProcess;
 	stopObserverRun(observerLifecycleState);
 	observerProcess = undefined;
@@ -1283,10 +1700,6 @@ function forceDisposeObserverForExtensionUnload(
 	observerStopOperation.clear();
 	setObserverEndpoints(undefined);
 	observerUsesSharedServer = false;
-	observerSharedControlToken = undefined;
-	observerSharedHealthProofSecret = undefined;
-	managedObserverControlToken = '';
-	managedObserverHealthProofSecret = '';
 	syncObserverUi();
 	terminateObserverProcess(proc, signal);
 }
@@ -1313,11 +1726,11 @@ function terminateObserverProcess(
 
 async function openObserverPanel(context: vscode.ExtensionContext): Promise<void> {
 	if (observerPanel === undefined) {
-		logObserverLifecycle('Creating observer webview panel.');
+		logObserverLifecycle('Creating Splunk Observability Studio webview panel.');
 		lastObserverPanelRenderKey = undefined;
 		observerPanel = vscode.window.createWebviewPanel(
 			observerPanelViewType,
-			'Observer – Telemetry Explorer',
+			observerPanelTitle,
 			vscode.ViewColumn.One,
 			{
 				enableScripts: true,
@@ -1328,7 +1741,7 @@ async function openObserverPanel(context: vscode.ExtensionContext): Promise<void
 	}
 	applyObserverPanelPresentation(observerPanel, context);
 
-	logObserverLifecycle('Revealing observer webview panel.');
+	logObserverLifecycle('Revealing Splunk Observability Studio webview panel.');
 	observerPanel.reveal(vscode.ViewColumn.One);
 
 	// If already running, show the UI immediately.
@@ -1361,7 +1774,7 @@ function configureObserverPanel(panel: vscode.WebviewPanel, context: vscode.Exte
 	}, undefined, context.subscriptions);
 	panel.onDidDispose(() => {
 		if (observerPanel === panel) {
-			logObserverLifecycle('Observer webview panel disposed.');
+			logObserverLifecycle('Splunk Observability Studio webview panel disposed.');
 			lastObserverPanelRenderKey = undefined;
 			disposeObserverPanelRuntime();
 			observerPanel = undefined;
@@ -1371,7 +1784,7 @@ function configureObserverPanel(panel: vscode.WebviewPanel, context: vscode.Exte
 
 function applyObserverPanelPresentation(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): void {
 	const iconUri = vscode.Uri.joinPath(context.extensionUri, 'assets', 'observer-icon.png');
-	panel.title = 'Observer – Telemetry Explorer';
+	panel.title = observerPanelTitle;
 	panel.iconPath = {
 		light: iconUri,
 		dark: iconUri,
@@ -1383,11 +1796,11 @@ function refreshObserverPanel(): void {
 		return;
 	}
 
-	const renderKey = `${observerLifecycleState.status}:${observerLifecycleState.port ?? 'none'}:${observerLifecycleState.startupError ?? 'none'}:${observerLifecycleState.startupHint ?? 'none'}:${observerBaseUrl ?? 'none'}:${observerUsesSharedServer ? 'shared' : 'local'}`;
+	const renderKey = `${observerLifecycleState.status}:${observerLifecycleState.port ?? 'none'}:${observerLifecycleState.startupError ?? 'none'}:${observerLifecycleState.startupHint ?? 'none'}:${observerLifecycleState.startupTitle ?? 'none'}:${observerBaseUrl ?? 'none'}:${observerUsesSharedServer ? 'shared' : 'local'}`;
 	if (renderKey === lastObserverPanelRenderKey) {
 		return;
 	}
-	logObserverLifecycle(`Rendering observer panel state ${renderKey}.`);
+	logObserverLifecycle(`Rendering Splunk Observability Studio panel state ${renderKey}.`);
 	lastObserverPanelRenderKey = renderKey;
 	disposeObserverPanelRuntime();
 
@@ -1409,8 +1822,9 @@ function refreshObserverPanel(): void {
 			return;
 		case 'error':
 			observerPanel.webview.html = getObserverErrorWebviewHtml(
-				observerLifecycleState.startupError ?? 'Observer could not start.',
+				observerLifecycleState.startupError ?? 'Splunk Observability Studio could not start.',
 				observerLifecycleState.startupHint ?? getObserverStartupHint('generic'),
+				observerLifecycleState.startupTitle ?? 'Splunk Observability Studio could not start',
 			);
 			return;
 		case 'starting':
@@ -1476,7 +1890,7 @@ async function handleObserverWebviewMessage(
 		cancelled = true;
 		// Read-only HTTP requests are safe to abort. Cloud mutations deliberately
 		// finish after the panel closes; lifecycle transitions share their queue so
-		// Observer state and IDE secure storage remain on the same committed version.
+		// Splunk Observability Studio state and IDE secure storage remain on the same committed version.
 		if (message.request.kind === 'http') {
 			controller.abort();
 		}
@@ -1488,10 +1902,11 @@ async function handleObserverWebviewMessage(
 			delivered = await postObserverHostResponse(panel, message.requestId, true, result).catch(() => false);
 		}
 		if (!delivered && !observerDeactivationStarted && freeAccountSignup) {
-			void vscode.window.showInformationMessage(
-				'Thank you for registering. Your free edition account is on its way. ' +
-				'You will receive an email within 10 minutes; check your spam folder if it does not arrive.',
-			);
+			void vscode.window.showInformationMessage(freeAccountSetupIsPending(result)
+				? 'Splunk received your Free Edition request but needs extra time to finish setting up the account. ' +
+					'If a confirmation email does not arrive within 24 hours, contact Splunk Support.'
+				: 'Thank you for registering. Your free edition account is on its way. ' +
+					'You will receive an email within 10 minutes; check your spam folder if it does not arrive.');
 		}
 	} catch (error) {
 		let delivered = false;
@@ -1520,6 +1935,16 @@ async function handleObserverWebviewMessage(
 
 function isFreeAccountSignupRequest(request: ObserverHostRequest): boolean {
 	return request.kind === 'cloud' && request.action === 'create-free-account';
+}
+
+function freeAccountSetupIsPending(value: unknown): boolean {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+	const freeAccount = (value as { freeAccount?: unknown }).freeAccount;
+	return typeof freeAccount === 'object'
+		&& freeAccount !== null
+		&& (freeAccount as { accountSetupPending?: unknown }).accountSetupPending === true;
 }
 
 async function performObserverHostRequest(
@@ -1580,13 +2005,10 @@ async function performCloudBridgeActionExclusive(
 				const [status, cimdSession] = await Promise.all([
 					refreshSplunkCloudConnection(context),
 					currentSISCIMDSessionStatus(context),
-				]);
-				return { cimdRegistrationEnabled, cimdSession, status };
-			} catch (error) {
-				if (!cloudControlRemainsAvailableAfterInitializationError(error)) {
-					throw error;
-				}
-				const [status, cimdSession] = await Promise.all([
+					]);
+					return { cimdRegistrationEnabled, cimdSession, status };
+				} catch (error) {
+					const [status, cimdSession] = await Promise.all([
 					getObserverCloudJSON('/api/splunk/export'),
 					currentSISCIMDSessionStatus(context),
 				]);
@@ -1684,11 +2106,11 @@ async function performCloudBridgeActionExclusive(
 			return {};
 		}
 		case 'open-audit-report': {
-			// Keep external navigation in the host so the Observer webview remains
+			// Keep external navigation in the host so the Splunk Observability Studio webview remains
 			// open and cannot choose an arbitrary destination.
 			const url = auditReportUrl(observerBaseUrl);
 			if (url === undefined) {
-				throw new Error('The Observer is not running, so the audit report cannot be opened.');
+				throw new Error('Splunk Observability Studio is not running, so the audit report cannot be opened.');
 			}
 			await openCloudExternalUrl(url);
 			return {};
@@ -1825,12 +2247,9 @@ function cloudConnectionFromRequest(
 
 function cloudExpectedVersionFromRequest(
 	request: { action: CloudBridgeAction; payload?: ObserverHostCloudPayload },
-): string {
+): string | undefined {
 	const expectedVersion = request.payload?.expectedVersion;
-	if (typeof expectedVersion !== 'string') {
-		throw new Error('Observer cloud state version is missing.');
-	}
-	return expectedVersion;
+	return typeof expectedVersion === 'string' ? expectedVersion : undefined;
 }
 
 async function refreshSplunkCloudConnection(context: vscode.ExtensionContext): Promise<unknown> {
@@ -1860,45 +2279,6 @@ async function refreshObserverCloudStatus(): Promise<unknown> {
 	return postObserverCloudJSON('/api/splunk/export/refresh', {});
 }
 
-async function persistManagedObserverCloudState(context: vscode.ExtensionContext): Promise<void> {
-	try {
-		await captureSplunkCloudState({
-			isManagedObserver: observerProcess !== undefined,
-			readConfiguration: () => postObserverControlledCloudJSON(
-				'/api/splunk/export/shutdown-snapshot',
-				{},
-				observerShutdownPreferenceCaptureTimeoutMs,
-			),
-			timeoutMs: observerShutdownPreferenceCaptureTimeoutMs,
-			writeState: async (state) => {
-				await persistSplunkCloudStateWithRollback({
-					next: {
-						connectionValue: state === undefined
-							? undefined
-							: JSON.stringify(state.connection),
-						exportEnabled: state?.exportEnabled,
-					},
-					readState: () => readStoredCloudConnectionState(context),
-					timeoutMs: observerShutdownPreferenceCaptureTimeoutMs,
-					waitForWrite: (operation) => operationCompletesWithin(
-						operation,
-						observerShutdownPreferenceCaptureTimeoutMs,
-					),
-					writeState: (next) => restoreStoredCloudConnectionState(
-						context,
-						next.connectionValue,
-						next.exportEnabled,
-					),
-				});
-			},
-		});
-	} catch (error) {
-		appendObserverOutputLine(
-			`[splunk-export] could not preserve cloud configuration before shutdown: ${getErrorMessage(error)}`,
-		);
-	}
-}
-
 async function restoreManagedObserverCloudConnection(context: vscode.ExtensionContext): Promise<void> {
 	try {
 		const status = await refreshSplunkCloudConnection(context);
@@ -1914,7 +2294,7 @@ async function restoreManagedObserverCloudConnection(context: vscode.ExtensionCo
 
 async function forgetSplunkCloudConnection(
 	context: vscode.ExtensionContext,
-	expectedVersion: string,
+	expectedVersion: string | undefined,
 ): Promise<unknown> {
 	const rollbackToken = crypto.randomBytes(32).toString('base64url');
 	return forgetSplunkCloudWithStorage({
@@ -2008,18 +2388,18 @@ async function requestObserverHostHTTP(
 	statusText: string;
 }> {
 	if (observerBaseUrl === undefined || observerLifecycleState.status !== 'running') {
-		throw new Error('Observer is not running.');
+		throw new Error('Splunk Observability Studio is not running.');
 	}
 	if (signal.aborted) {
-		throw new Error('Observer request was cancelled.');
+		throw new Error('Splunk Observability Studio request was cancelled.');
 	}
 
 	const url = buildObserverApiUrl(pathname);
 	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error('Observer requests require HTTP or HTTPS.');
+		throw new Error('Splunk Observability Studio requests require HTTP or HTTPS.');
 	}
-	if (url.protocol === 'http:' && !isLocalObserverControlHost(url.hostname)) {
-		throw new Error('Observer requests require HTTPS for a non-local Observer.');
+	if (!isLoopbackObserverHost(url.hostname)) {
+		throw new Error('Splunk Observability Studio requests require a loopback service.');
 	}
 
 	const payload = body === undefined ? undefined : Buffer.from(body, 'utf8');
@@ -2046,10 +2426,10 @@ async function requestObserverHostHTTP(
 				(error: Error) => finish(() => reject(error)),
 			);
 		});
-		const onAbort = () => request.destroy(new Error('Observer request was cancelled.'));
+		const onAbort = () => request.destroy(new Error('Splunk Observability Studio request was cancelled.'));
 		signal.addEventListener('abort', onAbort, { once: true });
 		request.setTimeout(15_000, () => {
-			request.destroy(new Error('Observer request timed out.'));
+			request.destroy(new Error('Splunk Observability Studio request timed out.'));
 		});
 		request.once('error', (error) => finish(() => reject(error)));
 		request.end(payload);
@@ -2061,67 +2441,19 @@ async function getObserverCloudJSON(
 	timeoutMs = observerCloudRequestTimeoutMs,
 ): Promise<unknown> {
 	if (observerBaseUrl === undefined || observerLifecycleState.status !== 'running') {
-		throw new Error('Observer is not running.');
+		throw new Error('Splunk Observability Studio is not running.');
 	}
 
 	const url = buildObserverApiUrl(pathname);
-	if (
-		url.protocol === 'http:'
-		&& !isLocalObserverControlHost(url.hostname)
-	) {
-		throw new Error('Cloud connection reads require HTTPS for a non-local Observer.');
+	if (!isLoopbackObserverHost(url.hostname)) {
+		throw new Error('Splunk Observability Studio cloud requests require a loopback service.');
 	}
 
-	const response = await requestObserverCloudJSON(url, undefined, undefined, timeoutMs);
+	const response = await requestObserverCloudJSON(url, undefined, timeoutMs);
 	if (response.statusCode >= 200 && response.statusCode < 300) {
 		return response.body;
 	}
 	throw observerCloudResponseError(response.statusCode, response.body);
-}
-
-async function postObserverControlledCloudJSON(
-	pathname: string,
-	body: Record<string, unknown>,
-	timeoutMs = observerCloudRequestTimeoutMs,
-): Promise<unknown> {
-	return requestObserverControlledCloudJSON(pathname, body, timeoutMs);
-}
-
-async function requestObserverControlledCloudJSON(
-	pathname: string,
-	body: Record<string, unknown> | undefined,
-	timeoutMs: number,
-): Promise<unknown> {
-	if (observerBaseUrl === undefined || observerLifecycleState.status !== 'running') {
-		throw new Error('Observer is not running.');
-	}
-	const url = buildObserverApiUrl(pathname);
-	if (url.protocol === 'http:' && !isLocalObserverControlHost(url.hostname)) {
-		throw new Error('Cloud control requires HTTPS for a non-local Observer.');
-	}
-	const sharedObserverUrl = observerUsesSharedServer ? observerBaseUrl : undefined;
-	return requestObserverCloudMutationWithTokenRefresh({
-		currentToken: activeObserverControlToken,
-		refreshToken: sharedObserverUrl !== undefined
-			? async (usedToken) => {
-				const refreshedToken = await refreshSharedObserverControlToken(
-					sharedObserverUrl,
-					usedToken,
-					getConfiguredSharedObserverUrl() !== undefined,
-				);
-				if (refreshedToken !== undefined) {
-					observerSharedControlToken = refreshedToken;
-				}
-				return refreshedToken;
-			}
-			: undefined,
-		send: (controlToken) => requestObserverCloudJSON(
-			buildObserverApiUrl(pathname),
-			body,
-			controlToken,
-			timeoutMs,
-		),
-	});
 }
 
 async function requestObserverFreeAccountJSON(
@@ -2131,29 +2463,26 @@ async function requestObserverFreeAccountJSON(
 ): Promise<unknown> {
 	if (observerBaseUrl === undefined || observerLifecycleState.status !== 'running') {
 		throw new ObserverCloudRequestError(
-			'Observer is not running.',
+			'Splunk Observability Studio is not running.',
 			'observer_unavailable',
 			true,
 		);
 	}
 	const url = buildObserverApiUrl(pathname);
-	if (url.protocol === 'http:' && !isLocalObserverControlHost(url.hostname)) {
+	if (!isLoopbackObserverHost(url.hostname)) {
 		throw new ObserverCloudRequestError(
-			'Free Edition signup requires HTTPS for a non-local Observer.',
+			'Free Edition signup requires a loopback Splunk Observability Studio service.',
 			'insecure_observer',
-			true,
-		);
-	}
-	if (activeObserverControlToken() === '') {
-		throw new ObserverCloudRequestError(
-			'Free Edition signup requires OBSTUDIO_CONTROL_TOKEN and OBSTUDIO_HEALTH_PROOF_SECRET when using a shared Observer.',
-			'control_token_missing',
 			true,
 		);
 	}
 
 	try {
-		return await requestObserverControlledCloudJSON(pathname, body, timeoutMs);
+		const response = await requestObserverCloudJSON(url, body, timeoutMs);
+		if (response.statusCode >= 200 && response.statusCode < 300) {
+			return response.body;
+		}
+		throw observerCloudResponseError(response.statusCode, response.body);
 	} catch (error) {
 		if (error instanceof ObserverCloudRequestError) {
 			throw error;
@@ -2184,47 +2513,28 @@ async function postObserverCloudJSON(
 	rollbackToken?: string,
 ): Promise<unknown> {
 	if (observerBaseUrl === undefined || observerLifecycleState.status !== 'running') {
-		throw new Error('Observer is not running.');
+		throw new Error('Splunk Observability Studio is not running.');
 	}
 
 	const url = buildObserverApiUrl(pathname);
-	if (
-		url.protocol === 'http:'
-		&& !isLocalObserverControlHost(url.hostname)
-	) {
-		throw new Error('Cloud connection changes require HTTPS for a non-local Observer.');
+	if (!isLoopbackObserverHost(url.hostname)) {
+		throw new Error('Cloud connection changes require a loopback Splunk Observability Studio service.');
 	}
-	const sharedObserverUrl = observerUsesSharedServer ? observerBaseUrl : undefined;
-
-	return requestObserverCloudMutationWithTokenRefresh({
-		currentToken: activeObserverControlToken,
-		refreshToken: sharedObserverUrl !== undefined
-			? async (usedToken) => {
-				const refreshedToken = await refreshSharedObserverControlToken(
-					sharedObserverUrl,
-					usedToken,
-					getConfiguredSharedObserverUrl() !== undefined,
-				);
-				if (refreshedToken !== undefined) {
-					observerSharedControlToken = refreshedToken;
-				}
-				return refreshedToken;
-			}
-				: undefined,
-		send: (controlToken) => requestObserverCloudJSON(
-			buildObserverApiUrl(pathname),
-			body,
-			controlToken,
-			observerCloudRequestTimeoutMs,
-			rollbackToken,
-		),
-	});
+	const response = await requestObserverCloudJSON(
+		url,
+		body,
+		observerCloudRequestTimeoutMs,
+		rollbackToken,
+	);
+	if (response.statusCode >= 200 && response.statusCode < 300) {
+		return response.body;
+	}
+	throw observerCloudResponseError(response.statusCode, response.body);
 }
 
 async function requestObserverCloudJSON(
 	url: URL,
 	body: Record<string, unknown> | undefined,
-	controlToken: string | undefined,
 	timeoutMs = observerCloudRequestTimeoutMs,
 	rollbackToken?: string,
 ): Promise<{ body: unknown; statusCode: number }> {
@@ -2232,9 +2542,6 @@ async function requestObserverCloudJSON(
 	const headers: http.OutgoingHttpHeaders = {
 		Accept: 'application/json',
 	};
-	if (controlToken !== undefined) {
-		headers.Authorization = `Bearer ${controlToken}`;
-	}
 	if (rollbackToken !== undefined) {
 		headers[observerCloudRollbackTokenHeader] = rollbackToken;
 	}
@@ -2270,7 +2577,7 @@ async function requestObserverCloudJSON(
 			}, (error: Error) => finish(() => reject(error)));
 		});
 		timeout = setTimeout(() => {
-			const error = new Error('Observer cloud request timed out.');
+			const error = new Error('Splunk Observability Studio cloud request timed out.');
 			request.destroy(error);
 			finish(() => reject(error));
 		}, timeoutMs);
@@ -2285,7 +2592,7 @@ function freeAccountRegionFromResponse(value: unknown): string {
 		: undefined;
 	if (typeof region !== 'string' || !isSupportedFreeAccountRegion(region)) {
 		throw new ObserverCloudRequestError(
-			'Observer returned an invalid Free Edition region.',
+			'Splunk Observability Studio returned an invalid Free Edition region.',
 			'invalid_response',
 			true,
 		);
@@ -2298,7 +2605,7 @@ function splunkRealmFromResponse(value: unknown): string {
 		? (value as Record<string, unknown>).realm
 		: undefined;
 	if (typeof realm !== 'string' || !/^[a-z]{2,12}[0-9]+$/.test(realm)) {
-		throw new Error('Observer returned an invalid Splunk Observability Cloud realm.');
+		throw new Error('Splunk Observability Studio returned an invalid Splunk Observability Cloud realm.');
 	}
 	return realm;
 }
@@ -2310,122 +2617,9 @@ function cloudBridgeErrorMetadata(error: unknown): { code?: string; retrySafe?: 
 	return {};
 }
 
-function activeObserverControlToken(): string {
-	if (!observerUsesSharedServer) {
-		return managedObserverControlToken;
-	}
-	return observerSharedControlToken ?? '';
-}
-
-function activeObserverHealthProofSecret(): string {
-	if (!observerUsesSharedServer) {
-		return managedObserverHealthProofSecret;
-	}
-	return observerSharedHealthProofSecret ?? '';
-}
-
-function sharedObserverControlTokenFromEnv(): string | undefined {
-	const token = process.env.OBSTUDIO_CONTROL_TOKEN?.trim();
-	return token === '' || token === undefined ? undefined : token;
-}
-
-function sharedObserverHealthProofSecretFromEnv(): string | undefined {
-	const secret = process.env.OBSTUDIO_HEALTH_PROOF_SECRET?.trim();
-	return secret === '' || secret === undefined ? undefined : secret;
-}
-
-async function verifyEnvironmentControlToken(
-	endpoints: ObserverEndpointRoles,
-	rejectedToken?: string,
-): Promise<{ controlToken: string; healthProofSecret: string } | undefined> {
-	const controlToken = sharedObserverControlTokenFromEnv();
-	const healthProofSecret = sharedObserverHealthProofSecretFromEnv();
-	if (controlToken === undefined || healthProofSecret === undefined || controlToken === rejectedToken) {
-		return undefined;
-	}
-	const probe = await probeObserver(endpoints, 500, {
-		requireStableOtlp: false,
-		rejectedControlToken: rejectedToken,
-		sharedDiscovery: {
-			baseUrl: endpoints.restBaseUrl,
-			controlToken,
-			healthProofSecret,
-			healthUrl: endpoints.healthUrl,
-			mcpUrl: endpoints.mcpUrl,
-		},
-	});
-	if (probe.status !== 'ready' || probe.verifiedControlToken === undefined) {
-		return undefined;
-	}
-	adoptVerifiedObserverMCPEndpoint(probe);
-	return {
-		controlToken: probe.verifiedControlToken,
-		healthProofSecret,
-	};
-}
-
-async function refreshSharedObserverControlToken(
-	observerUrl: string,
-	rejectedToken: string,
-	allowEnvironmentToken: boolean,
-): Promise<string | undefined> {
-	const currentEndpoints = observerEndpoints !== undefined
-		&& observerEndpoints.restBaseUrl === normalizeObserverBaseUrl(observerUrl)
-		? observerEndpoints
-		: observerEndpointRolesForBase(observerUrl);
-	const discovery = readSharedObserverDiscovery(
-		os.homedir(),
-		process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
-	);
-	if (
-		discovery?.controlToken !== undefined
-		&& discovery.controlToken !== rejectedToken
-		&& sharedDiscoveryMatchesRestBase(discovery, currentEndpoints.restBaseUrl)
-	) {
-		const refreshedEndpoints = observerEndpointRolesForDiscovery(
-			discovery,
-			currentEndpoints.restBaseUrl,
-		);
-		const probe = await probeObserver(refreshedEndpoints, 500, {
-			requireStableOtlp: false,
-			rejectedControlToken: rejectedToken,
-			sharedDiscovery: discovery,
-		});
-		if (probe.status === 'ready' && probe.verifiedControlToken !== undefined) {
-			adoptVerifiedObserverMCPEndpoint(probe);
-			observerSharedHealthProofSecret = probe.verifiedHealthProofSecret;
-			return probe.verifiedControlToken;
-		}
-	}
-	if (!allowEnvironmentToken) {
-		return undefined;
-	}
-	const environmentControl = await verifyEnvironmentControlToken(currentEndpoints, rejectedToken);
-	if (environmentControl === undefined) {
-		return undefined;
-	}
-	observerSharedHealthProofSecret = environmentControl.healthProofSecret;
-	return environmentControl.controlToken;
-}
-
-function adoptVerifiedObserverMCPEndpoint(
-	probe: Extract<ObserverProbeResult, { status: 'ready' }>,
-): void {
-	if (
-		probe.verifiedControlToken !== undefined
-		&& probe.verifiedMCPUrl !== undefined
-		&& observerEndpoints !== undefined
-	) {
-		setObserverEndpoints({
-			...observerEndpoints,
-			mcpUrl: probe.verifiedMCPUrl,
-		});
-	}
-}
-
 function buildObserverApiUrl(pathname: string): URL {
 	if (observerBaseUrl === undefined) {
-		throw new Error('Observer is not running.');
+		throw new Error('Splunk Observability Studio is not running.');
 	}
 	const normalizedBase = `${normalizeObserverBaseUrl(observerBaseUrl)}/`;
 	const relativePath = pathname.replace(/^\/+/, '');
@@ -2468,17 +2662,14 @@ async function ensurePortAvailable(reservation: PortReservation): Promise<number
 }
 
 async function identifyPortOwner(port: number): Promise<string | undefined> {
-	return new Promise((resolve) => {
-		cp.exec(`lsof -i :${port} -sTCP:LISTEN -n -P 2>/dev/null`, { timeout: 3000 }, (error, stdout) => {
-			if (error || !stdout) { resolve(undefined); return; }
-			const lines = stdout.trim().split('\n');
-			if (lines.length < 2) { resolve(undefined); return; }
-			const fields = lines[1].split(/\s+/);
-			const command = fields[0];
-			const pid = fields[1];
-			resolve(command && pid ? `${command} (PID ${pid})` : undefined);
-		});
-	});
+	const listener = await readListeningProcess(port);
+	if (listener === undefined) {
+		return undefined;
+	}
+	const command = listener.executablePath === undefined
+		? 'process'
+		: path.basename(listener.executablePath);
+	return `${command} (PID ${listener.pid})`;
 }
 
 async function waitForObserverReady(
@@ -2508,8 +2699,8 @@ async function waitForObserverReady(
 				return probe;
 			case 'mismatch': {
 				mismatchAttempts += 1;
-				appendObserverOutputLine(`Observer health probe mismatch at ${endpoints.healthUrl}: ${probe.reason}`);
-				logObserverLifecycle(`Run ${runId}: observer health probe mismatch at ${endpoints.healthUrl}: ${probe.reason}`);
+				appendObserverOutputLine(`Splunk Observability Studio health probe mismatch at ${endpoints.healthUrl}: ${probe.reason}`);
+				logObserverLifecycle(`Run ${runId}: Splunk Observability Studio health probe mismatch at ${endpoints.healthUrl}: ${probe.reason}`);
 				if (mismatchAttempts < maxMismatchAttempts) {
 					logObserverLifecycle(
 						`Run ${runId}: retrying after mismatch (attempt ${mismatchAttempts} of ${maxMismatchAttempts}).`,
@@ -2533,15 +2724,15 @@ async function waitForObserverReady(
 
 	if (lastError !== undefined) {
 		const rawProbeDetail = getErrorMessage(lastError);
-		appendObserverOutputLine(`Observer health probe unavailable at ${endpoints.healthUrl}: ${rawProbeDetail}`);
-		logObserverLifecycle(`Run ${runId}: observer readiness failed for ${endpoints.healthUrl}: ${rawProbeDetail}`);
+		appendObserverOutputLine(`Splunk Observability Studio health probe unavailable at ${endpoints.healthUrl}: ${rawProbeDetail}`);
+		logObserverLifecycle(`Run ${runId}: Splunk Observability Studio readiness failed for ${endpoints.healthUrl}: ${rawProbeDetail}`);
 		const unavailableContext = observerUsesSharedServer ? 'shared-reuse' : 'startup';
 		const wrappedError = new Error(formatObserverProbeUnavailableMessage(endpoints.restBaseUrl, unavailableContext));
 		Object.assign(wrappedError, { startupHint: getObserverProbeUnavailableHint(unavailableContext) });
 		throw wrappedError;
 	}
 	const unavailableContext = observerUsesSharedServer ? 'shared-reuse' : 'startup';
-	logObserverLifecycle(`Run ${runId}: observer readiness ended without a probe result at ${endpoints.healthUrl}.`);
+	logObserverLifecycle(`Run ${runId}: Splunk Observability Studio readiness ended without a probe result at ${endpoints.healthUrl}.`);
 	const wrappedError = new Error(formatObserverProbeUnavailableMessage(endpoints.restBaseUrl, unavailableContext));
 	Object.assign(wrappedError, { startupHint: getObserverProbeUnavailableHint(unavailableContext) });
 	throw wrappedError;
@@ -2553,15 +2744,7 @@ async function probeObserver(
 	options: ObserverProbeOptions,
 ): Promise<ObserverProbeResult> {
 	return new Promise((resolve) => {
-		const observerUrl = endpoints.restBaseUrl;
-		const proofChallenge = options.sharedDiscovery?.controlToken !== undefined
-			&& options.sharedDiscovery.healthProofSecret !== undefined
-			? createObserverHealthProofChallenge()
-			: undefined;
 		const target = new URL(endpoints.healthUrl);
-		if (proofChallenge !== undefined) {
-			target.searchParams.set(observerHealthProofChallengeQuery, proofChallenge);
-		}
 		const client = target.protocol === 'https:' ? https : http;
 		let settled = false;
 
@@ -2607,38 +2790,7 @@ async function probeObserver(
 					return;
 				}
 
-				const health = parsed as ObserverHealth;
-				const verifiedControlToken = proofChallenge === undefined
-					|| options.sharedDiscovery === undefined
-					? undefined
-					: verifySharedObserverControlToken(
-						observerUrl,
-						options.sharedDiscovery,
-						proofChallenge,
-						health,
-						options.rejectedControlToken,
-						endpoints.mcpUrl,
-					);
-				if (proofChallenge !== undefined && verifiedControlToken === undefined) {
-					finish(() => resolve({
-						status: 'mismatch',
-						reason: 'Observer control proof could not be verified',
-					}));
-					return;
-				}
-				const verifiedMCPUrl = verifiedControlToken === undefined
-					? undefined
-					: verifiedSharedObserverMCPUrl(observerUrl, health, endpoints.mcpUrl);
-				const verifiedHealthProofSecret = verifiedControlToken === undefined
-					? undefined
-					: options.sharedDiscovery?.healthProofSecret?.trim();
-				finish(() => resolve({
-					status: 'ready',
-					health,
-					...(verifiedControlToken === undefined ? {} : { verifiedControlToken }),
-					...(verifiedHealthProofSecret === undefined ? {} : { verifiedHealthProofSecret }),
-					...(verifiedMCPUrl === undefined ? {} : { verifiedMCPUrl }),
-				}));
+				finish(() => resolve({ status: 'ready', health: parsed as ObserverHealth }));
 			});
 		});
 
@@ -2646,7 +2798,7 @@ async function probeObserver(
 			request.destroy();
 			finish(() => resolve({
 				status: 'unavailable',
-				error: new Error(`Timed out waiting for observer health on ${target.toString()}`),
+				error: new Error(`Timed out waiting for Splunk Observability Studio health on ${target.toString()}`),
 			}));
 		});
 		request.once('error', (error: NodeJS.ErrnoException) => {
@@ -2720,8 +2872,16 @@ async function waitForObserverConfigurationRestartCompletion(): Promise<void> {
 	}
 }
 
+async function settleObserverConfigurationRestart(): Promise<void> {
+	try {
+		await waitForObserverConfigurationRestartCompletion();
+	} catch (error) {
+		logObserverLifecycle(`Prior Splunk Observability Studio configuration restart failed: ${getErrorMessage(error)}`);
+	}
+}
+
 async function restartObserver(context: vscode.ExtensionContext): Promise<void> {
-	await stopObserver(context);
+	await stopObserver();
 	try {
 		await ensureObserverRunning(context);
 		refreshObserverPanel();
@@ -2739,7 +2899,7 @@ async function restartObserver(context: vscode.ExtensionContext): Promise<void> 
 
 function getObserverWebviewHtmlForPanel(panel: vscode.WebviewPanel): string {
 	if (observerWebviewRootUri === undefined) {
-		throw new Error('Observer webview assets are not configured.');
+		throw new Error('Splunk Observability Studio webview assets are not configured.');
 	}
 	const scriptUri = panel.webview.asWebviewUri(
 		vscode.Uri.joinPath(observerWebviewRootUri, 'main.js'),
@@ -2769,6 +2929,16 @@ function delay(ms: number): Promise<void> {
 
 function buildManagedObserverBaseUrl(port: number): string {
 	return `http://${managedObserverHost}:${port}`;
+}
+
+function parseInternalTestPort(value: unknown, fallback: number): number {
+	if (value === undefined) {
+		return fallback;
+	}
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0 || value > 65_535) {
+		throw new Error('Splunk Observability Studio test OTLP ports must be integers between 1 and 65535.');
+	}
+	return value;
 }
 
 function getConfiguredManagedObserverPort(): number {
@@ -2938,7 +3108,6 @@ function readAgentIntegrationManagedConfig(spec: AgentIntegrationSpec): AgentInt
 function getAgentIntegrationConfigState(
 	spec: AgentIntegrationSpec,
 	mcpUrl: string,
-	controlToken = activeObserverControlToken(),
 ): AgentIntegrationConfigState {
 	const configPath = spec.configPath(os.homedir());
 	if (!fs.existsSync(configPath)) {
@@ -2969,10 +3138,7 @@ function getAgentIntegrationConfigState(
 			return remoteTypeMatches
 				&& server.url === mcpUrl
 				&& !hasIncompatibleRemoteFields
-				&& authorizationHeadersMatchControlToken(
-					server.headers,
-					controlToken,
-				)
+				&& hasNoAuthorizationHeader(server.headers)
 				? 'matching'
 				: 'different';
 		}
@@ -2983,10 +3149,7 @@ function getAgentIntegrationConfigState(
 			return 'missing';
 		}
 		return getCodexObstudioUrl(section) === mcpUrl
-			&& codexObstudioAuthorizationMatchesControlToken(
-				section,
-				controlToken,
-			)
+			&& codexObstudioHasNoAuthorization(section)
 			? 'matching'
 			: 'different';
 	} catch {
@@ -3042,14 +3205,10 @@ function needsAgentIntegrationUpdate(spec: AgentIntegrationSpec, mcpUrl: string,
 async function recordAgentIntegrationConfigFingerprint(
 	context: vscode.ExtensionContext,
 	spec: AgentIntegrationSpec,
-	credentials: AgentIntegrationInstallCredentials,
+	mcpUrl: string,
 	expectedConfig: AgentIntegrationManagedConfig,
 ): Promise<void> {
-	if (getAgentIntegrationConfigState(
-		spec,
-		credentials.mcpUrl,
-		credentials.controlToken,
-	) !== 'matching') {
+	if (getAgentIntegrationConfigState(spec, mcpUrl) !== 'matching') {
 		throw new Error(`${spec.label} MCP configuration could not be verified after installation.`);
 	}
 	const managedConfig = readAgentIntegrationManagedConfig(spec);
@@ -3078,7 +3237,7 @@ async function configureDetectedAgentIntegrations(
 ): Promise<string[]> {
 	await ensureObserverRunning(context);
 	if (observerEndpoints === undefined) {
-		throw new Error('Observer MCP URL is not available.');
+		throw new Error('Splunk Observability Studio MCP URL is not available.');
 	}
 
 	const mcpUrl = observerEndpoints.mcpUrl;
@@ -3122,14 +3281,13 @@ async function configureDetectedAgentIntegrations(
 	return configured;
 }
 
-function refreshOwnedAgentIntegrationCredentials(
+function refreshOwnedAgentIntegrationConfig(
 	context: vscode.ExtensionContext,
 	specs: AgentIntegrationSpec[],
 	mcpUrl: string,
 ): Promise<string[]> {
-	const controlToken = activeObserverControlToken().trim();
 	const operationKey = crypto.createHash('sha256')
-		.update(`${mcpUrl}\0${controlToken}\0${specs.map((spec) => spec.target).join(',')}`)
+		.update(`${mcpUrl}\0${specs.map((spec) => spec.target).join(',')}`)
 		.digest('hex');
 	if (agentIntegrationRefreshOperation !== undefined) {
 		if (agentIntegrationRefreshOperation.key === operationKey) {
@@ -3139,11 +3297,7 @@ function refreshOwnedAgentIntegrationCredentials(
 
 	const previousRefresh = agentIntegrationRefreshOperation?.promise;
 	const runRefresh = async (): Promise<string[]> => {
-		if (
-			controlToken === ''
-			|| observerEndpoints?.mcpUrl !== mcpUrl
-			|| activeObserverControlToken().trim() !== controlToken
-		) {
+		if (observerEndpoints?.mcpUrl !== mcpUrl) {
 			return [];
 		}
 		const shouldRefresh = (spec: AgentIntegrationSpec): boolean => (
@@ -3164,14 +3318,13 @@ function refreshOwnedAgentIntegrationCredentials(
 			refreshable,
 			false,
 			true,
-			() => observerEndpoints?.mcpUrl === mcpUrl
-				&& activeObserverControlToken().trim() === controlToken,
+			() => observerEndpoints?.mcpUrl === mcpUrl,
 			shouldRefresh,
 		);
 		if (refreshed.length > 0) {
 			const labelList = formatAgentLabelList(refreshed);
 			void vscode.window.showInformationMessage(
-				`${labelList} Observer credentials refreshed. Restart ${labelList} before starting a new task.`,
+				`Splunk Observability Studio configuration for ${labelList} refreshed. Restart ${labelList} before starting a new task.`,
 			);
 		}
 		return refreshed;
@@ -3199,9 +3352,9 @@ async function maybeOfferDetectedAgentIntegrations(context: vscode.ExtensionCont
 	const mcpUrl = observerEndpoints.mcpUrl;
 	const detectedSpecs = getDetectedAgentIntegrations();
 	try {
-		await refreshOwnedAgentIntegrationCredentials(context, detectedSpecs, mcpUrl);
+		await refreshOwnedAgentIntegrationConfig(context, detectedSpecs, mcpUrl);
 	} catch (error) {
-		appendObserverOutputLine(`Automatic agent credential refresh failed: ${getErrorMessage(error)}`);
+		appendObserverOutputLine(`Automatic agent configuration refresh failed: ${getErrorMessage(error)}`);
 	}
 	if (
 		offerGeneration !== agentIntegrationPromptGeneration
@@ -3242,8 +3395,8 @@ async function maybeOfferDetectedAgentIntegrations(context: vscode.ExtensionCont
 			? `Enable ${labels[0]} integration for Splunk Observability Studio?`
 			: 'Enable detected agent integrations for Splunk Observability Studio?';
 		const promptDetail = shownSpecs.length === 1
-			? `Install bundled skills and configure ${labels[0]} to use the local Observer at ${mcpUrl}.`
-			: `Install bundled skills and configure ${labelList} to use the local Observer at ${mcpUrl}.`;
+			? `Install bundled skills and configure ${labels[0]} to use the local Splunk Observability Studio service at ${mcpUrl}.`
+			: `Install bundled skills and configure ${labelList} to use the local Splunk Observability Studio service at ${mcpUrl}.`;
 		recentAgentIntegrationPrompts = [...recentAgentIntegrationPrompts.slice(-9), {
 			detail: promptDetail,
 			message: promptMessage,
@@ -3326,7 +3479,7 @@ async function configureAgentMCPNow(
 ): Promise<boolean> {
 	const outputChannel = observerOutputChannel;
 	if (outputChannel === undefined) {
-		throw new Error('Observer output channel is not initialized.');
+		throw new Error('Splunk Observability Studio output channel is not initialized.');
 	}
 
 	try {
@@ -3335,7 +3488,7 @@ async function configureAgentMCPNow(
 			return false;
 		}
 		if (observerEndpoints === undefined) {
-			throw new Error('Observer MCP URL is not available.');
+			throw new Error('Splunk Observability Studio MCP URL is not available.');
 		}
 
 		const spec = agentIntegrationSpecs.find((candidate) => candidate.target === target);
@@ -3346,63 +3499,35 @@ async function configureAgentMCPNow(
 		if (!shouldContinue()) {
 			return false;
 		}
-		const installedCredentials = await installAgentIntegrationWithStableCredentials({
-			readCredentials: async () => {
-				await ensureObserverRunning(context);
-				if (observerEndpoints === undefined) {
-					throw new Error('Observer MCP URL is not available.');
-				}
-				return {
-					controlToken: activeObserverControlToken(),
-					healthProofSecret: activeObserverHealthProofSecret(),
-					mcpUrl: observerEndpoints.mcpUrl,
-				};
-			},
-			install: async (credentials) => {
-				outputChannel.appendLine(`Enabling ${label} integration for ${credentials.mcpUrl}`);
-				const installOutput = await execFile(
-					backend.command,
-					['install', '--target', target, '--shared-url', credentials.mcpUrl],
-					backend.cwd,
-					{
-						OBSTUDIO_CONTROL_TOKEN: credentials.controlToken,
-						OBSTUDIO_HEALTH_PROOF_SECRET: credentials.healthProofSecret,
-					},
-				);
-				if (installOutput.length > 0) {
-					outputChannel.append(installOutput);
-					if (!installOutput.endsWith('\n')) {
-						outputChannel.appendLine('');
-					}
-				}
-			},
-			captureInstalledConfig: (credentials) => {
-				if (getAgentIntegrationConfigState(
-					spec,
-					credentials.mcpUrl,
-					credentials.controlToken,
-				) !== 'matching') {
-					throw new Error(`${spec.label} MCP configuration could not be verified after installation.`);
-				}
-				const installedConfig = readAgentIntegrationManagedConfig(spec);
-				if (installedConfig === undefined) {
-					throw new Error(`${spec.label} MCP configuration could not be fingerprinted after installation.`);
-				}
-				return installedConfig;
-			},
-			isManagedConfigUnchanged: (expectedConfig) => {
-				const currentConfig = readAgentIntegrationManagedConfig(spec);
-				return currentConfig?.mcpUrl === expectedConfig.mcpUrl
-					&& currentConfig.fingerprintMaterial === expectedConfig.fingerprintMaterial;
-			},
-			recordInstalledConfig: (installedConfig, credentials) => (
-				recordAgentIntegrationConfigFingerprint(context, spec, credentials, installedConfig)
-			),
-		});
+		const mcpUrl = observerEndpoints.mcpUrl;
+		outputChannel.appendLine(`Enabling ${label} integration for ${mcpUrl}`);
+		const installOutput = await execFile(
+			backend.command,
+			['install', '--target', target, '--shared-url', mcpUrl],
+			backend.cwd,
+			backend.env,
+		);
+		if (installOutput.length > 0) {
+			outputChannel.append(installOutput);
+			if (!installOutput.endsWith('\n')) {
+				outputChannel.appendLine('');
+			}
+		}
+		if (!shouldContinue() || observerEndpoints?.mcpUrl !== mcpUrl) {
+			throw new Error('Splunk Observability Studio MCP endpoint changed during integration setup; retry with the active local service.');
+		}
+		if (getAgentIntegrationConfigState(spec, mcpUrl) !== 'matching') {
+			throw new Error(`${spec.label} MCP configuration could not be verified after installation.`);
+		}
+		const installedConfig = readAgentIntegrationManagedConfig(spec);
+		if (installedConfig === undefined) {
+			throw new Error(`${spec.label} MCP configuration could not be fingerprinted after installation.`);
+		}
+		await recordAgentIntegrationConfigFingerprint(context, spec, mcpUrl, installedConfig);
 		await context.globalState.update(integrationPromptDismissalKey(target), undefined);
 		// Record the bundle version so that future version changes trigger a re-install.
 		await recordSkillsBundleVersion(context, target);
-		outputChannel.appendLine(`${label} integration enabled for ${installedCredentials.mcpUrl}`);
+		outputChannel.appendLine(`${label} integration enabled for ${mcpUrl}`);
 		if (showSuccessMessage) {
 			void vscode.window.showInformationMessage(
 				`${label} integration enabled. Restart ${label} to load the bundled skills.`,

@@ -1,4 +1,4 @@
-# Observer Client Instructions
+# Splunk Observability Studio Client Instructions
 
 This file adds React client guidance to the applicable parent instructions.
 

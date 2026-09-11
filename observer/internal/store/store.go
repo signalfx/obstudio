@@ -353,13 +353,13 @@ type Store struct {
 	// their dedicated task/span retention budgets.
 	providerTaskHistoryEvicted bool
 	// Provider logs at or before this watermark may be unavailable because
-	// Observer started, was cleared, or evicted an older dedicated-ring record.
+	// Splunk Observability Studio started, was cleared, or evicted an older dedicated-ring record.
 	providerUsageLogUnavailableThrough time.Time
 	// Provider metric series at or before this watermark may be unavailable
-	// because Observer started, was cleared, or evicted an older point.
+	// because Splunk Observability Studio started, was cleared, or evicted an older point.
 	providerUsageMetricUnavailableThrough time.Time
 	// Repository correlations at or before this watermark may be unavailable
-	// because Observer started, was cleared, or evicted an older record.
+	// because Splunk Observability Studio started, was cleared, or evicted an older record.
 	providerRepositoryCorrelationUnavailableThrough time.Time
 
 	lastIngest time.Time
@@ -1082,7 +1082,7 @@ func (s *Store) SnapshotProviderRepositoryCorrelations() []ProviderRepositoryCor
 	return s.providerRepositoryCorrelations.snapshot()
 }
 
-// ProviderUsageLogUnavailableThrough is the latest Observer-start, clear, or
+// ProviderUsageLogUnavailableThrough is the latest service start, clear, or
 // ring-eviction boundary. Callers use it to avoid presenting a provider request
 // stream that may have begun before retained history as exact.
 func (s *Store) ProviderUsageLogUnavailableThrough() time.Time {
@@ -1091,7 +1091,7 @@ func (s *Store) ProviderUsageLogUnavailableThrough() time.Time {
 	return s.providerUsageLogUnavailableThrough
 }
 
-// ProviderUsageMetricUnavailableThrough is the latest Observer-start, clear,
+// ProviderUsageMetricUnavailableThrough is the latest service start, clear,
 // or ring-eviction boundary. Callers use it to avoid presenting a provider
 // metric series that may have begun before retained history as exact.
 func (s *Store) ProviderUsageMetricUnavailableThrough() time.Time {
@@ -1100,7 +1100,7 @@ func (s *Store) ProviderUsageMetricUnavailableThrough() time.Time {
 	return s.providerUsageMetricUnavailableThrough
 }
 
-// ProviderRepositoryCorrelationUnavailableThrough is the latest Observer-start,
+// ProviderRepositoryCorrelationUnavailableThrough is the latest service start,
 // clear, or ring-eviction boundary. Session-level repository attribution fails
 // closed when a task may predate this retained-history window.
 func (s *Store) ProviderRepositoryCorrelationUnavailableThrough() time.Time {

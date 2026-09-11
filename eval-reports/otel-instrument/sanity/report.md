@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | sanity |
 | Skill | otel-instrument |
-| Run ID | 20260629T201932119253Z |
+| Run ID | 20260911T020835388215Z |
 | Agent model | gpt-5.5 |
 | Workers | 1 |
 | Config | evals/codex-evals.toml |
@@ -16,7 +16,13 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | 2 | 100% (4/4) | 226.5K | 1.2m | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | 2 | 100% (6/6) | 92.2K | 36.9s | - | - | - |
+
+## Agent Token Usage
+
+| Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
+|---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | with_skill | codex | cumulative | measured | 2/2 recognized | 91971 | 48640 | unknown | 277 | 106 | unknown | 92248 |
 
 ## Sanity Failures
 

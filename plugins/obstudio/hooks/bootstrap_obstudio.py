@@ -386,8 +386,8 @@ def bootstrap_locked(
     stopped_state = read_bootstrap_state(state_path) if bootstrap_state_requests_stop(state_path) else {}
     if stopped_state.get("pluginVersion") == plugin_version:
         emit_context(
-            f"{plugin_display_name()} Observer is intentionally stopped for this plugin. "
-            f"Use {skill_command('observer-restart')} to start the managed Observer again."
+            f"{plugin_display_name()} is intentionally stopped for this plugin. "
+            f"Use {skill_command('observer-restart')} to start the managed Splunk Observability Studio service again."
         )
         return 0
     if stopped_state:
@@ -401,7 +401,7 @@ def bootstrap_locked(
             ),
         )
         emit_context(
-            f"{plugin_display_name()} plugin files were updated, and the managed Observer "
+            f"{plugin_display_name()} plugin files were updated, and managed Splunk Observability Studio "
             "remains intentionally stopped. "
             f"Use {skill_command('observer-restart')} to start it again."
         )
@@ -417,8 +417,8 @@ def bootstrap_locked(
         )
         emit_context(
             "Splunk Observability Studio MCP is explicitly disabled in Codex config. The plugin hook "
-            "left the managed Observer stopped, did not start or restart the "
-            "plugin-managed Observer, and bundled Splunk Observability Studio skills remain available."
+            "left managed Splunk Observability Studio stopped, did not start or restart the "
+            "plugin-managed Splunk Observability Studio service, and bundled Splunk Observability Studio skills remain available."
         )
         return 0
     if mcp_policy == "custom":
@@ -429,7 +429,7 @@ def bootstrap_locked(
         emit_context(
             "Custom Splunk Observability Studio MCP endpoint detected in Codex config. The plugin hook "
             f"left the configured endpoint unchanged ({codex_obstudio_mcp_url(codex_config_path)}), "
-            "did not start or restart the plugin-managed Observer, and bundled "
+            "did not start or restart the plugin-managed Splunk Observability Studio service, and bundled "
             "Splunk Observability Studio skills remain available."
         )
         return 0
@@ -485,7 +485,7 @@ def bootstrap_locked(
             else:
                 if is_tcp_port_open(plugin_health_url):
                     raise RuntimeError(
-                        f"local Observer port is already occupied at {plugin_health_url} "
+                        f"local Splunk Observability Studio port is already occupied at {plugin_health_url} "
                         "but the health endpoint is not reporting Splunk Observability Studio; stop the existing process or clear the stale shared-observer state"
                     )
                 process, log_path = start_obstudio_background(obstudio_binary, plugin_data)
@@ -523,19 +523,19 @@ def bootstrap_locked(
         if process_started:
             emit_context(
                 f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills, "
-                "the local Observer MCP config, and a background Observer process "
+                "the local Splunk Observability Studio MCP config, and a background Splunk Observability Studio process "
                 "was started for the bundled HTTP MCP endpoint."
             )
         elif observer_state["mode"] == "managed":
             emit_context(
                 f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills, "
-                "the local Observer MCP config, and the managed background Observer "
+                "the local Splunk Observability Studio MCP config, and managed Splunk Observability Studio "
                 "is healthy."
             )
         else:
             emit_context(
                 f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills "
-                "and the MCP config points at a shared Observer."
+                "and the MCP config points at a shared Splunk Observability Studio service."
             )
         return 0
     except Exception as exc:  # pragma: no cover - defensive hook boundary
@@ -1061,7 +1061,7 @@ def resolve_release_version(resolved_artifact: str, artifact_suffix: str) -> str
 
 def ensure_process_running(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
-        raise RuntimeError("Observer process exited before becoming healthy")
+        raise RuntimeError("Splunk Observability Studio process exited before becoming healthy")
 
 
 def parse_obstudio_version(stdout: str, stderr: str) -> str | None:
@@ -1191,7 +1191,7 @@ def terminate_process(process: subprocess.Popen[str]) -> None:
 def terminate_managed_process(pid: str, health_url: str = OBSTUDIO_HEALTH_URL) -> None:
     pid = pid.strip()
     if not pid.isdigit():
-        raise RuntimeError("could not determine managed Observer process pid")
+        raise RuntimeError("could not determine managed Splunk Observability Studio process pid")
     if is_windows():
         subprocess.run(["taskkill", "/PID", pid, "/T"], check=False, capture_output=True, text=True, timeout=5)
     else:
@@ -1230,7 +1230,7 @@ def verify_local_obstudio_health(health_url: str = OBSTUDIO_HEALTH_URL) -> dict[
             last_error = exc
         time.sleep(HEALTH_CHECK_SLEEP_SECONDS)
     raise RuntimeError(
-        f"local Observer did not become healthy at {health_url}"
+        f"local Splunk Observability Studio did not become healthy at {health_url}"
     ) from last_error
 
 

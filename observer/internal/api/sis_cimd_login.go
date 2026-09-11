@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,9 +15,8 @@ import (
 )
 
 // TODO(CIMD PoC): This mirrors extension/src/sis-cimd-oauth.ts's authorizeWithSISCIMD
-// for Observer's own standalone web UI (no VS Code bridge). Unlike registration, login
-// mints a real OAuth session, so every route here is gated by OBSTUDIO_CONTROL_TOKEN --
-// see requireObserverControlToken in splunk_export.go. The resulting token is held only
+// for Splunk Observability Studio's own standalone web UI (no VS Code bridge). The routes are restricted
+// to local native callers or Splunk Observability Studio's same-origin browser page. The resulting token is held only
 // in this process's memory (sisCIMDLoginState below); it is never written to disk, never
 // returned to the browser, and is lost on restart. If these two implementations drift,
 // prefer the TypeScript one as the more heavily tested source of truth.
@@ -53,7 +51,7 @@ type sisCIMDSession struct {
 	expiresAt   time.Time
 }
 
-// sisCIMDLoginState is process-wide, in-memory-only OAuth session state for Observer's
+// sisCIMDLoginState is process-wide, in-memory-only OAuth session state for Splunk Observability Studio's
 // standalone web UI. There is one login at a time, matching the fixed loopback callback
 // port -- a second concurrent login attempt would race for the same port anyway.
 type sisCIMDLoginState struct {
@@ -164,7 +162,7 @@ func (s *sisCIMDLoginState) fail(generation uint64, err error) {
 
 // startSISCIMDLoginHandler resolves the CIMD client/discovery, opens the fixed loopback
 // callback listener, and returns the authorization URL for the browser to open in a new
-// tab (window.open from a click handler, since Observer cannot open the user's browser
+// tab (window.open from a click handler, since Splunk Observability Studio cannot open the user's browser
 // itself the way the VS Code extension can via vscode.env.openExternal). The actual code
 // exchange happens in the background; poll sisCIMDSessionStatusHandler for the result.
 func startSISCIMDLoginHandler(w http.ResponseWriter, _ *http.Request) {
@@ -193,16 +191,16 @@ func startSISCIMDLoginHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 	listener.run(generation)
 
-	writeJSON(w, sisCIMDLoginStartResult{AuthorizationURL: authorizationURL})
+	writeSameOriginJSON(w, sisCIMDLoginStartResult{AuthorizationURL: authorizationURL})
 }
 
 func sisCIMDSessionStatusHandler(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, globalSISCIMDLoginState.status())
+	writeSameOriginJSON(w, globalSISCIMDLoginState.status())
 }
 
 func disconnectSISCIMDSessionHandler(w http.ResponseWriter, _ *http.Request) {
 	globalSISCIMDLoginState.disconnect()
-	writeJSON(w, globalSISCIMDLoginState.status())
+	writeSameOriginJSON(w, globalSISCIMDLoginState.status())
 }
 
 type sisCIMDCallbackListener struct {
@@ -239,7 +237,7 @@ func startSISCIMDCallbackListener(
 	// attemptCtx bounds the token exchange to this login attempt: if disconnect or the
 	// overall timeout fires while the claimed callback is still exchanging, the exchange
 	// must be cancelled, not left to run in the background -- otherwise SIS could still
-	// mint a token after Observer has already reported the attempt cancelled or timed out.
+	// mint a token after Splunk Observability Studio has already reported the attempt cancelled or timed out.
 	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
 
 	mux.HandleFunc("GET /callback", func(w http.ResponseWriter, r *http.Request) {
@@ -250,11 +248,11 @@ func startSISCIMDCallbackListener(
 			// and well-known, so any unrelated local request or a drive-by page can hit
 			// it without ever knowing expectedState. Settling here would let a single
 			// such request reliably deny sign-in before the real SIS redirect arrives.
-			writeSISCIMDCallbackPage(w, http.StatusBadRequest, "Sign-in could not be verified", "Return to Observer and try again.")
+			writeSISCIMDCallbackPage(w, http.StatusBadRequest, "Sign-in could not be verified", "Return to Splunk Observability Studio and try again.")
 			return
 		}
 		if oauthError := query.Get("error"); oauthError != "" {
-			writeSISCIMDCallbackPage(w, http.StatusBadRequest, "Sign-in was not completed", "Return to Observer and try again.")
+			writeSISCIMDCallbackPage(w, http.StatusBadRequest, "Sign-in was not completed", "Return to Splunk Observability Studio and try again.")
 			safeError := "unknown_error"
 			if isSISCIMDSafeErrorCode(oauthError) {
 				safeError = oauthError
@@ -263,13 +261,13 @@ func startSISCIMDCallbackListener(
 			return
 		}
 		if callbackIssuer := query.Get("iss"); callbackIssuer != "" && callbackIssuer != expectedIssuer {
-			writeSISCIMDCallbackPage(w, http.StatusBadRequest, "Sign-in could not be verified", "Return to Observer and try again.")
+			writeSISCIMDCallbackPage(w, http.StatusBadRequest, "Sign-in could not be verified", "Return to Splunk Observability Studio and try again.")
 			settled.Do(func() { resultCh <- callbackResult{err: errors.New("SIS OAuth callback issuer did not match")} })
 			return
 		}
 		code := query.Get("code")
 		if code == "" {
-			writeSISCIMDCallbackPage(w, http.StatusBadRequest, "Sign-in response was incomplete", "Return to Observer and try again.")
+			writeSISCIMDCallbackPage(w, http.StatusBadRequest, "Sign-in response was incomplete", "Return to Splunk Observability Studio and try again.")
 			settled.Do(func() {
 				resultCh <- callbackResult{err: errors.New("SIS OAuth callback did not include an authorization code")}
 			})
@@ -288,14 +286,14 @@ func startSISCIMDCallbackListener(
 		// not lie about an outcome that is still unknown -- reporting success first and
 		// finding out about a token-exchange failure afterward (via the async goroutine
 		// below) left the user with no reliable signal from either the browser tab or the
-		// Observer UI that anything had gone wrong.
+		// Splunk Observability Studio UI that anything had gone wrong.
 		session, err := exchangeSISCIMDAuthorizationCode(attemptCtx, client, tokenEndpoint, config, code, verifier)
 		if err != nil {
-			writeSISCIMDCallbackPage(w, http.StatusBadGateway, "Sign-in could not be completed", "Return to Observer and try again.")
+			writeSISCIMDCallbackPage(w, http.StatusBadGateway, "Sign-in could not be completed", "Return to Splunk Observability Studio and try again.")
 			settled.Do(func() { resultCh <- callbackResult{err: err} })
 			return
 		}
-		writeSISCIMDCallbackPage(w, http.StatusOK, "Sign-in complete", "You can return to Observer.")
+		writeSISCIMDCallbackPage(w, http.StatusOK, "Sign-in complete", "You can return to Splunk Observability Studio.")
 		settled.Do(func() { resultCh <- callbackResult{session: session} })
 	})
 
@@ -326,7 +324,7 @@ func startSISCIMDCallbackListener(
 			// Cancel before the drain delay/shutdown below: a claimed callback may still
 			// be exchanging (e.g. disconnect fired while it was in flight), and its
 			// outbound request to SIS must be aborted now, not left to complete on its own
-			// after Observer has already reported this attempt cancelled or timed out.
+			// after Splunk Observability Studio has already reported this attempt cancelled or timed out.
 			cancelAttempt()
 			time.Sleep(sisCIMDCallbackDrainDelay)
 			shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
@@ -398,7 +396,7 @@ func exchangeSISCIMDAuthorizationCode(
 
 	// Mirrors sis-cimd-oauth.ts: an omitted scope means "identical to what was
 	// requested" (RFC 6749 5.1), but an explicit scope must match the requested set
-	// exactly in both directions -- a narrowed response could grant less than Observer
+	// exactly in both directions -- a narrowed response could grant less tha Splunk Observability Studio
 	// needs, and an expanded one could grant more than it asked for.
 	scope := token.Scope
 	if scope == "" {
@@ -478,15 +476,11 @@ func htmlEscape(value string) string {
 	return b.String()
 }
 
-// registerSISCIMDLoginRoutes wires the gated registration/login/session routes onto mux.
-// Registration is included here, not left ungated, because an unauthenticated cross-site
-// POST could otherwise trigger the outbound SIS authorization probe (and any shadow-client
-// creation/refresh it causes SIS to perform) and read back its redirect/cookie details --
-// see registerSISCIMDClientHandler's doc comment.
+// registerSISCIMDLoginRoutes wires local-only registration/login/session routes onto mux.
+// The shared gate rejects remote processes and cross-site browser requests.
 func registerSISCIMDLoginRoutes(mux *http.ServeMux) {
-	controlToken := strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN"))
 	gate := func(next http.HandlerFunc) http.HandlerFunc {
-		return requireObserverControlToken(controlToken, next, writeSISCIMDRegistrationError)
+		return requireLocalObserverRequest(next, writeSISCIMDRegistrationError)
 	}
 	mux.HandleFunc("POST /api/splunk/cimd/register", gate(registerSISCIMDClientHandler))
 	mux.HandleFunc("POST /api/splunk/cimd/login", gate(startSISCIMDLoginHandler))

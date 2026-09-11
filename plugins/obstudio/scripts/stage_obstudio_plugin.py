@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage a self-contained Obstudio plugin bundle for Codex and Claude."""
+"""Stage a self-contained Splunk Observability Studio plugin bundle for Codex and Claude."""
 
 from __future__ import annotations
 
@@ -60,6 +60,7 @@ PLUGIN_SKILL_ENTRIES = (
 
 PLUGIN_SHARED_PATHS = (
     ".mcp.json",
+    "LICENSE",
     "PRIVACY.md",
     "README.md",
     "SECURITY.md",
@@ -206,7 +207,7 @@ def stage_skills(skills_output: Path) -> None:
     if skills_output.exists():
         shutil.rmtree(skills_output)
     skills_output.mkdir(parents=True)
-    copy_plugin_skills(skills_output)
+    copy_plugin_skills(skills_output, exclude_tests=True)
 
 
 def sync_plugin_skills() -> None:
@@ -223,14 +224,19 @@ def sync_plugin_skills() -> None:
         remove_path(temp_output)
 
 
-def copy_plugin_skills(skills_output: Path, local_source_root: Path | None = None) -> None:
+def copy_plugin_skills(
+    skills_output: Path,
+    local_source_root: Path | None = None,
+    *,
+    exclude_tests: bool = False,
+) -> None:
     for relative in PLUGIN_SKILL_ENTRIES:
         source = source_for_plugin_skill_entry(relative, local_source_root=local_source_root)
         if not source.exists():
             raise RuntimeError(f"missing plugin skill entry: {source}")
         destination = skills_output / relative
         remove_path(destination)
-        copy_path(source, destination)
+        copy_path(source, destination, exclude_tests=exclude_tests)
         if relative not in PLUGIN_LOCAL_SKILL_ENTRIES:
             normalize_text_tree(destination)
 
@@ -271,11 +277,14 @@ def remove_path(path: Path) -> None:
         shutil.rmtree(path)
 
 
-def copy_path(source: Path, destination: Path) -> None:
+def copy_path(source: Path, destination: Path, *, exclude_tests: bool = False) -> None:
     if source.is_symlink():
         source = source.resolve()
     if source.is_dir():
-        ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
+        ignored_names = ["__pycache__", "*.pyc", ".DS_Store", ".pytest_cache", ".mypy_cache", ".ruff_cache"]
+        if exclude_tests:
+            ignored_names.extend(("tests", "test_*"))
+        ignore = shutil.ignore_patterns(*ignored_names)
         shutil.copytree(source, destination, symlinks=False, ignore=ignore)
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -507,7 +516,8 @@ def flatten_files(root: Path) -> set[Path]:
 
 
 def should_ignore(path: Path) -> bool:
-    return any(part == "__pycache__" for part in path.parts) or path.name in {".DS_Store"} or path.suffix == ".pyc"
+    ignored_directories = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+    return any(part in ignored_directories for part in path.parts) or path.name == ".DS_Store" or path.suffix == ".pyc"
 
 
 def write_archive(source: Path, archive: Path) -> None:

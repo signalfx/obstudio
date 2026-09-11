@@ -104,7 +104,7 @@ export class ObserverWebviewTelemetry {
 		});
 		socket.on('error', (error) => {
 			if (this.isCurrent(socket, generation)) {
-				this.log(`Observer webview telemetry error: ${error.message}`);
+				this.log(`Splunk Observability Studio webview telemetry error: ${error.message}`);
 			}
 		});
 		socket.on('close', () => {
@@ -172,7 +172,7 @@ export function webSocketURL(observerBaseUrl: string): string {
 	} else if (url.protocol === 'https:') {
 		url.protocol = 'wss:';
 	} else {
-		throw new Error('Observer webview telemetry requires an HTTP or HTTPS base URL.');
+		throw new Error('Splunk Observability Studio webview telemetry requires an HTTP or HTTPS base URL.');
 	}
 	return url.toString();
 }

@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as crypto from 'node:crypto';
 import { isIP } from 'node:net';
 import * as path from 'node:path';
 
@@ -13,7 +12,6 @@ export type ObserverBackend = {
 
 export type ObserverHealth = {
 	apiVersion?: string;
-	challengeProof?: string;
 	endpoints?: Record<string, string>;
 	kind?: string;
 	mode?: string;
@@ -24,25 +22,19 @@ export type ObserverHealth = {
 
 type SharedObserverState = {
 	baseUrl?: string;
-	controlToken?: string;
-	healthProofSecret?: string;
 	healthUrl?: string;
 	mcpUrl?: string;
+	pid?: number;
 	updatedAt?: string;
 };
 
 export type SharedObserverDiscovery = {
 	baseUrl: string;
-	controlToken?: string;
-	healthProofSecret?: string;
 	healthUrl?: string;
 	mcpUrl?: string;
+	pid?: number;
 	updatedAtMs?: number;
 };
-
-export const observerHealthProofChallengeQuery = 'obstudioHealthChallenge';
-const observerHealthProofChallengeBytes = 32;
-const observerHealthProofDomain = 'obstudio-health-proof-v2\0';
 
 export function isLoopbackObserverHost(hostname: string): boolean {
 	let normalized = hostname.trim().toLowerCase();
@@ -64,19 +56,19 @@ export function isLoopbackObserverHost(hostname: string): boolean {
 export function normalizeObserverBaseUrl(raw: string): string {
 	const trimmed = raw.trim();
 	if (trimmed.length === 0) {
-		throw new Error('Observer URL cannot be empty.');
+		throw new Error('Splunk Observability Studio URL cannot be empty.');
 	}
 
 	const parsed = new URL(trimmed);
 	if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-		throw new Error(`Observer URL must use http or https: ${raw}`);
+		throw new Error(`Splunk Observability Studio URL must use http or https: ${raw}`);
 	}
 	const authority = trimmed.slice(trimmed.indexOf('//') + 2).split(/[/?#]/, 1)[0];
 	if (parsed.username !== '' || parsed.password !== '' || authority.includes('@')) {
-		throw new Error('Observer URL must not include user information.');
+		throw new Error('Splunk Observability Studio URL must not include user information.');
 	}
 	if (parsed.hash !== '' || trimmed.includes('#')) {
-		throw new Error('Observer URL must not include a fragment.');
+		throw new Error('Splunk Observability Studio URL must not include a fragment.');
 	}
 	const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
 	if (hostname === '0.0.0.0') {
@@ -88,8 +80,8 @@ export function normalizeObserverBaseUrl(raw: string): string {
 	} else if (hostname.endsWith('.') && isLoopbackObserverHost(hostname)) {
 		parsed.hostname = hostname.slice(0, -1);
 	}
-	if (parsed.protocol === 'http:' && !isLoopbackObserverHost(parsed.hostname)) {
-		throw new Error('Observer URL must use HTTPS unless the host is loopback.');
+	if (!isLoopbackObserverHost(parsed.hostname)) {
+		throw new Error('Splunk Observability Studio URL host must be loopback.');
 	}
 
 	if (parsed.pathname.endsWith('/mcp')) {
@@ -137,25 +129,20 @@ export function readSharedObserverDiscovery(
 			return undefined;
 		}
 		const updatedAtMs = typeof state.updatedAt === 'string' ? Date.parse(state.updatedAt) : Number.NaN;
-		const controlToken = typeof state.controlToken === 'string' && state.controlToken.trim().length > 0
-			? state.controlToken.trim()
-			: undefined;
-		const healthProofSecret = typeof state.healthProofSecret === 'string'
-			&& isCanonicalBase64Url(state.healthProofSecret.trim(), observerHealthProofChallengeBytes)
-			? state.healthProofSecret.trim()
-			: undefined;
 		const healthUrl = typeof state.healthUrl === 'string' && state.healthUrl.trim().length > 0
 			? normalizeSharedObserverHealthUrl(state.healthUrl)
 			: undefined;
 		const mcpUrl = typeof state.mcpUrl === 'string' && state.mcpUrl.trim().length > 0
 			? normalizeSharedObserverMCPUrl(state.mcpUrl)
 			: undefined;
+		const pid = typeof state.pid === 'number' && Number.isSafeInteger(state.pid) && state.pid > 0
+			? state.pid
+			: undefined;
 		return {
 			baseUrl: normalizeSharedObserverBaseUrl(state.baseUrl),
-			...(controlToken !== undefined ? { controlToken } : {}),
-			...(healthProofSecret !== undefined ? { healthProofSecret } : {}),
 			...(healthUrl !== undefined ? { healthUrl } : {}),
 			...(mcpUrl !== undefined ? { mcpUrl } : {}),
+			...(pid !== undefined ? { pid } : {}),
 			...(Number.isFinite(updatedAtMs) ? { updatedAtMs } : {}),
 		};
 	} catch {
@@ -165,9 +152,36 @@ export function readSharedObserverDiscovery(
 
 function readPrivateSharedObserverState(statePath: string): string | undefined {
 	const effectiveUserId = process.geteuid?.();
-	if (effectiveUserId === undefined || process.platform === 'win32') {
-		// Node does not expose the Windows ACL primitives needed to prove the same
-		// owner-only policy as the Observer. Keep discovery fail-closed there.
+	if (process.platform === 'win32') {
+		// The shared state contains only validated loopback endpoints and a PID, not
+		// credentials. Windows profile ACLs protect the directory, and callers must
+		// independently verify the listener PID and Splunk Observability Studio executable before stopping
+		// it. Still reject links and file-replacement races here.
+		const linkedBefore = fs.lstatSync(statePath);
+		if (linkedBefore.isSymbolicLink() || !linkedBefore.isFile()) {
+			return undefined;
+		}
+		const descriptor = fs.openSync(statePath, fs.constants.O_RDONLY);
+		try {
+			const opened = fs.fstatSync(descriptor);
+			const linkedAfter = fs.lstatSync(statePath);
+			if (
+				!opened.isFile()
+				|| linkedAfter.isSymbolicLink()
+				|| !linkedAfter.isFile()
+				|| linkedAfter.dev !== opened.dev
+				|| linkedAfter.ino !== opened.ino
+				|| linkedAfter.dev !== linkedBefore.dev
+				|| linkedAfter.ino !== linkedBefore.ino
+			) {
+				return undefined;
+			}
+			return fs.readFileSync(descriptor, 'utf8');
+		} finally {
+			fs.closeSync(descriptor);
+		}
+	}
+	if (effectiveUserId === undefined) {
 		return undefined;
 	}
 	const parentPath = path.dirname(statePath);
@@ -205,32 +219,8 @@ function readPrivateSharedObserverState(statePath: string): string | undefined {
 	}
 }
 
-export function isLocalObserverControlHost(rawHostname: string): boolean {
-	const hostname = rawHostname.toLowerCase().replace(/^\[|\]$/g, '');
-	const ipv4Octets = hostname.split('.');
-	const ipv4Loopback = ipv4Octets.length === 4
-		&& ipv4Octets[0] === '127'
-		&& ipv4Octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255);
-	return hostname === 'localhost'
-		|| hostname === '::1'
-		|| ipv4Loopback;
-}
-
 export function normalizeSharedObserverBaseUrl(raw: string): string {
-	let normalized: string;
-	try {
-		normalized = normalizeObserverBaseUrl(raw);
-	} catch (error) {
-		if (error instanceof Error && error.message === 'Observer URL must use HTTPS unless the host is loopback.') {
-			throw new Error('A non-local shared Observer URL must use HTTPS.');
-		}
-		throw error;
-	}
-	const parsed = new URL(normalized);
-	if (parsed.protocol === 'http:' && !isLocalObserverControlHost(parsed.hostname)) {
-		throw new Error('A non-local shared Observer URL must use HTTPS.');
-	}
-	return normalized;
+	return normalizeObserverBaseUrl(raw);
 }
 
 export function normalizeSharedObserverHealthUrl(raw: string): string {
@@ -244,18 +234,18 @@ export function normalizeSharedObserverMCPUrl(raw: string): string {
 function normalizeSharedObserverEndpointUrl(raw: string, suffix: string, label: string): string {
 	const trimmed = raw.trim();
 	if (trimmed.length === 0) {
-		throw new Error(`Observer ${label} URL cannot be empty.`);
+		throw new Error(`Splunk Observability Studio ${label} URL cannot be empty.`);
 	}
 	const parsed = new URL(trimmed);
 	if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-		throw new Error(`Observer ${label} URL must use http or https.`);
+		throw new Error(`Splunk Observability Studio ${label} URL must use http or https.`);
 	}
 	const authority = trimmed.slice(trimmed.indexOf('//') + 2).split(/[/?#]/, 1)[0];
 	if (parsed.username !== '' || parsed.password !== '' || authority.includes('@')) {
-		throw new Error(`Observer ${label} URL must not include user information.`);
+		throw new Error(`Splunk Observability Studio ${label} URL must not include user information.`);
 	}
 	if (parsed.hash !== '' || parsed.search !== '' || trimmed.includes('#')) {
-		throw new Error(`Observer ${label} URL must not include a query or fragment.`);
+		throw new Error(`Splunk Observability Studio ${label} URL must not include a query or fragment.`);
 	}
 	const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
 	if (hostname === '0.0.0.0') {
@@ -265,136 +255,14 @@ function normalizeSharedObserverEndpointUrl(raw: string, suffix: string, label: 
 	} else if (hostname.endsWith('.') && isLoopbackObserverHost(hostname)) {
 		parsed.hostname = hostname.slice(0, -1);
 	}
-	if (parsed.protocol === 'http:' && !isLocalObserverControlHost(parsed.hostname)) {
-		throw new Error(`A non-local Observer ${label} URL must use HTTPS.`);
+	if (!isLoopbackObserverHost(parsed.hostname)) {
+		throw new Error(`Splunk Observability Studio ${label} URL host must be loopback.`);
 	}
 	parsed.pathname = parsed.pathname.replace(/\/+$/, '');
 	if (!parsed.pathname.endsWith(suffix)) {
-		throw new Error(`Observer ${label} URL must end with ${suffix}.`);
+		throw new Error(`Splunk Observability Studio ${label} URL must end with ${suffix}.`);
 	}
 	return parsed.toString();
-}
-
-export function createObserverHealthProofChallenge(): string {
-	return crypto.randomBytes(observerHealthProofChallengeBytes).toString('base64url');
-}
-
-function observerMCPUrl(observerUrl: string): string | undefined {
-	try {
-		return normalizeSharedObserverMCPUrl(`${normalizeSharedObserverBaseUrl(observerUrl)}/mcp`);
-	} catch {
-		return undefined;
-	}
-}
-
-export function verifiedSharedObserverMCPUrl(
-	observerUrl: string,
-	health: ObserverHealth,
-	intendedControlMCPUrl?: string,
-): string | undefined {
-	const intendedMCPUrl = observerMCPUrl(intendedControlMCPUrl ?? observerUrl);
-	const advertisedMCPUrl = health.endpoints?.mcp;
-	if (
-		intendedMCPUrl === undefined
-		|| typeof advertisedMCPUrl !== 'string'
-	) {
-		return undefined;
-	}
-	let normalizedAdvertisedMCPUrl: string;
-	try {
-		normalizedAdvertisedMCPUrl = normalizeSharedObserverMCPUrl(advertisedMCPUrl);
-	} catch {
-		return undefined;
-	}
-	if (
-		normalizedAdvertisedMCPUrl !== advertisedMCPUrl
-		|| !sameAdvertisedObserverControlEndpoint(intendedMCPUrl, normalizedAdvertisedMCPUrl)
-	) {
-		return undefined;
-	}
-	return normalizedAdvertisedMCPUrl;
-}
-
-export function verifySharedObserverControlToken(
-	observerUrl: string,
-	discovered: SharedObserverDiscovery,
-	challenge: string,
-	health: ObserverHealth,
-	rejectedToken?: string,
-	intendedControlMCPUrl?: string,
-): string | undefined {
-	const controlToken = discovered.controlToken?.trim();
-	const healthProofSecret = discovered.healthProofSecret?.trim();
-	const proof = health.challengeProof;
-	const advertisedMCPUrl = health.endpoints?.mcp;
-	if (
-		controlToken === undefined
-		|| controlToken === ''
-		|| healthProofSecret === undefined
-		|| !isCanonicalBase64Url(healthProofSecret, observerHealthProofChallengeBytes)
-		|| controlToken === rejectedToken
-		|| proof === undefined
-		|| typeof advertisedMCPUrl !== 'string'
-		|| verifiedSharedObserverMCPUrl(observerUrl, health, intendedControlMCPUrl) === undefined
-		|| !isCanonicalBase64Url(challenge, observerHealthProofChallengeBytes)
-		|| !isCanonicalBase64Url(proof, 32)
-	) {
-		return undefined;
-	}
-	const controlTokenDigest = crypto.createHash('sha256').update(controlToken, 'utf8').digest();
-	const expectedProof = crypto
-		.createHmac('sha256', Buffer.from(healthProofSecret, 'base64url'))
-		.update(observerHealthProofDomain, 'utf8')
-		.update(controlTokenDigest)
-		.update(Buffer.from([0]))
-		.update(challenge, 'utf8')
-		.update(Buffer.from([0]))
-		.update(advertisedMCPUrl, 'utf8')
-		.digest();
-	const providedProof = Buffer.from(proof, 'base64url');
-	return crypto.timingSafeEqual(expectedProof, providedProof) ? controlToken : undefined;
-}
-
-function sameAdvertisedObserverControlEndpoint(intended: string, advertised: string): boolean {
-	if (intended === advertised) {
-		return true;
-	}
-	try {
-		const intendedURL = new URL(intended);
-		const advertisedURL = new URL(advertised);
-		if (!isLocalhostIPv4Alias(intendedURL.hostname) || !isLocalhostIPv4Alias(advertisedURL.hostname)) {
-			return false;
-		}
-		return intendedURL.protocol === advertisedURL.protocol
-			&& effectiveObserverPort(intendedURL) === effectiveObserverPort(advertisedURL)
-			&& intendedURL.pathname === advertisedURL.pathname
-			&& intendedURL.search === advertisedURL.search
-			&& intendedURL.hash === ''
-			&& advertisedURL.hash === ''
-			&& intendedURL.username === ''
-			&& intendedURL.password === ''
-			&& advertisedURL.username === ''
-			&& advertisedURL.password === '';
-	} catch {
-		return false;
-	}
-}
-
-function isLocalhostIPv4Alias(hostname: string): boolean {
-	const normalized = hostname.toLowerCase().replace(/\.$/, '');
-	return normalized === 'localhost' || normalized === '127.0.0.1';
-}
-
-function effectiveObserverPort(value: URL): string {
-	return value.port || (value.protocol === 'https:' ? '443' : '80');
-}
-
-function isCanonicalBase64Url(value: string, decodedLength: number): boolean {
-	if (!/^[A-Za-z0-9_-]+$/.test(value)) {
-		return false;
-	}
-	const decoded = Buffer.from(value, 'base64url');
-	return decoded.length === decodedLength && decoded.toString('base64url') === value;
 }
 
 export function resolveBackend(extensionPath: string): ObserverBackend {
@@ -425,11 +293,11 @@ export function resolveBackend(extensionPath: string): ObserverBackend {
 			command: binary,
 			cwd: path.dirname(binary),
 			env,
-			label: 'observer',
+			label: 'Splunk Observability Studio',
 		};
 	}
 
 	throw new Error(
-		`observer binary not found in ${path.join(extensionPath, 'dist', 'observer')}. Run 'npm run compile' in the extension directory.`,
+		`Splunk Observability Studio binary not found in ${path.join(extensionPath, 'dist', 'observer')}. Run 'npm run compile' in the extension directory.`,
 	);
 }

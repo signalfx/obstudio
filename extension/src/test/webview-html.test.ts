@@ -24,6 +24,15 @@ describe('getObserverWebviewHtml', () => {
 		assert.equal(html.includes('<iframe'), false);
 	});
 
+	it('uses the full Splunk Observability Studio title', () => {
+		const html = getObserverWebviewHtml(
+			'vscode-webview://extension-id',
+			'vscode-webview://extension-id/main.js',
+			'vscode-webview://extension-id/main.css',
+		);
+		assert.ok(html.includes('<title>Splunk Observability Studio – Telemetry Explorer</title>'));
+	});
+
 	it('uses a strict CSP without network, frame, or clipboard capabilities', () => {
 		const html = getObserverWebviewHtml(
 			'vscode-webview://extension-id',
@@ -66,6 +75,7 @@ describe('getObserverLoadingWebviewHtml', () => {
 	it('shows a starting message', () => {
 		const html = getObserverLoadingWebviewHtml();
 		assert.ok(html.includes('Splunk Observability Studio is starting'));
+		assert.ok(html.includes('<title>Splunk Observability Studio</title>'));
 	});
 
 	it('does not contain an iframe', () => {
@@ -85,18 +95,30 @@ describe('getObserverErrorWebviewHtml', () => {
 
 	it('shows the "could not start" heading', () => {
 		const html = getObserverErrorWebviewHtml('some error');
-		assert.ok(html.includes('Observer could not start'));
+		assert.ok(html.includes('Splunk Observability Studio could not start'));
+	});
+
+	it('shows a restart-required heading and the selected service port', () => {
+		const html = getObserverErrorWebviewHtml(
+			'Splunk Observability Studio 0.0.18 on localhost port 3000 (PID 4321) is still running.',
+			'Restart VS Code, then start Splunk Observability Studio.',
+			'Restart required',
+		);
+		assert.ok(html.includes('<h2>Restart required</h2>'));
+		assert.ok(html.includes('localhost port 3000'));
+		assert.ok(html.includes('PID 4321'));
+		assert.ok(html.includes('Restart VS Code'));
 	});
 
 	it('includes restart hint', () => {
 		const html = getObserverErrorWebviewHtml('some error');
-		assert.ok(html.includes('Restart Observer'));
+		assert.ok(html.includes('Splunk Observability Studio: Restart'));
 		assert.ok(html.includes('output log'));
 	});
 
 	it('includes port-specific restart guidance for port conflicts', () => {
 		const html = getObserverErrorWebviewHtml(
-			'Observer UI port 3000 is already in use by "nginx (PID 42)".',
+			'Splunk Observability Studio UI port 3000 is already in use by "nginx (PID 42)".',
 			getObserverStartupHint('port-conflict'),
 		);
 		assert.ok(html.includes('freeing the conflicting port'));
@@ -128,12 +150,13 @@ describe('getObserverErrorWebviewHtml', () => {
 describe('getObserverStoppedWebviewHtml', () => {
 	it('shows stopped message', () => {
 		const html = getObserverStoppedWebviewHtml();
-		assert.ok(html.includes('Observer is stopped'));
+		assert.ok(html.includes('Splunk Observability Studio is stopped'));
 	});
 
 	it('includes start hint', () => {
 		const html = getObserverStoppedWebviewHtml();
-		assert.ok(html.includes('Start Observer'));
+		assert.ok(html.includes('Splunk Observability Studio: Start'));
+		assert.ok(!/\bObserver\b/.test(html));
 	});
 
 	it('does not contain an iframe', () => {
@@ -148,14 +171,15 @@ describe('getStatusBarUpdate', () => {
 	it('returns spinner icon and starting tooltip for starting state', () => {
 		const update = getStatusBarUpdate('starting');
 		assert.ok(update.text.includes('loading~spin'));
-		assert.ok(update.text.includes('Observer'));
+		assert.ok(update.text.includes('Splunk Observability Studio'));
 		assert.ok(update.tooltip.includes('starting'));
 		assert.equal(update.command, 'observability-studio.statusMenu');
 	});
 
-	it('returns pulse icon for running state', () => {
+	it('returns the product name without a misleading glyph for running state', () => {
 		const update = getStatusBarUpdate('running');
-		assert.ok(update.text.includes('pulse'));
+		assert.strictEqual(update.text, 'Splunk Observability Studio');
+		assert.ok(update.text.includes('Splunk Observability Studio'));
 		assert.ok(update.tooltip.includes('running'));
 		assert.equal(update.command, 'observability-studio.statusMenu');
 	});
@@ -163,6 +187,7 @@ describe('getStatusBarUpdate', () => {
 	it('returns circle-outline icon for stopped state', () => {
 		const update = getStatusBarUpdate('stopped');
 		assert.ok(update.text.includes('circle-outline'));
+		assert.ok(update.text.includes('Splunk Observability Studio'));
 		assert.ok(update.tooltip.includes('stopped'));
 		assert.equal(update.command, 'observability-studio.statusMenu');
 	});
@@ -170,6 +195,7 @@ describe('getStatusBarUpdate', () => {
 	it('returns error icon for error state', () => {
 		const update = getStatusBarUpdate('error');
 		assert.ok(update.text.includes('error'));
+		assert.ok(update.text.includes('Splunk Observability Studio'));
 		assert.ok(update.tooltip.includes('failed'));
 		assert.equal(update.command, 'observability-studio.statusMenu');
 	});
