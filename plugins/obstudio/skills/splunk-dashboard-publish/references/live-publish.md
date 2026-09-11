@@ -23,7 +23,8 @@ Use the shared skip-on-500 pagination rules for:
 - `GET /v2/dashboardgroup` for `id`, `name`;
 - `GET /v2/dashboard` for `id`, `name`, `groupId`, and placed `charts[]`;
 - `GET /v2/chart/{id}` only for charts in candidate-matched dashboards whose
-  `programText` and `options.type` are needed.
+  `programText`, `options.type`, and normalized visualization options
+  (`colorBy`/`defaultPlotType` where applicable) are needed.
 
 An empty successful live list means local objects are GAPs. Do not turn a
 failed/incomplete fetch into an empty list or false GAP. Only HTTP 500 pages are

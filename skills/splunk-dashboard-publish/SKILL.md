@@ -1,9 +1,8 @@
 ---
 name: splunk-dashboard-publish
 description: >-
-  Compare .observe/terraform/dashboards.tf with live Splunk Observability Cloud
-  groups, dashboards, and charts; classify COVERED/GAP/UNCERTAIN results,
-  confirm, and create only GAPs chart-first with a resumable ledger. Use for
+  Compare local dashboards with live Splunk O11y; classify COVERED/GAP/UNCERTAIN,
+  confirm, and create chart-first GAPs with a resumable ledger. Use for
   $splunk-dashboard-publish, "sync dashboards", "check which dashboards are missing",
   "create missing dashboards", or "push dashboard gaps to Splunk".
 metadata:
@@ -12,15 +11,13 @@ metadata:
   category: observability
 ---
 
-# Dashboard Publish -- Splunk O11y Gap Analysis And Create
+# Dashboard Publish -- Splunk O11y Gap Analysis & Create
 
 Compare `$splunk-dashboard` Terraform with live Splunk Observability Cloud at
-group, dashboard, and chart levels; create only confirmed GAPs. Charts must
-exist before dashboards use their `chartId` values. Keep a ledger for
-idempotent reruns and orphan-chart recovery.
+group, dashboard, and chart levels; create only confirmed GAPs. Create charts
+before dashboards reference `chartId`; keep an orphan-recovery ledger.
 
-Without `.observe/terraform/dashboards.tf`, stop and request
-`$splunk-dashboard` first.
+Without `.observe/terraform/dashboards.tf`, request `$splunk-dashboard` first.
 
 Resolve paths in this entrypoint from the skill directory. Inside a loaded
 reference, resolve its relative paths from that reference's directory. Never
@@ -140,12 +137,14 @@ Live mode applies `references/dashboard-coverage-model.md`:
   subset is COVERED with chart-level GAPs; divergent extra/different content is
   UNCERTAIN.
 - Chart: COVERED only when one live chart matches metric, resolved service
-  filter (`service.name` or equivalent `sf_service`), and chart type. Partial
-  matches are UNCERTAIN; absence of a complete match is GAP.
+  filter (`service.name` or equivalent `sf_service`), chart type, and normalized
+  visualization options (`colorBy` and `defaultPlotType` where applicable).
+  Partial matches are UNCERTAIN; absence of a complete match is GAP.
 
 Record every criterion that fired. A valid chart reason can say
 `metric http.server.request.duration + filter service.name=checkout + type
-time_series all matched live chart C-456`. Reject a generic note such as
+time_series + options colorBy=Dimension, defaultPlotType=LineChart all matched
+live chart C-456`. Reject a generic note such as
 `matched live dashboard`.
 
 ### 4. Show The Confirmation Diff

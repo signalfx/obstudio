@@ -199,7 +199,7 @@
   "failures": [],
   "source": {
     "digest_version": 2,
-    "digest": "cd17524a32613c4b71acc94438a7d51d6f47460731e84216ebd5eb14d3f2be03",
+    "digest": "8dcd36b0bea40b8152a840a9e8fd27b12d2ce9f964170270d85ef3b214eadc12",
     "eval_kinds": [
       "rubric"
     ],
@@ -255,12 +255,12 @@
       "skills/references/splunk-api.md": "5d68ade8ac4bc6414f99ca645804b69cf6633f2177188501cd5138f1818b9d59",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "77c3e9b98a3a84fe0f7699f7ab40eabcf0dd40fe9cef231e4958b12653535a69",
-      "skills/splunk-dashboard-publish/SKILL.md": "9b2168f3e4ac42bbdd26ae87bcd5643cff502d89c592d5cb8e7bce0073eb6c1f",
+      "skills/splunk-dashboard-publish/SKILL.md": "898e2a7aa619a57d735e71296cd5ca8e0defbd99f559243a5354f1f857dc477e",
       "skills/splunk-dashboard-publish/references/chart-wire-contract.md": "8e76b3de1bc2086a5aa608e3e219e5a8c336fdee9e3040d4ae3f9fded147d3ae",
-      "skills/splunk-dashboard-publish/references/dashboard-coverage-model.md": "827765df83df799dcfec9405acf3b84a0e563278406731de1f435f8126d7a416",
-      "skills/splunk-dashboard-publish/references/live-publish.md": "ea3f75016b36b5422dccdfd6cf42bec4933aabcf0797f4da5d3e1de356cf03fe",
+      "skills/splunk-dashboard-publish/references/dashboard-coverage-model.md": "8550da8b308220dd6214f6b39bb8617b227eb37c6b6a19c1c114cfcd849c7b5b",
+      "skills/splunk-dashboard-publish/references/live-publish.md": "e8feeb54fb2a94ac1a10d6c9ba0d80ef959cf4359bf1ca02980554912132dd51",
       "skills/splunk-dashboard-publish/references/offline-plan.md": "be40e7d22b4812a831b479d4ffd9e9fe329aeced1b14102d5f18a3648449a8a6",
-      "skills/splunk-dashboard-publish/tests/test_dashboard_publish_progressive_disclosure.py": "a568f1a7dcdf2d6a70c9f70a987a77dc09c603da040998e9798a51f188ee1e3d"
+      "skills/splunk-dashboard-publish/tests/test_dashboard_publish_progressive_disclosure.py": "67779fc7889d2fb43fc0d88c13038703074e9b0f048f2f3fff71bda7839f1187"
     },
     "skill_path": "skills/splunk-dashboard-publish",
     "selections": [

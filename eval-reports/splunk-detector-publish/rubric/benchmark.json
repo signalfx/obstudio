@@ -199,7 +199,7 @@
   "failures": [],
   "source": {
     "digest_version": 2,
-    "digest": "f00befd64883b2ecd1e2f3906d9e566fb1a77a888101c04d131dbf51d87b8c3f",
+    "digest": "b642ea26bd4154d3cc3dbe008bf77db9c9e5612f33cbbfa936d906b8c9b84196",
     "eval_kinds": [
       "rubric"
     ],
@@ -215,7 +215,7 @@
       "pytest-codex-evals/src/pytest_codex_evals/__init__.py": "b7a1a6542146ea0c4d860cbaacaba484b18b7556b04b11787e472bd051235d4f",
       "pytest-codex-evals/src/pytest_codex_evals/__main__.py": "307299fda7b77d22c64cb51430ec75e5f59d78e9c948786afb3b2544fe45e4b7",
       "pytest-codex-evals/src/pytest_codex_evals/ab.py": "316754af9db1b8b01ca95226e11e550d5f8e5545736127ccecce970da0ab4b9a",
-      "pytest-codex-evals/src/pytest_codex_evals/backends.py": "328ce20c74c11e23239488641a19f6873b567dbb131af371e2fe44f79317a563",
+      "pytest-codex-evals/src/pytest_codex_evals/backends.py": "d0b7e1231ead05085cd70904e2caf6a2a5879abf03c1c3ce5196ed36f93f5fce",
       "pytest-codex-evals/src/pytest_codex_evals/cli.py": "4b13fa56a5a9f9a9676bd1e4ebc1ee5ed73574109ae6951b3e35392baa9b70ae",
       "pytest-codex-evals/src/pytest_codex_evals/config.py": "44034f807c6e95fb85558eec0669e47e0cb1f5fa4e1fe1a0951aaf5747fce926",
       "pytest-codex-evals/src/pytest_codex_evals/definitions/__init__.py": "fde160bf0ba46e9555037f2a61d24edd7b6dff5d81ccc9126c3c5e3b86d0eb66",

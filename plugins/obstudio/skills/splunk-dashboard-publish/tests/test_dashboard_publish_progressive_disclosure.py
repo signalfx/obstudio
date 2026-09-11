@@ -123,6 +123,9 @@ def test_connected_dry_run_uses_live_read_only_classification() -> None:
     assert "perform the read-only live fetch" in entrypoint
     assert "later non-dry-run must re-fetch" in entrypoint
     assert "a connected dry run never writes one" in entrypoint
+    assert "normalized visualization options" in entrypoint
+    assert "colorBy" in entrypoint
+    assert "defaultPlotType" in live
     assert "A connected dry run never writes a ledger" in live
 
 

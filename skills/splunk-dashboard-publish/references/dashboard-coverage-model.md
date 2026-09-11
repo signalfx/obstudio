@@ -11,9 +11,9 @@ verdict and its own concrete reason.
 
 Matching dashboards by name alone is unreliable (the live search returns many
 org-wide results; names vary across teams). Match on **structural identity**: the
-group name, the dashboard name + its panel-metric set, and per-chart
-`{ metric, filters, chartType, normalized options }` read from the live
-`{ metric, filters, chartType }` read from the live `programText`/`charts[]`.
+group name, the dashboard name + its panel-metric set, and per-chart identity.
+Metric, filter, and chart type come from the live `programText`/`charts[]`;
+normalized visualization options come from the live chart `options`.
 
 ## Level 1 — Dashboard group
 

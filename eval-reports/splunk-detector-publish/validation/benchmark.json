@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "splunk-detector-publish",
-    "run_id": "20260911T180950075494Z",
+    "run_id": "20260911T023615185188Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -18,7 +18,7 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "filtered"
+    "validation_scope": "full"
   },
   "evals": [
     {
@@ -34,23 +34,41 @@
       "eval_dir": "evals/dashboards/checkout-detectors",
       "skill_path": "skills/splunk-detector-publish",
       "sanity_check_count": 0,
-      "rubric_check_count": 8,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "sanity/skill-smoke/sanity/detector-publish",
+      "case": "sanity/skill-smoke",
+      "language": "sanity",
+      "service": "skill-smoke",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "publish"
+      ],
+      "definition_path": "evals/sanity/skill-smoke/eval/sanity/detector-publish.json",
+      "eval_dir": "evals/sanity/skill-smoke",
+      "skill_path": "skills/splunk-detector-publish",
+      "sanity_check_count": 0,
+      "rubric_check_count": 0,
       "runtime_check_count": 0
     }
   ],
   "summary": {
-    "eval_count": 1,
-    "case_count": 1,
-    "prompt_count": 1,
+    "eval_count": 2,
+    "case_count": 3,
+    "prompt_count": 3,
     "sanity_check_count": 0,
-    "rubric_check_count": 8,
+    "rubric_check_count": 7,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 2,
-    "digest": "dc3462ae340916bbdf8edb2ae0586c3412a0d59210f1840b6f7896ba3ccea54d",
+    "digest": "56b9144e50d5f2192e4822f1eeeda6bc8faa2f24231d25e6a1574f119a6f570c",
     "eval_kinds": [
-      "rubric"
+      "rubric",
+      "sanity"
     ],
     "files": {
       "evals/codex-evals.validation.toml": "ce69f042257fdb4a4c8d196f2f0f515fdc371316c02ab7d86aecc36267f7e940",
@@ -64,7 +82,7 @@
       "pytest-codex-evals/src/pytest_codex_evals/__init__.py": "b7a1a6542146ea0c4d860cbaacaba484b18b7556b04b11787e472bd051235d4f",
       "pytest-codex-evals/src/pytest_codex_evals/__main__.py": "307299fda7b77d22c64cb51430ec75e5f59d78e9c948786afb3b2544fe45e4b7",
       "pytest-codex-evals/src/pytest_codex_evals/ab.py": "316754af9db1b8b01ca95226e11e550d5f8e5545736127ccecce970da0ab4b9a",
-      "pytest-codex-evals/src/pytest_codex_evals/backends.py": "328ce20c74c11e23239488641a19f6873b567dbb131af371e2fe44f79317a563",
+      "pytest-codex-evals/src/pytest_codex_evals/backends.py": "d0b7e1231ead05085cd70904e2caf6a2a5879abf03c1c3ce5196ed36f93f5fce",
       "pytest-codex-evals/src/pytest_codex_evals/cli.py": "4b13fa56a5a9f9a9676bd1e4ebc1ee5ed73574109ae6951b3e35392baa9b70ae",
       "pytest-codex-evals/src/pytest_codex_evals/config.py": "44034f807c6e95fb85558eec0669e47e0cb1f5fa4e1fe1a0951aaf5747fce926",
       "pytest-codex-evals/src/pytest_codex_evals/definitions/__init__.py": "fde160bf0ba46e9555037f2a61d24edd7b6dff5d81ccc9126c3c5e3b86d0eb66",
@@ -108,7 +126,9 @@
       "skills/splunk-detector-publish/references/coverage-model.md": "9bca7ef0a57794f8d2f87173a51a4d9315dd4b4c311906ab90ba8014b43ccc92",
       "skills/splunk-detector-publish/references/live-publish.md": "7c4f02183305967e37d9d792fdeaeb70f5d91a10ebaebea788973cceb29367dc",
       "skills/splunk-detector-publish/references/offline-plan.md": "c2da9688a49375b119fbba65d5abc885ce0e3ed85f4a5304b64ca42a01ce9bc4",
-      "skills/splunk-detector-publish/tests/test_progressive_disclosure.py": "6d2376885ca8196daee84521df2c44541a8655f3c2be45dfcbb16180e517ae74"
+      "skills/splunk-detector-publish/tests/test_progressive_disclosure.py": "6d2376885ca8196daee84521df2c44541a8655f3c2be45dfcbb16180e517ae74",
+      "evals/sanity/skill-smoke/eval/sanity/detector-publish.json": "1774a7e5ab89bb505033f7f83b788741e6f8925f6de9034fcd5431e944384020",
+      "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9"
     },
     "skill_path": "skills/splunk-detector-publish",
     "selections": [
@@ -118,9 +138,23 @@
         "prompt_id": "offline-plan",
         "eval_kind": "rubric",
         "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/sanity/skill-smoke/eval/sanity/detector-publish.json",
+        "fixture_dir": "evals/sanity/skill-smoke",
+        "prompt_id": "direct",
+        "eval_kind": "sanity",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/sanity/skill-smoke/eval/sanity/detector-publish.json",
+        "fixture_dir": "evals/sanity/skill-smoke",
+        "prompt_id": "publish",
+        "eval_kind": "sanity",
+        "eval_inputs": []
       }
     ],
     "config_path": "evals/codex-evals.validation.toml",
-    "selection_scope": "filtered"
+    "selection_scope": "full"
   }
 }
