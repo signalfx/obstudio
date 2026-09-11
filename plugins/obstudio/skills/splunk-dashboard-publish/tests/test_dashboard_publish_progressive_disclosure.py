@@ -191,8 +191,8 @@ def test_chart_wire_preserves_explicit_visualization_options() -> None:
     assert chart_options("signalfx_heatmap_chart") == {"type": "Heatmap"}
     assert chart_options("signalfx_text_chart") == {"type": "Text"}
     assert chart_options("signalfx_table_chart") == {"type": "TableChart"}
-    with pytest.raises(ValueError, match="unsupported color_by"):
-        chart_options("time_series", color_by="Scale")
+    assert chart_options("time_series", color_by="Scale")["colorBy"] == "Scale"
+    assert chart_options("single_value", color_by="Scale")["colorBy"] == "Scale"
 
 
 def test_chart_wire_defaults_only_absent_options_and_rejects_invalid_values() -> None:
@@ -205,7 +205,7 @@ def test_chart_wire_defaults_only_absent_options_and_rejects_invalid_values() ->
     }
     assert chart_options("single_value") == {
         "type": "SingleValue",
-        "colorBy": "Dimension",
+        "colorBy": "Metric",
     }
     assert chart_options("list") == {"type": "List", "colorBy": "Dimension"}
     for chart_type in ("single_value", "list", "heatmap", "text", "table"):
@@ -221,8 +221,6 @@ def test_chart_wire_defaults_only_absent_options_and_rejects_invalid_values() ->
         chart_options("time_series", color_by="Value")
     with pytest.raises(ValueError, match="unsupported color_by"):
         chart_options("single_value", color_by="")
-    with pytest.raises(ValueError, match="unsupported color_by"):
-        chart_options("single_value", color_by="Scale")
     with pytest.raises(ValueError, match="unsupported color_by"):
         chart_options("heatmap", color_by="Dimension")
     with pytest.raises(ValueError, match="unsupported chart type"):
