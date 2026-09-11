@@ -101,7 +101,7 @@ type codexManagedTelemetryBlock struct {
 func newTokenTelemetryCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "token-telemetry",
-		Short: "Manage opt-in Codex and Claude token telemetry routed through Observer",
+		Short: "Manage opt-in Codex and Claude token telemetry routed through Splunk Observability Studio",
 	}
 	cmd.AddCommand(newTokenTelemetryEnableCommand())
 	cmd.AddCommand(newTokenTelemetryDisableCommand())
@@ -115,7 +115,7 @@ func newTokenTelemetryEnableCommand() *cobra.Command {
 	var repositoryCorrelation string
 	cmd := &cobra.Command{
 		Use:   "enable",
-		Short: "Opt in and route provider token telemetry through Observer",
+		Short: "Opt in and route provider token telemetry through Splunk Observability Studio",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			targets, err := normalizeTokenTelemetryTargets(requestedTargets)
 			if err != nil {
@@ -145,7 +145,7 @@ func newTokenTelemetryEnableCommand() *cobra.Command {
 						correlationMode = resolvedMode
 					}
 					if correlationMode != "off" && !isLoopbackRepositoryCorrelationEndpoint(endpoint) {
-						return tokenTelemetryResult{}, errors.New("repository correlation requires a loopback Observer --endpoint")
+						return tokenTelemetryResult{}, errors.New("repository correlation requires a loopback Splunk Observability Studio --endpoint")
 					}
 					result, enableErr := enableAgentTokenTelemetryWithOwnershipMutation(
 						target,
@@ -166,7 +166,7 @@ func newTokenTelemetryEnableCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringSliceVar(&requestedTargets, "target", nil, "Provider target or comma-separated targets (codex, claude-code)")
-	cmd.Flags().StringVar(&endpoint, "endpoint", defaultTokenTelemetryEndpoint, "Observer OTLP/HTTP logs endpoint ending in /v1/logs")
+	cmd.Flags().StringVar(&endpoint, "endpoint", defaultTokenTelemetryEndpoint, "Splunk Observability Studio OTLP/HTTP logs endpoint ending in /v1/logs")
 	cmd.Flags().StringVar(&repositoryCorrelation, "repository-correlation", "", "Repository attribution mode (off, name, path); new targets default to path, while name omits repository and workspace paths")
 	cmd.MarkFlagRequired("target")
 	return cmd
@@ -176,7 +176,7 @@ func newTokenTelemetryDisableCommand() *cobra.Command {
 	var requestedTargets []string
 	cmd := &cobra.Command{
 		Use:   "disable",
-		Short: "Remove unchanged OTLP routing managed by Obstudio",
+		Short: "Remove unchanged OTLP routing managed by Splunk Observability Studio",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			targets, err := normalizeTokenTelemetryTargets(requestedTargets)
 			if err != nil {
@@ -244,7 +244,7 @@ func newTokenTelemetryStatusCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringSliceVar(&requestedTargets, "target", nil, "Provider target or comma-separated targets (codex, claude-code)")
-	cmd.Flags().StringVar(&endpoint, "endpoint", defaultTokenTelemetryEndpoint, "Expected Observer OTLP/HTTP logs endpoint ending in /v1/logs")
+	cmd.Flags().StringVar(&endpoint, "endpoint", defaultTokenTelemetryEndpoint, "Expected Splunk Observability Studio OTLP/HTTP logs endpoint ending in /v1/logs")
 	cmd.MarkFlagRequired("target")
 	return cmd
 }
@@ -749,7 +749,7 @@ func disableOwnedCodexTokenTelemetryWithOwnershipMutation(
 		}
 		if marked {
 			result.State = "unmanaged"
-			result.Detail = "Obstudio markers have no ownership record; all marked content was retained"
+			result.Detail = "Splunk Observability Studio markers have no ownership record; all marked content was retained"
 			if err := commitTokenTelemetryOwnershipMutation(statePath, ownership, mutation, writeOwnership); err != nil {
 				return tokenTelemetryResult{}, fmt.Errorf("write ownership state: %w", err)
 			}
@@ -761,9 +761,9 @@ func disableOwnedCodexTokenTelemetryWithOwnershipMutation(
 		}
 		if configured {
 			result.State = "unmanaged"
-			result.Detail = "no Obstudio ownership record exists; user-owned Codex OTel configuration was retained"
+			result.Detail = "no Splunk Observability Studio ownership record exists; user-owned Codex OTel configuration was retained"
 		} else {
-			result.Detail = "no Obstudio ownership record exists"
+			result.Detail = "no Splunk Observability Studio ownership record exists"
 		}
 		if err := commitTokenTelemetryOwnershipMutation(statePath, ownership, mutation, writeOwnership); err != nil {
 			return tokenTelemetryResult{}, fmt.Errorf("write ownership state: %w", err)
@@ -819,7 +819,7 @@ func disableOwnedCodexTokenTelemetryWithOwnershipMutation(
 		return tokenTelemetryResult{}, fmt.Errorf("write ownership state: %w", err)
 	}
 
-	result.Detail = fmt.Sprintf("removed %d unchanged Obstudio-owned settings", removed)
+	result.Detail = fmt.Sprintf("removed %d unchanged Splunk Observability Studio-owned settings", removed)
 	if len(preserved) > 0 {
 		result.State = "disabled-with-user-changes"
 		result.Detail += "; preserved modified settings: " + strings.Join(preserved, ", ")
@@ -898,7 +898,7 @@ func inspectOwnedCodexTokenTelemetry(path, statePath, endpoint string) (tokenTel
 		}
 		result.State = "enabled-managed"
 		result.Detail = fmt.Sprintf(
-			"Obstudio owns %d unchanged Codex exporter settings; Codex logs, traces, and metrics target Observer%s",
+			"Splunk Observability Studio owns %d unchanged Codex exporter settings; Codex logs, traces, and metrics target Splunk Observability Studio%s",
 			len(owned.Settings)+len(owned.TableSettings),
 			suffix,
 		)
@@ -915,7 +915,7 @@ func inspectUnownedMarkedCodexTokenTelemetry(path, endpoint string) (tokenTeleme
 		result.State = "enabled-existing"
 		result.Detail = strings.Replace(
 			result.Detail,
-			"Obstudio owns only the assignments inside its managed block",
+			"Splunk Observability Studio owns only the assignments inside its managed block",
 			"matching exporters are active; marker content has no ownership record and remains user-owned",
 			1,
 		)
@@ -1304,7 +1304,7 @@ func inspectCodexTokenTelemetry(path, endpoint string) (tokenTelemetryResult, er
 			missing++
 		default:
 			result.State = "conflict"
-			result.Detail = exporter.label + " exporter does not target Observer; enable replaces it and disable removes the managed route"
+			result.Detail = exporter.label + " exporter does not target Splunk Observability Studio; enable replaces it and disable removes the managed route"
 			return result, nil
 		}
 	}
@@ -1312,18 +1312,18 @@ func inspectCodexTokenTelemetry(path, endpoint string) (tokenTelemetryResult, er
 		result.State = "enabled-existing"
 		if managed {
 			result.State = "enabled-managed"
-			result.Detail = "all Codex signal exporters target Observer; Obstudio owns only its managed assignments"
+			result.Detail = "all Codex signal exporters target Splunk Observability Studio; Splunk Observability Studio owns only its managed assignments"
 		} else {
-			result.Detail = "all Codex signal exporters already targeted Observer and remain user-owned"
+			result.Detail = "all Codex signal exporters already targeted Splunk Observability Studio and remain user-owned"
 		}
 		return result, nil
 	}
 	if missing == len(exporters) {
-		result.Detail = "no Codex log, trace, or metrics exporter is configured for Observer"
+		result.Detail = "no Codex log, trace, or metrics exporter is configured for Splunk Observability Studio"
 		return result, nil
 	}
 	result.State = "partial"
-	result.Detail = fmt.Sprintf("%d of %d required signal exporters target Observer", matching, len(exporters))
+	result.Detail = fmt.Sprintf("%d of %d required signal exporters target Splunk Observability Studio", matching, len(exporters))
 	return result, nil
 }
 
@@ -1513,12 +1513,12 @@ func disableClaudeTokenTelemetryWithOwnershipMutation(
 		}
 		if claudeDetailedBetaTelemetryConfigured(env, lookupEnv) {
 			result.State = "unmanaged"
-			result.Detail = "no Obstudio ownership record exists; an active user-owned detailed-beta telemetry route was retained"
+			result.Detail = "no Splunk Observability Studio ownership record exists; an active user-owned detailed-beta telemetry route was retained"
 		} else if claudeTokenTelemetryConfigured(env, lookupEnv) {
 			result.State = "unmanaged"
-			result.Detail = "no Obstudio ownership record exists; user-owned Claude telemetry settings were retained"
+			result.Detail = "no Splunk Observability Studio ownership record exists; user-owned Claude telemetry settings were retained"
 		} else {
-			result.Detail = "no Obstudio ownership record exists"
+			result.Detail = "no Splunk Observability Studio ownership record exists"
 		}
 		if err := commitTokenTelemetryOwnershipMutation(statePath, ownership, mutation, writeOwnership); err != nil {
 			return tokenTelemetryResult{}, fmt.Errorf("write ownership state: %w", err)
@@ -1593,7 +1593,7 @@ func disableClaudeTokenTelemetryWithOwnershipMutation(
 	); err != nil {
 		return tokenTelemetryResult{}, fmt.Errorf("write ownership state: %w", err)
 	}
-	result.Detail = fmt.Sprintf("removed %d unchanged Obstudio-managed settings", len(removed))
+	result.Detail = fmt.Sprintf("removed %d unchanged Splunk Observability Studio-managed settings", len(removed))
 	if len(preserved) > 0 {
 		result.State = "disabled-with-user-changes"
 		result.Detail += "; preserved modified settings: " + strings.Join(preserved, ", ")
@@ -1662,14 +1662,14 @@ func inspectClaudeTokenTelemetry(
 		result.Detail = "matching settings are user-owned"
 		if owned, ok := ownership.Targets["claude-code"]; ok && sameTokenTelemetryConfigPath(owned.ConfigPath, path) && len(owned.Env) > 0 {
 			result.State = "enabled-managed"
-			result.Detail = fmt.Sprintf("Obstudio owns %d settings; Claude logs, traces, and metrics target Observer", len(owned.Env))
+			result.Detail = fmt.Sprintf("Splunk Observability Studio owns %d settings; Claude logs, traces, and metrics target Splunk Observability Studio", len(owned.Env))
 		}
 		return result, nil
 	}
 	if missing == len(required) {
 		if detailedBetaAtObserver {
 			result.State = "unmanaged"
-			result.Detail = "a user-owned detailed-beta route targets Observer for logs and traces; metrics are not configured by that route"
+			result.Detail = "a user-owned detailed-beta route targets Splunk Observability Studio for logs and traces; metrics are not configured by that route"
 		} else if existed {
 			result.Detail = "provider token telemetry is not configured"
 		} else {
@@ -1678,9 +1678,9 @@ func inspectClaudeTokenTelemetry(
 		return result, nil
 	}
 	result.State = "partial"
-	result.Detail = fmt.Sprintf("%d of %d required settings match Observer", matching, len(required))
+	result.Detail = fmt.Sprintf("%d of %d required settings match Splunk Observability Studio", matching, len(required))
 	if detailedBetaAtObserver {
-		result.Detail += "; a user-owned detailed-beta route also targets Observer for logs and traces"
+		result.Detail += "; a user-owned detailed-beta route also targets Splunk Observability Studio for logs and traces"
 	}
 	return result, nil
 }
@@ -1774,7 +1774,7 @@ func claudeOTLPRoutingConflict(
 		{key: "OTEL_EXPORTER_OTLP_PROTOCOL", value: "http/protobuf"},
 	} {
 		if value, exists, source := claudeConfiguredOrInheritedValue(env, setting.key, lookupEnv); exists && value != setting.value {
-			return fmt.Sprintf("%s %s does not match Observer; enable replaces it and disable removes the managed route", source, setting.key)
+			return fmt.Sprintf("%s %s does not match Splunk Observability Studio; enable replaces it and disable removes the managed route", source, setting.key)
 		}
 	}
 
@@ -1786,12 +1786,12 @@ func claudeOTLPRoutingConflict(
 		if existing, exists := env[key]; exists {
 			value, stringValue := existing.(string)
 			if !stringValue || value != wanted {
-				return fmt.Sprintf("Claude setting %s does not match Observer; enable replaces it and disable removes the managed route", key)
+				return fmt.Sprintf("Claude setting %s does not match Splunk Observability Studio; enable replaces it and disable removes the managed route", key)
 			}
 			continue
 		}
 		if inherited, ok := lookupEnvironment(lookupEnv, key); ok && inherited != wanted {
-			return fmt.Sprintf("inherited environment setting %s does not match Observer; enable adds a local override", key)
+			return fmt.Sprintf("inherited environment setting %s does not match Splunk Observability Studio; enable adds a local override", key)
 		}
 	}
 	return ""

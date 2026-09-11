@@ -37,7 +37,9 @@
 
 ## Runtime Failures
 
-No runtime failures.
+| Mode | Service | Side | Prompt | Result | Evidence |
+|---|---|---|---|---|---|
+| with_skill | python/flask-basic | with_skill | runtime-preserving | runtime:observer-runtime-telemetry FAIL | Runtime check failed: command timed out after 300s: docker compose -p codex-eval-4426aa005dcf -f /private/tmp/obstudio-pr241-runtime-922d241/evals/python/flask-basic/eval/runtime/docker-compose.yml --profile traffic run --rm traffic; compose logs: app-1 \| Traceback (most recent call last): app-1 \| File "/app/.venv/b... |
 
 ## Compose Evidence
 

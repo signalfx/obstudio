@@ -40,7 +40,7 @@ a required file is missing. Read only the references routed by the selected mode
   `.observe/dashboard-sync.md`, put it in prompt/report context, or persist a
   real value in Terraform examples.
 - Resolve realm from non-empty `SPLUNK_REALM` first, then the connected
-  Observer's realm-only lookup. That lookup is never a token source. If token
+  Splunk Observability Studio's realm-only lookup. That lookup is never a token source. If token
   or realm is missing for a live run, stop with the exact prerequisite.
 - Fetch and reclassify live state on every run; the prior ledger is not proof
   that an object remains COVERED or GAP. Use prior rows only for audit history
@@ -77,9 +77,8 @@ The local coverage model incorporates the shared
 separately. Offline mode must not load `splunk-api.md`, `live-publish.md`, the
 live coverage model, or the ledger template.
 
-The generator source `../splunk-dashboard/references/dashboard-templates.md`
-contains the same type vocabulary, but do not load it during publish; the
-local chart wire contract is self-contained.
+Do not load `../splunk-dashboard` references during publish; the local chart
+wire contract is self-contained.
 
 ## Process
 
@@ -214,7 +213,7 @@ creating duplicates.
 ## Red Flags
 
 - Missing dashboard Terraform: run `$splunk-dashboard`.
-- Missing live token or realm: stop; do not guess or use Observer as a token
+- Missing live token or realm: stop; do not guess or use Splunk Observability Studio as a token
   source.
 - Unresolved `${var.*}` or leading heredoc indentation: do not compare or POST.
 - Dashboard write before chart IDs exist: invalid order.

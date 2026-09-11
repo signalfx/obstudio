@@ -16,11 +16,10 @@ CHART_TYPE_MAP = {
 }
 
 PLOT_TYPES = {"LineChart", "AreaChart", "ColumnChart", "Histogram"}
-COLORS = {"Dimension", "Scale", "Metric"}
 COLOR_BY_TYPES = {
-    "TimeSeriesChart": ("Dimension", COLORS),
-    "SingleValue": ("Metric", COLORS),
-    "List": ("Dimension", COLORS),
+    "TimeSeriesChart": ("Dimension", {"Dimension", "Metric"}),
+    "SingleValue": ("Dimension", {"Dimension"}),
+    "List": ("Dimension", {"Dimension"}),
 }
 
 

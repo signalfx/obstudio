@@ -190,7 +190,7 @@ async function waitForHttpOrExit(url: string, child: ReturnType<typeof spawn>, t
 
 	while (Date.now() < deadline) {
 		if (child.exitCode !== null || child.killed) {
-			throw new Error(`Observer exited before becoming ready at ${url}.`);
+			throw new Error(`Splunk Observability Studio exited before becoming ready at ${url}.`);
 		}
 
 		try {
@@ -208,7 +208,7 @@ async function waitForHttpOrExit(url: string, child: ReturnType<typeof spawn>, t
 	}
 
 	if (child.exitCode !== null || child.killed) {
-		throw new Error(`Observer exited before becoming ready at ${url}.`);
+		throw new Error(`Splunk Observability Studio exited before becoming ready at ${url}.`);
 	}
 	if (lastError instanceof Error) {
 		throw lastError;
@@ -461,12 +461,22 @@ it('integration: extension.js exports activate and deactivate', { timeout: 120_0
 
 	// Verify status bar states are present
 	assert.ok(source.includes('loading~spin'), 'extension.js should contain starting spinner icon');
-	assert.ok(source.includes('pulse'), 'extension.js should contain running pulse icon');
+	assert.ok(
+		source.includes('Splunk Observability Studio is running \\u2014 click for options'),
+		'extension.js should contain the glyph-free running status label',
+	);
+	assert.equal(source.includes('$(pulse)'), false, 'extension.js should not contain the retired running pulse icon');
 	assert.ok(source.includes('circle-outline'), 'extension.js should contain stopped icon');
 
 	// Verify error and stopped webview pages are present
-	assert.ok(source.includes('Observer could not start'), 'extension.js should contain error webview heading');
-	assert.ok(source.includes('Observer is stopped'), 'extension.js should contain stopped webview message');
+	assert.ok(
+		source.includes('Splunk Observability Studio could not start'),
+		'extension.js should contain the branded error webview heading',
+	);
+	assert.ok(
+		source.includes('Splunk Observability Studio is stopped'),
+		'extension.js should contain the branded stopped webview message',
+	);
 
 	// Verify port conflict detection
 	assert.ok(source.includes('EADDRINUSE'), 'extension.js should handle EADDRINUSE port conflicts');
@@ -477,21 +487,24 @@ it('integration: extension.js exports activate and deactivate', { timeout: 120_0
 	assert.ok(source.includes('SIGKILL'), 'extension.js should fallback to SIGKILL');
 });
 
-it('integration: package.json registers all commands', () => {
+it('integration: package.json registers exact lifecycle command labels', () => {
 	const pkgPath = path.join(extensionRoot, 'package.json');
-	const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-	const commands = (pkg.contributes?.commands ?? []).map((c: { command: string }) => c.command);
+	const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as ExtensionPackage;
+	const commands = pkg.contributes?.commands ?? [];
+	const expectedCommands = new Map([
+		['observability-studio.openObserver', 'Open'],
+		['observability-studio.statusMenu', 'Status'],
+		['observability-studio.startObserver', 'Start'],
+		['observability-studio.stopObserver', 'Stop'],
+		['observability-studio.restartObserver', 'Restart'],
+	]);
 
-	for (const expected of [
-		'observability-studio.openObserver',
-		'observability-studio.statusMenu',
-		'observability-studio.startObserver',
-		'observability-studio.stopObserver',
-		'observability-studio.restartObserver',
-	]) {
-		assert.ok(
-			commands.includes(expected),
-			`package.json should register command "${expected}"`
+	for (const [commandId, title] of expectedCommands) {
+		const command = commands.find((entry) => entry.command === commandId);
+		assert.deepEqual(
+			command && { category: command.category, title: command.title },
+			{ category: 'Splunk Observability Studio', title },
+			`package.json should register "Splunk Observability Studio: ${title}"`,
 		);
 	}
 });
@@ -792,7 +805,7 @@ it('integration: installed VSIX smoke test starts the packaged observer and acce
 		assert.equal(
 			health.body.version,
 			installedPackage.version,
-			'installed VSIX and bundled Observer should report the same release version',
+			'installed VSIX and bundled Splunk Observability Studio should report the same release version',
 		);
 		assert.equal(health.body.endpoints.otlpHttp, otlpHttpUrl);
 		assert.equal(health.body.endpoints.otlpGrpc, `127.0.0.1:${otlpGrpcPort}`);

@@ -11,3 +11,7 @@ enabled = false
 # Agent model can be set here or overridden with MODEL=... in Make.
 agent = "gpt-5.5"
 judge = "gpt-5.5"
+
+[agent]
+# Do not inherit a host-level effort that the pinned eval models may not support.
+extra_args = ["--config", 'model_reasoning_effort="xhigh"']

@@ -20,7 +20,7 @@
     "Preserves the existing kvstore package APIs and avoids moving business logic.",
     "Uses otelhttp.NewHandler for stdlib HTTP routing and keeps span names low-cardinality.",
     "Reads service name and OTLP endpoint from environment or safe defaults, preserving the checked-in go-kvstore service identity rather than deriving a shortened name from the module or binary.",
-    "Bridges the existing standard logger through exactly one official Go logging bridge and one shared-resource batched OTLP LoggerProvider targeting the signal-specific local Observer /v1/logs endpoint by default.",
+    "Bridges the existing standard logger through exactly one official Go logging bridge and one shared-resource batched OTLP LoggerProvider targeting the signal-specific local Splunk Observability Studio /v1/logs endpoint by default.",
     "Preserves both fixture log contracts: exports each request-context warning exactly once with its existing body, WARN severity, go-kvstore resource identity, and non-empty unique trace and span IDs; preserves the distinct existing shutdown warning exactly once with WARN severity and go-kvstore identity without requiring request correlation outside an active span; and keeps both records in the standard-log console sink.",
     "Honors OTEL_LOGS_EXPORTER=none and another explicit operator-owned exporter by installing no local LoggerProvider or bridge while leaving the standard-log console sink active.",
     "Keeps generic or signal-specific cloud endpoints, headers, credentials, and forwarding out of the application-log path; direct cloud remains trace/metric-only and logs stay local unless explicitly operator-owned.",

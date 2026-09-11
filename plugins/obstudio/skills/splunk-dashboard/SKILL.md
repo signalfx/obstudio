@@ -1,7 +1,7 @@
 ---
 name: splunk-dashboard
 description: >-
-  Generate Splunk Observability Cloud dashboard Terraform and a local Observer
+  Generate Splunk Observability Cloud dashboard Terraform and a local Splunk Observability Studio
   preview from .observe/otel-audit.json. Use for $splunk-dashboard, "generate a dashboard",
   "build a dashboard from an audit", "create charts for my service", or
   "visualize my metrics". Use $splunk-configure for detectors and
@@ -115,6 +115,6 @@ Before finishing, verify without network or Terraform execution:
 ## 5. Hand off
 
 Summarize dashboards and panels, list the five files, and direct the user to the
-Observer **Dashboards** tab for local preview. Offer
+Splunk Observability Studio **Dashboards** tab for local preview. Offer
 `$splunk-dashboard-publish` or `terraform apply` as explicit next actions; do not
 perform either action in this skill.

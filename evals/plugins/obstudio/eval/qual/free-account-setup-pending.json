@@ -18,6 +18,6 @@
     "After the explicitly requested modeled tool call and assumed result, responds with exactly `**Splunk received your Free Edition request.**` followed by `Splunk needs extra time to finish setting up the account. If a confirmation email does not arrive within 24 hours, contact Splunk Support.` and no other user-facing text.",
     "Treats accountSetupPending true with intakeAcknowledged true as an accepted request whose setup needs more time; it does not call it a rejection, failure, error, completed account, or completed organization.",
     "Does not use the ordinary ten-minute success template, add resource links, expose the internal realm, repeat the upstream message, or claim that an email was already sent or delivered.",
-    "Uses the Observer MCP tool only and does not propose the public web form, curl, a reconstructed endpoint request, or extra company, phone, title, country, state, city, postal-code, or marketing-consent fields."
+    "Uses Splunk Observability Studio MCP tool only and does not propose the public web form, curl, a reconstructed endpoint request, or extra company, phone, title, country, state, city, postal-code, or marketing-consent fields."
   ]
 }

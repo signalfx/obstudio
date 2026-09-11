@@ -279,8 +279,11 @@ Keep verification proof and remaining runtime work in the separately bound
 `.observe/otel-verify.json`; do not duplicate them as new instrumentation
 schema fields. Author instrumentation `next_steps` and finding
 `follow_up_actions` as durable implementation or product actions, never as an
-instruction for the user to rerun `$otel-verify`. The human HTML must name the
-concrete remaining repair, runtime prerequisite, or product-evidence step.
+instruction for the user to rerun `$otel-verify`. With bound verification,
+HTML names the repair, runtime prerequisite, or product-evidence step. Without
+it, label harness/exporter checks as instrumentation-phase validation, never
+item proof. HTML keeps per-finding proof and OTLP/product visibility not
+run/not proven; details stay in Markdown.
 
 Render every selected finding once in the instrumentation HTML. Show all of its
 finding-level `changes` values and use the bound audit finding's

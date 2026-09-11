@@ -85,7 +85,7 @@ approves. Prefer test fakes and existing fixtures.
 
 ## Assertions Before OTLP
 
-Permanent unit tests should pass without requiring Obstudio or a local
+Permanent unit tests should pass without requiring Splunk Observability Studio or a local
 collector. Use in-memory exporters/readers first. If explorer-visible proof is
 also requested, run the same scenario or a paired temporary scenario with OTLP
 export and query the collector.

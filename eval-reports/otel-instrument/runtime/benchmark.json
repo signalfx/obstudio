@@ -16,9 +16,9 @@
     "config_path": "evals/codex-evals.token-benchmark-network.toml"
   },
   "summary": {
-    "eval_count": 6,
-    "prompt_count": 6,
-    "failure_count": 0,
+    "eval_count": 1,
+    "prompt_count": 1,
+    "failure_count": 1,
     "with_skill": {
       "prompt_count": 6,
       "command_count": 435,

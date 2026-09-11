@@ -2,8 +2,8 @@
 
 This repository contains:
 
-- `observer/` -- Go-based Observer built on the OTel Collector framework (REST API, MCP server, Web UI)
-- `extension/` -- VS Code-compatible extension for Visual Studio Code, Kiro, and Cursor that packages the Observer
+- `observer/` -- Go-based Splunk Observability Studio built on the OTel Collector framework (REST API, MCP server, Web UI)
+- `extension/` -- VS Code-compatible extension for Visual Studio Code, Kiro, and Cursor that packages Splunk Observability Studio
 - `skills/` -- AI agent skills (composable observability workflows)
 - `pytest-codex-evals/` -- reusable pytest plugin for Codex eval harnessing
 
@@ -11,8 +11,8 @@ This repository contains:
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Go | 1.25+ | observer collector |
-| Node.js | 22+ | observer client dev/test and VS Code-compatible editor extension |
+| Go | 1.25+ | Splunk Observability Studio collector |
+| Node.js | 22+ | Telemetry Explorer client development/testing and VS Code-compatible editor extension |
 | npm | latest | Package management |
 | uv | latest | Python eval harness and Python fixture apps |
 | Docker | latest | Optional runtime eval checks |
@@ -20,7 +20,7 @@ This repository contains:
 
 ## Build
 
-### Observer (primary)
+### Splunk Observability Studio (primary)
 
 ```sh
 make build    # compile the obstudio binary (skills embedded)
@@ -38,7 +38,7 @@ npm run build:vsix    # produce VSIX package
 
 ## Development
 
-### Observer
+### Splunk Observability Studio
 
 ```sh
 make build          # build binary
@@ -62,16 +62,16 @@ npm test              # vscode-test
 #### Debugging in the Extension Development Host
 
 Use **Run > Start Without Debugging** (`Cmd+F5` / `Ctrl+F5`), not `F5`, whenever
-you need the managed Observer to actually start. VS Code's JavaScript debugger,
+you need the managed Splunk Observability Studio to actually start. VS Code's JavaScript debugger,
 when attached to the Extension Development Host (which `F5` always does), can
 silently drop the body of HTTP responses inside that process. We hit this as
-the managed Observer's post-spawn `/api/health` probe getting a `200` with an
+the managed Splunk Observability Studio's post-spawn `/api/health` probe getting a `200` with an
 empty body -- the extension misdiagnosed it as "a different service" already
 on the port and killed its own healthy, just-spawned process. Confirmed via
 `tcpdump` on `lo0`: the wire always carried the correct, complete response;
 only the debugged process's own `response.on('data', ...)` never fired.
 Reserve `F5` for setting breakpoints in code paths that don't depend on the
-Observer starting.
+Splunk Observability Studio starting.
 
 Two more gotchas that look unrelated but block the same workflow:
 - `preLaunchTask 'watch' terminated with exit code 1` / `invalid
@@ -98,11 +98,11 @@ override it either, since that's a tracked file.
 The CIMD (Client ID Metadata Document) OAuth flow talks to a real SIS
 instance. SIS's dev-mode server (`SIS_DEV_MODE=1`) auto-generates its own
 self-signed TLS certificate per checkout (`sis-core/cmd/sis/dev.go`, written to
-`sis-core/.sis/sis_dev_tls.pem`), so both the Observer binary and the
+`sis-core/.sis/sis_dev_tls.pem`), so both Splunk Observability Studio binary and the
 extension's own native CIMD code need to be told to trust it -- **each on your
 own machine; never in a workspace setting or committed to the repo**:
 
-- **Observer (Go binary):** copy/export the SIS dev CA to a local file (e.g.
+- **Splunk Observability Studio (Go binary):** copy/export the SIS dev CA to a local file (e.g.
   `~/.obstudio/sis-cimd-dev-ca.pem`) and set
   `OBSTUDIO_SIS_CIMD_OAUTH_DEVELOPMENT_CA_BUNDLE_PATH=/path/to/that/file` in
   `~/.obstudio/env` (or your shell environment). The Go side augments the
@@ -182,7 +182,7 @@ See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 ### Local
 
 ```sh
-make test-all            # Go + observer client + extension + interactive OTel tests
+make test-all            # Go + Telemetry Explorer client + extension + interactive OTel tests
 make agent-policy-check  # agent instruction and repository-policy contracts
 npm run build            # root build path for binary + extension
 cd extension && npm test # VS Code-hosted extension tests

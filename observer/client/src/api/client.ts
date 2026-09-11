@@ -224,7 +224,7 @@ export async function resolveSplunkCloudRealm(
     ? (response as Record<string, string>).realm
     : "";
   if (!/^[a-z]{2,12}[0-9]+$/.test(realm)) {
-    throw new Error("Observer returned an invalid Splunk Observability Cloud realm.");
+    throw new Error("Splunk Observability Studio returned an invalid Splunk Observability Cloud realm.");
   }
   return realm;
 }
@@ -237,7 +237,7 @@ export interface SplunkFreeAccountRequest {
   termsAccepted: true;
 }
 
-/** Detect the suggested Free Edition region from Observer's same-origin browser API. */
+/** Detect the suggested Free Edition region from Splunk Observability Studio's same-origin browser API. */
 export async function detectSplunkFreeAccountRegion(
   signal?: AbortSignal,
 ): Promise<{ region?: unknown }> {
@@ -247,7 +247,7 @@ export async function detectSplunkFreeAccountRegion(
     : {};
 }
 
-/** Submit a Free Edition request through Observer's same-origin browser API. */
+/** Submit a Free Edition request through Splunk Observability Studio's same-origin browser API. */
 export async function submitSplunkFreeAccount(
   request: SplunkFreeAccountRequest,
   signal?: AbortSignal,
@@ -292,7 +292,7 @@ async function fetchSplunkBrowserJSON(
       : {};
     const message = typeof errorResponse.error === "string"
       ? errorResponse.error
-      : `Observer request failed with HTTP ${response.status}.`;
+      : `Splunk Observability Studio request failed with HTTP ${response.status}.`;
     const code = typeof errorResponse.code === "string" ? errorResponse.code : undefined;
     const retrySafe = typeof errorResponse.retrySafe === "boolean" ? errorResponse.retrySafe : undefined;
     throw new SplunkExportBrowserActionError(message, response.status, code, retrySafe);
@@ -301,10 +301,10 @@ async function fetchSplunkBrowserJSON(
 }
 
 /**
- * Probe SIS CIMD client registration directly through Observer's own backend, for use
+ * Probe SIS CIMD client registration directly through Splunk Observability Studio's own backend, for use
  * when there is no IDE bridge (e.g. standalone `go run ./cmd/obstudio` + browser dev).
  * Stores no secret, but the probe itself has side effects on SIS and its response
- * reveals federation redirect/cookie details, so Observer accepts it only from its
+ * reveals federation redirect/cookie details, so Splunk Observability Studio accepts it only from its
  * same-origin local page.
  */
 export async function registerSISCIMDClient(signal?: AbortSignal): Promise<SISCIMDRegistrationResult> {
@@ -333,10 +333,10 @@ async function parseSISCIMDJSONResponse<T>(response: Response): Promise<T> {
 }
 
 /**
- * Start SIS CIMD sign-in directly through Observer's own backend, for use when there is
+ * Start SIS CIMD sign-in directly through Splunk Observability Studio's own backend, for use when there is
  * no IDE bridge. Returns the authorization URL for the caller to open (e.g.
  * window.open from the click handler, to avoid popup blockers) -- the actual token
- * exchange happens in the background on Observer; poll fetchSISCIMDSession for the
+ * exchange happens in the background on Splunk Observability Studio; poll fetchSISCIMDSession for the
  * result.
  */
 export async function loginSISCIMD(): Promise<SISCIMDLoginStartResult> {
@@ -348,7 +348,7 @@ export async function fetchSISCIMDSession(signal?: AbortSignal): Promise<SISCIMD
   return fetchSISCIMDLocal<SISCIMDSessionStatus>("/api/splunk/cimd/session", { signal });
 }
 
-/** Clear the in-memory SIS CIMD session held by Observer's own backend. */
+/** Clear the in-memory SIS CIMD session held by Splunk Observability Studio's own backend. */
 export async function disconnectSISCIMDSession(): Promise<SISCIMDSessionStatus> {
   return fetchSISCIMDLocal<SISCIMDSessionStatus>("/api/splunk/cimd/session/disconnect", { method: "POST" });
 }

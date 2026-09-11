@@ -56,19 +56,19 @@ export function isLoopbackObserverHost(hostname: string): boolean {
 export function normalizeObserverBaseUrl(raw: string): string {
 	const trimmed = raw.trim();
 	if (trimmed.length === 0) {
-		throw new Error('Observer URL cannot be empty.');
+		throw new Error('Splunk Observability Studio URL cannot be empty.');
 	}
 
 	const parsed = new URL(trimmed);
 	if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-		throw new Error(`Observer URL must use http or https: ${raw}`);
+		throw new Error(`Splunk Observability Studio URL must use http or https: ${raw}`);
 	}
 	const authority = trimmed.slice(trimmed.indexOf('//') + 2).split(/[/?#]/, 1)[0];
 	if (parsed.username !== '' || parsed.password !== '' || authority.includes('@')) {
-		throw new Error('Observer URL must not include user information.');
+		throw new Error('Splunk Observability Studio URL must not include user information.');
 	}
 	if (parsed.hash !== '' || trimmed.includes('#')) {
-		throw new Error('Observer URL must not include a fragment.');
+		throw new Error('Splunk Observability Studio URL must not include a fragment.');
 	}
 	const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
 	if (hostname === '0.0.0.0') {
@@ -81,7 +81,7 @@ export function normalizeObserverBaseUrl(raw: string): string {
 		parsed.hostname = hostname.slice(0, -1);
 	}
 	if (!isLoopbackObserverHost(parsed.hostname)) {
-		throw new Error('Observer URL host must be loopback.');
+		throw new Error('Splunk Observability Studio URL host must be loopback.');
 	}
 
 	if (parsed.pathname.endsWith('/mcp')) {
@@ -155,7 +155,7 @@ function readPrivateSharedObserverState(statePath: string): string | undefined {
 	if (process.platform === 'win32') {
 		// The shared state contains only validated loopback endpoints and a PID, not
 		// credentials. Windows profile ACLs protect the directory, and callers must
-		// independently verify the listener PID and Observer executable before stopping
+		// independently verify the listener PID and Splunk Observability Studio executable before stopping
 		// it. Still reject links and file-replacement races here.
 		const linkedBefore = fs.lstatSync(statePath);
 		if (linkedBefore.isSymbolicLink() || !linkedBefore.isFile()) {
@@ -234,18 +234,18 @@ export function normalizeSharedObserverMCPUrl(raw: string): string {
 function normalizeSharedObserverEndpointUrl(raw: string, suffix: string, label: string): string {
 	const trimmed = raw.trim();
 	if (trimmed.length === 0) {
-		throw new Error(`Observer ${label} URL cannot be empty.`);
+		throw new Error(`Splunk Observability Studio ${label} URL cannot be empty.`);
 	}
 	const parsed = new URL(trimmed);
 	if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-		throw new Error(`Observer ${label} URL must use http or https.`);
+		throw new Error(`Splunk Observability Studio ${label} URL must use http or https.`);
 	}
 	const authority = trimmed.slice(trimmed.indexOf('//') + 2).split(/[/?#]/, 1)[0];
 	if (parsed.username !== '' || parsed.password !== '' || authority.includes('@')) {
-		throw new Error(`Observer ${label} URL must not include user information.`);
+		throw new Error(`Splunk Observability Studio ${label} URL must not include user information.`);
 	}
 	if (parsed.hash !== '' || parsed.search !== '' || trimmed.includes('#')) {
-		throw new Error(`Observer ${label} URL must not include a query or fragment.`);
+		throw new Error(`Splunk Observability Studio ${label} URL must not include a query or fragment.`);
 	}
 	const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
 	if (hostname === '0.0.0.0') {
@@ -256,11 +256,11 @@ function normalizeSharedObserverEndpointUrl(raw: string, suffix: string, label: 
 		parsed.hostname = hostname.slice(0, -1);
 	}
 	if (!isLoopbackObserverHost(parsed.hostname)) {
-		throw new Error(`Observer ${label} URL host must be loopback.`);
+		throw new Error(`Splunk Observability Studio ${label} URL host must be loopback.`);
 	}
 	parsed.pathname = parsed.pathname.replace(/\/+$/, '');
 	if (!parsed.pathname.endsWith(suffix)) {
-		throw new Error(`Observer ${label} URL must end with ${suffix}.`);
+		throw new Error(`Splunk Observability Studio ${label} URL must end with ${suffix}.`);
 	}
 	return parsed.toString();
 }
@@ -293,11 +293,11 @@ export function resolveBackend(extensionPath: string): ObserverBackend {
 			command: binary,
 			cwd: path.dirname(binary),
 			env,
-			label: 'observer',
+			label: 'Splunk Observability Studio',
 		};
 	}
 
 	throw new Error(
-		`observer binary not found in ${path.join(extensionPath, 'dist', 'observer')}. Run 'npm run compile' in the extension directory.`,
+		`Splunk Observability Studio binary not found in ${path.join(extensionPath, 'dist', 'observer')}. Run 'npm run compile' in the extension directory.`,
 	);
 }

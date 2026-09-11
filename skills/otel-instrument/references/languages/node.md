@@ -111,7 +111,7 @@ function defaultLocalLogConfiguration() {
   const configured = process.env.OTEL_LOGS_EXPORTER?.trim().toLowerCase();
   if (configured && configured !== 'otlp') {
     // `none` disables logs. Any other explicit exporter and its bridge belong
-    // entirely to a proven operator-owned setup; do not add an Obstudio bridge.
+    // entirely to a proven operator-owned setup; do not add a Splunk Observability Studio bridge.
     return {
       logRecordProcessors: undefined,
       addDefaultLocalLogBridge: false,
@@ -133,8 +133,8 @@ function defaultLocalLogConfiguration() {
     endpoint !== LOCAL_OBSERVER_LOGS_ENDPOINT
   ) {
     throw new Error(
-      'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local Observer; ' +
-      'refusing to create an Obstudio log provider or bridge',
+      'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local Splunk Observability Studio; ' +
+      'refusing to create a Splunk Observability Studio log provider or bridge',
     );
   }
 
@@ -148,7 +148,7 @@ function defaultLocalLogConfiguration() {
   if (process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS?.trim()) {
     throw new Error(
       'OTEL_EXPORTER_OTLP_LOGS_HEADERS is operator-owned; refusing to ' +
-      'apply it to the default local Observer exporter',
+      'apply it to the default local Splunk Observability Studio exporter',
     );
   }
 
@@ -179,7 +179,7 @@ const sdk = new NodeSDK({
   instrumentations: [
     new HttpInstrumentation(),
     new ExpressInstrumentation(),
-    // Add this only for the Obstudio-owned absent/`otlp` branch, after proving
+    // Add this only for the Splunk Observability Studio-owned absent/`otlp` branch, after proving
     // the selected Node runtime is supported and no bridge already owns it.
     ...(addDefaultLocalLogBridge ? [new ConsoleInstrumentation()] : []),
     // ... add other detected instrumentations here
@@ -270,7 +270,7 @@ stalled drain or exporter from leaving the process alive indefinitely; a
 successful drain and flush exits `0`, a drain/export failure exits `1`, and a
 timeout or second signal uses the conventional nonzero signal exit code.
 
-Adapt the local endpoint policy to the detected Observer service address for
+Adapt the local endpoint policy to the detected Splunk Observability Studio service address for
 Docker/Compose. When checked-in host and container paths coexist, retain the
 host fallback plus each exact container receiver in an exact allowlist or
 select one through a checked-in runtime-mode setting. Do not accept arbitrary
@@ -463,7 +463,7 @@ Express/Fastify auto-instrumentation automatically sets ERROR on 5xx responses.
 ## OTLP Export Configuration
 
 Use environment variables for operator-owned configuration. The only endpoint
-literal in the SDK example is the signal-specific local Observer logs fallback,
+literal in the SDK example is the signal-specific local Splunk Observability Studio logs fallback,
 which prevents a generic direct-cloud endpoint from becoming the implicit log
 destination.
 
@@ -472,15 +472,15 @@ destination.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP HTTP endpoint |
 | `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the default local log path |
 | `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or detected-local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
-| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for host/native Obstudio runs | Signal-specific local application-log destination |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for host/native Splunk Observability Studio runs | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
-| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Explicit headers are operator-owned and are never applied to the default local Observer exporter |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Explicit headers are operator-owned and are never applied to the default local Splunk Observability Studio exporter |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
 
-For local development with the Observer, run with:
+For local development with Splunk Observability Studio, run with:
 
     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     OTEL_LOGS_EXPORTER=otlp
@@ -494,17 +494,17 @@ When creating `PeriodicExportingMetricReader`, pass
 and `exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500)`.
 This makes HTTP metrics from `@opentelemetry/instrumentation-http`, including
 `http.server.request.duration` when stable HTTP semantic conventions are
-enabled, export promptly to Observer.
+enabled, export promptly to Splunk Observability Studio.
 
-### Local Observer application logs and cloud boundary
+### Local Splunk Observability Studio application logs and cloud boundary
 
 Local OTLP application logs are the default for a detected supported Node.js
 logging stack only when the exporter is absent/`otlp` and the logs endpoint is
-absent or matches the detected local Observer receiver. `none` omits the added
+absent or matches the detected local Splunk Observability Studio receiver. `none` omits the added
 processor and bridge while the original console/file destination continues;
 another non-OTLP exporter remains operator-owned and its endpoint is not
 interpreted. When traces or metrics use direct-cloud signal endpoints, keep
-the logs endpoint on local Observer. Never copy a Splunk ingest URL, realm,
+the logs endpoint on local Splunk Observability Studio. Never copy a Splunk ingest URL, realm,
 access token, generic cloud header, cloud exporter, or forwarding flag into log
 configuration. For the absent/`otlp` branch, reject a non-local explicit logs
 endpoint before constructing `NodeSDK` or the bridge, preserve it as operator
@@ -512,13 +512,13 @@ configuration, report the cloud-boundary conflict, and require the operator to
 resolve it. Reject generic OTLP headers on the local branch and move those
 credentials to trace/metric variables. Also reject an explicit signal-specific
 logs header: it is operator-owned configuration and must not be applied to the
-default local Observer exporter. Obstudio cloud forwarding remains traces and
+default local Splunk Observability Studio exporter. Splunk Observability Studio cloud forwarding remains traces and
 metrics only.
 
 Verify one sanitized record at each required severity both outside and inside
 an active span. Assert body/category, severity, shared `service.name`,
 trace/span IDs when active, presence in the original console/file sink, one
-record in Observer, and zero OTLP records under `OTEL_LOGS_EXPORTER=none`.
+record in Splunk Observability Studio, and zero OTLP records under `OTEL_LOGS_EXPORTER=none`.
 That record-count assertion is required for Console, Pino, and Winston because
 their transport/instrumentation combinations can otherwise duplicate logs.
 

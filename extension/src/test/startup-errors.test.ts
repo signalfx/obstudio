@@ -23,10 +23,10 @@ test('formatPortConflictMessage names the managed UI setting for configurable po
 		formatPortConflictMessage({
 			owner: 'nginx (PID 42)',
 			port: 3000,
-			role: 'Observer UI',
+			role: 'Splunk Observability Studio UI',
 			settingName: 'managedObserverPort',
 		}),
-		'Observer UI port 3000 is already in use by "nginx (PID 42)". Stop the other process or change observability-studio.managedObserverPort.',
+		'Splunk Observability Studio UI port 3000 is already in use by "nginx (PID 42)". Stop the other process or change observability-studio.managedObserverPort.',
 	);
 });
 
@@ -37,7 +37,7 @@ test('formatPortConflictMessage explains stale observer ownership for fixed OTLP
 			port: 4318,
 			role: 'OTLP/HTTP',
 		}),
-		'OTLP/HTTP port 4318 is already in use by "obstudio (PID 99)". Another Splunk Observability Studio instance or a stale observer process may still be running. Close the other VS Code window or terminate the stale observer process before restarting Splunk Observability Studio.',
+		'OTLP/HTTP port 4318 is already in use by "obstudio (PID 99)". Another Splunk Observability Studio instance or a stale local-service process may still be running. Close the other VS Code window or terminate the stale local-service process before restarting Splunk Observability Studio.',
 	);
 });
 
@@ -48,7 +48,7 @@ test('formatObserverProbeMismatchMessage hides internal health endpoint details'
 	);
 	assert.equal(
 		formatObserverProbeMismatchMessage('http://127.0.0.1:63575', 'shared-reuse'),
-		'the configured shared observer at http://127.0.0.1:63575 did not respond like Splunk Observability Studio. Verify observability-studio.sharedObserverUrl.',
+		'the configured shared service at http://127.0.0.1:63575 did not respond like Splunk Observability Studio. Verify observability-studio.sharedObserverUrl.',
 	);
 	assert.equal(
 		formatObserverProbeMismatchMessage('http://127.0.0.1:63575', 'startup-reuse'),
@@ -71,7 +71,7 @@ test('formatObserverProbeMismatchMessage hides internal health endpoint details'
 test('formatObserverProbeUnavailableMessage hides raw probe transport details', () => {
 	assert.equal(
 		formatObserverProbeUnavailableMessage('http://127.0.0.1:63575', 'shared-reuse'),
-		'could not reach the configured shared observer at http://127.0.0.1:63575. Verify observability-studio.sharedObserverUrl and make sure Splunk Observability Studio is running there.',
+		'could not reach the configured shared service at http://127.0.0.1:63575. Verify observability-studio.sharedObserverUrl and make sure Splunk Observability Studio is running there.',
 	);
 	assert.equal(
 		formatObserverProbeUnavailableMessage('http://127.0.0.1:63575', 'startup'),

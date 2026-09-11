@@ -160,9 +160,9 @@ auto-instrumentation first, then only approved custom signals.
   Library handlers may propagate context and add request-local telemetry, but
   the executable entrypoint owns setup, outer framework wrapping, and shutdown.
 - Reuse the actual startup command. Python uses per-process setup unless the
-  user selects CLI-only; otherwise a wrapper is insufficient. Node must preload
-  before app imports; Java normally uses the agent; Go must call setup and wrap
-  the handler from `cmd/.../main` or its equivalent.
+  user selects CLI-only; otherwise a wrapper is insufficient. Node
+  must preload before app imports; Java normally uses the agent; Go must call
+  setup and wrap the handler from `cmd/.../main` or its equivalent.
 - Obtain tracers/meters and create instruments during setup, not in hot paths.
   Use official OTel packages, except a library-maintained integration where no
   official package exists. Do not move business functions between files.
@@ -194,35 +194,33 @@ auto-instrumentation first, then only approved custom signals.
 ### Default Local Application Log Export
 
 For a supported detected Python, Node, Java, or Go logging stack, local
-Observer OTLP application-log export is part of the standard baseline:
+Splunk Observability Studio OTLP application-log export is part of the standard baseline:
 
 - A request that excludes custom business spans limits span work only; it is
   not a log-export opt-out.
 - Export locally only when `OTEL_LOGS_EXPORTER` is absent/`otlp` and the
   signal-specific logs endpoint is absent or exactly the detected local
-  Observer receiver. Default host HTTP logs to
-  `http://localhost:4318/v1/logs`; keep checked-in container URLs and never
-  infer locality from hostname syntax.
+  Splunk Observability Studio receiver. Host default is `http://localhost:4318/v1/logs`; keep
+  checked-in container URLs. Never infer locality from hostname syntax.
 - `OTEL_LOGS_EXPORTER=none` disables the added local log path. Any other explicit exporter is
   operator-owned; add no local provider, exporter, or bridge and do not treat
   the environment value alone as proof that its pipeline works.
 - A non-local endpoint on the absent/`otlp` branch is a boundary conflict:
   fail closed before constructing the local provider/bridge and report it.
-- The Obstudio-owned local exporter must receive no cloud credential or auth
+- The Splunk Observability Studio-owned local exporter must receive no cloud credential or auth
   header. Move generic direct-cloud endpoints/headers to trace- and
   metric-specific variables and remove the generic values. Do not pass
-  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` into the default local Observer exporter;
+  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` into the default local Splunk Observability Studio exporter;
   an explicit logs header makes that path operator-owned and must be resolved
-  or proven separately. Obstudio-to-Splunk cloud forwarding is traces and
+  or proven separately. Splunk Observability Studio-to-Splunk cloud forwarding is traces and
   metrics only.
 - Use one official bridge matching the detected logger, one LoggerProvider,
   exactly one bridge/export path, and one shutdown path. Preserve every existing
   console/file/platform sink and prevent duplicate bridge/export paths.
 - Pass the active request context to application logging. Preserve existing log
-  APIs/levels plus fixture, documentation, and test contracts for exact log
-  body/category, severity, and default `service.name`; do not replace a
-  service-specific expectation with a generic example value. Preserve every
-  distinct existing lifecycle-log
+  APIs/levels plus fixture, documentation, and test contracts for exact
+  body/category, severity, and default `service.name`; do not replace an
+  expectation with a generic example value. Preserve every distinct lifecycle-log
   contract as well: a shutdown/startup warning is not a duplicate of the
   request warning, and it needs trace/span IDs only if it runs inside an active
   span. Do not invent, remove, merge, or rename log bodies to manufacture proof.

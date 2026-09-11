@@ -69,7 +69,7 @@ const (
 	ErrorCodeCanceled       ErrorCode = "request_canceled"
 )
 
-// Error is a signup error that is safe to return through Observer APIs.
+// Error is a signup error that is safe to return through Splunk Observability Studio APIs.
 type Error struct {
 	Code      ErrorCode `json:"code"`
 	Message   string    `json:"error"`

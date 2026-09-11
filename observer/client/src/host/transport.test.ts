@@ -26,7 +26,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("Observer host transport", () => {
+describe("Splunk Observability Studio host transport", () => {
   it("keeps native fetch for the standalone browser", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("browser", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);

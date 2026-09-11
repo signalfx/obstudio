@@ -43,7 +43,7 @@ var splunkSignalviewConfigPattern = regexp.MustCompile(`window\.signalviewConfig
 var splunkRollbackTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 var splunkStateVersionPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 var errSplunkAccessTokenRejected = errors.New("Splunk rejected the access token for this realm.")
-var errSplunkExportQuiesced = errors.New("Observer is shutting down; cloud configuration changes are unavailable.")
+var errSplunkExportQuiesced = errors.New("Splunk Observability Studio is shutting down; cloud configuration changes are unavailable.")
 var splunkConnectionHTTPClient = &http.Client{
 	CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
@@ -144,7 +144,7 @@ func newSplunkExportService(
 		resolveRealmClient: splunkRealmHTTPClient,
 		// TODO(CIMD PoC): standalone-binary source of truth for the CIMD registration
 		// feature flag, independent of the VS Code "sisCimdRegistrationEnabled" setting
-		// used when Observer runs inside the extension. The IDE setting is the source of
+		// used when Splunk Observability Studio runs inside the extension. The IDE setting is the source of
 		// truth whenever it is present; this env var only matters for direct-browser dev
 		// (`go run ./cmd/obstudio` + `make dev`), where no VS Code settings exist.
 		cimdRegistrationEnabled: envFlagEnabled("OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED"),
@@ -498,7 +498,7 @@ func requireLocalObserverRequest(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !isLocalObserverRequest(r) {
-			writeError(w, http.StatusForbidden, "request must come from the local Observer origin")
+			writeError(w, http.StatusForbidden, "request must come from the local Splunk Observability Studio origin")
 			return
 		}
 		next(w, r)
@@ -532,7 +532,7 @@ func (s *splunkExportService) serializeRecoveryMutation(next http.HandlerFunc) h
 }
 
 // isSameOriginLoopbackBrowserRequest is the standalone browser CSRF boundary.
-// Observer trusts local-machine processes that can reach loopback; these checks
+// Splunk Observability Studio trusts local-machine processes that can reach loopback; these checks
 // prevent a remote web origin from driving cloud mutations through the HTTP API.
 func isSameOriginLoopbackBrowserRequest(r *http.Request) bool {
 	if r.Header.Get(splunkBrowserRequestHeader) != "1" {

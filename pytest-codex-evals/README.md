@@ -15,7 +15,7 @@ rubric grading, optional Docker runtime checks, and aggregate reports.
 - Schema-constrained rubric grading with a configurable judge model.
 - Optional Docker-backed runtime checks that can exercise a service and verify
   traces, metrics, logs, and preserved service output through an
-  Observer-compatible API and Docker Compose.
+  Splunk Observability Studio-compatible API and Docker Compose.
 - Separate raw JSON execution output and kind-specific Markdown/benchmark reports.
 
 ## Install
@@ -106,7 +106,7 @@ Other command-backed kinds are `command_succeeds`,
 
 Runtime checks are optional because they need Docker and a telemetry backend.
 Each runtime check runs an eval-owned Docker Compose file, then queries an
-Observer-compatible API for telemetry and can inspect preserved service output.
+Splunk Observability Studio-compatible API for telemetry and can inspect preserved service output.
 Keep service topology, build instructions, startup, and traffic generation in
 Compose. The eval JSON only points at the Compose file and declares telemetry
 expectations. Compose can use `${CODEX_EVAL_SERVICE_DIR}` when it must build the
@@ -153,11 +153,11 @@ instrumented temp service workspace instead of the source fixture.
 }
 ```
 
-Use `endpoints` for Observer API responses and `record_checks` when all asserted
+Use `endpoints` for Splunk Observability Studio API responses and `record_checks` when all asserted
 fields must belong to the same JSON record. `service_logs` verifies retained
 stdout or stderr output. Per-check `environment` values select isolated runtime
 scenarios, while `stop_services_before_validation` can stop only `app` so its
-shutdown-flushed telemetry is available before Observer assertions run.
+shutdown-flushed telemetry is available before Splunk Observability Studio assertions run.
 
 The referenced Compose file should expose an `observer` service on
 `127.0.0.1:3000` and a profiled one-shot `traffic` service. The harness runs:
@@ -259,7 +259,7 @@ judge = "gpt-5.5"
 
 `[models].agent` configures the task run, `--model` overrides it, and
 `[models].judge` configures the rubric grading pass.
-`[runtime].enabled` controls Docker/Observer runtime checks. CLI flags override
+`[runtime].enabled` controls Docker/Splunk Observability Studio runtime checks. CLI flags override
 the TOML mode for a single run:
 
 ```bash
@@ -336,7 +336,7 @@ a preferred total remain partial and the aggregate total remains unknown.
 Agent/task usage and rubric/judge usage remain separate, and judge usage is
 rendered only in rubric reports. Codex and Claude judge subprocesses disable
 OTel export, so globally configured provider telemetry cannot put grading usage
-into Observer's agent/task ring; judge usage is still parsed from the subprocess
+into Splunk Observability Studio's agent/task ring; judge usage is still parsed from the subprocess
 trace for the rubric report.
 
 ## Publish

@@ -136,7 +136,7 @@ export function collectObserverHostHTTPResponse(
 			size += buffer.length;
 			if (size > responseByteLimit) {
 				const error = new Error(
-					`Observer response exceeded ${responseByteLimit / (1 << 20)} MiB.`,
+					`Splunk Observability Studio response exceeded ${responseByteLimit / (1 << 20)} MiB.`,
 				);
 				request.destroy(error);
 				fail(error);
@@ -146,7 +146,7 @@ export function collectObserverHostHTTPResponse(
 		};
 		const onEnd = () => {
 			if (!response.complete) {
-				fail(new Error('Observer response ended before the message was complete.'));
+				fail(new Error('Splunk Observability Studio response ended before the message was complete.'));
 				return;
 			}
 			const contentType = response.headers['content-type'];
@@ -161,8 +161,8 @@ export function collectObserverHostHTTPResponse(
 			}));
 		};
 		const onError = (error: Error) => fail(error);
-		const onAborted = () => fail(new Error('Observer response was aborted before completion.'));
-		const onClose = () => fail(new Error('Observer response closed before completion.'));
+		const onAborted = () => fail(new Error('Splunk Observability Studio response was aborted before completion.'));
+		const onClose = () => fail(new Error('Splunk Observability Studio response closed before completion.'));
 
 		response.on('data', onData);
 		response.once('end', onEnd);
@@ -288,7 +288,7 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 		case 'disconnect-cimd':
 		case 'login-cimd':
 		case 'setup-cimd':
-			// These carry no CIMD-specific payload. A known Observer state version is
+			// These carry no CIMD-specific payload. A known Splunk Observability Studio state version is
 			// included when available, but initialization failures must not block a
 			// deliberate retry.
 			return value === undefined

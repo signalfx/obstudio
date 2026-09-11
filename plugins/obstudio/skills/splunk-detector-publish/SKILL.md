@@ -42,8 +42,8 @@ the routed references; do not scan alternate copies or load every reference.
 - Live auth uses `SPLUNK_ACCESS_TOKEN` from the environment as `X-SF-Token`.
   Never echo, log, print, persist, or place it in prompt/report context. Never
   write it to `.observe/detector-sync.md` or a Terraform example. Resolve the
-  realm from non-empty `SPLUNK_REALM` first, then the connected Observer's
-  realm-only lookup; Observer is never a token source. Missing live token or
+  realm from non-empty `SPLUNK_REALM` first, then the connected Splunk Observability Studio's
+  realm-only lookup; Splunk Observability Studio is never a token source. Missing live token or
   realm is a blocker, not an invitation to guess.
 - Offline/no-network/placeholder-credential mode never reads environment
   credentials and never calls the Splunk API. Its verdicts are `UNCERTAIN`, not

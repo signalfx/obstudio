@@ -155,7 +155,7 @@ Use only `app_test`, `unit`, `unit+otlp`, `full_runtime`, `contract_only`,
 `otlp_accepted`, `not_explorer_visible`, `not_proven`, or `not_applicable` for
 `visibility`. Unit proof may be working while `not_explorer_visible`; do not
 inflate it into an explorer claim. An `explorer_visible` result must cite saved
-query or Observer evidence.
+query or Splunk Observability Studio evidence.
 
 Preserve proof provenance. When a focused test or other lower-level check ran,
 retain its executed `proof_mode`, evidence, and `observed_telemetry`; do not
