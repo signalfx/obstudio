@@ -74,6 +74,8 @@ def test_offline_reference_is_uncertain_non_mutating_and_self_contained() -> Non
         "POST /v2/detector",
         'literal `"tags": ["obstudio"]`',
         "AutoDetect detectors",
+        "resolved notification value",
+        "stop before confirmation",
     ):
         assert required in text
 
@@ -105,6 +107,8 @@ def test_live_reference_preserves_fresh_idempotent_response_contract() -> None:
         "Never update/delete a detector",
         ".observe/detector-sync.md",
         "Never store the token",
+        "unresolved notification expressions",
+        'rule["notifications"]',
     ):
         assert required in text
 

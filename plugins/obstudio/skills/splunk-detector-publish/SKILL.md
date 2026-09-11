@@ -92,7 +92,7 @@ Require `.observe/terraform/detectors.tf`; optionally read
 
 1. HCL label and resolved `name`;
 2. raw `program_text`;
-3. every rule's `severity`, `detect_label`, and `notifications`;
+3. every rule's `severity`, `detect_label`, and resolved `notifications`;
 4. first `data('metric.name', ...)` metric; and
 5. resolved `filter('service.name', '...')` value, recognizing `sf_service` as
    the equivalent live dimension.
@@ -101,9 +101,11 @@ Read `../references/terraform-normalization.md`. Reproduce `<<-EOF` dedent,
 trim blank edges, and resolve every `${var.*}` from `terraform.tfvars`, then
 `*.auto.tfvars`, `terraform.tfvars.example`, then `variables.tf` defaults. This
 includes threshold, stddev, and window variables, not only service name. Ask
-rather than guess if any value is unresolved. Carry the one normalized string
-into both comparison and `programText`; unresolved interpolation or leading
-indentation causes an HTTP 400 SignalFlow parse failure.
+rather than guess if any value is unresolved. Resolve notification expressions
+with the same precedence and stop before confirmation if any remain unresolved.
+Carry the one normalized string into both comparison and `programText`;
+unresolved interpolation or leading indentation causes an HTTP 400 SignalFlow
+parse failure.
 
 Fail fast on malformed HCL. Avoid repeated full repository inventories: inspect
 the named Terraform inputs and only the supporting files required to resolve a

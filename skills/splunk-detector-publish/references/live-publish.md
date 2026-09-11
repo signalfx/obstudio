@@ -75,7 +75,7 @@ body = {
         {
             "severity": rule["severity"],
             "detectLabel": rule["detect_label"],
-            "notifications": rule.get("notifications", []),
+            "notifications": rule["notifications"],
             "disabled": False,
         }
         for rule in rules
@@ -85,9 +85,12 @@ body = {
 }
 ```
 
-Never send raw HCL `program_text`, an unresolved `${var.*}`, or snake_case
-`detect_label`. Never update/delete a detector or POST a COVERED/UNCERTAIN row.
-Keep writes sequential so each response is attributable.
+Never send raw HCL `program_text`, an unresolved `${var.*}`, unresolved
+notification expressions, or snake_case `detect_label`. Resolve notification
+values with the same tfvars/default precedence used for `program_text` and
+stop before confirmation if any value is unresolved. Never update/delete a
+detector or POST a COVERED/UNCERTAIN row. Keep writes sequential so each
+response is attributable.
 
 Apply the shared status contract:
 
