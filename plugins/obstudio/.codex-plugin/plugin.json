@@ -1,7 +1,7 @@
 {
   "name": "obstudio",
   "version": "0.0.18",
-  "description": "Splunk Observability Studio bundles local OpenTelemetry workflows and observer controls for Codex.",
+  "description": "Splunk Observability Studio bundles local OpenTelemetry workflows and service controls for Codex.",
   "author": {
     "name": "Splunk",
     "url": "https://github.com/signalfx/obstudio"

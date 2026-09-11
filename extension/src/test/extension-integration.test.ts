@@ -487,21 +487,24 @@ it('integration: extension.js exports activate and deactivate', { timeout: 120_0
 	assert.ok(source.includes('SIGKILL'), 'extension.js should fallback to SIGKILL');
 });
 
-it('integration: package.json registers all commands', () => {
+it('integration: package.json registers exact lifecycle command labels', () => {
 	const pkgPath = path.join(extensionRoot, 'package.json');
-	const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-	const commands = (pkg.contributes?.commands ?? []).map((c: { command: string }) => c.command);
+	const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as ExtensionPackage;
+	const commands = pkg.contributes?.commands ?? [];
+	const expectedCommands = new Map([
+		['observability-studio.openObserver', 'Open'],
+		['observability-studio.statusMenu', 'Status'],
+		['observability-studio.startObserver', 'Start'],
+		['observability-studio.stopObserver', 'Stop'],
+		['observability-studio.restartObserver', 'Restart'],
+	]);
 
-	for (const expected of [
-		'observability-studio.openObserver',
-		'observability-studio.statusMenu',
-		'observability-studio.startObserver',
-		'observability-studio.stopObserver',
-		'observability-studio.restartObserver',
-	]) {
-		assert.ok(
-			commands.includes(expected),
-			`package.json should register command "${expected}"`
+	for (const [commandId, title] of expectedCommands) {
+		const command = commands.find((entry) => entry.command === commandId);
+		assert.deepEqual(
+			command && { category: command.category, title: command.title },
+			{ category: 'Splunk Observability Studio', title },
+			`package.json should register "Splunk Observability Studio: ${title}"`,
 		);
 	}
 });

@@ -589,8 +589,8 @@ def test_splunk_access_token_secrecy_prose_in_shared_api_ref():
 
 def test_splunk_realm_uses_env_pair_before_connected_observer_without_exposing_token():
     """The environment realm stays paired with the environment token. A connected
-    SOS destination may supply only the fallback realm, and its stored token must
-    remain outside skill context."""
+    Splunk Observability Studio destination may supply only the fallback realm,
+    and its stored token must remain outside skill context."""
     text = _read(SPLUNK_API_REF)
     assert "observer_splunk_connection_realm" in text, (
         "splunk-api.md must use Splunk Observability Studio's realm-only tool for discovery"
@@ -598,7 +598,8 @@ def test_splunk_realm_uses_env_pair_before_connected_observer_without_exposing_t
     environment_realm = text.index("Use a non-empty `SPLUNK_REALM` when it is set")
     connected_realm = text.index("observer_splunk_connection_realm")
     assert environment_realm < connected_realm, (
-        "SPLUNK_REALM must stay paired with SPLUNK_ACCESS_TOKEN before using the connected SOS realm"
+        "SPLUNK_REALM must stay paired with SPLUNK_ACCESS_TOKEN before using the "
+        "connected Splunk Observability Studio realm"
     )
     assert "returns only the non-secret region" in text, (
         "the realm tool must be limited to non-secret realm discovery"

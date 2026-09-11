@@ -778,7 +778,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 		tools = append(tools,
 			toolDef{
 				Name:        "observer_splunk_connection_realm",
-				Description: "Return only the non-secret Splunk Observability Cloud realm stored with the current SOS connection. Use this realm as the default when the user has not supplied one. This tool never returns an access token or token metadata.",
+				Description: "Return only the non-secret Splunk Observability Cloud realm stored with the current Splunk Observability Studio connection. Use this realm as the default when the user has not supplied one. This tool never returns an access token or token metadata.",
 				InputSchema: jsonSchema{Type: "object", AdditionalProperties: &f},
 				Annotations: toolAnnot{Title: "Splunk Connection Realm", ReadOnlyHint: true, IdempotentHint: true},
 			},
@@ -790,7 +790,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 			},
 			toolDef{
 				Name:        "observer_splunk_metrics_export_configure",
-				Description: "Update the Splunk Observability Cloud metrics forwarding configuration at runtime. Use this to enable, disable, or change the realm, endpoint, or access token without restarting obstudio.",
+				Description: "Update the Splunk Observability Cloud metrics forwarding configuration at runtime. Use this to enable, disable, or change the realm, endpoint, or access token without restarting Splunk Observability Studio.",
 				InputSchema: jsonSchema{
 					Type: "object", AdditionalProperties: &f,
 					Properties: map[string]jsonSchema{

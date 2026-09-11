@@ -25,14 +25,15 @@ Then resolve the realm in this order:
    `observer_splunk_connection_realm` and use its non-empty `realm`. This is the
    region stored with the active Splunk Observability Cloud connection.
 3. If neither source provides a realm, **stop** and ask the user to set
-   `SPLUNK_REALM` or connect Splunk Observability Cloud in SOS.
+   `SPLUNK_REALM` or connect Splunk Observability Cloud in Splunk Observability
+   Studio.
 
 The realm tool returns only the non-secret region. It is not a token source.
 Direct REST calls always use `SPLUNK_ACCESS_TOKEN` from the environment.
 
 Before any create, update, or delete, include the resolved realm in the
-confirmation and state whether it came from the connected SOS destination or
-`SPLUNK_REALM`.
+confirmation and state whether it came from the connected Splunk Observability
+Studio destination or `SPLUNK_REALM`.
 
 Base API URL: `https://api.${realm}.signalfx.com`
 App (browser) URL for deep links: `https://app.${realm}.signalfx.com`

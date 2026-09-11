@@ -5339,6 +5339,20 @@ func TestToolsCallSplunkExportRejectedWhenUnconfigured(t *testing.T) {
 	}
 }
 
+func TestSplunkToolDescriptionsUseFullProductName(t *testing.T) {
+	index := make(map[string]toolDef)
+	for _, tool := range buildToolDefs(true) {
+		index[tool.Name] = tool
+	}
+
+	if got := index["observer_splunk_connection_realm"].Description; !strings.Contains(got, "current Splunk Observability Studio connection") {
+		t.Fatalf("realm tool description lost full product name: %q", got)
+	}
+	if got := index["observer_splunk_metrics_export_configure"].Description; !strings.Contains(got, "without restarting Splunk Observability Studio") {
+		t.Fatalf("metrics configuration tool description lost full product name: %q", got)
+	}
+}
+
 func TestToolsCallSplunkConnectionRealmReturnsOnlyRealm(t *testing.T) {
 	s := store.New()
 	metricsController, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{

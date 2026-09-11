@@ -13,13 +13,13 @@ is just a distribution mechanism.
 ┌─────────────────────────────────────────────────────────────────┐
 │  Layer 3: Distribution                                          │
 │                                                                 │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────┐  │
-│  │ VS Code    │  │ brew /     │  │ npx /      │  │ go       │  │
-│  │ Extension  │  │ Homebrew   │  │ npm        │  │ install  │  │
-│  └────────────┘  └────────────┘  └────────────┘  └──────────┘  │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────┐   │
+│  │ VS Code    │  │ brew /     │  │ npx /      │  │ go       │   │
+│  │ Extension  │  │ Homebrew   │  │ npm        │  │ install  │   │
+│  └────────────┘  └────────────┘  └────────────┘  └──────────┘   │
 │                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  Layer 2: obstudio                                        │  │
+│  │  Layer 2: Splunk Observability Studio                     │  │
 │  │                                                           │  │
 │  │  Single binary / runnable package                         │  │
 │  │  CLI interface, lifecycle management, skill installer     │  │
@@ -27,16 +27,16 @@ is just a distribution mechanism.
 │  │  ┌─────────────────────────────────────────────────────┐  │  │
 │  │  │  Layer 1: Core                                      │  │  │
 │  │  │                                                     │  │  │
-│  │  │  ┌──────────────────┐    ┌──────────────────────┐   │  │  │
-│  │  │  │  Skills          │    │  Splunk Observability Studio             │   │  │  │
-│  │  │  │                  │    │                       │   │  │  │
-│  │  │  │  instrument/     │    │  OTLP receiver        │   │  │  │
-│  │  │  │  terraform/      │    │    Storage            │   │  │  │
-│  │  │  │  (agent-readable │    │  Query API (REST)     │   │  │  │
-│  │  │  │   markdown)      │    │  MCP server           │   │  │  │
-│  │  │  │                  │    │  Web UI               │   │  │  │
-│  │  │  │                  │    │  Validator            │   │  │  │
-│  │  │  └──────────────────┘    └──────────────────────┘   │  │  │
+│  │  │  ┌────────────────┐ ┌─────────────────────────────┐ │  │  │
+│  │  │  │ Skills         │ │ Splunk Observability Studio │ │  │  │
+│  │  │  │                │ │                             │ │  │  │
+│  │  │  │ instrument/    │ │  OTLP receiver              │ │  │  │
+│  │  │  │ terraform/     │ │    Storage                  │ │  │  │
+│  │  │  │ (agent-readable│ │  Query API (REST)           │ │  │  │
+│  │  │  │  markdown)     │ │  MCP server                 │ │  │  │
+│  │  │  │                │ │  Web UI                     │ │  │  │
+│  │  │  │                │ │  Validator                  │ │  │  │
+│  │  │  └────────────────┘ └─────────────────────────────┘ │  │  │
 │  │  └─────────────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
@@ -47,11 +47,11 @@ independently:
 
 - **Layer 1 (Core)** works without Layer 2 or 3. A developer can run the
 Splunk Observability Studio server directly and read skill files from disk.
-- **Layer 2 (obstudio)** works without Layer 3. A developer can `obstudio start`
-from any terminal, in any editor, with any AI agent.
-- **Layer 3 (Distribution)** is how obstudio reaches developers. The VS Code
-extension is one channel. Homebrew is another. `go install` is another. None
-of them change what the product does.
+- **Layer 2 (Splunk Observability Studio)** works without Layer 3. A developer
+  can `obstudio start` from any terminal, in any editor, with any AI agent.
+- **Layer 3 (Distribution)** is how Splunk Observability Studio reaches
+  developers. The VS Code extension is one channel. Homebrew is another.
+  `go install` is another. None of them change what the product does.
 
 ## Who Is the Customer?
 
@@ -151,7 +151,7 @@ connects them.
 
 ---
 
-## Layer 2: obstudio (The Product)
+## Layer 2: Splunk Observability Studio (The Product)
 
 Layer 2 composes the core primitives into a single, runnable product. It is a
 cross-platform Go binary with no runtime dependencies.
@@ -172,7 +172,7 @@ telemetry and validate instrumentation results.
 ### What Layer 2 Adds Over Layer 1
 
 
-| Capability               | Layer 1 (Core)      | Layer 2 (obstudio)                         |
+| Capability               | Layer 1 (Core)      | Layer 2 (Splunk Observability Studio)      |
 | ------------------------ | ------------------- | ------------------------------------------ |
 | Run Splunk Observability Studio             | Manual server start | `obstudio start`                           |
 | Install skills           | Manual file copy    | `obstudio install --target=<agent>`        |
@@ -214,20 +214,21 @@ editor-specific protocol, no custom integration. Standard MCP over Streamable
 HTTP.
 
 Splunk detector operations (`$splunk-detector-publish`) call the Splunk REST API
-directly (`GET`/`POST /v2/detector`) — they do not go through the obstudio MCP
-server. Dashboard publish (`$splunk-dashboard-publish`) likewise calls the REST
-API directly
+directly (`GET`/`POST /v2/detector`) — they do not go through the Splunk
+Observability Studio MCP server. Dashboard publish
+(`$splunk-dashboard-publish`) likewise calls the REST API directly
 (`GET`/`POST /v2/dashboard`, `/v2/chart`, `/v2/dashboardgroup`). Splunk Observability Studio's
 read-only `GET /api/dashboards/preview` endpoint is the one exception that *is*
-served by obstudio: it reads the `.observe/dashboards.preview.json` sidecar and
-resolves each panel against locally stored telemetry for the Dashboards tab.
+served by Splunk Observability Studio: it reads the
+`.observe/dashboards.preview.json` sidecar and resolves each panel against
+locally stored telemetry for the Dashboards tab.
 
 ---
 
 ## Layer 3: Distribution
 
-Layer 3 is how obstudio reaches developers. It changes nothing about the
-product. It is packaging, delivery, and convenience.
+Layer 3 is how Splunk Observability Studio reaches developers. It changes
+nothing about the product. It is packaging, delivery, and convenience.
 
 Two channels are described below. To avoid scope creep we start with these and
 expand to additional channels (e.g. Homebrew, `go install`) once the core
@@ -235,9 +236,9 @@ product is stable.
 
 ### Channel 1: Native Agentic Installation
 
-obstudio can install itself directly into any AI coding environment. No
-extension, no marketplace, no intermediary. The developer runs a single command
-and the AI tool gains full access to skills and MCP tools.
+Splunk Observability Studio can install itself directly into any AI coding
+environment. No extension, no marketplace, no intermediary. The developer runs
+a single command and the AI tool gains full access to skills and MCP tools.
 
 ```bash
 $ obstudio register --agent cursor
@@ -266,8 +267,8 @@ resources exactly where the agent expects them.
 | Generic     | Project `.mcp.json`       | Project `.agents/skills/obstudio/` |
 
 
-After registration, the developer starts obstudio and the AI agent discovers it
-automatically via MCP `tools/list`. No extension needed.
+After registration, the developer starts Splunk Observability Studio and the AI
+agent discovers it automatically via MCP `tools/list`. No extension needed.
 
 ### Channel 2: VS Code Extension
 
@@ -275,7 +276,7 @@ The extension is a thin wrapper (~400 lines of TypeScript) that automates what
 `obstudio start` and `obstudio register` do manually. It adds three conveniences
 specific to the VS Code environment:
 
-1. **Auto-start**: spawns the obstudio binary when the editor opens
+1. **Auto-start**: spawns the `obstudio` binary when the editor opens
 2. **Embedded UI**: opens the web explorer in an editor panel instead of a browser tab
 3. **One-click config**: adds OTLP env vars to `.vscode/launch.json` for debug sessions
 
@@ -330,7 +331,7 @@ wrapper for developers who prefer a marketplace install and embedded panels.
 
 #### Binary Distribution Strategy
 
-The extension needs the obstudio binary. Three options, in order of preference:
+The extension needs the `obstudio` binary. Three options, in order of preference:
 
 
 | Strategy                  | How It Works                                                                                                                                            | Tradeoff                                                   |
@@ -380,17 +381,17 @@ The architectural pattern across all of these:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-obstudio follows this pattern. The Go binary is the product. The extension is
-one of several distribution channels.
+Splunk Observability Studio follows this pattern. The Go binary is the product.
+The extension is one of several distribution channels.
 
 ### Why This Matters for Splunk Observability Studio
 
 OTelMe demonstrates that the VS Code marketplace already has demand for local
-OpenTelemetry tooling. obstudio differs in two ways:
+OpenTelemetry tooling. Splunk Observability Studio differs in two ways:
 
-- **Reach** — OTelMe is locked to VS Code. obstudio works with every AI coding
-tool via MCP, and the extension is optional.
-- **Capabilities** — obstudio adds agent-readable skills, validation, and
+- **Reach** — OTelMe is locked to VS Code. Splunk Observability Studio works
+  with every AI coding tool via MCP, and the extension is optional.
+- **Capabilities** — Splunk Observability Studio adds agent-readable skills, validation, and
 terraform generation that go beyond live telemetry viewing.
 
 ---
@@ -399,14 +400,15 @@ terraform generation that go beyond live telemetry viewing.
 
 `obstudio register` is the mechanism that makes native agentic installation
 work. It writes the minimum configuration needed for an AI tool to discover
-obstudio's MCP server and skills.
+Splunk Observability Studio's MCP server and skills.
 
 ### What `obstudio register` Does
 
 For each supported AI tool, `register` performs two writes:
 
 1. **MCP config**: adds an entry to the tool's MCP configuration file so the
-  agent can discover obstudio's tools at `http://localhost:3000/mcp`.
+  agent can discover Splunk Observability Studio's tools at
+  `http://localhost:3000/mcp`.
 2. **Skills**: copies skill files to the location the tool expects so the agent
   can read instrumentation expertise.
 
