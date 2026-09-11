@@ -75,9 +75,8 @@ dashboard itself as GAP. Execute in this order:
 2. Reuse a matching saved orphan ID only when its name plus normalized
    `programText` and visualization-options fingerprint or its
    metric+filter+type+normalized-options fingerprint matches exactly. If a
-   required live option is missing or diverges, classify the candidate as
-   UNCERTAIN and do not reuse it. Otherwise create the GAP chart with
-   `POST /v2/chart`.
+   required live option is missing or diverges, treat the orphan as
+   nonmatching and create the confirmed GAP chart with `POST /v2/chart`.
 3. Immediately after each chart POST, write/rewrite the in-progress
    `.observe/dashboard-sync.md` ledger with that chart ID under `Orphan charts`.
    Do not wait until the final report.

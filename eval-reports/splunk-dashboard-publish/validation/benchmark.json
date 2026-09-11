@@ -65,7 +65,7 @@
   },
   "source": {
     "digest_version": 2,
-    "digest": "8f6af4616a2e2eef18b72621868c9dc9f0604f90f5fffb5b4a082f19c7204f50",
+    "digest": "011382f8f2f31f7032abd1f95e8ec52c849a9f273dfa0792c8eac25af6b521c2",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -124,8 +124,8 @@
       "skills/references/tests/test_observe_report.py": "77c3e9b98a3a84fe0f7699f7ab40eabcf0dd40fe9cef231e4958b12653535a69",
       "skills/splunk-dashboard-publish/SKILL.md": "898e2a7aa619a57d735e71296cd5ca8e0defbd99f559243a5354f1f857dc477e",
       "skills/splunk-dashboard-publish/references/chart-wire-contract.md": "8e76b3de1bc2086a5aa608e3e219e5a8c336fdee9e3040d4ae3f9fded147d3ae",
-      "skills/splunk-dashboard-publish/references/dashboard-coverage-model.md": "8550da8b308220dd6214f6b39bb8617b227eb37c6b6a19c1c114cfcd849c7b5b",
-      "skills/splunk-dashboard-publish/references/live-publish.md": "e8feeb54fb2a94ac1a10d6c9ba0d80ef959cf4359bf1ca02980554912132dd51",
+      "skills/splunk-dashboard-publish/references/dashboard-coverage-model.md": "9908409612f48fb82992c71fd805aa0360c9bff3b2ef3f37b94e71ca04ff0b84",
+      "skills/splunk-dashboard-publish/references/live-publish.md": "bbef099d21b4383cd600aa36bb9c66de1087e56b16cc76bf74db014229204726",
       "skills/splunk-dashboard-publish/references/offline-plan.md": "be40e7d22b4812a831b479d4ffd9e9fe329aeced1b14102d5f18a3648449a8a6",
       "skills/splunk-dashboard-publish/tests/test_dashboard_publish_progressive_disclosure.py": "67779fc7889d2fb43fc0d88c13038703074e9b0f048f2f3fff71bda7839f1187",
       "evals/sanity/skill-smoke/eval/sanity/dashboard-publish.json": "748bd26dfeeee534643ab02374c4c88459133e261f67f92c6380a027057079c2",

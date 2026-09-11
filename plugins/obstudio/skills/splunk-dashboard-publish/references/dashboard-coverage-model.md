@@ -78,7 +78,7 @@ Reason (COVERED):
 `chart COVERED: metric http.server.request.duration + filter service.name=<svc> + type time_series + options colorBy=Dimension, defaultPlotType=LineChart all matched live chart C-456`.
 
 A local chart is **GAP** when no live chart in the matched dashboard satisfies all
-three. Reason:
+four. Reason:
 `panel GAP: no live chart with metric=<m> + filter service.name=<svc> + type <t> + normalized options in dashboard D-123; will create and add`.
 
 A local chart is **UNCERTAIN** when the metric matches a live chart but the
