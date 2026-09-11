@@ -1,51 +1,18 @@
-# Obstudio Plugin Privacy
+# Observability Studio plugin privacy
 
 This document describes the current data flows for the `obstudio` plugin when
 used with Codex or Claude Code. The host, model provider, package managers,
 operating system, and user-invoked tools have their own privacy behavior.
 
-## What This Plugin Contains
+## What this plugin contains
 
-The plugin contains three capability groups.
+| Capability | Data and network behavior |
+|---|---|
+| Core workflow skills: `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, and `$splunk-dashboard` | Can read or edit repository files and generate local reports or Terraform. They do not manage a background Observer or create live Splunk resources. |
+| Observer and MCP controls: the bundled MCP configuration, SessionStart hook, and `$observer-open`, `$observer-status`, `$observer-restart`, and `$observer-stop` | Interact with local endpoints and may download, start, or manage Observer. Health or control checks may require narrow elevated access. The command skills use the default Observer endpoint and do not follow, probe, or control custom MCP endpoints automatically. |
+| Splunk publishers: `$splunk-detector-publish`, `$splunk-dashboard-publish`, and their deprecated `-sync` aliases | Call Splunk Observability Cloud APIs only when explicitly invoked. They can create dashboards or detectors and require credentials with the corresponding API permissions. |
 
-Core workflow skills:
-
-- `$otel-audit`
-- `$otel-instrument`
-- `$otel-verify`
-- `$splunk-configure`
-- `$splunk-dashboard`
-
-These can read and write repo files through skills like instrumentation and can
-generate local reports and Terraform. They do not manage a local background
-Observer process and do not call live Splunk APIs to create resources.
-
-Observer and MCP controls:
-
-- MCP server config for `http://127.0.0.1:3000/mcp`
-- SessionStart bootstrap hook, if managed startup is kept enabled
-- `$observer-open`
-- `$observer-status`
-- `$observer-restart`
-- `$observer-stop`
-
-These interact with host-local endpoints, may download/start/manage the local
-Observer, and may need narrow elevated/outside-sandbox access for localhost
-health or control checks. Command skills are limited to the default loopback
-Observer and do not probe or control custom MCP endpoints automatically.
-
-Splunk publish skills:
-
-- `$splunk-detector-publish`
-- `$splunk-dashboard-publish`
-- `$splunk-sync` deprecated alias
-- `$splunk-dashboard-sync` deprecated alias
-
-These call Splunk Observability Cloud APIs when explicitly invoked, can create
-live dashboard or detector resources, and require Splunk credentials with the
-required API permissions.
-
-## What the Plugin Does Not Add
+## What the plugin does not add
 
 - The plugin package does not enable token telemetry or repository correlation
   unless the user explicitly opts in with `obstudio token-telemetry enable`.
@@ -59,12 +26,12 @@ Codex or Claude Code may still send prompts, file context, tool output, and
 user-approved command results according to that host's settings and product
 behavior.
 
-## Bootstrap and Local Observer
+## Bootstrap and local Observer
 
-When the SessionStart hook is reviewed and trusted, Obstudio may bootstrap the
-managed Observer. The bootstrap may download an Obstudio release binary,
-verify `checksums.txt`, extract the release into plugin data, and start a local
-Observer process.
+When the SessionStart hook is reviewed and trusted, Observability Studio may
+bootstrap the managed Observer. The bootstrap may download an Observability
+Studio release binary, verify `checksums.txt`, extract the release into plugin
+data, and start a local Observer process.
 
 When token telemetry is enabled and no repository-correlation mode has been
 recorded, correlation defaults to `path`; `off` disables it and `name` omits
@@ -89,18 +56,15 @@ The managed Observer may bind host-local endpoints such as:
 - `127.0.0.1:4317`
 - `127.0.0.1:4318`
 
-These endpoints are intended for local development. Plugin/hook controls and
-MCP-server controls have different effects: disable the plugin or withhold
-SessionStart-hook approval to prevent plugin-managed startup; disable the MCP
-server to prevent the host from connecting to the endpoint. Disabling Claude
-Code's MCP server alone does not stop a previously trusted bootstrap hook from
-starting an Observer, nor does it stop a pre-existing local process.
+These endpoints are intended for local development. Disable managed startup in
+the plugin to prevent it from starting Observer. Disconnecting the MCP
+integration does not stop an Observer process that is already running.
 
 Observer command skills do not automatically follow a non-default MCP endpoint.
 They verify or control only the default loopback Observer at
 `127.0.0.1:3000`.
 
-## Local Data
+## Local data
 
 The skills may create local `.observe/` reports, JSON sidecars, Terraform
 files, and temporary local report servers bound to `127.0.0.1` for reviewing
@@ -116,7 +80,7 @@ Provider usage records, completed task accounting, token metrics, and optional
 repository-correlation events are retained in separate bounded in-memory rings.
 They are removed by ring overwrite, explicit Observer clear, or process exit.
 
-## External Calls
+## External calls
 
 The plugin can run project commands selected by the user or required by the
 invoked skill workflow. Package managers, tests, application runtimes, and
@@ -141,13 +105,3 @@ Observer is unhealthy.
 If a project command, package manager, test runtime, OTLP exporter, or user
 configuration performs network access, that traffic belongs to the selected
 tooling or project configuration, not to plugin telemetry code.
-
-## Host-Specific Controls
-
-Codex users can configure the plugin's MCP server and skill enablement through
-Codex configuration and approve the hook under Codex's trust model. Claude Code
-users can enable or disable the plugin and approve its SessionStart hook to
-control managed startup; they can independently use Claude's MCP-server and
-command permissions to control connection and host-local command access. These
-host controls do not all govern the same capability, and this document does not
-itself configure or enforce them.
