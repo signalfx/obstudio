@@ -1107,6 +1107,69 @@ def test_process_group_options_use_a_new_session(monkeypatch):
     }
 
 
+def test_command_runner_normal_exit_cleans_up_open_descendant_streams(
+    monkeypatch, tmp_path: Path
+):
+    killpg_calls = []
+
+    class FakeProcess:
+        pid = 456
+        stdout = io.StringIO("")
+        stderr = io.StringIO("")
+        returncode = 0
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+    class FakeThread:
+        instances = []
+
+        def __init__(self, **_kwargs):
+            self.joins = 0
+            self.alive = True
+            self.instances.append(self)
+
+        def start(self):
+            pass
+
+        def join(self, timeout=None):
+            self.joins += 1
+            if self.joins == 2:
+                self.alive = False
+
+        def is_alive(self):
+            return self.alive
+
+    monkeypatch.setattr(backend_module, "_IS_WINDOWS", False)
+    monkeypatch.setattr(
+        backend_module.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: FakeProcess(),
+    )
+    monkeypatch.setattr(backend_module.threading, "Thread", FakeThread)
+    monkeypatch.setattr(
+        backend_module.os,
+        "killpg",
+        lambda pid, sig: killpg_calls.append((pid, sig)),
+        raising=False,
+    )
+    monkeypatch.setattr(backend_module.signal, "SIGKILL", 9, raising=False)
+
+    result = run_streamed_command(
+        ["agent"],
+        stdout_path=tmp_path / "trace.jsonl",
+        stderr_path=tmp_path / "stderr.txt",
+        timeout=10,
+    )
+
+    assert result.returncode == 0
+    assert killpg_calls == [(456, backend_module.signal.SIGKILL)]
+    assert [thread.joins for thread in FakeThread.instances] == [2, 2]
+
+
 def test_command_runner_interrupt_terminates_process_group(monkeypatch, tmp_path: Path):
     killpg_calls = []
 

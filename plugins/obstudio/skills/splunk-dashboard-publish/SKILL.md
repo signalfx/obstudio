@@ -12,7 +12,7 @@ metadata:
   category: observability
 ---
 
-# Dashboard Publish -- Splunk O11y Dashboard Gap Analysis And Create
+# Dashboard Publish -- Splunk O11y Gap Analysis And Create
 
 Compare `$splunk-dashboard` Terraform with live Splunk Observability Cloud at
 group, dashboard, and chart levels; create only confirmed GAPs. Charts must
@@ -77,9 +77,8 @@ The local coverage model incorporates the shared
 separately. Offline mode must not load `splunk-api.md`, `live-publish.md`, the
 live coverage model, or the ledger template.
 
-The generator source `../splunk-dashboard/references/dashboard-templates.md`
-contains the same type vocabulary, but do not load it during publish; the
-local chart wire contract is self-contained.
+The generator vocabulary is in `../splunk-dashboard/references/dashboard-templates.md`; do
+not load it during publish.
 
 ## Process
 
