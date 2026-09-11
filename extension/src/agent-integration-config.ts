@@ -11,64 +11,6 @@ export type AgentIntegrationManagedConfig = {
 	mcpUrl: string;
 };
 
-export type AgentIntegrationInstallCredentials = {
-	controlToken: string;
-	healthProofSecret: string;
-	mcpUrl: string;
-};
-
-type StableAgentIntegrationInstallOptions = {
-	captureInstalledConfig: (
-		credentials: AgentIntegrationInstallCredentials,
-	) => AgentIntegrationManagedConfig | Promise<AgentIntegrationManagedConfig>;
-	install: (credentials: AgentIntegrationInstallCredentials) => Promise<void>;
-	isManagedConfigUnchanged: (
-		config: AgentIntegrationManagedConfig,
-	) => boolean | Promise<boolean>;
-	readCredentials: () => AgentIntegrationInstallCredentials | Promise<AgentIntegrationInstallCredentials>;
-	recordInstalledConfig: (
-		config: AgentIntegrationManagedConfig,
-		credentials: AgentIntegrationInstallCredentials,
-	) => Promise<void>;
-};
-
-const stableAgentIntegrationInstallAttempts = 3;
-
-function agentIntegrationInstallCredentialsEqual(
-	left: AgentIntegrationInstallCredentials,
-	right: AgentIntegrationInstallCredentials,
-): boolean {
-	return left.controlToken === right.controlToken
-		&& left.healthProofSecret === right.healthProofSecret
-		&& left.mcpUrl === right.mcpUrl;
-}
-
-export async function installAgentIntegrationWithStableCredentials(
-	options: StableAgentIntegrationInstallOptions,
-): Promise<AgentIntegrationInstallCredentials> {
-	let previousInstall: AgentIntegrationManagedConfig | undefined;
-	for (let attempt = 0; attempt < stableAgentIntegrationInstallAttempts; attempt += 1) {
-		if (previousInstall !== undefined
-			&& !await options.isManagedConfigUnchanged(previousInstall)) {
-			throw new Error('Agent integration configuration changed while Observer credentials were rotating; the newer configuration was preserved.');
-		}
-
-		const credentials = await options.readCredentials();
-		await options.install(credentials);
-		const installedConfig = await options.captureInstalledConfig(credentials);
-		// Persist ownership before checking for rotation so a bounded retry failure
-		// can be repaired by the next credential refresh.
-		await options.recordInstalledConfig(installedConfig, credentials);
-		const currentCredentials = await options.readCredentials();
-		if (agentIntegrationInstallCredentialsEqual(credentials, currentCredentials)) {
-			return credentials;
-		}
-		previousInstall = installedConfig;
-	}
-
-	throw new Error('Observer credentials changed during three consecutive agent integration install attempts; retry after Observer startup stabilizes.');
-}
-
 export function createAgentIntegrationConfigFingerprint(
 	config: AgentIntegrationManagedConfig,
 ): AgentIntegrationConfigFingerprint {
@@ -109,18 +51,12 @@ export function caseInsensitiveHeaderValue(
 	return matches.length === 1 ? matches[0][1] : undefined;
 }
 
-export function authorizationHeadersMatchControlToken(
+export function hasNoAuthorizationHeader(
 	headers: Record<string, unknown> | undefined,
-	controlToken: string,
 ): boolean {
-	const matches = Object.entries(headers ?? {}).filter(([candidate]) => (
+	return !Object.keys(headers ?? {}).some((candidate) => (
 		candidate.toLowerCase() === 'authorization'
 	));
-	const normalizedToken = controlToken.trim();
-	if (normalizedToken === '') {
-		return matches.length === 0;
-	}
-	return matches.length === 1 && matches[0][1] === `Bearer ${normalizedToken}`;
 }
 
 function parseTOMLBasicString(value: string): string | undefined {
@@ -273,21 +209,9 @@ export function getCodexObstudioAuthorization(section: string): string | undefin
 		: undefined;
 }
 
-export function codexObstudioAuthorizationMatchesControlToken(
-	section: string,
-	controlToken: string,
-): boolean {
+export function codexObstudioHasNoAuthorization(section: string): boolean {
 	const { headerContainerCount, malformed, values } = inspectCodexObstudioAuthorization(section);
-	if (malformed || headerContainerCount > 1 || values.length > 1) {
-		return false;
-	}
-	const normalizedToken = controlToken.trim();
-	if (normalizedToken === '') {
-		return values.length === 0;
-	}
-	return headerContainerCount === 1
-		&& values.length === 1
-		&& values[0] === `Bearer ${normalizedToken}`;
+	return !malformed && headerContainerCount <= 1 && values.length === 0;
 }
 
 export function getCodexObstudioUrl(section: string): string | undefined {

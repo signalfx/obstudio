@@ -116,4 +116,28 @@ def test_split_contract_preserves_dashboard_semantics_and_safety() -> None:
         "table",
     ):
         assert chart_type in text
+    for genai_category in (
+        "genai-latency",
+        "genai-token-pressure",
+        "genai-provider",
+        "genai-tool",
+        "genai-model-config",
+        "genai-workflow-fanout",
+        "genai-retrieval",
+        "genai-memory-context",
+        "genai-evaluation-quality",
+        "genai-content-governance",
+        "genai-cost",
+    ):
+        assert genai_category in text
+    for genai_match in (
+        "requested/response model",
+        "agent/model/tool call counts",
+        "bounded numeric capture, redaction, privacy",
+        "app-computed cost",
+    ):
+        assert genai_match in text
+    assert "generic words such as model, memory, quality, or cost alone do not qualify" in text
+    assert "counts, outcomes, and cost use a `time_series` sum" in text
+    assert "current state, score, or ratio uses `single_value`" in text
     assert "detect()/when()/threshold()" in text

@@ -120,14 +120,14 @@
         "observability-studio.sharedObserverUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override for the UI and MCP connection. Local shared Observers may use HTTP; non-local shared Observers must use HTTPS. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`. A configured shared Observer's OTLP receiver ports are not remapped or validated."
+          "markdownDescription": "Optional loopback `obstudio` base URL or `/mcp` URL override for the UI and MCP connection. The host must be `localhost` or a loopback IP address, and Observer must report the version bundled with this extension. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`. A configured local Observer's OTLP receiver ports are not remapped or validated."
         },
         "observability-studio.managedObserverPort": {
           "type": "number",
           "default": 3000,
           "minimum": 1,
           "maximum": 65535,
-          "markdownDescription": "Local port used by the extension-managed Observer UI and MCP HTTP endpoint when `sharedObserverUrl` is unset."
+          "markdownDescription": "Local port used by the extension-managed Observer UI and MCP HTTP endpoint when `sharedObserverUrl` is unset. If a verified but incompatible `obstudio` process already owns this port, the extension stops and replaces it."
         },
         "observability-studio.sisCimdRegistrationEnabled": {
           "type": "boolean",
@@ -184,7 +184,8 @@
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test:unit": "npm run compile-tests && node --test --experimental-test-coverage out/test/extension.test.js out/test/webview-html.test.js out/test/observer-lifecycle.test.js out/test/build-vsix.test.js out/test/startup-errors.test.js out/test/sis-cimd-oauth.test.js",
+    "test:unit": "npm run compile-tests && node --test --experimental-test-coverage out/test/extension.test.js out/test/webview-html.test.js out/test/observer-lifecycle.test.js out/test/build-vsix.test.js out/test/startup-errors.test.js out/test/sis-cimd-oauth.test.js out/test/process-control.test.js",
+    "test:process-control": "npm run compile-tests && node --test out/test/process-control.test.js",
     "test:integration": "tsc --outDir out --rootDir src --module Node16 --target ES2022 --strict --skipLibCheck --esModuleInterop src/test/extension-integration.test.ts && node --test out/test/extension-integration.test.js",
     "test:integration:smoke": "tsc --outDir out --rootDir src --module Node16 --target ES2022 --strict --skipLibCheck --esModuleInterop src/test/extension-integration.test.ts && node --test --test-name-pattern=\"installed VSIX smoke test\" out/test/extension-integration.test.js",
     "test:host:current": "npm run compile-tests && npm run compile && vscode-test --run out/test/extension-vscode.test.js --fail-zero --timeout 30000",
@@ -202,7 +203,7 @@
     "@types/vscode": "1.82.0",
     "@types/ws": "8.18.1",
     "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.7.1",
     "esbuild": "^0.28.1",
     "eslint": "^9.39.3",

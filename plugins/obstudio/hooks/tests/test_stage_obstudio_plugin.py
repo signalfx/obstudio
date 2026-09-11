@@ -83,11 +83,15 @@ class StageObstudioPluginTest(unittest.TestCase):
     def test_claude_stage_preserves_source_manifest_version(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio-claude"
+            plugin_root = Path(__file__).resolve().parents[2]
+            source_manifest = json.loads(
+                (plugin_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+            )
 
             STAGE.stage_plugin(output, host="claude")
 
             manifest = json.loads((output / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["version"], "0.0.18")
+            self.assertEqual(manifest["version"], source_manifest["version"])
 
     def test_release_tag_stamps_and_enforces_both_plugin_manifest_versions(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -125,7 +129,7 @@ class StageObstudioPluginTest(unittest.TestCase):
             for manifest_dir in (".claude-plugin", ".codex-plugin"):
                 (plugin_root / manifest_dir).mkdir(parents=True)
                 (plugin_root / manifest_dir / "plugin.json").write_text(
-                    json.dumps({"name": "obstudio", "version": "0.0.16"}),
+                    '{\n  "name": "obstudio",\n  "version": "0.0.16",\n  "skills": ["./skills/"]\n}\n',
                     encoding="utf-8",
                 )
 
@@ -133,8 +137,13 @@ class StageObstudioPluginTest(unittest.TestCase):
 
             self.assertEqual(len(updated), 2)
             for manifest_dir in (".claude-plugin", ".codex-plugin"):
-                manifest = json.loads((plugin_root / manifest_dir / "plugin.json").read_text(encoding="utf-8"))
+                manifest_path = plugin_root / manifest_dir / "plugin.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
                 self.assertEqual(manifest["version"], "1.2.3")
+                self.assertEqual(
+                    manifest_path.read_text(encoding="utf-8"),
+                    '{\n  "name": "obstudio",\n  "version": "1.2.3",\n  "skills": ["./skills/"]\n}\n',
+                )
 
     def test_cli_bump_manifests_routes_release_tag(self):
         with mock.patch.object(sys, "argv", ["stage_obstudio_plugin.py", "--bump-manifests", "--release-tag", "v1.2.3"]):
@@ -181,11 +190,11 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertNotIn("description", marketplace)
         self.assertEqual(marketplace["name"], "obstudio")
         self.assertEqual(marketplace["plugins"][0]["name"], "obstudio")
+        self.assertEqual(marketplace["plugins"][0]["displayName"], "Splunk Observability Studio")
         self.assertEqual(marketplace["plugins"][0]["source"], "./plugins/obstudio")
-        self.assertNotIn("displayName", marketplace["plugins"][0])
         self.assertEqual(
             set(marketplace["plugins"][0]),
-            {"name", "source", "description"},
+            {"name", "displayName", "source", "description"},
         )
 
     def test_plugin_manifest_uses_committed_skills(self):
@@ -216,7 +225,6 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertEqual(claude_manifest["name"], "obstudio")
         self.assertNotIn("$schema", claude_manifest)
         self.assertNotIn("displayName", claude_manifest)
-        self.assertEqual(claude_manifest["version"], "0.0.18")
 
         codex_hook = json.loads((plugin_root / "hooks" / "codex-hooks.json").read_text(encoding="utf-8"))
         codex_command = codex_hook["hooks"]["SessionStart"][0]["hooks"][0]["command"]

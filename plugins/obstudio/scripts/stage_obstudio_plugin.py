@@ -78,6 +78,7 @@ SEMVER_PATTERN = re.compile(
     rf"(?:-{SEMVER_IDENTIFIER}(?:\.{SEMVER_IDENTIFIER})*)?"
     rf"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\Z"
 )
+VERSION_FIELD_PATTERN = re.compile(r'(?m)^([ \t]*"version"[ \t]*:[ \t]*)"[^"\r\n]*"([ \t]*,?[ \t]*)$')
 
 
 def main() -> int:
@@ -171,9 +172,20 @@ def bump_committed_manifest_versions(version: str, plugin_root: Path = PLUGIN_RO
 
 
 def _write_manifest_version(manifest_path: Path, version: str) -> None:
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["version"] = version
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    manifest_text = manifest_path.read_text(encoding="utf-8")
+    manifest = json.loads(manifest_text)
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("version"), str):
+        raise RuntimeError(f"manifest version must be a string: {manifest_path}")
+
+    updated_text, replacements = VERSION_FIELD_PATTERN.subn(
+        lambda match: f'{match.group(1)}{json.dumps(version)}{match.group(2)}',
+        manifest_text,
+        count=1,
+    )
+    if replacements != 1:
+        raise RuntimeError(f"could not locate the top-level version field: {manifest_path}")
+    if updated_text != manifest_text:
+        manifest_path.write_text(updated_text, encoding="utf-8")
 
 
 def plugin_paths(host: str) -> tuple[str, ...]:

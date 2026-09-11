@@ -1,6 +1,7 @@
 """Static guards for progressively disclosed skill context."""
 
 import re
+import tomllib
 from pathlib import Path
 
 
@@ -20,6 +21,7 @@ COVERAGE_TREE = SKILLS / "references" / "coverage-decision-tree.md"
 INCIDENT = SKILLS / "references" / "incident-readiness.md"
 GENAI = SKILLS / "references" / "genai-readiness.md"
 FULL_RUNTIME = SKILLS / "references" / "full-runtime-acceptance.md"
+NETWORK_BENCHMARK = REPO_ROOT / "evals" / "codex-evals.token-benchmark-network.toml"
 
 AUDIT_DIR = SKILLS / "otel-audit"
 INSTRUMENT_DIR = SKILLS / "otel-instrument"
@@ -142,6 +144,12 @@ ROUTING_TERMS = {
 def _description(text: str) -> str:
     frontmatter = text.split("---", 2)[1]
     return frontmatter.split("description: >-", 1)[1].split("metadata:", 1)[0]
+
+
+def test_network_benchmark_allows_long_running_demo_agents() -> None:
+    config = tomllib.loads(NETWORK_BENCHMARK.read_text(encoding="utf-8"))
+
+    assert config["agent"]["timeout"] == 2400
 
 
 def _non_shell_fences(text: str) -> list[str]:

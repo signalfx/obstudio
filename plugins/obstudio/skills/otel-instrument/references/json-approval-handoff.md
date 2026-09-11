@@ -142,6 +142,9 @@ cannot enter the executable selection. Reject unanswered manual dependencies,
 unresolved external follow-up, and executable work outside the recorded
 option's `unlocks`.
 
+Before editing, record the `deployment.environment.name` source or explicit
+absence; preserve operator `OTEL_RESOURCE_ATTRIBUTES`.
+
 Build an internal closure matrix before editing:
 `finding ID -> area -> priority -> required fix -> instrument mode -> planned
 action -> verification scenarios`. Implement exactly that queue. Use one row

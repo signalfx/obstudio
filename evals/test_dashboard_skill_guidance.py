@@ -13,6 +13,8 @@ readiness reference + detector skills, where concrete names do not belong.
 
 import json
 from pathlib import Path
+import subprocess
+import sys
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -250,6 +252,24 @@ DASHBOARD_PANEL_TSX = REPO_ROOT / "observer" / "client" / "src" / "dashboards" /
 CHECKOUT_RED_QUAL_RUBRIC = (
     REPO_ROOT / "evals" / "dashboards" / "checkout-red" / "eval" / "qual" / "dashboard.json"
 )
+CHECKOUT_GENAI_QUAL_RUBRIC = (
+    REPO_ROOT
+    / "evals"
+    / "dashboards"
+    / "checkout-red"
+    / "eval"
+    / "qual"
+    / "dashboard-genai.json"
+)
+CHECKOUT_GENAI_AUDIT = (
+    REPO_ROOT
+    / "evals"
+    / "dashboards"
+    / "checkout-red"
+    / "eval"
+    / "inputs"
+    / "otel-audit-genai.json"
+)
 
 
 def test_dashboard_skill_emits_preview_sidecar_contract():
@@ -324,6 +344,45 @@ def test_checkout_red_qual_rubric_matches_preview_chart_vocabulary():
     assert "|event" not in joined and "event vocabulary" not in joined, (
         "qual rubric must not list the never-emitted 'event' chartType"
     )
+
+
+def test_checkout_genai_qual_rubric_covers_source_backed_categories():
+    definition = json.loads(_read(CHECKOUT_GENAI_QUAL_RUBRIC))
+    assert definition["prompts"] == [
+        {
+            "id": "genai-classification",
+            "eval_inputs": ["eval/inputs/otel-audit-genai.json"],
+            "task": definition["prompts"][0]["task"],
+        }
+    ]
+    joined = " ".join(
+        [definition["prompts"][0]["task"]] + definition["rubric"]
+    )
+    for category in (
+        "genai-model-config",
+        "genai-workflow-fanout",
+        "genai-content-governance",
+        "genai-cost",
+    ):
+        assert category in joined
+    assert "checkout.order.cost" in joined
+    assert "merely because its name contains cost" in joined
+    assert "raw prompt, completion, user, session, or tool-argument content" in joined
+    judge_inputs = " ".join(definition["judge_inputs"])
+    assert "./trace.jsonl" in judge_inputs
+    assert "audit-gate ordering" in judge_inputs
+    assert "absence of network calls or Terraform execution" in judge_inputs
+
+
+def test_checkout_genai_audit_is_canonical_schema_v2():
+    validator = SKILLS_DIR / "references" / "scripts" / "observe_report.py"
+    completed = subprocess.run(
+        [sys.executable, str(validator), "validate", str(CHECKOUT_GENAI_AUDIT)],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_dashboard_classification_defines_grid_and_chart_vocabulary():

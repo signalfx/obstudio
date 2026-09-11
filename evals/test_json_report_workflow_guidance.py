@@ -28,6 +28,24 @@ INSTRUMENT_EVAL = (
 CHI_CANONICAL_VERIFY_EVAL = (
     ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "verify.json"
 )
+CHI_DIRECT_VERIFY_EVAL = (
+    ROOT
+    / "evals"
+    / "go"
+    / "chi-basic"
+    / "eval"
+    / "qual"
+    / "verify-runtime-blocker.json"
+)
+CHI_DIRECT_VERIFY_PROBE = (
+    ROOT
+    / "evals"
+    / "go"
+    / "chi-basic"
+    / "eval"
+    / "inputs"
+    / "conclusive-listener-probe.txt"
+)
 CHI_DIRECT_INSTRUMENT_EVAL = (
     ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "instrument.json"
 )
@@ -317,6 +335,44 @@ def test_instrument_keeps_verification_results_in_bound_overlay() -> None:
     assert "do not duplicate them as new instrumentation schema fields" in handoff
 
 
+def test_instrumentation_phase_validation_is_not_bound_verification() -> None:
+    instrument = " ".join(_read(INSTRUMENT_SKILL).split())
+    rubric = " ".join(
+        json.loads(_read(CHI_DIRECT_INSTRUMENT_EVAL))["rubric"]
+    )
+
+    assert "instrumentation-phase validation, never item proof" in instrument
+    assert "With bound verification, HTML names the repair" in instrument
+    assert "HTML keeps per-finding proof and OTLP/product visibility not run/not proven" in instrument
+    assert "details stay in Markdown" in instrument
+    assert "With a bound verification overlay, detailed item/scenario proof and coverage come from that overlay" in rubric
+    assert "placeholder satisfies the HTML proof and coverage requirement" in rubric
+    assert "detailed item/scenario proof is not required" in rubric
+    assert "instrumentation-phase harness or exporter tests stay separately labeled" in rubric
+    assert "rather than being promoted to bound proof" in rubric
+
+
+def test_instrument_preflight_records_deployment_environment_ownership() -> None:
+    instrument = " ".join(_read(INSTRUMENT_SKILL).split())
+    rubric = " ".join(
+        json.loads(_read(CHI_DIRECT_INSTRUMENT_EVAL))["rubric"]
+    )
+
+    assert "Before editing, record the `deployment.environment.name` source or explicit absence" in instrument
+    assert "preserve operator `OTEL_RESOURCE_ATTRIBUTES`" in instrument
+    assert "deployment.environment.name source or explicit absence before editing" in rubric
+
+
+def test_instrument_rubric_allows_standard_runtime_auto_instrumentation() -> None:
+    rubric = " ".join(
+        json.loads(_read(CHI_DIRECT_INSTRUMENT_EVAL))["rubric"]
+    )
+
+    assert "does not add unselected OTEL-002 task.created, OTEL-004 task.create" in rubric
+    assert "The Go guide's standard runtime metrics baseline" in rubric
+    assert "is not a drive-by custom signal" in rubric
+
+
 def test_instrumentation_meta_result_never_uses_not_run() -> None:
     handoff = " ".join(_read(INSTRUMENT_HANDOFF).split())
 
@@ -395,6 +451,45 @@ def test_representative_evals_require_canonical_artifacts_and_scope() -> None:
     assert ".observe/otel-instrumentation.json" in instrument
     assert ".observe/otel-instrumentation.html" in instrument
     assert ".observe/otel-verify.json" in verify
+
+
+def test_direct_verify_eval_covers_conclusive_runtime_blocker() -> None:
+    canonical = json.loads(_read(CHI_CANONICAL_VERIFY_EVAL))
+    direct = json.loads(_read(CHI_DIRECT_VERIFY_EVAL))
+    contract = " ".join(
+        [item["task"] for item in direct["prompts"]]
+        + direct["rubric"]
+        + [_read(CHI_DIRECT_VERIFY_PROBE)]
+    )
+
+    assert [item["id"] for item in canonical["prompts"]] == [
+        "canonical-proof-packet"
+    ]
+    assert [item["id"] for item in direct["prompts"]] == [
+        "conclusive-listener-blocker"
+    ]
+    assert direct["prompts"][0]["eval_inputs"] == [
+        "eval/inputs/canonical-verify-evidence.txt",
+        "eval/inputs/conclusive-listener-probe.txt",
+        "eval/inputs/otel-audit.json",
+        "eval/inputs/otel-instrumentation.json",
+        "eval/inputs/otel-selection.json",
+    ]
+    for term in (
+        "new direct verification",
+        "exact bound audit -> selection -> instrumentation chain",
+        "Write the bound canonical verification JSON",
+        "Current-run prerequisite probe",
+        "same selected Go runtime",
+        "Checked-in application listener: :8000",
+        "does not launch",
+        "overall result as Blocked",
+        "ambiguous probe",
+        "application code, configuration, or tests",
+        "free :8000 and rerun full-runtime proof",
+        "does not substitute generated SDK telemetry",
+    ):
+        assert term in contract
 
 
 def test_audit_final_handoff_requires_only_browser_link() -> None:

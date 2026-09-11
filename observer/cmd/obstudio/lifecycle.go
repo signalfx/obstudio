@@ -515,7 +515,6 @@ func stopManagedObserver(client *http.Client) error {
 	if err != nil {
 		return err
 	}
-	request.Header.Set("Authorization", "Bearer "+state.ControlToken)
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -915,10 +914,10 @@ func lifecycleEndpoint(healthURL, path string) (string, error) {
 	return parsed.String(), nil
 }
 
-func registerManagedStop(mux *http.ServeMux, token string, stop chan<- struct{}) {
+func registerManagedStop(mux *http.ServeMux, stop chan<- struct{}) {
 	mux.HandleFunc("POST "+managedStopPath, func(w http.ResponseWriter, r *http.Request) {
-		if !loopbackRemote(r.RemoteAddr) || !validBearer(r.Header.Get("Authorization"), token) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		if !loopbackRemote(r.RemoteAddr) || strings.TrimSpace(r.Header.Get("Origin")) != "" {
+			http.Error(w, "local native request required", http.StatusForbidden)
 			return
 		}
 		select {
@@ -937,11 +936,4 @@ func loopbackRemote(remote string) bool {
 	}
 	ip := net.ParseIP(strings.Trim(host, "[]"))
 	return ip != nil && ip.IsLoopback()
-}
-func validBearer(header, token string) bool {
-	if token == "" {
-		return false
-	}
-	provided := strings.TrimPrefix(header, "Bearer ")
-	return strings.HasPrefix(header, "Bearer ") && len(provided) == len(token) && subtle.ConstantTimeCompare([]byte(provided), []byte(token)) == 1
 }

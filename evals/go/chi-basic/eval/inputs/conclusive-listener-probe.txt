@@ -1,0 +1,11 @@
+Selected project runtime: Go toolchain resolved from go.mod.
+Project-native build viability gate: passed.
+Runtime-only claim awaiting proof: GET /health emits the expected automatic
+SERVER span and route attributes after the real process starts.
+Checked-in application listener: :8000 in main.go.
+Current-run prerequisite probe: the same selected Go runtime attempted to bind
+the exact :8000 listener before application launch.
+Probe result: listen tcp :8000: bind: address already in use.
+Probe classification: conclusive listener-binding failure; it did not originate
+from application code, runtime configuration, or tests.
+Meaningful telemetry proof executed in this run: none.

@@ -83,18 +83,30 @@ a `single_value` panel (current saturation) and optionally a `time_series` trend
 
 ### GenAI
 
-When the canonical audit has `genai_readiness[]` rows, GenAI findings, or
-source evidence that maps the metric to an LLM/GenAI workflow, and GenAI
-metrics exist, group them into their **own** `signalfx_dashboard` inside a
-separate GenAI dashboard group. Classify source-backed metrics locally as
-`genai-latency` (model/workflow duration), `genai-token-pressure` (token or
-context counts/ratios), `genai-provider` (provider/model outcomes or fallback),
-`genai-tool` (tool duration/outcomes), or `genai-retrieval` (retrieval
-duration/outcomes). Render latency/duration as a `time_series` percentile,
-token usage as `time_series` or `single_value`, and provider/tool/retrieval
-error counts as `time_series`. Keep explicitly evidenced memory, evaluation,
-or data-export metrics independently actionable. A missing GenAI signal is a
-preview/instrumentation prerequisite—never an invented panel.
+Classify a metric as GenAI only when `gen_ai.*` or canonical
+`genai_readiness`/finding/evidence explicitly ties it to an owned LLM workflow;
+generic words such as model, memory, quality, or cost alone do not qualify. Put
+source-backed GenAI metrics in their **own** dashboard and group. First match:
+
+- `genai-latency`: model/workflow/first-token latency or duration.
+- `genai-token-pressure`: token/context/cache counts or ratios.
+- `genai-provider`: provider/model errors, timeouts, or fallbacks.
+- `genai-tool`: tool call count, duration, or outcome.
+- `genai-model-config`: requested/response model, deployment, config, readiness,
+  or canary state.
+- `genai-workflow-fanout`: agent/model/tool call counts, fanout, workflow timeout,
+  or outcome.
+- `genai-retrieval`: retrieval/vector/embedding/rerank duration or outcome.
+- `genai-memory-context`: memory/context/session state, hit, miss, or outcome.
+- `genai-evaluation-quality`: score, factuality, hallucination, or toxicity.
+- `genai-content-governance`: bounded numeric capture, redaction, privacy, or
+  policy outcomes; never raw content.
+- `genai-cost`: app-computed cost, spend, or billing-health metrics.
+
+Duration uses a `time_series` percentile; counts, outcomes, and cost use a
+`time_series` sum; current state, score, or ratio uses `single_value` with an
+optional trend. A missing signal is an instrumentation prerequisite, never an
+invented panel.
 
 ## Exclusion rules
 

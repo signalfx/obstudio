@@ -189,7 +189,7 @@ Disable it with `EVAL_PROGRESS=0`.
 | `evals/codex-evals.baseline.toml` | Compatibility with-baseline config |
 | `evals/codex-evals.ab.toml` | Compatibility A/B config |
 | `evals/codex-evals.token-benchmark.toml` | Controlled Codex/high benchmark that ignores `config.toml`; inherited environment, auth, and `CODEX_HOME` still apply |
-| `evals/codex-evals.token-benchmark-network.toml` | Same benchmark with network/loopback access for dependency-resolving demo tasks |
+| `evals/codex-evals.token-benchmark-network.toml` | Same benchmark with network/loopback access and a 2,400-second agent timeout for dependency-resolving demo tasks |
 
 Set the judge model with:
 

@@ -159,9 +159,10 @@ auto-instrumentation first, then only approved custom signals.
 - Keep importable libraries free of unconditional SDK/provider registration.
   Library handlers may propagate context and add request-local telemetry, but
   the executable entrypoint owns setup, outer framework wrapping, and shutdown.
-- Reuse the actual startup command. Python must wire an explicit setup module;
-  Node must preload before app imports; Java normally uses the agent; Go must
-  call setup and wrap the handler from `cmd/.../main` or its equivalent.
+- Reuse the actual startup command. Python uses per-process setup unless the
+  user selects CLI-only; otherwise a wrapper is insufficient. Node must preload
+  before app imports; Java normally uses the agent; Go must call setup and wrap
+  the handler from `cmd/.../main` or its equivalent.
 - Obtain tracers/meters and create instruments during setup, not in hot paths.
   Use official OTel packages, except a library-maintained integration where no
   official package exists. Do not move business functions between files.
@@ -200,7 +201,8 @@ Observer OTLP application-log export is part of the standard baseline:
 - Export locally only when `OTEL_LOGS_EXPORTER` is absent/`otlp` and the
   signal-specific logs endpoint is absent or exactly the detected local
   Observer receiver. Default host HTTP logs to
-  `http://localhost:4318/v1/logs`; adapt to the checked-in container receiver.
+  `http://localhost:4318/v1/logs`; keep checked-in container URLs and never
+  infer locality from hostname syntax.
 - `OTEL_LOGS_EXPORTER=none` disables the added local log path. Any other explicit exporter is
   operator-owned; add no local provider, exporter, or bridge and do not treat
   the environment value alone as proof that its pipeline works.
@@ -216,10 +218,11 @@ Observer OTLP application-log export is part of the standard baseline:
 - Use one official bridge matching the detected logger, one LoggerProvider,
   exactly one bridge/export path, and one shutdown path. Preserve every existing
   console/file/platform sink and prevent duplicate bridge/export paths.
-- Pass the active request context to application logging. Preserve fixture,
-  documentation, and test contracts for exact log body/category, severity,
-  and default `service.name`; do not replace a service-specific expectation
-  with a generic example value. Preserve every distinct existing lifecycle-log
+- Pass the active request context to application logging. Preserve existing log
+  APIs/levels plus fixture, documentation, and test contracts for exact log
+  body/category, severity, and default `service.name`; do not replace a
+  service-specific expectation with a generic example value. Preserve every
+  distinct existing lifecycle-log
   contract as well: a shutdown/startup warning is not a duplicate of the
   request warning, and it needs trace/span IDs only if it runs inside an active
   span. Do not invent, remove, merge, or rename log bodies to manufacture proof.

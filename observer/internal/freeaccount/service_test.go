@@ -53,6 +53,7 @@ func TestSubmitUsesSplunkGeoIPAndSendsCompleteUS1PayloadForEveryCall(t *testing.
 		GeoURL:     server.URL + "/geo",
 		SignupURL:  server.URL + "/signup",
 	})
+	service.companyRandom = bytes.NewReader([]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11})
 	request := Request{
 		FirstName:     "Ada",
 		LastName:      "Lovelace Byron",
@@ -77,7 +78,7 @@ func TestSubmitUsesSplunkGeoIPAndSendsCompleteUS1PayloadForEveryCall(t *testing.
 	if firstPayload.FirstName != "Ada" || firstPayload.LastName != "Lovelace Byron" || firstPayload.EmailAddress != "ada@example.com" {
 		t.Fatalf("unexpected identity payload: %+v", firstPayload)
 	}
-	if firstPayload.Company != "dev" || firstPayload.Title != "Developer" || firstPayload.Region != "us" {
+	if firstPayload.Company != "abcdef" || firstPayload.Title != "Developer" || firstPayload.Region != "us" {
 		t.Fatalf("unexpected fixed signup values: %+v", firstPayload)
 	}
 	if firstPayload.Country != "United States" || firstPayload.State != "Virginia" || firstPayload.City != "Ashburn" || firstPayload.PostalCode != "20149" {
@@ -110,6 +111,97 @@ func TestSubmitUsesSplunkGeoIPAndSendsCompleteUS1PayloadForEveryCall(t *testing.
 	}
 	if submitted[1].FirstName != "ADA" || submitted[1].LastName != "LOVELACE BYRON" || submitted[1].EmailAddress != "ADA@EXAMPLE.COM" {
 		t.Fatalf("second payload was not freshly submitted: %+v", submitted[1])
+	}
+	if submitted[1].Company != "ghijkl" {
+		t.Fatalf("second company = %q, want a fresh generated value", submitted[1].Company)
+	}
+}
+
+func TestSubmitUsesGeneratedSixLetterCompanyInsteadOfSharedDevPlaceholder(t *testing.T) {
+	var submittedCompany string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/geo":
+			_, _ = w.Write([]byte(`{"code":"REQ_SUCCESS","data":{"countryName":"United States"},"region":"AMER"}`))
+		case "/signup":
+			var payload signupPayload
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Errorf("decode signup: %v", err)
+			}
+			submittedCompany = payload.Company
+			if payload.Company == "dev" {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_, _ = w.Write([]byte(`{"message":"Denied Person"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`"OK"`))
+		default:
+			t.Fatalf("unexpected request path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	service := newTestService(t, Config{
+		HTTPClient: server.Client(),
+		GeoURL:     server.URL + "/geo",
+		SignupURL:  server.URL + "/signup",
+	})
+	service.companyRandom = bytes.NewReader([]byte{25, 0, 1, 2, 3, 4})
+	result, err := service.Submit(context.Background(), Request{
+		FirstName:     "Test",
+		LastName:      "Person",
+		Email:         "test.person@example.com",
+		TermsAccepted: true,
+	})
+	if err != nil {
+		t.Fatalf("Submit() error = %v", err)
+	}
+	if !result.IntakeAcknowledged {
+		t.Fatalf("result = %+v, want acknowledged submission", result)
+	}
+	if len(submittedCompany) != 6 {
+		t.Fatalf("company = %q, want six letters", submittedCompany)
+	}
+	for _, character := range submittedCompany {
+		if character < 'a' || character > 'z' {
+			t.Fatalf("company = %q, want six lowercase ASCII letters", submittedCompany)
+		}
+	}
+	if submittedCompany != "zabcde" {
+		t.Fatalf("company = %q, want generated value zabcde", submittedCompany)
+	}
+}
+
+func TestSubmitReportsRandomCompanyFailureAsRetrySafeBeforePosting(t *testing.T) {
+	var signupCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/geo":
+			_, _ = w.Write([]byte(`{"data":{"countryName":"United States","countryCode":"US","region":"California","salesRegion":"AMER"}}`))
+		case "/signup":
+			signupCalls.Add(1)
+			_, _ = w.Write([]byte(`"OK"`))
+		default:
+			t.Fatalf("unexpected request path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	service := newTestService(t, Config{
+		HTTPClient: server.Client(),
+		GeoURL:     server.URL + "/geo",
+		SignupURL:  server.URL + "/signup",
+	})
+	service.companyRandom = strings.NewReader("")
+	_, err := service.Submit(context.Background(), Request{
+		FirstName:     "Test",
+		LastName:      "Person",
+		Email:         "test.person@example.com",
+		TermsAccepted: true,
+	})
+	assertSignupError(t, err, ErrorCodePreparation, true)
+	if signupCalls.Load() != 0 {
+		t.Fatalf("signup calls = %d, want no POST before company generation succeeds", signupCalls.Load())
 	}
 }
 
@@ -552,6 +644,7 @@ func TestSubmitDefiniteRejectionCanBeCorrectedAndResubmitted(t *testing.T) {
 		if r.URL.Path == "/signup" {
 			calls.Add(1)
 			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(`{"message":"Denied Person"}`))
 			return
 		}
@@ -570,6 +663,28 @@ func TestSubmitDefiniteRejectionCanBeCorrectedAndResubmitted(t *testing.T) {
 	}
 }
 
+func TestSubmitTreatsAcceptedDeniedPersonAsPendingAccountSetup(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/signup" {
+			t.Fatalf("unexpected request path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"message":"Denied Person"}`))
+	}))
+	defer server.Close()
+	service := newTestService(t, Config{HTTPClient: server.Client(), GeoURL: ":", SignupURL: server.URL + "/signup"})
+
+	result, err := service.Submit(context.Background(), Request{
+		FirstName: "Pending", LastName: "User", Email: "pending@example.com", TermsAccepted: true,
+	})
+	if err != nil {
+		t.Fatalf("Submit() error = %v, want acknowledged pending setup", err)
+	}
+	if !result.IntakeAcknowledged || !result.AccountSetupPending || !strings.Contains(result.Message, "24 hours") {
+		t.Fatalf("Submit() = %+v, want acknowledged setup pending for up to 24 hours", result)
+	}
+}
+
 func TestSubmitClassifiesAndLogsOnlySafeUpstreamResponseDiagnostics(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -578,6 +693,7 @@ func TestSubmitClassifiesAndLogsOnlySafeUpstreamResponseDiagnostics(t *testing.T
 		wantClassification signupResponseClassification
 		wantCode           ErrorCode
 		wantMessagePart    string
+		wantSetupPending   bool
 	}{
 		{
 			name:               "acknowledged",
@@ -586,8 +702,15 @@ func TestSubmitClassifiesAndLogsOnlySafeUpstreamResponseDiagnostics(t *testing.T
 			wantClassification: signupResponseAcknowledged,
 		},
 		{
-			name:               "denied person",
+			name:               "accepted account setup pending",
 			status:             http.StatusOK,
+			body:               `{"message":"Denied Person","private":"must-not-be-logged"}`,
+			wantClassification: signupResponseSetupPending,
+			wantSetupPending:   true,
+		},
+		{
+			name:               "rejected denied person",
+			status:             http.StatusBadRequest,
 			body:               `{"message":"Denied Person","private":"must-not-be-logged"}`,
 			wantClassification: signupResponseDeniedPerson,
 			wantCode:           ErrorCodeRejected,
@@ -648,6 +771,9 @@ func TestSubmitClassifiesAndLogsOnlySafeUpstreamResponseDiagnostics(t *testing.T
 			if test.wantCode == "" {
 				if err != nil || !result.IntakeAcknowledged {
 					t.Fatalf("Submit() = %+v, %v; want acknowledged", result, err)
+				}
+				if result.AccountSetupPending != test.wantSetupPending {
+					t.Fatalf("Submit() setup pending = %t, want %t", result.AccountSetupPending, test.wantSetupPending)
 				}
 			} else {
 				assertSignupError(t, err, test.wantCode, test.wantCode == ErrorCodeRejected)
