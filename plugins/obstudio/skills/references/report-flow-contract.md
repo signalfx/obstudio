@@ -208,8 +208,8 @@ matters`, a mode-aware required action, and `Next step`: label the action
 `Instrumentation change` for executable work, `Decision needed` for a manual
 prerequisite, and `External requirement` for an external prerequisite. For a
 currently selectable, unselected executable finding, the next step is `Select`
--> copy the generated command -> `$otel-instrument`. Keep the copy synchronized
-with selection state: explicitly selected work proceeds to the command, an auto-added
+-> copy the generated prompt -> `$otel-instrument`. Keep the copy synchronized
+with selection state: explicitly selected work proceeds to the prompt, an auto-added
 dependency explains why it is included, and blocked executable work names its blocking `OTEL-###`
 IDs and directs the reviewer to resolve them first. Do not label verification,
 explorer, dashboard, or detector follow-up as the immediate next step.

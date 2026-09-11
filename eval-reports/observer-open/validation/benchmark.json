@@ -2,12 +2,12 @@
   "schema_version": 1,
   "kind": "validation",
   "mode": "validation",
-  "skill": "splunk-dashboard",
+  "skill": "observer-open",
   "metadata": {
     "mode": "validation",
     "eval_kind": "validation",
     "ab_enabled": false,
-    "skill": "splunk-dashboard",
+    "skill": "observer-open",
     "run_id": "20260911T190811713531Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
@@ -22,92 +22,43 @@
   },
   "evals": [
     {
-      "id": "dashboards/checkout-red/qual/dashboard",
-      "case": "dashboards/checkout-red",
-      "language": "dashboards",
-      "service": "checkout-red",
-      "prompt_count": 1,
-      "prompts": [
-        "generate"
-      ],
-      "definition_path": "evals/dashboards/checkout-red/eval/qual/dashboard.json",
-      "eval_dir": "evals/dashboards/checkout-red",
-      "skill_path": "skills/splunk-dashboard",
-      "sanity_check_count": 0,
-      "rubric_check_count": 7,
-      "runtime_check_count": 0
-    },
-    {
-      "id": "dashboards/checkout-red/sanity/dashboard",
-      "case": "dashboards/checkout-red",
-      "language": "dashboards",
-      "service": "checkout-red",
-      "prompt_count": 1,
-      "prompts": [
-        "generate"
-      ],
-      "definition_path": "evals/dashboards/checkout-red/eval/sanity/dashboard.json",
-      "eval_dir": "evals/dashboards/checkout-red",
-      "skill_path": "skills/splunk-dashboard",
-      "sanity_check_count": 8,
-      "rubric_check_count": 0,
-      "runtime_check_count": 0
-    },
-    {
-      "id": "sanity/skill-smoke/sanity/dashboard",
-      "case": "sanity/skill-smoke",
-      "language": "sanity",
-      "service": "skill-smoke",
+      "id": "plugins/obstudio/qual/observer-open",
+      "case": "plugins/obstudio",
+      "language": "plugins",
+      "service": "obstudio",
       "prompt_count": 2,
       "prompts": [
-        "direct",
-        "visualize"
+        "claude-cli-fallback",
+        "codex-browser"
       ],
-      "definition_path": "evals/sanity/skill-smoke/eval/sanity/dashboard.json",
-      "eval_dir": "evals/sanity/skill-smoke",
-      "skill_path": "skills/splunk-dashboard",
+      "definition_path": "evals/plugins/obstudio/eval/qual/observer-open.json",
+      "eval_dir": "evals/plugins/obstudio",
+      "skill_path": "plugins/obstudio/skills/observer-control/observer-open",
       "sanity_check_count": 0,
-      "rubric_check_count": 0,
-      "runtime_check_count": 0
-    },
-    {
-      "id": "sanity/skill-smoke/sanity/dashboard-no-audit",
-      "case": "sanity/skill-smoke",
-      "language": "sanity",
-      "service": "skill-smoke",
-      "prompt_count": 1,
-      "prompts": [
-        "missing-audit"
-      ],
-      "definition_path": "evals/sanity/skill-smoke/eval/sanity/dashboard-no-audit.json",
-      "eval_dir": "evals/sanity/skill-smoke",
-      "skill_path": "skills/splunk-dashboard",
-      "sanity_check_count": 2,
-      "rubric_check_count": 0,
+      "rubric_check_count": 5,
       "runtime_check_count": 0
     }
   ],
   "summary": {
-    "eval_count": 4,
-    "case_count": 5,
-    "prompt_count": 5,
-    "sanity_check_count": 10,
-    "rubric_check_count": 7,
+    "eval_count": 1,
+    "case_count": 2,
+    "prompt_count": 2,
+    "sanity_check_count": 0,
+    "rubric_check_count": 10,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 2,
-    "digest": "2c85f2af57ccfe015b6216ceb127c7517879abaae16926c6633dd73b5b4a5a60",
+    "digest": "5d179f202cc47fae9dea4121c17c3b9cf892b0e75030504766f84353222754db",
     "eval_kinds": [
-      "rubric",
-      "sanity"
+      "rubric"
     ],
     "files": {
       "evals/codex-evals.validation.toml": "ce69f042257fdb4a4c8d196f2f0f515fdc371316c02ab7d86aecc36267f7e940",
-      "evals/dashboards/checkout-red/eval/qual/dashboard.json": "2a03ef498448e51cab28390f58c0ad1a5a14938063af3e53237f958de76d3376",
-      "evals/dashboards/checkout-red/otel-audit.json": "70d5b1ee8fa801912041311dd2387a5c839892f8a02a2e707e3220c2f891bbe6",
+      "evals/plugins/obstudio/eval/qual/observer-open.json": "2b494947726c7829a45c016554ff8b7596178ca8030103d80bc5c65571df9d94",
       "evals/pyproject.toml": "2c51312de8067b0c85fd99bfa8ad58a8d6870f67d8e8e368b869c7a04b004a0b",
       "evals/uv.lock": "ad811e95827dd15596c6b41c9a6e112dc011ce6eece83b3322054ff786b932b3",
+      "plugins/obstudio/skills/observer-control/observer-open/SKILL.md": "eb507f4b1254993eae2d6556e6e4359f5ec8360155a951883daa3553d51fa7dd",
       "pytest-codex-evals/pyproject.toml": "e356e980db8086d731a14dee7b6f508b60e43652ecf86d051b1a6faece0339db",
       "pytest-codex-evals/src/pytest_codex_evals/__init__.py": "b7a1a6542146ea0c4d860cbaacaba484b18b7556b04b11787e472bd051235d4f",
       "pytest-codex-evals/src/pytest_codex_evals/__main__.py": "307299fda7b77d22c64cb51430ec75e5f59d78e9c948786afb3b2544fe45e4b7",
@@ -151,50 +102,22 @@
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "8800c90a9c2cf3bb1c10df957d5b6e8baa02a9e83b4d51671776638e47d3951f",
-      "skills/splunk-dashboard/SKILL.md": "4ce9bfa9e909b180e0e021af777bfce7bb081edd1dbb7f831e6572b1186954f1",
-      "skills/splunk-dashboard/references/dashboard-classification.md": "ba6dff4b76e63dad7356e304e083962a06b581c6925628ff778a6f6fab4efa87",
-      "skills/splunk-dashboard/references/dashboard-templates.md": "a29c329acef70470dbc79c937c83ac32108bffc7b0a051fd8176768f0a028d44",
-      "evals/dashboards/checkout-red/eval/sanity/dashboard.json": "e36af9b1a2052d4c53c8119587993569c809526559dc58b3dd5daa4b402ee2c3",
-      "evals/sanity/skill-smoke/eval/sanity/dashboard-no-audit.json": "bf0827bb92ddfae2222bfd46ac60d2c0628bb1ce41e30033692c7ccc4dbdd8f8",
-      "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9",
-      "evals/sanity/skill-smoke/eval/sanity/dashboard.json": "10c407fbbb660426bdd9cb2a5fec9706b00bfb2a008d1ff78a19baa02bbde5e8"
+      "skills/references/tests/test_observe_report.py": "8800c90a9c2cf3bb1c10df957d5b6e8baa02a9e83b4d51671776638e47d3951f"
     },
-    "skill_path": "skills/splunk-dashboard",
+    "skill_path": "plugins/obstudio/skills/observer-control/observer-open",
     "selections": [
       {
-        "definition_path": "evals/dashboards/checkout-red/eval/qual/dashboard.json",
-        "fixture_dir": "evals/dashboards/checkout-red",
-        "prompt_id": "generate",
+        "definition_path": "evals/plugins/obstudio/eval/qual/observer-open.json",
+        "fixture_dir": "evals/plugins/obstudio",
+        "prompt_id": "claude-cli-fallback",
         "eval_kind": "rubric",
         "eval_inputs": []
       },
       {
-        "definition_path": "evals/dashboards/checkout-red/eval/sanity/dashboard.json",
-        "fixture_dir": "evals/dashboards/checkout-red",
-        "prompt_id": "generate",
-        "eval_kind": "sanity",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/sanity/skill-smoke/eval/sanity/dashboard-no-audit.json",
-        "fixture_dir": "evals/sanity/skill-smoke",
-        "prompt_id": "missing-audit",
-        "eval_kind": "sanity",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/sanity/skill-smoke/eval/sanity/dashboard.json",
-        "fixture_dir": "evals/sanity/skill-smoke",
-        "prompt_id": "direct",
-        "eval_kind": "sanity",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/sanity/skill-smoke/eval/sanity/dashboard.json",
-        "fixture_dir": "evals/sanity/skill-smoke",
-        "prompt_id": "visualize",
-        "eval_kind": "sanity",
+        "definition_path": "evals/plugins/obstudio/eval/qual/observer-open.json",
+        "fixture_dir": "evals/plugins/obstudio",
+        "prompt_id": "codex-browser",
+        "eval_kind": "rubric",
         "eval_inputs": []
       }
     ],

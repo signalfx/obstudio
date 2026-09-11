@@ -170,7 +170,7 @@ describe("OverviewTab", () => {
     const { container } = render(<OverviewTab />);
 
     await waitFor(() => {
-      expect(container.querySelector(".overview-score__value")?.textContent).toBe("91/100");
+      expect(container.querySelector(".overview-score__value")?.textContent).toBe("91%");
     });
     expect(container.querySelector(".overview-score")?.className).toContain("overview-score--good");
     // Counts live on the callout, not the score card.
@@ -210,15 +210,19 @@ describe("OverviewTab", () => {
     const rows = Array.from(container.querySelectorAll(".overview-score__row")).map((el) => ({
       label: el.querySelector(".overview-score__row-label")?.textContent,
       value: el.querySelector(".overview-score__row-value")?.textContent,
-      state: el.className.replace(/.*overview-score__row--/, ""),
+      detail: el.querySelector(".overview-score__row-detail")?.textContent,
+      state: /overview-score__row--(full|partial|empty)/.exec(el.className)?.[1],
+      isTotal: el.classList.contains("overview-score__row--total"),
     }));
 
-    expect(rows[0]).toEqual({ label: "Coverage", value: "62.5/70", state: "partial" });
-    expect(rows[1]).toEqual({ label: "Quality", value: "21/30", state: "partial" });
-    expect(rows[2]).toEqual({ label: "Ratecovered", value: "15/15", state: "full" });
-    expect(rows[3]).toEqual({ label: "Errorspartial", value: "7.5/15", state: "partial" });
-    // A component worth zero is flagged as the shortfall it is.
-    expect(rows[4]).toEqual({ label: "Logsnone detected", value: "0/5", state: "empty" });
+    // Coverage section first: total row then components sorted by COVERAGE_COMPONENT_ORDER.
+    expect(rows[0]).toMatchObject({ label: "Coverage", value: "62.5/70", state: "partial", isTotal: true });
+    // Logs is at index 2 in COVERAGE_COMPONENT_ORDER so it sorts before Rate and Errors.
+    expect(rows[1]).toMatchObject({ label: "Logs", detail: "none detected", state: "empty", isTotal: false });
+    expect(rows[2]).toMatchObject({ label: "Rate", detail: "covered", state: "full", isTotal: false });
+    expect(rows[3]).toMatchObject({ label: "Errors", detail: "partial", state: "partial", isTotal: false });
+    // Quality section follows, total row only (no quality components in this fixture).
+    expect(rows[4]).toMatchObject({ label: "Quality", value: "21/30", state: "partial", isTotal: true });
   });
 
   it("attributes the score to its source report", async () => {
@@ -269,7 +273,6 @@ describe("OverviewTab", () => {
     });
     expect(container.querySelector(".overview-score__stale")).toBeNull();
 
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
     const view = container.querySelector<HTMLAnchorElement>(".overview-report__view")!;
     expect(view.textContent).toContain("View full report");
     expect(view.getAttribute("href")).toBe("/api/audit/report");
@@ -286,7 +289,6 @@ describe("OverviewTab", () => {
     await waitFor(() => {
       expect(container.querySelector(".overview-callout")).toBeTruthy();
     });
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
 
     expect(container.querySelector("#overview-report-details")).toBeTruthy();
     expect(container.querySelector(".overview-report__view")).toBeNull();
@@ -299,12 +301,11 @@ describe("OverviewTab", () => {
     await waitFor(() => {
       expect(container.querySelector(".overview-callout")).toBeTruthy();
     });
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
 
     expect(container.querySelector(".overview-report__title")?.textContent).toBe("Instrumentation report");
   });
 
-  it("keeps the report details collapsed until the callout is activated", async () => {
+  it("opens the report details by default and hides them when the callout is clicked", async () => {
     stubScoreFetch(makeScore({}));
     const { container } = render(<OverviewTab />);
 
@@ -313,13 +314,15 @@ describe("OverviewTab", () => {
     });
 
     const toggle = container.querySelector<HTMLButtonElement>(".overview-callout")!;
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(container.querySelector("#overview-report-details")).toBeNull();
+    // Panel is open by default.
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector("#overview-report-details")).toBeTruthy();
 
     fireEvent.click(toggle);
 
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(container.querySelector("#overview-report-details")).toBeTruthy();
+    // Clicking collapses the panel.
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector("#overview-report-details")).toBeNull();
   });
 
   it("renders the report's own gap and recommendation text when expanded", async () => {
@@ -329,7 +332,6 @@ describe("OverviewTab", () => {
     await waitFor(() => {
       expect(container.querySelector(".overview-callout")).toBeTruthy();
     });
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
 
     const items = Array.from(container.querySelectorAll(".overview-report__item")).map((el) => el.textContent);
     expect(items).toContain("No OTLP log pipeline.");
@@ -346,7 +348,6 @@ describe("OverviewTab", () => {
     await waitFor(() => {
       expect(container.querySelector(".overview-callout")).toBeTruthy();
     });
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
 
     const callout = container.querySelector(".overview-callout")!;
     const report = container.querySelector("#overview-report-details")!;
@@ -368,7 +369,6 @@ describe("OverviewTab", () => {
     await waitFor(() => {
       expect(container.querySelector(".overview-callout")).toBeTruthy();
     });
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
 
     const empties = Array.from(container.querySelectorAll(".overview-report__empty")).map((el) => el.textContent);
     expect(empties).toContain("None detected.");
@@ -445,6 +445,53 @@ describe("OverviewTab", () => {
     });
     expect(Array.from(container.querySelectorAll(".overview-checklist__title")).map((el) => el.textContent))
       .toEqual(["Instrumentation Skills", "Observability Cloud Skills"]);
+  });
+
+  it("shows a connected badge on the cloud skills card when Splunk is connected", async () => {
+    stubStatusFetch({ connected: true });
+    const { container } = render(<OverviewTab />);
+
+    const cloudCard = container.querySelector("#overview-cloud-skills")!;
+    await waitFor(() => {
+      expect(cloudCard.querySelector(".stream-toggle")).toBeTruthy();
+    });
+
+    const badge = cloudCard.querySelector(".stream-toggle")!;
+    expect(badge.textContent).toContain("Connected");
+    expect(badge.className).toContain("stream-toggle--live");
+  });
+
+  it("shows a not-connected badge on the cloud skills card when Splunk is disconnected", async () => {
+    stubStatusFetch({ connected: false });
+    const { container } = render(<OverviewTab />);
+
+    const cloudCard = container.querySelector("#overview-cloud-skills")!;
+    await waitFor(() => {
+      expect(cloudCard.querySelector(".stream-toggle")).toBeTruthy();
+    });
+
+    const badge = cloudCard.querySelector(".stream-toggle")!;
+    expect(badge.textContent).toContain("Not connected");
+    expect(badge.className).toContain("stream-toggle--muted");
+  });
+
+  it("shows an unavailable badge on the cloud skills card when the connection check fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      if (String(input).includes("/api/splunk/export")) throw new Error("network down");
+      return ok(makeScore({}));
+    }));
+    const { container } = render(<OverviewTab />);
+
+    const cloudCard = container.querySelector("#overview-cloud-skills")!;
+    await waitFor(() => {
+      expect(cloudCard.querySelector(".overview-skills__empty-title")?.textContent)
+        .toBe("Connection status unavailable");
+    });
+
+    const badge = cloudCard.querySelector(".stream-toggle")!;
+    expect(badge.textContent).toContain("Unavailable");
+    expect(badge.textContent).not.toContain("Not connected");
+    expect(badge.className).toContain("stream-toggle--muted");
   });
 
   it("explains what the cloud skills do in the connect prompt", async () => {
@@ -671,6 +718,40 @@ describe("OverviewTab", () => {
     expect(panel?.getAttribute("role")).toBe("tabpanel");
     expect(panel?.getAttribute("aria-label")).toBe("Overview");
   });
+
+  it("renders Findings and Anti-patterns quality rows as jump-to-report links", async () => {
+    stubScoreFetch(makeScore({
+      breakdown: {
+        coverage: 70,
+        coverageMax: 70,
+        quality: 10,
+        qualityMax: 30,
+        components: [
+          { label: "Findings", earned: 5, max: 15, detail: "3 gaps" },
+          { label: "Anti-patterns", earned: 5, max: 15, detail: "2 anti-patterns" },
+        ],
+      },
+    }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-score__breakdown")).toBeTruthy();
+    });
+
+    const findingsLink = Array.from(container.querySelectorAll(".overview-score__row"))
+      .find((el) => el.querySelector(".overview-score__row-label")?.textContent === "Findings")
+      ?.querySelector(".overview-score__row-detail--link");
+    const antiPatternsLink = Array.from(container.querySelectorAll(".overview-score__row"))
+      .find((el) => el.querySelector(".overview-score__row-label")?.textContent === "Anti-patterns")
+      ?.querySelector(".overview-score__row-detail--link");
+
+    expect(findingsLink).toBeTruthy();
+    expect(antiPatternsLink).toBeTruthy();
+
+    // Clicking a jump link keeps the report panel open (it is already open by default).
+    fireEvent.click(findingsLink as HTMLElement);
+    expect(container.querySelector("#overview-report-details")).toBeTruthy();
+  });
 });
 
 describe("shortCommit", () => {
@@ -707,9 +788,9 @@ describe("OverviewTab staleness and failures", () => {
 
     // The score is still shown, but marked rather than presented as current.
     expect(container.querySelector(".overview-score")?.className).toContain("is-stale");
-    expect(container.querySelector(".overview-score__value")?.textContent).toBe("91/100");
+    expect(container.querySelector(".overview-score__value")?.textContent).toBe("91%");
     // And the audit command is offered for re-running.
-    expect(container.querySelector(".overview-score__stale-actions .overview-checklist__command")?.textContent)
+    expect(container.querySelector(".overview-score__stale .overview-checklist__command")?.textContent)
       .toBe("$otel-audit");
   });
 
@@ -768,7 +849,7 @@ describe("OverviewTab staleness and failures", () => {
       expect(container.querySelector(".overview-score__stale")).toBeTruthy();
     });
 
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-score__stale-actions .overview-checklist__nav")!);
+    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-score__footer .overview-checklist__nav")!);
 
     await waitFor(() => {
       expect(container.querySelector(".overview-score__stale")).toBeNull();
@@ -879,7 +960,7 @@ describe("OverviewTab outstanding work and formatting", () => {
     expect(hint).toContain("2026-08-20");
     expect(hint).not.toContain("the workspace is now on");
     // Re-running the audit is still the remedy offered.
-    expect(container.querySelector(".overview-score__stale-actions .overview-checklist__command")?.textContent)
+    expect(container.querySelector(".overview-score__stale .overview-checklist__command")?.textContent)
       .toBe("$otel-audit");
   });
 
@@ -890,7 +971,6 @@ describe("OverviewTab outstanding work and formatting", () => {
     await waitFor(() => {
       expect(container.querySelector(".overview-callout")).toBeTruthy();
     });
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
     const link = container.querySelector<HTMLAnchorElement>(".overview-report__view")!;
 
     const event = new MouseEvent("click", { bubbles: true, cancelable: true });
@@ -910,7 +990,6 @@ describe("OverviewTab outstanding work and formatting", () => {
     await waitFor(() => {
       expect(container.querySelector(".overview-callout")).toBeTruthy();
     });
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
     const link = container.querySelector<HTMLAnchorElement>(".overview-report__view")!;
 
     const event = new MouseEvent("click", { bubbles: true, cancelable: true });

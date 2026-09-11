@@ -1,4 +1,4 @@
-# connect-splunk-observability-cloud Codex Eval Validation Report
+# observer-open Codex Eval Validation Report
 
 This report validates eval JSON, eval directory availability, and skill source availability. It does not run Codex execution.
 
@@ -8,7 +8,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 |---|---|
 | Mode | validation |
 | Eval kind | validation |
-| Skill | connect-splunk-observability-cloud |
+| Skill | observer-open |
 | Run ID | 20260911T190811713531Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
@@ -17,4 +17,4 @@ This report validates eval JSON, eval directory availability, and skill source a
 
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
-| plugins/obstudio/qual/connect-splunk-observability-cloud | plugins/obstudio | 3 | evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json | 0 | 9 | 0 |
+| plugins/obstudio/qual/observer-open | plugins/obstudio | 2 | evals/plugins/obstudio/eval/qual/observer-open.json | 0 | 5 | 0 |

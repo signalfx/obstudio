@@ -2059,7 +2059,7 @@ class ObserveReportTest(unittest.TestCase):
             html = html_path.read_text(encoding="utf-8")
             self.assertIn("OTEL-001", html)
             self.assertNotIn("Save selection", html)
-            self.assertIn("Copy this terminal command", html)
+            self.assertIn("Copy this prompt and paste into AI chat", html)
             self.assertNotIn("navigator.clipboard", html)
             self.assertIn("Technical appendix", html)
             self.assertIn("Source-visible instrumentation evidence", html)
