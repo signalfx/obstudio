@@ -476,7 +476,7 @@
   },
   "source": {
     "digest_version": 2,
-    "digest": "a4d75d0ac72dc02fdd9ddb352883ea9e8042bea5994b40793853e7bf16085b86",
+    "digest": "09d20bf7ccc0ca76b00fc3e448035a23b9149d9716d29a8713e0eca6cc01a595",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -782,7 +782,6 @@
       "skills/splunk-sync/references/coverage-model.md": "282117ad1cf0ff60a1a9cdc853983a8aa47729c6c2d216e251d6e992223b2ed1",
       "evals/go/chi-partial/eval/qual/instrument.json": "931f49ba387f6f2cfed899d6d7b8950cffec4f1f9a1d629b604551f74d217cad",
       "evals/go/chi-partial/go.mod": "c98802561b52e8e423a669a197c43ab62e8e7af5c19d83094b33beda1df2797f",
-      "evals/go/chi-partial/go.sum": "3708d13ed158e6020350066c8cda0777bdbf8ef6efb58907a7fa81eea61cb26b",
       "evals/go/chi-partial/main.go": "e395c48e36e43de4537eb493003c9d682557d496304a2d680006a96bea35a7d3",
       "evals/go/chi-partial/eval/runtime/App.Dockerfile": "a31ffaaedcf0ebdb3075b2ca807ebdd0030774fe36740f201bd11516447b7e47",
       "evals/go/chi-partial/eval/runtime/docker-compose.yml": "6299da539fca807228f0365a07c8bccd87b2012820461023a1b0a6c4a0fb9e92",
@@ -798,7 +797,6 @@
       "evals/go/kvstore/kvstore/http_test.go": "a12102b9726850b60830d36f924446b2c0044b893319e6d184d1daf25355ac3d",
       "evals/go/kvstore/kvstore/store.go": "eb8c09d0220e8816f3f6bb8a6fae9c86c44823048065ed12cf56cf9f6e6b98fd",
       "evals/go/kvstore/kvstore/store_test.go": "23532aff7f33ce9ce0937e10b915c0b3e136b6382c98c16aada5fcf711b0c96b",
-      "evals/go/kvstore/kvstore-server": "b6f3fef7fe87fef0f24dd218c12ff33fbda6ab3cc57c819a41e5cef7a138186f",
       "evals/go/kvstore/spec.md": "4eb0f6f554cb707e1a3290b6b76a1f5e74af5100d2938fb2734e079798d29c7a",
       "evals/go/kvstore/eval/qual/instrument.json": "5928e335779572a7541d808ef758ba62114b9068ecf2c388d0f57373f62b0633",
       "evals/go/kvstore/eval/runtime/App.Dockerfile": "a5fd8ddcda7b4d4aa9345c8b1f906ed8455a7e6b542731dd41ffad176f573d43",

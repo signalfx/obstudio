@@ -302,7 +302,7 @@
   },
   "source": {
     "digest_version": 2,
-    "digest": "8647e5b963187a06c98b5b8eb8d661f5c9688bcd18f52aa462ca2e2090efee0a",
+    "digest": "ac0995dedf1ea392a0120aa8909949d1b97e22a7e147125163bb431407fb4741",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -364,7 +364,6 @@
       "skills/references/tests/test_observe_report.py": "8800c90a9c2cf3bb1c10df957d5b6e8baa02a9e83b4d51671776638e47d3951f",
       "evals/go/chi-partial/eval/qual/audit.json": "f3ee529239047e5771c74fdf99feba0b1b3cdcc8a4a815bc8123dfd60b9476d9",
       "evals/go/chi-partial/go.mod": "c98802561b52e8e423a669a197c43ab62e8e7af5c19d83094b33beda1df2797f",
-      "evals/go/chi-partial/go.sum": "3708d13ed158e6020350066c8cda0777bdbf8ef6efb58907a7fa81eea61cb26b",
       "evals/go/chi-partial/main.go": "e395c48e36e43de4537eb493003c9d682557d496304a2d680006a96bea35a7d3",
       "evals/go/kvstore/.vscode/launch.json": "91385f78513beaadd967bbfddfe03e992f8d2fa54a7f86e6a17ef3562a1691c8",
       "evals/go/kvstore/Makefile": "557b16aa60d316634e43c3650f02c06305ddcc006e07ded16bee7452cabe9fa7",
@@ -376,7 +375,6 @@
       "evals/go/kvstore/kvstore/http_test.go": "a12102b9726850b60830d36f924446b2c0044b893319e6d184d1daf25355ac3d",
       "evals/go/kvstore/kvstore/store.go": "eb8c09d0220e8816f3f6bb8a6fae9c86c44823048065ed12cf56cf9f6e6b98fd",
       "evals/go/kvstore/kvstore/store_test.go": "23532aff7f33ce9ce0937e10b915c0b3e136b6382c98c16aada5fcf711b0c96b",
-      "evals/go/kvstore/kvstore-server": "b6f3fef7fe87fef0f24dd218c12ff33fbda6ab3cc57c819a41e5cef7a138186f",
       "evals/go/kvstore/spec.md": "4eb0f6f554cb707e1a3290b6b76a1f5e74af5100d2938fb2734e079798d29c7a",
       "evals/java/kafka-batch-consumer/README.md": "23a5dcf5ebdf24c356199041d54712966ba63a977523b352e559ae72994c3286",
       "evals/java/kafka-batch-consumer/eval/qual/audit.json": "5a7c64397ae995c6f021b49a5cb20ff8927b79dd41e2eb2f2183917ce8dca48c",
