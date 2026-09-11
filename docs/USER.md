@@ -41,9 +41,9 @@ already running before installation, omitting the flag also lets setup detect
 it automatically. Restart each configured agent and begin a new task.
 
 To configure more than one target, replace `codex` with a comma-separated list.
-Keep `--shared-url` when using shared mode. Use shared mode when multiple
-configured agents may run concurrently because only one agent-started Observer
-can use the default ports at a time.
+Keep `--shared-url` when using a shared Observer. Use a shared Observer when
+multiple configured agents may run concurrently because only one agent-started
+Observer can use the default ports at a time.
 
 ## Agent targets
 
