@@ -304,6 +304,7 @@ def test_xdist_workers_merge_validation_reports(pytester: pytest.Pytester):
     assert len(raw_runs) == 1
     payload = json.loads(raw_runs[0].read_text(encoding="utf-8"))
     assert payload["metadata"]["mode"] == "validation"
+    assert payload["metadata"]["workers"] == "2"
     assert payload["metadata"]["validation_scope"] == "full"
     assert len(payload["results"]) == 2
 

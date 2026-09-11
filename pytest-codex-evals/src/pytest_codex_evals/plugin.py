@@ -494,7 +494,11 @@ def session_run(config: pytest.Config, repo_root: Path, skill: str, mode: str, k
 
 def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) -> dict[str, Any]:
     path = config_path(config)
-    workers = getattr(config.option, "numprocesses", None) or 1
+    workers = (
+        config.workerinput["workercount"]
+        if is_xdist_worker(config)
+        else getattr(config.option, "numprocesses", None) or 1
+    )
     backend = get_backend(config)
     return {
         "mode": mode,
