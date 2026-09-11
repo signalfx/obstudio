@@ -889,7 +889,7 @@ func buildSharedObserverState(host, port string, publicMCPURLs ...string) shared
 
 func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 	return fmt.Sprintf(
-		"\nObservability Studio (collector)\n"+
+		"\nSplunk Observability Studio (collector)\n"+
 			"  Telemetry Explorer:  %s\n"+
 			"  OTLP/HTTP receiver:  http://%s\n"+
 			"  OTLP/gRPC receiver:  %s\n"+
