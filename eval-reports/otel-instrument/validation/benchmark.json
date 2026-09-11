@@ -476,7 +476,7 @@
   },
   "source": {
     "digest_version": 2,
-    "digest": "d69d3ea725d702712b190e910491f26c021e1872486446aeb4e3935692cde467",
+    "digest": "a4d75d0ac72dc02fdd9ddb352883ea9e8042bea5994b40793853e7bf16085b86",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -612,8 +612,8 @@
       "observer/client/src/metrics/TimeSeriesChart.tsx": "b1730b9cb362555e3fd254ba6dfb0578f00dad4e355c9a71173402690e79da3e",
       "observer/client/src/metrics/index.ts": "8b5886fa59bd2468faa5b0969f1418f8ac16bc13043fab2ba3bd034512699443",
       "observer/client/src/metrics/useMetricTimeSeries.ts": "7bf8d616a1f98a6dd587923a5bce0068e56cb07f27bd3461ab3d38b0c46b4ce9",
-      "observer/client/src/overview/OverviewTab.test.tsx": "eff904a2ed08a6ca5b0a8ba1508c04b12615b9b8f43a9e71e37ae6cb7b18ee9e",
-      "observer/client/src/overview/OverviewTab.tsx": "8ed7bed178f49c3841fa33c5d632201d98c374696190a369c7cc8add135a9eff",
+      "observer/client/src/overview/OverviewTab.test.tsx": "bea9a9f8474b9cdf08d4c4e34189b41e331a656abdbf99cd3855f3172a85753b",
+      "observer/client/src/overview/OverviewTab.tsx": "f1023b44bd81011182d999f5d122078e93116ec4abb691babc1112017a120fe7",
       "observer/client/src/overview/index.ts": "f52ca71f90aa6eec53a4fea0bb6d8abffe3dd8252bed3373f9edb8390d889896",
       "observer/client/src/palette.ts": "cde1d9253b714b74175125a05f0993e774a41120378f260b8c96f5e30a367369",
       "observer/client/src/services/ServicesTab.test.tsx": "c8709dc1d0f52236689fef1ac7f0e80a09d0aee1f59a09cae4b5c89df4ca454a",

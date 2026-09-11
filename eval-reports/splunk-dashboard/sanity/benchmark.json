@@ -258,7 +258,7 @@
   "failures": [],
   "source": {
     "digest_version": 2,
-    "digest": "dc90668ba42b2c696c9baccf5ca41abcd9d8beeb93845a0489a4420a2544c80d",
+    "digest": "6939b99207cb5d31dbc70b272aff11c8b681f4801daede0bc97f7f759b84d1d4",
     "eval_kinds": [
       "sanity"
     ],
@@ -306,12 +306,12 @@
       "skills/references/genai-readiness.md": "73e8af6407a4074ea7942df9e26be95b807e0bc69dd58e403819bc108db12209",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
-      "skills/references/report-flow-contract.md": "83d235fa1aa93f709462839504ec76d9819ddcccecd34ebb3e56d34c44e49acc",
-      "skills/references/scripts/observe_report.py": "90f84cdf0aa12d8ddb69b829790871bf5888ac0b3d7eb9beb29b397f82fa5170",
+      "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
+      "skills/references/scripts/observe_report.py": "0c53195a8c565c20075f4b142dc7c0fde9c41f4ef9804acfb79e3f2ef58e39d4",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "77c3e9b98a3a84fe0f7699f7ab40eabcf0dd40fe9cef231e4958b12653535a69",
+      "skills/references/tests/test_observe_report.py": "8800c90a9c2cf3bb1c10df957d5b6e8baa02a9e83b4d51671776638e47d3951f",
       "skills/splunk-dashboard/SKILL.md": "4ce9bfa9e909b180e0e021af777bfce7bb081edd1dbb7f831e6572b1186954f1",
       "skills/splunk-dashboard/references/dashboard-classification.md": "ba6dff4b76e63dad7356e304e083962a06b581c6925628ff778a6f6fab4efa87",
       "skills/splunk-dashboard/references/dashboard-templates.md": "a29c329acef70470dbc79c937c83ac32108bffc7b0a051fd8176768f0a028d44",
