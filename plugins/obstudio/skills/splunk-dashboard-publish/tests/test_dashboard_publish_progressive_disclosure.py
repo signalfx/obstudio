@@ -128,6 +128,7 @@ def test_connected_dry_run_uses_live_read_only_classification() -> None:
 
 def test_live_reference_preserves_status_idempotency_and_orphan_contracts() -> None:
     text = " ".join(LIVE.read_text(encoding="utf-8").split())
+    coverage = " ".join(COVERAGE.read_text(encoding="utf-8").split())
 
     for required in (
         "skip-on-500",
@@ -141,8 +142,17 @@ def test_live_reference_preserves_status_idempotency_and_orphan_contracts() -> N
         "DELETE /v2/chart/{id}",
         "re-fetches and reclassifies live state",
         "Never include the access token",
+        "visualization-options fingerprint",
+        "required live option is missing or diverges",
     ):
         assert required in text
+    for required in (
+        "normalized options",
+        "Same normalized visualization options",
+        "defaultPlotType",
+        "treat a missing required live option as UNCERTAIN",
+    ):
+        assert required in coverage
 
 
 def _chart_options():

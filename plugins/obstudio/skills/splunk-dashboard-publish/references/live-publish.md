@@ -71,9 +71,12 @@ dashboard itself as GAP. Execute in this order:
 
 1. Create each GAP group with `POST /v2/dashboardgroup` body
    `{name, description}`; reuse the ID of a COVERED group.
-2. Reuse a matching saved orphan ID when its name plus normalized
-   `programText` fingerprint or metric+filter+type matches exactly. Otherwise
-   create the GAP chart with `POST /v2/chart`.
+2. Reuse a matching saved orphan ID only when its name plus normalized
+   `programText` and visualization-options fingerprint or its
+   metric+filter+type+normalized-options fingerprint matches exactly. If a
+   required live option is missing or diverges, classify the candidate as
+   UNCERTAIN and do not reuse it. Otherwise create the GAP chart with
+   `POST /v2/chart`.
 3. Immediately after each chart POST, write/rewrite the in-progress
    `.observe/dashboard-sync.md` ledger with that chart ID under `Orphan charts`.
    Do not wait until the final report.

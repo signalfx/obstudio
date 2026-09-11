@@ -195,8 +195,12 @@ def run_streamed_command(
         for cleanup_error in cleanup_errors:
             error.add_note(f"agent cleanup: {cleanup_error}")
         raise
-    stdout_thread.join()
-    stderr_thread.join()
+    stdout_thread.join(timeout=5)
+    stderr_thread.join(timeout=5)
+    if stdout_thread.is_alive() or stderr_thread.is_alive():
+        _terminate_process_tree(process, process_group_id=process_group_id)
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
     return StreamedCommandResult(
         returncode=returncode,
         stdout="".join(stdout_chunks),

@@ -12,7 +12,7 @@ metadata:
   category: observability
 ---
 
-# Dashboard Publish -- Splunk O11y Dashboard Gap Analysis And Create
+# Dashboard Publish -- Splunk O11y Gap Analysis And Create
 
 Compare `$splunk-dashboard` Terraform with live Splunk Observability Cloud at
 group, dashboard, and chart levels; create only confirmed GAPs. Charts must
