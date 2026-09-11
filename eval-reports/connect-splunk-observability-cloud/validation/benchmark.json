@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "connect-splunk-observability-cloud",
-    "run_id": "20260910T020544692581Z",
+    "run_id": "20260911T020726957913Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
