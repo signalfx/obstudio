@@ -40,6 +40,24 @@ DASHBOARD_COVERAGE_MODEL = SPLUNK_DASHBOARD_PUBLISH_REFS / "dashboard-coverage-m
 # Detector publish skill (canonical; splunk-sync is the deprecated stub).
 SPLUNK_DETECTOR_PUBLISH = SKILLS_DIR / "splunk-detector-publish" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
+DASHBOARD_PUBLISH_OFFLINE_EVAL = (
+    REPO_ROOT
+    / "evals"
+    / "dashboards"
+    / "checkout-sync"
+    / "eval"
+    / "qual"
+    / "dashboard-publish.json"
+)
+DETECTOR_PUBLISH_OFFLINE_EVAL = (
+    REPO_ROOT
+    / "evals"
+    / "dashboards"
+    / "checkout-detectors"
+    / "eval"
+    / "qual"
+    / "detector-publish.json"
+)
 
 
 def _read(path: Path) -> str:
@@ -421,6 +439,36 @@ def test_dashboard_templates_map_hcl_chart_resources_to_rest_types():
 # ---------------------------------------------------------------------------
 # Publish skill — wire casing, chart-first ordering, orphan recovery
 # ---------------------------------------------------------------------------
+
+
+def test_dashboard_publish_offline_rubric_requests_visible_grid_and_payload():
+    definition = json.loads(_read(DASHBOARD_PUBLISH_OFFLINE_EVAL))
+    task = definition["prompts"][0]["task"]
+    rubric = " ".join(definition["rubric"])
+
+    for field in ("column", "row", "width", "height"):
+        assert field in task
+        assert field in rubric
+    assert "hypothetical non-sent dry-run POST /v2/dashboard body" in task
+    assert '"tags": ["obstudio"]' in task
+    assert "hypothetical, non-sent dry-run POST /v2/dashboard body" in rubric
+
+
+def test_detector_publish_offline_eval_matches_uncertain_fallback():
+    definition = json.loads(_read(DETECTOR_PUBLISH_OFFLINE_EVAL))
+    task = definition["prompts"][0]["task"]
+    rubric = " ".join(definition["rubric"])
+
+    assert "UNCERTAIN (not GAP)" in task
+    assert "no POST is allowed until a successful live fetch" in task
+    assert "hypothetical, non-sent dry-run POST /v2/detector" in task
+    for mapping in ("program_text -> programText", "detect_label -> detectLabel"):
+        assert mapping in task
+        assert mapping in rubric
+    assert "AutoDetect" in task
+    assert '"tags": ["obstudio"]' in task
+    assert "classifies every detector as UNCERTAIN (not GAP)" in rubric
+    assert "Refuses every current POST" in rubric
 
 
 def test_dashboard_publish_reads_terraform_dashboards_tf():
