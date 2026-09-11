@@ -806,3 +806,7 @@ def test_runtime_observer_keeps_grpc_loopback_when_http_is_container_visible() -
         observer_service = compose.split("\n  app:", 1)[0]
         assert "target: 3000" in observer_service
         assert "host_ip: 127.0.0.1" in observer_service
+
+        definition = json.loads(_read(compose_file.with_name("instrument.json")))
+        for check in definition["checks"]:
+            assert check["expect"]["clear_path"] is None

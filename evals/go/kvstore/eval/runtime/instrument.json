@@ -17,6 +17,7 @@
       },
       "stop_services_before_validation": ["app"],
       "expect": {
+        "clear_path": null,
         "endpoints": [
           {
             "id": "traces",
@@ -95,6 +96,7 @@
       },
       "stop_services_before_validation": ["app"],
       "expect": {
+        "clear_path": null,
         "endpoints": [
           {
             "id": "traces",
