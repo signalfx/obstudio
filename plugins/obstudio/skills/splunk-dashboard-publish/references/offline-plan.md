@@ -91,7 +91,9 @@ No live state was fetched. Confirm? (yes/no)
 The prompt is informational in offline mode: stop after it. A `yes` cannot
 authorize offline mutation or convert planned candidates into live GAPs. A later
 online run must fetch and reclassify fresh state, show a new diff with the
-resolved realm and exact orphan deletions, and obtain confirmation again.
+resolved realm and exact orphan deletions, and obtain confirmation again. The
+final response must explicitly state each of those fresh-fetch, new-diff, and
+renewed-confirmation requirements.
 
 ## Planned Creation Graph And Bodies
 
