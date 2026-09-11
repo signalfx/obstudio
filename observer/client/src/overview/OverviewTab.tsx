@@ -411,7 +411,7 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
               {scoreState === "error" ? (
                 <>
                   <p className="overview-score__meta">
-                    Could not reach the Observer to load the audit. An audit may already exist.
+                    Could not reach Splunk Observability Studio to load the audit. An audit may already exist.
                   </p>
                   <button type="button" className="overview-checklist__nav" onClick={refreshAll}>
                     <span aria-hidden="true">↻</span> Retry
@@ -448,7 +448,7 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                     <>
                       <p className="overview-skills__empty-title">Connection status unavailable</p>
                       <p className="overview-skills__empty-hint">
-                        Could not reach the Observer to check your Splunk connection, so these
+                        Could not reach Splunk Observability Studio to check your Splunk connection, so these
                         skills are hidden. You may still be connected.
                       </p>
                       <button

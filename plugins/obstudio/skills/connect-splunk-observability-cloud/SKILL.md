@@ -1,17 +1,17 @@
 ---
 name: connect-splunk-observability-cloud
 description: >-
-  Open the already-running local Obstudio Observer Cloud tab so a user can
+  Open the already-running local Splunk Observability Studio Cloud tab so a user can
   connect an existing or newly ready Splunk Observability Cloud organization
   by entering its URL and access token outside agent context. Use when a user
   asks to connect, configure, or provide credentials for Splunk Observability
-  Cloud, Splunk O11y, or SignalFx outside the Obstudio IDE extension. Do not use
+  Cloud, Splunk O11y, or SignalFx outside the Splunk Observability Studio IDE extension. Do not use
   this skill to create a Free Edition account.
 ---
 
 # Connect Splunk Observability Cloud
 
-Hand credential entry to the existing local Observer Cloud UI. The agent must
+Hand credential entry to the existing local Splunk Observability Studio Cloud UI. The agent must
 never collect or transmit the access token itself.
 
 ## Guardrails
@@ -30,7 +30,7 @@ never collect or transmit the access token itself.
   model context.
 - Do not call `observer_splunk_free_account_region_detect` or
   `observer_splunk_free_account_create` during this connection workflow.
-- Do not start, stop, or restart Observer or launch another Observer process.
+- Do not start, stop, or restart Splunk Observability Studio or launch another Splunk Observability Studio process.
 
 ## Open the existing Cloud tab
 
@@ -47,7 +47,7 @@ never collect or transmit the access token itself.
    http://127.0.0.1:3000/?tab=cloud
    ```
 
-   Use the port already reported by the running Observer. Never allocate,
+   Use the port already reported by the running Splunk Observability Studio. Never allocate,
    probe for, or choose a new dynamic port.
 4. When the current client exposes a host-provided browser or open-URL
    capability, use it to open the Cloud-tab URL. Do not shell out to
@@ -59,19 +59,19 @@ never collect or transmit the access token itself.
    **Access token** directly in that local UI, then select **Connect**. Stop and
    wait while the user completes the form.
 7. In the same handoff, explicitly state: `This connection applies to the
-   current running standalone Observer process and must be entered again after
-   Observer restarts.`
+   current running standalone Splunk Observability Studio process and must be entered again after
+   Splunk Observability Studio restarts.`
 8. Also state that opening the tab only presents the credential-entry surface
    and does not mean the organization is connected. Connection success requires
-   a later local Cloud UI or Observer backend result.
+   a later local Cloud UI or Splunk Observability Studio backend result.
 
 If `observer_status` is unavailable, `endpoints.rest` is missing or invalid, or
 the Cloud tab cannot be opened, explain the specific limitation and stop. An
-inconclusive browser render is not proof that Observer is unhealthy.
+inconclusive browser render is not proof that Splunk Observability Studio is unhealthy.
 
 Do not claim the organization is connected merely because the page opened. If
 the user later asks to confirm the configuration, call
 `observer_splunk_connection_realm` with no arguments. A non-empty realm proves
-only that Observer has a consistent local connection configuration; it does
+only that Splunk Observability Studio has a consistent local connection configuration; it does
 not prove remote token validity or that export is enabled. Never request the
 token to investigate an empty result.

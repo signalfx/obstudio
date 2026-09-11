@@ -505,7 +505,7 @@ describe("AppView main tab keyboard navigation", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     const overviewTab = screen.getByRole("tab", { name: /overview/i });
     const metricsTab = screen.getByRole("tab", { name: /metrics/i });
 
@@ -526,7 +526,7 @@ describe("AppView main tab keyboard navigation", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "ArrowRight" });
 
     const overviewTab = screen.getByRole("tab", { name: /overview/i });
@@ -540,7 +540,7 @@ describe("AppView main tab keyboard navigation", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "ArrowLeft" });
 
     const cloudTab = screen.getByRole("tab", { name: /cloud/i });
@@ -553,7 +553,7 @@ describe("AppView main tab keyboard navigation", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "End" });
 
     const cloudTab = screen.getByRole("tab", { name: /cloud/i });
@@ -566,7 +566,7 @@ describe("AppView main tab keyboard navigation", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "End" });
     fireEvent.keyDown(tablist, { key: "Home" });
 
@@ -579,7 +579,7 @@ describe("AppView main tab keyboard navigation", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
 
     // overview → metrics → traces → logs → services (4 ArrowRights)
     fireEvent.keyDown(tablist, { key: "ArrowRight" });

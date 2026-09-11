@@ -68,7 +68,7 @@ def test_audit_selects_missing_supported_local_logs_by_default() -> None:
     instrument = _normalized(SKILLS / "otel-instrument" / "SKILL.md")
 
     for term in (
-        "local Observer provider/exporter/bridge",
+        "local Splunk Observability Studio provider/exporter/bridge",
         "`required` with `instrument_mode: default`",
         "explicitly disabled",
         "operator-owned exporter",
@@ -80,7 +80,7 @@ def test_audit_selects_missing_supported_local_logs_by_default() -> None:
         "A request that excludes custom business spans limits span work only",
         "`OTEL_LOGS_EXPORTER=none` disables",
         "exactly one bridge/export path",
-        "Obstudio-to-Splunk cloud forwarding is traces and metrics only",
+        "Splunk Observability Studio cloud forwarding to Splunk is traces and metrics only",
     ):
         assert term in instrument
 
@@ -512,7 +512,7 @@ def test_language_rubrics_grade_the_default_local_log_contract() -> None:
     for path in rubric_paths:
         definition = json.loads(_read(path))
         contract = " ".join(definition["rubric"])
-        assert "local Observer" in contract
+        assert "local Splunk Observability Studio" in contract
         assert "OTEL_LOGS_EXPORTER=none" in contract
         assert "cloud" in contract
 
@@ -535,7 +535,7 @@ def test_direct_no_custom_span_prompts_still_grade_default_local_logs() -> None:
         contract = " ".join(definition["rubric"]).lower()
 
         assert "no custom business spans" in direct_prompt
-        assert "local observer" in contract
+        assert "local splunk observability studio" in contract
         assert "default" in contract
         assert "log" in contract
 
@@ -567,7 +567,7 @@ def test_audit_rubrics_grade_the_default_local_log_gap() -> None:
         definition = json.loads(_read(path))
         contract = " ".join(definition["rubric"])
         assert "required default gap" in contract
-        assert "local Observer" in contract
+        assert "local Splunk Observability Studio" in contract
         assert "cloud forwarding limited to traces and metrics" in contract
 
 
@@ -806,3 +806,7 @@ def test_runtime_observer_keeps_grpc_loopback_when_http_is_container_visible() -
         observer_service = compose.split("\n  app:", 1)[0]
         assert "target: 3000" in observer_service
         assert "host_ip: 127.0.0.1" in observer_service
+
+        definition = json.loads(_read(compose_file.with_name("instrument.json")))
+        for check in definition["checks"]:
+            assert check["expect"]["clear_path"] is None

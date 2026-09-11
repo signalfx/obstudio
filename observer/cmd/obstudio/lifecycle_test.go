@@ -224,7 +224,7 @@ func TestPrepareManagedLaunchRejectsCorruptSavedState(t *testing.T) {
 	if err := os.WriteFile(managedStatePath(), []byte("not-json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := prepareManagedLaunch(runConfig{}, true); err == nil || !strings.Contains(err.Error(), "read managed Observer configuration") {
+	if _, err := prepareManagedLaunch(runConfig{}, true); err == nil || !strings.Contains(err.Error(), "read managed Splunk Observability Studio configuration") {
 		t.Fatalf("prepare with corrupt state = %v", err)
 	}
 }
@@ -677,7 +677,7 @@ func TestRestartRefusesForegroundObserverWithoutManagedState(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := newRestartCmd().Execute()
-	if err == nil || !strings.Contains(err.Error(), "another Observer is already running") {
+	if err == nil || !strings.Contains(err.Error(), "another Splunk Observability Studio instance is already running") {
 		t.Fatalf("restart with foreground owner = %v", err)
 	}
 }
@@ -710,7 +710,7 @@ func TestRestartRechecksSharedOwnerAfterManagedStop(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := newRestartCmd().Execute()
-	if err == nil || !strings.Contains(err.Error(), "another Observer is already running") {
+	if err == nil || !strings.Contains(err.Error(), "another Splunk Observability Studio instance is already running") {
 		t.Fatalf("restart after shared owner replacement = %v", err)
 	}
 	if _, statErr := os.Stat(managedControlStatePath()); !errors.Is(statErr, os.ErrNotExist) {

@@ -1,6 +1,6 @@
-# Observer
+# Splunk Observability Studio
 
-Observer is Observability Studio's local OpenTelemetry collector and explorer.
+Splunk Observability Studio is a local OpenTelemetry collector and explorer.
 It receives OTLP traces, metrics, and logs, keeps them in bounded memory, and
 makes the same evidence available through a browser UI, REST API, and MCP tools.
 
@@ -17,11 +17,11 @@ same in either directory. To run an extracted release instead, use:
 Examples in this guide use the release binary. For a source build, run them
 from the repository root and replace `./obstudio` with `./build/obstudio`.
 
-Observer starts these local endpoints:
+Splunk Observability Studio starts these local endpoints:
 
 | Service | Default endpoint |
 |---|---|
-| Observer UI and REST API | `http://127.0.0.1:3000` |
+| Splunk Observability Studio UI and REST API | `http://127.0.0.1:3000` |
 | MCP | `http://127.0.0.1:3000/mcp` |
 | OTLP/HTTP | `http://127.0.0.1:4318` |
 | OTLP/gRPC | `127.0.0.1:4317` |
@@ -45,8 +45,8 @@ export OTEL_SERVICE_NAME=my-service
 ```
 
 Exporter packages and environment-variable support vary by language. The
-Observability Studio skills can audit and configure a service when you do not
-already have an OpenTelemetry setup.
+Splunk Observability Studio skills can audit and configure a service when you
+do not already have an OpenTelemetry setup.
 
 Start the application, exercise a real request, and open
 `http://127.0.0.1:3000`. Use **Live** or press `P` while the UI is focused
@@ -71,9 +71,9 @@ fabricated data.
 
 ### Validation
 
-Open **Validation** and run an analysis after telemetry arrives. Observer uses
-the bundled `weaver` runtime and retains the latest result. New telemetry marks
-that result stale until validation is refreshed.
+Open **Validation** and run an analysis after telemetry arrives. Splunk
+Observability Studio uses the bundled `weaver` runtime and retains the latest
+result. New telemetry marks that result stale until validation is refreshed.
 
 ### MCP tools
 
@@ -109,14 +109,15 @@ Enable providers and inspect the same targets:
 ```
 
 Running `enable` replaces recognized provider OTLP routes; there is no separate
-force flag. Observability Studio does not save the replaced destinations.
-`disable` removes only unchanged values managed by Observability Studio and
-leaves later edits alone.
+force flag. Splunk Observability Studio does not save the replaced destinations.
+`disable` removes only unchanged values managed by Splunk Observability Studio
+and leaves later edits alone.
 
 The default sends logs to `http://127.0.0.1:4318/v1/logs` and derives the
 matching trace and metric endpoints.
 
-If Observer uses a custom OTLP/HTTP port, pass its full logs endpoint:
+If Splunk Observability Studio uses a custom OTLP/HTTP port, pass its full logs
+endpoint:
 
 ```bash
 ./obstudio token-telemetry enable --target=codex,claude-code --endpoint=http://127.0.0.1:14318/v1/logs
@@ -127,15 +128,15 @@ If Observer uses a custom OTLP/HTTP port, pass its full logs endpoint:
 New targets default to `path`. For an existing target, omitting
 `--repository-correlation` preserves its recorded setting.
 
-| Mode | Data added by Observability Studio |
+| Mode | Data added by Splunk Observability Studio |
 |---|---|
 | `path` | Repository name plus canonical repository and workspace paths; supports exact-path queries. |
 | `name` | Repository name without filesystem paths. |
 | `off` | No normalized repository correlation. |
 
-Claude Code repository correlation requires the Observability Studio plugin's
-SessionStart hook to emit a session association event. Codex can also derive
-repository context from working-directory data in its task spans.
+Claude Code repository correlation requires the Splunk Observability Studio
+plugin's SessionStart hook to emit a session association event. Codex can also
+derive repository context from working-directory data in its task spans.
 
 For example:
 
@@ -148,8 +149,8 @@ provider-supplied working directory.
 
 ### Verify token accounting
 
-1. Start Observer, enable the provider, and fully restart every affected Codex
-   or Claude process. Start a new task or session.
+1. Start Splunk Observability Studio, enable the provider, and fully restart
+   every affected Codex or Claude process. Start a new task or session.
 2. Run `$otel-audit` as the only work in a fresh Codex task, or run
    `/otel-audit` in a fresh Claude Code session. Plugin users can use the
    namespaced `/obstudio:otel-audit` form.
@@ -168,27 +169,28 @@ provider-supplied working directory.
 The agent calls `observer_token_usage_overview` for you. Read its result as
 follows:
 
-- **Measurement:** `status` says whether Observer retained usable token data.
-  Unknown values remain unknown rather than being treated as zero.
-- **Accounting:** `accountingStatus` describes completeness. Observer
-  reconciles overlapping logs, spans, and metrics instead of adding duplicate
-  measurements.
+- **Measurement:** `status` says whether Splunk Observability Studio retained
+  usable token data. Unknown values remain unknown rather than being treated as
+  zero.
+- **Accounting:** `accountingStatus` describes completeness. Splunk
+  Observability Studio reconciles overlapping logs, spans, and metrics instead
+  of adding duplicate measurements.
 - **Repository attribution:** `repositoryCorrelationStatus` describes whether
-  Observer could associate the task with a repository. Repository filters
-  exclude tasks whose association cannot be proven.
+  Splunk Observability Studio could associate the task with a repository.
+  Repository filters exclude tasks whose association cannot be proven.
 - **Live views:** Services lists telemetry producers, not operating-system
   processes. Keep the provider process running while demonstrating its traces,
   logs, metrics, and service entry; those signals leave the UI when it
   disconnects.
 - **Completed usage:** Token accounting is retained separately after a process
-  disconnects. It remains queryable until Observer is cleared, exits, or
-  overwrites that bounded history.
-- **Trace retention:** Observer protects recent provider traces from unrelated
-  telemetry while the producer is connected. A compacted trace shows a
-  lower-bound span count such as `8+` without changing service aggregates or
-  validation results.
+  disconnects. It remains queryable until Splunk Observability Studio is
+  cleared, exits, or overwrites that bounded history.
+- **Trace retention:** Splunk Observability Studio protects recent provider
+  traces from unrelated telemetry while the producer is connected. A compacted
+  trace shows a lower-bound span count such as `8+` without changing service
+  aggregates or validation results.
 
-When finished, remove unchanged routes managed by Observability Studio:
+When finished, remove unchanged routes managed by Splunk Observability Studio:
 
 ```bash
 ./obstudio token-telemetry disable --target=codex,claude-code
@@ -206,23 +208,23 @@ By default, Codex CLI, IDE, and Desktop processes share
 
 | Existing Codex configuration | What `enable` does |
 |---|---|
-| No exporter | Adds an Observability Studio-managed local exporter. |
+| No exporter | Adds a Splunk Observability Studio-managed local exporter. |
 | Recognized inline assignment | Replaces and manages the complete exporter assignment. |
 | Canonical OTLP/HTTP table with an endpoint | Redirects and manages its endpoint and protocol entries while preserving headers and unrelated settings. |
 | Compatible canonical table without an endpoint | Completes the route and manages its endpoint and protocol entries. |
 | Unsupported, malformed, or multiply defined exporter | Stops without editing the configuration. |
 
-While enabled, Codex's exporters for logs, traces, and metrics point to Observer.
-`disable` removes unchanged managed routes and does not recover previous
-destinations. Codex token histograms remain visible in Metrics, but their
-current points do not have stable task or turn identifiers. Correlated totals
-therefore use the richer Codex logs and task spans.
+While enabled, Codex's exporters for logs, traces, and metrics point to Splunk
+Observability Studio. `disable` removes unchanged managed routes and does not
+recover previous destinations. Codex token histograms remain visible in
+Metrics, but their current points do not have stable task or turn identifiers.
+Correlated totals therefore use the richer Codex logs and task spans.
 
 ### Claude Code
 
 - An active `ENABLE_BETA_TRACING_DETAILED` and `BETA_TRACING_ENDPOINT` pair
   overrides the standard log and trace exporters. `enable` manages and
-  normalizes that active pair to Observer.
+  normalizes that active pair to Splunk Observability Studio.
 - Existing generic OTLP endpoint and protocol values are redirected and
   managed. Required signal-specific routes are written locally even when
   matching values are inherited.
@@ -230,18 +232,18 @@ therefore use the richer Codex logs and task spans.
   settings. Existing interval, temporality, TLS, header, and unrelated settings
   remain unchanged.
 - Removing a managed local override can expose an unchanged inherited or
-  higher-precedence route. Observability Studio does not restore that route.
+  higher-precedence route. Splunk Observability Studio does not restore that route.
 
 ## Optional Splunk Observability Cloud forwarding
 
-Observer can optionally forward received traces and metrics to Splunk while
-keeping the Observer UI available. Logs remain local. The
-[user guide](../docs/USER.md#forward-to-splunk-observability-cloud) provides
-the env-file example and credential scope.
+Splunk Observability Studio can optionally forward received traces and metrics
+to Splunk while keeping its UI available. Logs remain local. The [user
+guide](../docs/USER.md#forward-to-splunk-observability-cloud) provides the
+env-file example and credential scope.
 
 ## REST API
 
-The REST API uses the Observer UI base URL. Common routes are:
+The REST API uses the Splunk Observability Studio UI base URL. Common routes are:
 
 - health and endpoint status: `GET /api/health`;
 - traces: `GET /api/query/traces` and
@@ -264,29 +266,29 @@ Overview. Use `./obstudio --env-file <path>` for another startup env file.
 
 ## Troubleshooting
 
-- **Observer will not start:** check `3000`, `4318`, and `4317` separately.
-  Change `PORT`, `OTLP_HTTP_PORT`, or `OTLP_GRPC_PORT` for the listener that is
-  busy.
+- **Splunk Observability Studio will not start:** check `3000`, `4318`, and
+  `4317` separately. Change `PORT`, `OTLP_HTTP_PORT`, or `OTLP_GRPC_PORT` for
+  the listener that is busy.
 - **No telemetry appears:** confirm that the SDK has OTLP exporters enabled,
-  uses the expected protocol, sends to this Observer's receiver ports, and
+  uses the expected protocol, sends to this instance's receiver ports, and
   reports the service name you expect.
 - **Validation cannot run:** keep the bundled `weaver` binary beside
   `obstudio`, or make `weaver` available on `PATH`.
 - **Agent telemetry is missing:** run
   `./obstudio token-telemetry status --target=<provider>`, restart the provider,
-  and confirm that provider telemetry and MCP both reach the same Observer.
-- **Data disappeared:** Observer storage is bounded and in memory. Clear,
-  process exit, overwrite, and provider disconnect affect the views described
-  above.
+  and confirm that provider telemetry and MCP both reach the same instance.
+- **Data disappeared:** Splunk Observability Studio storage is bounded and in
+  memory. Clear, process exit, overwrite, and provider disconnect affect the
+  views described above.
 
 ### Claude Desktop telemetry
 
 Claude Desktop's active Setup profile takes precedence over user-level Claude
 Code settings. `--target=claude-code` neither inspects nor edits that profile.
 If the profile disables trace export or routes OTLP elsewhere, the running
-Desktop process will not appear in Observer even when user-level status is
-enabled. A routed session appears in Services under its reported resource name,
-commonly `claude-code` or `claude-code-desktop`.
+Desktop process will not appear in Splunk Observability Studio even when
+user-level status is enabled. A routed session appears in Services under its
+reported resource name, commonly `claude-code` or `claude-code-desktop`.
 
 For a non-destructive test while keeping any required organization profile:
 
@@ -297,13 +299,14 @@ For a non-destructive test while keeping any required organization profile:
 
 If the profile is organization-locked or must retain a corporate destination,
 use a separate Claude Code CLI process or ask the profile administrator to
-route through Observer. Only that administrator can change a locked
-destination; Observability Studio cannot override or silently replace it.
+route through Splunk Observability Studio. Only that administrator can change a
+locked destination; Splunk Observability Studio cannot override or silently
+replace it.
 
-## Developing Observer
+## Developing Splunk Observability Studio
 
-OTLP/HTTP and OTLP/gRPC feed the bounded in-memory store. The Observer UI,
-REST API, and MCP tools query that same data.
+OTLP/HTTP and OTLP/gRPC feed the bounded in-memory store. The Splunk
+Observability Studio UI, REST API, and MCP tools query that same data.
 
 | Path | Responsibility |
 |---|---|
@@ -313,7 +316,7 @@ REST API, and MCP tools query that same data.
 | `internal/api/` | REST query and mutation handlers. |
 | `internal/mcp/` | HTTP and stdio MCP tools. |
 | `internal/web/` | Embedded UI, SPA fallback, and live updates. |
-| `client/` | React Observer UI built with esbuild. |
+| `client/` | React UI built with esbuild. |
 
 Run `make test` for Go tests and `make test-client` for the UI. See
 [`CONTRIBUTING.md`](../CONTRIBUTING.md) for the full build, test, and pull

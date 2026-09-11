@@ -246,7 +246,7 @@ func (d *Dispatcher) tokenUsageOverview(args map[string]any) toolResult {
 	repositoryFilter := repositoryFilterFromArgs(args)
 	result := tokenUsageOverviewResult{
 		Scope:                       "agent_task",
-		Retention:                   "bounded in-memory telemetry ring; explicit clear, Observer exit, or ring overwrite evicts retained provider usage history",
+		Retention:                   "bounded in-memory telemetry ring; explicit clear, Splunk Observability Studio exit, or ring overwrite evicts retained provider usage history",
 		MeasurementSource:           "none",
 		AccountingStatus:            "unknown",
 		RepositoryCorrelationStatus: "unknown",

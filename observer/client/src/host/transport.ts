@@ -168,10 +168,10 @@ export async function observerFetch(path: string, init?: RequestInit): Promise<R
 
   const method = (init?.method ?? "GET").toUpperCase();
   if (method !== "GET" && method !== "POST") {
-    throw new Error(`Observer host transport does not support ${method} requests.`);
+    throw new Error(`Splunk Observability Studio host transport does not support ${method} requests.`);
   }
   if (init?.body !== undefined && typeof init.body !== "string") {
-    throw new Error("Observer host transport accepts only string request bodies.");
+    throw new Error("Splunk Observability Studio host transport accepts only string request bodies.");
   }
 
   const result = await callObserverHost({
@@ -181,7 +181,7 @@ export async function observerFetch(path: string, init?: RequestInit): Promise<R
     path,
   }, init?.signal ?? undefined);
   if (!isObserverHostHTTPResult(result)) {
-    throw new Error("The IDE returned an invalid Observer response.");
+    throw new Error("The IDE returned an invalid Splunk Observability Studio response.");
   }
   const body = result.status === 204 || result.status === 205 || result.status === 304
     ? null
@@ -302,7 +302,7 @@ function callObserverHost(request: ObserverHostRequest, signal?: AbortSignal): P
           return;
         }
         // Do not cancel an accepted cloud mutation: the extension must finish
-        // synchronizing Observer state and secure storage. The caller fails
+        // synchronizing Splunk Observability Studio state and secure storage. The caller fails
         // closed until reload instead of permitting an uncertain retry.
         reject(new ObserverHostCloudTimeoutError());
       }, requestTimeoutMs(request));

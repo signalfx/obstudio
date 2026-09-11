@@ -1,7 +1,7 @@
 {
   "name": "obstudio",
   "version": "0.0.18",
-  "description": "OpenTelemetry workflows and observer controls for Claude Code.",
+  "description": "Splunk Observability Studio bundles local OpenTelemetry workflows and service controls for Claude Code.",
   "author": {
     "name": "Splunk",
     "url": "https://github.com/signalfx/obstudio"

@@ -94,7 +94,7 @@ describe("CloudTab", () => {
     expect(signupCalls).toBe(1);
   });
 
-  it("recovers standalone controls and Observer state after a transient initial status failure", async () => {
+  it("recovers standalone controls and Splunk Observability Studio state after a transient initial status failure", async () => {
     let statusCalls = 0;
     let markInitialStatusAttempted: (() => void) | undefined;
     const initialStatusAttempted = new Promise<void>((resolve) => {
@@ -220,7 +220,7 @@ describe("CloudTab", () => {
     fireEvent.click(connectButton);
 
     expect(await screen.findByText("eu1 · Access token configured")).toBeTruthy();
-    expect(screen.getByText("Cloud state refreshed from Observer.")).toBeTruthy();
+    expect(screen.getByText("Cloud state refreshed from Splunk Observability Studio.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(statusCalls).toBe(2);
   });
@@ -246,7 +246,7 @@ describe("CloudTab", () => {
     bridge.reject(connect, "A cloud configuration change is already in progress.");
 
     expect(await screen.findByText("eu1 · Access token configured")).toBeTruthy();
-    expect(screen.getByText("Cloud state refreshed from Observer.")).toBeTruthy();
+    expect(screen.getByText("Cloud state refreshed from Splunk Observability Studio.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(bridge.httpRequests().filter((request) => request.path === "/api/splunk/export"))
       .toHaveLength(1);
@@ -278,7 +278,7 @@ describe("CloudTab", () => {
 
     expect(await screen.findByRole("switch", { name: "Remote telemetry export is on" })).toBeTruthy();
     expect(screen.getByText("On")).toBeTruthy();
-    expect(screen.getByText("Cloud state refreshed from Observer.")).toBeTruthy();
+    expect(screen.getByText("Cloud state refreshed from Splunk Observability Studio.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(statusCalls).toBe(2);
   });
@@ -354,7 +354,7 @@ describe("CloudTab", () => {
     bridge.reject(forget, "A cloud configuration change is already in progress.");
 
     expect(await screen.findByText("Connect to export metrics and traces.")).toBeTruthy();
-    expect(screen.getByText("Cloud state refreshed from Observer.")).toBeTruthy();
+    expect(screen.getByText("Cloud state refreshed from Splunk Observability Studio.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     const regionInput = screen.getByLabelText("Realm or Observability Cloud URL");
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -363,7 +363,7 @@ describe("CloudTab", () => {
       .toHaveLength(1);
   });
 
-  it("reconciles an invisible key rotation by comparing Observer versions", async () => {
+  it("reconciles an invisible key rotation by comparing Splunk Observability Studio versions", async () => {
     const initialVersion = "I".repeat(43);
     const winnerVersion = "W".repeat(43);
     const bridge = installBridge({
@@ -386,7 +386,7 @@ describe("CloudTab", () => {
     });
     bridge.reject(enable, "Cloud configuration changed in another session. Refresh and try again.");
 
-    expect(await screen.findByText("Cloud state refreshed from Observer.")).toBeTruthy();
+    expect(await screen.findByText("Cloud state refreshed from Splunk Observability Studio.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByRole("switch", { name: "Remote telemetry export is off" })).toBeTruthy();
   });
@@ -521,7 +521,7 @@ describe("CloudTab", () => {
     const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
     await waitFor(() => expect(connectButton.disabled).toBe(false));
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
+    expect(screen.queryByText("Splunk Observability Studio state is read-only in this browser session.")).toBeNull();
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).disabled).toBe(false);
     expect((screen.getByLabelText("Access token") as HTMLInputElement).disabled).toBe(false);
     fireEvent.change(screen.getByLabelText("Realm or Observability Cloud URL"), { target: { value: "us1" } });
@@ -529,7 +529,7 @@ describe("CloudTab", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("shows Observer state with standalone mutation controls available", async () => {
+  it("shows Splunk Observability Studio state with standalone mutation controls available", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
       if (path === "/api/splunk/export") return jsonResponse(connectedStatus(true, "us1"));
@@ -541,7 +541,7 @@ describe("CloudTab", () => {
 
     expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
+    expect(screen.queryByText("Splunk Observability Studio state is read-only in this browser session.")).toBeNull();
     expect((screen.getByRole("switch", { name: "Remote telemetry export is on" }) as HTMLButtonElement).disabled)
       .toBe(false);
     expect((screen.getByRole("button", { name: "Remove connection" }) as HTMLButtonElement).disabled)
@@ -791,14 +791,14 @@ describe("CloudTab", () => {
     expect((tokenInput as HTMLInputElement).value).toBe("token_before_bridge_123456789");
   });
 
-  it("keeps both setup forms and retry actions available when Observer status is unavailable", async () => {
-    const bridge = installBridge({ httpError: "Observer is unavailable" });
+  it("keeps both setup forms and retry actions available when Splunk Observability Studio status is unavailable", async () => {
+    const bridge = installBridge({ httpError: "Splunk Observability Studio is unavailable" });
     render(<CloudTab />);
 
     const initialize = await bridge.next("initialize");
-    bridge.reject(initialize, "Observer is starting");
+    bridge.reject(initialize, "Splunk Observability Studio is starting");
 
-    expect((await screen.findByRole("alert")).textContent).toContain("Observer is unavailable");
+    expect((await screen.findByRole("alert")).textContent).toContain("Splunk Observability Studio is unavailable");
     const regionInput = screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement;
     const tokenInput = screen.getByLabelText("Access token") as HTMLInputElement;
     expect(regionInput.disabled).toBe(false);
@@ -961,11 +961,11 @@ describe("CloudTab", () => {
     render(<CloudTab />);
 
     const initialize = await bridge.next("initialize");
-    bridge.reject(initialize, "Observer was still starting");
+    bridge.reject(initialize, "Splunk Observability Studio was still starting");
 
     expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain("Observer was still starting");
-    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("Splunk Observability Studio was still starting");
+    expect(screen.queryByText("Splunk Observability Studio state is read-only in this browser session.")).toBeNull();
     expect((screen.getByRole("button", { name: "Remove connection" }) as HTMLButtonElement).disabled)
       .toBe(false);
   });
@@ -975,12 +975,12 @@ describe("CloudTab", () => {
     render(<CloudTab />);
 
     const initialize = await bridge.next("initialize");
-    bridge.reject(initialize, "Observer was still starting");
+    bridge.reject(initialize, "Splunk Observability Studio was still starting");
 
     const regionInput = await screen.findByLabelText("Realm or Observability Cloud URL");
     const tokenInput = screen.getByLabelText("Access token");
-    expect(screen.getByRole("alert").textContent).toContain("Observer was still starting");
-    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("Splunk Observability Studio was still starting");
+    expect(screen.queryByText("Splunk Observability Studio state is read-only in this browser session.")).toBeNull();
     expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled)
       .toBe(false);
 
@@ -989,19 +989,19 @@ describe("CloudTab", () => {
 
     expect((regionInput as HTMLInputElement).value).toBe("eu1");
     expect((tokenInput as HTMLInputElement).value).toBe("edited_after_initialize_failure");
-    expect(screen.getByRole("alert").textContent).toContain("Observer was still starting");
-    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("Splunk Observability Studio was still starting");
+    expect(screen.queryByText("Splunk Observability Studio state is read-only in this browser session.")).toBeNull();
     expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled)
       .toBe(false);
   });
 
   it("lets Enter explicitly retry Connect when both initialization and status loading fail", async () => {
     const user = userEvent.setup();
-    const bridge = installBridge({ httpError: "Observer status is unavailable" });
+    const bridge = installBridge({ httpError: "Splunk Observability Studio status is unavailable" });
     render(<CloudTab />);
 
     const initialize = await bridge.next("initialize");
-    bridge.reject(initialize, "Observer is starting");
+    bridge.reject(initialize, "Splunk Observability Studio is starting");
 
     const regionInput = await screen.findByLabelText("Realm or Observability Cloud URL");
     const tokenInput = screen.getByLabelText("Access token");
@@ -1019,7 +1019,7 @@ describe("CloudTab", () => {
     expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
   });
 
-  it("falls back to Observer status when the IDE initialize response omits status", async () => {
+  it("falls back to Splunk Observability Studio status when the IDE initialize response omits status", async () => {
     const status = disconnectedStatus();
     const bridge = installBridge({ httpStatus: status });
     render(<CloudTab />);
@@ -1052,7 +1052,7 @@ describe("CloudTab", () => {
     render(<CloudTab />);
 
     const initialize = await bridge.next("initialize");
-    bridge.reject(initialize, "Observer status unavailable");
+    bridge.reject(initialize, "Splunk Observability Studio status unavailable");
 
     const startButton = await screen.findByRole("button", { name: "Get started with Observability Cloud Free Edition" });
     await waitFor(() => expect((startButton as HTMLButtonElement).disabled).toBe(false));
@@ -1665,7 +1665,7 @@ describe("CloudTab", () => {
 
     const form = screen.getByRole("form", { name: "Free Edition account" });
     const submissionAlert = await within(form).findByRole("alert");
-    expect(submissionAlert.textContent).toContain("Observer did not confirm the Free Edition request.");
+    expect(submissionAlert.textContent).toContain("Splunk Observability Studio did not confirm the Free Edition request.");
     expect(submissionAlert.textContent).toContain("No automatic retry was attempted.");
     expect(screen.getAllByRole("alert")).toEqual([submissionAlert]);
     const submissionAction = form.querySelector(".cloud-free-account__action");
@@ -1673,7 +1673,7 @@ describe("CloudTab", () => {
     expect(submissionAction?.contains(submissionAlert)).toBe(true);
     expect(submissionAlert.nextElementSibling).toBe(createButton);
     expect(document.querySelector(".cloud-alert-region")?.textContent).not.toContain(
-      "Observer did not confirm the Free Edition request.",
+      "Splunk Observability Studio did not confirm the Free Edition request.",
     );
     expect((within(form).getByLabelText("Email") as HTMLInputElement).value).toBe("person@example.com");
     expect(createButton.hasAttribute("disabled")).toBe(false);
@@ -1690,7 +1690,7 @@ describe("CloudTab", () => {
     bridge.respond(request, { freeAccount: freeAccountResult("us", "ca0") });
 
     expect((await screen.findByRole("alert")).textContent)
-      .toContain("Observer did not confirm the Free Edition request.");
+      .toContain("Splunk Observability Studio did not confirm the Free Edition request.");
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).value).toBe("");
   });
 
@@ -1706,7 +1706,7 @@ describe("CloudTab", () => {
 
     const form = screen.getByRole("form", { name: "Free Edition account" });
     expect((await within(form).findByRole("alert")).textContent)
-      .toContain("Observer did not confirm the Free Edition request.");
+      .toContain("Splunk Observability Studio did not confirm the Free Edition request.");
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).value).toBe("");
   });
 
@@ -1721,7 +1721,7 @@ describe("CloudTab", () => {
     bridge.respond(request, { freeAccount: freeAccountResult("eu0", "eu0") });
 
     expect((await screen.findByRole("alert")).textContent)
-      .toContain("Observer did not confirm the Free Edition request.");
+      .toContain("Splunk Observability Studio did not confirm the Free Edition request.");
   });
 
   it("rejects a backend realm that does not match its signup region", async () => {
@@ -1735,7 +1735,7 @@ describe("CloudTab", () => {
     bridge.respond(request, { freeAccount: freeAccountResult("Europe (Ireland)", "eu1") });
 
     expect((await screen.findByRole("alert")).textContent)
-      .toContain("Observer did not confirm the Free Edition request.");
+      .toContain("Splunk Observability Studio did not confirm the Free Edition request.");
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).value).toBe("");
   });
 
@@ -1845,7 +1845,7 @@ describe("CloudTab", () => {
     })).toBeTruthy();
   });
 
-  it("keeps signup input editable when Observer control rejects before submission", async () => {
+  it("keeps signup input editable when Splunk Observability Studio control rejects before submission", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
 
@@ -1854,13 +1854,13 @@ describe("CloudTab", () => {
     const form = await fillValidFreeAccountForm();
     fireEvent.submit(form);
     const request = await bridge.next("create-free-account");
-    bridge.reject(request, "Observer control is not configured.", {
+    bridge.reject(request, "Splunk Observability Studio control is not configured.", {
       code: "observer_control_unavailable",
       retrySafe: true,
     });
 
     expect((await screen.findByRole("alert")).textContent)
-      .toContain("Observer control is not configured.");
+      .toContain("Splunk Observability Studio control is not configured.");
     expect(screen.getByRole("form", { name: "Free Edition account" })).toBeTruthy();
     expect((screen.getByLabelText("First name") as HTMLInputElement).value).toBe("Example");
     expect((screen.getByLabelText("Last name") as HTMLInputElement).value).toBe("Person");
@@ -2116,7 +2116,7 @@ describe("CloudTab", () => {
       .toBe(false);
   });
 
-  it("does not report success unless Observer confirms the connection", async () => {
+  it("does not report success unless Splunk Observability Studio confirms the connection", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
 
@@ -2382,7 +2382,7 @@ describe("CloudTab", () => {
     expect(screen.getByText("18 points · 2 batches")).toBeTruthy();
   });
 
-  it("refreshes disconnected setup from Observer when another session connects", async () => {
+  it("refreshes disconnected setup from Splunk Observability Studio when another session connects", async () => {
     const bridge = installBridge({ httpStatus: connectedStatus(false, "eu1") });
     render(<CloudTab />);
 
@@ -2403,7 +2403,7 @@ describe("CloudTab", () => {
     expect(screen.getByText("eu1 · Access token configured")).toBeTruthy();
   });
 
-  it("refreshes export-off state from Observer when another session forgets it", async () => {
+  it("refreshes export-off state from Splunk Observability Studio when another session forgets it", async () => {
     const bridge = installBridge({ httpStatus: disconnectedStatus() });
     render(<CloudTab />);
 
@@ -2512,7 +2512,7 @@ describe("CloudTab", () => {
     expect(screen.getByText("9 points · 2 batches")).toBeTruthy();
   });
 
-  it("shows the CIMD setup control from Observer's own status when there is no IDE bridge", async () => {
+  it("shows the CIMD setup control from Splunk Observability Studio's own status when there is no IDE bridge", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
       ...disconnectedStatus(),
       cimdRegistrationEnabled: true,
@@ -2523,7 +2523,7 @@ describe("CloudTab", () => {
     expect(await screen.findByText("Unified sign-in")).toBeTruthy();
   });
 
-  it("keeps cloud controls available on a fresh install with current Observer status", async () => {
+  it("keeps cloud controls available on a fresh install with current Splunk Observability Studio status", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
 
@@ -2537,7 +2537,7 @@ describe("CloudTab", () => {
     expect(screen.queryByRole("button", { name: "Register OAuth client with CIMD" })).toBeNull();
   });
 
-  it("keeps cloud controls available after an upgrade reuses a pre-CIMD Observer", async () => {
+  it("keeps cloud controls available after an upgrade reuses a pre-CIMD Splunk Observability Studio", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
 
@@ -2633,7 +2633,7 @@ describe("CloudTab", () => {
     expect(screen.queryByRole("button", { name: "Register OAuth client with CIMD" })).toBeNull();
   });
 
-  it("registers through Observer's own backend when there is no IDE bridge", async () => {
+  it("registers through Splunk Observability Studio's own backend when there is no IDE bridge", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).includes("/api/splunk/cimd/register") && init?.method === "POST") {
         const headers = new Headers(init.headers);
@@ -2662,7 +2662,7 @@ describe("CloudTab", () => {
     )).toBeTruthy();
   });
 
-  it("surfaces a registration failure from Observer's own backend when there is no IDE bridge", async () => {
+  it("surfaces a registration failure from Splunk Observability Studio's own backend when there is no IDE bridge", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).includes("/api/splunk/cimd/register") && init?.method === "POST") {
         return jsonResponse({ error: "SIS discovery does not advertise CIMD support" }, 502);
@@ -2683,7 +2683,7 @@ describe("CloudTab", () => {
     expect(screen.queryByText("Registration verified")).toBeNull();
   });
 
-  it("signs in through Observer's own backend and polls until connected, with no IDE bridge", async () => {
+  it("signs in through Splunk Observability Studio's own backend and polls until connected, with no IDE bridge", async () => {
     const sessionPhases: SISCIMDSessionStatus[] = [
       { phase: "pending" },
       {
@@ -2748,7 +2748,7 @@ describe("CloudTab", () => {
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
   });
 
-  it("disconnects the SIS session through Observer's own backend", async () => {
+  it("disconnects the SIS session through Splunk Observability Studio's own backend", async () => {
     vi.stubGlobal("open", vi.fn(() => fakePopup()));
     let sessionPhase: "pending" | "connected" | "disconnected" = "pending";
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -2787,7 +2787,7 @@ describe("CloudTab", () => {
     expect(await screen.findByRole("button", { name: "Sign in to SIS" })).toBeTruthy();
   });
 
-  it("surfaces a login failure from Observer's own backend when there is no IDE bridge", async () => {
+  it("surfaces a login failure from Splunk Observability Studio's own backend when there is no IDE bridge", async () => {
     const popup = fakePopup();
     vi.stubGlobal("open", vi.fn(() => popup));
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

@@ -53,9 +53,9 @@ from the environment:
 
 Resolve the realm using `../references/splunk-api.md`: keep
 `SPLUNK_ACCESS_TOKEN` paired with a non-empty `SPLUNK_REALM` when it is set;
-otherwise call `observer_splunk_connection_realm` and use the connected SOS
-destination's non-empty `realm`. The read-only tool returns only the non-secret
-region.
+otherwise call `observer_splunk_connection_realm` and use the connected Splunk
+Observability Studio destination's non-empty `realm`. The read-only tool returns
+only the non-secret region.
 
 If `SPLUNK_ACCESS_TOKEN` is missing, or neither realm source is available, stop
 and tell the user. Before creating detectors, include the resolved realm and its
@@ -452,7 +452,7 @@ reviewing and resolving the ambiguous live detectors manually.
 
 - `.observe/terraform/detectors.tf` missing — run `$splunk-configure` first
 - `SPLUNK_ACCESS_TOKEN` not set — stop and tell the user
-- No realm from `SPLUNK_REALM` or the connected Observer — stop and tell the user
+- No realm from `SPLUNK_REALM` or the connected Splunk Observability Studio — stop and tell the user
 - `service_name` not resolvable from `terraform.tfvars` or `.example` — prompt
   the user before fetching live detectors
 - All offsets returning HTTP 500 continuously (not intermittent) — likely an

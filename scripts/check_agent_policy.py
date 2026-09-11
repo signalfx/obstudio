@@ -72,8 +72,8 @@ ROUTED_AGENT_GUIDE_PREAMBLES = {
     ),
 }
 ROUTED_AGENT_GUIDE_TITLES = {
-    "observer/AGENTS.md": "Observer Instructions",
-    "observer/client/AGENTS.md": "Observer Client Instructions",
+    "observer/AGENTS.md": "Splunk Observability Studio Instructions",
+    "observer/client/AGENTS.md": "Splunk Observability Studio Client Instructions",
     "extension/AGENTS.md": "Extension Instructions",
     "skills/AGENTS.md": "Skill Source Instructions",
     "evals/AGENTS.md": "Eval Instructions",

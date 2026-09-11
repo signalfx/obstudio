@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -22,6 +23,9 @@ func TestStaticIndexReferencesObserverIcon(t *testing.T) {
 	if !strings.Contains(string(indexBytes), `/assets/observer-icon.svg`) {
 		t.Fatal("static index should reference the observer favicon asset")
 	}
+	if !strings.Contains(string(indexBytes), `<title>Splunk Observability Studio – Telemetry Explorer</title>`) {
+		t.Fatal("static index should use the full product title")
+	}
 	if !strings.Contains(string(indexBytes), `/assets/main.js?v=0.0.8`) {
 		t.Fatal("static index should cache-bust main.js with the extension release version")
 	}
@@ -31,6 +35,13 @@ func TestStaticIndexReferencesObserverIcon(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(rootDir, "assets", "observer-icon.svg")); err != nil {
 		t.Fatalf("observer favicon asset missing: %v", err)
+	}
+	mainJS, err := os.ReadFile(filepath.Join(rootDir, "assets", "main.js"))
+	if err != nil {
+		t.Fatalf("read static main.js: %v", err)
+	}
+	if regexp.MustCompile(`\bObserver\b`).Match(mainJS) {
+		t.Fatal("static client bundle should not contain the legacy product display label")
 	}
 }
 
@@ -85,6 +96,6 @@ func TestStaticIndexNeverEmbedsObserverCredentials(t *testing.T) {
 		t.Fatalf("expected index response status 200, got %d", recorder.Code)
 	}
 	if strings.Contains(recorder.Body.String(), "__OBSTUDIO_CONTROL_TOKEN__") {
-		t.Fatal("index embedded an Observer control credential")
+		t.Fatal("index embedded a Splunk Observability Studio control credential")
 	}
 }

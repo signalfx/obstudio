@@ -76,9 +76,9 @@ export class StoredSplunkCloudConnectionVerificationUnavailableError extends Obs
 }
 
 /**
- * A 4xx response is an authoritative rejection, so the Observer did not apply
+ * A 4xx response is an authoritative rejection, so Splunk Observability Studio did not apply
  * the requested mutation. Transport failures and 5xx responses have an
- * uncertain outcome and require restoring the previous Observer state.
+ * uncertain outcome and require restoring the previous Splunk Observability Studio state.
  */
 export function shouldRestoreObserverAfterCloudMutationFailure(error: unknown): boolean {
 	return !(error instanceof ObserverCloudResponseError
@@ -96,7 +96,7 @@ export function parseObserverCloudResponseBody(statusCode: number, responseBody:
 		if (statusCode < 200 || statusCode >= 300) {
 			return {};
 		}
-		throw new Error(`Observer returned an invalid response (HTTP ${statusCode}).`);
+		throw new Error(`Splunk Observability Studio returned an invalid response (HTTP ${statusCode}).`);
 	}
 }
 
@@ -114,7 +114,7 @@ export function observerCloudResponseError(
 		: undefined;
 	const message = typeof response?.error === 'string'
 		? response.error
-		: `Observer request failed with HTTP ${statusCode}.`;
+		: `Splunk Observability Studio request failed with HTTP ${statusCode}.`;
 	return new ObserverCloudResponseError(
 		statusCode,
 		message,
@@ -169,7 +169,7 @@ export function freeAccountSubmissionFailureIsOutcomeUnknown(error: unknown): bo
 
 /**
  * Stored credentials must pass the same connection test as newly entered
- * credentials before the Observer applies them. A transient upstream failure
+ * credentials before Splunk Observability Studio applies them. A transient upstream failure
  * remains distinct so the IDE can show the disconnected status and a warning
  * without disabling authenticated Cloud controls.
  */
@@ -191,7 +191,7 @@ export async function verifyStoredSplunkCloudConnection(
 }
 
 /**
- * Path the Observer serves the $otel-audit HTML report from.
+ * Path Splunk Observability Studio serves the $otel-audit HTML report from.
  *
  * The webview asks for "the audit report", never for a URL, so the extension
  * decides what gets opened. The path is fixed here rather than passed in so a
@@ -432,7 +432,7 @@ export async function connectSplunkCloudWithStorage(options: {
 					rollbackError = rollbackError === undefined
 						? observerRollbackError
 						: new Error(
-							`${cloudErrorMessage(rollbackError)}; Observer rollback also failed: `
+							`${cloudErrorMessage(rollbackError)}; Splunk Observability Studio rollback also failed: `
 							+ cloudErrorMessage(observerRollbackError),
 						);
 				}
@@ -503,7 +503,7 @@ export async function setSplunkCloudExportEnabledWithStorage(options: {
 					rollbackError = rollbackError === undefined
 						? observerRollbackError
 						: new Error(
-							`${cloudErrorMessage(rollbackError)}; Observer rollback also failed: `
+							`${cloudErrorMessage(rollbackError)}; Splunk Observability Studio rollback also failed: `
 							+ cloudErrorMessage(observerRollbackError),
 						);
 				}
@@ -561,7 +561,7 @@ export async function forgetSplunkCloudWithStorage(options: {
 					rollbackError = rollbackError === undefined
 						? observerRollbackError
 						: new Error(
-							`${cloudErrorMessage(rollbackError)}; Observer rollback also failed: `
+							`${cloudErrorMessage(rollbackError)}; Splunk Observability Studio rollback also failed: `
 							+ cloudErrorMessage(observerRollbackError),
 						);
 				}

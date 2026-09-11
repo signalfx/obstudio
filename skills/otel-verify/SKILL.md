@@ -17,7 +17,7 @@ description: >-
 
 Run deterministic checks that prove existing OpenTelemetry instrumentation
 works. Prefer app-code execution with fake inputs, optionally export the same
-scenarios to a local OTLP collector or Obstudio, then write
+scenarios to a local OTLP collector or Splunk Observability Studio, then write
 `.observe/otel-verify.md`. In canonical flow also write
 `.observe/otel-verify.json` and refresh `.observe/otel-instrumentation.html`.
 
@@ -351,11 +351,11 @@ Coverage rules:
   expected body/category, severity, trace/span correlation when required, and
   redaction.
 - Trace topology is verified only when expected parent -> child edges, links,
-  or span depth are asserted or visible in collector/Obstudio evidence. Span
+  or span depth are asserted or visible in collector or Splunk Observability Studio evidence. Span
   presence alone is not DAG proof.
 - Path coverage is verified only when the scenario trigger ran or was
   faithfully synthesized, expected topology/signals were asserted, and
-  collector/Obstudio evidence was captured when OTLP is available.
+  collector or Splunk Observability Studio evidence was captured when OTLP is available.
 - Runtime-only rows are verified only by the real process with its actual
   agent, preload, middleware, or startup bootstrap. A synthetic owning root or
   direct handler call cannot prove automatic server span count, kind, route
@@ -369,8 +369,8 @@ Use this status vocabulary:
 
 - `Verified: unit`: deterministic app-code assertion or in-memory exporter
   proof, not exported to a collector.
-- `Verified: OTLP`: collector or Obstudio evidence from a real SDK exporter.
-- `Verified: unit+OTLP`: deterministic assertions and collector/Obstudio
+- `Verified: OTLP`: collector or Splunk Observability Studio evidence from a real SDK exporter.
+- `Verified: unit+OTLP`: deterministic assertions and collector or Splunk Observability Studio
   evidence from the same focused scenario when possible.
 - `Verified: app test`: committed or newly authored repo-native test executes
   app code and asserts telemetry. Use `Verified: app test+OTLP` when paired
@@ -394,7 +394,7 @@ parentage, or missing log severity/body/correlation/redaction.
 
 ### 6. Prefer Unit+OTLP Contract Harnesses
 
-When Obstudio, a local collector, or an explicit OTLP endpoint is available,
+When Splunk Observability Studio, a local collector, or an explicit OTLP endpoint is available,
 try to upgrade deterministic unit/integration proof to `Verified: unit+OTLP`
 for every language and framework.
 
@@ -423,13 +423,13 @@ not an instrumentation failure.
   metric and route dimensions. If stable semantic conventions were requested,
   require `http.server.request.duration`; an alternate metric in source or a unit
   fake does not satisfy that runtime row.
-- Keep an Obstudio contract process alive until trace, metric, and log queries
+- Keep a Splunk Observability Studio contract process alive until trace, metric, and log queries
   complete; some local explorers evict telemetry for short-lived sources.
-- Mark `Verified: unit+OTLP` only when assertions and collector/Obstudio
+- Mark `Verified: unit+OTLP` only when assertions and collector or Splunk Observability Studio
   evidence both pass. If assertions pass but export is unavailable, use
   `Verified: unit`.
 
-Run Obstudio validation when the user requests it, but classify each finding
+Run Splunk Observability Studio validation when the user requests it, but classify each finding
 before using it as an application result:
 
 - `actionable`: emitted telemetry violates the selected convention or expected
@@ -470,7 +470,7 @@ Nested topology harness rules:
 - For async or queue boundaries, use parent/child when context propagates
   synchronously or span links when the architecture expects links.
 - Assert topology after export by querying parent span ids, links, span depth,
-  or Obstudio flow nodes/edges when available.
+  or Splunk Observability Studio flow nodes/edges when available.
 
 ### 7. Author App-Code Tests When Requested
 
@@ -592,7 +592,7 @@ Report requirements:
   diagnostic tables that merely repeat evidence already shown above.
 - Use exact signal names and source/test paths.
 - Do not claim a signal is verified unless command output, test assertion, or
-  collector/Obstudio evidence proves it.
+  collector or Splunk Observability Studio evidence proves it.
 - If only fake/in-memory telemetry was used, say it is not explorer-visible.
 - If any inventory row is unverified, set `Result: Partial`, `Blocked`, or
   `Fail`.
@@ -707,4 +707,4 @@ confirm unselected findings were excluded.
 
 For demo-oriented runs, include:
 
-`Obstudio can verify the instrumentation contract locally: it runs deterministic checks, can hold open a real OTLP contract process, and writes a report proving which OTel signals are emitted and visible.`
+`Splunk Observability Studio can verify the instrumentation contract locally: it runs deterministic checks, can hold open a real OTLP contract process, and writes a report proving which OTel signals are emitted and visible.`

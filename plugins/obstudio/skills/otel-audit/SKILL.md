@@ -121,24 +121,24 @@ signal by type so the report can list them explicitly.
   (`grpc` with the gRPC receiver, or `http/protobuf` with `/v1/<signal>`), not
   just a host or port. A configured endpoint with an incompatible protocol is
   a required exporter gap.
-- Resolve whether the logs endpoint is the local Observer receiver or a direct
+- Resolve whether the logs endpoint is the local Splunk Observability Studio receiver or a direct
   cloud ingest endpoint. An unset signal-specific logs endpoint must not inherit
-  a generic direct-cloud endpoint: local application logs default to Observer,
-  while direct-cloud or Obstudio cloud forwarding is traces and metrics only.
-  An explicit local Observer logs endpoint may participate in the default
+  a generic direct-cloud endpoint: local application logs default to Splunk Observability Studio,
+  while direct-cloud or Splunk Observability Studio cloud forwarding is traces and metrics only.
+  An explicit local Splunk Observability Studio logs endpoint may participate in the default
   pipeline. An explicit non-local endpoint paired with an absent or `otlp`
   exporter is instead an operator-owned boundary conflict. Represent it as an
   `external follow-up` that requires the named operator to remove the non-local
-  endpoint or replace it with the exact detected local Observer endpoint, plus
+  endpoint or replace it with the exact detected local Splunk Observability Studio endpoint, plus
   a dependent `required`/`default` local-log finding. The
   dependency keeps the executable finding locked until the operator resolves
   the conflict; do not classify the conflict as a scan blocker or authorize
   the provider/bridge early. Preserve `none` and other
   non-OTLP exporter branches without validating their endpoint. Flag any cloud
   log endpoint, credential/header, exporter, or forwarding flag introduced by
-  Obstudio instrumentation as a required boundary violation.
+  Splunk Observability Studio instrumentation as a required boundary violation.
 - Treat any nonempty generic `OTEL_EXPORTER_OTLP_HEADERS` as unsafe for an
-  Obstudio-owned local log path, even when
+  Splunk Observability Studio-owned local log path, even when
   `OTEL_EXPORTER_OTLP_LOGS_HEADERS` is also set. SDKs may merge generic and
   signal-specific headers. Require the generic value to be moved to
   trace/metric signal variables and removed before local log export is enabled.
@@ -237,8 +237,8 @@ Record the metric name and source file with line number.
   configured`. Trace/MDC fields in stdout are not an OTLP log pipeline.
   `OTEL_LOGS_EXPORTER=none` is an explicit opt-out, while an absent exporter on
   a supported Python, Node.js, Java, or Go application logging stack requires a
-  default local Observer OTLP pipeline only when the logs endpoint is absent or
-  matches the detected local Observer receiver. Preserve any other explicit
+  default local Splunk Observability Studio OTLP pipeline only when the logs endpoint is absent or
+  matches the detected local Splunk Observability Studio receiver. Preserve any other explicit
   exporter as operator-owned without validating or supplementing its endpoint.
   For an absent/`otlp` exporter with an explicit non-local endpoint, record an
   external operator prerequisite and a dependent default local-log finding;
@@ -278,7 +278,7 @@ proof.
   record per log call, provider shutdown/flush, and
   `OTEL_LOGS_EXPORTER=none` producing no OTLP record. When cloud trace/metric
   export or forwarding exists, also prove the application record remains
-  visible in local Observer without any cloud log path.
+  visible in local Splunk Observability Studio without any cloud log path.
 - For every exact custom span name or operation entrypoint, create an explicit
   scenario row. Shared helper implementation is not proof that each operation
   emits its expected name and topology.
@@ -552,9 +552,9 @@ trace continuity, error attribution, exporter/resource identity, cardinality
 safety, and duplicate signal ownership in `required`. Put safe deeper
 diagnostics and business metrics in `recommended` unless the request already
 makes them mandatory. For a detected supported application logging stack, put
-a missing local Observer provider/exporter/bridge in `required` with
+a missing local Splunk Observability Studio provider/exporter/bridge in `required` with
 `instrument_mode: default`; this makes it part of implicit broad/default
-Obstudio instrumentation. Do not create that finding when logs are explicitly
+Splunk Observability Studio instrumentation. Do not create that finding when logs are explicitly
 disabled or a non-OTLP operator-owned exporter is already configured. When an
 absent/`otlp` exporter is paired with an explicit non-local logs endpoint,
 create an `external follow-up` whose exact `required_fix` and
@@ -602,14 +602,14 @@ markers to the prioritized gap table. Use only `[SOURCE-COVERED]` and
 
 - Multiple SDK initializations in the same process
 - Hardcoded OTLP endpoints instead of env vars, except the required
-  signal-specific local Observer logs fallback
+  signal-specific local Splunk Observability Studio logs fallback
 - Tracer/Meter created in hot paths instead of at startup
 - High-cardinality attributes on metrics (user IDs, request IDs)
 - Missing `recordException` in error handling paths
 - Custom span names with variable segments (IDs, paths)
 - Use of community or third-party OTel wrappers when an official OpenTelemetry package exists (e.g. `go.opentelemetry.io/contrib`, `@opentelemetry/`*, `opentelemetry-*`)
 - A generic direct-cloud OTLP endpoint implicitly receiving application logs,
-  or an Obstudio-added Splunk cloud log endpoint/header/token/exporter/
+  or a Splunk Observability Studio-added Splunk cloud log endpoint/header/token/exporter/
   forwarding flag
 - Two log providers, appenders, handlers, transports, hooks, or bridges that
   export the same application record twice
@@ -822,7 +822,7 @@ Use this shape for `.observe/otel-audit.json`:
           "product_view": "Trace waterfall and route filtering"
         }
       ],
-      "follow_up_actions": ["After instrumentation proof exists, filter the span in ObStudio before merge."]
+      "follow_up_actions": ["After instrumentation proof exists, filter the span in Splunk Observability Studio before merge."]
     }
   ],
   "verification": {
@@ -899,7 +899,7 @@ JSON requirements:
   distinguish quick wins from longer or choice-dependent work.
 - Every finding must include human impact, one concise `product_outcome`,
   required fix, evidence, acceptance criteria, expected telemetry with its
-  Splunk/ObStudio `product_view`, and at least one follow-up action. The outcome
+  Splunk Observability Studio `product_view`, and at least one follow-up action. The outcome
   states what the owner should see or gain after implementation and
   verification without claiming it is already proven. Include verification
   scenario IDs when runnable.

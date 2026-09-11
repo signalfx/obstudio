@@ -12,7 +12,7 @@ export interface ObserverLifecycleState {
 
 export class ObserverLifecycleCancelledError extends Error {
 	constructor() {
-		super('Observer lifecycle changed while startup was in progress.');
+		super('Splunk Observability Studio lifecycle changed while startup was in progress.');
 		this.name = 'ObserverLifecycleCancelledError';
 	}
 }

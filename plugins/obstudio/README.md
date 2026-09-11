@@ -1,24 +1,24 @@
-# Observability Studio plugin for Codex and Claude Code
+# Splunk Observability Studio plugin for Codex and Claude Code
 
-This directory is the portable Observability Studio plugin bundle for Codex and
+This directory is the portable Splunk Observability Studio plugin bundle for Codex and
 Claude Code.
 
 It packages the canonical skill sources from `../../skills/`, points both hosts
-at the local Observer MCP endpoint via [`.mcp.json`](./.mcp.json), and includes
+at the local Splunk Observability Studio MCP endpoint via [`.mcp.json`](./.mcp.json), and includes
 host-specific SessionStart hook manifests for first-run bootstrap.
 
 ## How to get started
 
 1. Install the **Splunk Observability Studio** plugin.
 2. Trust the host's `SessionStart` hook when prompted to review it.
-3. Try a workflow or Observer command.
+3. Try a workflow or Splunk Observability Studio command.
 
 | Purpose | Codex | Claude Code |
 | --- | --- | --- |
-| Open Observer | `$observer-open` | `/obstudio:observer-open` |
-| Check Observer status | `$observer-status` | `/obstudio:observer-status` |
-| Restart Observer | `$observer-restart` | `/obstudio:observer-restart` |
-| Stop Observer | `$observer-stop` | `/obstudio:observer-stop` |
+| Open Splunk Observability Studio | `$observer-open` | `/obstudio:observer-open` |
+| Check Splunk Observability Studio status | `$observer-status` | `/obstudio:observer-status` |
+| Restart Splunk Observability Studio | `$observer-restart` | `/obstudio:observer-restart` |
+| Stop Splunk Observability Studio | `$observer-stop` | `/obstudio:observer-stop` |
 | Find telemetry gaps | `$otel-audit` | `/obstudio:otel-audit` |
 | Implement selected telemetry improvements | `$otel-instrument` | `/obstudio:otel-instrument` |
 | Verify instrumentation | `$otel-verify` | `/obstudio:otel-verify` |
@@ -37,13 +37,13 @@ Splunk publish skills, plus `observer-open`, `observer-status`,
 
 - host marketplace entries under [`.agents/plugins/marketplace.json`](../../.agents/plugins/marketplace.json)
   and [`.claude-plugin/marketplace.json`](../../.claude-plugin/marketplace.json);
-- the Observer MCP configuration in [`.mcp.json`](./.mcp.json); and
+- the Splunk Observability Studio MCP configuration in [`.mcp.json`](./.mcp.json); and
 - SessionStart manifests in [`hooks/codex-hooks.json`](./hooks/codex-hooks.json)
   and [`hooks/claude-hooks.json`](./hooks/claude-hooks.json).
 
 The shared [`hooks/bootstrap_obstudio.py`](./hooks/bootstrap_obstudio.py)
 downloads the release when needed, validates its published checksum, and
-starts or reuses Observer when the host permits managed startup.
+starts or reuses Splunk Observability Studio when the host permits managed startup.
 
 ## Maintainer workflow
 
@@ -83,6 +83,6 @@ Each staged plugin is intentionally self-contained for its host:
 - Published staged bundles omit skill test suites and local tool caches; those
   files remain in the repository for development and CI.
 - The plugin’s bootstrap script can bootstrap the release archive and managed
-  local Observer runtime on first session start.
+  local Splunk Observability Studio runtime on first session start.
 - Each host asks you to review and trust the hook before it runs for the first
   time.

@@ -231,6 +231,8 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertEqual(marketplace["plugins"][0]["name"], "obstudio")
         self.assertEqual(marketplace["plugins"][0]["displayName"], "Splunk Observability Studio")
         self.assertEqual(marketplace["plugins"][0]["source"], "./plugins/obstudio")
+        self.assertIn("Splunk Observability Studio", marketplace["plugins"][0]["description"])
+        self.assertNotIn("observer controls", marketplace["plugins"][0]["description"].lower())
         self.assertEqual(
             set(marketplace["plugins"][0]),
             {"name", "displayName", "source", "description"},
@@ -260,8 +262,12 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertEqual(codex_manifest["hooks"], "./hooks/codex-hooks.json")
         self.assertEqual(codex_manifest["name"], "obstudio")
         self.assertEqual(codex_manifest["interface"]["displayName"], "Splunk Observability Studio")
+        self.assertIn("Splunk Observability Studio", codex_manifest["description"])
+        self.assertNotIn("observer controls", codex_manifest["description"].lower())
         self.assertEqual(claude_manifest["hooks"], "./hooks/claude-hooks.json")
         self.assertEqual(claude_manifest["name"], "obstudio")
+        self.assertIn("Splunk Observability Studio", claude_manifest["description"])
+        self.assertNotIn("observer controls", claude_manifest["description"].lower())
         self.assertNotIn("$schema", claude_manifest)
         self.assertNotIn("displayName", claude_manifest)
 

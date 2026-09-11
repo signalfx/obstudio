@@ -102,14 +102,14 @@ Markdown reports.
   it does not prove that the other signals are configured.
 - Inventory the application logging stack and every stdout, stderr, file,
   platform, and existing OTLP sink. For a supported Python, Node.js, Java, or
-  Go logging stack, local Observer OTLP log export is part of the default
-  Obstudio baseline only when the exporter is absent or `otlp` and the logs
-  endpoint is absent or exactly the detected local Observer receiver. Treat
+  Go logging stack, local Splunk Observability Studio OTLP log export is part of the default
+  Splunk Observability Studio baseline only when the exporter is absent or `otlp` and the logs
+  endpoint is absent or exactly the detected local Splunk Observability Studio receiver. Treat
   `OTEL_LOGS_EXPORTER=none` as an explicit opt-out, and preserve every other
   explicit exporter as operator-owned without validating or supplementing its
   endpoint. An explicit non-local logs endpoint with an absent or `otlp`
   exporter is an operator-owned boundary conflict: do not construct or enable
-  an Obstudio log provider, exporter, or bridge; fail closed and report the
+  a Splunk Observability Studio log provider, exporter, or bridge; fail closed and report the
   configuration for operator resolution. Plan one log provider, one exporter
   path, and one bridge; preserve existing stdout/file sinks and identify any
   duplicate bridge before editing.
@@ -663,7 +663,7 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Reuse the app's current startup entrypoint instead of replacing it with a new Docker-only path
 - For Python, Node.js, and Java, prefer preload or agent wrappers plus env vars over large code refactors when auto-instrumentation already covers the framework
 - For host/native runtimes, default OTLP endpoints to loopback (`http://localhost:4318`) unless the existing platform already provides a collector address
-- For a supported application logging stack, default logs to the local Observer
+- For a supported application logging stack, default logs to the local Splunk Observability Studio
   receiver with a signal-specific endpoint such as
   `http://localhost:4318/v1/logs`. Do not let a generic direct-cloud OTLP
   endpoint become the implicit log destination.
@@ -700,14 +700,14 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   reporting it as working.
 - Keep local application-log export separate from cloud export. When a generic
   `OTEL_EXPORTER_OTLP_ENDPOINT` is a direct-cloud endpoint, configure traces and
-  metrics with their signal-specific endpoints and give logs a local Observer
+  metrics with their signal-specific endpoints and give logs a local Splunk Observability Studio
   `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`. Never copy a Splunk realm, ingest URL,
   access token, auth header, or cloud exporter into log configuration. Optional
-  Obstudio cloud forwarding remains traces and metrics only; never add a log
+  Splunk Observability Studio cloud forwarding remains traces and metrics only; never add a log
   forwarding flag or cloud logs pipeline. Remove a generic
   `OTEL_EXPORTER_OTLP_HEADERS` value from the shared startup surface after
   moving it to trace- and metric-specific headers; reject it from an
-  Obstudio-owned local log path even when
+  Splunk Observability Studio-owned local log path even when
   `OTEL_EXPORTER_OTLP_LOGS_HEADERS` is also set, because SDKs may merge generic
   and signal-specific headers.
 - For Java trace wiring, DI binding, and provider rules, follow `./references/languages/java.md` (Implementation Rules section).
@@ -931,7 +931,7 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   check. If the proof shows only workflow-level usage attributes and no
   inference span, or chat/tool spans that are siblings of the workflow under a
   generic HTTP root span, keep the surface partial in `remaining_signals`.
-- For local span-first trace explorers such as Obstudio, metrics alone are not enough
+- For local span-first trace explorers such as Splunk Observability Studio, metrics alone are not enough
   for a selected-trace summary. When provider usage, model, tool,
   memory, evaluation, or fanout data is available, also set safe span attributes
   on the most specific GenAI span and aggregate to the workflow span when
@@ -950,7 +950,7 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Metric attributes must avoid high cardinality.
 - Preserve existing env-var patterns for operator-owned telemetry config. The
   only endpoint literal the default log path may introduce is the
-  signal-specific local Observer fallback; it must not inherit a generic
+  signal-specific local Splunk Observability Studio fallback; it must not inherit a generic
   direct-cloud endpoint.
 - If the app is a library, provide an opt-in setup path rather than forcing SDK initialization on import.
 - Keep the codebase idiomatic. Match the repo's dependency manager, config style, and lifecycle patterns.
@@ -965,7 +965,7 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   `unsupported-stack`. Trace/MDC fields in stdout are correlation-only, not an
   OTLP log pipeline.
 - For a supported Python, Node.js, Java, or Go application logging stack,
-  configure local Observer OTLP export by default. Use the official log SDK,
+  configure local Splunk Observability Studio OTLP export by default. Use the official log SDK,
   batch processor/exporter, and the official bridge for the detected stack.
   Keep one `LoggerProvider` and exactly one bridge/export path per record.
 - Preserve operator ownership. Never overwrite an explicitly set
@@ -975,12 +975,12 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   with a second local pipeline, but its provider/exporter/bridge must be proven;
   an environment value by itself is not evidence of export. When the exporter
   is absent or explicitly `otlp`, an explicit signal endpoint may be used by
-  the Obstudio-owned pipeline only when it exactly matches the detected local
-  Observer receiver for the selected runtime and protocol. Adapt the local
+  the Splunk Observability Studio-owned pipeline only when it exactly matches the detected local
+  Splunk Observability Studio receiver for the selected runtime and protocol. Adapt the local
   endpoint to the checked-in Docker/Compose service address when applicable.
   Default an absent exporter to `otlp` and an absent endpoint to that detected
   local receiver. If the explicit endpoint is non-local or direct-cloud, do not
-  construct or enable the Obstudio provider/exporter/bridge; fail closed and
+  construct or enable the Splunk Observability Studio provider/exporter/bridge; fail closed and
   report the operator-owned boundary conflict. Do not validate the logs
   endpoint on the `none` or other non-OTLP exporter branches, because those
   branches remain wholly operator-owned.
@@ -992,7 +992,7 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Never derive the default log destination from a generic endpoint that points
   directly at a cloud ingest service. Use a signal-specific local logs endpoint
   and keep any direct-cloud endpoints signal-specific to traces and metrics.
-  Obstudio-to-Splunk cloud forwarding is traces and metrics only. Do not add a
+  Splunk Observability Studio cloud forwarding to Splunk is traces and metrics only. Do not add a
   cloud log endpoint, cloud log header/token, cloud log exporter, or log
   forwarding flag.
 - Resolve the log protocol independently. The local baseline is
@@ -1018,7 +1018,7 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   resource identity, trace/span correlation in an active span, redaction,
   preservation of the existing sink, explicit `none` opt-out, and exactly one
   OTLP record per application log call. When cloud trace/metric forwarding is
-  configured, also prove the log is visible in local Observer and no cloud log
+  configured, also prove the log is visible in local Splunk Observability Studio and no cloud log
   exporter or forwarding path was configured.
 - When `OTEL_LOGS_EXPORTER=none`, disable or bypass any previously discovered
   application-log provider/bridge as needed to prove zero OTLP application log
@@ -1142,7 +1142,7 @@ Java:
 - Wire the agent through the existing startup surface, `JAVA_TOOL_OPTIONS`, or a documented run command.
 - Default the Java agent's application log exporter to `otlp` only when
   `OTEL_LOGS_EXPORTER` is absent and the logs endpoint is absent or matches the
-  detected local Observer receiver. Set that local
+  detected local Splunk Observability Studio receiver. Set that local
   `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, and rely on the agent's detected
   Logback/Log4j bridge plus JVM shutdown hook. A non-local explicit endpoint on
   the absent/`otlp` branch is a fail-closed boundary conflict and must not start
@@ -1283,14 +1283,14 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 2. If it exists, update at least one debug configuration for this service to include:
    - `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
    - `OTEL_LOGS_EXPORTER=otlp` when no explicit exporter exists and the logs
-     endpoint is absent or is the detected local Observer endpoint
+     endpoint is absent or is the detected local Splunk Observability Studio endpoint
    - `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs` when the
      exporter is absent/`otlp` and no explicit logs endpoint exists
    - `OTEL_METRIC_EXPORT_INTERVAL=1000`
    - `OTEL_BSP_SCHEDULE_DELAY=100`
    If an absent/`otlp` exporter is paired with an explicit non-local logs
    endpoint, do not add either logs setting; stop and report the operator-owned
-   boundary conflict instead of enabling an Obstudio log path.
+   boundary conflict instead of enabling a Splunk Observability Studio log path.
 3. After editing, report which configuration was updated, the file path, and whether the env vars were added or already present.
 4. If `.vscode/launch.json` exists and you do not update it, stop and explain why.
 5. If `.vscode/launch.json` does not exist, explicitly report: `No .vscode/launch.json found; Step 6 skipped.`

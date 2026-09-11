@@ -1,6 +1,6 @@
 # Example prompts
 
-Use these prompts as starting points for common Observability Studio workflows.
+Use these prompts as starting points for common Splunk Observability Studio workflows.
 
 ## Audit: find gaps
 
@@ -16,7 +16,7 @@ Use these prompts as starting points for common Observability Studio workflows.
 |----------|--------|
 | Verify every signal and path from the audit and instrumentation reports | Run `$otel-verify` and tell me exactly what is working or unproven |
 | Prove route-aware HTTP spans, request duration, and duplicate prevention | Verify the HTTP server instrumentation in the real local runtime |
-| Capture local OTLP evidence in the Telemetry Explorer | Verify this instrumentation against my local Observability Studio collector |
+| Capture local OTLP evidence in the Telemetry Explorer | Verify this instrumentation against my local Splunk Observability Studio collector |
 | Recheck instrumentation without changing application code | Rerun the OTel verification report for this service |
 
 ## Configure detectors
@@ -68,7 +68,7 @@ Use these prompts as starting points for common Observability Studio workflows.
 | Forward metrics to Splunk while developing locally | How do I send my local metrics to Splunk O11y? | `USER.md` — metrics export config |
 | Make this service appear in Splunk APM | Forward my spans to Splunk so it shows up in APM | `USER.md` — trace export config |
 | Check whether metrics are reaching Splunk | Is the Splunk metrics export working? | MCP: `observer_splunk_metrics_export_status` |
-| Apply a new ingest token without restarting obstudio | Update the Splunk ingest token for the running observer | MCP: `observer_splunk_metrics_export_configure` |
+| Apply a new ingest token without restarting `obstudio` | Update the Splunk ingest token for the running Splunk Observability Studio service | MCP: `observer_splunk_metrics_export_configure` |
 | Send a test canary metric to verify connectivity | Send a test metric to confirm Splunk connectivity | MCP: `observer_splunk_metrics_export_test` |
 
 ## Add or adjust OpenTelemetry code

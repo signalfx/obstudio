@@ -1,21 +1,21 @@
-# Observability Studio user guide
+# Splunk Observability Studio user guide
 
-Observability Studio gives coding agents an OpenTelemetry workflow and provides
-a local Observer for inspecting the resulting traces, metrics, logs, and
-validation evidence.
+Splunk Observability Studio gives coding agents an OpenTelemetry workflow and
+provides a local runtime for inspecting the resulting traces, metrics, logs,
+and validation evidence.
 
 ## Quick start
 
 Download and extract the archive for your platform from
 [GitHub Releases](https://github.com/signalfx/obstudio/releases/latest). This
 guide uses the release binary as `./obstudio`; for a source build, use
-`./build/obstudio` instead. Choose how Observer will run.
+`./build/obstudio` instead. Choose how Splunk Observability Studio will run.
 
-### Agent-managed Observer
+### Agent-managed Splunk Observability Studio
 
-Stop any running Observer before installing in this mode; otherwise setup
-reuses the detected Observer. Then install the integration and let the agent
-start its own Observer:
+Stop any running instance before installing in this mode; otherwise setup
+reuses the detected instance. Then install the integration and let the agent
+start Splunk Observability Studio:
 
 ```bash
 cd obstudio_<version>_<os>_<arch>
@@ -23,12 +23,12 @@ cd obstudio_<version>_<os>_<arch>
 ```
 
 Restart each configured agent and begin a new task. The generated MCP
-configuration starts Observer, so do not also launch a standalone Observer on
-the same ports.
+configuration starts Splunk Observability Studio, so do not also launch a
+standalone instance on the same ports.
 
-### Shared standalone Observer
+### Shared standalone Splunk Observability Studio
 
-Start one background Observer, then connect integrations to its MCP endpoint:
+Start one background instance, then connect integrations to its MCP endpoint:
 
 ```bash
 cd obstudio_<version>_<os>_<arch>
@@ -36,20 +36,20 @@ cd obstudio_<version>_<os>_<arch>
 ./obstudio install --target=codex --shared-url=http://127.0.0.1:3000/mcp
 ```
 
-The shared Observer must be running when you pass `--shared-url`. If it is
+The shared instance must be running when you pass `--shared-url`. If it is
 already running before installation, omitting the flag also lets setup detect
 it automatically. Restart each configured agent and begin a new task.
 
 To configure more than one target, replace `codex` with a comma-separated list.
-Keep `--shared-url` when using a shared Observer. Use a shared Observer when
-multiple configured agents may run concurrently because only one agent-started
-Observer can use the default ports at a time.
+Keep `--shared-url` when using a shared instance. Use this mode when multiple
+configured agents may run concurrently because only one agent-started instance
+can use the default ports at a time.
 
 ## Agent targets
 
 Use `--target=windsurf` for Windsurf or Devin Desktop.
 
-To connect every supported target to the running shared Observer:
+To connect every supported target to the running shared instance:
 
 ```bash
 ./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot --shared-url=http://127.0.0.1:3000/mcp
@@ -66,14 +66,14 @@ To connect every supported target to the running shared Observer:
 The `windsurf` skill bundle is available to Devin Local and legacy Cascade; the
 target configures Cascade automatically. For Devin Local, install the [Devin
 CLI](https://docs.devin.ai/cli), make sure `devin` is on `PATH`, and add the
-running Observer:
+running Splunk Observability Studio:
 
 ```bash
 devin mcp add -s user obstudio OBSERVER_BASE_URL/mcp
 ```
 
-Replace `OBSERVER_BASE_URL` with the Observer base URL and keep the `/mcp`
-suffix.
+Replace `OBSERVER_BASE_URL` with the Splunk Observability Studio base URL and
+keep the `/mcp` suffix.
 
 Where supported, installation copies the bundled skills, `obstudio`, and
 `weaver` into the selected agent's managed directory and updates its MCP
@@ -129,11 +129,12 @@ artifacts remain in `.observe/`. See
 [OTel Verify](https://github.com/signalfx/obstudio/blob/main/docs/otel-verify.md)
 for direct verification guidance.
 
-## Manage a shared Observer
+## Manage a shared Splunk Observability Studio
 
-Skip this section when an agent starts Observer from its MCP configuration.
+Skip this section when an agent starts Splunk Observability Studio from its MCP
+configuration.
 
-Start Observer in the foreground:
+Start Splunk Observability Studio in the foreground:
 
 ```bash
 ./obstudio
@@ -148,18 +149,18 @@ Or manage a background process:
 ./obstudio stop
 ```
 
-Installing a new build does not restart a running Observer. The lifecycle
+Installing a new build does not restart a running instance. The lifecycle
 commands manage only the standalone background process, not foreground or
 extension-managed instances.
 
-The [Observer guide](https://github.com/signalfx/obstudio/blob/main/observer/README.md)
+The [Splunk Observability Studio guide](https://github.com/signalfx/obstudio/blob/main/observer/README.md)
 documents endpoints, service exporter setup, views, validation, runtime
 configuration, and APIs.
 
 ## Forward to Splunk Observability Cloud
 
-Observer can forward received traces and metrics while keeping the Observer UI
-available. Logs remain local.
+Splunk Observability Studio can forward received traces and metrics while
+keeping its UI available. Logs remain local.
 
 Create `~/.obstudio/env` with these values:
 
@@ -174,9 +175,10 @@ SPLUNK_ACCESS_TOKEN=<org-ingest-token>
 chmod 600 ~/.obstudio/env
 ```
 
-Then reload Observer. For an agent-managed Observer, fully restart the coding
-agent and begin a new task. For a standalone background Observer, run
-`./obstudio restart`. For a foreground Observer, stop it and launch it again.
+Then reload Splunk Observability Studio. For an agent-managed instance, fully
+restart the coding agent and begin a new task. For a standalone background
+instance, run `./obstudio restart`. For a foreground instance, stop it and
+launch it again.
 
 The default env file is loaded automatically when present. Shell environment
 variables take precedence; use `./obstudio --env-file <path>` for another file.
@@ -196,17 +198,17 @@ create their resources; an ingest-only token is not sufficient.
 
 - **An agent cannot find skills or MCP:** restart the agent and open a new task.
   Existing processes keep their startup configuration.
-- **A configured local Observer does not connect:** confirm that it is
-  reachable and its version is compatible with the client.
+- **A configured local instance does not connect:** confirm that it is reachable
+  and its version is compatible with the client.
 
-For runtime startup, telemetry, or validation problems, see the Observer
-[troubleshooting section](https://github.com/signalfx/obstudio/blob/main/observer/README.md#troubleshooting).
+For runtime startup, telemetry, or validation problems, see the Splunk
+Observability Studio [troubleshooting section](https://github.com/signalfx/obstudio/blob/main/observer/README.md#troubleshooting).
 For editor-managed issues, see the extension's
 [troubleshooting section](https://github.com/signalfx/obstudio/blob/main/extension/README.md#troubleshooting).
 
 ## Security and data handling
 
-Observer stores telemetry in bounded local memory.
+Splunk Observability Studio stores telemetry in bounded local memory.
 
 For the bundled plugin, review its
 [security](https://github.com/signalfx/obstudio/blob/main/plugins/obstudio/SECURITY.md)
@@ -215,7 +217,7 @@ documentation.
 
 ## Resources
 
-- [Observer guide](https://github.com/signalfx/obstudio/blob/main/observer/README.md)
+- [Splunk Observability Studio guide](https://github.com/signalfx/obstudio/blob/main/observer/README.md)
 - [Prompt examples](examples.md)
 - [Skill sources](https://github.com/signalfx/obstudio/tree/main/skills)
 - [Contributing](https://github.com/signalfx/obstudio/blob/main/CONTRIBUTING.md)

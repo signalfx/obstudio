@@ -317,7 +317,7 @@ func useDefaultLocalLogExport() (bool, error) {
 	if endpoint != "" && endpoint != localObserverLogsEndpoint {
 		return false, errors.New(
 			"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local " +
-				"Observer; refusing to create an Obstudio log provider or bridge",
+				"Splunk Observability Studio; refusing to create a Splunk Observability Studio log provider or bridge",
 		)
 	}
 	return true, nil
@@ -524,7 +524,7 @@ slog.InfoContext(ctx, "order accepted", "order.type", "standard")
 
 An unset `OTEL_LOGS_EXPORTER` is treated as `otlp` only when the logs endpoint
 is absent or matches `localObserverLogsEndpoint`. Adapt that constant to the
-detected Observer service address for Docker/Compose. A non-local explicit
+detected Splunk Observability Studio service address for Docker/Compose. A non-local explicit
 endpoint on the absent/`otlp` branch returns an error before the provider or
 bridge is constructed; report the operator-owned boundary conflict instead of
 converting it to local or cloud export. Exact `none` and every other explicit
@@ -711,7 +711,7 @@ The `otelhttp` handler auto-sets ERROR on 5xx responses.
 ## OTLP Export Configuration
 
 Use environment variables for operator-owned configuration. The only endpoint
-literal in the SDK example is the signal-specific local Observer logs fallback,
+literal in the SDK example is the signal-specific local Splunk Observability Studio logs fallback,
 which prevents a generic direct-cloud endpoint from becoming the implicit log
 destination. The `otlptracehttp` and `otlpmetrichttp` exporters read their
 configuration automatically.
@@ -720,9 +720,9 @@ configuration automatically.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Common OTLP HTTP endpoint |
-| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the Obstudio-owned local log path, even when logs headers are set |
+| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the Splunk Observability Studio-owned local log path, even when logs headers are set |
 | `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or detected-local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
-| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for host/native Obstudio runs | Signal-specific local application-log destination |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for host/native Splunk Observability Studio runs | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
 | `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
@@ -731,7 +731,7 @@ configuration automatically.
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
 
 
-For local development with the Observer:
+For local development with Splunk Observability Studio:
 
 ```
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
@@ -748,40 +748,40 @@ When creating `sdkmetric.NewPeriodicReader`, pass
 `sdkmetric.WithTimeout(metricExportTimeout())`, where the helper functions read
 `OTEL_METRIC_EXPORT_INTERVAL` and `OTEL_METRIC_EXPORT_TIMEOUT`. This makes HTTP
 metrics from `otelhttp`, including `http.server.request.duration` or the older
-`http.server.duration` name, export promptly to Observer.
+`http.server.duration` name, export promptly to Splunk Observability Studio.
 
-For Docker or Compose, use the checked-in local Observer service address (for
+For Docker or Compose, use the checked-in local Splunk Observability Studio service address (for
 example `http://observer:4318/v1/logs`) instead of loopback and adapt
 `localObserverLogsEndpoint` to that same detected value. On the absent/`otlp`
 branch, accept an explicit endpoint only when it matches that local value; do
 not derive the log destination from `OTEL_EXPORTER_OTLP_ENDPOINT` when that
 generic value might point directly to cloud ingest.
 
-### Local Observer application logs and cloud boundary
+### Local Splunk Observability Studio application logs and cloud boundary
 
 Local OTLP application logs are the default for a detected supported Go
 logging stack only when the exporter is absent/`otlp` and the logs endpoint is
-absent or matches the detected local Observer receiver. `none` omits the added
+absent or matches the detected local Splunk Observability Studio receiver. `none` omits the added
 provider, processor, exporter, and bridge while the original stdout/file sink
 continues; another non-OTLP exporter remains operator-owned and its endpoint is
 not interpreted. When traces or metrics use direct-cloud signal endpoints,
-keep the default logs endpoint on local Observer. Never copy a Splunk ingest
+keep the default logs endpoint on local Splunk Observability Studio. Never copy a Splunk ingest
 URL, realm, access token, generic cloud header, cloud exporter, or forwarding
 flag into log configuration. For the absent/`otlp` branch, reject a non-local
 explicit logs endpoint before constructing the provider or bridge, preserve it
 as operator configuration, report the boundary conflict, and require the
 operator to resolve it. Also reject any generic OTLP header on the local branch
 even when signal-specific logs headers exist; move the generic credentials to
-trace/metric variables and remove the generic setting. Obstudio cloud
+trace/metric variables and remove the generic setting. Splunk Observability Studio cloud
 forwarding remains traces and metrics only.
 
-Add an in-memory SDK log test and a full local Observer runtime check. Emit one
+Add an in-memory SDK log test and a full local Splunk Observability Studio runtime check. Emit one
 sanitized application record at each required severity both outside and inside
 an active span, then assert its exact body/category, severity, shared resource
 including `service.name`, and trace/span IDs for the active-span record. Prove
 the original stdout/file sink still receives it, exactly one OTel record exists
 per application log call, `OTEL_LOGS_EXPORTER=none` produces no OTel record
-while preserving the original sink, and the record is visible in the Obstudio
+while preserving the original sink, and the record is visible in the Splunk Observability Studio
 Explorer. When trace/metric cloud export is enabled, also prove no cloud log
 endpoint, header, exporter, or forwarding path was configured.
 

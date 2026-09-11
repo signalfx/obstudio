@@ -52,9 +52,9 @@ charts[] — and each chart is a **separate** REST object that must be created
 > never a bare `except Exception`).
 
 All Splunk O11y data calls use the **Splunk REST API** directly. The optional
-read-only Observer status call is used only to discover a default realm. If
+read-only Splunk Observability Studio status call is used only to discover a default realm. If
 `SPLUNK_ACCESS_TOKEN` is missing, or neither `SPLUNK_REALM` nor the connected
-Observer provides a realm, stop and tell the user. Treat the token as a secret —
+Splunk Observability Studio provides a realm, stop and tell the user. Treat the token as a secret —
 never log it or write it to the ledger.
 
 ## Process
@@ -359,7 +359,7 @@ and `../references/coverage-decision-tree.md` for the shared rule.
 
 - `.observe/terraform/dashboards.tf` missing — run `$splunk-dashboard` first.
 - `SPLUNK_ACCESS_TOKEN` unset — stop and tell the user.
-- No realm from `SPLUNK_REALM` or the connected Observer — stop and tell the
+- No realm from `SPLUNK_REALM` or the connected Splunk Observability Studio — stop and tell the
   user.
 - A chart `programText` still has a literal `${var.*}` or a leading-whitespace
   line — it will 400 on create; re-normalize per

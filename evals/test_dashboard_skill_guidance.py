@@ -40,6 +40,24 @@ DASHBOARD_COVERAGE_MODEL = SPLUNK_DASHBOARD_PUBLISH_REFS / "dashboard-coverage-m
 # Detector publish skill (canonical; splunk-sync is the deprecated stub).
 SPLUNK_DETECTOR_PUBLISH = SKILLS_DIR / "splunk-detector-publish" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
+DASHBOARD_PUBLISH_OFFLINE_EVAL = (
+    REPO_ROOT
+    / "evals"
+    / "dashboards"
+    / "checkout-sync"
+    / "eval"
+    / "qual"
+    / "dashboard-publish.json"
+)
+DETECTOR_PUBLISH_OFFLINE_EVAL = (
+    REPO_ROOT
+    / "evals"
+    / "dashboards"
+    / "checkout-detectors"
+    / "eval"
+    / "qual"
+    / "detector-publish.json"
+)
 
 
 def _read(path: Path) -> str:
@@ -237,7 +255,7 @@ def test_dashboard_skill_marks_api_token_sensitive():
 
 
 # The single source of truth for the preview chartType vocabulary: the types the
-# generator emits AND the Observer renderer understands. "event" was never emitted
+# generator emits AND Splunk Observability Studio renderer understands. "event" was never emitted
 # by any generator artifact and is intentionally excluded; "table" is emitted by the
 # classification/templates and rendered by DashboardPanel.tsx, so it is included.
 PREVIEW_CHART_TYPES = ("time_series", "single_value", "list", "heatmap", "text", "table")
@@ -255,9 +273,9 @@ CHECKOUT_RED_QUAL_RUBRIC = (
 
 def test_dashboard_skill_emits_preview_sidecar_contract():
     text = _read(SPLUNK_DASHBOARD)
-    assert ".observe/dashboards.preview.json" in text, "must write the Observer preview sidecar"
+    assert ".observe/dashboards.preview.json" in text, "must write Splunk Observability Studio preview sidecar"
     assert "schemaVersion" in text, "preview sidecar must declare schemaVersion"
-    # The chart types the generator emits and the Observer renderer understands.
+    # The chart types the generator emits and Splunk Observability Studio renderer understands.
     for chart_type in PREVIEW_CHART_TYPES:
         assert chart_type in text, f"preview sidecar chartType vocabulary missing: {chart_type}"
     # "event" is never produced by any generator artifact: it must not reappear in the
@@ -421,6 +439,36 @@ def test_dashboard_templates_map_hcl_chart_resources_to_rest_types():
 # ---------------------------------------------------------------------------
 # Publish skill — wire casing, chart-first ordering, orphan recovery
 # ---------------------------------------------------------------------------
+
+
+def test_dashboard_publish_offline_rubric_requests_visible_grid_and_payload():
+    definition = json.loads(_read(DASHBOARD_PUBLISH_OFFLINE_EVAL))
+    task = definition["prompts"][0]["task"]
+    rubric = " ".join(definition["rubric"])
+
+    for field in ("column", "row", "width", "height"):
+        assert field in task
+        assert field in rubric
+    assert "hypothetical non-sent dry-run POST /v2/dashboard body" in task
+    assert '"tags": ["obstudio"]' in task
+    assert "hypothetical, non-sent dry-run POST /v2/dashboard body" in rubric
+
+
+def test_detector_publish_offline_eval_matches_uncertain_fallback():
+    definition = json.loads(_read(DETECTOR_PUBLISH_OFFLINE_EVAL))
+    task = definition["prompts"][0]["task"]
+    rubric = " ".join(definition["rubric"])
+
+    assert "UNCERTAIN (not GAP)" in task
+    assert "no POST is allowed until a successful live fetch" in task
+    assert "hypothetical, non-sent dry-run POST /v2/detector" in task
+    for mapping in ("program_text -> programText", "detect_label -> detectLabel"):
+        assert mapping in task
+        assert mapping in rubric
+    assert "AutoDetect" in task
+    assert '"tags": ["obstudio"]' in task
+    assert "classifies every detector as UNCERTAIN (not GAP)" in rubric
+    assert "Refuses every current POST" in rubric
 
 
 def test_dashboard_publish_reads_terraform_dashboards_tf():
@@ -589,22 +637,23 @@ def test_splunk_access_token_secrecy_prose_in_shared_api_ref():
 
 def test_splunk_realm_uses_env_pair_before_connected_observer_without_exposing_token():
     """The environment realm stays paired with the environment token. A connected
-    SOS destination may supply only the fallback realm, and its stored token must
-    remain outside skill context."""
+    Splunk Observability Studio destination may supply only the fallback realm,
+    and its stored token must remain outside skill context."""
     text = _read(SPLUNK_API_REF)
     assert "observer_splunk_connection_realm" in text, (
-        "splunk-api.md must use the Observer's realm-only tool for discovery"
+        "splunk-api.md must use Splunk Observability Studio's realm-only tool for discovery"
     )
     environment_realm = text.index("Use a non-empty `SPLUNK_REALM` when it is set")
     connected_realm = text.index("observer_splunk_connection_realm")
     assert environment_realm < connected_realm, (
-        "SPLUNK_REALM must stay paired with SPLUNK_ACCESS_TOKEN before using the connected SOS realm"
+        "SPLUNK_REALM must stay paired with SPLUNK_ACCESS_TOKEN before using the "
+        "connected Splunk Observability Studio realm"
     )
     assert "returns only the non-secret region" in text, (
         "the realm tool must be limited to non-secret realm discovery"
     )
     assert "Direct REST calls always use `SPLUNK_ACCESS_TOKEN`" in text, (
-        "the connected Observer must not become a token source for publish skills"
+        "the connected Splunk Observability Studio must not become a token source for publish skills"
     )
 
 

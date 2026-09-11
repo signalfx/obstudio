@@ -51,14 +51,14 @@ func TestWriteSharedObserverStatePublishesSecureControlStateOnWindows(t *testing
 		MCPURL:    "http://127.0.0.1:3000/mcp",
 	}
 	if err := writeSharedObserverState(statePath, want); err != nil {
-		t.Fatalf("write shared Observer state: %v", err)
+		t.Fatalf("write shared Splunk Observability Studio state: %v", err)
 	}
 	got, err := readSharedObserverState(statePath)
 	if err != nil {
-		t.Fatalf("read shared Observer state: %v", err)
+		t.Fatalf("read shared Splunk Observability Studio state: %v", err)
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("shared Observer state = %#v, want %#v", got, want)
+		t.Fatalf("shared Splunk Observability Studio state = %#v, want %#v", got, want)
 	}
 }
 
