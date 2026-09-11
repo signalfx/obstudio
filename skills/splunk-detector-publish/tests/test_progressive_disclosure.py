@@ -139,9 +139,23 @@ def test_live_payload_preserves_true_false_and_defaults_only_when_absent() -> No
         "resolved_name": "detector",
         "normalized_program_text": "A = data('metric')",
         "rules": [
-            {"severity": "Critical", "detect_label": "disabled", "disabled": True},
-            {"severity": "Major", "detect_label": "enabled", "disabled": False},
-            {"severity": "Minor", "detect_label": "default"},
+                {
+                    "severity": "Critical",
+                    "detect_label": "disabled",
+                    "notifications": ["critical@example.com"],
+                    "disabled": True,
+                },
+                {
+                    "severity": "Major",
+                    "detect_label": "enabled",
+                    "notifications": ["major@example.com"],
+                    "disabled": False,
+                },
+                {
+                    "severity": "Minor",
+                    "detect_label": "default",
+                    "notifications": [],
+                },
         ],
         "hcl_label": "detector",
     }
@@ -152,8 +166,9 @@ def test_live_payload_preserves_true_false_and_defaults_only_when_absent() -> No
         False,
         False,
     ]
-    assert "Preserve explicit `disabled = true` and `disabled = false`" in live
-    assert "default to `false` only when `disabled` is absent" in live
+    live_compact = " ".join(live.split())
+    assert "Preserve explicit `disabled = true` and `disabled = false`" in live_compact
+    assert "default to `false` only when `disabled` is absent" in live_compact
 
 
 def test_routed_references_resolve_inside_the_skill_catalog() -> None:
