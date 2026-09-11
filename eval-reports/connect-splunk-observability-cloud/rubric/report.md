@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | connect-splunk-observability-cloud |
-| Run ID | 20260910T183429721589Z |
+| Run ID | 20260911T020742761839Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | plugins/obstudio/qual/connect-splunk-observability-cloud | plugins/obstudio | 3 | 100% (26/26), avg score 100 | 117.0K | 3.3m | - | - | - |
+| with_skill | plugins/obstudio/qual/connect-splunk-observability-cloud | plugins/obstudio | 3 | 100% (27/27), avg score 100 | 118.1K | 3.7m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | plugins/obstudio/qual/connect-splunk-observability-cloud | plugins/obstudio | with_skill | codex | cumulative | measured | 3/3 recognized | 114572 | 60672 | unknown | 2388 | 1546 | unknown | 116960 |
+| with_skill | plugins/obstudio/qual/connect-splunk-observability-cloud | plugins/obstudio | with_skill | codex | cumulative | measured | 3/3 recognized | 116062 | 86272 | unknown | 2064 | 1252 | unknown | 118126 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | plugins/obstudio/qual/connect-splunk-observability-cloud | plugins/obstudio | with_skill | codex | cumulative | measured | 3/3 recognized | 114593 | 68864 | unknown | 5122 | 2625 | unknown | 119715 |
+| with_skill | plugins/obstudio/qual/connect-splunk-observability-cloud | plugins/obstudio | with_skill | codex | cumulative | measured | 3/3 recognized | 116045 | 80128 | unknown | 5602 | 2994 | unknown | 121647 |
 
 ## Rubric Failures
 
