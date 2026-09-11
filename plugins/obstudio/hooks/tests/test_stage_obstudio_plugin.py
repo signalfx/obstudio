@@ -32,6 +32,7 @@ class StageObstudioPluginTest(unittest.TestCase):
 
             self.assertTrue((output / ".codex-plugin" / "plugin.json").is_file())
             self.assertTrue((output / ".claude-plugin" / "plugin.json").is_file())
+            self.assertTrue((output / "LICENSE").is_file())
             self.assertTrue((output / "PRIVACY.md").is_file())
             self.assertTrue((output / "SECURITY.md").is_file())
             self.assertTrue((output / "hooks" / "bootstrap_obstudio.py").is_file())
