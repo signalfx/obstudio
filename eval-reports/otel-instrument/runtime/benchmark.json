@@ -143,7 +143,7 @@
   ],
   "source": {
     "digest_version": 2,
-    "digest": "c2272654b0ab6ee08fca078b4d5982247e400d8f11b71df4c01fe823cc5a0ea0",
+    "digest": "4c224bd555cd50388a22f5e546a7d17d455d64b9e52022ebd986dade8b046f49",
     "eval_kinds": [
       "runtime"
     ],
@@ -370,7 +370,7 @@
       "pytest-codex-evals/src/pytest_codex_evals/graders/runtime.py": "7c88e33471f8bc93854bac11ee8e4b91944dfa94e1f7ad61b000daa87e001406",
       "pytest-codex-evals/src/pytest_codex_evals/graders/sanity.py": "78a96be10b9745ce8e7c4812fa757c91c0e2066aafa120c3345b622a359333d2",
       "pytest-codex-evals/src/pytest_codex_evals/graders/shared.py": "c49074bd8ce03acc61fb8fbade669193a6497d70bbe29c1f1361868b10b59e79",
-      "pytest-codex-evals/src/pytest_codex_evals/plugin.py": "784bc9568b0b0151ac4cdd7871ebf1da0e027e25cea49af1b94aa3054261c7a9",
+      "pytest-codex-evals/src/pytest_codex_evals/plugin.py": "0fb9e4916647ce58dad42886d46a8d87916138ed1f97580d46e56e944a73f97a",
       "pytest-codex-evals/src/pytest_codex_evals/report.py": "840f53b6d840534981316ce436ad6f5d35f0a32b11c57701579de3f20a7d3154",
       "pytest-codex-evals/src/pytest_codex_evals/reports/__init__.py": "5cc2742d160817be1afd199ec8c92df25690d169e1a89e34fbc86510c43a6622",
       "pytest-codex-evals/src/pytest_codex_evals/reports/templates.py": "f73db35e6587630e49862e3c77e3c87e00e6e3e68ca421cd36ccb4fac73c44d7",
