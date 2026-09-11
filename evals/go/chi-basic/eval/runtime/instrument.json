@@ -9,7 +9,7 @@
   "checks": [
     {
       "id": "observer-runtime-telemetry",
-      "description": "Docker runtime emits Go chi traces and HTTP duration metrics to Observer.",
+      "description": "Docker runtime emits Go chi traces and HTTP duration metrics to Splunk Observability Studio.",
       "compose_file": "docker-compose.yml",
       "timeout_seconds": 300,
       "expect": {

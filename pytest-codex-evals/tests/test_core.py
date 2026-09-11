@@ -3460,7 +3460,7 @@ def runtime_case() -> RuntimeEvalCase:
 def runtime_check() -> RuntimeCheck:
     return RuntimeCheck(
         id="observer-runtime",
-        description="Runtime telemetry reaches Observer.",
+        description="Runtime telemetry reaches Splunk Observability Studio.",
         compose_file="docker-compose.yml",
         expect=RuntimeExpectations(
             endpoints=[
@@ -3604,7 +3604,7 @@ def test_runtime_expectations_reject_unknown_keys():
             RuntimeCheck,
             {
                 "id": "observer-runtime",
-                "description": "Runtime telemetry reaches Observer.",
+                "description": "Runtime telemetry reaches Splunk Observability Studio.",
                 "compose_file": "docker-compose.yml",
                 "expect": {"endpoints": [{"id": "logs", "url": "/api/query/logs"}]},
                 "stop_service_before_validation": ["app"],
@@ -3635,7 +3635,7 @@ def test_runtime_check_rejects_non_app_shutdown_service():
     with pytest.raises(ValueError, match="stop_services_before_validation"):
         RuntimeCheck(
             id="observer-runtime",
-            description="Runtime telemetry reaches Observer.",
+            description="Runtime telemetry reaches Splunk Observability Studio.",
             compose_file="docker-compose.yml",
             stop_services_before_validation=["observer"],
             expect=RuntimeExpectations(

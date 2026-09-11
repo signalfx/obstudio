@@ -22,8 +22,8 @@
     "After the explicitly requested modeled detection call and assumed result, starts the intake portion with Get started with Observability Cloud Free Edition, then treats that title, the lead-in, complete official Terms URL bare on its own line, detected-region/allowed-values sentence, instruction sentence, and field block as one indivisible response; it never emits the field block alone. It ends after the closing code fence and does not append an unmatched bracket, list delimiter, or other wrapper punctuation. It does not promise Tab navigation or invent a keyboard shortcut that the current client did not expose.",
     "Stops after showing the editable five-line block and waits for a later user response that returns, confirms, or replaces the detected region; it never proceeds directly from detection to observer_splunk_free_account_create in the same turn.",
     "Does not ask for company, phone, job title, country, state, city, postal code, or other profile data.",
-    "Keeps the eventual operation scoped to the Observer MCP backend and its GeoIP-selected public signup value; it does not recommend the web form, curl, or a reconstructed direct JSON submission.",
+    "Keeps the eventual operation scoped to the Splunk Observability Studio MCP backend and its GeoIP-selected public signup value; it does not recommend the web form, curl, or a reconstructed direct JSON submission.",
     "Does not infer marketing consent and gives a concise, actionable response that stops at the consent gate.",
-    "Routes the request through the consent-gated Observer signup workflow rather than the existing-organization connection skill or Splunk web form."
+    "Routes the request through the consent-gated Splunk Observability Studio signup workflow rather than the existing-organization connection skill or Splunk web form."
   ]
 }

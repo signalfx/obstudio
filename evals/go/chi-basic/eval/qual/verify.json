@@ -10,7 +10,7 @@
         "eval/inputs/otel-selection.json",
         "eval/inputs/otel-verify.json"
       ],
-      "task": "Create ./service/.observe and copy the four canonical JSON files from ./service/eval/inputs into it. Use $otel-verify read-only to validate the complete bound audit -> selection -> instrumentation -> verify proof packet. Preserve the supplied canonical .observe/otel-verify.json proof rather than changing application code or inventing a removed telemetry item for a signal this fixture never emitted. Write the reader-first compatibility verification report, describe the captured trace as the generated trace without exposing a trace ID, and report the exact validated result."
+      "task": "Create ./service/.observe and copy the four canonical JSON files from ./service/eval/inputs into it. Use $otel-verify read-only to validate the complete bound audit -> selection -> instrumentation -> verify proof packet. Preserve the supplied canonical .observe/otel-verify.json proof rather than changing application code or inventing a removed telemetry item for a signal this fixture never emitted. Write the reader-first compatibility verification report, describe the captured trace as the generated trace without exposing a trace ID, use the full product name Splunk Observability Studio for any explorer evidence source, and report the exact validated result."
     }
   ],
   "judge_inputs": [

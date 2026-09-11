@@ -452,7 +452,7 @@ export async function loadStoredSISCIMDOAuthSession(
 
 // Mirrors sisCIMDSessionStatus in observer/internal/api/sis_cimd_login.go: redacted,
 // non-secret session status shared with CloudTab.tsx over the bridge, the same shape
-// Observer's own /api/splunk/cimd/session returns for the no-bridge path. The stored
+// Splunk Observability Studio's own /api/splunk/cimd/session returns for the no-bridge path. The stored
 // session's accessToken/idToken/refreshToken are deliberately never read here.
 export async function computeSISCIMDSessionStatus(
 	secrets: SISCIMDSessionSecretStorage,

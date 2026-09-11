@@ -60,27 +60,27 @@
     "commands": [
       {
         "command": "observability-studio.openObserver",
-        "title": "Open Observer",
+        "title": "Open",
         "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.statusMenu",
-        "title": "Observer Status",
+        "title": "Status",
         "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.startObserver",
-        "title": "Start Observer",
+        "title": "Start",
         "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.stopObserver",
-        "title": "Stop Observer",
+        "title": "Stop",
         "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.restartObserver",
-        "title": "Restart Observer",
+        "title": "Restart",
         "category": "Splunk Observability Studio"
       },
       {
@@ -120,14 +120,14 @@
         "observability-studio.sharedObserverUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional loopback `obstudio` base URL or `/mcp` URL override for the UI and MCP connection. The host must be `localhost` or a loopback IP address, and Observer must report the version bundled with this extension. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`. A configured local Observer's OTLP receiver ports are not remapped or validated."
+          "markdownDescription": "Optional loopback `obstudio` base URL or `/mcp` URL override for the UI and MCP connection. The host must be `localhost` or a loopback IP address, and Splunk Observability Studio must report the version bundled with this extension. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`. A configured local service's OTLP receiver ports are not remapped or validated."
         },
         "observability-studio.managedObserverPort": {
           "type": "number",
           "default": 3000,
           "minimum": 1,
           "maximum": 65535,
-          "markdownDescription": "Local port used by the extension-managed Observer UI and MCP HTTP endpoint when `sharedObserverUrl` is unset. If a verified but incompatible `obstudio` process already owns this port, the extension stops and replaces it."
+          "markdownDescription": "Local port used by the extension-managed Splunk Observability Studio UI and MCP HTTP endpoint when `sharedObserverUrl` is unset. If a verified but incompatible `obstudio` process already owns this port, the extension stops and replaces it."
         },
         "observability-studio.sisCimdRegistrationEnabled": {
           "type": "boolean",

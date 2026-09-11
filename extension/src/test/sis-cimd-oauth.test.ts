@@ -868,7 +868,7 @@ async function startMockSIS(tlsCertificate?: { cert: string; key: string }): Pro
 	const clientId = `${baseUrl}/oauth/client-metadata.json`;
 	Object.assign(metadata, {
 		client_id: clientId,
-		client_name: 'Obstudio (CIMD)',
+		client_name: 'Splunk Observability Studio (CIMD)',
 		grant_types: ['authorization_code', 'refresh_token'],
 		redirect_uris: [sisCIMDOAuthRedirectUri],
 		response_types: ['code'],

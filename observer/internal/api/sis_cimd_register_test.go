@@ -63,7 +63,7 @@ func startMockSIS(t *testing.T) *mockSIS {
 	clientID := mock.server.URL + "/oauth/client-metadata.json"
 	mock.metadata = map[string]any{
 		"client_id":      clientID,
-		"client_name":    "Obstudio (CIMD)",
+		"client_name":    "Splunk Observability Studio (CIMD)",
 		"grant_types":    []string{"authorization_code", "refresh_token"},
 		"redirect_uris":  []string{sisCIMDRedirectURI},
 		"response_types": []string{"code"},

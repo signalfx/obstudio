@@ -21,9 +21,9 @@ synthetic/canary checks, startup/deployment compatibility, input complexity,
 capacity, and release context belong here only when source evidence shows they
 exercise, carry, or block an AI workflow.
 
-## Obstudio GenAI Trace UI Contract
+## Splunk Observability Studio GenAI Trace UI Contract
 
-Obstudio's GenAI trace view is span-first. If a value exists only in a metric
+Splunk Observability Studio's GenAI trace view is span-first. If a value exists only in a metric
 stream, the trace view may not be able to summarize it for one selected trace.
 For a demoable selected-trace summary, emit both the detector metric and safe
 span-level attributes when the service can observe the value.
@@ -41,7 +41,7 @@ span-level attributes when the service can observe the value.
 | Error badges | Span status ERROR plus low-cardinality `error.type` |
 | Streaming timeout explanation | First event/chunk latency, stream close reason family, timeout/cancel/disconnect events, and workflow ERROR with `error.type=first_event_timeout` or another stable class |
 
-If an audit gap mentions a local trace summary, Obstudio view, selected trace,
+If an audit gap mentions a local trace summary, Splunk Observability Studio view, selected trace,
 or demo trace, treat span-level selected-trace summary attributes as required
 acceptance criteria in addition to detector metrics.
 

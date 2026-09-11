@@ -109,7 +109,7 @@ func startMockSISForLogin(t *testing.T) *mockSISForLogin {
 	clientID := mock.server.URL + "/oauth/client-metadata.json"
 	mock.metadata = map[string]any{
 		"client_id":      clientID,
-		"client_name":    "Obstudio (CIMD)",
+		"client_name":    "Splunk Observability Studio (CIMD)",
 		"grant_types":    []string{"authorization_code", "refresh_token"},
 		"redirect_uris":  []string{sisCIMDRedirectURI},
 		"response_types": []string{"code"},
@@ -162,7 +162,7 @@ func resetGlobalSISCIMDLoginState(t *testing.T) {
 // simulateBrowserFollowingAuthorizationURL performs the same two hops a real browser
 // tab would after window.open(authorizationURL): fetch the authorization URL (the mock
 // IDP-equivalent redirect straight to our loopback callback), then let that redirect
-// resolve, delivering the code to Observer's callback listener. Cookies are irrelevant
+// resolve, delivering the code to Splunk Observability Studio's callback listener. Cookies are irrelevant
 // here since sisCIMDCallbackListener validates via the OAuth `state` query parameter,
 // not a cookie.
 func simulateBrowserFollowingAuthorizationURL(t *testing.T, authorizationURL string) *http.Response {
@@ -405,14 +405,14 @@ func TestSISCIMDLoginCancelsAnInFlightExchangeOnDisconnect(t *testing.T) {
 	}
 
 	// The exchange is now genuinely in flight (blocked in the mock's token handler,
-	// which never releases it in this test). Disconnecting here must cancel Observer's
+	// which never releases it in this test). Disconnecting here must cancel Splunk Observability Studio's
 	// outbound request rather than leave it running in the background -- otherwise SIS
-	// could still mint a token after Observer has already reported disconnection.
+	// could still mint a token after Splunk Observability Studio has already reported disconnection.
 	globalSISCIMDLoginState.disconnect()
 
 	// If the exchange were left to run instead of being cancelled, this would hang until
 	// the mock's block channel closes at test cleanup -- it only completes promptly here
-	// because disconnect cancelled Observer's own outbound request.
+	// because disconnect cancelled Splunk Observability Studio's own outbound request.
 	select {
 	case response := <-callbackDone:
 		if response == nil {

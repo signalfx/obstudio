@@ -16,11 +16,13 @@ AGENT_POLICY_BASE ?=
 AGENT_POLICY_ARGS := $(if $(strip $(AGENT_POLICY_BASE)),--base-ref "$(AGENT_POLICY_BASE)",)
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
+PLUGIN_RELEASE_DIR ?= $(CURDIR)/.release/plugins
 RELEASE_WEAVER_DIR := $(CURDIR)/.release/weaver
-PLUGIN_CODEX_STAGE_DIR := $(CURDIR)/.release/plugins/obstudio-codex
-PLUGIN_CLAUDE_STAGE_DIR := $(CURDIR)/.release/plugins/obstudio-claude
-PLUGIN_CODEX_ARCHIVE := $(CURDIR)/.release/plugins/obstudio-codex.zip
-PLUGIN_CLAUDE_ARCHIVE := $(CURDIR)/.release/plugins/obstudio-claude.zip
+PLUGIN_CODEX_STAGE_DIR := $(PLUGIN_RELEASE_DIR)/obstudio-codex
+PLUGIN_CLAUDE_STAGE_DIR := $(PLUGIN_RELEASE_DIR)/obstudio-claude
+PLUGIN_VERSION = $(patsubst v%,%,$(RELEASE_TAG))
+PLUGIN_CODEX_ARCHIVE = $(PLUGIN_RELEASE_DIR)/obstudio_codex_$(PLUGIN_VERSION).zip
+PLUGIN_CLAUDE_ARCHIVE = $(PLUGIN_RELEASE_DIR)/obstudio_claude_$(PLUGIN_VERSION).zip
 RELEASE_TAG_ARG = $(if $(strip $(RELEASE_TAG)),--release-tag "$(RELEASE_TAG)",)
 
 .PHONY: help build build-client build-vsix stage-skills bundle-weaver stage-release-weaver sync-obstudio-plugin-skills check-obstudio-plugin-skills stage-obstudio-plugin package-obstudio-plugin require-release-tag dev run load-severity-demo test test-extension test-client test-interactive-otel-scripts test-agent-policy agent-policy-check test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
@@ -62,7 +64,7 @@ stage-obstudio-plugin: ## Stage self-contained Codex and Claude plugin bundles
 	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --host codex $(RELEASE_TAG_ARG) --output "$(PLUGIN_CODEX_STAGE_DIR)"
 	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --host claude $(RELEASE_TAG_ARG) --output "$(PLUGIN_CLAUDE_STAGE_DIR)"
 
-package-obstudio-plugin: ## Build self-contained Codex and Claude plugin zip artifacts
+package-obstudio-plugin: require-release-tag ## Build versioned self-contained Codex and Claude plugin zip artifacts
 	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --host codex $(RELEASE_TAG_ARG) --output "$(PLUGIN_CODEX_STAGE_DIR)" --archive "$(PLUGIN_CODEX_ARCHIVE)"
 	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --host claude $(RELEASE_TAG_ARG) --output "$(PLUGIN_CLAUDE_STAGE_DIR)" --archive "$(PLUGIN_CLAUDE_ARCHIVE)"
 
@@ -127,7 +129,7 @@ lint: stage-skills ## Run golangci-lint (requires golangci-lint on PATH)
 require-release-tag:
 	@test -n "$(RELEASE_TAG)" || { echo "RELEASE_TAG is required (for example, v0.2.0)"; exit 2; }
 
-release-prep: require-release-tag stage-skills build-client stage-release-weaver package-obstudio-plugin ## Prepare assets for GoReleaser and plugin publishing
+release-prep: require-release-tag check-obstudio-plugin-skills stage-skills build-client stage-release-weaver package-obstudio-plugin ## Prepare assets for GoReleaser and plugin publishing
 
 release-local: RELEASE_TAG = v$(VERSION)
 release-local: release-prep ## Build release archives locally via GoReleaser (snapshot, no publish)
@@ -162,7 +164,7 @@ eval-rubric-test eval-rubric-report:
 eval-rubric-ab: ## Run rubric grading with baseline
 	$(MAKE) -C $(EVALS_DIR) $@
 
-eval-runtime: ## Run Docker/Observer runtime checks; pass AB=1 or WITH=ab to include baseline
+eval-runtime: ## Run Docker/Splunk Observability Studio runtime checks; pass AB=1 or WITH=ab to include baseline
 	$(MAKE) -C $(EVALS_DIR) $@
 
 eval-runtime-test eval-runtime-report:

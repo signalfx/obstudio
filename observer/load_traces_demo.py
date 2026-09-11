@@ -847,7 +847,7 @@ def main() -> None:
 
     print(f"Done. Sent {sent} traces ({total_spans} spans) to {UI_BASE}.", flush=True)
     print(f"Services: {', '.join(SERVICES.keys())}", flush=True)
-    print("Keeping process alive so the Observer retains the data. Press Ctrl+C to exit.", flush=True)
+    print("Keeping process alive so Splunk Observability Studio retains the data. Press Ctrl+C to exit.", flush=True)
 
     try:
         while True:

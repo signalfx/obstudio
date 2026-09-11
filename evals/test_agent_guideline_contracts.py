@@ -202,7 +202,11 @@ def test_code_review_rules_have_stable_ids_and_semantic_markers() -> None:
     _assert_any(integration, "shared schema", "target's schema")
     _assert_any(integration, "user-owned state", "unrelated settings")
     _assert_any(integration, "one automatic target failure", "later targets")
-    _assert_any(integration, "core observer", "stop the core observer")
+    _assert_any(
+        integration,
+        "core splunk observability studio",
+        "stop the core splunk observability studio",
+    )
     _assert_any(integration, "middle integration fails", "mixed-target path")
 
 
@@ -430,7 +434,7 @@ def test_review_cases_cover_ui_plugin_and_integration_both_ways() -> None:
         "live resizing",
         "zoom/text scaling",
         "materially distinct",
-        "core observer",
+        "core splunk observability studio",
     ):
         assert marker in safe_text
 

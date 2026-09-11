@@ -21,7 +21,7 @@ kind from the baseline decision:
 - `sanity` runs quick loaded-skill guards such as final output and skill
   visibility.
 - `rubric` runs the task and a schema-constrained judge pass.
-- `runtime` runs Docker/Observer telemetry checks.
+- `runtime` runs Docker/Splunk Observability Studio telemetry checks.
 - `AB=1` adds the no-skill baseline side to any live eval kind.
 
 | Eval Type | What Runs | What It Proves | Output |
@@ -29,7 +29,7 @@ kind from the baseline decision:
 | Validation | Pytest collection only | JSON shape, eval directory, skill source | Validation report |
 | Sanity | Codex with `.agents/skills/<skill>` visible | Skill loads and the task completes | Sanity report |
 | Rubric | Codex task plus schema-constrained judge | Semantic quality and workflow fit | Rubric report |
-| Runtime Checks | Docker Compose plus Observer API queries | Live spans, metrics, and logs are emitted after traffic | Runtime report |
+| Runtime Checks | Docker Compose plus Splunk Observability Studio API queries | Live spans, metrics, and logs are emitted after traffic | Runtime report |
 | A/B | Adds the no-skill baseline side to sanity, rubric, or runtime | Skill lift over baseline | Same report shape with baseline columns populated |
 
 Validation is the fast gate for CI: it proves the eval JSONs are collectable and
@@ -58,7 +58,7 @@ Mode-specific JSON files are grouped by role:
 
 ```text
 eval/sanity/*.json     # quick skill-loading checks
-eval/runtime/*.json    # Docker/Observer runtime checks
+eval/runtime/*.json    # Docker/Splunk Observability Studio runtime checks
 eval/qual/*.json       # schema-constrained rubric checks
 ```
 
@@ -89,10 +89,10 @@ service workspace.
 Runtime checks are top-level `checks[]` entries in `eval/runtime/*.json`.
 `eval-runtime` enables them automatically. The eval JSON points at a Compose
 file and declares telemetry expectations. The Compose file owns service
-topology, Observer startup, app startup, and a profiled `traffic` service that
+topology, Splunk Observability Studio startup, app startup, and a profiled `traffic` service that
 generates requests with tools such as `siege`. The harness runs Compose,
-discovers the Observer host port with `docker compose port observer 3000`,
-invokes `traffic`, queries that isolated Observer instance, then tears the stack
+discovers Splunk Observability Studio host port with `docker compose port observer 3000`,
+invokes `traffic`, queries that isolated Splunk Observability Studio instance, then tears the stack
 down. Compose can use `${CODEX_EVAL_SERVICE_DIR}` when it must build the
 instrumented temp service workspace rather than the source fixture. Shared
 runtime image definitions live in `evals/runtime/`; service-specific runtime
@@ -105,22 +105,22 @@ record check can select records with `match` or `match_contains`, assert
 `exact_count`, and reject duplicates with `unique_by`. Dotted paths address
 nested fields such as `resource.serviceName`. Set `correlates_with_trace` when
 a log must carry nonzero 32/16-hex trace/span IDs that identify the same span in
-the Observer trace-detail endpoint. Use a nonempty `service_logs` substring or
+Splunk Observability Studio trace-detail endpoint. Use a nonempty `service_logs` substring or
 occurrence check when the runtime must also prove that the original
 stdout/stderr sink is preserved; failure to retrieve Compose logs fails the
 check. Per-check `environment` values can drive isolated scenarios such as
 `OTEL_LOGS_EXPORTER=none`; harness-owned service paths and Compose project names
 remain protected. `stop_services_before_validation` can stop only the app after
-traffic while leaving Observer available, so endpoint assertions include
+traffic while leaving Splunk Observability Studio available, so endpoint assertions include
 shutdown-flushed telemetry and preserved container logs.
 The Python, Node.js, and Go fixtures emit `runtime shutdown completed` once at
 WARN after their graceful server stop. Default checks require that record in
-both Observer and the original service sink; `OTEL_LOGS_EXPORTER=none` checks
+both Splunk Observability Studio and the original service sink; `OTEL_LOGS_EXPORTER=none` checks
 require it only in the preserved sink and require zero service records in
-Observer.
+Splunk Observability Studio.
 
 The standard Python, Node.js, and Go runtime topologies use an isolated local
-Observer. A shared Observer OTLP-handler integration test enables its trace and
+Splunk Observability Studio. A shared Splunk Observability Studio OTLP-handler integration test enables its trace and
 metric forwarding surfaces, ingests all three signals, proves the matching
 exporters receive traces and metrics, and proves logs remain locally queryable
 without any log-forwarding surface. This supplies live receiver-side proof of
@@ -145,10 +145,10 @@ every language topology.
 | `make eval-rubric-test SKILL=skills/otel-instrument CASE=go/kvstore` | Run rubric checks and write raw JSON only |
 | `make eval-rubric-report SKILL=skills/otel-instrument` | Render the latest rubric Markdown and benchmark |
 | `make eval-rubric-ab SKILL=skills/otel-instrument CASE=go/kvstore` | Run rubric judge checks with baseline |
-| `make eval-runtime SKILL=skills/otel-instrument` | Run Docker/Observer runtime checks |
+| `make eval-runtime SKILL=skills/otel-instrument` | Run Docker/Splunk Observability Studio runtime checks |
 | `make eval-runtime-test SKILL=skills/otel-instrument` | Run runtime checks and write raw JSON only |
 | `make eval-runtime-report SKILL=skills/otel-instrument` | Render the latest runtime Markdown and benchmark |
-| `make eval-runtime-ab SKILL=skills/otel-instrument` | Run Docker/Observer runtime checks with baseline |
+| `make eval-runtime-ab SKILL=skills/otel-instrument` | Run Docker/Splunk Observability Studio runtime checks with baseline |
 | `make eval-all SKILL=skills/otel-audit` | Run validation, sanity, rubric, and runtime |
 | `make eval-all-ab SKILL=skills/otel-audit` | Run validation plus A/B sanity, rubric, and runtime |
 | `make eval-with-skill SKILL=skills/otel-instrument CASE=go/kvstore` | Run only the loaded-skill side |
@@ -286,7 +286,7 @@ produced by the instrumentation task. Until pinned infrastructure is available,
 the fixture supplies a request-context log and grades Java's record fields,
 single bridge, preserved appenders, opt-out, cloud configuration, and
 agent-owned shutdown path as independent semantic rubric requirements; the
-shared Observer integration test supplies the live receiver-side cloud-boundary
+shared Splunk Observability Studio integration test supplies the live receiver-side cloud-boundary
 proof.
 
 Kafka coverage is organized by processing pattern rather than by every

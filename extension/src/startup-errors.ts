@@ -1,4 +1,4 @@
-export type ObserverPortRole = 'Observer UI' | 'OTLP/HTTP' | 'OTLP/gRPC';
+export type ObserverPortRole = 'Splunk Observability Studio UI' | 'OTLP/HTTP' | 'OTLP/gRPC';
 export type ObserverStartupFailureKind = 'generic' | 'not-executable' | 'port-conflict' | 'wrong-platform';
 export type ObserverStartupFailure = {
 	hint: string;
@@ -43,13 +43,13 @@ export function formatPortConflictMessage(details: PortConflictDetails): string 
 		: ' is already in use.';
 	const staleObserver = details.owner !== undefined && observerOwnerPattern.test(details.owner);
 	const staleObserverHint = staleObserver
-		? ' Another Splunk Observability Studio instance or a stale observer process may still be running.'
+		? ' Another Splunk Observability Studio instance or a stale local-service process may still be running.'
 		: '';
 
 	if (staleObserver) {
 		const resolution = details.settingName
-			? ` Close the other VS Code window or terminate the stale observer process, or change observability-studio.${details.settingName}.`
-			: ' Close the other VS Code window or terminate the stale observer process before restarting Splunk Observability Studio.';
+			? ` Close the other VS Code window or terminate the stale local-service process, or change observability-studio.${details.settingName}.`
+			: ' Close the other VS Code window or terminate the stale local-service process before restarting Splunk Observability Studio.';
 		return `${details.role} port ${details.port}${ownerText}${staleObserverHint}${resolution}`;
 	}
 
@@ -62,13 +62,13 @@ export function formatPortConflictMessage(details: PortConflictDetails): string 
 export function getObserverStartupHint(kind: ObserverStartupFailureKind = 'generic'): string {
 	switch (kind) {
 		case 'port-conflict':
-			return 'Use the Command Palette (Cmd+Shift+P) and run Splunk Observability Studio: Restart Observer after freeing the conflicting port.';
+			return 'Use the Command Palette (Cmd+Shift+P) and run Splunk Observability Studio: Restart after freeing the conflicting port.';
 		case 'wrong-platform':
-			return 'Install the platform-specific extension package for this machine or configure observability-studio.sharedObserverUrl, then run Splunk Observability Studio: Restart Observer.';
+			return 'Install the platform-specific extension package for this machine or configure observability-studio.sharedObserverUrl, then run Splunk Observability Studio: Restart.';
 		case 'not-executable':
-			return 'Reinstall the extension or restore execute permissions, then run Splunk Observability Studio: Restart Observer.';
+			return 'Reinstall the extension or restore execute permissions, then run Splunk Observability Studio: Restart.';
 		case 'generic':
-			return 'Open the Splunk Observability Studio output log, fix the startup problem, then run Splunk Observability Studio: Restart Observer.';
+			return 'Open the Splunk Observability Studio output log, fix the startup problem, then run Splunk Observability Studio: Restart.';
 	}
 }
 
@@ -80,7 +80,7 @@ export function formatObserverProbeMismatchMessage(
 		case 'managed-reuse':
 			return `the service already using ${baseUrl} is not Splunk Observability Studio.`;
 		case 'shared-reuse':
-			return `the configured shared observer at ${baseUrl} did not respond like Splunk Observability Studio. Verify observability-studio.sharedObserverUrl.`;
+			return `the configured shared service at ${baseUrl} did not respond like Splunk Observability Studio. Verify observability-studio.sharedObserverUrl.`;
 		case 'startup-reuse':
 			return `a different service responded at ${baseUrl} while Splunk Observability Studio was starting.`;
 	}
@@ -92,7 +92,7 @@ export function getObserverProbeMismatchHint(context: ObserverProbeMismatchConte
 		case 'startup-reuse':
 			return getObserverStartupHint('port-conflict');
 		case 'shared-reuse':
-			return 'Verify observability-studio.sharedObserverUrl, make sure the shared observer is reachable, then run Splunk Observability Studio: Restart Observer.';
+			return 'Verify observability-studio.sharedObserverUrl, make sure the shared service is reachable, then run Splunk Observability Studio: Restart.';
 	}
 }
 
@@ -102,7 +102,7 @@ export function formatObserverProbeUnavailableMessage(
 ): string {
 	switch (context) {
 		case 'shared-reuse':
-			return `could not reach the configured shared observer at ${baseUrl}. Verify observability-studio.sharedObserverUrl and make sure Splunk Observability Studio is running there.`;
+			return `could not reach the configured shared service at ${baseUrl}. Verify observability-studio.sharedObserverUrl and make sure Splunk Observability Studio is running there.`;
 		case 'startup':
 			return `Splunk Observability Studio did not become ready at ${baseUrl}.`;
 	}
@@ -111,7 +111,7 @@ export function formatObserverProbeUnavailableMessage(
 export function getObserverProbeUnavailableHint(context: ObserverProbeUnavailableContext): string {
 	switch (context) {
 		case 'shared-reuse':
-			return 'Verify observability-studio.sharedObserverUrl, make sure the shared observer is reachable, then run Splunk Observability Studio: Restart Observer.';
+			return 'Verify observability-studio.sharedObserverUrl, make sure the shared service is reachable, then run Splunk Observability Studio: Restart.';
 		case 'startup':
 			return getObserverStartupHint('generic');
 	}
@@ -132,7 +132,7 @@ export function describeObserverStartupFailure(
 
 	if (code === 'ENOEXEC' || /\bENOEXEC\b/i.test(errorMessage)) {
 		const target = currentVsCodeTarget(options.platform, options.arch);
-		const binaryPath = options.binaryPath ?? 'the bundled observer binary';
+		const binaryPath = options.binaryPath ?? 'the bundled Splunk Observability Studio binary';
 		return {
 			hint: getObserverStartupHint('wrong-platform'),
 			kind: 'wrong-platform',
@@ -143,7 +143,7 @@ export function describeObserverStartupFailure(
 	}
 
 	if (code === 'EACCES' || /\bEACCES\b/i.test(errorMessage)) {
-		const binaryPath = options.binaryPath ?? 'the bundled observer binary';
+		const binaryPath = options.binaryPath ?? 'the bundled Splunk Observability Studio binary';
 		return {
 			hint: getObserverStartupHint('not-executable'),
 			kind: 'not-executable',

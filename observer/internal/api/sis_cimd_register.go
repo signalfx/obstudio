@@ -19,7 +19,7 @@ import (
 )
 
 // TODO(CIMD PoC): This mirrors extension/src/sis-cimd-oauth.ts's registerClientWithSIS
-// and its metadata/discovery validation, kept as a second implementation so Observer's
+// and its metadata/discovery validation, kept as a second implementation so Splunk Observability Studio's
 // own web UI can probe SIS CIMD registration without a VS Code bridge (e.g. the
 // `go run ./cmd/obstudio` + browser dev loop). It deliberately stops at the federated
 // authorization redirect -- it does not follow it into IDP login. If these two
@@ -32,8 +32,8 @@ const (
 	sisCIMDRedirectURI           = "http://127.0.0.1:33418/callback"
 )
 
-// sisCIMDRegistrationConfig is read from environment variables so Observer's standalone
-// web UI has a source of truth independent of any VS Code settings. When Observer is
+// sisCIMDRegistrationConfig is read from environment variables so Splunk Observability Studio's standalone
+// web UI has a source of truth independent of any VS Code settings. When Splunk Observability Studio is
 // launched by the extension, the extension's own settings take precedence in the
 // browser: CloudTab.tsx prefers the bridge's response over this endpoint whenever a
 // bridge is present.

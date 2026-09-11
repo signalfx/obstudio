@@ -34,7 +34,12 @@
 
 ## Rubric Failures
 
-No rubric failures.
+| Mode | Service | Side | Prompt | Result | Evidence |
+|---|---|---|---|---|---|
+| with_skill | go/kvstore | with_skill | direct | rubric:rubric-5 FAIL | service/cmd/kvstore-server/otel.go:94-100 creates sdklog LoggerProvider and otelslog handler; service/kvstore/store.go:227,314,322 and service/cmd/kvstore-server/main.go:42,66 still use standard log.Printf paths that are not sent through otelslog. |
+| with_skill | go/kvstore | with_skill | direct | rubric:rubric-6 FAIL | service/kvstore/http.go:61-65 emits slog.WarnContext with r.Context(); service/cmd/kvstore-server/otel.go:29-31 sets defaultServiceName = 'kvstore'; service/cmd/kvstore-server/otel_test.go:69 asserts 'kvstore'. |
+| with_skill | go/kvstore | with_skill | direct | rubric:rubric-7 FAIL | service/cmd/kvstore-server/otel.go:149-159 returns an error for non-local OTEL_EXPORTER_OTLP_LOGS_ENDPOINT when OTEL_LOGS_EXPORTER is otlp; main.go:31-32 fatal-exits on initOTel error. |
+| with_skill | go/kvstore | with_skill | direct | rubric:rubric-8 FAIL | service/cmd/kvstore-server/otel.go:167-169 rejects OTEL_EXPORTER_OTLP_HEADERS entirely; :176-178 allows OTEL_EXPORTER_OTLP_LOGS_HEADERS to flow through when set. |
 
 ## Result JSON
 

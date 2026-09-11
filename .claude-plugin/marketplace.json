@@ -8,7 +8,7 @@
       "name": "obstudio",
       "displayName": "Splunk Observability Studio",
       "source": "./plugins/obstudio",
-      "description": "OpenTelemetry workflows and observer controls for Claude Code."
+      "description": "Splunk Observability Studio bundles local OpenTelemetry workflows and service controls for Claude Code."
     }
   ]
 }

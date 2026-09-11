@@ -1,9 +1,9 @@
 """
-Loads demo data for all Observer tabs: Traces, Metrics, Logs, Services, Validation.
+Loads demo data for all Splunk Observability Studio tabs: Traces, Metrics, Logs, Services, Validation.
 
 Imports scenario generators from load_traces_demo so trace data is identical.
 Sends metrics and logs independently via OTLP/HTTP.
-Keeps all emitters alive so Observer retains the data.
+Keeps all emitters alive so Splunk Observability Studio retains the data.
 """
 
 import json
@@ -399,8 +399,8 @@ def main() -> None:
     load_logs()
 
     print(flush=True)
-    print(f"All tabs loaded. Observer is at {UI_BASE}", flush=True)
-    print("Keeping process alive so Observer retains the data. Press Ctrl+C to exit.", flush=True)
+    print(f"All tabs loaded. Splunk Observability Studio is at {UI_BASE}", flush=True)
+    print("Keeping process alive so Splunk Observability Studio retains the data. Press Ctrl+C to exit.", flush=True)
 
     try:
         while True:

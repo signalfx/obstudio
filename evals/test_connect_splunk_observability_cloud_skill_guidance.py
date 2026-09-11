@@ -41,7 +41,7 @@ def test_connection_skill_is_discoverable_and_scoped_separately_from_signup() ->
     text = _normalized(SKILL)
     metadata = _normalized(AGENT_YAML)
     assert "connect an existing or newly ready Splunk Observability Cloud organization" in text
-    assert "outside the Obstudio IDE extension" in text
+    assert "outside the Splunk Observability Studio IDE extension" in text
     assert "Do not use this skill to create a Free Edition account" in text
     assert "Use `$create-splunk-free-account`" in text
     assert "Connect Splunk Observability Cloud" in metadata
@@ -59,20 +59,20 @@ def test_connection_skill_keeps_credentials_in_existing_local_cloud_ui() -> None
         "`::` to `::1`",
         "Append `/?tab=cloud`",
         CLOUD_URL,
-        "port already reported by the running Observer",
+        "port already reported by the running Splunk Observability Studio",
         "Never allocate, probe for, or choose a new dynamic port",
         "host-provided browser or open-URL capability",
         "clickable fallback",
         "Do not launch an operating-system browser without the user's explicit approval",
-        "Do not start, stop, or restart Observer",
+        "Do not start, stop, or restart Splunk Observability Studio",
         "**Realm or Observability Cloud URL**",
         "**Access token**",
         "directly in that local UI",
-        "This connection applies to the current running standalone Observer process",
-        "must be entered again after Observer restarts",
+        "This connection applies to the current running standalone Splunk Observability Studio process",
+        "must be entered again after Splunk Observability Studio restarts",
         "opening the tab only presents the credential-entry surface",
         "does not mean the organization is connected",
-        "Connection success requires a later local Cloud UI or Observer backend result",
+        "Connection success requires a later local Cloud UI or Splunk Observability Studio backend result",
         "Never ask the user to paste the Observability Cloud URL or access token into agent chat",
         "Never place an access token in an MCP or other tool argument",
         "native agent form",
@@ -115,10 +115,10 @@ def test_connection_skill_eval_covers_browser_and_terminal_handoffs() -> None:
     assert "Does not model observer_splunk_metrics_export_configure" in rubric
     assert "observer_splunk_free_account_region_detect" in rubric
     assert "observer_splunk_free_account_create" in rubric
-    assert "without starting, stopping, restarting, or launching another Observer instance" in rubric
+    assert "without starting, stopping, restarting, or launching another Splunk Observability Studio instance" in rubric
     assert "a successful-render prompt need not add an irrelevant render-failure warning" in rubric
-    assert "current running standalone Observer process" in rubric
-    assert "must be entered again after Observer restarts" in rubric
+    assert "current running standalone Splunk Observability Studio process" in rubric
+    assert "must be entered again after Splunk Observability Studio restarts" in rubric
     assert "Does not claim the organization is connected merely because the Cloud tab opened" in rubric
     assert "does not repeat, retract, contradict, or modify the earlier approved registration confirmation" in rubric
     assert "it need not mention the earlier confirmation" in rubric

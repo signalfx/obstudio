@@ -2,7 +2,7 @@
 
 Shared reference for every skill that talks to the Splunk Observability Cloud
 REST API directly: `splunk-detector-publish`, `splunk-dashboard-publish`, and any
-future publish skill. An optional read-only Observer MCP call may supply the
+future publish skill. An optional read-only Splunk Observability Studio MCP call may supply the
 default realm. The auth, pagination, and HTTP-status rules are identical
 regardless of which object type (detector, dashboard, chart, group) is being
 synced — this file is the single source of truth for them.
@@ -21,18 +21,19 @@ Then resolve the realm in this order:
 
 1. Use a non-empty `SPLUNK_REALM` when it is set. This keeps the environment
    token and environment realm paired.
-2. Otherwise, if the Observer MCP tools are available, call
+2. Otherwise, if Splunk Observability Studio MCP tools are available, call
    `observer_splunk_connection_realm` and use its non-empty `realm`. This is the
    region stored with the active Splunk Observability Cloud connection.
 3. If neither source provides a realm, **stop** and ask the user to set
-   `SPLUNK_REALM` or connect Splunk Observability Cloud in SOS.
+   `SPLUNK_REALM` or connect Splunk Observability Cloud in Splunk Observability
+   Studio.
 
 The realm tool returns only the non-secret region. It is not a token source.
 Direct REST calls always use `SPLUNK_ACCESS_TOKEN` from the environment.
 
 Before any create, update, or delete, include the resolved realm in the
-confirmation and state whether it came from the connected SOS destination or
-`SPLUNK_REALM`.
+confirmation and state whether it came from the connected Splunk Observability
+Studio destination or `SPLUNK_REALM`.
 
 Base API URL: `https://api.${realm}.signalfx.com`
 App (browser) URL for deep links: `https://app.${realm}.signalfx.com`
@@ -171,7 +172,7 @@ POST.
 ## Red flags
 
 - `SPLUNK_ACCESS_TOKEN` unset — stop and tell the user.
-- No realm from `SPLUNK_REALM` or the connected Observer — stop and tell the
+- No realm from `SPLUNK_REALM` or the connected Splunk Observability Studio — stop and tell the
   user.
 - **All** offsets returning HTTP 500 continuously (not intermittent) — likely an
   auth failure masquerading as 500; verify the token is valid.

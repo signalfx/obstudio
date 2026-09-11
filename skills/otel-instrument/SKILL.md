@@ -194,25 +194,25 @@ auto-instrumentation first, then only approved custom signals.
 ### Default Local Application Log Export
 
 For a supported detected Python, Node, Java, or Go logging stack, local
-Observer OTLP application-log export is part of the standard baseline:
+Splunk Observability Studio OTLP application-log export is part of the standard baseline:
 
 - A request that excludes custom business spans limits span work only; it is
   not a log-export opt-out.
 - Export locally only when `OTEL_LOGS_EXPORTER` is absent/`otlp` and the
   signal-specific logs endpoint is absent or exactly the detected local
-  Observer receiver. Host default is `http://localhost:4318/v1/logs`; keep
+  Splunk Observability Studio receiver. Host default is `http://localhost:4318/v1/logs`; keep
   checked-in container URLs. Never infer locality from hostname syntax.
 - `OTEL_LOGS_EXPORTER=none` disables the added local log path. Any other explicit exporter is
   operator-owned; add no local provider, exporter, or bridge and do not treat
   the environment value alone as proof that its pipeline works.
 - A non-local endpoint on the absent/`otlp` branch is a boundary conflict:
   fail closed before constructing the local provider/bridge and report it.
-- The Obstudio-owned local exporter must receive no cloud credential or auth
+- The Splunk Observability Studio-owned local exporter must receive no cloud credential or auth
   header. Move generic direct-cloud endpoints/headers to trace- and
   metric-specific variables and remove the generic values. Do not pass
-  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` into the default local Observer exporter;
+  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` into the default local Splunk Observability Studio exporter;
   an explicit logs header makes that path operator-owned and must be resolved
-  or proven separately. Obstudio-to-Splunk cloud forwarding is traces and
+  or proven separately. Splunk Observability Studio-to-Splunk cloud forwarding is traces and
   metrics only.
 - Use one official bridge matching the detected logger, one LoggerProvider,
   exactly one bridge/export path, and one shutdown path. Preserve every existing

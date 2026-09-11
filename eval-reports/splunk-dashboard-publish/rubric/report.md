@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | splunk-dashboard-publish |
-| Run ID | 20260701T175624671458Z |
+| Run ID | 20260911T023720346184Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,7 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-sync/qual/dashboard-publish | dashboards/checkout-sync | 1 | 100% (6/6), avg score 96 | 499.5K | 5.3m | - | - | - |
+| with_skill | dashboards/checkout-sync/qual/dashboard-publish | dashboards/checkout-sync | 1 | 100% (7/7), avg score 96 | 216.4K | 5.3m | - | - | - |
+
+## Agent Token Usage
+
+| Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
+|---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| with_skill | dashboards/checkout-sync/qual/dashboard-publish | dashboards/checkout-sync | with_skill | codex | cumulative | measured | 1/1 recognized | 205670 | 173696 | unknown | 10755 | 6018 | unknown | 216425 |
+
+## Judge Token Usage
+
+| Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
+|---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| with_skill | dashboards/checkout-sync/qual/dashboard-publish | dashboards/checkout-sync | with_skill | codex | cumulative | measured | 1/1 recognized | 143169 | 98176 | unknown | 4349 | 2358 | unknown | 147518 |
 
 ## Rubric Failures
 

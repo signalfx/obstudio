@@ -866,7 +866,7 @@ func TestSplunkExportRejectsMutationsFromAStaleObserverVersion(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !splunkStateVersionPattern.MatchString(status.Version) {
-			t.Fatalf("invalid Observer state version %q", status.Version)
+			t.Fatalf("invalid Splunk Observability Studio state version %q", status.Version)
 		}
 		return status
 	}
@@ -893,7 +893,7 @@ func TestSplunkExportRejectsMutationsFromAStaleObserverVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	if configured.Version == initial.Version {
-		t.Fatal("connecting did not change the Observer state version")
+		t.Fatal("connecting did not change Splunk Observability Studio state version")
 	}
 	enabledValue := true
 
@@ -955,7 +955,7 @@ func TestSplunkExportRejectsMutationsFromAStaleObserverVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	if enabled.Version == configured.Version {
-		t.Fatal("changing export enablement did not change the Observer state version")
+		t.Fatal("changing export enablement did not change Splunk Observability Studio state version")
 	}
 
 	forgottenResponse := post("/api/splunk/export/forget", forgetSplunkExportRequest{
@@ -969,7 +969,7 @@ func TestSplunkExportRejectsMutationsFromAStaleObserverVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	if forgotten.Version == enabled.Version {
-		t.Fatal("forgetting the connection did not change the Observer state version")
+		t.Fatal("forgetting the connection did not change Splunk Observability Studio state version")
 	}
 }
 

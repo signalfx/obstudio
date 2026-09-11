@@ -207,4 +207,4 @@ findings were excluded, and route instrumentation-introduced repairs to
 
 For demo-oriented runs, include:
 
-`Obstudio can verify the instrumentation contract locally: it runs deterministic checks, can hold open a real OTLP contract process, and writes a report proving which OTel signals are emitted and visible.`
+`Splunk Observability Studio can verify the instrumentation contract locally: it runs deterministic checks, can hold open a real OTLP contract process, and writes a report proving which OTel signals are emitted and visible.`
