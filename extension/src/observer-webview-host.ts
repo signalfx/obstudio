@@ -2,18 +2,29 @@ import type { IncomingMessage } from 'node:http';
 import {
 	cloudBridgeActions,
 	isSkillDocsId,
+	isSupportedFreeAccountRegion,
 	maxCloudAccessTokenBytes,
+	maxCloudDestinationBytes,
+	maxFreeAccountEmailLength,
+	maxFreeAccountFirstNameLength,
+	maxFreeAccountLastNameLength,
 	type CloudBridgeAction,
 	type SkillDocsId,
 } from './cloud-bridge';
-import { isLocalObserverControlHost } from './backend';
+import { isLoopbackObserverHost } from './backend';
 
 export type ObserverHostCloudPayload = {
 	accessToken?: string;
+	destination?: string;
+	email?: string;
 	enabled?: boolean;
 	expectedVersion?: string;
+	firstName?: string;
+	lastName?: string;
 	realm?: string;
+	region?: string;
 	skill?: SkillDocsId;
+	termsAccepted?: boolean;
 };
 
 export type ObserverHostRequest =
@@ -38,6 +49,16 @@ export type ObserverHostRequestEnvelope = {
 export type ObserverHostCancelEnvelope = {
 	requestId: string;
 	type: 'obstudio.host.cancel';
+};
+
+export type ObserverHostResponseEnvelope = {
+	code?: string;
+	error?: string;
+	ok: boolean;
+	requestId: string;
+	result?: unknown;
+	retrySafe?: boolean;
+	type: 'obstudio.host.response';
 };
 
 export type ObserverHostTelemetryEnvelope = {
@@ -71,7 +92,7 @@ const allowedGetPaths = new Set([
 const allowedPostPaths = new Set(['/api/validation/run']);
 
 export function observerHostResponseByteLimit(url: URL): number {
-	return isLocalObserverControlHost(url.hostname)
+	return isLoopbackObserverHost(url.hostname)
 		? maxLocalObserverHostResponseBytes
 		: maxRemoteObserverHostResponseBytes;
 }
@@ -115,7 +136,7 @@ export function collectObserverHostHTTPResponse(
 			size += buffer.length;
 			if (size > responseByteLimit) {
 				const error = new Error(
-					`Observer response exceeded ${responseByteLimit / (1 << 20)} MiB.`,
+					`Splunk Observability Studio response exceeded ${responseByteLimit / (1 << 20)} MiB.`,
 				);
 				request.destroy(error);
 				fail(error);
@@ -125,7 +146,7 @@ export function collectObserverHostHTTPResponse(
 		};
 		const onEnd = () => {
 			if (!response.complete) {
-				fail(new Error('Observer response ended before the message was complete.'));
+				fail(new Error('Splunk Observability Studio response ended before the message was complete.'));
 				return;
 			}
 			const contentType = response.headers['content-type'];
@@ -140,8 +161,8 @@ export function collectObserverHostHTTPResponse(
 			}));
 		};
 		const onError = (error: Error) => fail(error);
-		const onAborted = () => fail(new Error('Observer response was aborted before completion.'));
-		const onClose = () => fail(new Error('Observer response closed before completion.'));
+		const onAborted = () => fail(new Error('Splunk Observability Studio response was aborted before completion.'));
+		const onClose = () => fail(new Error('Splunk Observability Studio response closed before completion.'));
 
 		response.on('data', onData);
 		response.once('end', onEnd);
@@ -222,36 +243,67 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 	switch (action) {
 		case 'connect':
 			return isObserverHostCloudPayload(value)
+				&& hasOnlyCloudPayloadKeys(value, ['accessToken', 'expectedVersion', 'realm'])
 				&& typeof value.accessToken === 'string'
-				&& typeof value.expectedVersion === 'string'
-				&& typeof value.realm === 'string'
-				&& value.enabled === undefined
-				&& value.skill === undefined;
+				&& typeof value.realm === 'string';
+		case 'resolve-realm':
+			return isObserverHostCloudPayload(value)
+				&& hasOnlyCloudPayloadKeys(value, ['destination'])
+				&& typeof value.destination === 'string'
+				&& value.destination.trim().length > 0
+				&& Buffer.byteLength(value.destination, 'utf8') <= maxCloudDestinationBytes;
+		case 'create-free-account':
+			return isObserverHostCloudPayload(value)
+				&& hasOnlyCloudPayloadKeys(value, [
+					'email',
+					'firstName',
+					'lastName',
+					'region',
+					'termsAccepted',
+				])
+				&& typeof value.firstName === 'string'
+				&& value.firstName.length > 0
+				&& value.firstName.length <= maxFreeAccountFirstNameLength
+				&& typeof value.lastName === 'string'
+				&& value.lastName.length > 0
+				&& value.lastName.length <= maxFreeAccountLastNameLength
+				&& typeof value.email === 'string'
+				&& value.email.length > 0
+				&& value.email.length <= maxFreeAccountEmailLength
+				&& typeof value.region === 'string'
+				&& isSupportedFreeAccountRegion(value.region)
+				&& value.termsAccepted === true;
 		case 'set-enabled':
 			return isObserverHostCloudPayload(value)
-				&& typeof value.enabled === 'boolean'
-				&& typeof value.expectedVersion === 'string'
-				&& value.accessToken === undefined
-				&& value.realm === undefined
-				&& value.skill === undefined;
+				&& hasOnlyCloudPayloadKeys(value, ['enabled', 'expectedVersion'])
+				&& typeof value.enabled === 'boolean';
 		case 'open-skill-docs':
 			return isObserverHostCloudPayload(value)
-				&& isSkillDocsId(value.skill)
-				&& value.accessToken === undefined
-				&& value.enabled === undefined
-				&& value.expectedVersion === undefined
-				&& value.realm === undefined;
+				&& hasOnlyCloudPayloadKeys(value, ['skill'])
+				&& isSkillDocsId(value.skill);
 		case 'forget':
-			return isObserverHostCloudPayload(value)
-				&& typeof value.expectedVersion === 'string'
-				&& value.accessToken === undefined
-				&& value.enabled === undefined
-				&& value.realm === undefined
-				&& value.skill === undefined;
+			return value === undefined
+				|| (isObserverHostCloudPayload(value)
+					&& hasOnlyCloudPayloadKeys(value, ['expectedVersion']));
+		case 'disconnect-cimd':
+		case 'login-cimd':
+		case 'setup-cimd':
+			// These carry no CIMD-specific payload. A known Splunk Observability Studio state version is
+			// included when available, but initialization failures must not block a
+			// deliberate retry.
+			return value === undefined
+				|| (isObserverHostCloudPayload(value)
+					&& hasOnlyCloudPayloadKeys(value, ['expectedVersion']));
+		case 'detect-free-account-region':
 		case 'initialize':
 		case 'open-audit-report':
 		case 'open-free-edition':
+		case 'open-free-edition-terms':
 		case 'open-ingest-token-help':
+		case 'open-realm-help':
+		case 'open-observability-cloud-demo':
+		case 'open-observability-data-course':
+		case 'open-observability-docs':
 			return value === undefined;
 	}
 }
@@ -263,21 +315,42 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 	const payload = value as Record<string, unknown>;
 	return Object.keys(payload).every((key) => [
 		'accessToken',
+		'destination',
+		'email',
 		'enabled',
 		'expectedVersion',
+		'firstName',
+		'lastName',
 		'realm',
+		'region',
 		'skill',
+		'termsAccepted',
 	].includes(key))
 		&& (payload.accessToken === undefined
 			|| (typeof payload.accessToken === 'string'
 				&& Buffer.byteLength(payload.accessToken, 'utf8') <= maxCloudAccessTokenBytes))
+		&& (payload.destination === undefined
+			|| (typeof payload.destination === 'string'
+				&& Buffer.byteLength(payload.destination, 'utf8') <= maxCloudDestinationBytes))
+		&& (payload.email === undefined || typeof payload.email === 'string')
 		&& (payload.enabled === undefined || typeof payload.enabled === 'boolean')
 		&& (payload.expectedVersion === undefined
 			|| (typeof payload.expectedVersion === 'string'
 				&& observerStateVersionPattern.test(payload.expectedVersion)))
+		&& (payload.firstName === undefined || typeof payload.firstName === 'string')
+		&& (payload.lastName === undefined || typeof payload.lastName === 'string')
 		&& (payload.realm === undefined
 			|| (typeof payload.realm === 'string' && payload.realm.length <= 32))
-		&& (payload.skill === undefined || isSkillDocsId(payload.skill));
+		&& (payload.region === undefined || typeof payload.region === 'string')
+		&& (payload.skill === undefined || isSkillDocsId(payload.skill))
+		&& (payload.termsAccepted === undefined || typeof payload.termsAccepted === 'boolean');
+}
+
+function hasOnlyCloudPayloadKeys(
+	value: ObserverHostCloudPayload,
+	allowed: readonly string[],
+): boolean {
+	return Object.keys(value).every((key) => allowed.includes(key));
 }
 
 function isCloudAction(value: unknown): value is CloudBridgeAction {

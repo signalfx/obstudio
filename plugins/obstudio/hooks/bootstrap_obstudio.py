@@ -32,6 +32,8 @@ BOOTSTRAP_STATE_FILE = "bootstrap-state.json"
 BOOTSTRAP_LOCK_FILE = "bootstrap.lock"
 BOOTSTRAP_STATUS_STOPPED = "stopped"
 CODEX_MANAGED_BLOCK = "# BEGIN OBSTUDIO MCP CONFIG"
+TOKEN_TELEMETRY_STATE_FILE = "token-telemetry.json"
+REPOSITORY_CORRELATION_EVENT = "obstudio.repository_correlation"
 DOWNLOAD_TIMEOUT_SECONDS = 30
 DOWNLOAD_ATTEMPTS = 3
 HEALTH_CHECK_ATTEMPTS = 20
@@ -130,7 +132,9 @@ def acquire_windows_lock(lock_file, deadline: float) -> None:
 
 
 def main() -> int:
+    hook_payload: dict[str, object] = {}
     try:
+        hook_payload = read_hook_payload()
         plugin_root = resolve_plugin_root()
         plugin_data = resolve_plugin_data()
         plugin_version = read_plugin_version(plugin_root)
@@ -140,7 +144,7 @@ def main() -> int:
         plugin_mcp_path = plugin_root / ".mcp.json"
 
         with bootstrap_lock(plugin_data / BOOTSTRAP_LOCK_FILE):
-            return bootstrap_locked(
+            result = bootstrap_locked(
                 plugin_data,
                 plugin_version,
                 state_path,
@@ -148,6 +152,7 @@ def main() -> int:
                 codex_skills_path,
                 plugin_mcp_path,
             )
+        return result
     except Exception as exc:  # pragma: no cover - defensive hook boundary
         emit_error(
             f"{plugin_display_name()} bootstrap could not complete automatically. "
@@ -155,6 +160,219 @@ def main() -> int:
         )
         print(f"bootstrap error: {exc}", file=sys.stderr)
         return 2
+    finally:
+        try:
+            emit_repository_correlation(hook_payload)
+        except Exception as exc:  # pragma: no cover - independent best-effort signal
+            print(f"repository correlation warning: {exc}", file=sys.stderr)
+
+
+def read_hook_payload(stream=None) -> dict[str, object]:
+    source = stream if stream is not None else sys.stdin
+    try:
+        raw = source.read()
+    except (OSError, ValueError):
+        return {}
+    if not raw.strip():
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def emit_repository_correlation(hook_payload: dict[str, object]) -> bool:
+    config = read_repository_correlation_config()
+    if config is None or not hook_payload:
+        return False
+    event = build_repository_correlation_event(hook_payload, config)
+    if event is None:
+        return False
+    request = urllib.request.Request(
+        config["endpoint"],
+        data=json.dumps(event, separators=(",", ":")).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(request, timeout=2) as response:
+            status = getattr(response, "status", 200)
+            return 200 <= status < 300
+    except Exception as exc:
+        print(f"repository correlation warning: {exc}", file=sys.stderr)
+        return False
+
+
+def read_repository_correlation_config() -> dict[str, str] | None:
+    configured_path = os.environ.get("OBSTUDIO_TOKEN_TELEMETRY_STATE_PATH", "").strip()
+    if configured_path:
+        state_path = Path(configured_path).expanduser()
+        if not state_path.is_absolute():
+            state_path = Path.home() / state_path
+    else:
+        state_path = Path.home() / ".obstudio" / TOKEN_TELEMETRY_STATE_FILE
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(state, dict) or state.get("version") != 1:
+        return None
+    correlations = state.get("repositoryCorrelation")
+    if not isinstance(correlations, dict):
+        return None
+    target = "claude-code" if plugin_host() == "claude" else "codex"
+    config = correlations.get(target)
+    if not isinstance(config, dict):
+        return None
+    mode = config.get("mode")
+    endpoint = config.get("endpoint")
+    if mode not in {"name", "path"} or not isinstance(endpoint, str):
+        return None
+    parsed = urllib.parse.urlparse(endpoint.strip())
+    if (
+        parsed.scheme not in {"http", "https"}
+        or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+        or parsed.path.rstrip("/") != "/v1/logs"
+    ):
+        return None
+    return {"mode": mode, "endpoint": endpoint.strip()}
+
+
+def build_repository_correlation_event(
+    hook_payload: dict[str, object],
+    config: dict[str, str],
+) -> dict[str, object] | None:
+    conversation_id = first_payload_string(
+        hook_payload,
+        "session_id",
+        "sessionId",
+        "conversation_id",
+        "conversationId",
+        "thread_id",
+        "threadId",
+        "thread-id",
+    )
+    task_id = first_payload_string(hook_payload, "turn_id", "turnId", "turn-id", "prompt_id", "promptId")
+    cwd = first_payload_string(hook_payload, "cwd", "working_directory", "workspace_path")
+    if (not conversation_id and not task_id) or not cwd:
+        return None
+    identity = repository_identity(Path(cwd))
+    if identity is None:
+        return None
+    mode = config["mode"]
+    provider = "claude" if plugin_host() == "claude" else "codex"
+    source = first_payload_string(hook_payload, "hook_event_name", "type") or "SessionStart"
+    attributes = {
+        "event.name": REPOSITORY_CORRELATION_EVENT,
+        "gen_ai.provider.name": provider,
+        "repository.name": identity["repositoryName"],
+        "obstudio.repository_correlation.mode": mode,
+        "obstudio.repository_correlation.source": source,
+        "event.timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    if conversation_id:
+        attributes["conversation.id"] = conversation_id
+        attributes["session.id"] = conversation_id
+    if task_id:
+        attributes["task.id"] = task_id
+    if mode == "path":
+        attributes["repository.path"] = identity["repositoryPath"]
+        attributes["workspace.path"] = identity["workspacePath"]
+    return otlp_log_payload(REPOSITORY_CORRELATION_EVENT, attributes)
+
+
+def first_payload_string(payload: dict[str, object], *keys: str) -> str:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def repository_identity(cwd: Path) -> dict[str, str] | None:
+    try:
+        workspace = cwd.expanduser().resolve()
+    except OSError:
+        workspace = cwd.expanduser().absolute()
+    if workspace.is_file():
+        workspace = workspace.parent
+    current = workspace
+    while True:
+        marker = current / ".git"
+        if marker.exists():
+            repository_path = canonical_repository_path(marker) if marker.is_file() else current
+            repository_path = repository_path or current
+            return {
+                "repositoryName": repository_path.name,
+                "repositoryPath": str(repository_path),
+                "workspacePath": str(current),
+            }
+        if current.parent == current:
+            break
+        current = current.parent
+    if not workspace.name:
+        return None
+    return {
+        "repositoryName": workspace.name,
+        "repositoryPath": str(workspace),
+        "workspacePath": str(workspace),
+    }
+
+
+def canonical_repository_path(marker: Path) -> Path | None:
+    try:
+        line = marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not line.lower().startswith("gitdir:"):
+        return None
+    git_dir = Path(line[len("gitdir:"):].strip())
+    if not git_dir.is_absolute():
+        git_dir = marker.parent / git_dir
+    git_dir = git_dir.resolve()
+    common_dir = git_dir
+    try:
+        common_value = (git_dir / "commondir").read_text(encoding="utf-8").strip()
+        common_dir = Path(common_value)
+        if not common_dir.is_absolute():
+            common_dir = git_dir / common_dir
+        common_dir = common_dir.resolve()
+    except OSError:
+        pass
+    return common_dir.parent if common_dir.name == ".git" else None
+
+
+def otlp_log_payload(body: str, attributes: dict[str, str]) -> dict[str, object]:
+    return {
+        "resourceLogs": [
+            {
+                "resource": {
+                    "attributes": [
+                        {"key": "service.name", "value": {"stringValue": "obstudio-agent-correlation"}},
+                    ]
+                },
+                "scopeLogs": [
+                    {
+                        "scope": {"name": "obstudio.agent-correlation", "version": "1"},
+                        "logRecords": [
+                            {
+                                "timeUnixNano": str(time.time_ns()),
+                                "severityNumber": 9,
+                                "severityText": "INFO",
+                                "body": {"stringValue": body},
+                                "attributes": [
+                                    {"key": key, "value": {"stringValue": value}}
+                                    for key, value in sorted(attributes.items())
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
 
 
 def bootstrap_locked(
@@ -168,8 +386,8 @@ def bootstrap_locked(
     stopped_state = read_bootstrap_state(state_path) if bootstrap_state_requests_stop(state_path) else {}
     if stopped_state.get("pluginVersion") == plugin_version:
         emit_context(
-            f"{plugin_display_name()} Observer is intentionally stopped for this plugin. "
-            f"Use {skill_command('observer-restart')} to start the managed Observer again."
+            f"{plugin_display_name()} is intentionally stopped for this plugin. "
+            f"Use {skill_command('observer-restart')} to start the managed Splunk Observability Studio service again."
         )
         return 0
     if stopped_state:
@@ -183,7 +401,7 @@ def bootstrap_locked(
             ),
         )
         emit_context(
-            f"{plugin_display_name()} plugin files were updated, and the managed Observer "
+            f"{plugin_display_name()} plugin files were updated, and managed Splunk Observability Studio "
             "remains intentionally stopped. "
             f"Use {skill_command('observer-restart')} to start it again."
         )
@@ -199,8 +417,8 @@ def bootstrap_locked(
         )
         emit_context(
             "Splunk Observability Studio MCP is explicitly disabled in Codex config. The plugin hook "
-            "left the managed Observer stopped, did not start or restart the "
-            "plugin-managed Observer, and bundled Splunk Observability Studio skills remain available."
+            "left managed Splunk Observability Studio stopped, did not start or restart the "
+            "plugin-managed Splunk Observability Studio service, and bundled Splunk Observability Studio skills remain available."
         )
         return 0
     if mcp_policy == "custom":
@@ -211,7 +429,7 @@ def bootstrap_locked(
         emit_context(
             "Custom Splunk Observability Studio MCP endpoint detected in Codex config. The plugin hook "
             f"left the configured endpoint unchanged ({codex_obstudio_mcp_url(codex_config_path)}), "
-            "did not start or restart the plugin-managed Observer, and bundled "
+            "did not start or restart the plugin-managed Splunk Observability Studio service, and bundled "
             "Splunk Observability Studio skills remain available."
         )
         return 0
@@ -267,7 +485,7 @@ def bootstrap_locked(
             else:
                 if is_tcp_port_open(plugin_health_url):
                     raise RuntimeError(
-                        f"local Observer port is already occupied at {plugin_health_url} "
+                        f"local Splunk Observability Studio port is already occupied at {plugin_health_url} "
                         "but the health endpoint is not reporting Splunk Observability Studio; stop the existing process or clear the stale shared-observer state"
                     )
                 process, log_path = start_obstudio_background(obstudio_binary, plugin_data)
@@ -305,19 +523,19 @@ def bootstrap_locked(
         if process_started:
             emit_context(
                 f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills, "
-                "the local Observer MCP config, and a background Observer process "
+                "the local Splunk Observability Studio MCP config, and a background Splunk Observability Studio process "
                 "was started for the bundled HTTP MCP endpoint."
             )
         elif observer_state["mode"] == "managed":
             emit_context(
                 f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills, "
-                "the local Observer MCP config, and the managed background Observer "
+                "the local Splunk Observability Studio MCP config, and managed Splunk Observability Studio "
                 "is healthy."
             )
         else:
             emit_context(
                 f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills "
-                "and the MCP config points at a shared Observer."
+                "and the MCP config points at a shared Splunk Observability Studio service."
             )
         return 0
     except Exception as exc:  # pragma: no cover - defensive hook boundary
@@ -346,6 +564,13 @@ def resolve_plugin_data() -> Path:
             data = Path(value).expanduser().resolve()
             data.mkdir(parents=True, exist_ok=True)
             return data
+    if plugin_host() == "claude":
+        config_root = os.environ.get("CLAUDE_CONFIG_DIR", "").strip()
+        data_root = Path(config_root).expanduser() if config_root else Path.home() / ".claude"
+        data = data_root / "plugins" / "data" / "obstudio"
+        data = data.resolve()
+        data.mkdir(parents=True, exist_ok=True)
+        return data
     raise RuntimeError("PLUGIN_DATA is not set")
 
 
@@ -836,7 +1061,7 @@ def resolve_release_version(resolved_artifact: str, artifact_suffix: str) -> str
 
 def ensure_process_running(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
-        raise RuntimeError("Observer process exited before becoming healthy")
+        raise RuntimeError("Splunk Observability Studio process exited before becoming healthy")
 
 
 def parse_obstudio_version(stdout: str, stderr: str) -> str | None:
@@ -966,7 +1191,7 @@ def terminate_process(process: subprocess.Popen[str]) -> None:
 def terminate_managed_process(pid: str, health_url: str = OBSTUDIO_HEALTH_URL) -> None:
     pid = pid.strip()
     if not pid.isdigit():
-        raise RuntimeError("could not determine managed Observer process pid")
+        raise RuntimeError("could not determine managed Splunk Observability Studio process pid")
     if is_windows():
         subprocess.run(["taskkill", "/PID", pid, "/T"], check=False, capture_output=True, text=True, timeout=5)
     else:
@@ -1005,7 +1230,7 @@ def verify_local_obstudio_health(health_url: str = OBSTUDIO_HEALTH_URL) -> dict[
             last_error = exc
         time.sleep(HEALTH_CHECK_SLEEP_SECONDS)
     raise RuntimeError(
-        f"local Observer did not become healthy at {health_url}"
+        f"local Splunk Observability Studio did not become healthy at {health_url}"
     ) from last_error
 
 

@@ -3,12 +3,15 @@ package mcp
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/signalfx/obstudio/observer/internal/freeaccount"
 	"github.com/signalfx/obstudio/observer/internal/store"
 )
 
@@ -18,6 +21,32 @@ func newHTTPTestServer(t *testing.T) *httptest.Server {
 	mux := http.NewServeMux()
 	Register(mux, store.New())
 	return httptest.NewServer(mux)
+}
+
+func TestHTTPLocalNativeClientDoesNotNeedObserverControlCredentials(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "obsolete-local-secret")
+	mux := http.NewServeMux()
+	Register(mux, store.New())
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`
+
+	localRequest := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	localRequest.RemoteAddr = "127.0.0.1:54321"
+	localRequest.Header.Set("Content-Type", "application/json")
+	localResponse := httptest.NewRecorder()
+	mux.ServeHTTP(localResponse, localRequest)
+	if localResponse.Code != http.StatusOK {
+		t.Fatalf("local MCP status = %d, want %d; body=%s", localResponse.Code, http.StatusOK, localResponse.Body.String())
+	}
+
+	crossOriginRequest := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:3000/mcp", strings.NewReader(body))
+	crossOriginRequest.RemoteAddr = "127.0.0.1:54321"
+	crossOriginRequest.Header.Set("Content-Type", "application/json")
+	crossOriginRequest.Header.Set("Origin", "http://127.0.0.1:4000")
+	crossOriginResponse := httptest.NewRecorder()
+	mux.ServeHTTP(crossOriginResponse, crossOriginRequest)
+	if crossOriginResponse.Code != http.StatusForbidden {
+		t.Fatalf("cross-origin MCP status = %d, want %d; body=%s", crossOriginResponse.Code, http.StatusForbidden, crossOriginResponse.Body.String())
+	}
 }
 
 func TestHTTPGetStreamReturnsEventStream(t *testing.T) {
@@ -166,6 +195,12 @@ func TestHTTPDeleteTerminatesSession(t *testing.T) {
 		t.Fatalf("expected Mcp-Session-Id header")
 	}
 
+	toolsList := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/list",
+	}
+	toolsBody, _ := json.Marshal(toolsList)
 	req, err = http.NewRequest(http.MethodDelete, server.URL+"/mcp", nil)
 	if err != nil {
 		t.Fatalf("new delete request: %v", err)
@@ -180,13 +215,6 @@ func TestHTTPDeleteTerminatesSession(t *testing.T) {
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", resp.StatusCode)
 	}
-
-	toolsList := map[string]any{
-		"jsonrpc": "2.0",
-		"id":      2,
-		"method":  "tools/list",
-	}
-	toolsBody, _ := json.Marshal(toolsList)
 
 	req, err = http.NewRequest(http.MethodPost, server.URL+"/mcp", bytes.NewReader(toolsBody))
 	if err != nil {
@@ -241,6 +269,45 @@ func TestHTTPAllowsPostWithoutSessionForExistingClients(t *testing.T) {
 	}
 }
 
+func TestHTTPOptionsAllowsLocalNativeClient(t *testing.T) {
+	mux := http.NewServeMux()
+	Register(mux, store.New())
+	request := httptest.NewRequest(http.MethodOptions, "/mcp", nil)
+	request.RemoteAddr = "127.0.0.1:54321"
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusNoContent)
+	}
+}
+
+func TestHTTPFreeAccountToolPropagatesCanceledRequestContext(t *testing.T) {
+	submitter := &fakeMCPFreeAccountSubmitter{
+		err: &freeaccount.Error{
+			Code:      freeaccount.ErrorCodeCanceled,
+			Message:   "The signup request was canceled before it was sent.",
+			RetrySafe: true,
+		},
+	}
+	mux := http.NewServeMux()
+	Register(mux, store.New(), submitter)
+	body := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"observer_splunk_free_account_create","arguments":{"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com","termsAccepted":true}}}`)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	request := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body)).WithContext(ctx)
+	request.RemoteAddr = "127.0.0.1:43123"
+	response := httptest.NewRecorder()
+
+	mux.ServeHTTP(response, request)
+
+	if submitter.calls != 1 || !errors.Is(submitter.ctxErr, context.Canceled) {
+		t.Fatalf("submitter calls=%d context error=%v, want one canceled call", submitter.calls, submitter.ctxErr)
+	}
+	if !strings.Contains(response.Body.String(), `request_canceled`) {
+		t.Fatalf("response did not return safe canceled result: %s", response.Body.String())
+	}
+}
+
 func TestHTTPRejectsMalformedJSONWithRPCParseError(t *testing.T) {
 	server := newHTTPTestServer(t)
 	defer server.Close()
@@ -275,6 +342,69 @@ func TestHTTPRejectsMalformedJSONWithRPCParseError(t *testing.T) {
 	}
 }
 
+func TestHTTPPreservesLargeNumericRequestID(t *testing.T) {
+	server := newHTTPTestServer(t)
+	defer server.Close()
+
+	request, err := http.NewRequest(
+		http.MethodPost,
+		server.URL+"/mcp",
+		strings.NewReader(`{"jsonrpc":"2.0","id":9007199254740993,"method":"tools/list"}`),
+	)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("post large-ID request: %v", err)
+	}
+	defer response.Body.Close()
+
+	var payload struct {
+		ID json.RawMessage `json:"id"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode large-ID response: %v", err)
+	}
+	if string(payload.ID) != "9007199254740993" {
+		t.Fatalf("response ID = %s, want 9007199254740993", payload.ID)
+	}
+}
+
+func TestHTTPRejectsInvalidRequestIDTypes(t *testing.T) {
+	for name, id := range map[string]string{
+		"boolean": "true",
+		"object":  `{}`,
+		"array":   `[]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			Register(mux, store.New())
+			request := httptest.NewRequest(
+				http.MethodPost,
+				"/mcp",
+				strings.NewReader(`{"jsonrpc":"2.0","id":`+id+`,"method":"tools/list"}`),
+			)
+			request.RemoteAddr = "127.0.0.1:54321"
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, request)
+
+			var payload struct {
+				ID    json.RawMessage `json:"id"`
+				Error *jsonRPCError   `json:"error"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("unmarshal invalid-ID response %q: %v", response.Body.String(), err)
+			}
+			if string(payload.ID) != "null" || payload.Error == nil || payload.Error.Code != -32600 {
+				t.Fatalf("invalid-ID response = %#v, want null ID and -32600", payload)
+			}
+		})
+	}
+}
+
 func TestHTTPDeleteRequiresSessionHeader(t *testing.T) {
 	server := newHTTPTestServer(t)
 	defer server.Close()
@@ -295,7 +425,7 @@ func TestHTTPDeleteRequiresSessionHeader(t *testing.T) {
 	}
 }
 
-func TestHTTPLocalhostOriginIsAccepted(t *testing.T) {
+func TestHTTPSameOriginIsAccepted(t *testing.T) {
 	server := newHTTPTestServer(t)
 	defer server.Close()
 
@@ -303,7 +433,7 @@ func TestHTTPLocalhostOriginIsAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
-	req.Header.Set("Origin", "http://localhost:3000")
+	req.Header.Set("Origin", server.URL)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -312,7 +442,16 @@ func TestHTTPLocalhostOriginIsAccepted(t *testing.T) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 for localhost origin, got %d", resp.StatusCode)
+		t.Fatalf("expected 200 for same origin, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPLocalhostTrailingDotSameOriginIsAccepted(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "http://localhost.:3000/mcp", nil)
+	request.RemoteAddr = "127.0.0.1:54321"
+	request.Header.Set("Origin", "http://localhost.:3000")
+	if !originAllowed(request) {
+		t.Fatal("localhost. same-origin MCP request was rejected")
 	}
 }
 

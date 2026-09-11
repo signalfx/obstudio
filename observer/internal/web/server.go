@@ -51,6 +51,7 @@ func Register(mux *http.ServeMux, s *store.Store, v *validator.Store) func() {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write(index)
 	})
 

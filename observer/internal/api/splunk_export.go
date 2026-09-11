@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,7 +19,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -26,26 +26,30 @@ import (
 )
 
 const (
-	maxSplunkExportRequestBytes = 32 * 1024
-	maxSplunkAccessTokenBytes   = 4096
-	splunkConnectionTestTimeout = 10 * time.Second
-	splunkExportEnvFileSource   = "env-file"
-	splunkMetricsOTLPTestPath   = "/v2/datapoint/otlp"
-	splunkBrowserRequestHeader  = "X-Obstudio-Browser-Request"
-	splunkBrowserTokenHeader    = "X-Obstudio-Browser-Token"
-	splunkRollbackTokenHeader   = "X-Obstudio-Cloud-Rollback-Token"
-	splunkBrowserCookiePrefix   = "obstudio_cloud_browser_session_"
-	splunkBrowserLaunchEnv      = "OBSTUDIO_CLOUD_BROWSER_LAUNCH_TOKEN"
+	maxSplunkExportRequestBytes  = 32 * 1024
+	maxSplunkAccessTokenBytes    = 4096
+	maxSplunkDestinationBytes    = 2048
+	maxSplunkRealmPageBytes      = 512 * 1024
+	splunkConnectionTestTimeout  = 10 * time.Second
+	splunkRealmResolutionTimeout = 8 * time.Second
+	splunkExportEnvFileSource    = "env-file"
+	splunkMetricsOTLPTestPath    = "/v2/datapoint/otlp"
+	splunkBrowserRequestHeader   = "X-Obstudio-Browser-Request"
+	splunkRollbackTokenHeader    = "X-Obstudio-Cloud-Rollback-Token"
 )
 
 var splunkRealmPattern = regexp.MustCompile(`^[a-z]{2,12}[0-9]+$`)
-var splunkBrowserLaunchTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
-var splunkBrowserTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
+var splunkSignalviewConfigPattern = regexp.MustCompile(`window\.signalviewConfig\s*=\s*`)
 var splunkRollbackTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 var splunkStateVersionPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 var errSplunkAccessTokenRejected = errors.New("Splunk rejected the access token for this realm.")
-var errSplunkExportQuiesced = errors.New("Observer is shutting down; cloud configuration changes are unavailable.")
+var errSplunkExportQuiesced = errors.New("Splunk Observability Studio is shutting down; cloud configuration changes are unavailable.")
 var splunkConnectionHTTPClient = &http.Client{
+	CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
+var splunkRealmHTTPClient = &http.Client{
 	CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	},
@@ -59,26 +63,22 @@ type splunkConnectionVerifier func(context.Context, string, string) error
 type SplunkExportConfigurationRefresher func() (bool, error)
 
 type splunkExportService struct {
-	metrics              *otlp.SplunkMetricsExportController
-	traces               *otlp.SplunkTracesExportController
-	refresh              SplunkExportConfigurationRefresher
-	verifyConnection     splunkConnectionVerifier
-	controlToken         string
-	browserLaunch        string
-	browserSessionIssued bool
-	browserToken         string
-	rollbackToken        string
-	rollbackMetrics      otlp.SplunkMetricsExporterConfig
-	rollbackChanged      bool
-	rollbackTraces       otlp.SplunkTracesExporterConfig
-	rollbackSource       string
-	source               string
-	configurationChanged bool
-	mutationsQuiesced    atomic.Bool
-	stateVersionKey      [32]byte
-	browserMu            sync.Mutex
-	mutationMu           sync.Mutex
-	mu                   sync.Mutex
+	metrics                 *otlp.SplunkMetricsExportController
+	traces                  *otlp.SplunkTracesExportController
+	refresh                 SplunkExportConfigurationRefresher
+	verifyConnection        splunkConnectionVerifier
+	resolveRealmClient      *http.Client
+	rollbackToken           string
+	rollbackMetrics         otlp.SplunkMetricsExporterConfig
+	rollbackChanged         bool
+	rollbackTraces          otlp.SplunkTracesExporterConfig
+	rollbackSource          string
+	source                  string
+	cimdRegistrationEnabled bool
+	configurationChanged    bool
+	stateVersionKey         [32]byte
+	mutationMu              sync.Mutex
+	mu                      sync.Mutex
 }
 
 type splunkExportSignalStatus struct {
@@ -91,23 +91,14 @@ type splunkExportSignalStatus struct {
 }
 
 type splunkExportStatusResponse struct {
-	Connected     bool                     `json:"connected"`
-	Enabled       bool                     `json:"enabled"`
-	Realm         string                   `json:"realm,omitempty"`
-	RollbackToken string                   `json:"rollbackToken,omitempty"`
-	Version       string                   `json:"version"`
-	Metrics       splunkExportSignalStatus `json:"metrics"`
-	Traces        splunkExportSignalStatus `json:"traces"`
-}
-
-type splunkExportConfigurationResponse struct {
-	AccessToken string `json:"accessToken,omitempty"`
-	Changed     bool   `json:"changed"`
-	Connected   bool   `json:"connected"`
-	Enabled     bool   `json:"enabled"`
-	Realm       string `json:"realm,omitempty"`
-	Source      string `json:"source,omitempty"`
-	Version     string `json:"version"`
+	Connected               bool                     `json:"connected"`
+	Enabled                 bool                     `json:"enabled"`
+	Realm                   string                   `json:"realm,omitempty"`
+	RollbackToken           string                   `json:"rollbackToken,omitempty"`
+	Version                 string                   `json:"version"`
+	Metrics                 splunkExportSignalStatus `json:"metrics"`
+	Traces                  splunkExportSignalStatus `json:"traces"`
+	CIMDRegistrationEnabled bool                     `json:"cimdRegistrationEnabled"`
 }
 
 type configureSplunkExportRequest struct {
@@ -129,8 +120,13 @@ type rollbackSplunkExportRequest struct {
 	RollbackToken string `json:"rollbackToken"`
 }
 
-type splunkExportBrowserSessionRequest struct {
-	LaunchToken string `json:"launchToken"`
+type splunkExportRealmRequest struct {
+	Destination string `json:"destination"`
+}
+
+type splunkSignalviewConfig struct {
+	AppDomain string `json:"appDomain"`
+	Realm     string `json:"realm"`
 }
 
 func newSplunkExportService(
@@ -145,13 +141,17 @@ func newSplunkExportService(
 		verifyConnection: func(ctx context.Context, realm, accessToken string) error {
 			return verifySplunkCloudConnection(ctx, splunkConnectionHTTPClient, realm, accessToken)
 		},
-		controlToken:  strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")),
-		browserLaunch: strings.TrimSpace(os.Getenv(splunkBrowserLaunchEnv)),
+		resolveRealmClient: splunkRealmHTTPClient,
+		// TODO(CIMD PoC): standalone-binary source of truth for the CIMD registration
+		// feature flag, independent of the VS Code "sisCimdRegistrationEnabled" setting
+		// used when Splunk Observability Studio runs inside the extension. The IDE setting is the source of
+		// truth whenever it is present; this env var only matters for direct-browser dev
+		// (`go run ./cmd/obstudio` + `make dev`), where no VS Code settings exist.
+		cimdRegistrationEnabled: envFlagEnabled("OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED"),
 	}
 	if _, err := rand.Read(service.stateVersionKey[:]); err != nil {
 		service.stateVersionKey = sha256.Sum256([]byte(fmt.Sprintf(
-			"%s:%d:%d",
-			service.controlToken,
+			"%d:%d",
 			os.Getpid(),
 			time.Now().UnixNano(),
 		)))
@@ -159,60 +159,54 @@ func newSplunkExportService(
 	return service
 }
 
+func envFlagEnabled(name string) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	return value == "1" || value == "true"
+}
+
 func (s *splunkExportService) register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/splunk/export", s.status)
-	mux.HandleFunc("GET /api/splunk/export/configuration", s.authorizeControlToken(s.serializeRecoveryMutation(s.configuration)))
-	mux.HandleFunc("POST /api/splunk/export/shutdown-snapshot", s.authorizeControlToken(s.serializeShutdownSnapshot(s.shutdownSnapshot)))
 	mux.HandleFunc("POST /api/splunk/export", s.authorizeMutation(s.serializeMutation(s.configure)))
-	mux.HandleFunc("POST /api/splunk/export/rollback", s.authorizeControlToken(s.serializeRecoveryMutation(s.rollback)))
-	mux.HandleFunc("POST /api/splunk/export/browser/session", s.issueBrowserSession)
+	mux.HandleFunc("POST /api/splunk/export/realm", s.authorizeMutation(s.resolveRealm))
+	mux.HandleFunc("POST /api/splunk/export/rollback", s.authorizeMutation(s.serializeRecoveryMutation(s.rollback)))
 	mux.HandleFunc("POST /api/splunk/export/enabled", s.authorizeMutation(s.serializeMutation(s.setEnabled)))
 	mux.HandleFunc("POST /api/splunk/export/forget", s.authorizeMutation(s.serializeMutation(s.forget)))
 	if s.refresh != nil {
-		mux.HandleFunc("POST /api/splunk/export/refresh", s.authorizeControlToken(s.serializeMutation(s.refreshConfiguration)))
+		mux.HandleFunc("POST /api/splunk/export/refresh", s.authorizeMutation(s.serializeMutation(s.refreshConfiguration)))
 	}
+}
+
+func (s *splunkExportService) resolveRealm(w http.ResponseWriter, r *http.Request) {
+	var request splunkExportRealmRequest
+	if err := decodeStrictJSON(w, r, &request); err != nil {
+		writeSplunkExportError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), splunkRealmResolutionTimeout)
+	defer cancel()
+	realm, err := resolveSplunkRealm(ctx, s.resolveRealmClient, request.Destination)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			writeSplunkExportError(w, http.StatusGatewayTimeout, "Splunk Observability Cloud realm lookup timed out.")
+			return
+		}
+		var validationError *splunkRealmDestinationError
+		if errors.As(err, &validationError) {
+			writeSplunkExportError(w, http.StatusBadRequest, validationError.Error())
+			return
+		}
+		writeSplunkExportError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	writeSameOriginJSON(w, map[string]string{"realm": realm})
 }
 
 func (s *splunkExportService) status(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, s.snapshot())
-}
-
-func (s *splunkExportService) configuration(w http.ResponseWriter, _ *http.Request) {
-	s.writeConfigurationSnapshot(w)
-}
-
-func (s *splunkExportService) shutdownSnapshot(w http.ResponseWriter, _ *http.Request) {
-	s.writeConfigurationSnapshot(w)
-}
-
-func (s *splunkExportService) writeConfigurationSnapshot(w http.ResponseWriter) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	metrics := s.metrics.Config()
-	traces := s.traces.Config()
-	connected := sameSplunkCloudRealm(
-		metrics.Realm,
-		metrics.AccessToken,
-		metrics.Endpoint != "",
-		traces.Realm,
-		traces.AccessToken,
-		traces.Endpoint != "",
-	)
-	response := splunkExportConfigurationResponse{
-		Changed:   s.configurationChanged,
-		Connected: connected,
-		Enabled:   connected && metrics.Enabled && traces.Enabled,
-		Source:    s.source,
-		Version:   s.stateVersionLocked(metrics, traces),
-	}
-	if connected {
-		response.AccessToken = metrics.AccessToken
-		response.Realm = metrics.Realm
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, response)
 }
 
 func (s *splunkExportService) configure(w http.ResponseWriter, r *http.Request) {
@@ -243,10 +237,6 @@ func (s *splunkExportService) configure(w http.ResponseWriter, r *http.Request) 
 		writeSplunkExportError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	if s.rejectQuiescedMutation(w) {
-		return
-	}
-
 	s.applyCloudConnection(w, realm, accessToken, issueRollback, requestedRollbackToken)
 }
 
@@ -279,10 +269,6 @@ func (s *splunkExportService) applyCloudConnection(
 ) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.rejectQuiescedMutation(w) {
-		return
-	}
-
 	previousMetrics := s.metrics.Config()
 	previousTraces := s.traces.Config()
 	rollbackToken, err := s.beginRollbackLocked(issueRollback, requestedRollbackToken)
@@ -307,13 +293,10 @@ func (s *splunkExportService) applyCloudConnection(
 	s.configurationChanged = true
 	status := s.snapshotLocked()
 	status.RollbackToken = rollbackToken
-	writeJSON(w, status)
+	writeSameOriginJSON(w, status)
 }
 
 func (s *splunkExportService) rollback(w http.ResponseWriter, r *http.Request) {
-	if s.rejectQuiescedMutation(w) {
-		return
-	}
 	var request rollbackSplunkExportRequest
 	if err := decodeStrictJSON(w, r, &request); err != nil {
 		writeSplunkExportError(w, http.StatusBadRequest, err.Error())
@@ -327,9 +310,6 @@ func (s *splunkExportService) rollback(w http.ResponseWriter, r *http.Request) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.rejectQuiescedMutation(w) {
-		return
-	}
 	if !equalSplunkRollbackToken(provided, s.rollbackToken) {
 		writeSplunkExportError(w, http.StatusConflict, "cloud rollback capability is not valid")
 		return
@@ -341,7 +321,7 @@ func (s *splunkExportService) rollback(w http.ResponseWriter, r *http.Request) {
 	s.source = s.rollbackSource
 	s.configurationChanged = s.rollbackChanged
 	s.clearRollbackLocked()
-	writeJSON(w, s.snapshotLocked())
+	writeSameOriginJSON(w, s.snapshotLocked())
 }
 
 func (s *splunkExportService) setEnabled(w http.ResponseWriter, r *http.Request) {
@@ -365,10 +345,6 @@ func (s *splunkExportService) setEnabled(w http.ResponseWriter, r *http.Request)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.rejectQuiescedMutation(w) {
-		return
-	}
-
 	metricsConfig := s.metrics.Config()
 	tracesConfig := s.traces.Config()
 	if enabled && !sameSplunkCloudRealm(
@@ -396,7 +372,7 @@ func (s *splunkExportService) setEnabled(w http.ResponseWriter, r *http.Request)
 	s.configurationChanged = true
 	status := s.snapshotLocked()
 	status.RollbackToken = rollbackToken
-	writeJSON(w, status)
+	writeSameOriginJSON(w, status)
 }
 
 func (s *splunkExportService) forget(w http.ResponseWriter, r *http.Request) {
@@ -415,12 +391,8 @@ func (s *splunkExportService) forget(w http.ResponseWriter, r *http.Request) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.rejectQuiescedMutation(w) {
-		return
-	}
-
 	if s.source == splunkExportEnvFileSource {
-		writeSplunkExportError(w, http.StatusConflict, "remove SPLUNK_ACCESS_TOKEN from the env file before forgetting this connection")
+		writeSplunkExportError(w, http.StatusConflict, "remove SPLUNK_ACCESS_TOKEN from the env file before removing this connection")
 		return
 	}
 	rollbackToken, err := s.beginRollbackLocked(issueRollback, requestedRollbackToken)
@@ -429,159 +401,14 @@ func (s *splunkExportService) forget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.apply(otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}); err != nil {
-		writeSplunkExportError(w, http.StatusInternalServerError, "could not forget Splunk Observability Cloud destination")
+		writeSplunkExportError(w, http.StatusInternalServerError, "could not remove Splunk Observability Cloud connection")
 		return
 	}
 	s.source = ""
 	s.configurationChanged = true
 	status := s.snapshotLocked()
 	status.RollbackToken = rollbackToken
-	writeJSON(w, status)
-}
-
-func (s *splunkExportService) issueBrowserSession(w http.ResponseWriter, r *http.Request) {
-	if s.controlToken == "" {
-		writeSplunkExportError(w, http.StatusServiceUnavailable, "Observer control is not configured")
-		return
-	}
-	if !isSameOriginLoopbackBrowserRequest(r) {
-		writeSplunkExportError(w, http.StatusForbidden, "browser cloud control requires the local Observer page")
-		return
-	}
-	var request splunkExportBrowserSessionRequest
-	if err := decodeStrictJSON(w, r, &request); err != nil {
-		writeSplunkExportError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
-	if s.rejectQuiescedMutation(w) {
-		return
-	}
-
-	providedSession := s.validBrowserTokenFromRequest(r)
-	authorizedBySession := providedSession != ""
-	launchToken := strings.TrimSpace(request.LaunchToken)
-	token := providedSession
-	if !authorizedBySession {
-		var authorizedByBrowser bool
-		var err error
-		token, authorizedByBrowser, err = s.browserSessionForLocalPage(launchToken)
-		if err != nil {
-			writeSplunkExportError(w, http.StatusInternalServerError, "could not create browser cloud control session")
-			return
-		}
-		if !authorizedByBrowser {
-			writeSplunkExportError(w, http.StatusUnauthorized, "browser cloud control launch is not valid")
-			return
-		}
-	}
-	warning := ""
-	if s.refresh != nil && !s.hasPendingRollback() {
-		if err := s.refreshConfigurationState(); err != nil {
-			warning = err.Error()
-		}
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	http.SetCookie(w, &http.Cookie{
-		Name:     splunkBrowserTokenCookieName(r),
-		Value:    token,
-		Path:     "/api/splunk/export",
-		HttpOnly: true,
-		Secure:   r.TLS != nil,
-		SameSite: http.SameSiteStrictMode,
-	})
-	response := map[string]string{"browserToken": token}
-	if warning != "" {
-		response["warning"] = warning
-	}
-	writeSameOriginJSON(w, response)
-}
-
-func splunkBrowserTokenCookieFromRequest(r *http.Request) string {
-	cookie, err := r.Cookie(splunkBrowserTokenCookieName(r))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(cookie.Value)
-}
-
-func splunkBrowserTokenCookieName(r *http.Request) string {
-	port := "80"
-	if r.TLS != nil {
-		port = "443"
-	}
-	if _, requestPort, err := net.SplitHostPort(r.Host); err == nil && requestPort != "" {
-		port = requestPort
-	}
-	return splunkBrowserCookiePrefix + port
-}
-
-func (s *splunkExportService) browserSessionForLocalPage(
-	launchToken string,
-) (string, bool, error) {
-	// The caller's loopback, Origin, request-marker, and fetch-metadata checks are
-	// the browser security boundary. A launch capability is optional so a local
-	// standalone page can be the first controller, but it must be valid whenever
-	// one is supplied so stale or tampered secure launch URLs fail closed.
-	if launchToken != "" && !equalSplunkBrowserLaunchToken(launchToken, s.browserLaunch) {
-		return "", false, nil
-	}
-
-	s.browserMu.Lock()
-	defer s.browserMu.Unlock()
-	if s.browserSessionIssued {
-		// The launch credential is process-scoped so the same secure URL can
-		// attach another legitimate tab or loopback hostname to this session.
-		if splunkBrowserTokenPattern.MatchString(s.browserToken) {
-			return s.browserToken, true, nil
-		}
-		return "", false, nil
-	}
-
-	token, err := newSplunkOpaqueToken()
-	if err != nil {
-		return "", false, err
-	}
-	s.browserToken = token
-	s.browserSessionIssued = true
-	return token, true, nil
-}
-
-func equalSplunkBrowserLaunchToken(provided, expected string) bool {
-	return splunkBrowserLaunchTokenPattern.MatchString(provided) &&
-		len(provided) == len(expected) &&
-		subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
-}
-
-func newSplunkOpaqueToken() (string, error) {
-	token := make([]byte, 32)
-	if _, err := rand.Read(token); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(token), nil
-}
-
-func (s *splunkExportService) hasValidBrowserToken(token string) bool {
-	if !splunkBrowserTokenPattern.MatchString(token) {
-		return false
-	}
-	s.browserMu.Lock()
-	defer s.browserMu.Unlock()
-	return len(token) == len(s.browserToken) &&
-		subtle.ConstantTimeCompare([]byte(token), []byte(s.browserToken)) == 1
-}
-
-func (s *splunkExportService) validBrowserTokenFromRequest(r *http.Request) string {
-	headerToken := strings.TrimSpace(r.Header.Get(splunkBrowserTokenHeader))
-	if s.hasValidBrowserToken(headerToken) {
-		return headerToken
-	}
-	cookieToken := splunkBrowserTokenCookieFromRequest(r)
-	if s.hasValidBrowserToken(cookieToken) {
-		return cookieToken
-	}
-	return ""
+	writeSameOriginJSON(w, status)
 }
 
 func equalSplunkRollbackToken(provided, expected string) bool {
@@ -594,9 +421,6 @@ func (s *splunkExportService) rollbackRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 ) (bool, string, bool) {
-	if !s.hasValidControlToken(r) {
-		return false, "", true
-	}
 	requested := strings.TrimSpace(r.Header.Get(splunkRollbackTokenHeader))
 	if requested == "" {
 		return false, "", true
@@ -636,12 +460,6 @@ func (s *splunkExportService) clearRollbackLocked() {
 	s.rollbackSource = ""
 }
 
-func (s *splunkExportService) hasPendingRollback() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.rollbackToken != ""
-}
-
 func (s *splunkExportService) refreshConfiguration(w http.ResponseWriter, _ *http.Request) {
 	if err := s.refreshConfigurationState(); err != nil {
 		if errors.Is(err, errSplunkExportQuiesced) {
@@ -654,15 +472,12 @@ func (s *splunkExportService) refreshConfiguration(w http.ResponseWriter, _ *htt
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	writeJSON(w, s.snapshotLocked())
+	writeSameOriginJSON(w, s.snapshotLocked())
 }
 
 func (s *splunkExportService) refreshConfigurationState() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.mutationsQuiesced.Load() {
-		return errSplunkExportQuiesced
-	}
 	s.clearRollbackLocked()
 
 	managed, err := s.refresh()
@@ -677,18 +492,13 @@ func (s *splunkExportService) refreshConfigurationState() error {
 	return nil
 }
 
-func (s *splunkExportService) authorizeControlToken(next http.HandlerFunc) http.HandlerFunc {
+func requireLocalObserverRequest(
+	next http.HandlerFunc,
+	writeError func(w http.ResponseWriter, status int, message string),
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.controlToken == "" {
-			writeSplunkExportError(w, http.StatusServiceUnavailable, "Observer control is not configured")
-			return
-		}
-		if !hasBearerAuthorization(r) {
-			writeSplunkExportError(w, http.StatusUnauthorized, "missing Observer control token")
-			return
-		}
-		if !s.hasValidControlToken(r) {
-			writeSplunkExportError(w, http.StatusUnauthorized, "invalid Observer control token")
+		if !isLocalObserverRequest(r) {
+			writeError(w, http.StatusForbidden, "request must come from the local Splunk Observability Studio origin")
 			return
 		}
 		next(w, r)
@@ -696,35 +506,7 @@ func (s *splunkExportService) authorizeControlToken(next http.HandlerFunc) http.
 }
 
 func (s *splunkExportService) authorizeMutation(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if s.controlToken == "" {
-			writeSplunkExportError(w, http.StatusServiceUnavailable, "Observer control is not configured")
-			return
-		}
-		if s.hasValidControlToken(r) {
-			next(w, r)
-			return
-		}
-
-		browserToken := s.validBrowserTokenFromRequest(r)
-		if browserToken == "" {
-			message := "missing Observer control token"
-			if hasBearerAuthorization(r) {
-				message = "invalid Observer control token"
-			}
-			if strings.TrimSpace(r.Header.Get(splunkBrowserTokenHeader)) != "" ||
-				splunkBrowserTokenCookieFromRequest(r) != "" {
-				message = "browser cloud control session is not valid"
-			}
-			writeSplunkExportError(w, http.StatusUnauthorized, message)
-			return
-		}
-		if !isSameOriginLoopbackBrowserRequest(r) {
-			writeSplunkExportError(w, http.StatusUnauthorized, "browser cloud control session is not valid")
-			return
-		}
-		next(w, r)
-	}
+	return requireLocalObserverRequest(next, writeSplunkExportError)
 }
 
 func (s *splunkExportService) serializeMutation(next http.HandlerFunc) http.HandlerFunc {
@@ -737,9 +519,6 @@ func (s *splunkExportService) serializeMutation(next http.HandlerFunc) http.Hand
 			return
 		}
 		defer s.mutationMu.Unlock()
-		if s.rejectQuiescedMutation(w) {
-			return
-		}
 		next(w, r)
 	}
 }
@@ -752,45 +531,9 @@ func (s *splunkExportService) serializeRecoveryMutation(next http.HandlerFunc) h
 	}
 }
 
-func (s *splunkExportService) serializeShutdownSnapshot(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Seal first so a long-running Connect cannot finish verification and
-		// apply while this shutdown request waits for the mutation lock.
-		s.mu.Lock()
-		s.mutationsQuiesced.Store(true)
-		s.mu.Unlock()
-		s.mutationMu.Lock()
-		defer s.mutationMu.Unlock()
-		next(w, r)
-	}
-}
-
-func (s *splunkExportService) rejectQuiescedMutation(w http.ResponseWriter) bool {
-	if !s.mutationsQuiesced.Load() {
-		return false
-	}
-	writeSplunkExportError(w, http.StatusServiceUnavailable, "Observer is shutting down; cloud configuration changes are unavailable.")
-	return true
-}
-
-func (s *splunkExportService) hasValidControlToken(r *http.Request) bool {
-	const bearerPrefix = "Bearer "
-	authorization := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authorization, bearerPrefix) {
-		return false
-	}
-	provided := strings.TrimSpace(strings.TrimPrefix(authorization, bearerPrefix))
-	return len(provided) == len(s.controlToken) &&
-		subtle.ConstantTimeCompare([]byte(provided), []byte(s.controlToken)) == 1
-}
-
-func hasBearerAuthorization(r *http.Request) bool {
-	return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
-}
-
 // isSameOriginLoopbackBrowserRequest is the standalone browser CSRF boundary.
-// Observer trusts same-user local processes; these checks prevent a remote web
-// origin from driving cloud mutations through the loopback HTTP API.
+// Splunk Observability Studio trusts local-machine processes that can reach loopback; these checks
+// prevent a remote web origin from driving cloud mutations through the HTTP API.
 func isSameOriginLoopbackBrowserRequest(r *http.Request) bool {
 	if r.Header.Get(splunkBrowserRequestHeader) != "1" {
 		return false
@@ -815,8 +558,22 @@ func isSameOriginLoopbackBrowserRequest(r *http.Request) bool {
 		isLoopbackHostname(origin.Hostname())
 }
 
+func isLocalObserverRequest(r *http.Request) bool {
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || !isLoopbackHostname(remoteHost) {
+		return false
+	}
+	if strings.TrimSpace(r.Header.Get("Origin")) != "" {
+		return isSameOriginLoopbackBrowserRequest(r)
+	}
+	if fetchSite := strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")); fetchSite != "" {
+		return fetchSite == "same-origin" && r.Header.Get(splunkBrowserRequestHeader) == "1"
+	}
+	return true
+}
+
 func isLoopbackHostname(host string) bool {
-	host = strings.Trim(strings.TrimSpace(host), "[]")
+	host = strings.TrimSuffix(strings.Trim(strings.TrimSpace(host), "[]"), ".")
 	if strings.EqualFold(host, "localhost") {
 		return true
 	}
@@ -868,10 +625,11 @@ func (s *splunkExportService) snapshotLocked() splunkExportStatusResponse {
 	}
 
 	return splunkExportStatusResponse{
-		Connected: connected,
-		Enabled:   connected && metrics.Enabled && traces.Enabled,
-		Realm:     realm,
-		Version:   s.stateVersionLocked(metricsConfig, tracesConfig),
+		Connected:               connected,
+		Enabled:                 connected && metrics.Enabled && traces.Enabled,
+		Realm:                   realm,
+		Version:                 s.stateVersionLocked(metricsConfig, tracesConfig),
+		CIMDRegistrationEnabled: s.cimdRegistrationEnabled,
 		Metrics: splunkExportSignalStatus{
 			Configured:      splunkSignalConfigured(metricsConfig.Realm, metrics.AccessTokenConfigured, metricsConfig.Endpoint),
 			Enabled:         metrics.Enabled,
@@ -964,9 +722,228 @@ func sameSplunkCloudRealm(
 func validateSplunkRealm(value string) (string, error) {
 	realm := strings.ToLower(strings.TrimSpace(value))
 	if !splunkRealmPattern.MatchString(realm) {
-		return "", errors.New("region is not valid")
+		return "", errors.New("realm is not valid")
 	}
 	return realm, nil
+}
+
+type splunkRealmDestinationError struct {
+	message string
+}
+
+func (e *splunkRealmDestinationError) Error() string {
+	return e.message
+}
+
+func invalidSplunkRealmDestination(message string) error {
+	return &splunkRealmDestinationError{message: message}
+}
+
+func resolveSplunkRealm(ctx context.Context, client *http.Client, value string) (string, error) {
+	destination := strings.TrimSpace(value)
+	if destination == "" {
+		return "", invalidSplunkRealmDestination("Observability Cloud URL or realm is required")
+	}
+	if len(destination) > maxSplunkDestinationBytes {
+		return "", invalidSplunkRealmDestination("Observability Cloud URL or realm is too long")
+	}
+	if strings.EqualFold(destination, "realm") {
+		return "", invalidSplunkRealmDestination("replace the placeholder with your Observability Cloud realm")
+	}
+	if realm, err := validateSplunkRealm(destination); err == nil {
+		return realm, nil
+	}
+
+	parsed, err := url.Parse(destination)
+	if err != nil || parsed.Opaque != "" || !strings.EqualFold(parsed.Scheme, "https") || parsed.Host == "" {
+		return "", invalidSplunkRealmDestination("destination must be a realm or HTTPS Splunk Observability Cloud URL")
+	}
+	if parsed.User != nil {
+		return "", invalidSplunkRealmDestination("destination URL must not contain user information")
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if parsed.Port() != "" || !strings.EqualFold(parsed.Host, host) {
+		return "", invalidSplunkRealmDestination("destination URL must not contain a port")
+	}
+	if net.ParseIP(host) != nil {
+		return "", invalidSplunkRealmDestination("destination URL must use a Splunk hostname")
+	}
+	if !validDNSHostname(host) || !isSplunkObservabilityHostname(host) {
+		return "", invalidSplunkRealmDestination("destination is not a Splunk Observability Cloud hostname")
+	}
+	if realm, standard, err := realmFromStandardSplunkHostname(host); standard {
+		if err != nil {
+			return "", invalidSplunkRealmDestination("destination URL does not contain a valid Observability Cloud realm")
+		}
+		return realm, nil
+	}
+	prefix, _, ok := splunkHostnamePrefix(host)
+	if !ok || strings.Contains(prefix, ".") {
+		return "", invalidSplunkRealmDestination("destination URL is not a supported Observability Cloud endpoint")
+	}
+	if strings.EqualFold(prefix, "realm") {
+		return "", invalidSplunkRealmDestination("replace the placeholder with your Observability Cloud realm")
+	}
+	if isRealmLessSplunkService(prefix) {
+		return "", invalidSplunkRealmDestination("destination URL does not identify an organization realm")
+	}
+
+	return fetchSplunkRealm(ctx, client, host)
+}
+
+func validDNSHostname(host string) bool {
+	if host == "" || len(host) > 253 || strings.HasPrefix(host, ".") || strings.HasSuffix(host, ".") {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, character := range label {
+			if (character < 'a' || character > 'z') &&
+				(character < '0' || character > '9') && character != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isSplunkObservabilityHostname(host string) bool {
+	return strings.HasSuffix(host, ".signalfx.com") ||
+		strings.HasSuffix(host, ".observability.splunkcloud.com")
+}
+
+func realmFromStandardSplunkHostname(host string) (string, bool, error) {
+	prefix, domain, ok := splunkHostnamePrefix(host)
+	if !ok {
+		return "", false, nil
+	}
+	parts := strings.Split(prefix, ".")
+	if len(parts) == 1 {
+		return "", false, nil
+	}
+	if len(parts) != 2 || !isSplunkRealmService(parts[0], domain) {
+		return "", true, errors.New("unsupported Splunk Observability Cloud endpoint")
+	}
+	realm, err := validateSplunkRealm(parts[1])
+	return realm, true, err
+}
+
+type splunkHostnameDomain uint8
+
+const (
+	splunkSignalFxDomain splunkHostnameDomain = iota + 1
+	splunkObservabilityDomain
+)
+
+func splunkHostnamePrefix(host string) (string, splunkHostnameDomain, bool) {
+	switch {
+	case strings.HasSuffix(host, ".observability.splunkcloud.com"):
+		return strings.TrimSuffix(host, ".observability.splunkcloud.com"), splunkObservabilityDomain, true
+	case strings.HasSuffix(host, ".signalfx.com"):
+		return strings.TrimSuffix(host, ".signalfx.com"), splunkSignalFxDomain, true
+	default:
+		return "", 0, false
+	}
+}
+
+func isSplunkRealmService(value string, domain splunkHostnameDomain) bool {
+	switch value {
+	case "app", "api", "ingest", "rum-ingest", "stream", "backfill", "runner":
+		return true
+	case "private-api", "private-ingest", "private-stream":
+		return domain == splunkSignalFxDomain
+	case "customer-api":
+		return domain == splunkObservabilityDomain
+	default:
+		return false
+	}
+}
+
+func isRealmLessSplunkService(value string) bool {
+	if value == "login" || value == "cdn" {
+		return true
+	}
+	return isSplunkRealmService(value, splunkSignalFxDomain) ||
+		isSplunkRealmService(value, splunkObservabilityDomain)
+}
+
+func fetchSplunkRealm(ctx context.Context, client *http.Client, host string) (string, error) {
+	if client == nil {
+		client = splunkRealmHTTPClient
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/", http.NoBody)
+	if err != nil {
+		return "", errors.New("could not prepare the Splunk Observability Cloud realm lookup")
+	}
+
+	lookupClient := *client
+	lookupClient.Jar = nil
+	lookupClient.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	response, err := lookupClient.Do(request)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "", context.DeadlineExceeded
+		}
+		return "", errors.New("could not reach the Splunk Observability Cloud URL")
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4*1024))
+		return "", fmt.Errorf("Splunk Observability Cloud URL returned HTTP %d", response.StatusCode)
+	}
+	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	if err != nil || !strings.EqualFold(mediaType, "text/html") {
+		return "", errors.New("Splunk Observability Cloud URL did not return an HTML page")
+	}
+	page, err := io.ReadAll(io.LimitReader(response.Body, maxSplunkRealmPageBytes+1))
+	if err != nil {
+		return "", errors.New("could not read the Splunk Observability Cloud page")
+	}
+	if len(page) > maxSplunkRealmPageBytes {
+		return "", errors.New("Splunk Observability Cloud page is too large")
+	}
+
+	config, err := parseSplunkSignalviewConfig(page)
+	if err != nil {
+		return "", err
+	}
+	realm, err := validateSplunkRealm(config.Realm)
+	if err != nil {
+		return "", errors.New("Splunk Observability Cloud page did not contain a valid realm")
+	}
+	if !splunkAppDomainMatchesRealm(config.AppDomain, realm) {
+		return "", errors.New("Splunk Observability Cloud page realm did not match its application domain")
+	}
+	return realm, nil
+}
+
+func parseSplunkSignalviewConfig(page []byte) (splunkSignalviewConfig, error) {
+	match := splunkSignalviewConfigPattern.FindIndex(page)
+	if match == nil {
+		return splunkSignalviewConfig{}, errors.New("Splunk Observability Cloud page did not contain signalview configuration")
+	}
+	var config splunkSignalviewConfig
+	decoder := json.NewDecoder(strings.NewReader(string(page[match[1]:])))
+	if err := decoder.Decode(&config); err != nil {
+		return splunkSignalviewConfig{}, errors.New("Splunk Observability Cloud page contained invalid signalview configuration")
+	}
+	return config, nil
+}
+
+func splunkAppDomainMatchesRealm(value, realm string) bool {
+	host := strings.ToLower(strings.TrimSpace(value))
+	if !validDNSHostname(host) {
+		return false
+	}
+	domainRealm, standard, err := realmFromStandardSplunkHostname(host)
+	if err != nil || !standard || !strings.HasPrefix(host, "app.") {
+		return false
+	}
+	return domainRealm == realm
 }
 
 func validateSplunkAccessToken(value string) (string, error) {

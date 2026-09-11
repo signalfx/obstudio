@@ -381,7 +381,12 @@ func TestMCPToolsList(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(req)
-	resp, err := http.Post(baseURL+"/mcp", "application/json", bytes.NewReader(data))
+	request, err := http.NewRequest(http.MethodPost, baseURL+"/mcp", bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("failed to create /mcp request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatalf("failed to POST to /mcp: %v", err)
 	}

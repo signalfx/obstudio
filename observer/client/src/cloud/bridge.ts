@@ -39,7 +39,7 @@ export interface UseCloudBridgeResult {
 /**
  * Exposes the VS Code/Kiro cloud command channel when the same React client is
  * running as a top-level IDE webview. Standalone localhost pages return no
- * bridge and continue to use the browser-session API.
+ * bridge and call the same-origin local API directly.
  */
 export function useCloudBridge(): UseCloudBridgeResult {
   const bridge = isObserverIDEHost() ? ideBridge : null;
@@ -59,7 +59,9 @@ export function isSplunkExportStatus(value: unknown): value is SplunkExportStatu
     && typeof status.version === "string"
     && /^[A-Za-z0-9_-]{43}$/.test(status.version)
     && isSplunkExportSignalStatus(status.metrics)
-    && isSplunkExportSignalStatus(status.traces);
+    && isSplunkExportSignalStatus(status.traces)
+    && (status.cimdRegistrationEnabled === undefined
+      || typeof status.cimdRegistrationEnabled === "boolean");
 }
 
 function isSplunkExportSignalStatus(value: unknown): value is SplunkExportSignalStatus {

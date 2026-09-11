@@ -122,6 +122,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate plugin checksums
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          plugin_version="${RELEASE_TAG#v}"
+          cd .release/plugins
+          sha256sum obstudio_codex_*.zip obstudio_claude_*.zip > "obstudio-plugin-checksum-${plugin_version}.txt"
+
+      - name: Upload plugin bundles to release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          plugin_version="${RELEASE_TAG#v}"
+          gh release upload "${GITHUB_REF_NAME}" \
+            .release/plugins/obstudio_codex_*.zip \
+            .release/plugins/obstudio_claude_*.zip \
+            ".release/plugins/obstudio-plugin-checksum-${plugin_version}.txt" \
+            --clobber
+
       - name: Upload VSIX to release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -163,3 +183,13 @@ jobs:
             echo "Verify \`Splunk.observability-studio\` version \`${marketplace_version}\` after publishing."
           } >> "${GITHUB_STEP_SUMMARY}"
           echo "::notice title=Manual Marketplace publish required::Upload the four VSIX files from ${RELEASE_URL} to ${MARKETPLACE_PUBLISHER_URL}; do not rebuild them."
+
+  sync-plugin-manifests:
+    name: Sync plugin manifest versions
+    needs: publish-release
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/sync-plugin-manifests.yml
+    with:
+      release_tag: ${{ github.ref_name }}

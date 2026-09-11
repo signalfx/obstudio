@@ -1,0 +1,4 @@
+interface:
+  display_name: "Get started with Observability Cloud Free Edition"
+  short_description: "Submit a region-mapped Free Edition intake"
+  default_prompt: "Use $create-splunk-free-account to get started with Observability Cloud Free Edition."

@@ -1,17 +1,33 @@
-import type { SplunkExportStatus } from "../api/types";
+import type { SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 
 export const observerHostCloudActions = [
   "connect",
+  "create-free-account",
+  "detect-free-account-region",
+  "disconnect-cimd",
   "forget",
   "initialize",
+  "login-cimd",
   "open-audit-report",
   "open-free-edition",
+  "open-free-edition-terms",
   "open-ingest-token-help",
+  "open-realm-help",
+  "open-observability-cloud-demo",
+  "open-observability-data-course",
+  "open-observability-docs",
   "open-skill-docs",
+  "resolve-realm",
   "set-enabled",
+  "setup-cimd",
 ] as const;
 
 export type ObserverHostCloudAction = typeof observerHostCloudActions[number];
+
+// login-cimd/setup-cimd block on a human completing an out-of-band browser sign-in
+// (or a slower SIS round trip), which can easily exceed the default cloud-action
+// timeout below -- give them a much longer allowance.
+const cimdCloudActions: ReadonlySet<ObserverHostCloudAction> = new Set(['login-cimd', 'setup-cimd']);
 
 export const observerHostSkillIds = [
   "otel-audit",
@@ -26,13 +42,26 @@ export type ObserverHostSkillId = typeof observerHostSkillIds[number];
 
 export interface ObserverHostCloudPayload {
   accessToken?: string;
+  destination?: string;
+  email?: string;
   enabled?: boolean;
   expectedVersion?: string;
+  firstName?: string;
+  lastName?: string;
   realm?: string;
+  region?: string;
   skill?: ObserverHostSkillId;
+  termsAccepted?: boolean;
 }
 
 export interface ObserverHostCloudResponse {
+  cimdRegistrationEnabled?: boolean;
+  cimdRegistrationVerified?: boolean;
+  cimdSession?: SISCIMDSessionStatus;
+  freeAccount?: unknown;
+  message?: string;
+  realm?: string;
+  region?: string;
   status?: SplunkExportStatus;
   warning?: string;
 }
@@ -72,10 +101,12 @@ interface ObserverHostCancelEnvelope {
 }
 
 interface ObserverHostResponseEnvelope {
+  code?: string;
   error?: string;
   ok: boolean;
   requestId: string;
   result?: unknown;
+  retrySafe?: boolean;
   type: "obstudio.host.response";
 }
 
@@ -93,6 +124,12 @@ interface PendingHostRequest {
 
 const hostRequestTimeoutMs = 15_000;
 const hostCloudRequestTimeoutMs = 60_000;
+const cimdCloudRequestTimeoutMs = 6 * 60_000;
+
+function requestTimeoutMs(request: ObserverHostRequest): number {
+  if (request.kind === "http") return hostRequestTimeoutMs;
+  return cimdCloudActions.has(request.action) ? cimdCloudRequestTimeoutMs : hostCloudRequestTimeoutMs;
+}
 const pendingHostRequests = new Map<string, PendingHostRequest>();
 const telemetryListeners = new Set<(message: ObserverHostTelemetryMessage) => void>();
 let acquiredFrom: (() => VSCodeWebviewAPI) | undefined;
@@ -103,6 +140,17 @@ export class ObserverHostCloudTimeoutError extends Error {
   constructor() {
     super("The IDE did not confirm the cloud request. Reload the window to reconcile its final state before trying again.");
     this.name = "ObserverHostCloudTimeoutError";
+  }
+}
+
+export class ObserverHostCloudRequestError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+    readonly retrySafe?: boolean,
+  ) {
+    super(message);
+    this.name = "ObserverHostCloudRequestError";
   }
 }
 
@@ -120,10 +168,10 @@ export async function observerFetch(path: string, init?: RequestInit): Promise<R
 
   const method = (init?.method ?? "GET").toUpperCase();
   if (method !== "GET" && method !== "POST") {
-    throw new Error(`Observer host transport does not support ${method} requests.`);
+    throw new Error(`Splunk Observability Studio host transport does not support ${method} requests.`);
   }
   if (init?.body !== undefined && typeof init.body !== "string") {
-    throw new Error("Observer host transport accepts only string request bodies.");
+    throw new Error("Splunk Observability Studio host transport accepts only string request bodies.");
   }
 
   const result = await callObserverHost({
@@ -133,7 +181,7 @@ export async function observerFetch(path: string, init?: RequestInit): Promise<R
     path,
   }, init?.signal ?? undefined);
   if (!isObserverHostHTTPResult(result)) {
-    throw new Error("The IDE returned an invalid Observer response.");
+    throw new Error("The IDE returned an invalid Splunk Observability Studio response.");
   }
   const body = result.status === 204 || result.status === 205 || result.status === 304
     ? null
@@ -223,7 +271,10 @@ function installMessageListener(): void {
       if (event.data.ok) {
         pending.resolve(event.data.result);
       } else {
-        pending.reject(new Error(event.data.error ?? "The IDE request failed."));
+        const message = event.data.error ?? "The IDE request failed.";
+        pending.reject(event.data.code !== undefined || event.data.retrySafe !== undefined
+          ? new ObserverHostCloudRequestError(message, event.data.code, event.data.retrySafe)
+          : new Error(message));
       }
       return;
     }
@@ -251,10 +302,10 @@ function callObserverHost(request: ObserverHostRequest, signal?: AbortSignal): P
           return;
         }
         // Do not cancel an accepted cloud mutation: the extension must finish
-        // synchronizing Observer state and secure storage. The caller fails
+        // synchronizing Splunk Observability Studio state and secure storage. The caller fails
         // closed until reload instead of permitting an uncertain retry.
         reject(new ObserverHostCloudTimeoutError());
-      }, request.kind === "http" ? hostRequestTimeoutMs : hostCloudRequestTimeoutMs);
+      }, requestTimeoutMs(request));
     const abort = signal
       ? () => {
         const pending = pendingHostRequests.get(requestId);
@@ -316,8 +367,27 @@ function isObserverHostHTTPResult(value: unknown): value is {
 function isObserverHostCloudResponse(value: unknown): value is ObserverHostCloudResponse {
   if (typeof value !== "object" || value === null) return false;
   const response = value as Record<string, unknown>;
-  return (response.status === undefined || isSplunkExportStatus(response.status))
-    && (response.warning === undefined || typeof response.warning === "string");
+  return (response.freeAccount === undefined
+      || (typeof response.freeAccount === "object" && response.freeAccount !== null))
+    && (response.region === undefined || typeof response.region === "string")
+    && (response.status === undefined || isSplunkExportStatus(response.status))
+    && (response.warning === undefined || typeof response.warning === "string")
+    && (response.message === undefined || typeof response.message === "string")
+    && (response.cimdRegistrationEnabled === undefined || typeof response.cimdRegistrationEnabled === "boolean")
+    && (response.cimdRegistrationVerified === undefined || typeof response.cimdRegistrationVerified === "boolean")
+    && (response.cimdSession === undefined || isSISCIMDSessionStatus(response.cimdSession));
+}
+
+function isSISCIMDSessionStatus(value: unknown): value is SISCIMDSessionStatus {
+  if (typeof value !== "object" || value === null) return false;
+  const status = value as Record<string, unknown>;
+  return (status.phase === "disconnected" || status.phase === "pending"
+    || status.phase === "connected" || status.phase === "error")
+    && (status.error === undefined || typeof status.error === "string")
+    && (status.issuer === undefined || typeof status.issuer === "string")
+    && (status.scope === undefined || typeof status.scope === "string")
+    && (status.connectedAt === undefined || typeof status.connectedAt === "string")
+    && (status.expiresAt === undefined || typeof status.expiresAt === "string");
 }
 
 function isSplunkExportStatus(value: unknown): value is SplunkExportStatus {
@@ -329,7 +399,9 @@ function isSplunkExportStatus(value: unknown): value is SplunkExportStatus {
     && typeof status.version === "string"
     && /^[A-Za-z0-9_-]{43}$/.test(status.version)
     && isSplunkExportSignalStatus(status.metrics)
-    && isSplunkExportSignalStatus(status.traces);
+    && isSplunkExportSignalStatus(status.traces)
+    && (status.cimdRegistrationEnabled === undefined
+      || typeof status.cimdRegistrationEnabled === "boolean");
 }
 
 function isSplunkExportSignalStatus(value: unknown): boolean {
@@ -355,7 +427,10 @@ function isObserverHostResponseEnvelope(value: unknown): value is ObserverHostRe
     && typeof response.requestId === "string"
     && /^[A-Za-z0-9_-]{8,128}$/.test(response.requestId)
     && typeof response.ok === "boolean"
-    && (response.error === undefined || typeof response.error === "string");
+    && (response.code === undefined
+      || (typeof response.code === "string" && /^[a-z0-9_]{1,64}$/.test(response.code)))
+    && (response.error === undefined || typeof response.error === "string")
+    && (response.retrySafe === undefined || typeof response.retrySafe === "boolean");
 }
 
 function isObserverHostTelemetryEnvelope(value: unknown): value is ObserverHostTelemetryEnvelope {

@@ -86,6 +86,7 @@ export interface MetricDataPoint {
 export interface LogRecord {
   id: string;
   timeUnixNano: string;
+  observedTimeUnixNano?: string;
   severityNumber?: number;
   severityText?: string;
   body: string;
@@ -115,6 +116,9 @@ export interface TraceSummary {
   durationMs?: number;
   status: string;
   isGenAI?: boolean;
+  retentionTruncated?: boolean;
+  retentionUnknown?: boolean;
+  revision?: number;
   spans?: SpanPreview[];
 }
 
@@ -183,6 +187,9 @@ export interface TraceDetail {
   spanCount: number;
   durationMs?: number;
   status: string;
+  retentionTruncated?: boolean;
+  retentionUnknown?: boolean;
+  revision?: number;
   spans: Span[];
   genAI?: GenAITraceSummary;
 }
@@ -303,4 +310,26 @@ export interface SplunkExportStatus {
   version: string;
   metrics: SplunkExportSignalStatus;
   traces: SplunkExportSignalStatus;
+  cimdRegistrationEnabled?: boolean;
+}
+
+export interface SISCIMDRegistrationResult {
+  authorizationUrl: string;
+  location: string;
+  cookieMaxAgeSeconds: number;
+}
+
+export interface SISCIMDLoginStartResult {
+  authorizationUrl: string;
+}
+
+export type SISCIMDSessionPhase = "disconnected" | "pending" | "connected" | "error";
+
+export interface SISCIMDSessionStatus {
+  phase: SISCIMDSessionPhase;
+  error?: string;
+  issuer?: string;
+  scope?: string;
+  connectedAt?: string;
+  expiresAt?: string;
 }

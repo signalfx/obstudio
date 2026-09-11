@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -24,16 +25,21 @@ type httpHandler struct {
 
 // Register adds the MCP HTTP endpoints to the given ServeMux.
 func Register(mux *http.ServeMux, s *store.Store, params ...any) {
-	h := &httpHandler{dispatcher: NewDispatcher(s, params...)}
+	h := &httpHandler{
+		dispatcher: NewDispatcher(s, params...),
+	}
 	mux.HandleFunc("GET /mcp", h.handleStream)
 	mux.HandleFunc("POST /mcp", h.handle)
 	mux.HandleFunc("DELETE /mcp", h.handleDelete)
 	mux.HandleFunc("OPTIONS /mcp", h.handleOptions)
 }
 
-func (h *httpHandler) handleOptions(w http.ResponseWriter, _ *http.Request) {
+func (h *httpHandler) handleOptions(w http.ResponseWriter, r *http.Request) {
+	if !originAllowed(r) {
+		http.Error(w, "origin not allowed", http.StatusForbidden)
+		return
+	}
 	w.Header().Set("Allow", "GET, POST, DELETE, OPTIONS")
-	setCORSHeaders(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -42,7 +48,6 @@ func (h *httpHandler) handleStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "origin not allowed", http.StatusForbidden)
 		return
 	}
-
 	sessionID := strings.TrimSpace(r.Header.Get("Mcp-Session-Id"))
 	// Streamable HTTP clients may establish the SSE stream before sending
 	// initialize, so a missing session ID is allowed here.
@@ -51,7 +56,6 @@ func (h *httpHandler) handleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setCORSHeaders(w)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -87,12 +91,15 @@ func (h *httpHandler) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setCORSHeaders(w)
-
 	var req jsonRPCRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(rpcError(nil, -32700, "Parse error"))
+		return
+	}
+	if !validJSONRPCRequestID(req.ID) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(rpcError(nil, -32600, "Invalid Request"))
 		return
 	}
 
@@ -104,7 +111,7 @@ func (h *httpHandler) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, handled := h.dispatcher.Dispatch(req)
+	resp, handled := h.dispatcher.DispatchContext(r.Context(), req)
 	if !handled {
 		w.WriteHeader(http.StatusAccepted)
 		return
@@ -126,7 +133,6 @@ func (h *httpHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setCORSHeaders(w)
 	sessionID := strings.TrimSpace(r.Header.Get("Mcp-Session-Id"))
 	if sessionID == "" {
 		http.Error(w, "missing Mcp-Session-Id header", http.StatusBadRequest)
@@ -149,17 +155,17 @@ func (h *httpHandler) sessionExists(sessionID string) bool {
 	return ok
 }
 
-func setCORSHeaders(w http.ResponseWriter) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id")
-	w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
-}
-
 func originAllowed(r *http.Request) bool {
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || !loopbackHost(remoteHost) {
+		return false
+	}
 	origin := strings.TrimSpace(r.Header.Get("Origin"))
 	if origin == "" {
-		// Non-browser local clients like Codex and Claude do not send Origin.
+		// This is an intentional local-machine trust boundary, not same-user
+		// authentication: native clients omit Origin, and any OS account or
+		// process that can reach this loopback endpoint is trusted. Browser
+		// callers must pass the exact same-origin check below.
 		return true
 	}
 
@@ -167,13 +173,21 @@ func originAllowed(r *http.Request) bool {
 	if err != nil {
 		return false
 	}
-
-	switch parsed.Hostname() {
-	case "localhost", "127.0.0.1", "::1":
-		return true
-	default:
-		return false
+	expectedScheme := "http"
+	if r.TLS != nil {
+		expectedScheme = "https"
 	}
+	return parsed.User == nil && parsed.Path == "" && parsed.RawQuery == "" && parsed.Fragment == "" &&
+		parsed.Scheme == expectedScheme && strings.EqualFold(parsed.Host, r.Host) && loopbackHost(parsed.Hostname())
+}
+
+func loopbackHost(host string) bool {
+	host = strings.TrimSuffix(strings.Trim(strings.TrimSpace(host), "[]"), ".")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func generateSessionID() string {

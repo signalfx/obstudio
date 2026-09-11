@@ -1,0 +1,2 @@
+{"type":"turn.completed","usage":{"input_tokens":80,"cached_input_tokens":20,"output_tokens":10,"reasoning_output_tokens":4,"total_tokens":90}}
+{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":40,"cached_input_tokens":10,"cache_write_input_tokens":5,"output_tokens":8,"reasoning_output_tokens":3,"total_tokens":48},"total_token_usage":{"input_tokens":120,"cached_input_tokens":30,"cache_write_input_tokens":10,"output_tokens":20,"reasoning_output_tokens":8,"total_tokens":140}}}}

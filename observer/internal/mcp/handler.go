@@ -2,6 +2,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/freeaccount"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/validator"
@@ -21,6 +23,65 @@ type jsonRPCRequest struct {
 	JSONRPC string `json:"jsonrpc"`
 	Method  string `json:"method"`
 	Params  any    `json:"params,omitempty"`
+}
+
+// UnmarshalJSON preserves protocol identifiers as json.Number without changing
+// the long-standing float64 decoding used by numeric tool arguments.
+func (r *jsonRPCRequest) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		ID      json.RawMessage `json:"id"`
+		JSONRPC string          `json:"jsonrpc"`
+		Method  string          `json:"method"`
+		Params  json.RawMessage `json:"params"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+
+	id, err := decodeJSONRPCRequestValue(wire.ID, true)
+	if err != nil {
+		return err
+	}
+	params, err := decodeJSONRPCRequestValue(wire.Params, wire.Method == "notifications/cancelled")
+	if err != nil {
+		return err
+	}
+
+	*r = jsonRPCRequest{
+		ID:      id,
+		JSONRPC: wire.JSONRPC,
+		Method:  wire.Method,
+		Params:  params,
+	}
+	return nil
+}
+
+func decodeJSONRPCRequestValue(raw json.RawMessage, preserveNumbers bool) (any, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var value any
+	if !preserveNumbers {
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return nil, err
+		}
+		return value, nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+func validJSONRPCRequestID(id any) bool {
+	switch id.(type) {
+	case nil, string, json.Number:
+		return true
+	default:
+		return false
+	}
 }
 
 type jsonRPCResponse struct {
@@ -37,11 +98,17 @@ type jsonRPCError struct {
 }
 
 type toolDef struct {
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	InputSchema jsonSchema `json:"inputSchema"`
-	Annotations toolAnnot  `json:"annotations"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	InputSchema jsonSchema     `json:"inputSchema"`
+	Annotations toolAnnot      `json:"annotations"`
+	Meta        map[string]any `json:"_meta,omitempty"`
 }
+
+const (
+	TokenAccountingProtocolMetaKey = "obstudio/token-accounting-version"
+	TokenAccountingProtocolVersion = 3
+)
 
 type jsonSchema struct {
 	Type                 string                `json:"type"`
@@ -52,6 +119,7 @@ type jsonSchema struct {
 	Enum                 []string              `json:"enum,omitempty"`
 	Minimum              *int                  `json:"minimum,omitempty"`
 	Maximum              *int                  `json:"maximum,omitempty"`
+	MaxLength            *int                  `json:"maxLength,omitempty"`
 	Default              any                   `json:"default,omitempty"`
 }
 
@@ -73,13 +141,19 @@ type toolContent struct {
 	Text string `json:"text"`
 }
 
+// RepositoryCorrelationModeResolver returns the currently configured
+// repository-correlation mode for a provider.
+type RepositoryCorrelationModeResolver func(provider string) string
+
 // Dispatcher handles MCP JSON-RPC method dispatch independent of transport.
 type Dispatcher struct {
-	store             *store.Store
-	validationService *validator.Service
-	splunkMetricsCtrl *otlp.SplunkMetricsExportController
-	splunkTracesCtrl  *otlp.SplunkTracesExportController
-	tools             []toolDef
+	store                             *store.Store
+	validationService                 *validator.Service
+	splunkMetricsCtrl                 *otlp.SplunkMetricsExportController
+	splunkTracesCtrl                  *otlp.SplunkTracesExportController
+	repositoryCorrelationModeResolver RepositoryCorrelationModeResolver
+	freeAccount                       freeaccount.Submitter
+	tools                             []toolDef
 }
 
 // NewDispatcher creates a new transport-agnostic MCP dispatcher.
@@ -88,6 +162,8 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 	var runner validator.Runner
 	var splunkMetricsCtrl *otlp.SplunkMetricsExportController
 	var splunkTracesCtrl *otlp.SplunkTracesExportController
+	var repositoryCorrelationModeResolver RepositoryCorrelationModeResolver
+	var freeAccountSubmitter freeaccount.Submitter
 	for _, param := range params {
 		switch value := param.(type) {
 		case *validator.Store:
@@ -106,17 +182,27 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 			if value != nil {
 				splunkTracesCtrl = value
 			}
+		case freeaccount.Submitter:
+			if value != nil {
+				freeAccountSubmitter = value
+			}
+		case RepositoryCorrelationModeResolver:
+			if value != nil {
+				repositoryCorrelationModeResolver = value
+			}
 		}
 	}
 	if validationStore == nil {
 		validationStore = validator.NewStore()
 	}
 	return &Dispatcher{
-		store:             s,
-		validationService: validator.NewService(validationStore, runner),
-		splunkMetricsCtrl: splunkMetricsCtrl,
-		splunkTracesCtrl:  splunkTracesCtrl,
-		tools:             buildToolDefs(splunkMetricsCtrl != nil),
+		store:                             s,
+		validationService:                 validator.NewService(validationStore, runner),
+		splunkMetricsCtrl:                 splunkMetricsCtrl,
+		splunkTracesCtrl:                  splunkTracesCtrl,
+		repositoryCorrelationModeResolver: repositoryCorrelationModeResolver,
+		freeAccount:                       freeAccountSubmitter,
+		tools:                             buildToolDefs(splunkMetricsCtrl != nil, freeAccountSubmitter != nil),
 	}
 }
 
@@ -124,6 +210,12 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 // It returns (response, handled). When handled is false the caller should
 // send an HTTP 202 or similar acknowledgement (e.g. for notifications).
 func (d *Dispatcher) Dispatch(req jsonRPCRequest) (jsonRPCResponse, bool) {
+	return d.DispatchContext(context.Background(), req)
+}
+
+// DispatchContext processes a single JSON-RPC request using the transport's
+// lifecycle context. Callers without one should use Dispatch.
+func (d *Dispatcher) DispatchContext(ctx context.Context, req jsonRPCRequest) (jsonRPCResponse, bool) {
 	switch req.Method {
 	case "initialize":
 		return d.handleInitialize(req), true
@@ -132,7 +224,7 @@ func (d *Dispatcher) Dispatch(req jsonRPCRequest) (jsonRPCResponse, bool) {
 	case "tools/list":
 		return d.handleToolsList(req), true
 	case "tools/call":
-		return d.handleToolsCall(req), true
+		return d.handleToolsCall(ctx, req), true
 	default:
 		return rpcError(req.ID, -32601, fmt.Sprintf("Method not found: %s", req.Method)), true
 	}
@@ -157,7 +249,7 @@ func (d *Dispatcher) handleToolsList(req jsonRPCRequest) jsonRPCResponse {
 	return rpcResult(req.ID, map[string]any{"tools": d.tools})
 }
 
-func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
+func (d *Dispatcher) handleToolsCall(ctx context.Context, req jsonRPCRequest) jsonRPCResponse {
 	params, ok := toMap(req.Params)
 	if !ok {
 		params = make(map[string]any)
@@ -175,6 +267,8 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 		result = d.tracesOverview(args)
 	case "observer_trace_detail":
 		result = d.traceDetail(args)
+	case "observer_token_usage_overview":
+		result = d.tokenUsageOverview(args)
 	case "observer_logs_overview":
 		result = d.logsOverview(args)
 	case "observer_clear":
@@ -184,9 +278,19 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 	case "observer_validation_status":
 		result = d.validationStatus()
 	case "observer_validation_analyze":
-		result = d.validationAnalyze(args)
+		result = d.validationAnalyze(ctx, args)
 	case "observer_validation_refresh":
-		result = d.validationRefresh(args)
+		result = d.validationRefresh(ctx, args)
+	case "observer_splunk_free_account_create":
+		if d.freeAccount == nil {
+			return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
+		}
+		result = d.splunkFreeAccountCreate(ctx, args)
+	case "observer_splunk_free_account_region_detect":
+		if d.freeAccount == nil {
+			return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
+		}
+		result = d.splunkFreeAccountRegionDetect(ctx, args)
 	case "observer_splunk_connection_realm",
 		"observer_splunk_metrics_export_status",
 		"observer_splunk_metrics_export_configure",
@@ -205,7 +309,7 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 		case "observer_splunk_metrics_export_configure":
 			result = d.splunkMetricsExportConfigure(args)
 		case "observer_splunk_metrics_export_test":
-			result = d.splunkMetricsExportTest(args)
+			result = d.splunkMetricsExportTest(ctx, args)
 		}
 	default:
 		return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
@@ -303,11 +407,11 @@ func (d *Dispatcher) validationStatus() toolResult {
 	return jsonToolResult(d.validationService.Summary())
 }
 
-func (d *Dispatcher) validationAnalyze(args map[string]any) toolResult {
+func (d *Dispatcher) validationAnalyze(ctx context.Context, args map[string]any) toolResult {
 	query := validationQueryFromArgs(args)
 	timeout := durationArgSeconds(args, "timeoutSeconds", 90*time.Second, 5*time.Second, 5*time.Minute)
 	freshness := freshnessArg(args, "freshness", validator.FreshnessAuto)
-	analysis, err := d.validationService.Analyze(context.Background(), query, freshness, timeout)
+	analysis, err := d.validationService.Analyze(ctx, query, freshness, timeout)
 	if err != nil {
 		suggestedTool := "observer_validation_analyze"
 		if freshness == validator.FreshnessLatestOK {
@@ -318,9 +422,9 @@ func (d *Dispatcher) validationAnalyze(args map[string]any) toolResult {
 	return jsonToolResult(analysis)
 }
 
-func (d *Dispatcher) validationRefresh(args map[string]any) toolResult {
+func (d *Dispatcher) validationRefresh(ctx context.Context, args map[string]any) toolResult {
 	timeout := durationArgSeconds(args, "timeoutSeconds", 90*time.Second, 5*time.Second, 5*time.Minute)
-	analysis, err := d.validationService.Refresh(context.Background(), validationQueryFromArgs(args), timeout)
+	analysis, err := d.validationService.Refresh(ctx, validationQueryFromArgs(args), timeout)
 	if err != nil {
 		return jsonValidationErrorResult(err, "observer_validation_status")
 	}
@@ -392,17 +496,82 @@ func (d *Dispatcher) splunkMetricsExportConfigure(args map[string]any) toolResul
 	return jsonToolResult(d.splunkMetricsCtrl.Status())
 }
 
-func (d *Dispatcher) splunkMetricsExportTest(args map[string]any) toolResult {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+func (d *Dispatcher) splunkMetricsExportTest(ctx context.Context, args map[string]any) toolResult {
+	testCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	status, err := d.splunkMetricsCtrl.TestConnection(ctx, strArg(args, "metricName"))
+	status, err := d.splunkMetricsCtrl.TestConnection(testCtx, strArg(args, "metricName"))
 	if err != nil {
 		return jsonErrorResult(map[string]any{"error": err.Error(), "status": status})
 	}
 	return jsonToolResult(status)
 }
 
-func buildToolDefs(withSplunk bool) []toolDef {
+func (d *Dispatcher) splunkFreeAccountCreate(ctx context.Context, args map[string]any) toolResult {
+	if !hasExactFreeAccountArgs(args) {
+		return jsonErrorResult(map[string]any{
+			"code":      freeaccount.ErrorCodeValidation,
+			"error":     "Free Edition signup requires firstName, lastName, email, and termsAccepted, with only an optional region override.",
+			"retrySafe": true,
+		})
+	}
+	result, err := d.freeAccount.Submit(ctx, freeaccount.Request{
+		FirstName:     strArg(args, "firstName"),
+		LastName:      strArg(args, "lastName"),
+		Email:         strArg(args, "email"),
+		Region:        strArg(args, "region"),
+		TermsAccepted: boolArg(args, "termsAccepted", false),
+	})
+	if err == nil {
+		return jsonToolResult(result)
+	}
+	var signupErr *freeaccount.Error
+	if errors.As(err, &signupErr) {
+		return jsonErrorResult(map[string]any{
+			"code":      signupErr.Code,
+			"error":     signupErr.Message,
+			"retrySafe": signupErr.RetrySafe,
+		})
+	}
+	return jsonErrorResult(map[string]any{
+		"code":      "internal_error",
+		"error":     "Could not submit the Free Edition signup.",
+		"retrySafe": false,
+	})
+}
+
+func (d *Dispatcher) splunkFreeAccountRegionDetect(ctx context.Context, args map[string]any) toolResult {
+	if len(args) != 0 {
+		return jsonErrorResult(map[string]any{
+			"code":      freeaccount.ErrorCodeValidation,
+			"error":     "Free Edition region detection does not accept arguments.",
+			"retrySafe": true,
+		})
+	}
+	return jsonToolResult(d.freeAccount.DetectRegion(ctx))
+}
+
+func hasExactFreeAccountArgs(args map[string]any) bool {
+	if len(args) != 4 && len(args) != 5 {
+		return false
+	}
+	for _, key := range [...]string{"firstName", "lastName", "email", "termsAccepted"} {
+		if _, ok := args[key]; !ok {
+			return false
+		}
+	}
+	if len(args) == 5 {
+		region, ok := args["region"]
+		if !ok {
+			return false
+		}
+		if _, ok := region.(string); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 	f := false
 	tools := []toolDef{
 		{
@@ -420,7 +589,7 @@ func buildToolDefs(withSplunk bool) []toolDef {
 					"limit":             {Type: "integer", Minimum: intPtr(1), Maximum: intPtr(100), Default: 20, Description: "Maximum number of metric groups to return."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Metrics Overview", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Metrics Overview", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_metric_detail",
@@ -434,7 +603,7 @@ func buildToolDefs(withSplunk bool) []toolDef {
 					"serviceName":    {Type: "string", Description: "Optional case-insensitive service.name filter."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Metric Detail", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Metric Detail", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_traces_overview",
@@ -450,7 +619,7 @@ func buildToolDefs(withSplunk bool) []toolDef {
 					"spanPreviewCount": {Type: "integer", Minimum: intPtr(0), Maximum: intPtr(12), Default: 5, Description: "Maximum number of spans to include in each trace preview."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Traces Overview", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Traces Overview", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_trace_detail",
@@ -462,7 +631,32 @@ func buildToolDefs(withSplunk bool) []toolDef {
 					"traceId":    {Type: "string", Description: "Lowercase hex traceId to fetch."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Trace Detail", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Trace Detail", ReadOnlyHint: true, IdempotentHint: true},
+		},
+		{
+			Name:        "observer_token_usage_overview",
+			Description: "Answer questions about recent agent or task token usage retained in Splunk Observability Studio's bounded in-memory history. Provider-native Codex response.completed logs, Claude api_request logs, and completed native task/request spans are normalized without adding logs and spans together. Returns normalized input, cached input, cache-creation input, output, reasoning output, provider-reported total, independently derived total, effective total, measurement coverage, trace/task identity, repository attribution, and accountingStatus. Use this when the user asks how many tokens a recent task or audit used, requests cache or reasoning breakdowns, compares provider and derived totals, asks which recent task used the most tokens, provides a Codex thread or Claude session ID, or asks about usage for a repository name or absolute path. highestUsageTask is computed across every retained match rather than only returned rows, and is null when any matched task has an unknown effective total. accountingStatus=exact describes token accounting only; repositoryCorrelationStatus separately describes repository attribution. Codex task traces can provide per-turn cwd, while explicit provider lifecycle events correlate Claude sessions when repository correlation is enabled. accountingStatus=exact requires one complete provider accounting source correlated to a completed native task boundary, or all four provider-native Claude cumulative metric components for an explicitly queried session. Delta metrics measure only their retained export window and remain partial. Codex logs are reconciled against the completed turn total; when retained logs are incomplete or evicted, the completed task span is authoritative. An explicit thread/session query omits a still-in-progress prompt when completed tasks for that conversation are retained. Uncorrelated, partial, estimated, and unknown are reported distinctly. Null means unknown and is distinct from an explicit zero. Raw provider events remain available as logs. Enclosing span summaries are de-duplicated from model-call spans, and evaluation-only judge branches are excluded.",
+			InputSchema: jsonSchema{
+				Type: "object", AdditionalProperties: &f,
+				Properties: map[string]jsonSchema{
+					"limit":          {Type: "integer", Minimum: intPtr(1), Maximum: intPtr(100), Default: 20, Description: "Maximum number of recent provider task rows or GenAI traces to return. Provider-task totals, coverage, and highestUsageTask include all retained matches."},
+					"serviceName":    {Type: "string", Description: "Optional case-insensitive provider or span service.name filter."},
+					"spanName":       {Type: "string", Description: "Optional case-insensitive span name filter; setting this explicitly selects span fallback data."},
+					"traceId":        {Type: "string", Description: "Optional exact provider trace ID. Use this for exact accounting of one dedicated task or audit trace."},
+					"traceIdPrefix":  {Type: "string", Description: "Optional provider task/conversation ID or lowercase hex trace ID prefix filter."},
+					"taskId":         {Type: "string", Description: "Optional exact Codex turn ID, Claude prompt ID, or fallback task ID."},
+					"conversationId": {Type: "string", Description: "Optional exact Codex conversation/thread ID or Claude session ID. For a codex://threads/... URL, use its trailing ID."},
+					"threadId":       {Type: "string", Description: "Backward-compatible alias for conversationId when an agent maps a codex://threads/... URL to threadId."},
+					"provider":       {Type: "string", Enum: []string{"codex", "claude"}, Description: "Optional provider-native telemetry filter."},
+					"skillName":      {Type: "string", Description: "Optional exact skill.name filter when the provider emits a skill marker, such as otel-audit."},
+					"repositoryName": {Type: "string", Description: "Optional case-insensitive repository name filter. Use this for a bare name such as entity-model-service or to include linked worktrees."},
+					"repositoryPath": {Type: "string", Description: "Optional absolute repository or workspace path filter. Canonical repository paths and provider worktree paths are both matched when retained."},
+				},
+			},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Agent Token Usage", ReadOnlyHint: true, IdempotentHint: true},
+			Meta: map[string]any{
+				TokenAccountingProtocolMetaKey: TokenAccountingProtocolVersion,
+			},
 		},
 		{
 			Name:        "observer_logs_overview",
@@ -477,7 +671,7 @@ func buildToolDefs(withSplunk bool) []toolDef {
 					"traceId":      {Type: "string", Description: "Optional traceId to find logs correlated with a specific trace."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Logs Overview", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Logs Overview", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_validation_status",
@@ -485,7 +679,7 @@ func buildToolDefs(withSplunk bool) []toolDef {
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 			},
-			Annotations: toolAnnot{Title: "Observer Validation Status", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Validation Status", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_validation_analyze",
@@ -506,7 +700,7 @@ func buildToolDefs(withSplunk bool) []toolDef {
 					"traceId":        {Type: "string", Description: "Optional exact trace id filter."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Validation Analyze"},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Validation Analyze"},
 		},
 		{
 			Name:        "observer_validation_refresh",
@@ -526,30 +720,65 @@ func buildToolDefs(withSplunk bool) []toolDef {
 					"traceId":        {Type: "string", Description: "Optional exact trace id filter."},
 				},
 			},
-			Annotations: toolAnnot{Title: "Observer Validation Refresh"},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Validation Refresh"},
 		},
 		{
 			Name:        "observer_clear",
-			Description: "Clear all telemetry data (traces, metrics, logs) from the in-memory store. Use this only when the user explicitly asks to clear or reset the observer state.",
+			Description: "Clear all telemetry data (traces, metrics, logs) from the in-memory store. Use this only when the user explicitly asks to clear or reset Splunk Observability Studio state.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 			},
-			Annotations: toolAnnot{Title: "Observer Clear Data", DestructiveHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Clear Data", DestructiveHint: true, IdempotentHint: true},
 		},
 		{
 			Name:        "observer_status",
-			Description: "Return the collector's listening endpoints (OTLP HTTP, OTLP gRPC, REST/Web UI) and current telemetry stats. Use this when the user asks whether telemetry is arriving, what ports to send OTLP to, or whether the observer backend is up.",
+			Description: "Return the collector's listening endpoints (OTLP HTTP, OTLP gRPC, REST/Web UI) and current telemetry stats. Use this when the user asks whether telemetry is arriving, what ports to send OTLP to, or whether Splunk Observability Studio is up.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 			},
-			Annotations: toolAnnot{Title: "Observer Status", ReadOnlyHint: true, IdempotentHint: true},
+			Annotations: toolAnnot{Title: "Splunk Observability Studio Status", ReadOnlyHint: true, IdempotentHint: true},
 		},
+	}
+	if len(freeAccountEnabled) > 0 && freeAccountEnabled[0] {
+		tools = append(tools, toolDef{
+			Name:        "observer_splunk_free_account_region_detect",
+			Description: "Detect a supported Splunk Observability Cloud Free Edition signup region from Splunk's coarse GeoIP response. Returns one of the exact region values used by Splunk's public signup form: us, Europe (Ireland), or apac-au. Lookup or mapping failures return us. Call this before collecting signup fields so the user can review or replace the preselected region. This performs no signup and retains no location data.",
+			InputSchema: jsonSchema{Type: "object", AdditionalProperties: &f},
+			Annotations: toolAnnot{
+				Title:           "Detect Splunk Free Edition Region",
+				ReadOnlyHint:    true,
+				DestructiveHint: false,
+				IdempotentHint:  true,
+				OpenWorldHint:   true,
+			},
+		}, toolDef{
+			Name:        "observer_splunk_free_account_create",
+			Description: "Submit one Splunk Observability Cloud Free Edition signup after the user explicitly accepts the Free Edition Terms of Use at https://www.splunk.com/en_us/legal/splunk-observability-free-edition-terms.html. Splunk derives coarse GeoIP country, state, city, postal code, and market region from Splunk Observability Studio's request source; Splunk Observability Studio supplies those matching form fields and maps the market to a supported signup region with a United States fallback. The optional region field lets the user override only the destination using the exact value from Splunk's public signup form. The result returns both that public-form region value and the corresponding technical realm. Ask for only the user's first name, last name, and email address, set termsAccepted only from explicit consent, and never call this tool speculatively or automatically retry it. Explicit acceptance is sent upstream as privacyPolicyCheck=1. A successful result confirms only that Splunk acknowledged intake; Splunk Observability Studio cannot verify provisioning or email delivery.",
+			InputSchema: jsonSchema{
+				Type: "object", AdditionalProperties: &f,
+				Required: []string{"firstName", "lastName", "email", "termsAccepted"},
+				Properties: map[string]jsonSchema{
+					"firstName":     {Type: "string", MaxLength: intPtr(40), Description: "The user's first name."},
+					"lastName":      {Type: "string", MaxLength: intPtr(40), Description: "The user's last name."},
+					"email":         {Type: "string", MaxLength: intPtr(80), Description: "The email address supplied with the Free Edition signup intake request."},
+					"region":        {Type: "string", Enum: []string{"us", "Europe (Ireland)", "apac-au"}, Description: "Optional exact region value from Splunk's public Free Edition signup form."},
+					"termsAccepted": {Type: "boolean", Description: "True only after the user explicitly accepts the Splunk Observability Cloud Free Edition Terms of Use."},
+				},
+			},
+			Annotations: toolAnnot{
+				Title:           "Create Splunk Free Edition Account",
+				ReadOnlyHint:    false,
+				DestructiveHint: false,
+				IdempotentHint:  false,
+				OpenWorldHint:   true,
+			},
+		})
 	}
 	if withSplunk {
 		tools = append(tools,
 			toolDef{
 				Name:        "observer_splunk_connection_realm",
-				Description: "Return only the non-secret Splunk Observability Cloud realm stored with the current SOS connection. Use this realm as the default when the user has not supplied one. This tool never returns an access token or token metadata.",
+				Description: "Return only the non-secret Splunk Observability Cloud realm stored with the current Splunk Observability Studio connection. Use this realm as the default when the user has not supplied one. This tool never returns an access token or token metadata.",
 				InputSchema: jsonSchema{Type: "object", AdditionalProperties: &f},
 				Annotations: toolAnnot{Title: "Splunk Connection Realm", ReadOnlyHint: true, IdempotentHint: true},
 			},
@@ -561,7 +790,7 @@ func buildToolDefs(withSplunk bool) []toolDef {
 			},
 			toolDef{
 				Name:        "observer_splunk_metrics_export_configure",
-				Description: "Update the Splunk Observability Cloud metrics forwarding configuration at runtime. Use this to enable, disable, or change the realm, endpoint, or access token without restarting obstudio.",
+				Description: "Update the Splunk Observability Cloud metrics forwarding configuration at runtime. Use this to enable, disable, or change the realm, endpoint, or access token without restarting Splunk Observability Studio.",
 				InputSchema: jsonSchema{
 					Type: "object", AdditionalProperties: &f,
 					Properties: map[string]jsonSchema{

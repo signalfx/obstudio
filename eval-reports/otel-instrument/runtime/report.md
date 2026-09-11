@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | runtime |
 | Skill | otel-instrument |
-| Run ID | 20260430T170207539067Z |
+| Run ID | 20260911T043511367063Z |
 | Agent model | gpt-5.5 |
 | Runtime enabled | True |
 | Workers | 1 |
@@ -17,16 +17,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/runtime/instrument | go/chi-basic | 1 | 100% (1/1) | 3.2M | 6.1m | - | - | - |
-| with_skill | go/chi-partial/runtime/instrument | go/chi-partial | 1 | 100% (1/1) | 1.1M | 4.6m | - | - | - |
-| with_skill | go/kvstore/runtime/instrument | go/kvstore | 1 | 100% (1/1) | 1.7M | 5.1m | - | - | - |
-| with_skill | node/express-basic/runtime/instrument | node/express-basic | 1 | 100% (1/1) | 415.6K | 4.6m | - | - | - |
-| with_skill | python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | 100% (1/1) | 616.7K | 3.9m | - | - | - |
-| with_skill | python/flask-basic/runtime/instrument | python/flask-basic | 1 | 100% (1/1) | 490.4K | 2.9m | - | - | - |
+| with_skill | python/flask-basic/runtime/instrument | python/flask-basic | 1 | 50% (1/2) | 5.3M | 25.4m | - | - | - |
+
+## Agent Token Usage
+
+| Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
+|---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| with_skill | python/flask-basic/runtime/instrument | python/flask-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 5223511 | 5047936 | unknown | 51883 | 23615 | unknown | 5275394 |
 
 ## Runtime Failures
 
-No runtime failures.
+| Mode | Service | Side | Prompt | Result | Evidence |
+|---|---|---|---|---|---|
+| with_skill | python/flask-basic | with_skill | runtime-preserving | runtime:observer-runtime-telemetry FAIL | Runtime check failed: command timed out after 300s: docker compose -p codex-eval-4426aa005dcf -f /private/tmp/obstudio-pr241-runtime-922d241/evals/python/flask-basic/eval/runtime/docker-compose.yml --profile traffic run --rm traffic; compose logs: app-1 \| Traceback (most recent call last): app-1 \| File "/app/.venv/b... |
 
 ## Compose Evidence
 

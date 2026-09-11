@@ -1,0 +1,4 @@
+{not-json
+{"type":"turn.completed","usage":{"total_tokens":"7"}}
+[]
+{"type":"turn.completed","usage":{"input_tokens":1.5,"cached_input_tokens":true,"output_tokens":-2,"total_tokens":null}}

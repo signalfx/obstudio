@@ -554,7 +554,9 @@ func TestConvertLogsBasic(t *testing.T) {
 
 	logRecord := sl.LogRecords().AppendEmpty()
 	timestamp := time.Now()
+	observedTimestamp := timestamp.Add(time.Millisecond)
 	logRecord.SetTimestamp(pcommon.NewTimestampFromTime(timestamp))
+	logRecord.SetObservedTimestamp(pcommon.NewTimestampFromTime(observedTimestamp))
 	logRecord.SetSeverityNumber(plog.SeverityNumberError)
 	logRecord.SetSeverityText("ERROR")
 	logRecord.Body().SetStr("An error occurred")
@@ -575,6 +577,9 @@ func TestConvertLogsBasic(t *testing.T) {
 	lr := result[0]
 	if lr.Body != "An error occurred" {
 		t.Errorf("body mismatch: expected 'An error occurred', got '%s'", lr.Body)
+	}
+	if lr.ObservedTimestamp == nil || !lr.ObservedTimestamp.Equal(observedTimestamp) {
+		t.Errorf("observed timestamp mismatch: got %v", lr.ObservedTimestamp)
 	}
 	if lr.SeverityText != "ERROR" {
 		t.Errorf("severity text mismatch")

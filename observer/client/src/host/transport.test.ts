@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   callObserverHostCloud,
+  ObserverHostCloudRequestError,
   observerFetch,
   subscribeObserverHostTelemetry,
 } from "./transport";
@@ -25,7 +26,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("Observer host transport", () => {
+describe("Splunk Observability Studio host transport", () => {
   it("keeps native fetch for the standalone browser", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("browser", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -83,9 +84,51 @@ describe("Observer host transport", () => {
     respond(request, true, { status: disconnectedStatus() });
     await expect(pending).resolves.toEqual({ status: disconnectedStatus() });
 
+    const legacy = callObserverHostCloud("initialize");
+    respond(posted.at(-1), true, { status: legacyDisconnectedStatus() });
+    await expect(legacy).resolves.toEqual({ status: legacyDisconnectedStatus() });
+
     const invalid = callObserverHostCloud("initialize");
     respond(posted.at(-1), true, { status: { connected: "yes" } });
     await expect(invalid).rejects.toThrow("invalid cloud response");
+
+    // A stringified boolean must not pass validation and end up truthy in the UI.
+    const invalidCIMDFlag = callObserverHostCloud("initialize");
+    respond(posted.at(-1), true, {
+      status: { ...disconnectedStatus(), cimdRegistrationEnabled: "false" },
+    });
+    await expect(invalidCIMDFlag).rejects.toThrow("invalid cloud response");
+  });
+
+  it("preserves allowlisted cloud failure metadata for outcome handling", async () => {
+    const { posted } = installHost();
+    const pending = callObserverHostCloud("create-free-account", {
+      email: "person@example.com",
+      firstName: "Example",
+      lastName: "Person",
+      region: "us",
+      termsAccepted: true,
+    });
+    const request = posted.at(-1);
+    if (!request?.requestId) throw new Error("host request was not posted");
+
+    window.dispatchEvent(new MessageEvent("message", {
+      data: {
+        code: "outcome_unknown",
+        error: "The upstream result could not be confirmed.",
+        ok: false,
+        requestId: request.requestId,
+        retrySafe: false,
+        type: "obstudio.host.response",
+      },
+    }));
+
+    await expect(pending).rejects.toEqual(expect.objectContaining({
+      code: "outcome_unknown",
+      message: "The upstream result could not be confirmed.",
+      name: "ObserverHostCloudRequestError",
+      retrySafe: false,
+    } satisfies Partial<ObserverHostCloudRequestError>));
   });
 
   it("cancels the host request when its AbortSignal is aborted", async () => {
@@ -174,6 +217,7 @@ function respond(request: PostedMessage | undefined, ok: boolean, result?: unkno
 
 function disconnectedStatus() {
   return {
+    cimdRegistrationEnabled: false,
     connected: false,
     enabled: false,
     version: "V".repeat(43),
@@ -192,4 +236,9 @@ function disconnectedStatus() {
       failedBatches: 0,
     },
   };
+}
+
+function legacyDisconnectedStatus() {
+  const { cimdRegistrationEnabled: _cimdRegistrationEnabled, ...status } = disconnectedStatus();
+  return status;
 }

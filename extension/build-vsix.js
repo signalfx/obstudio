@@ -107,17 +107,17 @@ function resolveVsceTarget(target) {
 	return resolved;
 }
 
-function buildObserverEnvironment(env = process.env, target = null) {
+function buildObserverEnvironment(env = process.env, target = null, releaseVersion = null) {
 	const resolved = resolveVsceTarget(target);
-	if (!resolved) {
-		return env;
-	}
 	return {
 		...env,
-		OBSTUDIO_GOARCH: resolved.goarch,
-		OBSTUDIO_GOOS: resolved.goos,
-		OBSTUDIO_OBSERVER_BINARY_NAME: resolved.binaryName,
-		OBSTUDIO_VSCODE_TARGET: target,
+		...(resolved === null ? {} : {
+			OBSTUDIO_GOARCH: resolved.goarch,
+			OBSTUDIO_GOOS: resolved.goos,
+			OBSTUDIO_OBSERVER_BINARY_NAME: resolved.binaryName,
+			OBSTUDIO_VSCODE_TARGET: target,
+		}),
+		...(releaseVersion === null ? {} : { OBSTUDIO_OBSERVER_VERSION: releaseVersion }),
 	};
 }
 
@@ -173,7 +173,7 @@ function packageVsix({
 		extraArgs,
 	}), vsceExecOptions({
 		cwd: extensionRoot,
-		env: buildObserverEnvironment(env, target),
+		env: buildObserverEnvironment(env, target, releaseVersion),
 	}));
 
 	return { output, releaseVersion };

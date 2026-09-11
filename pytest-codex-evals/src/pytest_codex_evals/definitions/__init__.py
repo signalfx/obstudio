@@ -7,6 +7,7 @@ from .base import (
     GradeCheckResult,
     GradeResult,
     PromptVariant,
+    TokenUsage,
     resolve_skill_source,
     SideResult,
     ValidationResult,
@@ -52,5 +53,6 @@ __all__ = [
     "SanityEvalDefinition",
     "ServiceLogExpectation",
     "SideResult",
+    "TokenUsage",
     "ValidationResult",
 ]

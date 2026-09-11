@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -22,6 +23,9 @@ func TestStaticIndexReferencesObserverIcon(t *testing.T) {
 	if !strings.Contains(string(indexBytes), `/assets/observer-icon.svg`) {
 		t.Fatal("static index should reference the observer favicon asset")
 	}
+	if !strings.Contains(string(indexBytes), `<title>Splunk Observability Studio – Telemetry Explorer</title>`) {
+		t.Fatal("static index should use the full product title")
+	}
 	if !strings.Contains(string(indexBytes), `/assets/main.js?v=0.0.8`) {
 		t.Fatal("static index should cache-bust main.js with the extension release version")
 	}
@@ -31,6 +35,13 @@ func TestStaticIndexReferencesObserverIcon(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(rootDir, "assets", "observer-icon.svg")); err != nil {
 		t.Fatalf("observer favicon asset missing: %v", err)
+	}
+	mainJS, err := os.ReadFile(filepath.Join(rootDir, "assets", "main.js"))
+	if err != nil {
+		t.Fatalf("read static main.js: %v", err)
+	}
+	if regexp.MustCompile(`\bObserver\b`).Match(mainJS) {
+		t.Fatal("static client bundle should not contain the legacy product display label")
 	}
 }
 
@@ -68,5 +79,23 @@ func TestStaticIndexCannotBeFramedByAnotherSite(t *testing.T) {
 	}
 	if frameOptions := recorder.Header().Get("X-Frame-Options"); frameOptions != "DENY" {
 		t.Fatalf("X-Frame-Options = %q, want DENY", frameOptions)
+	}
+}
+
+func TestStaticIndexNeverEmbedsObserverCredentials(t *testing.T) {
+	mux := http.NewServeMux()
+	cleanup := Register(mux, store.New(), validator.NewStore())
+	defer cleanup()
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/?tab=cloud", nil)
+	request.RemoteAddr = "127.0.0.1:54321"
+	request.Host = "127.0.0.1:3000"
+	mux.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected index response status 200, got %d", recorder.Code)
+	}
+	if strings.Contains(recorder.Body.String(), "__OBSTUDIO_CONTROL_TOKEN__") {
+		t.Fatal("index embedded a Splunk Observability Studio control credential")
 	}
 }

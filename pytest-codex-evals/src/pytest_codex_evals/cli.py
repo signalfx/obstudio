@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import json
+import sys
 from pathlib import Path
 
 from .discovery import discover_cases
-from .report import load_raw_run_payloads, normalize_kind, render_reports_for_run_root
+from .report import (
+    load_raw_run_payloads,
+    normalize_kind,
+    render_reports_for_run_root,
+    verify_published_report_sources,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,6 +28,9 @@ def main(argv: list[str] | None = None) -> int:
     report_parser.add_argument("--kind", required=True, choices=("validation", "sanity", "rubric", "runtime"), help="Report kind to render")
     report_parser.add_argument("--skill", default="", help="Skill directory path or skill name; optional with --run-root")
     report_parser.add_argument("--output-dir", default="", help="Directory for latest report copies; defaults to <repo-root>/eval-reports")
+
+    verify_parser = subparsers.add_parser("verify-reports", help="Verify tracked report inputs still match skill and eval sources")
+    verify_parser.add_argument("--repo-root", default=".", help="Repository root; defaults to current directory or nearest parent with skills/")
 
     args = parser.parse_args(argv)
     if args.command == "list":
@@ -46,6 +56,15 @@ def main(argv: list[str] | None = None) -> int:
             report_path, benchmark_path = render_reports_for_run_root(run_root, args.kind, skill=skill, output_dir=output_dir)
             print(f"wrote {report_path}")
             print(f"wrote {benchmark_path}")
+        return 0
+    if args.command == "verify-reports":
+        repo_root = infer_repo_root(Path(args.repo_root).expanduser().resolve())
+        try:
+            verified = verify_published_report_sources(repo_root)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(f"verified {len(verified)} eval report source manifest(s)")
         return 0
     return 1
 

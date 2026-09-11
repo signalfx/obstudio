@@ -30,7 +30,7 @@ jobs:
         run: make agent-policy-check
 
   observer:
-    name: Observer – vet, build & test
+    name: Splunk Observability Studio – vet, build & test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,11 +76,11 @@ jobs:
       - name: Run eval-input handoff tests
         run: make test-pytest-plugin
 
-      - name: Run Obstudio plugin hook tests
+      - name: Run Splunk Observability Studio plugin hook tests
         run: python3 -m unittest discover -s plugins/obstudio/hooks/tests -p 'test_*.py'
 
   observer-smoke:
-    name: Observer smoke – ${{ matrix.label }}
+    name: Splunk Observability Studio smoke – ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -106,7 +106,7 @@ jobs:
         working-directory: observer
         run: |
           go run ./cmd/stage-skills
-          go test ./cmd/obstudio -run TestInstallSmokeInstallsBinaryAndAcceptsOTLP -count=1
+          go test ./cmd/obstudio -run 'Test(InstallSmokeInstallsBinaryAndAcceptsOTLP|ManagedLifecycleRealBinary|ManagedUpgradeActivatesOnlyAfterRestart)$' -count=1
 
   extension:
     name: Extension – test & package
@@ -127,7 +127,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: extension
-        run: npm ci
+        run: npm ci --engine-strict
 
       - name: Run unit tests
         working-directory: extension
@@ -136,6 +136,46 @@ jobs:
       - name: Run integration tests
         working-directory: extension
         run: npm run test:integration
+
+      - name: Prepare exact v0.0.18 upgrade fixture
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          fixture_dir="${RUNNER_TEMP}/obstudio-v0.0.18"
+          archive="${fixture_dir}/obstudio_0.0.18_linux_amd64.zip"
+          mkdir -p "${fixture_dir}/unpacked"
+          gh release download v0.0.18 \
+            --repo signalfx/obstudio \
+            --pattern 'obstudio_0.0.18_linux_amd64.zip' \
+            --dir "${fixture_dir}"
+          echo "334fe414f6c8d0994ffab3e065232b9726f1b76e47f260a719213f5dc85c9c47  ${archive}" | sha256sum -c -
+          unzip -q "${archive}" -d "${fixture_dir}/unpacked"
+          binary="$(find "${fixture_dir}/unpacked" -type f -name obstudio -print -quit)"
+          test -n "${binary}"
+          chmod +x "${binary}"
+          echo "OBSTUDIO_V018_BINARY_PATH=${binary}" >> "${GITHUB_ENV}"
+
+      - name: Prepare exact v0.0.20 upgrade fixture
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          fixture_dir="${RUNNER_TEMP}/obstudio-v0.0.20"
+          archive="${fixture_dir}/obstudio_0.0.20_linux_amd64.zip"
+          mkdir -p "${fixture_dir}/unpacked"
+          gh release download v0.0.20 \
+            --repo signalfx/obstudio \
+            --pattern 'obstudio_0.0.20_linux_amd64.zip' \
+            --dir "${fixture_dir}"
+          echo "56efc339d671e041da2d812b0c5e824b084a5c4215a92f148ecc77d64d805323  ${archive}" | sha256sum -c -
+          unzip -q "${archive}" -d "${fixture_dir}/unpacked"
+          binary="$(find "${fixture_dir}/unpacked" -type f -name obstudio -print -quit)"
+          test -n "${binary}"
+          chmod +x "${binary}"
+          echo "OBSTUDIO_V020_BINARY_PATH=${binary}" >> "${GITHUB_ENV}"
 
       - name: Run VS Code host tests
         working-directory: extension
@@ -213,6 +253,10 @@ jobs:
       - name: Install dependencies
         working-directory: extension
         run: npm ci
+
+      - name: Verify platform process termination
+        working-directory: extension
+        run: npm run test:process-control
 
       - name: Download target VSIX artifact
         uses: actions/download-artifact@v4

@@ -1,9 +1,13 @@
 import importlib.util
 import json
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 def load_stage_module():
@@ -28,14 +32,42 @@ class StageObstudioPluginTest(unittest.TestCase):
 
             self.assertTrue((output / ".codex-plugin" / "plugin.json").is_file())
             self.assertTrue((output / ".claude-plugin" / "plugin.json").is_file())
+            self.assertTrue((output / "LICENSE").is_file())
             self.assertTrue((output / "PRIVACY.md").is_file())
             self.assertTrue((output / "SECURITY.md").is_file())
             self.assertTrue((output / "hooks" / "bootstrap_obstudio.py").is_file())
             self.assertTrue((output / "hooks" / "bootstrap_claude.cjs").is_file())
+            self.assertTrue((output / "skills" / "connect-splunk-observability-cloud" / "SKILL.md").is_file())
+            self.assertTrue((output / "skills" / "create-splunk-free-account" / "SKILL.md").is_file())
             self.assertTrue((output / "skills" / "otel-instrument" / "SKILL.md").is_file())
             self.assertTrue((output / "skills" / "references" / "report-flow-contract.md").is_file())
             self.assertFalse((output / "skills" / "otel-instrument").is_symlink())
             self.assertFalse(any(path.is_symlink() for path in output.rglob("*")))
+
+    def test_staged_plugin_excludes_skill_tests_and_caches(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            output = Path(tempdir) / "obstudio"
+            canonical_skills = Path(tempdir) / "skills"
+            shutil.copytree(STAGE.CANONICAL_SKILLS_ROOT, canonical_skills)
+            for cache_name in (".pytest_cache", ".mypy_cache", ".ruff_cache"):
+                cache_file = canonical_skills / "otel-instrument" / cache_name / "cache" / "entry"
+                cache_file.parent.mkdir(parents=True)
+                cache_file.write_text("cache", encoding="utf-8")
+
+            with mock.patch.object(STAGE, "CANONICAL_SKILLS_ROOT", canonical_skills):
+                STAGE.stage_plugin(output)
+
+            skill_files = [path for path in (output / "skills").rglob("*") if path.is_file()]
+            self.assertTrue((output / "skills" / "otel-instrument" / "scripts" / "validate_gap_closure.py").is_file())
+            self.assertFalse(any(path.name == "tests" or "tests" in path.parts for path in skill_files))
+            self.assertFalse(any(path.name.startswith("test_") for path in skill_files))
+            self.assertFalse(
+                any(
+                    cache_name in path.parts
+                    for path in skill_files
+                    for cache_name in (".pytest_cache", ".mypy_cache", ".ruff_cache")
+                )
+            )
 
     def test_host_stage_omits_other_host_metadata(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -52,11 +84,15 @@ class StageObstudioPluginTest(unittest.TestCase):
     def test_claude_stage_preserves_source_manifest_version(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio-claude"
+            plugin_root = Path(__file__).resolve().parents[2]
+            source_manifest = json.loads(
+                (plugin_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+            )
 
             STAGE.stage_plugin(output, host="claude")
 
             manifest = json.loads((output / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["version"], "0.0.16")
+            self.assertEqual(manifest["version"], source_manifest["version"])
 
     def test_release_tag_stamps_and_enforces_both_plugin_manifest_versions(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -80,6 +116,45 @@ class StageObstudioPluginTest(unittest.TestCase):
     def test_release_tag_accepts_semver_prerelease_and_build_metadata(self):
         self.assertEqual(STAGE.release_version_from_tag("v1.2.3-rc.1+build.42"), "1.2.3-rc.1+build.42")
 
+    def test_package_target_requires_tag_and_stamps_versioned_archives(self):
+        root = Path(__file__).resolve().parents[4]
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            release_dir = Path(tempdir) / "plugins"
+            make_base = ["make", "--no-print-directory", "package-obstudio-plugin"]
+            output_override = f"PLUGIN_RELEASE_DIR={release_dir}"
+
+            missing_tag = subprocess.run(
+                [*make_base, output_override],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(missing_tag.returncode, 0)
+            self.assertIn("RELEASE_TAG is required", missing_tag.stderr + missing_tag.stdout)
+
+            packaged = subprocess.run(
+                [*make_base, "RELEASE_TAG=v1.2.3", output_override],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(packaged.returncode, 0, packaged.stdout + packaged.stderr)
+
+            for host, manifest_dir in (("codex", ".codex-plugin"), ("claude", ".claude-plugin")):
+                archive = release_dir / f"obstudio_{host}_1.2.3.zip"
+                self.assertTrue(archive.is_file(), packaged.stdout + packaged.stderr)
+
+                with zipfile.ZipFile(archive) as zip_file:
+                    manifest_name = next(
+                        name for name in zip_file.namelist() if name.endswith(f"{manifest_dir}/plugin.json")
+                    )
+                    manifest = json.loads(zip_file.read(manifest_name))
+
+                self.assertEqual(manifest["version"], "1.2.3")
+
     def test_release_tag_verification_rejects_manifest_version_mismatch(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio-claude"
@@ -87,6 +162,40 @@ class StageObstudioPluginTest(unittest.TestCase):
 
             with self.assertRaisesRegex(RuntimeError, "must match release version 1.2.3"):
                 STAGE.verify_staged_plugin(output, host="claude", expected_version="1.2.3")
+
+    def test_bump_committed_manifest_versions_updates_both_hosts(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            plugin_root = Path(tempdir) / "obstudio"
+            for manifest_dir in (".claude-plugin", ".codex-plugin"):
+                (plugin_root / manifest_dir).mkdir(parents=True)
+                (plugin_root / manifest_dir / "plugin.json").write_text(
+                    '{\n  "name": "obstudio",\n  "version": "0.0.16",\n  "skills": ["./skills/"]\n}\n',
+                    encoding="utf-8",
+                )
+
+            updated = STAGE.bump_committed_manifest_versions("1.2.3", plugin_root=plugin_root)
+
+            self.assertEqual(len(updated), 2)
+            for manifest_dir in (".claude-plugin", ".codex-plugin"):
+                manifest_path = plugin_root / manifest_dir / "plugin.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                self.assertEqual(manifest["version"], "1.2.3")
+                self.assertEqual(
+                    manifest_path.read_text(encoding="utf-8"),
+                    '{\n  "name": "obstudio",\n  "version": "1.2.3",\n  "skills": ["./skills/"]\n}\n',
+                )
+
+    def test_cli_bump_manifests_routes_release_tag(self):
+        with mock.patch.object(sys, "argv", ["stage_obstudio_plugin.py", "--bump-manifests", "--release-tag", "v1.2.3"]):
+            with mock.patch.object(STAGE, "bump_committed_manifest_versions") as bump:
+                self.assertEqual(STAGE.main(), 0)
+
+        bump.assert_called_once_with("1.2.3")
+
+    def test_cli_bump_manifests_requires_release_tag(self):
+        with mock.patch.object(sys, "argv", ["stage_obstudio_plugin.py", "--bump-manifests"]):
+            with self.assertRaisesRegex(RuntimeError, "--release-tag is required with --bump-manifests"):
+                STAGE.main()
 
     def test_verify_rejects_staged_symlinks(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -121,8 +230,14 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertNotIn("description", marketplace)
         self.assertEqual(marketplace["name"], "obstudio")
         self.assertEqual(marketplace["plugins"][0]["name"], "obstudio")
-        self.assertEqual(marketplace["plugins"][0]["source"], "./plugins/obstudio")
         self.assertEqual(marketplace["plugins"][0]["displayName"], "Splunk Observability Studio")
+        self.assertEqual(marketplace["plugins"][0]["source"], "./plugins/obstudio")
+        self.assertIn("Splunk Observability Studio", marketplace["plugins"][0]["description"])
+        self.assertNotIn("observer controls", marketplace["plugins"][0]["description"].lower())
+        self.assertEqual(
+            set(marketplace["plugins"][0]),
+            {"name", "displayName", "source", "description"},
+        )
 
     def test_plugin_manifest_uses_committed_skills(self):
         plugin_root = Path(__file__).resolve().parents[2]
@@ -136,6 +251,8 @@ class StageObstudioPluginTest(unittest.TestCase):
             STAGE.MAX_DEFAULT_PROMPTS,
         )
         self.assertTrue((skills_path / "otel-instrument" / "SKILL.md").is_file())
+        self.assertTrue((skills_path / "connect-splunk-observability-cloud" / "SKILL.md").is_file())
+        self.assertTrue((skills_path / "create-splunk-free-account" / "SKILL.md").is_file())
         self.assertFalse(any(path.is_symlink() for path in skills_path.rglob("*")))
 
     def test_host_manifests_explicitly_select_hook_files(self):
@@ -146,11 +263,14 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertEqual(codex_manifest["hooks"], "./hooks/codex-hooks.json")
         self.assertEqual(codex_manifest["name"], "obstudio")
         self.assertEqual(codex_manifest["interface"]["displayName"], "Splunk Observability Studio")
+        self.assertIn("Splunk Observability Studio", codex_manifest["description"])
+        self.assertNotIn("observer controls", codex_manifest["description"].lower())
         self.assertEqual(claude_manifest["hooks"], "./hooks/claude-hooks.json")
         self.assertEqual(claude_manifest["name"], "obstudio")
+        self.assertIn("Splunk Observability Studio", claude_manifest["description"])
+        self.assertNotIn("observer controls", claude_manifest["description"].lower())
         self.assertNotIn("$schema", claude_manifest)
-        self.assertEqual(claude_manifest["displayName"], "Splunk Observability Studio")
-        self.assertEqual(claude_manifest["version"], "0.0.16")
+        self.assertNotIn("displayName", claude_manifest)
 
         codex_hook = json.loads((plugin_root / "hooks" / "codex-hooks.json").read_text(encoding="utf-8"))
         codex_command = codex_hook["hooks"]["SessionStart"][0]["hooks"][0]["command"]
@@ -162,8 +282,11 @@ class StageObstudioPluginTest(unittest.TestCase):
 
         claude_hook = json.loads((plugin_root / "hooks" / "claude-hooks.json").read_text(encoding="utf-8"))
         claude_command = claude_hook["hooks"]["SessionStart"][0]["hooks"][0]
-        self.assertEqual(claude_command["command"], "node")
-        self.assertEqual(claude_command["args"], ["${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap_claude.cjs"])
+        self.assertEqual(
+            claude_command["command"],
+            'node "${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap_claude.cjs"',
+        )
+        self.assertNotIn("args", claude_command)
         self.assertEqual(claude_command["statusMessage"], "Bootstrapping Splunk Observability Studio for Claude Code")
         self.assertNotIn("commandWindows", claude_command)
 
@@ -257,7 +380,10 @@ class StageObstudioPluginTest(unittest.TestCase):
                         seen.add(skill)
                         skill_dirs.append(skill)
 
-            self.assertEqual(skill_dirs[:14], list(STAGE.PLUGIN_SKILL_ENTRIES[:14]))
+            self.assertEqual(
+                skill_dirs[: len(STAGE.PLUGIN_SKILL_ENTRIES)],
+                list(STAGE.PLUGIN_SKILL_ENTRIES),
+            )
 
     def test_plugin_local_observer_control_skills_are_not_shared(self):
         root = Path(__file__).resolve().parents[4]

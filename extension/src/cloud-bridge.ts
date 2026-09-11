@@ -1,21 +1,49 @@
 export const splunkCloudConnectionSecretKey = 'splunkCloudConnection.v1';
 export const maxCloudAccessTokenBytes = 4096;
+export const maxCloudDestinationBytes = 2048;
+export const maxFreeAccountFirstNameLength = 40;
+export const maxFreeAccountLastNameLength = 40;
+export const maxFreeAccountEmailLength = 80;
+
+const supportedFreeAccountRegionRealms: Readonly<Record<string, string>> = Object.freeze({
+	'us': 'us1',
+	'Europe (Ireland)': 'eu0',
+	'apac-au': 'au0',
+});
+export type FreeAccountSubmissionResult = {
+	accountSetupPending?: boolean;
+	intakeAcknowledged: boolean;
+	realm: string;
+	region: string;
+};
 
 export const cloudBridgeActions = [
 	'connect',
+	'create-free-account',
+	'detect-free-account-region',
+	'disconnect-cimd',
 	'forget',
 	'initialize',
+	'login-cimd',
 	'open-audit-report',
 	'open-free-edition',
+	'open-free-edition-terms',
 	'open-ingest-token-help',
+	'open-realm-help',
+	'open-observability-cloud-demo',
+	'open-observability-data-course',
+	'open-observability-docs',
 	'open-skill-docs',
+	'resolve-realm',
 	'set-enabled',
+	'setup-cimd',
 ] as const;
 
 export type CloudBridgeAction = typeof cloudBridgeActions[number];
 
 export function cloudBridgeActionRequiresLifecycleSerialization(action: CloudBridgeAction): boolean {
 	return action === 'connect'
+		|| action === 'create-free-account'
 		|| action === 'forget'
 		|| action === 'initialize'
 		|| action === 'set-enabled';
@@ -25,6 +53,8 @@ export class ObserverCloudResponseError extends Error {
 	constructor(
 		readonly statusCode: number,
 		message: string,
+		readonly code?: string,
+		readonly retrySafe?: boolean,
 	) {
 		super(message);
 		this.name = 'ObserverCloudResponseError';
@@ -46,24 +76,14 @@ export class StoredSplunkCloudConnectionVerificationUnavailableError extends Obs
 }
 
 /**
- * A 4xx response is an authoritative rejection, so the Observer did not apply
+ * A 4xx response is an authoritative rejection, so Splunk Observability Studio did not apply
  * the requested mutation. Transport failures and 5xx responses have an
- * uncertain outcome and require restoring the previous Observer state.
+ * uncertain outcome and require restoring the previous Splunk Observability Studio state.
  */
 export function shouldRestoreObserverAfterCloudMutationFailure(error: unknown): boolean {
 	return !(error instanceof ObserverCloudResponseError
 		&& error.statusCode >= 400
 		&& error.statusCode < 500);
-}
-
-export function cloudControlRemainsAvailableAfterInitializationError(error: unknown): boolean {
-	return error instanceof StoredSplunkCloudConnectionRejectedError
-		|| error instanceof StoredSplunkCloudConnectionVerificationUnavailableError
-		|| (error instanceof ObserverCloudResponseError
-		&& error.statusCode >= 400
-		&& error.statusCode < 500
-		&& error.statusCode !== 401
-		&& error.statusCode !== 403);
 }
 
 export function parseObserverCloudResponseBody(statusCode: number, responseBody: string): unknown {
@@ -76,7 +96,7 @@ export function parseObserverCloudResponseBody(statusCode: number, responseBody:
 		if (statusCode < 200 || statusCode >= 300) {
 			return {};
 		}
-		throw new Error(`Observer returned an invalid response (HTTP ${statusCode}).`);
+		throw new Error(`Splunk Observability Studio returned an invalid response (HTTP ${statusCode}).`);
 	}
 }
 
@@ -89,47 +109,67 @@ export function observerCloudResponseError(
 	statusCode: number,
 	body: unknown,
 ): ObserverCloudResponseError {
-	const message = typeof body === 'object'
-		&& body !== null
-		&& typeof (body as Record<string, unknown>).error === 'string'
-		? (body as Record<string, string>).error
-		: `Observer request failed with HTTP ${statusCode}.`;
-	return new ObserverCloudResponseError(statusCode, message);
+	const response = typeof body === 'object' && body !== null
+		? body as Record<string, unknown>
+		: undefined;
+	const message = typeof response?.error === 'string'
+		? response.error
+		: `Splunk Observability Studio request failed with HTTP ${statusCode}.`;
+	return new ObserverCloudResponseError(
+		statusCode,
+		message,
+		typeof response?.code === 'string' ? response.code : undefined,
+		typeof response?.retrySafe === 'boolean' ? response.retrySafe : undefined,
+	);
 }
 
-export async function requestObserverCloudMutationWithTokenRefresh(options: {
-	currentToken: () => string;
-	refreshToken?: (usedToken: string) => string | undefined;
-	send: (controlToken: string) => Promise<ObserverCloudHTTPResponse>;
-}): Promise<unknown> {
-	let controlToken = options.currentToken();
-	if (controlToken === '') {
-		throw new Error(
-			'Cloud connection changes require OBSTUDIO_CONTROL_TOKEN when using a shared Observer.',
-		);
-	}
+export function isSupportedFreeAccountRegion(value: string): boolean {
+	return Object.hasOwn(supportedFreeAccountRegionRealms, value);
+}
 
-	for (let attempt = 0; attempt < 2; attempt += 1) {
-		const response = await options.send(controlToken);
-		if (response.statusCode >= 200 && response.statusCode < 300) {
-			return response.body;
-		}
-		if (attempt === 0 && response.statusCode === 401 && options.refreshToken !== undefined) {
-			const refreshedToken = options.refreshToken(controlToken);
-			if (refreshedToken !== undefined && refreshedToken !== controlToken) {
-				controlToken = refreshedToken;
-				continue;
-			}
-		}
-		throw observerCloudResponseError(response.statusCode, response.body);
+export function parseFreeAccountSubmissionResult(value: unknown): FreeAccountSubmissionResult | undefined {
+	if (typeof value !== 'object' || value === null) {
+		return undefined;
 	}
+	const response = value as Record<string, unknown>;
+	const realm = typeof response.realm === 'string' ? response.realm.trim().toLowerCase() : '';
+	const region = typeof response.region === 'string' ? response.region : '';
+	const expectedRealm = supportedFreeAccountRegionRealms[region];
+	if (
+		typeof response.intakeAcknowledged !== 'boolean'
+		|| (response.accountSetupPending !== undefined
+			&& typeof response.accountSetupPending !== 'boolean')
+		|| expectedRealm === undefined
+		|| realm !== expectedRealm
+	) {
+		return undefined;
+	}
+	return {
+		...(response.accountSetupPending === undefined
+			? {}
+			: { accountSetupPending: response.accountSetupPending }),
+		intakeAcknowledged: response.intakeAcknowledged,
+		realm,
+		region,
+	};
+}
 
-	throw new Error('Observer cloud request failed.');
+export function freeAccountSubmissionFailureIsOutcomeUnknown(error: unknown): boolean {
+	if (!(error instanceof ObserverCloudResponseError)) {
+		return false;
+	}
+	if (error.retrySafe === true) {
+		return false;
+	}
+	if (error.code === 'outcome_unknown' || error.retrySafe === false || error.statusCode >= 500) {
+		return true;
+	}
+	return false;
 }
 
 /**
  * Stored credentials must pass the same connection test as newly entered
- * credentials before the Observer applies them. A transient upstream failure
+ * credentials before Splunk Observability Studio applies them. A transient upstream failure
  * remains distinct so the IDE can show the disconnected status and a warning
  * without disabling authenticated Cloud controls.
  */
@@ -151,7 +191,7 @@ export async function verifyStoredSplunkCloudConnection(
 }
 
 /**
- * Path the Observer serves the $otel-audit HTML report from.
+ * Path Splunk Observability Studio serves the $otel-audit HTML report from.
  *
  * The webview asks for "the audit report", never for a URL, so the extension
  * decides what gets opened. The path is fixed here rather than passed in so a
@@ -228,18 +268,6 @@ export type RestoreSplunkCloudConnectionOptions = {
 	refresh: () => Promise<unknown>;
 	restoreStoredConnection: boolean;
 	setEnabled: (enabled: boolean, expectedVersion: string | undefined) => Promise<unknown>;
-};
-
-export type CapturedSplunkCloudState = {
-	connection: StoredSplunkCloudConnection;
-	exportEnabled: boolean;
-};
-
-export type CaptureSplunkCloudStateOptions = {
-	isManagedObserver: boolean;
-	readConfiguration: () => Promise<unknown>;
-	timeoutMs?: number;
-	writeState: (state: CapturedSplunkCloudState | undefined) => Promise<void>;
 };
 
 type SplunkCloudExportPreference = {
@@ -363,60 +391,6 @@ export async function writeSplunkCloudStatePair(options: {
 	]);
 }
 
-/**
- * Replace the two-part durable Cloud state without leaving a mixed pair when
- * either persistence operation fails or exceeds its shutdown deadline.
- * A timed-out write may still finish later, so the newer rollback write also
- * lets the revisioned stores repair that late completion.
- */
-export async function persistSplunkCloudStateWithRollback(options: {
-	next: StoredSplunkCloudState;
-	readState: () => Promise<StoredSplunkCloudState>;
-	timeoutMs: number;
-	waitForWrite: (operation: Promise<void>) => Promise<boolean>;
-	writeState: (state: StoredSplunkCloudState) => Promise<void>;
-}): Promise<void> {
-	let timeout: NodeJS.Timeout | undefined;
-	let previous: StoredSplunkCloudState;
-	try {
-		previous = await Promise.race([
-			options.readState(),
-			new Promise<never>((_resolve, reject) => {
-				timeout = setTimeout(() => {
-					reject(new Error('Cloud configuration state read timed out.'));
-				}, options.timeoutMs);
-			}),
-		]);
-	} finally {
-		if (timeout !== undefined) {
-			clearTimeout(timeout);
-		}
-	}
-	let writeError: unknown;
-	try {
-		const completed = await options.waitForWrite(options.writeState(options.next));
-		if (completed) {
-			return;
-		}
-		writeError = new Error('Cloud configuration write timed out.');
-	} catch (error) {
-		writeError = error;
-	}
-
-	try {
-		const restored = await options.waitForWrite(options.writeState(previous));
-		if (!restored) {
-			throw new Error('Cloud configuration rollback timed out.');
-		}
-	} catch (rollbackError) {
-		throw new Error(
-			`Could not persist the cloud configuration: ${cloudErrorMessage(writeError)}. `
-			+ `Durable-state rollback also failed: ${cloudErrorMessage(rollbackError)}`,
-		);
-	}
-	throw writeError;
-}
-
 export async function connectSplunkCloudWithStorage(options: {
 	configureObserver: () => Promise<unknown>;
 	readStoredState: () => Promise<StoredSplunkCloudState>;
@@ -426,60 +400,52 @@ export async function connectSplunkCloudWithStorage(options: {
 	storeConnectedState: () => Promise<void>;
 }): Promise<unknown> {
 	const previous = await options.readStoredState();
-	let configuredResponse: unknown;
-	try {
-		configuredResponse = await options.configureObserver();
-	} catch (configureError) {
-		if (shouldRestoreObserverAfterCloudMutationFailure(configureError)) {
-			try {
-				await options.rollbackObserver(options.rollbackToken);
-			} catch (rollbackError) {
-				// A conflict means this operation never installed the capability,
-				// or a newer mutation superseded it. In either case, do not
-				// overwrite the newer Observer state.
-				if (!(rollbackError instanceof ObserverCloudResponseError
-					&& rollbackError.statusCode === 409)) {
-					throw new Error(
-						`Could not connect to Splunk Observability Cloud: ${cloudErrorMessage(configureError)}. `
-						+ `Observer rollback also failed: ${cloudErrorMessage(rollbackError)}`,
-					);
-				}
-			}
-		}
-		throw configureError;
-	}
-	const configured = splitCloudRollbackCapability(configuredResponse);
 	try {
 		await options.storeConnectedState();
 	} catch (storeError) {
+		try {
+			await options.restoreStoredState(previous);
+		} catch (storageRollbackError) {
+			throw new Error(
+				`Could not store the cloud key securely: ${cloudErrorMessage(storeError)}. `
+				+ `Secure-storage rollback also failed: ${cloudErrorMessage(storageRollbackError)}`,
+			);
+		}
+		throw new Error(`Could not store the cloud key securely: ${cloudErrorMessage(storeError)}`);
+	}
+
+	try {
+		return splitCloudRollbackCapability(await options.configureObserver()).status;
+	} catch (configureError) {
 		let rollbackError: unknown;
 		try {
 			await options.restoreStoredState(previous);
 		} catch (storageRollbackError) {
 			rollbackError = storageRollbackError;
 		}
-		try {
-			if (configured.rollbackToken === undefined) {
-				throw new Error('Observer did not provide a cloud rollback capability.');
+		if (shouldRestoreObserverAfterCloudMutationFailure(configureError)) {
+			try {
+				await options.rollbackObserver(options.rollbackToken);
+			} catch (observerRollbackError) {
+				if (!(observerRollbackError instanceof ObserverCloudResponseError
+					&& observerRollbackError.statusCode === 409)) {
+					rollbackError = rollbackError === undefined
+						? observerRollbackError
+						: new Error(
+							`${cloudErrorMessage(rollbackError)}; Splunk Observability Studio rollback also failed: `
+							+ cloudErrorMessage(observerRollbackError),
+						);
+				}
 			}
-			await options.rollbackObserver(configured.rollbackToken);
-		} catch (observerRollbackError) {
-			rollbackError = rollbackError === undefined
-				? observerRollbackError
-				: new Error(
-					`${cloudErrorMessage(rollbackError)}; Observer rollback also failed: `
-					+ cloudErrorMessage(observerRollbackError),
-				);
 		}
 		if (rollbackError !== undefined) {
 			throw new Error(
-				`Could not store the cloud key securely: ${cloudErrorMessage(storeError)}. `
-				+ `Cloud connection rollback also failed: ${cloudErrorMessage(rollbackError)}`,
+				`Could not connect to Splunk Observability Cloud: ${cloudErrorMessage(configureError)}. `
+				+ `Rollback also failed: ${cloudErrorMessage(rollbackError)}`,
 			);
 		}
-		throw new Error(`Could not store the cloud key securely: ${cloudErrorMessage(storeError)}`);
+		throw configureError;
 	}
-	return configured.status;
 }
 
 function splitCloudRollbackCapability(value: unknown): {
@@ -537,7 +503,7 @@ export async function setSplunkCloudExportEnabledWithStorage(options: {
 					rollbackError = rollbackError === undefined
 						? observerRollbackError
 						: new Error(
-							`${cloudErrorMessage(rollbackError)}; Observer rollback also failed: `
+							`${cloudErrorMessage(rollbackError)}; Splunk Observability Studio rollback also failed: `
 							+ cloudErrorMessage(observerRollbackError),
 						);
 				}
@@ -569,7 +535,7 @@ export async function forgetSplunkCloudWithStorage(options: {
 			await options.restoreStoredState(previous);
 		} catch (restoreError) {
 			throw new Error(
-				`Could not forget the cloud key: ${cloudErrorMessage(localError)}. `
+				`Could not remove the cloud connection: ${cloudErrorMessage(localError)}. `
 				+ `Secure-storage rollback also failed: ${cloudErrorMessage(restoreError)}`,
 			);
 		}
@@ -595,7 +561,7 @@ export async function forgetSplunkCloudWithStorage(options: {
 					rollbackError = rollbackError === undefined
 						? observerRollbackError
 						: new Error(
-							`${cloudErrorMessage(rollbackError)}; Observer rollback also failed: `
+							`${cloudErrorMessage(rollbackError)}; Splunk Observability Studio rollback also failed: `
 							+ cloudErrorMessage(observerRollbackError),
 						);
 				}
@@ -603,7 +569,7 @@ export async function forgetSplunkCloudWithStorage(options: {
 		}
 		if (rollbackError !== undefined) {
 			throw new Error(
-				`Could not forget the cloud key: ${cloudErrorMessage(forgetError)}. `
+				`Could not remove the cloud connection: ${cloudErrorMessage(forgetError)}. `
 				+ `Cloud connection rollback also failed: ${cloudErrorMessage(rollbackError)}`,
 			);
 		}
@@ -684,58 +650,6 @@ export async function restoreSplunkCloudConnectionFromStorage(
 		return status;
 	}
 	return options.setEnabled(enabled, cloudStatusVersion(status));
-}
-
-export async function captureSplunkCloudState(
-	options: CaptureSplunkCloudStateOptions,
-): Promise<void> {
-	if (!options.isManagedObserver) {
-		return;
-	}
-
-	let configuration: unknown;
-	if (options.timeoutMs === undefined) {
-		configuration = await options.readConfiguration();
-	} else {
-		let timeout: NodeJS.Timeout | undefined;
-		try {
-			configuration = await Promise.race([
-				options.readConfiguration(),
-				new Promise<never>((_resolve, reject) => {
-					timeout = setTimeout(() => {
-						reject(new Error('Cloud configuration read timed out.'));
-					}, options.timeoutMs);
-				}),
-			]);
-		} finally {
-			if (timeout !== undefined) {
-				clearTimeout(timeout);
-			}
-		}
-	}
-
-	if (typeof configuration !== 'object' || configuration === null) {
-		throw new Error('Observer returned an invalid cloud configuration snapshot.');
-	}
-	const snapshot = configuration as Record<string, unknown>;
-	if (!/^[A-Za-z0-9_-]{43}$/.test(String(snapshot.version ?? ''))) {
-		throw new Error('Observer returned an invalid cloud configuration snapshot.');
-	}
-	if (snapshot.source === 'env-file' || snapshot.changed !== true) {
-		return;
-	}
-	if (snapshot.connected === false) {
-		await options.writeState(undefined);
-		return;
-	}
-	const connection = parseStoredSplunkCloudConnection(JSON.stringify({
-		accessToken: snapshot.accessToken,
-		realm: snapshot.realm,
-	}));
-	if (snapshot.connected !== true || typeof snapshot.enabled !== 'boolean' || connection === undefined) {
-		throw new Error('Observer returned an invalid cloud configuration snapshot.');
-	}
-	await options.writeState({ connection, exportEnabled: snapshot.enabled });
 }
 
 export function cloudStatusConnected(value: unknown): boolean {

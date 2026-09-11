@@ -109,7 +109,7 @@ describe("LogsTab", () => {
     expect(container.querySelector(".data-table__td--service .explorer-row__secondary")).toBeTruthy();
     expect(container.querySelector(".data-table__td--message .explorer-row__primary")).toBeTruthy();
 
-    selectFilterField("Message");
+    selectFilterField("Body");
     expect((screen.getByRole("radio", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
     fireEvent.change(screen.getByLabelText("bodyContains value"), {
       target: { value: "payment" },
@@ -121,6 +121,136 @@ describe("LogsTab", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/query/logs?filter%5BbodyContains%5D%5Beq%5D=payment", expect.any(Object));
     expect(screen.getByText("payment failed")).toBeTruthy();
     expect(screen.queryByText("checkout started")).toBeNull();
+  });
+
+  it("filters attribute-only events by the fallback shown in the Message column", async () => {
+    const attributeOnlyLog = {
+      id: "claude",
+      timeUnixNano: "2026-08-27T18:00:04.005Z",
+      severityText: "INFO",
+      body: "",
+      attributes: { "event.name": "api_request" },
+      resource: { serviceName: "claude-code", attributes: {} },
+      scope: { name: "com.anthropic.claude_code.events" },
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [attributeOnlyLog],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<LogsTab logs={[attributeOnlyLog]} onInteract={vi.fn()} />);
+
+    expect(screen.getByText("api_request")).toBeTruthy();
+    selectFilterField("Message");
+    fireEvent.change(screen.getByLabelText("messageContains value"), {
+      target: { value: "api_request" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+
+    await act(async () => {});
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/query/logs?filter%5BmessageContains%5D%5Beq%5D=api_request",
+      expect.any(Object),
+    );
+    expect(screen.getByText("api_request")).toBeTruthy();
+  });
+
+  it("renders messages and timestamps for attribute-only Codex and Claude events", () => {
+    const { container } = render(
+      <LogsTab
+        logs={[
+          {
+            id: "codex",
+            timeUnixNano: "1970-01-01T00:00:00Z",
+            severityText: "INFO",
+            body: "",
+            attributes: {
+              "event.name": "codex.turn_ttft",
+              "event.timestamp": "2026-08-27T17:27:03.227Z",
+            },
+            resource: { serviceName: "codex-app-server", attributes: {} },
+            scope: { name: "codex_otel.log_only" },
+          },
+          {
+            id: "claude",
+            timeUnixNano: "1970-01-01T00:00:00Z",
+            observedTimeUnixNano: "2026-08-27T18:00:04.005Z",
+            severityText: "INFO",
+            body: "",
+            attributes: { "event.name": "api_request" },
+            resource: { serviceName: "claude-code", attributes: {} },
+            scope: { name: "com.anthropic.claude_code.events" },
+          },
+          {
+            id: "unknown",
+            timeUnixNano: "1970-01-01T00:00:00Z",
+            severityText: "INFO",
+            body: "",
+            attributes: {},
+            resource: { serviceName: "unknown-service", attributes: {} },
+            scope: { name: "unknown" },
+          },
+        ]}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    const messages = Array.from(container.querySelectorAll(".data-table__td--message"), (element) => element.textContent);
+    const timestamps = Array.from(container.querySelectorAll(".data-table__td--timestamp"), (element) => element.textContent);
+    expect(messages).toEqual(["codex.turn_ttft", "api_request", "--"]);
+    expect(timestamps).toEqual(["17:27:03.227", "18:00:04.005", "--"]);
+
+    fireEvent.click(container.querySelectorAll(".data-table__row--logs")[0] as HTMLElement);
+    expect(container.querySelector(".detail-panel__title")?.textContent).toBe("codex.turn_ttft");
+    expect(container.querySelector(".log-detail__body")?.textContent).toBe("codex.turn_ttft");
+
+    fireEvent.click(screen.getByRole("tab", { name: "JSON" }));
+    expect(container.querySelector(".log-detail__body")?.textContent).toContain('"body": ""');
+  });
+
+  it("renders positive sub-millisecond OTLP timestamps without accepting epoch placeholders", () => {
+    const { container } = render(
+      <LogsTab
+        logs={[
+          {
+            id: "numeric-nanos",
+            timeUnixNano: "1",
+            severityText: "INFO",
+            body: "numeric nanos",
+            attributes: {},
+            resource: { serviceName: "test", attributes: {} },
+            scope: { name: "test" },
+          },
+          {
+            id: "rfc3339-nanos",
+            timeUnixNano: "1970-01-01T00:00:00.000000001Z",
+            severityText: "INFO",
+            body: "RFC3339 nanos",
+            attributes: {},
+            resource: { serviceName: "test", attributes: {} },
+            scope: { name: "test" },
+          },
+          {
+            id: "epoch-placeholder",
+            timeUnixNano: "1970-01-01T00:00:00Z",
+            severityText: "INFO",
+            body: "epoch placeholder",
+            attributes: {},
+            resource: { serviceName: "test", attributes: {} },
+            scope: { name: "test" },
+          },
+        ]}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    const timestamps = Array.from(
+      container.querySelectorAll(".data-table__td--timestamp"),
+      (element) => element.textContent,
+    );
+    expect(timestamps).toEqual(["00:00:00.000", "00:00:00.000", "--"]);
   });
 
   it("encodes negated exact filters with neq operators", async () => {

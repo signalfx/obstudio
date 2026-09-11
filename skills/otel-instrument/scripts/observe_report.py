@@ -20,7 +20,7 @@ def main() -> int:
     if not shared_tool.is_file():
         print(
             "OpenTelemetry report helper is missing: "
-            f"{shared_tool}. Install or copy the complete Obstudio skill bundle.",
+            f"{shared_tool}. Install or copy the complete Splunk Observability Studio skill bundle.",
             file=sys.stderr,
         )
         return 1

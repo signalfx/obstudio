@@ -1,0 +1,39 @@
+[
+  {
+    "type": "assistant",
+    "message": {
+      "usage": {
+        "input_tokens": 5,
+        "cache_read_input_tokens": 10,
+        "cache_creation_input_tokens": 20,
+        "output_tokens": 8,
+        "output_tokens_details": {"thinking_tokens": 3}
+      }
+    }
+  },
+  {
+    "type": "assistant",
+    "message": {
+      "usage": {
+        "input_tokens": 7,
+        "cache_read_input_tokens": 20,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 6,
+        "output_tokens_details": {"thinking_tokens": 1}
+      }
+    }
+  },
+  {
+    "type": "result",
+    "usage": {
+      "input_tokens": 12,
+      "cache_read_input_tokens": 30,
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 5,
+        "ephemeral_5m_input_tokens": 3
+      },
+      "output_tokens": 14,
+      "output_tokens_details": {"thinking_tokens": 4}
+    }
+  }
+]

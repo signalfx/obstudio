@@ -5,7 +5,7 @@ description: >-
   otel-audit report. Reads .observe/otel-audit.json, groups metrics into
   dashboard panels, and outputs ready-to-apply HCL (signalfx_dashboard_group +
   signalfx_dashboard + per-panel signalfx_*_chart resources) plus a sidecar
-  preview model for the local Observer. Use when the user types
+  preview model for the local Splunk Observability Studio. Use when the user types
   $splunk-dashboard, asks to "generate a dashboard", "build a dashboard from
   the audit", "create charts for my service", or "visualize my metrics".
 metadata:
@@ -22,7 +22,7 @@ Read an existing `.observe/otel-audit.json` audit report, group detected metrics
 into dashboard panels (RED-style layout), and generate Terraform for Splunk
 Observability Cloud `signalfx_dashboard_group`, `signalfx_dashboard`, and
 per-panel `signalfx_*_chart` resources with inline SignalFlow `program_text`.
-Also emit a sidecar `.observe/dashboards.preview.json` that the local Observer's
+Also emit a sidecar `.observe/dashboards.preview.json` that the local Splunk Observability Studio's
 **Dashboards** tab renders against live OTLP data as an approximate preview.
 
 This is the visualization analogue of `$splunk-configure` (which generates
@@ -35,7 +35,7 @@ each chart is a separate resource placed on a 12-column grid.
 - After running `$otel-audit` to generate `.observe/otel-audit.json`
 - When the user wants a dashboard / charts / a visual overview for their service
 - When the user wants to preview a dashboard layout locally before pushing it to
-  Splunk (the Observer Dashboards tab reads the preview sidecar this skill writes)
+  Splunk (Splunk Observability Studio Dashboards tab reads the preview sidecar this skill writes)
 
 **When NOT to use:** If no audit report exists yet, instruct the user to run
 `$otel-audit` first. For alerting/detection Terraform, use `$splunk-configure`.
@@ -159,12 +159,12 @@ api_token    = ""   # Splunk O11y API token (org-level, dashboard write)
 service_name = "<service-name from report>"
 ```
 
-### Step 5 -- Emit the Observer Preview Sidecar
+### Step 5 -- Emit Splunk Observability Studio Preview Sidecar
 
-Write `.observe/dashboards.preview.json` for the local Observer Dashboards tab.
+Write `.observe/dashboards.preview.json` for the local Splunk Observability Studio Dashboards tab.
 Because this skill already resolves `${var.*}` and dedents the `<<-EOF` heredocs
 while writing HCL (per `../references/terraform-normalization.md`), write the
-**fully-resolved** `programText` here — the Observer does no HCL parsing.
+**fully-resolved** `programText` here — Splunk Observability Studio does no HCL parsing.
 
 ```jsonc
 {
@@ -244,7 +244,7 @@ Create `.observe/dashboards.md` as a human-readable companion:
 
 1. `cp .observe/terraform/terraform.tfvars.example .observe/terraform/terraform.tfvars`
 2. Fill in `realm` and `api_token`
-3. Preview locally: open the Observer **Dashboards** tab (localhost:3000)
+3. Preview locally: open Splunk Observability Studio **Dashboards** tab (localhost:3000)
 4. Push to Splunk: `$splunk-dashboard-publish` (REST-direct, creates only gaps)
    or `cd .observe/terraform && terraform init && terraform apply`
 
@@ -257,7 +257,7 @@ Create `.observe/dashboards.md` as a human-readable companion:
 After all files are written, present a concise summary: the dashboards/panels
 generated, the files written (`dashboards.tf`, `variables.tf`,
 `terraform.tfvars.example`, `.observe/dashboards.md`,
-`.observe/dashboards.preview.json`), and the next steps — preview in the Observer
+`.observe/dashboards.preview.json`), and the next steps — preview in Splunk Observability Studio
 Dashboards tab, then `$splunk-dashboard-publish` or `terraform apply`.
 
 ## Red Flags
@@ -268,6 +268,6 @@ Dashboards tab, then `$splunk-dashboard-publish` or `terraform apply`.
   preview sidecar and any future POST will fail; resolve every variable per
   `../references/terraform-normalization.md` before writing.
 - A panel's grid placement overflows the 12-column grid (`column + width > 12`)
-  — clamp or re-place it; the Observer preview clamps defensively but the HCL
+  — clamp or re-place it; Splunk Observability Studio preview clamps defensively but the HCL
   should be correct.
 - Service name contains characters invalid for a SignalFlow filter value.

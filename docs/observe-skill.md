@@ -1,4 +1,4 @@
-# Observability Studio Skills -- Product Requirements Document
+# Splunk Observability Studio Skills -- Product Requirements Document
 
 **Author**: Tigran Najaryan, with AI skill specifications by Platform Engineering
 **Status**: Draft
@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-Observability Studio is a developer tool that helps instrument (make
+Splunk Observability Studio is a developer tool that helps instrument (make
 observable) applications and services, verify the telemetry emitted by
 instrumentation, and iterate and improve instrumentation quickly.
 
@@ -53,24 +53,24 @@ feel like an ad platform.
 
 ## 2. Architecture
 
-Observability Studio follows a layered architecture where each layer is
+Splunk Observability Studio follows a layered architecture where each layer is
 independently useful. See `docs/architecture-proposal.md` for the full
 design.
 
 ```
 Layer 3: Distribution (VS Code extension, brew, npx, go install)
 Layer 2: obstudio CLI (start, register, skill installer)
-Layer 1: Core (Skills + Observer)
+Layer 1: Core (Skills + Splunk Observability Studio)
 ```
 
-### Skills + Observer Composition
+### Skills + Splunk Observability Studio Composition
 
-Skills tell the agent *what to do*. The Observer tells the agent *what
+Skills tell the agent *what to do*. Splunk Observability Studio tells the agent *what
 happened*. Together they form a closed loop:
 
 1. Agent reads skill -- instruments the code
 2. Developer runs the app
-3. App sends OTLP to Observer (`localhost:4318`)
+3. App sends OTLP to Splunk Observability Studio (`localhost:4318`)
 4. Agent calls MCP tools -- inspects telemetry
 5. Agent fixes issues -- go to step 2
 
@@ -93,7 +93,7 @@ Token-conscious design: the agent loads SKILL.md (~180 lines) plus only
 the one language file matching the detected codebase (~200 lines). Reference
 files are loaded only when the specific workflow step executes them.
 
-### MCP Tools (Observer)
+### MCP Tools (Splunk Observability Studio)
 
 | MCP Tool | Purpose |
 |----------|---------|
@@ -149,7 +149,7 @@ flow. The agent can run the full audit or skip directly to instrumentation.
 | 5 - Signal Mapping | Build SLI definitions and signal tables (Spans/Metrics/Logs) | `skills/references/signal-mapping-guide.md` |
 | 6 - Generate .observability.md | Write audit document | `skills/references/observability-template.md` |
 | 7 - Implement | Install OOB libraries, generate custom spans/metrics | (language file already loaded) |
-| 8 - Verify | Run app, check telemetry via Observer MCP | (none) |
+| 8 - Verify | Run app, check telemetry via Splunk Observability Studio MCP | (none) |
 | 9 - Alerts | Add alert definitions to .observability.md | (none) |
 
 ### 4.2 OOB vs Custom Decision Framework
@@ -226,7 +226,7 @@ verification against golden results.
 | Structural | Single SDK init, correct OOB libraries | Exact match |
 | Semantic convention | Span/metric/attribute names follow semconv | Exact match |
 | Golden comparison | Full output vs reference | >= 80% structural similarity |
-| Telemetry emission | Run app, verify OTLP received by Observer | Expected signals present |
+| Telemetry emission | Run app, verify OTLP received by Splunk Observability Studio | Expected signals present |
 | Idempotency | Run skill twice | Second run makes no/minimal changes |
 | Cross-run consistency | Run skill N times | >= 85% of runs pass structural checks |
 
@@ -235,7 +235,7 @@ common archetypes (Web Service, Data Store, Batch Processor, Queue Consumer).
 
 **Eval tooling**: deepeval with LLM-as-judge (GEval) rubrics for golden
 comparison, custom pytest assertions for structural and semconv checks,
-integration tests for telemetry emission using the Observer MCP tools.
+integration tests for telemetry emission using Splunk Observability Studio MCP tools.
 
 ### 5.3 Versioning
 
@@ -258,7 +258,7 @@ integration tests for telemetry emission using the Observer MCP tools.
 | `skill.instrumentation.custom_span_count` | Counter | Custom spans generated |
 | `skill.instrumentation.custom_metric_count` | Counter | Custom metrics generated |
 
-### Observer-Side Validation
+### Splunk Observability Studio-Side Validation
 
 | Metric | Type | Description |
 |--------|------|-------------|
@@ -271,11 +271,11 @@ integration tests for telemetry emission using the Observer MCP tools.
 | Metric | Source |
 |--------|--------|
 | Skill activation rate (weekly) | Agent telemetry |
-| First-run success rate | Observer validation |
+| First-run success rate | Splunk Observability Studio validation |
 | Acceptance rate (PRs merged without revert) | Git analytics |
 | Eval pass rate | CI pipeline |
 | Coverage delta (KPI % increase) | `.observability.md` diff |
-| Time-to-first-trace | Observer timestamps |
+| Time-to-first-trace | Splunk Observability Studio timestamps |
 
 ---
 
@@ -289,7 +289,7 @@ integration tests for telemetry emission using the Observer MCP tools.
 | VS Code Extension | Marketplace | Automatic on activation |
 | Manual | `go install` / binary download | Edit MCP config by hand |
 
-All channels result in the same product: same Observer, same MCP tools,
+All channels result in the same product: same Splunk Observability Studio, same MCP tools,
 same skills.
 
 ### `obstudio register`
@@ -343,7 +343,7 @@ Writes MCP config and copies skills to the agent's expected location:
 - Language guides for Node.js, Python, Go (in `skills/references/languages/`)
 - Reference material (fault-domain-patterns, signal-mapping-guide,
   observability-template) in `skills/references/`
-- Observer with OTLP ingest, web UI, MCP server
+- Splunk Observability Studio with OTLP ingest, web UI, MCP server
 - VS Code extension packaging
 
 ### Does Not Ship

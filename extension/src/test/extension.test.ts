@@ -6,33 +6,44 @@ import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import WebSocket from 'ws';
 import {
+	caseInsensitiveHeaderValue,
+	codexObstudioHasNoAuthorization,
+	createAgentIntegrationConfigFingerprint,
+	getCodexObstudioAuthorization,
+	getCodexObstudioSection,
+	getCodexObstudioUrl,
+	hasNoAuthorizationHeader,
+	shouldRefreshOwnedAgentIntegrationConfig,
+} from '../agent-integration-config';
+import {
 	buildObserverHealthUrl,
 	buildObserverValidatorSummaryUrl,
-	isLocalObserverControlHost,
+	isLoopbackObserverHost,
 	normalizeObserverBaseUrl,
 	normalizeSharedObserverBaseUrl,
+	normalizeSharedObserverHealthUrl,
+	normalizeSharedObserverMCPUrl,
 	observerPortFromUrl,
 	readSharedObserverDiscovery,
-	resolveSharedObserverControlToken,
 	resolveBackend,
 } from '../backend';
 import {
 	auditReportPath,
 	auditReportUrl,
-	captureSplunkCloudState,
 	cloudBridgeActionRequiresLifecycleSerialization,
-	cloudControlRemainsAvailableAfterInitializationError,
 	connectSplunkCloudWithStorage,
+	freeAccountSubmissionFailureIsOutcomeUnknown,
 	forgetSplunkCloudWithStorage,
 	initializeSplunkCloudStatus,
 	isSkillDocsId,
+	isSupportedFreeAccountRegion,
 	ObserverCloudResponseError,
+	observerCloudResponseError,
+	parseFreeAccountSubmissionResult,
 	parseObserverCloudResponseBody,
-	persistSplunkCloudStateWithRollback,
 	skillDocsIds,
 	skillDocsUrl,
 	parseStoredSplunkCloudConnection,
-	requestObserverCloudMutationWithTokenRefresh,
 	restoreSplunkCloudConnectionFromStorage,
 	setSplunkCloudExportEnabledWithStorage,
 	SplunkCloudConnectionStore,
@@ -56,13 +67,20 @@ import {
 import { ObserverWebviewTelemetry, webSocketURL } from '../observer-webview-telemetry';
 
 const extensionRoot = path.resolve(__dirname, '..', '..');
-const { buildClientAssets, getBuildPaths, resetObserverOutputDirs } = require('../../build-observer.js') as {
+const {
+	buildClientAssets,
+	getBuildPaths,
+	observerBuildArgs,
+	observerBuildVersion,
+	resetObserverOutputDirs,
+} = require('../../build-observer.js') as {
 	buildClientAssets: (
 		paths: ReturnType<typeof getBuildPaths>,
 		run?: (file: string, args: string[], options: { cwd: string; stdio: string }) => unknown,
 	) => void;
 	getBuildPaths: (extensionRoot?: string, env?: NodeJS.ProcessEnv) => {
 		clientAssetsDir: string;
+		repoRoot: string;
 		observerRoot: string;
 		observerOutDir: string;
 		observerOutBinary: string;
@@ -73,6 +91,11 @@ const { buildClientAssets, getBuildPaths, resetObserverOutputDirs } = require('.
 		};
 		webviewOutDir: string;
 	};
+	observerBuildArgs: (
+		paths: ReturnType<typeof getBuildPaths>,
+		env?: NodeJS.ProcessEnv,
+	) => string[];
+	observerBuildVersion: (env?: NodeJS.ProcessEnv) => string;
 	resetObserverOutputDirs: (paths: ReturnType<typeof getBuildPaths>) => void;
 };
 function hostWeaverBinaryName(): string {
@@ -87,6 +110,11 @@ function withTempExtensionRoot(run: (extensionRoot: string) => void) {
 	} finally {
 		fs.rmSync(extensionRoot, { force: true, recursive: true });
 	}
+}
+
+function writePrivateSharedObserverState(statePath: string, state: Record<string, unknown>): void {
+	fs.writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });
+	fs.chmodSync(statePath, 0o600);
 }
 
 test('IDE host transport accepts only bounded known cloud requests', () => {
@@ -114,7 +142,7 @@ test('IDE host transport accepts only bounded known cloud requests', () => {
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('connect', {
 		accessToken: 'token_1234567890123456',
 		realm: 'us0',
-	})), false);
+	})), true);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('connect', {
 		accessToken: 'token_1234567890123456',
 		expectedVersion: 'not-a-version',
@@ -126,11 +154,79 @@ test('IDE host transport accepts only bounded known cloud requests', () => {
 	})), true);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('set-enabled', {
 		enabled: true,
-	})), false);
+	})), true);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('forget', { expectedVersion })), true);
-	assert.equal(isObserverHostRequestEnvelope(cloudRequest('forget')), false);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('forget')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('resolve-realm', {
+		destination: 'https://pov-rexel-webshop.observability.splunkcloud.com/#/signin',
+	})), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('resolve-realm', {
+		destination: 'é'.repeat(1024),
+	})), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('resolve-realm', {
+		destination: 'é'.repeat(1025),
+	})), false);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('resolve-realm', {
+		destination: '   ',
+	})), false);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('resolve-realm', {
+		accessToken: 'must-not-pass',
+		destination: 'https://ingest.eu0.observability.splunkcloud.com',
+	})), false);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-free-edition')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-free-edition-terms')), true);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-ingest-token-help')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-realm-help')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-realm-help', {
+		destination: 'https://example.test',
+	})), false);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-observability-cloud-demo')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-observability-data-course')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-observability-docs')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('detect-free-account-region')), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('detect-free-account-region', {
+		region: 'Europe (Ireland)',
+	})), false);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('create-free-account', {
+		email: 'person@example.com',
+		firstName: 'Example',
+		lastName: 'Person',
+		region: 'Europe (Ireland)',
+		termsAccepted: true,
+	})), true);
+	for (const invalidPayload of [
+		{
+			email: 'person@example.com',
+			firstName: 'Example',
+			lastName: 'Person',
+			region: 'eu0',
+			termsAccepted: true,
+		},
+		{
+			email: 'person@example.com',
+			firstName: 'Example',
+			lastName: 'Person',
+			region: 'us',
+			termsAccepted: false,
+		},
+		{
+			email: 'person@example.com',
+			firstName: 'Example',
+			lastName: 'Person',
+			publicIp: '203.0.113.10',
+			region: 'us',
+			termsAccepted: true,
+		},
+		{
+			email: `${'e'.repeat(69)}@example.com`,
+			firstName: 'Example',
+			lastName: 'Person',
+			region: 'us',
+			termsAccepted: true,
+		},
+	]) {
+		assert.equal(isObserverHostRequestEnvelope(cloudRequest('create-free-account', invalidPayload)), false);
+	}
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('unsupported')), false);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-skill-docs', {
 		skill: 'otel-instrument',
@@ -154,15 +250,247 @@ test('IDE host transport accepts only bounded known cloud requests', () => {
 	})), false);
 });
 
-test('Observer-mutating Cloud actions serialize with lifecycle transitions', () => {
-	for (const action of ['connect', 'forget', 'initialize', 'set-enabled'] as const) {
+test('free account region contract matches the public Splunk form values', () => {
+	for (const region of [
+		'us',
+		'Europe (Ireland)',
+		'apac-au',
+	]) {
+		assert.equal(isSupportedFreeAccountRegion(region), true, region);
+	}
+	for (const removedRegion of [
+		'Europe (Frankfurt)',
+		'Europe (London)',
+		'apac-jp',
+		'Asia Pacific (Singapore)',
+	]) {
+		assert.equal(isSupportedFreeAccountRegion(removedRegion), false, removedRegion);
+	}
+	for (const realm of ['us0', 'us1', 'eu0', 'eu1', 'eu2', 'au0', 'jp0', 'sg0']) {
+		assert.equal(isSupportedFreeAccountRegion(realm), false, realm);
+	}
+});
+
+test('Splunk Observability Studio cloud errors expose only allowlisted signup metadata', () => {
+	const error = observerCloudResponseError(502, {
+		code: 'outcome_unknown',
+		error: 'The signup outcome is unknown.',
+		retrySafe: false,
+		secret: 'must-not-pass',
+	});
+	assert.equal(error.message, 'The signup outcome is unknown.');
+	assert.equal(error.code, 'outcome_unknown');
+	assert.equal(error.retrySafe, false);
+	assert.equal('secret' in error, false);
+});
+
+test('Free Edition proxy 5xx responses are treated as unknown submission outcomes', () => {
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(502, 'Bad Gateway')),
+		true,
+	);
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(
+			503,
+			'Splunk Observability Studio control unavailable',
+			'observer_control_unavailable',
+			true,
+		)),
+		false,
+	);
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(
+			502,
+			'Bad Gateway',
+			'bad_gateway',
+		)),
+		true,
+	);
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(
+			500,
+			'Retryable before submission',
+			'future_pre_submit_error',
+			true,
+		)),
+		false,
+	);
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(
+			409,
+			'Outcome unknown',
+			'outcome_unknown',
+			false,
+		)),
+		true,
+	);
+	assert.equal(
+		freeAccountSubmissionFailureIsOutcomeUnknown(new ObserverCloudResponseError(422, 'Invalid request')),
+		false,
+	);
+	assert.equal(freeAccountSubmissionFailureIsOutcomeUnknown(new Error('network failure')), false);
+});
+
+test('Free Edition success requires a complete acknowledged Splunk Observability Studio result', () => {
+	for (const [region, realm] of [
+		['us', 'us1'],
+		['Europe (Ireland)', 'eu0'],
+		['apac-au', 'au0'],
+	] as const) {
+		assert.deepEqual(parseFreeAccountSubmissionResult({
+			intakeAcknowledged: true,
+			realm: realm.toUpperCase(),
+			region,
+		}), {
+			intakeAcknowledged: true,
+			realm,
+			region,
+		});
+	}
+	assert.deepEqual(parseFreeAccountSubmissionResult({
+		intakeAcknowledged: false,
+		realm: 'us1',
+		region: 'us',
+	}), {
+		intakeAcknowledged: false,
+		realm: 'us1',
+		region: 'us',
+	});
+	assert.deepEqual(parseFreeAccountSubmissionResult({
+		accountSetupPending: true,
+		intakeAcknowledged: true,
+		realm: 'eu0',
+		region: 'Europe (Ireland)',
+	}), {
+		accountSetupPending: true,
+		intakeAcknowledged: true,
+		realm: 'eu0',
+		region: 'Europe (Ireland)',
+	});
+	for (const invalid of [
+		{},
+		{ accountSetupPending: 'true', intakeAcknowledged: true, realm: 'us1', region: 'us' },
+		{ intakeAcknowledged: true, realm: 'us1', region: 'us0' },
+		{ intakeAcknowledged: true, realm: '../us1', region: 'us' },
+		{ intakeAcknowledged: true, realm: 'us-', region: 'us' },
+		{ intakeAcknowledged: true, realm: 'us1', region: 'Europe (Ireland)' },
+	]) {
+		assert.equal(parseFreeAccountSubmissionResult(invalid), undefined);
+	}
+});
+
+test('agent integration configuration rejects every Authorization header', () => {
+	assert.equal(
+		caseInsensitiveHeaderValue({ authorization: 'Bearer stale-token' }, 'Authorization'),
+		'Bearer stale-token',
+	);
+	assert.equal(hasNoAuthorizationHeader(undefined), true);
+	assert.equal(hasNoAuthorizationHeader({}), true);
+	assert.equal(hasNoAuthorizationHeader({ Authorization: 'Bearer stale-token' }), false);
+	assert.equal(hasNoAuthorizationHeader({
+		Authorization: 'Bearer one',
+		authorization: 'Bearer two',
+	}), false);
+
+	const noAuthorization = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+	].join('\n'));
+	assert.notEqual(noAuthorization, undefined);
+	assert.equal(codexObstudioHasNoAuthorization(noAuthorization ?? ''), true);
+	assert.equal(getCodexObstudioAuthorization(noAuthorization ?? ''), undefined);
+
+	for (const authorization of [
+		'http_headers = { Authorization = "Bearer stale-token" }',
+		'[mcp_servers.obstudio.http_headers]\nAuthorization = "Bearer stale-token"',
+	]) {
+		const section = getCodexObstudioSection([
+			'[mcp_servers.obstudio]',
+			'url = "http://127.0.0.1:3000/mcp"',
+			authorization,
+		].join('\n'));
+		assert.notEqual(section, undefined);
+		assert.equal(codexObstudioHasNoAuthorization(section ?? ''), false);
+	}
+});
+
+test('agent integration fingerprints refresh only an unchanged extension-owned endpoint', () => {
+	const desiredMcpUrl = 'http://127.0.0.1:3000/mcp';
+	const original = {
+		fingerprintMaterial: JSON.stringify({
+			headers: { Authorization: 'Bearer prior-control-token' },
+			type: 'http',
+			url: desiredMcpUrl,
+		}),
+		mcpUrl: desiredMcpUrl,
+	};
+	const fingerprint = createAgentIntegrationConfigFingerprint(original);
+
+	assert.equal(JSON.stringify(fingerprint).includes('prior-control-token'), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, original, desiredMcpUrl), true);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, {
+		...original,
+		fingerprintMaterial: original.fingerprintMaterial.replace('prior-control-token', 'user-control-token'),
+	}, desiredMcpUrl), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, {
+		...original,
+		fingerprintMaterial: original.fingerprintMaterial.replace('"type":"http"', '"disabled":true,"type":"http"'),
+	}, desiredMcpUrl), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, {
+		...original,
+		mcpUrl: 'http://127.0.0.1:4000/mcp',
+	}, desiredMcpUrl), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, original, 'http://127.0.0.1:4000/mcp'), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(undefined, original, desiredMcpUrl), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig({
+		...fingerprint,
+		configurationDigest: 'not-a-digest',
+	}, original, desiredMcpUrl), false);
+});
+
+test('Codex TOML parsing treats array tables as distinct scope boundaries', () => {
+	const adjacentArray = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'[[profiles.entries]]',
+		'url = "https://wrong.example.test/mcp"',
+	].join('\n'));
+	assert.equal(adjacentArray, [
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+	].join('\n'));
+	assert.equal(getCodexObstudioUrl(adjacentArray ?? ''), 'http://127.0.0.1:3000/mcp');
+
+	const nestedArray = getCodexObstudioSection([
+		'[mcp_servers.obstudio]',
+		'url = "http://127.0.0.1:3000/mcp"',
+		'[[mcp_servers.obstudio.metadata]]',
+		'url = "https://array.example.test/mcp"',
+		'http_headers = { Authorization = "Bearer wrong-token" }',
+		'[mcp_servers.obstudio.http_headers]',
+		'Authorization = "Bearer current-token"',
+		'[mcp_servers.other]',
+		'url = "https://other.example.test/mcp"',
+	].join('\n'));
+	assert.notEqual(nestedArray, undefined);
+	assert.match(nestedArray ?? '', /\[\[mcp_servers\.obstudio\.metadata\]\]/);
+	assert.doesNotMatch(nestedArray ?? '', /other\.example\.test/);
+	assert.equal(getCodexObstudioUrl(nestedArray ?? ''), 'http://127.0.0.1:3000/mcp');
+	assert.equal(getCodexObstudioAuthorization(nestedArray ?? ''), 'Bearer current-token');
+	assert.equal(codexObstudioHasNoAuthorization(nestedArray ?? ''), false);
+});
+
+test('Splunk Observability Studio-mutating Cloud actions serialize with lifecycle transitions', () => {
+	for (const action of ['connect', 'create-free-account', 'forget', 'initialize', 'set-enabled'] as const) {
 		assert.equal(cloudBridgeActionRequiresLifecycleSerialization(action), true, action);
 	}
 	for (const action of [
 		'open-audit-report',
 		'open-free-edition',
 		'open-ingest-token-help',
+		'open-realm-help',
 		'open-skill-docs',
+		'resolve-realm',
 	] as const) {
 		assert.equal(cloudBridgeActionRequiresLifecycleSerialization(action), false, action);
 	}
@@ -179,6 +507,71 @@ test('Observer-mutating Cloud actions serialize with lifecycle transitions', () 
 	);
 });
 
+test('Free Edition actions use the generic IDE host transport and fixed Splunk Observability Studio routes', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+	const hostSource = fs.readFileSync(
+		path.join(extensionRoot, 'src', 'observer-webview-host.ts'),
+		'utf-8',
+	);
+
+	assert.match(
+		source,
+		/case 'detect-free-account-region':[\s\S]*?requestObserverFreeAccountJSON\(\s*'\/api\/splunk\/free-account\/region',\s*undefined,/,
+	);
+	assert.match(
+		source,
+		/case 'resolve-realm':[\s\S]*?postObserverCloudJSON\(\s*'\/api\/splunk\/export\/realm',\s*\{ destination \}/,
+	);
+	assert.match(
+		source,
+		/case 'resolve-realm':[\s\S]*?return \{[\s\S]*?realm: splunkRealmFromResponse/,
+	);
+	assert.match(
+		source,
+		/const splunkRealmHelpUrl = 'https:\/\/help\.splunk\.com\/en\/splunk-observability-cloud\/administer\/org-reference-info\/view-your-realm-api-endpoints-and-organization'/,
+	);
+	assert.match(
+		source,
+		/const splunkIngestTokenHelpUrl = 'https:\/\/help\.splunk\.com\/en\/splunk-observability-cloud\/administer\/authentication-and-security\/authentication-tokens\/org-access-tokens'/,
+	);
+	assert.match(
+		source,
+		/case 'open-realm-help':[\s\S]*?openCloudExternalUrl\(splunkRealmHelpUrl\)/,
+	);
+	assert.match(
+		source,
+		/case 'open-ingest-token-help':[\s\S]*?openCloudExternalUrl\(splunkIngestTokenHelpUrl\)/,
+	);
+	assert.match(
+		source,
+		/case 'create-free-account':[\s\S]*?requestObserverFreeAccountJSON\(\s*'\/api\/splunk\/free-account',[\s\S]*?email: payload\.email,[\s\S]*?firstName: payload\.firstName,[\s\S]*?lastName: payload\.lastName,[\s\S]*?region: payload\.region,[\s\S]*?termsAccepted: true,/,
+	);
+	assert.match(
+		source,
+		/const freeAccount = parseFreeAccountSubmissionResult\([\s\S]*?freeAccount === undefined[\s\S]*?'outcome_unknown'[\s\S]*?!freeAccount\.intakeAcknowledged[\s\S]*?'signup_not_acknowledged'/,
+	);
+	assert.match(
+		source,
+		/postObserverHostResponse\([\s\S]*?cloudBridgeErrorMetadata\(error\)[\s\S]*?type: 'obstudio\.host\.response'/,
+	);
+	assert.match(
+		source,
+		/isFreeAccountSignupRequest\(message\.request\)[\s\S]*?showInformationMessage\([\s\S]*?within 10 minutes/,
+	);
+	assert.match(
+		source,
+		/delivered = await postObserverHostResponse\([\s\S]*?\.catch\(\(\) => false\)[\s\S]*?!delivered[\s\S]*?freeAccountSignup/,
+	);
+	assert.match(
+		source,
+		/metadata\.code === 'outcome_unknown' \|\| metadata\.retrySafe === false[\s\S]*?showWarningMessage/,
+	);
+	assert.match(hostSource, /case 'create-free-account':[\s\S]*?value\.termsAccepted === true/);
+	assert.doesNotMatch(source, /obstudio\.cloud\.(?:bridge|ready|request|response)/);
+	assert.doesNotMatch(hostSource, /publicIp|clientIpLookupAttempted|opendns/i);
+});
+
 test('observer cloud response parsing preserves non-JSON route errors for compatibility fallback', () => {
 	assert.deepEqual(parseObserverCloudResponseBody(404, '404 page not found\n'), {});
 	assert.deepEqual(parseObserverCloudResponseBody(401, '{"error":"unauthorized"}'), { error: 'unauthorized' });
@@ -188,7 +581,7 @@ test('observer cloud response parsing preserves non-JSON route errors for compat
 	);
 });
 
-test('Observer rollback is skipped after authoritative cloud mutation rejections', () => {
+test('Splunk Observability Studio rollback is skipped after authoritative cloud mutation rejections', () => {
 	for (const statusCode of [400, 401, 404, 409]) {
 		assert.equal(
 			shouldRestoreObserverAfterCloudMutationFailure(
@@ -206,42 +599,6 @@ test('Observer rollback is skipped after authoritative cloud mutation rejections
 	assert.equal(shouldRestoreObserverAfterCloudMutationFailure(new Error('connection reset')), true);
 });
 
-test('authenticated initialization errors keep cloud controls available', () => {
-	for (const statusCode of [400, 404, 409, 429]) {
-		assert.equal(
-			cloudControlRemainsAvailableAfterInitializationError(
-				new ObserverCloudResponseError(statusCode, 'refresh failed'),
-			),
-			true,
-		);
-	}
-	for (const statusCode of [401, 403, 500, 503]) {
-		assert.equal(
-			cloudControlRemainsAvailableAfterInitializationError(
-				new ObserverCloudResponseError(statusCode, 'control unavailable'),
-			),
-			false,
-		);
-	}
-	assert.equal(
-		cloudControlRemainsAvailableAfterInitializationError(
-			new StoredSplunkCloudConnectionRejectedError(
-				new ObserverCloudResponseError(401, 'stored Splunk access token was rejected'),
-			),
-		),
-		true,
-	);
-	assert.equal(
-		cloudControlRemainsAvailableAfterInitializationError(
-			new StoredSplunkCloudConnectionVerificationUnavailableError(
-				new ObserverCloudResponseError(502, 'Splunk temporarily unavailable'),
-			),
-		),
-		true,
-	);
-	assert.equal(cloudControlRemainsAvailableAfterInitializationError(new Error('transport failed')), false);
-});
-
 test('stored cloud restore never applies credentials after transient verification failures', async () => {
 	for (const statusCode of [502, 504]) {
 		const calls: string[] = [];
@@ -257,8 +614,8 @@ test('stored cloud restore never applies credentials after transient verificatio
 
 	for (const error of [
 		new ObserverCloudResponseError(400, 'invalid stored connection'),
-		new ObserverCloudResponseError(500, 'Observer apply failed'),
-		new Error('Observer transport failed'),
+		new ObserverCloudResponseError(500, 'Splunk Observability Studio apply failed'),
+		new Error('Splunk Observability Studio transport failed'),
 	]) {
 		await assert.rejects(
 			() => verifyStoredSplunkCloudConnection(async () => { throw error; }),
@@ -321,6 +678,27 @@ test('IDE host transport restricts HTTP paths, cancellation, and telemetry comma
 		command: 'connect',
 		type: 'obstudio.host.telemetry',
 	}), false);
+	for (const cimdAction of ['setup-cimd', 'login-cimd', 'disconnect-cimd']) {
+		assert.equal(isObserverHostRequestEnvelope({
+			request: { action: cimdAction, kind: 'cloud', payload: { expectedVersion: 'V'.repeat(43) } },
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), true, cimdAction);
+		assert.equal(isObserverHostRequestEnvelope({
+			request: { action: cimdAction, kind: 'cloud' },
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), true, `${cimdAction} must allow retry without an available state version`);
+		assert.equal(isObserverHostRequestEnvelope({
+			request: {
+				action: cimdAction,
+				kind: 'cloud',
+				payload: { expectedVersion: 'V'.repeat(43), realm: 'us0' },
+			},
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), false, `${cimdAction} must not accept a realm payload`);
+	}
 });
 
 test('IDE host response collection rejects truncated and aborted responses', async () => {
@@ -448,7 +826,7 @@ test('IDE telemetry uses the same local and remote payload limits as HTTP snapsh
 	}
 });
 
-test('IDE telemetry maps Observer HTTP URLs to WebSocket URLs', () => {
+test('IDE telemetry maps Splunk Observability Studio HTTP URLs to WebSocket URLs', () => {
 	assert.equal(webSocketURL('http://127.0.0.1:3000'), 'ws://127.0.0.1:3000/api/ws');
 	assert.equal(webSocketURL('https://observer.example.test/base'), 'wss://observer.example.test/base/api/ws');
 	assert.throws(() => webSocketURL('file:///tmp/observer'), /HTTP or HTTPS/);
@@ -523,7 +901,7 @@ test('resolveBackend returns observer binary when it exists', () => {
 		assert.deepEqual(backend.args, []);
 		assert.equal(backend.cwd, path.dirname(binary));
 		assert.equal(backend.env.WEAVER_PATH, weaver);
-		assert.equal(backend.label, 'observer');
+		assert.equal(backend.label, 'Splunk Observability Studio');
 	});
 });
 
@@ -565,6 +943,34 @@ test('build output layout uses an .exe suffix for Windows targets', () => {
 	});
 });
 
+test('release Splunk Observability Studio builds embed the exact VSIX version', () => {
+	withTempExtensionRoot((extensionRoot) => {
+		const paths = getBuildPaths(extensionRoot);
+		assert.deepEqual(
+			observerBuildArgs(paths, { OBSTUDIO_OBSERVER_VERSION: '1.2.3' }),
+			[
+				'build',
+				'-ldflags',
+				'-X main.version=1.2.3',
+				'-o',
+				paths.observerOutBinary,
+				'./cmd/obstudio',
+			],
+		);
+	});
+});
+
+test('extension Splunk Observability Studio builds default to the extension manifest version', () => {
+	const packageVersion = JSON.parse(
+		fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf8'),
+	) as { version: string };
+	assert.equal(observerBuildVersion({}), packageVersion.version);
+	assert.throws(
+		() => observerBuildVersion({ OBSTUDIO_OBSERVER_VERSION: '1.2.3 -X unsafe=value' }),
+		/Invalid Splunk Observability Studio build version/,
+	);
+});
+
 test('package metadata declares an extension icon that exists', () => {
 	const packageJSONPath = path.join(extensionRoot, 'package.json');
 	const packageJSON = JSON.parse(fs.readFileSync(packageJSONPath, 'utf-8')) as { icon?: string };
@@ -572,6 +978,31 @@ test('package metadata declares an extension icon that exists', () => {
 	assert.equal(typeof packageJSON.icon, 'string');
 	assert.ok(packageJSON.icon);
 	assert.equal(fs.existsSync(path.join(extensionRoot, packageJSON.icon!)), true);
+});
+
+test('package metadata has no legacy product display labels', () => {
+	const packageJSON = JSON.parse(
+		fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf-8'),
+	) as {
+		contributes?: {
+			commands?: Array<{ category?: string; title?: string }>;
+			configuration?: {
+				properties?: Record<string, { description?: string; markdownDescription?: string }>;
+				title?: string;
+			};
+		};
+		displayName?: string;
+	};
+	const displayCopy = [
+		packageJSON.displayName,
+		packageJSON.contributes?.configuration?.title,
+		...Object.values(packageJSON.contributes?.configuration?.properties ?? {})
+			.flatMap((property) => [property.description, property.markdownDescription]),
+		...(packageJSON.contributes?.commands ?? [])
+			.flatMap((command) => [command.category, command.title]),
+	].filter((value): value is string => typeof value === 'string');
+
+	assert.equal(displayCopy.some((value) => /\bObserver\b/.test(value)), false);
 });
 
 test('package metadata keeps the VS Code minimum aligned with the API types', () => {
@@ -603,7 +1034,7 @@ test('package metadata includes the extension-host WebSocket runtime', () => {
 	const packageJSON = JSON.parse(
 		fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf-8'),
 	) as { dependencies?: Record<string, string> };
-	assert.equal(packageJSON.dependencies?.ws, '8.18.3');
+	assert.equal(packageJSON.dependencies?.ws, '8.21.0');
 });
 
 test('package metadata declares marketplace categories, tags, and resource links', () => {
@@ -665,6 +1096,18 @@ test('observer webview panel uses the bundled observer icon', () => {
 	assert.match(source, /observer-icon\.png/);
 });
 
+test('observer webview panel uses the full product title', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+
+	assert.match(
+		source,
+		/const observerPanelTitle = 'Splunk Observability Studio – Telemetry Explorer';/,
+	);
+	assert.match(source, /createWebviewPanel\(\s*observerPanelViewType,\s*observerPanelTitle,/s);
+	assert.match(source, /panel\.title = observerPanelTitle;/);
+});
+
 test('managed observer startup restores cloud export without opening the Cloud tab', () => {
 	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
 	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
@@ -675,7 +1118,7 @@ test('managed observer startup restores cloud export without opening the Cloud t
 	);
 });
 
-test('extension treats shared Observer cloud initialization as read-only', () => {
+test('extension treats shared Splunk Observability Studio cloud initialization as read-only', () => {
 	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
 	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
 
@@ -729,7 +1172,7 @@ test('cloud export preference survives managed observer restarts', async () => {
 	]);
 });
 
-test('transient stored verification failure leaves the managed Observer disconnected', async () => {
+test('transient stored verification failure leaves the managed Splunk Observability Studio disconnected', async () => {
 	const disconnected = cloudStatus(false, false, false);
 	let setEnabledCalled = false;
 
@@ -750,13 +1193,7 @@ test('transient stored verification failure leaves the managed Observer disconne
 				return cloudStatus(true, true, true);
 			},
 		}),
-		(error: unknown) => {
-			assert.equal(
-				cloudControlRemainsAvailableAfterInitializationError(error),
-				true,
-			);
-			return error instanceof StoredSplunkCloudConnectionVerificationUnavailableError;
-		},
+		(error: unknown) => error instanceof StoredSplunkCloudConnectionVerificationUnavailableError,
 	);
 	assert.equal(setEnabledCalled, false);
 });
@@ -787,25 +1224,25 @@ test('cloud export restore skips local storage when observer is already configur
 	assert.equal(readConnection, false);
 });
 
-test('shared Observer initialization never restores this profile\'s stored cloud connection', async () => {
+test('shared Splunk Observability Studio initialization never restores this profile\'s stored cloud connection', async () => {
 	const refreshed = cloudStatus(false, false, false);
 	let readConnection = false;
 
 	const result = await restoreSplunkCloudConnectionFromStorage({
 		configure: async () => {
-			throw new Error('shared Observer should not be configured automatically');
+			throw new Error('shared Splunk Observability Studio should not be configured automatically');
 		},
 		readConnection: async () => {
 			readConnection = true;
 			return { accessToken: 'private_profile_token', realm: 'us1' };
 		},
 		readExportEnabled: () => {
-			throw new Error('shared Observer preference should not be read');
+			throw new Error('shared Splunk Observability Studio preference should not be read');
 		},
 		refresh: async () => refreshed,
 		restoreStoredConnection: false,
 		setEnabled: async () => {
-			throw new Error('shared Observer preference should not be applied');
+			throw new Error('shared Splunk Observability Studio preference should not be applied');
 		},
 	});
 
@@ -813,7 +1250,7 @@ test('shared Observer initialization never restores this profile\'s stored cloud
 	assert.equal(readConnection, false);
 });
 
-test('shared Observer initialization reads cloud status without mutating its configuration', async () => {
+test('shared Splunk Observability Studio initialization reads cloud status without mutating its configuration', async () => {
 	const calls: string[] = [];
 	const status = cloudStatus(true, true, true);
 
@@ -825,7 +1262,7 @@ test('shared Observer initialization reads cloud status without mutating its con
 		},
 		refreshManagedStatus: async () => {
 			calls.push('refresh');
-			throw new Error('shared Observer configuration must not be refreshed');
+			throw new Error('shared Splunk Observability Studio configuration must not be refreshed');
 		},
 	});
 
@@ -833,7 +1270,7 @@ test('shared Observer initialization reads cloud status without mutating its con
 	assert.deepEqual(calls, ['read']);
 });
 
-test('managed Observer initialization refreshes its owned cloud configuration', async () => {
+test('managed Splunk Observability Studio initialization refreshes its owned cloud configuration', async () => {
 	const calls: string[] = [];
 	const status = cloudStatus(true, false, true);
 
@@ -841,7 +1278,7 @@ test('managed Observer initialization refreshes its owned cloud configuration', 
 		isManagedObserver: true,
 		readStatus: async () => {
 			calls.push('read');
-			throw new Error('managed Observer should refresh its owned configuration');
+			throw new Error('managed Splunk Observability Studio should refresh its owned configuration');
 		},
 		refreshManagedStatus: async () => {
 			calls.push('refresh');
@@ -851,309 +1288,6 @@ test('managed Observer initialization refreshes its owned cloud configuration', 
 
 	assert.equal(result, status);
 	assert.deepEqual(calls, ['refresh']);
-});
-
-test('standalone cloud state survives a managed Observer window reload', async () => {
-	let storedState: {
-		connection: { accessToken: string; realm: string };
-		exportEnabled: boolean;
-	} | undefined;
-	const calls: Array<[string, unknown?]> = [];
-	await captureSplunkCloudState({
-		isManagedObserver: false,
-		readConfiguration: async () => {
-			throw new Error('shared Observer status should not be captured');
-		},
-		writeState: async () => {
-			throw new Error('shared Observer state should not be stored');
-		},
-	});
-	await captureSplunkCloudState({
-		isManagedObserver: true,
-		readConfiguration: async () => {
-			calls.push(['captureConfiguration']);
-			return cloudConfiguration(true, true, 'browser-token', 'eu1');
-		},
-		writeState: async (state) => {
-			calls.push(['writeState', state]);
-			storedState = state;
-		},
-	});
-
-	const refreshed = cloudStatus(false, false, false, 'R'.repeat(43));
-	const configured = cloudStatus(true, false, true, 'C'.repeat(43));
-	const enabled = cloudStatus(true, true, true, 'E'.repeat(43));
-
-	const result = await restoreSplunkCloudConnectionFromStorage({
-		configure: async (_connection, expectedVersion) => {
-			calls.push(['configure', expectedVersion]);
-			return configured;
-		},
-		readConnection: async () => {
-			calls.push(['readConnection']);
-			return storedState?.connection;
-		},
-		readExportEnabled: () => {
-			calls.push(['readExportEnabled']);
-			return storedState?.exportEnabled;
-		},
-		refresh: async () => {
-			calls.push(['refresh']);
-			return refreshed;
-		},
-		restoreStoredConnection: true,
-		setEnabled: async (value, expectedVersion) => {
-			calls.push(['setEnabled', { expectedVersion, value }]);
-			return enabled;
-		},
-	});
-
-	assert.equal(result, enabled);
-	assert.deepEqual(calls, [
-		['captureConfiguration'],
-		['writeState', {
-			connection: { accessToken: 'browser-token', realm: 'eu1' },
-			exportEnabled: true,
-		}],
-		['refresh'],
-		['readConnection'],
-		['configure', 'R'.repeat(43)],
-		['readExportEnabled'],
-		['setEnabled', { expectedVersion: 'C'.repeat(43), value: true }],
-	]);
-});
-
-test('standalone Forget clears the managed Observer durable state', async () => {
-	let stored: unknown = 'unchanged';
-	await captureSplunkCloudState({
-		isManagedObserver: true,
-		readConfiguration: async () => cloudConfiguration(false, false),
-		writeState: async (state) => {
-			stored = state;
-		},
-	});
-	assert.equal(stored, undefined);
-});
-
-test('an unconfigured Observer with no successful mutation preserves a stored key', async () => {
-	let writes = 0;
-	await captureSplunkCloudState({
-		isManagedObserver: true,
-		readConfiguration: async () => cloudConfiguration(false, false, undefined, undefined, false),
-		writeState: async () => {
-			writes += 1;
-		},
-	});
-	assert.equal(writes, 0);
-});
-
-test('unchanged connected startup credentials do not become durable IDE state', async () => {
-	let writes = 0;
-	await captureSplunkCloudState({
-		isManagedObserver: true,
-		readConfiguration: async () => cloudConfiguration(
-			true,
-			true,
-			'process-environment-token',
-			'us1',
-			false,
-		),
-		writeState: async () => {
-			writes += 1;
-		},
-	});
-	assert.equal(writes, 0);
-});
-
-test('env-file cloud state does not replace IDE secure storage', async () => {
-	let writes = 0;
-	await captureSplunkCloudState({
-		isManagedObserver: true,
-		readConfiguration: async () => ({
-			...cloudConfiguration(true, true, 'env-token', 'us1'),
-			source: 'env-file',
-		}),
-		writeState: async () => {
-			writes += 1;
-		},
-	});
-	assert.equal(writes, 0);
-});
-
-test('managed Observer state deadline prevents a late configuration read from starting a write', async () => {
-	let resolveConfiguration: ((status: unknown) => void) | undefined;
-	let writeCalls = 0;
-	const capture = captureSplunkCloudState({
-		isManagedObserver: true,
-		readConfiguration: () => new Promise((resolve) => {
-			resolveConfiguration = resolve;
-		}),
-		timeoutMs: 10,
-		writeState: async () => {
-			writeCalls += 1;
-		},
-	});
-	await assert.rejects(capture, /Cloud configuration read timed out/);
-	resolveConfiguration?.(cloudConfiguration(true, true, 'token', 'us1'));
-	await new Promise<void>((resolve) => setImmediate(resolve));
-	assert.equal(writeCalls, 0);
-});
-
-test('managed Observer state write keeps lifecycle serialization after the read deadline', async () => {
-	let releaseWrite: (() => void) | undefined;
-	let markWriteStarted: (() => void) | undefined;
-	let stored: boolean | undefined;
-	const writeStarted = new Promise<void>((resolve) => {
-		markWriteStarted = resolve;
-	});
-	const capture = captureSplunkCloudState({
-		isManagedObserver: true,
-		readConfiguration: async () => cloudConfiguration(true, true, 'token', 'us1'),
-		timeoutMs: 10,
-		writeState: (state) => new Promise<void>((resolve) => {
-			markWriteStarted?.();
-			releaseWrite = () => {
-				stored = state?.exportEnabled;
-				resolve();
-			};
-		}),
-	});
-	const outcome = capture.then(() => 'fulfilled', () => 'rejected');
-	await writeStarted;
-	const beforeRelease = await Promise.race([
-		outcome,
-		new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 25)),
-	]);
-	assert.equal(beforeRelease, 'pending');
-	releaseWrite?.();
-	assert.equal(await outcome, 'fulfilled');
-	assert.equal(stored, true);
-});
-
-test('managed Observer state persistence restores both fields after a partial write failure', async () => {
-	const previous = {
-		connectionValue: JSON.stringify({ accessToken: 'old-token', realm: 'us1' }),
-		exportEnabled: true,
-	};
-	const next = {
-		connectionValue: JSON.stringify({ accessToken: 'new-token', realm: 'eu1' }),
-		exportEnabled: false,
-	};
-	let durable: {
-		connectionValue: string | undefined;
-		exportEnabled: boolean | undefined;
-	} = { ...previous };
-	let writeCalls = 0;
-
-	await assert.rejects(
-		persistSplunkCloudStateWithRollback({
-			next,
-			readState: async () => ({ ...previous }),
-			timeoutMs: 50,
-			waitForWrite: async (operation) => {
-				await operation;
-				return true;
-			},
-			writeState: async (state) => {
-				writeCalls += 1;
-				durable.connectionValue = state.connectionValue;
-				if (writeCalls === 1) {
-					throw new Error('export preference write failed');
-				}
-				durable.exportEnabled = state.exportEnabled;
-			},
-		}),
-		/export preference write failed/,
-	);
-	assert.equal(writeCalls, 2);
-	assert.deepEqual(durable, previous);
-});
-
-test('managed Observer state persistence bounds the previous-state read', async () => {
-	let writeCalls = 0;
-	await assert.rejects(
-		persistSplunkCloudStateWithRollback({
-			next: { connectionValue: 'new', exportEnabled: false },
-			readState: () => new Promise(() => undefined),
-			timeoutMs: 10,
-			waitForWrite: async (operation) => {
-				await operation;
-				return true;
-			},
-			writeState: async () => {
-				writeCalls += 1;
-			},
-		}),
-		/Cloud configuration state read timed out/,
-	);
-	assert.equal(writeCalls, 0);
-});
-
-test('a timed-out pair write cannot resume after rollback and mix durable fields', async () => {
-	const connectionStore = new SplunkCloudConnectionStore();
-	const preferenceStore = new SplunkCloudExportPreferenceStore();
-	type DurableState = {
-		connectionValue: string | undefined;
-		exportEnabled: boolean | undefined;
-	};
-	const previous: DurableState = { connectionValue: 'old-token', exportEnabled: true };
-	const next: DurableState = { connectionValue: 'new-token', exportEnabled: false };
-	let durable: DurableState = { ...previous };
-	let connectionWrites = 0;
-	let pairWrites = 0;
-	let releaseFirstConnection: (() => void) | undefined;
-	let markFirstConnectionStarted: (() => void) | undefined;
-	let firstPairWrite: Promise<void> | undefined;
-	const firstConnectionStarted = new Promise<void>((resolve) => {
-		markFirstConnectionStarted = resolve;
-	});
-	const writeState = (state: DurableState): Promise<void> => {
-		pairWrites += 1;
-		const operation = writeSplunkCloudStatePair({
-			state,
-			writeConnection: (value) => connectionStore.write(value, async (current) => {
-				connectionWrites += 1;
-				if (connectionWrites === 1) {
-					markFirstConnectionStarted?.();
-					await new Promise<void>((resolve) => {
-						releaseFirstConnection = resolve;
-					});
-				}
-				durable.connectionValue = current;
-			}),
-			writeExportEnabled: (value) => preferenceStore.write(value, async (current) => {
-				durable.exportEnabled = current;
-			}),
-		});
-		if (pairWrites === 1) {
-			firstPairWrite = operation;
-		}
-		return operation;
-	};
-	let waits = 0;
-
-	await assert.rejects(
-		persistSplunkCloudStateWithRollback({
-			next,
-			readState: async () => ({ ...previous }),
-			timeoutMs: 50,
-			waitForWrite: async (operation) => {
-				waits += 1;
-				if (waits === 1) {
-					await firstConnectionStarted;
-					return false;
-				}
-				await operation;
-				return true;
-			},
-			writeState,
-		}),
-		/Cloud configuration write timed out/,
-	);
-	releaseFirstConnection?.();
-	await firstPairWrite;
-	assert.equal(pairWrites, 2);
-	assert.deepEqual(durable, previous);
 });
 
 test('late cloud preference writes repair the newest value before settling', async () => {
@@ -1277,18 +1411,18 @@ test('a late writer does not retry a newer rejected preference', async () => {
 	assert.equal(store.read(() => persisted), true);
 });
 
-test('cloud connect stores state after Observer acceptance and rolls back storage failures', async () => {
+test('cloud connect stores credentials before mutating Splunk Observability Studio', async () => {
 	const previous = { connectionValue: 'previous', exportEnabled: true };
 	const status = cloudStatus(true, false, true);
 	const rollbackToken = 'R'.repeat(43);
-	const successCalls: string[] = [];
+	const calls: string[] = [];
 	const result = await connectSplunkCloudWithStorage({
 		configureObserver: async () => {
-			successCalls.push('configureObserver');
+			calls.push('configureObserver');
 			return { ...status, rollbackToken };
 		},
 		readStoredState: async () => {
-			successCalls.push('readStoredState');
+			calls.push('readStoredState');
 			return previous;
 		},
 		rollbackObserver: async () => {
@@ -1299,93 +1433,49 @@ test('cloud connect stores state after Observer acceptance and rolls back storag
 			throw new Error('restoreStoredState should not be called');
 		},
 		storeConnectedState: async () => {
-			successCalls.push('storeConnectedState');
+			calls.push('storeConnectedState');
 		},
 	});
 	assert.deepEqual(result, status);
 	assert.equal(Object.prototype.hasOwnProperty.call(result, 'rollbackToken'), false);
-	assert.deepEqual(successCalls, ['readStoredState', 'configureObserver', 'storeConnectedState']);
+	assert.deepEqual(calls, ['readStoredState', 'storeConnectedState', 'configureObserver']);
+});
 
-	const rollbackCalls: string[] = [];
+test('cloud connect restores storage without touching Splunk Observability Studio when secure storage fails', async () => {
+	const previous = { connectionValue: 'previous', exportEnabled: true };
+	const calls: string[] = [];
 	await assert.rejects(
 		() => connectSplunkCloudWithStorage({
 			configureObserver: async () => {
-				rollbackCalls.push('configureObserver');
-				return { ...status, rollbackToken };
+				calls.push('configureObserver');
+				return cloudStatus(true, false, true);
 			},
 			readStoredState: async () => {
-				rollbackCalls.push('readStoredState');
+				calls.push('readStoredState');
 				return previous;
 			},
-			rollbackObserver: async (token) => {
-				assert.equal(token, rollbackToken);
-				rollbackCalls.push('rollbackObserver');
+			rollbackObserver: async () => {
+				calls.push('rollbackObserver');
 			},
-			rollbackToken,
+			rollbackToken: 'R'.repeat(43),
 			restoreStoredState: async (state) => {
 				assert.deepEqual(state, previous);
-				rollbackCalls.push('restoreStoredState');
+				calls.push('restoreStoredState');
 			},
 			storeConnectedState: async () => {
-				rollbackCalls.push('storeConnectedState');
+				calls.push('storeConnectedState');
 				throw new Error('keychain unavailable');
 			},
 		}),
 		/Could not store the cloud key securely: keychain unavailable/,
 	);
-	assert.deepEqual(rollbackCalls, [
-		'readStoredState',
-		'configureObserver',
-		'storeConnectedState',
-		'restoreStoredState',
-		'rollbackObserver',
-	]);
-
-	const failedRollbackCalls: string[] = [];
-	await assert.rejects(
-		() => connectSplunkCloudWithStorage({
-			configureObserver: async () => ({ ...status, rollbackToken }),
-			readStoredState: async () => previous,
-			rollbackObserver: async () => {
-				failedRollbackCalls.push('rollbackObserver');
-			},
-			rollbackToken,
-			restoreStoredState: async () => {
-				failedRollbackCalls.push('restoreStoredState');
-				throw new Error('keychain rollback unavailable');
-			},
-			storeConnectedState: async () => {
-				throw new Error('keychain unavailable');
-			},
-		}),
-		/keychain rollback unavailable/,
-	);
-	assert.deepEqual(failedRollbackCalls, ['restoreStoredState', 'rollbackObserver']);
+	assert.deepEqual(calls, ['readStoredState', 'storeConnectedState', 'restoreStoredState']);
 });
 
-test('cloud connect requires the server-issued rollback capability after a storage failure', async () => {
-	let rollbackCalled = false;
-	await assert.rejects(
-		() => connectSplunkCloudWithStorage({
-			configureObserver: async () => cloudStatus(true, false, true),
-			readStoredState: async () => ({ connectionValue: 'previous', exportEnabled: false }),
-			rollbackObserver: async () => {
-				rollbackCalled = true;
-			},
-			rollbackToken: 'R'.repeat(43),
-			restoreStoredState: async () => undefined,
-			storeConnectedState: async () => {
-				throw new Error('keychain unavailable');
-			},
-		}),
-		/Observer did not provide a cloud rollback capability/,
-	);
-	assert.equal(rollbackCalled, false);
-});
-
-test('cloud connect rolls back an uncertain configure outcome with its client-held capability', async () => {
+test('cloud connect restores both durable and Splunk Observability Studio state after an uncertain mutation', async () => {
 	const configureFailure = new Error('connection reset after request upload');
 	const rollbackToken = 'R'.repeat(43);
+	const previous = { connectionValue: 'previous', exportEnabled: true };
 	const calls: string[] = [];
 
 	await assert.rejects(
@@ -1396,23 +1486,30 @@ test('cloud connect rolls back an uncertain configure outcome with its client-he
 			},
 			readStoredState: async () => {
 				calls.push('readStoredState');
-				return { connectionValue: 'previous', exportEnabled: true };
+				return previous;
 			},
 			rollbackObserver: async (token) => {
 				assert.equal(token, rollbackToken);
 				calls.push('rollbackObserver');
 			},
 			rollbackToken,
-			restoreStoredState: async () => {
-				throw new Error('stored state was not changed');
+			restoreStoredState: async (state) => {
+				assert.deepEqual(state, previous);
+				calls.push('restoreStoredState');
 			},
 			storeConnectedState: async () => {
-				throw new Error('storage must not run after configure failed');
+				calls.push('storeConnectedState');
 			},
 		}),
 		(error: unknown) => error === configureFailure,
 	);
-	assert.deepEqual(calls, ['readStoredState', 'configureObserver', 'rollbackObserver']);
+	assert.deepEqual(calls, [
+		'readStoredState',
+		'storeConnectedState',
+		'configureObserver',
+		'restoreStoredState',
+		'rollbackObserver',
+	]);
 });
 
 test('cloud connect does not roll back an authoritative configure rejection', async () => {
@@ -1437,7 +1534,7 @@ test('cloud connect does not roll back an authoritative configure rejection', as
 	assert.equal(rollbackCalled, false);
 });
 
-test('cloud connect leaves newer Observer state intact when uncertain rollback conflicts', async () => {
+test('cloud connect leaves newer Splunk Observability Studio state intact when uncertain rollback conflicts', async () => {
 	const configureFailure = new Error('request timed out after upload');
 
 	await assert.rejects(
@@ -1457,7 +1554,7 @@ test('cloud connect leaves newer Observer state intact when uncertain rollback c
 	);
 });
 
-test('cloud export enable rolls local state back without rewriting Observer after a 4xx rejection', async () => {
+test('cloud export enable rolls local state back without rewriting Splunk Observability Studio after a 4xx rejection', async () => {
 	const previous = { connectionValue: 'stored', exportEnabled: false };
 	const rejection = new ObserverCloudResponseError(409, 'request rejected');
 	const calls: string[] = [];
@@ -1469,7 +1566,7 @@ test('cloud export enable rolls local state back without rewriting Observer afte
 				return previous;
 			},
 			rollbackObserver: async () => {
-				throw new Error('authoritative rejection must not roll back Observer state');
+				throw new Error('authoritative rejection must not roll back Splunk Observability Studio state');
 			},
 			rollbackToken: 'R'.repeat(43),
 			restoreStoredExportEnabled: async (enabled) => {
@@ -1495,7 +1592,7 @@ test('cloud export enable rolls local state back without rewriting Observer afte
 	]);
 });
 
-test('cloud export enable uses its scoped Observer rollback after an uncertain server failure', async () => {
+test('cloud export enable uses its scoped Splunk Observability Studio rollback after an uncertain server failure', async () => {
 	const previous = { connectionValue: 'stored', exportEnabled: false };
 	const failure = new ObserverCloudResponseError(500, 'server failed');
 	const calls: string[] = [];
@@ -1527,7 +1624,7 @@ test('cloud export enable uses its scoped Observer rollback after an uncertain s
 	]);
 });
 
-test('cloud forget uses its scoped Observer rollback after an uncertain failure', async () => {
+test('cloud forget uses its scoped Splunk Observability Studio rollback after an uncertain failure', async () => {
 	const previous = { connectionValue: 'stored', exportEnabled: true };
 	const failure = new ObserverCloudResponseError(500, 'server failed');
 	const calls: string[] = [];
@@ -1565,7 +1662,7 @@ test('cloud forget uses its scoped Observer rollback after an uncertain failure'
 	]);
 });
 
-test('cloud export recovery does not overwrite a newer Observer winner', async () => {
+test('cloud export recovery does not overwrite a newer Splunk Observability Studio winner', async () => {
 	const failure = new Error('connection reset');
 	await assert.rejects(
 		() => setSplunkCloudExportEnabledWithStorage({
@@ -1639,147 +1736,190 @@ function cloudConfiguration(
 	};
 }
 
-test('IDE cloud host retries a rotated control token before returning the response', async () => {
-	const usedTokens: string[] = [];
-	let refreshCalls = 0;
-	const status = cloudStatus(false, false, false);
-
-	const result = await requestObserverCloudMutationWithTokenRefresh({
-		currentToken: () => 'initial-control-token',
-		refreshToken: (usedToken) => {
-			assert.equal(usedToken, 'initial-control-token');
-			refreshCalls += 1;
-			return 'rotated-control-token';
-		},
-		send: async (controlToken) => {
-			usedTokens.push(controlToken);
-			if (controlToken === 'initial-control-token') {
-				return { body: { error: 'rotated Observer control token' }, statusCode: 401 };
-			}
-			return { body: status, statusCode: 200 };
-		},
-	});
-
-	assert.deepEqual(usedTokens, ['initial-control-token', 'rotated-control-token']);
-	assert.equal(refreshCalls, 1);
-	assert.equal(result, status);
-});
-
-test('extension unload paths clean up observer state', () => {
-	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
-	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+test('extension unload paths stop only the extension-owned Splunk Observability Studio process', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf-8');
 
 	assert.match(source, /export\s+async\s+function\s+deactivate\(\):\s*Promise<void>\s*\{/);
-	assert.match(source, /export\s+async\s+function\s+deactivate[\s\S]*?observerDeactivationStarted\s*=\s*true;[\s\S]*?await\s+shutdownObserverForExtensionUnload\(activeExtensionContext,\s*'Extension deactivated'\)/);
-	assert.match(source, /async\s+function\s+shutdownObserverForExtensionUnload\([\s\S]*?context:\s*vscode\.ExtensionContext\s*\|\s*undefined,[\s\S]*?reason:\s*string,[\s\S]*?\):\s*Promise<void>/);
 	assert.match(
 		source,
-		/async\s+function\s+stopObserver\(context\?:\s*vscode\.ExtensionContext\)[\s\S]*?const\s+queuedStop\s*=\s*observerCloudLifecycleOperations\.run\(async\s*\(\)\s*=>\s*\{[\s\S]*?await\s+persistManagedObserverCloudState\(context\)[\s\S]*?return\s+observerStopOperation\.run\(\(\)\s*=>\s*queuedStop\)/,
+		/export\s+async\s+function\s+deactivate[\s\S]*?observerDeactivationStarted\s*=\s*true;[\s\S]*?await\s+shutdownObserverForExtensionUnload\('Extension deactivated'\)/,
 	);
-	assert.match(source, /await\s+stopObserver\(context\)/);
-	assert.match(source, /async\s+function\s+persistManagedObserverCloudState[\s\S]*?captureSplunkCloudState[\s\S]*?isManagedObserver:\s*observerProcess\s*!==\s*undefined/);
-	assert.match(source, /dispose:\s*\(\)\s*=>\s*\{[\s\S]*?disposeObserverForExtensionUnload\('Extension disposed'\)/);
-	assert.match(source, /function\s+disposeObserverForExtensionUnload\(reason:\s*string\):\s*void/);
-	assert.match(source, /function\s+disposeObserverForExtensionUnload[\s\S]*?if\s*\(observerDeactivationStarted\)[\s\S]*?return;/);
-	assert.match(source, /operationCompletesWithin\(\s*stopObserver\(context\),\s*observerExtensionUnloadDeadlineMs/);
+	assert.match(
+		source,
+		/async\s+function\s+stopObserver\(\):\s*Promise<void>[\s\S]*?observerCloudLifecycleOperations\.run\([\s\S]*?terminateObserverProcess\(proc, 'SIGTERM'\)/,
+	);
+	assert.match(source, /operationCompletesWithin\(\s*stopObserver\(\),\s*observerExtensionUnloadDeadlineMs/);
 	assert.match(source, /if\s*\(!stopped\)[\s\S]*?forceDisposeObserverForExtensionUnload\([\s\S]*?'SIGKILL'\)/);
-	assert.match(source, /stopObserverRun\(observerLifecycleState\)/);
-	assert.match(source, /terminateObserverProcess\(proc,\s*'SIGTERM'\)/);
-	assert.doesNotMatch(source, /export\s+function\s+deactivate\(\)\s*\{[\s\S]*?terminateObserverProcess\(observerProcess,\s*'SIGTERM'\)/);
-});
-
-test('managed Observer state capture stays within the extension unload budget', () => {
-	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
-	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
-	const readMilliseconds = (name: string): number => {
-		const match = source.match(new RegExp(`const ${name} = ([\\d_]+);`));
-		assert.ok(match, `${name} should be declared`);
-		return Number(match[1].replaceAll('_', ''));
-	};
-
-	const captureTimeout = readMilliseconds('observerShutdownPreferenceCaptureTimeoutMs');
-	const terminationTimeout = readMilliseconds('observerShutdownTerminationTimeoutMs');
-	const postExitDelay = readMilliseconds('observerShutdownPostExitDelayMs');
-	const unloadDeadline = readMilliseconds('observerExtensionUnloadDeadlineMs');
-	assert.ok((captureTimeout * 4) + terminationTimeout + postExitDelay < 5_000);
-	assert.ok(unloadDeadline < 5_000);
-	assert.match(
-		source,
-		/readConfiguration:\s*\(\)\s*=>\s*postObserverControlledCloudJSON\(\s*'\/api\/splunk\/export\/shutdown-snapshot',[\s\S]*?observerShutdownPreferenceCaptureTimeoutMs[\s\S]*?\)/,
-	);
-	assert.match(source, /timeoutMs:\s*observerShutdownPreferenceCaptureTimeoutMs/);
-	assert.match(
-		source,
-		/persistSplunkCloudStateWithRollback\([\s\S]*?waitForWrite:[\s\S]*?operationCompletesWithin\([\s\S]*?observerShutdownPreferenceCaptureTimeoutMs/,
-	);
-	assert.match(
-		source,
-		/async\s+function\s+requestObserverCloudJSON\([\s\S]*?timeoutMs\s*=\s*observerCloudRequestTimeoutMs[\s\S]*?setTimeout\(\(\)\s*=>\s*\{[\s\S]*?request\.destroy\([\s\S]*?\},\s*timeoutMs\)/,
-	);
+	assert.match(source, /dispose:\s*\(\)\s*=>\s*\{[\s\S]*?disposeObserverForExtensionUnload\('Extension disposed'\)/);
+	assert.doesNotMatch(source, /captureSplunkCloudState|shutdown-snapshot|persistManagedObserverCloudState/);
 });
 
 test('resolveBackend throws when the observer binary is missing', () => {
 	withTempExtensionRoot((extensionRoot) => {
-		assert.throws(() => resolveBackend(extensionRoot), /observer binary not found/);
+		assert.throws(() => resolveBackend(extensionRoot), /Splunk Observability Studio binary not found/);
 	});
 });
 
-test('normalizeObserverBaseUrl accepts base URLs and /mcp URLs', () => {
+test('normalizeObserverBaseUrl accepts loopback base URLs and /mcp URLs', () => {
 	assert.equal(normalizeObserverBaseUrl('http://127.0.0.1:3000'), 'http://127.0.0.1:3000');
 	assert.equal(normalizeObserverBaseUrl('http://127.0.0.1:3000/'), 'http://127.0.0.1:3000');
 	assert.equal(normalizeObserverBaseUrl('http://127.0.0.1:3000/mcp'), 'http://127.0.0.1:3000');
 	assert.equal(normalizeObserverBaseUrl('http://[::]:3000/mcp'), 'http://[::1]:3000');
-	assert.equal(normalizeObserverBaseUrl('https://example.com/observer/mcp'), 'https://example.com/observer');
+	assert.equal(normalizeObserverBaseUrl('https://localhost:3000/observer/mcp'), 'https://localhost:3000/observer');
 });
 
-test('buildObserverValidatorSummaryUrl uses normalized observer base URL', () => {
+test('normalizeObserverBaseUrl rejects every non-loopback host', () => {
+	for (const raw of [
+		'http://localhost:3000',
+		'http://LOCALHOST.:3000',
+		'http://127.0.0.1:3000',
+		'http://127.42.0.9:3000',
+		'http://[::1]:3000',
+		'http://0.0.0.0:3000',
+		'http://[::]:3000',
+		'https://localhost:3000',
+	]) {
+		assert.doesNotThrow(() => normalizeObserverBaseUrl(raw), raw);
+	}
+
+	for (const raw of [
+		'http://example.com:3000',
+		'https://example.com:3000',
+		'http://10.0.0.1:3000',
+		'http://localhost.example.com:3000',
+		'http://127.0.0.1.example.com:3000',
+		'http://[::2]:3000',
+	]) {
+		assert.throws(() => normalizeObserverBaseUrl(raw), /host must be loopback/, raw);
+	}
+});
+
+test('isLoopbackObserverHost recognizes only supported loopback host forms', () => {
+	for (const hostname of ['localhost', 'LOCALHOST.', '127.0.0.1', '127.42.0.9', '::1', '[::1]']) {
+		assert.equal(isLoopbackObserverHost(hostname), true, hostname);
+	}
+	for (const hostname of ['localhost.example.com', '127.0.0.1.example.com', '::2', '192.168.1.2']) {
+		assert.equal(isLoopbackObserverHost(hostname), false, hostname);
+	}
+});
+
+test('normalizeObserverBaseUrl rejects URL credentials and fragments', () => {
+	for (const raw of ['https://user:password@localhost/observer', 'https://@localhost/observer']) {
+		assert.throws(() => normalizeObserverBaseUrl(raw), /must not include user information/, raw);
+	}
+	for (const raw of ['https://localhost/observer#fragment', 'https://localhost/observer#']) {
+		assert.throws(() => normalizeObserverBaseUrl(raw), /must not include a fragment/, raw);
+	}
+});
+
+test('buildObserverValidatorSummaryUrl uses a normalized loopback Splunk Observability Studio URL', () => {
 	assert.equal(
 		buildObserverValidatorSummaryUrl('http://127.0.0.1:3000/mcp'),
 		'http://127.0.0.1:3000/api/query/validation/summary',
 	);
 	assert.equal(
-		buildObserverValidatorSummaryUrl('https://example.com/observer/'),
-		'https://example.com/observer/api/query/validation/summary',
+		buildObserverValidatorSummaryUrl('https://localhost/observer/'),
+		'https://localhost/observer/api/query/validation/summary',
 	);
 });
 
-test('buildObserverHealthUrl uses normalized observer base URL', () => {
+test('buildObserverHealthUrl uses a normalized loopback Splunk Observability Studio URL', () => {
 	assert.equal(
 		buildObserverHealthUrl('http://127.0.0.1:3000/mcp'),
 		'http://127.0.0.1:3000/api/health',
 	);
 	assert.equal(
-		buildObserverHealthUrl('https://example.com/observer/'),
-		'https://example.com/observer/api/health',
+		buildObserverHealthUrl('https://localhost/observer/'),
+		'https://localhost/observer/api/health',
 	);
 });
 
-test('observerPortFromUrl returns explicit and default ports', () => {
+test('observerPortFromUrl returns explicit and default loopback ports', () => {
 	assert.equal(observerPortFromUrl('http://127.0.0.1:3000'), 3000);
-	assert.equal(observerPortFromUrl('https://example.com'), 443);
-	assert.equal(observerPortFromUrl('http://example.com/service/mcp'), 80);
+	assert.equal(observerPortFromUrl('https://localhost'), 443);
+	assert.equal(observerPortFromUrl('http://127.0.0.2/service/mcp'), 80);
 });
 
-test('readSharedObserverDiscovery reads the CLI shared observer state', () => {
+test('readSharedObserverDiscovery ignores legacy credentials and keeps local endpoints', () => {
 	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
 	try {
 		const stateDir = path.join(homeDir, '.obstudio');
 		fs.mkdirSync(stateDir, { recursive: true });
-		fs.writeFileSync(
+		writePrivateSharedObserverState(
 			path.join(stateDir, 'shared-observer.json'),
-			JSON.stringify({
+			{
 				baseUrl: 'http://127.0.0.1:3001/',
-				controlToken: 'shared-control-token',
+				controlToken: 'legacy-control-token',
+				healthProofSecret: 'legacy-health-proof',
+				healthUrl: 'http://127.0.0.1:3001/api/health',
+				mcpUrl: 'http://127.0.0.1:3001/mcp',
+				pid: 3210,
 				updatedAt: '2026-07-28T07:08:55.652888Z',
-			}),
+			},
 		);
 
 		assert.deepEqual(readSharedObserverDiscovery(homeDir), {
 			baseUrl: 'http://127.0.0.1:3001',
-			controlToken: 'shared-control-token',
+			healthUrl: 'http://127.0.0.1:3001/api/health',
+			mcpUrl: 'http://127.0.0.1:3001/mcp',
+			pid: 3210,
 			updatedAtMs: Date.parse('2026-07-28T07:08:55.652888Z'),
 		});
 	} finally {
+		fs.rmSync(homeDir, { force: true, recursive: true });
+	}
+});
+
+test('readSharedObserverDiscovery rejects state that is not owner-only', () => {
+	if (process.platform === 'win32') {
+		return;
+	}
+	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+	try {
+		const stateDir = path.join(homeDir, '.obstudio');
+		fs.mkdirSync(stateDir, { recursive: true });
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		fs.writeFileSync(statePath, JSON.stringify({ baseUrl: 'http://127.0.0.1:3001' }), { mode: 0o644 });
+		fs.chmodSync(statePath, 0o644);
+		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
+	} finally {
+		fs.rmSync(homeDir, { force: true, recursive: true });
+	}
+});
+
+test('readSharedObserverDiscovery rejects a symlinked state file', () => {
+	if (process.platform === 'win32') {
+		return;
+	}
+	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+	try {
+		const stateDir = path.join(homeDir, '.obstudio');
+		fs.mkdirSync(stateDir, { recursive: true });
+		const victimPath = path.join(stateDir, 'victim.json');
+		writePrivateSharedObserverState(victimPath, { baseUrl: 'http://127.0.0.1:3001' });
+		fs.symlinkSync(victimPath, path.join(stateDir, 'shared-observer.json'));
+		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
+	} finally {
+		fs.rmSync(homeDir, { force: true, recursive: true });
+	}
+});
+
+test('readSharedObserverDiscovery rejects a group-writable parent', () => {
+	if (process.platform === 'win32') {
+		return;
+	}
+	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+	const stateDir = path.join(homeDir, '.obstudio');
+	try {
+		fs.mkdirSync(stateDir, { recursive: true });
+		writePrivateSharedObserverState(
+			path.join(stateDir, 'shared-observer.json'),
+			{ baseUrl: 'http://127.0.0.1:3001' },
+		);
+		fs.chmodSync(stateDir, 0o770);
+		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
+	} finally {
+		fs.chmodSync(stateDir, 0o700);
 		fs.rmSync(homeDir, { force: true, recursive: true });
 	}
 });
@@ -1789,12 +1929,13 @@ test('readSharedObserverDiscovery rejects plaintext non-local shared observer st
 	try {
 		const stateDir = path.join(homeDir, '.obstudio');
 		fs.mkdirSync(stateDir, { recursive: true });
-		fs.writeFileSync(
+		writePrivateSharedObserverState(
 			path.join(stateDir, 'shared-observer.json'),
-			JSON.stringify({
+			{
 				baseUrl: 'http://observer.example.test:3001',
-				controlToken: 'must-not-be-sent-over-plaintext',
-			}),
+				healthUrl: 'http://observer.example.test:3001/api/health',
+				mcpUrl: 'http://observer.example.test:3001/mcp',
+			},
 		);
 
 		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
@@ -1803,7 +1944,7 @@ test('readSharedObserverDiscovery rejects plaintext non-local shared observer st
 	}
 });
 
-test('cloud control permits plaintext bearer requests only to loopback hosts', () => {
+test('local Splunk Observability Studio operations accept only loopback hosts', () => {
 	for (const hostname of [
 		'localhost',
 		'127.0.0.1',
@@ -1811,7 +1952,7 @@ test('cloud control permits plaintext bearer requests only to loopback hosts', (
 		'::1',
 		'[::1]',
 	]) {
-		assert.equal(isLocalObserverControlHost(hostname), true, hostname);
+		assert.equal(isLoopbackObserverHost(hostname), true, hostname);
 	}
 	for (const hostname of [
 		'0.0.0.0',
@@ -1822,145 +1963,281 @@ test('cloud control permits plaintext bearer requests only to loopback hosts', (
 		'127.example.test',
 		'127.999.0.1',
 	]) {
-		assert.equal(isLocalObserverControlHost(hostname), false, hostname);
+		assert.equal(isLoopbackObserverHost(hostname), false, hostname);
 	}
 });
 
-test('shared Observer URLs normalize wildcard listeners and reject non-local plaintext transport', () => {
+test('shared Splunk Observability Studio URLs normalize wildcard listeners and reject every non-loopback host', () => {
 	assert.equal(normalizeSharedObserverBaseUrl('http://0.0.0.0:3001'), 'http://127.0.0.1:3001');
 	assert.equal(normalizeSharedObserverBaseUrl('http://[::]:3001/mcp'), 'http://[::1]:3001');
+	assert.equal(normalizeSharedObserverBaseUrl('http://LOCALHOST.:3001/mcp'), 'http://localhost:3001');
 	assert.equal(normalizeSharedObserverBaseUrl('http://127.0.0.2:3001'), 'http://127.0.0.2:3001');
 	assert.equal(
-		normalizeSharedObserverBaseUrl('https://observer.example.test:3001/mcp'),
-		'https://observer.example.test:3001',
+		normalizeSharedObserverHealthUrl('http://0.0.0.0:3001/api/health'),
+		'http://127.0.0.1:3001/api/health',
 	);
 	assert.throws(
 		() => normalizeSharedObserverBaseUrl('http://observer.example.test:3001'),
-		/non-local shared Observer URL must use HTTPS/,
+		/host must be loopback/,
+	);
+	assert.throws(
+		() => normalizeSharedObserverBaseUrl('https://observer.example.test:3001'),
+		/host must be loopback/,
+	);
+	assert.throws(
+		() => normalizeSharedObserverMCPUrl('https://observer.example.test/team/mcp'),
+		/host must be loopback/,
 	);
 });
 
-test('shared observer token matching still treats wildcard bind URLs as local aliases', () => {
-	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
-	try {
-		const stateDir = path.join(homeDir, '.obstudio');
-		fs.mkdirSync(stateDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(stateDir, 'shared-observer.json'),
-			JSON.stringify({ baseUrl: 'http://0.0.0.0:3001', controlToken: 'wildcard-state-token' }),
-		);
+test('managed startup strips obsolete control credentials and public endpoints', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	assert.match(source, /OBSTUDIO_OWNER: extensionManagedObserverOwner/);
+	assert.match(source, /OBSTUDIO_MODE: extensionManagedObserverMode/);
+	assert.match(
+		source,
+		/delete managedObserverEnvironment\.OBSTUDIO_CONTROL_TOKEN;[\s\S]*?delete managedObserverEnvironment\.OBSTUDIO_HEALTH_PROOF_SECRET;[\s\S]*?delete managedObserverEnvironment\.OBSTUDIO_PUBLIC_MCP_URL;[\s\S]*?cp\.spawn/,
+	);
+});
 
-		assert.equal(
-			resolveSharedObserverControlToken('http://127.0.0.1:3001', homeDir, undefined),
-			'wildcard-state-token',
+test('agent integration install writes a credential-free local MCP endpoint', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const configureStart = source.indexOf('async function configureAgentMCP(');
+	const configureEnd = source.indexOf('\nfunction execFile(', configureStart);
+	assert.notEqual(configureStart, -1);
+	assert.notEqual(configureEnd, -1);
+	const configureHandling = source.slice(configureStart, configureEnd);
+	assert.match(configureHandling, /agentIntegrationConfigurationQueue\.run\(/);
+	assert.match(
+		configureHandling,
+		/\['install', '--target', target, '--shared-url', mcpUrl\][\s\S]*?backend\.env/,
+	);
+	assert.match(
+		configureHandling,
+		/getAgentIntegrationConfigState\(spec, mcpUrl\)[\s\S]*?recordAgentIntegrationConfigFingerprint\(context, spec, mcpUrl, installedConfig\)/,
+	);
+	assert.doesNotMatch(configureHandling, /controlToken|healthProof|Authorization/);
+});
+
+test('automatic agent refresh removes stale authentication before prompting', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const offerStart = source.indexOf('async function maybeOfferDetectedAgentIntegrations(');
+	const offerEnd = source.indexOf('\nasync function configureAgentMCP(', offerStart);
+	assert.notEqual(offerStart, -1);
+	assert.notEqual(offerEnd, -1);
+	const offerHandling = source.slice(offerStart, offerEnd);
+	assert.match(
+		offerHandling,
+		/await refreshOwnedAgentIntegrationConfig\(context, detectedSpecs, mcpUrl\)[\s\S]*?showInformationMessage\(/,
+	);
+
+	const refreshStart = source.indexOf('function refreshOwnedAgentIntegrationConfig(');
+	const refreshEnd = source.indexOf('\nasync function maybeOfferDetectedAgentIntegrations(', refreshStart);
+	assert.notEqual(refreshStart, -1);
+	assert.notEqual(refreshEnd, -1);
+	const refreshHandling = source.slice(refreshStart, refreshEnd);
+	assert.match(refreshHandling, /getAgentIntegrationConfigState\(spec, mcpUrl\) === 'different'/);
+	assert.match(refreshHandling, /shouldRefreshOwnedAgentIntegrationConfig\(/);
+	assert.match(refreshHandling, /const refreshable = specs\.filter\(shouldRefresh\)/);
+	assert.match(
+		refreshHandling,
+		/await configureDetectedAgentIntegrations\([\s\S]*?observerEndpoints\?\.mcpUrl === mcpUrl,[\s\S]*?shouldRefresh/,
+	);
+	assert.doesNotMatch(refreshHandling, /controlToken|healthProof/);
+});
+
+test('shared startup validates health without a credential or feature probe', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	assert.match(
+		source,
+		/waitForObserverReady\(\s*configuredEndpoints,\s*\{ requireStableOtlp: false \},\s*runId,\s*\)/,
+	);
+	assert.match(
+		source,
+		/probeObserver\([\s\S]*?discoveredEndpoints,[\s\S]*?\{ requireStableOtlp: true \}/,
+	);
+	assert.match(source, /const target = new URL\(endpoints\.healthUrl\)/);
+	const probeStart = source.indexOf('async function probeObserver(');
+	const probeEnd = source.indexOf('\nfunction validateObserverHealth(', probeStart);
+	const probe = source.slice(probeStart, probeEnd);
+	assert.doesNotMatch(probe, /challenge|proof|token|Authorization/i);
+});
+
+test('upgrade retirement verifies Splunk Observability Studio health and the executable path before terminating a PID', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const startupStart = source.indexOf('async function startObserver(');
+	const startupEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', startupStart);
+	const startup = source.slice(startupStart, startupEnd);
+	assert.match(
+		startup,
+		/let discoveryProbe = await probeObserver\([\s\S]*?const retirement = await retireMismatchedManagedPortObserver\([\s\S]*?discoveryProbe\.status === 'ready'/,
+	);
+
+	const retirementStart = startupEnd + 1;
+	const retirementEnd = source.indexOf('\nasync function waitForProcessExit(', retirementStart);
+	const retirement = source.slice(retirementStart, retirementEnd);
+	assert.match(
+		retirement,
+		/const observerHealthVerified = observerHealth !== undefined;[\s\S]*?observerVersion === bundleVersion/,
+	);
+	assert.ok(
+		retirement.indexOf('if (!observerHealthVerified)')
+			< retirement.indexOf('const listenerInspection = await inspectListeningProcess(managedPort)'),
+		'Splunk Observability Studio health must be verified before inspecting the managed-port listener',
+	);
+	assert.match(
+		retirement,
+		/const listenerInspection = await inspectListeningProcess\(managedPort\)[\s\S]*?const listener = listenerInspection\.process[\s\S]*?isObserverExecutablePath\(processExecutablePath\)/,
+		'the listener PID must resolve to the Splunk Observability Studio executable',
+	);
+	assert.ok(
+		retirement.indexOf('const preStopInspection = await inspectListeningProcess(managedPort)')
+			< retirement.indexOf('const replacementProbe = await probeObserver('),
+		'the listener must be fixed before refreshing the health identity',
+	);
+	assert.ok(
+		retirement.indexOf('const replacementProbe = await probeObserver(')
+			< retirement.indexOf('const confirmedInspection = await inspectListeningProcess(managedPort)'),
+		'health must be refreshed before the final listener identity check',
+	);
+	assert.match(
+		retirement,
+		/const replacementProbe = await probeObserver\(\s*observerEndpointRolesForBase\(buildManagedObserverBaseUrl\(managedPort\)\),\s*500,\s*\{ requireStableOtlp: false \}/,
+		'the refreshed health identity must come from the canonical managed listener, not a state-file URL',
+	);
+	assert.ok(
+		retirement.indexOf('const confirmedInspection = await inspectListeningProcess(managedPort)')
+			< retirement.indexOf('await gracefullyTerminateProcess(pid)'),
+		'the port owner and executable must be reverified immediately before graceful termination',
+	);
+	assert.match(
+		retirement,
+		/confirmedListener\.pid !== pid[\s\S]*?processExecutablePathsEqual\(confirmedListener\.executablePath, processExecutablePath\)/,
+	);
+	assert.ok(
+		retirement.indexOf('const forceStopInspection = await inspectListeningProcess(managedPort)')
+			< retirement.indexOf('const currentProcessExecutablePath = await readProcessExecutablePath(pid)'),
+		'the managed port must be checked before falling back to process identity',
+	);
+	assert.ok(
+		retirement.indexOf('const currentProcessExecutablePath = await readProcessExecutablePath(pid)')
+			< retirement.indexOf('await forceTerminateProcess(pid)'),
+		'the original PID and executable path must be reverified before forced termination',
+	);
+	assert.match(
+		retirement,
+		/forceStopInspection\.status === 'ambiguous'[\s\S]*?forceStopInspection\.status === 'unavailable'/,
+	);
+	assert.match(
+		retirement,
+		/forceStopInspection\.status === 'unique'[\s\S]*?forceStopInspection\.process\.pid !== pid/,
+	);
+	assert.match(
+		retirement,
+		/currentProcessExecutablePath === undefined[\s\S]*?processExecutablePathsEqual\(currentProcessExecutablePath, processExecutablePath\)/,
+	);
+	assert.doesNotMatch(
+		retirement,
+		/process\.kill\(pid, 'SIGTERM'\)/,
+		'the upgrade path must not treat Node SIGTERM as graceful on Windows',
+	);
+	assert.doesNotMatch(
+		retirement,
+		/observerHealth\?\.owner|observerHealth\.mode|findOtherExtension|readProcessCommand|processCommand/,
+	);
+});
+
+test('upgrade retirement treats a vacated managed port as already retired', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const retirementStart = source.indexOf('async function retireMismatchedManagedPortObserver(');
+	const retirementEnd = source.indexOf('\nasync function waitForProcessExit(', retirementStart);
+	const retirement = source.slice(retirementStart, retirementEnd);
+
+	for (const inspectionName of [
+		'listenerInspection',
+		'preStopInspection',
+		'replacementProbeInspection',
+		'confirmedInspection',
+	]) {
+		assert.match(
+			retirement,
+			new RegExp(
+				`const ${inspectionName} = await inspectListeningProcess\\(managedPort\\);[\\s\\S]*?`
+				+ `${inspectionName}\\.status === 'none'[\\s\\S]*?status: 'retired'`,
+			),
+			`${inspectionName} must distinguish a free port from failed or ambiguous inspection`,
 		);
-		fs.writeFileSync(
-			path.join(stateDir, 'shared-observer.json'),
-			JSON.stringify({ baseUrl: 'http://[::]:3001', controlToken: 'ipv6-wildcard-state-token' }),
-		);
-		assert.equal(
-			resolveSharedObserverControlToken('http://[::1]:3001', homeDir, undefined),
-			'ipv6-wildcard-state-token',
-		);
-		assert.equal(
-			resolveSharedObserverControlToken('http://127.0.0.1:3001', homeDir, undefined),
-			undefined,
-		);
-	} finally {
-		fs.rmSync(homeDir, { force: true, recursive: true });
 	}
 });
 
-test('matching shared observer state wins while mismatched state preserves the inherited token', () => {
-	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
-	try {
-		const stateDir = path.join(homeDir, '.obstudio');
-		fs.mkdirSync(stateDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(stateDir, 'shared-observer.json'),
-			JSON.stringify({ baseUrl: 'http://127.0.0.1:3001', controlToken: 'current-state-token' }),
-		);
-
-		assert.equal(
-			resolveSharedObserverControlToken(
-				'http://127.0.0.1:3001',
-				homeDir,
-				'stale-inherited-token',
-			),
-			'current-state-token',
-		);
-		assert.equal(
-			resolveSharedObserverControlToken(
-				'http://127.0.0.1:3002',
-				homeDir,
-				'inherited-token',
-			),
-			'inherited-token',
-		);
-	} finally {
-		fs.rmSync(homeDir, { force: true, recursive: true });
-	}
+test('all local Splunk Observability Studio reuse paths use the same bundled-version compatibility rule', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const startupStart = source.indexOf('async function startObserver(');
+	const startupEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', startupStart);
+	const startup = source.slice(startupStart, startupEnd);
+	assert.match(startup, /const bundleVersion = getBundleVersion\(context\)/);
+	assert.match(startup, /configuredProbe\.health\.version !== bundleVersion/);
+	assert.match(
+		startup,
+		/managedProbe\.status === 'ready'[\s\S]*?retireMismatchedManagedPortObserver\([\s\S]*?managedProbe\.health/,
+	);
+	assert.match(
+		startup,
+		/existingObserver\.health\.version === bundleVersion[\s\S]*?retireMismatchedManagedPortObserver\(/,
+	);
+	assert.match(startup, /startedProbe\.health\.version !== bundleVersion/);
+	assert.doesNotMatch(startup, /0\.0\.18|0\.0\.20/);
 });
 
-test('shared observer token resolution falls back after either matching token is rejected', () => {
-	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
-	try {
-		const stateDir = path.join(homeDir, '.obstudio');
-		fs.mkdirSync(stateDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(stateDir, 'shared-observer.json'),
-			JSON.stringify({ baseUrl: 'http://127.0.0.1:3001', controlToken: 'state-token' }),
-		);
-
-		assert.equal(
-			resolveSharedObserverControlToken(
-				'http://127.0.0.1:3001',
-				homeDir,
-				'explicit-token',
-				undefined,
-				'state-token',
-			),
-			'explicit-token',
-		);
-		assert.equal(
-			resolveSharedObserverControlToken(
-				'http://127.0.0.1:3001',
-				homeDir,
-				'explicit-token',
-				undefined,
-				'explicit-token',
-			),
-			'state-token',
-		);
-		assert.equal(
-			resolveSharedObserverControlToken(
-				'http://127.0.0.1:3001',
-				homeDir,
-				'state-token',
-				undefined,
-				'state-token',
-			),
-			undefined,
-		);
-	} finally {
-		fs.rmSync(homeDir, { force: true, recursive: true });
+test('manual lifecycle and panel commands settle configuration-triggered restarts before acting', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	for (const command of ['openObserver', 'startObserver', 'stopObserver', 'restartObserver']) {
+		const start = source.indexOf(`registerCommand('observability-studio.${command}', async () => {`);
+		assert.notEqual(start, -1);
+		const body = source.slice(start, source.indexOf('\n\t});', start));
+		assert.match(body, /await settleObserverConfigurationRestart\(\);/);
 	}
+	const openStart = source.indexOf("registerCommand('observability-studio.openObserver', async () => {");
+	const openBody = source.slice(openStart, source.indexOf('\n\t});', openStart));
+	assert.match(
+		openBody,
+		/await openObserverPanel\(context\);/,
+		'Open Splunk Observability Studio must not resolve before its panel startup attempt finishes',
+	);
+	const stopStart = source.indexOf("registerCommand('observability-studio.stopObserver', async () => {");
+	const stopBody = source.slice(stopStart, source.indexOf('\n\t});', stopStart));
+	assert.match(
+		stopBody,
+		/observerBaseUrl === undefined[\s\S]*?observerLifecycleState\.status === 'stopped'/,
+		'Stop must clear an idle startup error instead of returning before the lifecycle reset',
+	);
 });
 
-test('inherited shared observer token remains available when no discovery state exists', () => {
-	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
-	try {
-		assert.equal(
-			resolveSharedObserverControlToken(
-				'http://127.0.0.1:3001',
-				homeDir,
-				'configured-inherited-token',
-			),
-			'configured-inherited-token',
-		);
-	} finally {
-		fs.rmSync(homeDir, { force: true, recursive: true });
-	}
+function waitForObserverReadySource(): string {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const start = source.indexOf('async function waitForObserverReady(');
+	const end = source.indexOf('\nasync function probeObserver(', start);
+	assert.notEqual(start, -1);
+	assert.notEqual(end, -1);
+	return source.slice(start, end);
+}
+
+test('a health mismatch retries with a bounded delay rather than an immediate failure', () => {
+	// Regression coverage for the Cisco-Secure-Endpoint-content-filter false mismatch:
+	// a mismatch below the attempt limit must retry, not throw on the first attempt.
+	assert.match(
+		waitForObserverReadySource(),
+		/case 'mismatch': \{\n\t+mismatchAttempts \+= 1;[\s\S]*?if \(mismatchAttempts < maxMismatchAttempts\) \{[\s\S]*?await delay\(mismatchRetryDelayMs\);[\s\S]*?break;\n\t+\}/,
+	);
+});
+
+test('a health mismatch throws once the attempt limit is reached, not retrying indefinitely', () => {
+	const source = waitForObserverReadySource();
+	assert.match(source, /const maxMismatchAttempts = 6;/);
+	assert.match(
+		source,
+		/if \(mismatchAttempts < maxMismatchAttempts\) \{[\s\S]*?break;\n\t+\}\n\t+const mismatchContext[\s\S]*?throw wrappedError;/,
+	);
 });
 
 test('readSharedObserverDiscovery ignores missing, malformed, and incomplete state', () => {
@@ -1971,10 +2248,11 @@ test('readSharedObserverDiscovery ignores missing, malformed, and incomplete sta
 		const stateDir = path.join(homeDir, '.obstudio');
 		fs.mkdirSync(stateDir, { recursive: true });
 		const statePath = path.join(stateDir, 'shared-observer.json');
-		fs.writeFileSync(statePath, '{');
+		fs.writeFileSync(statePath, '{', { mode: 0o600 });
+		fs.chmodSync(statePath, 0o600);
 		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
 
-		fs.writeFileSync(statePath, JSON.stringify({ healthUrl: 'http://127.0.0.1:3001/api/health' }));
+		writePrivateSharedObserverState(statePath, { healthUrl: 'http://127.0.0.1:3001/api/health' });
 		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
 	} finally {
 		fs.rmSync(homeDir, { force: true, recursive: true });

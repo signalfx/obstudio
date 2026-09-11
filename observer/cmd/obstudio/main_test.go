@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -11,94 +10,71 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 )
 
-func TestEnsureObserverControlTokenPreservesConfiguredToken(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "configured-control-token")
-
-	if err := ensureObserverControlToken(); err != nil {
-		t.Fatalf("ensureObserverControlToken() error = %v", err)
+func TestValidateRunConfigRejectsNonLoopbackObserverHost(t *testing.T) {
+	t.Setenv("OBSTUDIO_MODE", "")
+	t.Setenv(dockerRuntimeEvalAllowNonLoopbackBindEnv, "false")
+	config := runConfig{
+		host:             "0.0.0.0",
+		observerHTTPPort: "3000",
+		otlpGRPCHost:     "127.0.0.1",
+		otlpGRPCPort:     "4317",
+		otlpHTTPPort:     "4318",
 	}
-	if got := os.Getenv("OBSTUDIO_CONTROL_TOKEN"); got != "configured-control-token" {
-		t.Fatalf("OBSTUDIO_CONTROL_TOKEN = %q, want configured token", got)
-	}
-}
-
-func TestEnsureObserverControlTokenGeneratesStateToken(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
-
-	if err := ensureObserverControlToken(); err != nil {
-		t.Fatalf("ensureObserverControlToken() error = %v", err)
-	}
-	if !regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`).MatchString(os.Getenv("OBSTUDIO_CONTROL_TOKEN")) {
-		t.Fatalf("OBSTUDIO_CONTROL_TOKEN = %q, want a 32-byte base64url token", os.Getenv("OBSTUDIO_CONTROL_TOKEN"))
-	}
-	if state := buildSharedObserverState("127.0.0.1", "3000"); state.ControlToken != os.Getenv("OBSTUDIO_CONTROL_TOKEN") {
-		t.Fatalf("shared observer state control token = %q, want generated token", state.ControlToken)
+	if err := validateRunConfig(config); err == nil || !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("validateRunConfig() = %v, want loopback error", err)
 	}
 }
 
-func TestEnsureObserverCloudBrowserLaunchTokenReplacesInheritedValue(t *testing.T) {
-	inherited := strings.Repeat("A", 43)
-	t.Setenv(observerCloudBrowserLaunchTokenEnv, inherited)
-
-	if err := ensureObserverCloudBrowserLaunchToken(); err != nil {
-		t.Fatalf("ensureObserverCloudBrowserLaunchToken() error = %v", err)
+func TestValidateRunConfigAllowsNonLoopbackObserverHostOnlyForDockerRuntimeEvals(t *testing.T) {
+	t.Setenv("OBSTUDIO_MODE", "")
+	config := runConfig{
+		host:             "0.0.0.0",
+		observerHTTPPort: "3000",
+		otlpGRPCHost:     "127.0.0.1",
+		otlpGRPCPort:     "4317",
+		otlpHTTPPort:     "4318",
 	}
-	got := os.Getenv(observerCloudBrowserLaunchTokenEnv)
-	if got == inherited {
-		t.Fatal("browser launch token reused an inherited value")
-	}
-	if !regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`).MatchString(got) {
-		t.Fatalf("%s = %q, want a 32-byte base64url token", observerCloudBrowserLaunchTokenEnv, got)
-	}
-}
 
-func TestObserverBrowserURLOnlyExposesEphemeralLaunchTokenOnLoopbackURL(t *testing.T) {
-	launchToken := strings.Repeat("B", 43)
-	t.Setenv(observerCloudBrowserLaunchTokenEnv, launchToken)
-	t.Setenv(observerHideCloudBrowserLaunchTokenEnv, "")
+	t.Setenv(dockerRuntimeEvalAllowNonLoopbackBindEnv, "true")
+	if err := validateRunConfig(config); err == nil || !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("validateRunConfig() without Docker eval mode = %v, want loopback error", err)
+	}
 
-	for _, test := range []struct {
-		name    string
-		address string
-		wantURL string
-	}{
-		{
-			name:    "loopback",
-			address: "127.0.0.1:3000",
-			wantURL: "http://127.0.0.1:3000/#obstudio-cloud-control=" + launchToken,
-		},
-		{
-			name:    "wildcard",
-			address: "0.0.0.0:3000",
-			wantURL: "http://127.0.0.1:3000/#obstudio-cloud-control=" + launchToken,
-		},
-		{
-			name:    "IPv6 wildcard",
-			address: "[::]:3000",
-			wantURL: "http://[::1]:3000/#obstudio-cloud-control=" + launchToken,
-		},
-		{
-			name:    "non-loopback",
-			address: "192.0.2.10:3000",
-			wantURL: "http://192.0.2.10:3000",
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			if got := observerBrowserURL(test.address); got != test.wantURL {
-				t.Fatalf("observerBrowserURL(%q) = %q, want %q", test.address, got, test.wantURL)
-			}
-		})
+	t.Setenv("OBSTUDIO_MODE", dockerRuntimeEvalMode)
+	t.Setenv(dockerRuntimeEvalAllowNonLoopbackBindEnv, "false")
+	if err := validateRunConfig(config); err == nil || !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("validateRunConfig() without explicit Docker eval opt-in = %v, want loopback error", err)
+	}
+
+	t.Setenv(dockerRuntimeEvalAllowNonLoopbackBindEnv, "true")
+	if err := validateRunConfig(config); err != nil {
+		t.Fatalf("validateRunConfig() for explicit Docker runtime eval opt-in = %v", err)
 	}
 }
 
-func TestObserverBrowserURLCanHideLaunchTokenFromManagedProcessLogs(t *testing.T) {
-	launchToken := strings.Repeat("B", 43)
-	t.Setenv(observerCloudBrowserLaunchTokenEnv, launchToken)
-	t.Setenv(observerHideCloudBrowserLaunchTokenEnv, "true")
+func TestValidateRunConfigRejectsNonLoopbackOTLPGRPCHost(t *testing.T) {
+	config := runConfig{
+		host:             "127.0.0.1",
+		observerHTTPPort: "3000",
+		otlpGRPCHost:     "0.0.0.0",
+		otlpGRPCPort:     "4317",
+		otlpHTTPPort:     "4318",
+	}
+	if err := validateRunConfig(config); err == nil || !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("validateRunConfig() = %v, want OTLP/gRPC loopback error", err)
+	}
+}
 
-	got := observerBrowserURL("127.0.0.1:3000")
-	if got != "http://127.0.0.1:3000" {
-		t.Fatalf("observerBrowserURL() = %q, want URL without launch token", got)
+func TestObserverBrowserURLContainsNoControlCredential(t *testing.T) {
+	if got := observerBrowserURL("127.0.0.1:3000"); got != "http://127.0.0.1:3000" {
+		t.Fatalf("observerBrowserURL() = %q, want credential-free local URL", got)
+	}
+}
+
+func TestRenderStartupBannerUsesFullProductName(t *testing.T) {
+	got := renderStartupBanner("127.0.0.1:3000", "127.0.0.1:4318", "127.0.0.1:4317")
+	if !strings.HasPrefix(got, "\nSplunk Observability Studio (collector)\n") {
+		t.Fatalf("renderStartupBanner() = %q, want full product name", got)
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/signalfx/obstudio/observer/internal/audit"
 	"github.com/signalfx/obstudio/observer/internal/dashboards"
+	"github.com/signalfx/obstudio/observer/internal/freeaccount"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/validator"
@@ -39,6 +40,12 @@ type healthResponse struct {
 	Endpoints map[string]string `json:"endpoints"`
 }
 
+// EndpointConfig overrides externally advertised endpoints without adding
+// credentials to health discovery.
+type EndpointConfig struct {
+	MCPURL string
+}
+
 // Register adds the REST API routes to the given mux.
 // It registers handlers for querying traces, metrics, logs, and stats.
 func Register(mux *http.ServeMux, s *store.Store, params ...any) {
@@ -49,6 +56,8 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	var metricsController *otlp.SplunkMetricsExportController
 	var tracesController *otlp.SplunkTracesExportController
 	var splunkExportRefresher SplunkExportConfigurationRefresher
+	var freeAccountSubmitter freeaccount.Submitter
+	var endpointConfig EndpointConfig
 	info := ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
@@ -87,13 +96,19 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			tracesController = value
 		case SplunkExportConfigurationRefresher:
 			splunkExportRefresher = value
+		case freeaccount.Submitter:
+			if value != nil {
+				freeAccountSubmitter = value
+			}
+		case EndpointConfig:
+			endpointConfig = value
 		}
 	}
 	validationService := validator.NewService(validationStore, runner)
 	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig)
 	auditResolver := audit.NewResolver(auditConfig)
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
-	mux.HandleFunc("GET /api/health", queryHealth(s, info))
+	mux.HandleFunc("GET /api/health", queryHealth(s, info, endpointConfig))
 	mux.HandleFunc("GET /api/query/traces", queryTraces(s))
 	mux.HandleFunc("GET /api/query/traces/filter-values", queryTraceFilterValues(s))
 	mux.HandleFunc("GET /api/query/traces/{traceId}", queryTraceDetail(s))
@@ -114,14 +129,18 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("GET /api/query/validation/summary", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/status", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/latest", queryValidationLatest(validationService))
-	mux.HandleFunc("POST /api/validation/run", runValidation(validationService))
-	mux.HandleFunc("POST /api/validation/refresh", refreshValidation(validationService))
-	mux.HandleFunc("POST /api/validation/analyze", analyzeValidation(validationService))
+	mux.HandleFunc("POST /api/validation/run", localMutation(runValidation(validationService)))
+	mux.HandleFunc("POST /api/validation/refresh", localMutation(refreshValidation(validationService)))
+	mux.HandleFunc("POST /api/validation/analyze", localMutation(analyzeValidation(validationService)))
 	mux.HandleFunc("GET /api/query/validation/findings", queryValidationFindings(validationService))
-	mux.HandleFunc("DELETE /api/data", clearData(s, validationStore))
+	mux.HandleFunc("DELETE /api/data", localMutation(clearData(s, validationStore)))
 	if metricsController != nil && tracesController != nil {
 		newSplunkExportService(metricsController, tracesController, splunkExportRefresher).register(mux)
 	}
+	if freeAccountSubmitter != nil {
+		newFreeAccountAPI(freeAccountSubmitter).register(mux)
+	}
+	registerSISCIMDLoginRoutes(mux)
 }
 
 func queryTraces(s *store.Store) http.HandlerFunc {
@@ -173,15 +192,26 @@ func writeSameOriginJSON(w http.ResponseWriter, v any) {
 	}
 }
 
+func localMutation(next http.HandlerFunc) http.HandlerFunc {
+	return requireLocalObserverRequest(next, func(w http.ResponseWriter, status int, message string) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(status)
+		if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
+			log.Printf("[api] localMutation: %v", err)
+		}
+	})
+}
+
 // auditReportCSP locks down the workspace-controlled report served on the
-// Observer's own origin. It extends the policy the $otel-audit report server
+// Splunk Observability Studio's own origin. It extends the policy the $otel-audit report server
 // applies with a sandbox, because that server is an isolated origin and this
 // one also hosts the local APIs.
 // The sandbox directive is the important part: it puts the document in an
 // opaque origin, so its inline script cannot read same-origin API responses,
-// storage, or cookies belonging to the Observer, and cannot navigate the top
+// storage, or cookies belonging to Splunk Observability Studio, and cannot navigate the top
 // level. allow-scripts keeps the report interactive without granting it the
-// Observer's origin, which a policy built only from default-src would.
+// Splunk Observability Studio's origin, which a policy built only from default-src would.
 const auditReportCSP = "sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; " +
 	"script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
 
@@ -225,7 +255,7 @@ func queryAuditArtifact(resolver *audit.Resolver, name string) http.HandlerFunc 
 // as-is; nosniff keeps the content type from being guessed.
 //
 // Unlike the telemetry routes, this returns a file from the developer's working
-// tree, so it deliberately omits the wildcard CORS header: only the Observer UI
+// tree, so it deliberately omits the wildcard CORS header: only the Splunk Observability Studio UI
 // itself, which is same-origin, needs to read it.
 func queryAuditReport(resolver *audit.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -244,7 +274,7 @@ func queryAuditReport(resolver *audit.Resolver) http.HandlerFunc {
 			return
 		}
 
-		// The report is workspace-controlled markup served on the Observer's own
+		// The report is workspace-controlled markup served on Splunk Observability Studio's own
 		// origin, so it is locked down the same way the skill's own report server
 		// locks it down: inline style and script still work, but default-src
 		// 'none' denies network access, so a tampered report cannot call the
@@ -305,8 +335,8 @@ func queryValidationStatus(service *validator.Service) http.HandlerFunc {
 	}
 }
 
-func queryHealth(s *store.Store, info ServerInfo) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func queryHealth(s *store.Store, info ServerInfo, endpointConfig EndpointConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		var endpoints store.Endpoints
 		if s != nil {
 			endpoints = s.Endpoints()
@@ -317,7 +347,7 @@ func queryHealth(s *store.Store, info ServerInfo) http.HandlerFunc {
 			mcpEndpoint = endpoints.REST + "/mcp"
 		}
 
-		writeJSON(w, healthResponse{
+		response := healthResponse{
 			ServerInfo: info,
 			Endpoints: map[string]string{
 				"mcp":      mcpEndpoint,
@@ -325,7 +355,15 @@ func queryHealth(s *store.Store, info ServerInfo) http.HandlerFunc {
 				"otlpHttp": endpoints.OTLPHTTP,
 				"rest":     endpoints.REST,
 			},
-		})
+		}
+		publicMCPURL := strings.TrimSpace(endpointConfig.MCPURL)
+		if publicMCPURL == "" {
+			publicMCPURL = mcpEndpoint
+		}
+		if publicMCPURL != "" {
+			response.Endpoints["mcp"] = publicMCPURL
+		}
+		writeJSON(w, response)
 	}
 }
 
@@ -371,10 +409,10 @@ func analyzeValidation(service *validator.Service) http.HandlerFunc {
 			}
 			statusCode, payload := validationHTTPErrorPayload(err, nextMethod, nextPath)
 			w.WriteHeader(statusCode)
-			writeJSON(w, payload)
+			writeSameOriginJSON(w, payload)
 			return
 		}
-		writeJSON(w, analysis)
+		writeSameOriginJSON(w, analysis)
 	}
 }
 
@@ -387,10 +425,10 @@ func refreshValidation(service *validator.Service) http.HandlerFunc {
 		if err != nil {
 			statusCode, payload := validationHTTPErrorPayload(err, http.MethodGet, "/api/query/validation/status")
 			w.WriteHeader(statusCode)
-			writeJSON(w, payload)
+			writeSameOriginJSON(w, payload)
 			return
 		}
-		writeJSON(w, analysis)
+		writeSameOriginJSON(w, analysis)
 	}
 }
 
@@ -400,10 +438,10 @@ func runValidation(service *validator.Service) http.HandlerFunc {
 		if err != nil {
 			statusCode, payload := validationHTTPErrorPayload(err, http.MethodGet, "/api/query/validation/status")
 			w.WriteHeader(statusCode)
-			writeJSON(w, payload)
+			writeSameOriginJSON(w, payload)
 			return
 		}
-		writeJSON(w, summary)
+		writeSameOriginJSON(w, summary)
 	}
 }
 
@@ -411,16 +449,30 @@ func clearData(s *store.Store, v *validator.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		s.Clear()
 		v.Clear()
-		writeJSON(w, map[string]string{"status": "cleared"})
+		writeSameOriginJSON(w, map[string]string{"status": "cleared"})
 	}
 }
 
 func corsPreflightHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		requestedMethod := strings.ToUpper(strings.TrimSpace(r.Header.Get("Access-Control-Request-Method")))
+		if strings.HasPrefix(r.URL.Path, "/api/splunk/") || isMutationMethod(requestedMethod) {
+			http.Error(w, "cross-origin access is not allowed", http.StatusForbidden)
+			return
+		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func isMutationMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -574,6 +626,8 @@ func logRecordFilterFromRequest(r *http.Request) store.LogRecordFilter {
 		ExcludeSeverityDisplay: queryNeqString(q, "severityDisplay"),
 		SeverityText:           queryEqString(q, "severityText", "severityText"),
 		ExcludeSeverityText:    queryNeqString(q, "severityText"),
+		MessageContains:        firstNonEmpty(q.Get("filter[messageContains][eq]"), q.Get("filter[messageContains]")),
+		ExcludeMessageContains: q.Get("filter[messageContains][neq]"),
 		BodyContains:           firstNonEmpty(q.Get("filter[bodyContains][eq]"), q.Get("filter[bodyContains]"), q.Get("body")),
 		ExcludeBodyContains:    q.Get("filter[bodyContains][neq]"),
 		TraceID:                queryEqString(q, "traceId", "traceId"),

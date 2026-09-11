@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage a self-contained Obstudio plugin bundle for Codex and Claude."""
+"""Stage a self-contained Splunk Observability Studio plugin bundle for Codex and Claude."""
 
 from __future__ import annotations
 
@@ -26,6 +26,8 @@ PLUGIN_LOCAL_SKILL_ENTRIES = (
     "observer-control/observer-stop",
 )
 PLUGIN_SHARED_SKILL_ENTRIES = (
+    "connect-splunk-observability-cloud",
+    "create-splunk-free-account",
     "otel-audit",
     "otel-instrument",
     "otel-verify",
@@ -39,6 +41,8 @@ PLUGIN_SHARED_SKILL_ENTRIES = (
 )
 PLUGIN_SKILL_ENTRIES = (
     "observer-control/observer-open",
+    "connect-splunk-observability-cloud",
+    "create-splunk-free-account",
     "otel-audit",
     "otel-instrument",
     "otel-verify",
@@ -56,6 +60,7 @@ PLUGIN_SKILL_ENTRIES = (
 
 PLUGIN_SHARED_PATHS = (
     ".mcp.json",
+    "LICENSE",
     "PRIVACY.md",
     "README.md",
     "SECURITY.md",
@@ -70,6 +75,7 @@ SEMVER_PATTERN = re.compile(
     rf"(?:-{SEMVER_IDENTIFIER}(?:\.{SEMVER_IDENTIFIER})*)?"
     rf"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\Z"
 )
+VERSION_FIELD_PATTERN = re.compile(r'(?m)^([ \t]*"version"[ \t]*:[ \t]*)"[^"\r\n]*"([ \t]*,?[ \t]*)$')
 
 
 def main() -> int:
@@ -90,6 +96,11 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="verify the staged plugin and exit")
     parser.add_argument("--sync-plugin-skills", action="store_true", help="refresh the committed plugin skills copy")
     parser.add_argument("--check-plugin-skills", action="store_true", help="verify committed plugin skills are synced")
+    parser.add_argument(
+        "--bump-manifests",
+        action="store_true",
+        help="bump the committed Claude and Codex plugin manifests to --release-tag and exit",
+    )
     args = parser.parse_args()
 
     if args.sync_plugin_skills:
@@ -97,6 +108,11 @@ def main() -> int:
         return 0
     if args.check_plugin_skills:
         verify_plugin_skills_synced()
+        return 0
+    if args.bump_manifests:
+        if not args.release_tag:
+            raise RuntimeError("--release-tag is required with --bump-manifests")
+        bump_committed_manifest_versions(release_version_from_tag(args.release_tag))
         return 0
 
     output = args.output.expanduser().resolve()
@@ -138,9 +154,36 @@ def release_version_from_tag(release_tag: str) -> str:
 def stamp_staged_manifest_versions(output: Path, host: str, version: str) -> None:
     for selected_host in PLUGIN_HOSTS if host == "all" else (host,):
         manifest_path = output / (".claude-plugin" if selected_host == "claude" else ".codex-plugin") / "plugin.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest["version"] = version
-        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        _write_manifest_version(manifest_path, version)
+
+
+def bump_committed_manifest_versions(version: str, plugin_root: Path = PLUGIN_ROOT) -> list[Path]:
+    """Bump the version field in the committed (non-staged) plugin manifests."""
+    updated = []
+    for selected_host in PLUGIN_HOSTS:
+        manifest_path = plugin_root / (".claude-plugin" if selected_host == "claude" else ".codex-plugin") / "plugin.json"
+        _write_manifest_version(manifest_path, version)
+        updated.append(manifest_path)
+        print(f"bumped {manifest_path} -> {version}")
+    return updated
+
+
+def _write_manifest_version(manifest_path: Path, version: str) -> None:
+    manifest_text = manifest_path.read_text(encoding="utf-8")
+    manifest = json.loads(manifest_text)
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("version"), str):
+        raise RuntimeError(f"manifest version must be a string: {manifest_path}")
+
+    updated_text, replacements = VERSION_FIELD_PATTERN.subn(
+        lambda match: f'{match.group(1)}{json.dumps(version)}{match.group(2)}',
+        manifest_text,
+        count=1,
+    )
+    if replacements != 1:
+        raise RuntimeError(f"could not locate the top-level version field: {manifest_path}")
+    if updated_text != manifest_text:
+        manifest_path.write_text(updated_text, encoding="utf-8")
+
 
 def plugin_paths(host: str) -> tuple[str, ...]:
     if host == "all":
@@ -164,7 +207,7 @@ def stage_skills(skills_output: Path) -> None:
     if skills_output.exists():
         shutil.rmtree(skills_output)
     skills_output.mkdir(parents=True)
-    copy_plugin_skills(skills_output)
+    copy_plugin_skills(skills_output, exclude_tests=True)
 
 
 def sync_plugin_skills() -> None:
@@ -181,14 +224,19 @@ def sync_plugin_skills() -> None:
         remove_path(temp_output)
 
 
-def copy_plugin_skills(skills_output: Path, local_source_root: Path | None = None) -> None:
+def copy_plugin_skills(
+    skills_output: Path,
+    local_source_root: Path | None = None,
+    *,
+    exclude_tests: bool = False,
+) -> None:
     for relative in PLUGIN_SKILL_ENTRIES:
         source = source_for_plugin_skill_entry(relative, local_source_root=local_source_root)
         if not source.exists():
             raise RuntimeError(f"missing plugin skill entry: {source}")
         destination = skills_output / relative
         remove_path(destination)
-        copy_path(source, destination)
+        copy_path(source, destination, exclude_tests=exclude_tests)
         if relative not in PLUGIN_LOCAL_SKILL_ENTRIES:
             normalize_text_tree(destination)
 
@@ -229,11 +277,14 @@ def remove_path(path: Path) -> None:
         shutil.rmtree(path)
 
 
-def copy_path(source: Path, destination: Path) -> None:
+def copy_path(source: Path, destination: Path, *, exclude_tests: bool = False) -> None:
     if source.is_symlink():
         source = source.resolve()
     if source.is_dir():
-        ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
+        ignored_names = ["__pycache__", "*.pyc", ".DS_Store", ".pytest_cache", ".mypy_cache", ".ruff_cache"]
+        if exclude_tests:
+            ignored_names.extend(("tests", "test_*"))
+        ignore = shutil.ignore_patterns(*ignored_names)
         shutil.copytree(source, destination, symlinks=False, ignore=ignore)
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -465,7 +516,8 @@ def flatten_files(root: Path) -> set[Path]:
 
 
 def should_ignore(path: Path) -> bool:
-    return any(part == "__pycache__" for part in path.parts) or path.name in {".DS_Store"} or path.suffix == ".pyc"
+    ignored_directories = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+    return any(part in ignored_directories for part in path.parts) or path.name == ".DS_Store" or path.suffix == ".pyc"
 
 
 def write_archive(source: Path, archive: Path) -> None:

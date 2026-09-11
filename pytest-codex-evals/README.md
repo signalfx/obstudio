@@ -15,7 +15,7 @@ rubric grading, optional Docker runtime checks, and aggregate reports.
 - Schema-constrained rubric grading with a configurable judge model.
 - Optional Docker-backed runtime checks that can exercise a service and verify
   traces, metrics, logs, and preserved service output through an
-  Observer-compatible API and Docker Compose.
+  Splunk Observability Studio-compatible API and Docker Compose.
 - Separate raw JSON execution output and kind-specific Markdown/benchmark reports.
 
 ## Install
@@ -106,7 +106,7 @@ Other command-backed kinds are `command_succeeds`,
 
 Runtime checks are optional because they need Docker and a telemetry backend.
 Each runtime check runs an eval-owned Docker Compose file, then queries an
-Observer-compatible API for telemetry and can inspect preserved service output.
+Splunk Observability Studio-compatible API for telemetry and can inspect preserved service output.
 Keep service topology, build instructions, startup, and traffic generation in
 Compose. The eval JSON only points at the Compose file and declares telemetry
 expectations. Compose can use `${CODEX_EVAL_SERVICE_DIR}` when it must build the
@@ -153,11 +153,11 @@ instrumented temp service workspace instead of the source fixture.
 }
 ```
 
-Use `endpoints` for Observer API responses and `record_checks` when all asserted
+Use `endpoints` for Splunk Observability Studio API responses and `record_checks` when all asserted
 fields must belong to the same JSON record. `service_logs` verifies retained
 stdout or stderr output. Per-check `environment` values select isolated runtime
 scenarios, while `stop_services_before_validation` can stop only `app` so its
-shutdown-flushed telemetry is available before Observer assertions run.
+shutdown-flushed telemetry is available before Splunk Observability Studio assertions run.
 
 The referenced Compose file should expose an `observer` service on
 `127.0.0.1:3000` and a profiled one-shot `traffic` service. The harness runs:
@@ -259,7 +259,7 @@ judge = "gpt-5.5"
 
 `[models].agent` configures the task run, `--model` overrides it, and
 `[models].judge` configures the rubric grading pass.
-`[runtime].enabled` controls Docker/Observer runtime checks. CLI flags override
+`[runtime].enabled` controls Docker/Splunk Observability Studio runtime checks. CLI flags override
 the TOML mode for a single run:
 
 ```bash
@@ -295,10 +295,49 @@ The report step writes `<kind>/report.md` and `<kind>/benchmark.json` in the
 timestamped run directory and copies the latest summary to
 `eval-reports/<skill>/<kind>/`.
 
+Report benchmarks include a SHA-256 manifest of the canonical skill tree, the
+collected eval definitions, their staged fixtures and prompt-selected inputs,
+eval configuration, harness package code and schemas, and locked harness
+dependencies. Filtered runs remain scoped to their collected cases; full
+validation also detects newly added matching definitions. Verify tracked
+manifests without invoking an agent or judge with:
+
+```bash
+uv run codex-eval-harness verify-reports --repo-root .
+```
+
 Each `benchmark.json` is kind-specific. Sanity reports contain only sanity
 check fields, rubric reports contain only rubric judge fields, and runtime
 reports contain only runtime check fields. Baseline columns are empty when a
 baseline side was not run.
+
+### Token usage
+
+Live run artifacts retain the backward-compatible `tokens`, `agent_tokens`,
+and `rubric_tokens` fields and also include optional `agent_usage` and
+`rubric_usage` objects. The normalized objects report input, cached input,
+cache-creation input, output, reasoning output, the provider-reported total,
+and an independently derived input-plus-output total.
+
+Codex input and output counts remain provider-inclusive totals; cached input,
+cache creation, and reasoning output are breakdowns and are not subtracted.
+Claude input is normalized from uncached input plus cache-read and
+cache-creation input, while output remains the provider's inclusive output
+count. A cumulative provider record takes precedence over per-turn records so
+the same work is not counted twice. If no cumulative record is recognized,
+complete incremental records are summed.
+
+Markdown and benchmark reports include measurement coverage. `unknown` means a
+field was absent or could not be recognized and is distinct from an explicitly
+reported `0`; partial aggregates include the number of prompts that measured
+each field. A row is measured only when every prompt has a provider-reported
+total or a complete independently derived total; recognized fragments without
+a preferred total remain partial and the aggregate total remains unknown.
+Agent/task usage and rubric/judge usage remain separate, and judge usage is
+rendered only in rubric reports. Codex and Claude judge subprocesses disable
+OTel export, so globally configured provider telemetry cannot put grading usage
+into Splunk Observability Studio's agent/task ring; judge usage is still parsed from the subprocess
+trace for the rubric report.
 
 ## Publish
 

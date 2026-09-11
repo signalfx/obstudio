@@ -1,6 +1,9 @@
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const { version: extensionVersion } = require("./package.json");
+
+const OBSERVER_VERSION_PATTERN = /^(?:dev|(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))$/;
 
 function normalizeGoos(platform) {
 	if (platform === "win32") {
@@ -81,10 +84,29 @@ function buildClientAssets(paths, run = execFileSync) {
 	console.log("Client assets built.");
 }
 
+function observerBuildVersion(env = process.env) {
+	const version = String(env.OBSTUDIO_OBSERVER_VERSION ?? extensionVersion).trim();
+	if (!OBSERVER_VERSION_PATTERN.test(version)) {
+		throw new Error(`Invalid Splunk Observability Studio build version "${version}"`);
+	}
+	return version;
+}
+
+function observerBuildArgs(paths, env = process.env) {
+	return [
+		"build",
+		"-ldflags",
+		`-X main.version=${observerBuildVersion(env)}`,
+		"-o",
+		paths.observerOutBinary,
+		"./cmd/obstudio",
+	];
+}
+
 function buildObserverGo(paths) {
 	console.log("Building observer binary...");
 
-	execFileSync("go", ["build", "-o", paths.observerOutBinary, "./cmd/obstudio"], {
+	execFileSync("go", observerBuildArgs(paths), {
 		cwd: paths.observerRoot,
 		env: {
 			...process.env,
@@ -140,4 +162,6 @@ module.exports = {
 	buildClientAssets,
 	buildObserverGo,
 	bundleWeaverRuntime,
+	observerBuildArgs,
+	observerBuildVersion,
 };

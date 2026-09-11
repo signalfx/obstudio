@@ -1,16 +1,15 @@
-// Package main implements the Observability Studio CLI entry point.
+// Package main implements the Splunk Observability Studio CLI entry point.
 package main
 
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -24,6 +23,7 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/api"
 	"github.com/signalfx/obstudio/observer/internal/audit"
 	"github.com/signalfx/obstudio/observer/internal/dashboards"
+	"github.com/signalfx/obstudio/observer/internal/freeaccount"
 	"github.com/signalfx/obstudio/observer/internal/mcp"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
@@ -32,10 +32,13 @@ import (
 )
 
 var version = "dev"
+var listenObserverHTTP = net.Listen
 
 const (
-	observerCloudBrowserLaunchTokenEnv     = "OBSTUDIO_CLOUD_BROWSER_LAUNCH_TOKEN"
-	observerHideCloudBrowserLaunchTokenEnv = "OBSTUDIO_HIDE_CLOUD_BROWSER_LAUNCH_TOKEN"
+	observerPublicMCPURLEnv                  = "OBSTUDIO_PUBLIC_MCP_URL"
+	observerPublicMCPURLMaxLength            = 2048
+	dockerRuntimeEvalMode                    = "docker-runtime-eval"
+	dockerRuntimeEvalAllowNonLoopbackBindEnv = "OBSTUDIO_DOCKER_RUNTIME_EVAL_ALLOW_NON_LOOPBACK"
 )
 
 var splunkEnvFilePrecedenceKeys = []string{
@@ -69,6 +72,7 @@ type runConfig struct {
 	otlpGRPCPort     string
 	otlpHTTPPort     string
 	envFile          string
+	publicMCPURL     string
 }
 
 func main() {
@@ -83,7 +87,7 @@ func main() {
 func newRootCmd(config *runConfig) *cobra.Command {
 	root := &cobra.Command{
 		Use:     "obstudio",
-		Short:   "Observability Studio -- local OTel collector, MCP server, and skill installer",
+		Short:   "Splunk Observability Studio -- local OTel collector, MCP server, and skill installer",
 		Version: version,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := loadConfiguredEnvFile(config.envFile); err != nil {
@@ -93,27 +97,24 @@ func newRootCmd(config *runConfig) *cobra.Command {
 			if err := validateRunConfig(resolved); err != nil {
 				return err
 			}
-			run(resolved)
-			return nil
+			return run(resolved)
 		},
 		SilenceUsage: true,
 	}
 
-	root.Flags().StringVar(&config.host, "host", "", "Bind address for the Observer UI, MCP HTTP endpoint, and OTLP/HTTP; also the OTLP/gRPC default")
-	root.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Observer web UI, REST API, and MCP HTTP port")
+	root.Flags().StringVar(&config.host, "host", "", "Bind address for Splunk Observability Studio UI, MCP HTTP endpoint, and OTLP/HTTP; also the OTLP/gRPC default")
+	root.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Splunk Observability Studio web UI, REST API, and MCP HTTP port")
 	root.Flags().StringVar(&config.envFile, "env-file", "", "Load KEY=VALUE settings from an env file before startup")
 
 	root.AddCommand(newInstallCmd())
+	root.AddCommand(newLifecycleCommands()...)
+	root.AddCommand(newTokenTelemetryCommand())
 	return root
 }
 
-func run(config runConfig) {
-	if err := ensureObserverControlToken(); err != nil {
-		log.Fatalf("configure Observer control token: %v", err)
-	}
-	if err := ensureObserverCloudBrowserLaunchToken(); err != nil {
-		log.Fatalf("configure standalone browser cloud launch: %v", err)
-	}
+func run(config runConfig) error {
+	managedLaunchAuthorized := consumeManagedLaunchCapability()
+	configureManagedLogging()
 
 	s := store.New()
 	v := validator.NewStore()
@@ -137,6 +138,15 @@ func run(config runConfig) {
 		OTLPgRPC: otlpGRPCAddr,
 		REST:     "http://" + mainAddr,
 	})
+	publicMCPURL := ""
+	if strings.TrimSpace(config.publicMCPURL) != "" {
+		var err error
+		publicMCPURL, err = normalizePublicMCPURL(config.publicMCPURL)
+		if err != nil {
+			log.Fatalf("configure public MCP URL: %v", err)
+		}
+	}
+	observerState := buildSharedObserverState(host, port, publicMCPURL)
 
 	ctx := context.Background()
 	if err := validatorManager.Start(ctx); err != nil {
@@ -181,13 +191,20 @@ func run(config runConfig) {
 		log.Fatalf("failed to start OTLP receiver: %v", err)
 	}
 
+	observerOwner := envOr("OBSTUDIO_OWNER", "cli")
+	observerMode := envOr("OBSTUDIO_MODE", "standalone")
+	if observerMode == managedObserverMode && !managedLaunchAuthorized {
+		observerMode = "standalone"
+	}
+	stopManaged := make(chan struct{}, 1)
+	freeAccountSubmitter := freeaccount.New(freeaccount.Config{})
 	mux := http.NewServeMux()
 	api.Register(mux, s, v, validatorManager, api.ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
 		Version:    version,
-		Owner:      envOr("OBSTUDIO_OWNER", "cli"),
-		Mode:       envOr("OBSTUDIO_MODE", "standalone"),
+		Owner:      observerOwner,
+		Mode:       observerMode,
 		StartedAt:  startedAt,
 		Exporters:  exporterInfo(splunkExportController, splunkTracesController),
 	}, dashboards.Config{
@@ -196,42 +213,96 @@ func run(config runConfig) {
 	}, audit.Config{
 		WorkspaceRoot: envOr("OBSTUDIO_WORKSPACE_ROOT", ""),
 		ReportPath:    envOr("OBSTUDIO_AUDIT_REPORT", ""),
+	}, api.EndpointConfig{
+		MCPURL: observerState.MCPURL,
 	}, splunkExportController, splunkTracesController,
-		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController))
-	mcp.Register(mux, s, v, validatorManager, splunkExportController, splunkTracesController)
+		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController),
+		freeAccountSubmitter)
+	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
+		registerManagedStop(mux, stopManaged)
+	}
+	repositoryCorrelationModeResolver := mcp.RepositoryCorrelationModeResolver(func(provider string) string {
+		return providerRepositoryCorrelationMode(tokenTelemetryStatePath(), provider)
+	})
+	mcp.Register(
+		mux,
+		s,
+		v,
+		validatorManager,
+		splunkExportController,
+		splunkTracesController,
+		repositoryCorrelationModeResolver,
+		freeAccountSubmitter,
+	)
 	webCleanup := web.Register(mux, s, v)
 
 	srv := &http.Server{Addr: mainAddr, Handler: mux}
-	mainListener, err := net.Listen("tcp", mainAddr)
+	mainListener, err := listenObserverHTTP("tcp", mainAddr)
 	if err != nil {
 		log.Fatalf("failed to start HTTP server: %v", err)
 	}
 
-	observerState := buildSharedObserverState(host, port)
 	observerStatePath := sharedObserverStatePath()
 	if err := writeSharedObserverState(observerStatePath, observerState); err != nil {
-		log.Printf("failed to write shared observer state: %v", err)
+		log.Printf("failed to write shared service state: %v", err)
 	} else {
 		defer func() {
 			if err := clearSharedObserverStateIfOwned(observerStatePath, observerState); err != nil {
-				log.Printf("failed to clear shared observer state: %v", err)
+				log.Printf("failed to clear shared service state: %v", err)
 			}
 		}()
 	}
+	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
+		managedPath := managedControlStatePath()
+		if err := writeSharedObserverState(managedPath, observerState); err != nil {
+			log.Printf("failed to write managed Splunk Observability Studio state: %v", err)
+			_ = mainListener.Close()
+			webCleanup()
+			validatorManager.Shutdown(ctx)
+			rcv.Shutdown(ctx)
+			splunkExportController.Shutdown(ctx)
+			splunkTracesController.Shutdown(ctx)
+			return fmt.Errorf("write managed Splunk Observability Studio state: %w", err)
+		} else {
+			defer func() {
+				if err := clearSharedObserverStateIfOwned(managedPath, observerState); err != nil {
+					log.Printf("failed to clear managed Splunk Observability Studio state: %v", err)
+				}
+			}()
+		}
+	}
 
+	serveErrors := make(chan error, 1)
 	go func() {
 		if err := srv.Serve(mainListener); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("HTTP server failed: %v", err)
+			serveErrors <- err
 		}
 	}()
 
 	fmt.Fprint(os.Stderr, renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr))
 
-	go mcp.RunStdio(s, os.Stdin, os.Stdout, v, validatorManager, splunkExportController, splunkTracesController)
+	go mcp.RunStdio(
+		s,
+		os.Stdin,
+		os.Stdout,
+		v,
+		validatorManager,
+		splunkExportController,
+		splunkTracesController,
+		repositoryCorrelationModeResolver,
+		freeAccountSubmitter,
+	)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
+	var runErr error
+	select {
+	case <-sig:
+	case <-stopManaged:
+	case err := <-serveErrors:
+		runErr = fmt.Errorf("HTTP server failed: %w", err)
+		log.Printf("%v", runErr)
+	}
 	fmt.Fprintf(os.Stderr, "\nShutting down...\n")
 
 	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -239,35 +310,10 @@ func run(config runConfig) {
 	srv.Shutdown(shutCtx)
 	webCleanup()
 	validatorManager.Shutdown(shutCtx)
-	rcv.Shutdown(ctx)
+	rcv.Shutdown(shutCtx)
 	splunkExportController.Shutdown(shutCtx)
 	splunkTracesController.Shutdown(shutCtx)
-}
-
-func ensureObserverControlToken() error {
-	if strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")) != "" {
-		return nil
-	}
-
-	token := make([]byte, 32)
-	if _, err := rand.Read(token); err != nil {
-		return fmt.Errorf("generate control token: %w", err)
-	}
-	if err := os.Setenv("OBSTUDIO_CONTROL_TOKEN", base64.RawURLEncoding.EncodeToString(token)); err != nil {
-		return fmt.Errorf("store generated control token: %w", err)
-	}
-	return nil
-}
-
-func ensureObserverCloudBrowserLaunchToken() error {
-	token := make([]byte, 32)
-	if _, err := rand.Read(token); err != nil {
-		return fmt.Errorf("generate browser launch token: %w", err)
-	}
-	if err := os.Setenv(observerCloudBrowserLaunchTokenEnv, base64.RawURLEncoding.EncodeToString(token)); err != nil {
-		return fmt.Errorf("store generated browser launch token: %w", err)
-	}
-	return nil
+	return runErr
 }
 
 func envOr(key, fallback string) string {
@@ -426,6 +472,7 @@ func resolveRunConfig(config runConfig) runConfig {
 		otlpGRPCHost:     valueOrEnv(config.otlpGRPCHost, "OTLP_GRPC_HOST", host),
 		otlpGRPCPort:     valueOrEnv(config.otlpGRPCPort, "OTLP_GRPC_PORT", "4317"),
 		envFile:          config.envFile,
+		publicMCPURL:     valueOrEnv(config.publicMCPURL, observerPublicMCPURLEnv, ""),
 	}
 }
 
@@ -738,12 +785,28 @@ func valueOrEnv(value, envKey, fallback string) string {
 }
 
 func validateRunConfig(config runConfig) error {
+	allowDockerRuntimeEvalNonLoopback := envOr("OBSTUDIO_MODE", "") == dockerRuntimeEvalMode &&
+		envBool(dockerRuntimeEvalAllowNonLoopbackBindEnv)
+	if !isLoopbackBindHost(config.host) && !allowDockerRuntimeEvalNonLoopback {
+		return errors.New("Splunk Observability Studio UI, REST API, MCP, and OTLP/HTTP require a loopback --host")
+	}
+	if !isLoopbackBindHost(config.otlpGRPCHost) {
+		return errors.New("Splunk Observability Studio OTLP/gRPC requires a loopback --otlp-grpc-host")
+	}
+	if publicMCPURL := strings.TrimSpace(config.publicMCPURL); publicMCPURL != "" {
+		if len(publicMCPURL) > observerPublicMCPURLMaxLength {
+			return fmt.Errorf("%s exceeds %d bytes", observerPublicMCPURLEnv, observerPublicMCPURLMaxLength)
+		}
+		if _, err := normalizePublicMCPURL(publicMCPURL); err != nil {
+			return err
+		}
+	}
 	ports := []struct {
 		flagName string
 		label    string
 		value    string
 	}{
-		{flagName: "--observer-http-port", label: "Observer UI, REST API, and MCP HTTP", value: config.observerHTTPPort},
+		{flagName: "--observer-http-port", label: "Splunk Observability Studio UI, REST API, and MCP HTTP", value: config.observerHTTPPort},
 		{flagName: "--otlp-http-port", label: "OTLP/HTTP", value: config.otlpHTTPPort},
 		{flagName: "--otlp-grpc-port", label: "OTLP/gRPC", value: config.otlpGRPCPort},
 	}
@@ -771,7 +834,39 @@ func validateRunConfig(config runConfig) error {
 	return nil
 }
 
-func buildSharedObserverState(host, port string) sharedObserverState {
+func normalizePublicMCPURL(raw string) (string, error) {
+	normalized, err := normalizeSharedURL(raw, observerPublicMCPURLEnv)
+	if err != nil {
+		return "", err
+	}
+	parsed, err := url.Parse(normalized)
+	if err != nil {
+		return "", fmt.Errorf("invalid %s: %w", observerPublicMCPURLEnv, err)
+	}
+	if parsed.RawQuery != "" || parsed.ForceQuery {
+		return "", fmt.Errorf("invalid %s: URL must not include a query", observerPublicMCPURLEnv)
+	}
+	hostname := strings.ToLower(parsed.Hostname())
+	if address := net.ParseIP(hostname); address != nil {
+		hostname = address.String()
+	} else if strings.HasSuffix(hostname, ".") && isLoopbackSharedObserverHost(hostname) {
+		hostname = strings.TrimSuffix(hostname, ".")
+	}
+	port := parsed.Port()
+	if (parsed.Scheme == "https" && port == "443") || (parsed.Scheme == "http" && port == "80") {
+		port = ""
+	}
+	if port != "" {
+		parsed.Host = net.JoinHostPort(hostname, port)
+	} else if strings.Contains(hostname, ":") {
+		parsed.Host = "[" + hostname + "]"
+	} else {
+		parsed.Host = hostname
+	}
+	return parsed.String(), nil
+}
+
+func buildSharedObserverState(host, port string, publicMCPURLs ...string) sharedObserverState {
 	connectHost := host
 	switch connectHost {
 	case "", "0.0.0.0", "::", "[::]":
@@ -779,28 +874,34 @@ func buildSharedObserverState(host, port string) sharedObserverState {
 	}
 
 	baseURL := fmt.Sprintf("http://%s", net.JoinHostPort(connectHost, port))
+	mcpURL := baseURL + "/mcp"
+	if len(publicMCPURLs) > 0 && strings.TrimSpace(publicMCPURLs[0]) != "" {
+		mcpURL = strings.TrimSpace(publicMCPURLs[0])
+	}
 	return sharedObserverState{
-		BaseURL:      baseURL,
-		ControlToken: strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")),
-		HealthURL:    baseURL + "/api/health",
-		MCPURL:       baseURL + "/mcp",
-		PID:          os.Getpid(),
-		UpdatedAt:    time.Now().UTC(),
+		BaseURL:   baseURL,
+		HealthURL: baseURL + "/api/health",
+		MCPURL:    mcpURL,
+		PID:       os.Getpid(),
+		UpdatedAt: time.Now().UTC(),
 	}
 }
 
 func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 	return fmt.Sprintf(
-		"\nObservability Studio (collector)\n"+
+		"\nSplunk Observability Studio (collector)\n"+
 			"  Telemetry Explorer:  %s\n"+
 			"  OTLP/HTTP receiver:  http://%s\n"+
 			"  OTLP/gRPC receiver:  %s\n"+
 			"  MCP endpoint:        http://%s/mcp\n"+
-			"  Agent setup:         obstudio install --target=<agent>[,<agent>...]\n\n",
+			"  Agent setup:         obstudio install --target=<agent>[,<agent>...]\n"+
+			"\nEnvironment Variables\n"+
+			"  OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED: %s\n\n",
 		observerBrowserURL(mainAddr),
 		otlpHTTPAddr,
 		otlpGRPCAddr,
 		mainAddr,
+		strings.TrimSpace(os.Getenv("OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED")),
 	)
 }
 
@@ -821,13 +922,5 @@ func observerBrowserURL(mainAddr string) string {
 			return "http://" + mainAddr
 		}
 	}
-	baseURL := "http://" + net.JoinHostPort(host, port)
-	if envBool(observerHideCloudBrowserLaunchTokenEnv) {
-		return baseURL
-	}
-	launchToken := strings.TrimSpace(os.Getenv(observerCloudBrowserLaunchTokenEnv))
-	if launchToken == "" {
-		return baseURL
-	}
-	return baseURL + "/#obstudio-cloud-control=" + launchToken
+	return "http://" + net.JoinHostPort(host, port)
 }

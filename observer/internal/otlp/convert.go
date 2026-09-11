@@ -79,7 +79,7 @@ func ConvertLogs(ld plog.Logs) []store.LogRecord {
 			lrs := sl.LogRecords()
 			for k := 0; k < lrs.Len(); k++ {
 				lr := lrs.At(k)
-				out = append(out, store.LogRecord{
+				record := store.LogRecord{
 					Timestamp:      lr.Timestamp().AsTime(),
 					SeverityNumber: int32(lr.SeverityNumber()),
 					SeverityText:   lr.SeverityText(),
@@ -89,7 +89,12 @@ func ConvertLogs(ld plog.Logs) []store.LogRecord {
 					SpanID:         spanIDStr(lr.SpanID()),
 					Resource:       res,
 					Scope:          scope,
-				})
+				}
+				if lr.ObservedTimestamp() > 0 {
+					observedTimestamp := lr.ObservedTimestamp().AsTime()
+					record.ObservedTimestamp = &observedTimestamp
+				}
+				out = append(out, record)
 			}
 		}
 	}

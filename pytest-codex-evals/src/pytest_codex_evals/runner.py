@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import shutil
 import tempfile
 import time
@@ -9,10 +8,18 @@ from pathlib import Path
 
 from .ab import side_prompt
 from .backends import AgentBackend, CodexBackend
-from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult, resolve_skill_source
-from .definitions.base import validate_eval_input_paths
+from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult, TokenUsage, resolve_skill_source
+from .eval_files import (
+    fixture_eval_input_sources,
+    fixture_workspace_ignore,
+    shared_skill_reference_source_files,
+    skill_workspace_ignore,
+    staged_fixture_source_files,
+    staged_skill_source_files,
+)
 from .graders import grade_side
 from .graders.rubric import run_rubric_grade
+from .trace import TraceUsage, UsageProvider
 
 
 def new_run_id() -> str:
@@ -128,7 +135,8 @@ def run_side(
     agent_duration_seconds = time.monotonic() - agent_start
 
     trace = backend.parse_trace(agent_result.trace_path)
-    agent_tokens = trace.usage.total_tokens
+    agent_usage = token_usage_from_trace_usage(trace.usage)
+    agent_tokens = flat_token_total(agent_usage)
     final_message = agent_result.final_message_path.read_text(encoding="utf-8", errors="replace")
     grade = grade_side(
         case=case,
@@ -145,10 +153,12 @@ def run_side(
     rubric_path: Path | None = None
     rubric_duration_seconds = 0.0
     rubric_tokens = 0
+    rubric_usage: TokenUsage | None = None
     errors: list[str] = []
     if agent_result.returncode != 0:
         errors.append(f"{backend.name} exited with {agent_result.returncode}")
     if rubric and isinstance(case, RubricEvalCase) and case.rubric:
+        rubric_usage = TokenUsage(provider=usage_provider_for_backend(backend))
         rubric_start = time.monotonic()
         try:
             rubric_path = run_rubric_grade(
@@ -165,7 +175,10 @@ def run_side(
             rubric_trace_path = exec_dir / "rubric_trace.jsonl"
             if rubric_trace_path.exists():
                 try:
-                    rubric_tokens = backend.parse_trace(rubric_trace_path).usage.total_tokens
+                    rubric_usage = token_usage_from_trace_usage(
+                        backend.parse_trace(rubric_trace_path).usage
+                    )
+                    rubric_tokens = flat_token_total(rubric_usage)
                 except Exception as exc:  # pragma: no cover - preserved in run artifacts
                     errors.append(f"rubric trace parsing failed: {exc}")
 
@@ -193,10 +206,44 @@ def run_side(
         tokens=agent_tokens + rubric_tokens,
         agent_tokens=agent_tokens,
         rubric_tokens=rubric_tokens,
+        agent_usage=agent_usage,
+        rubric_usage=rubric_usage,
         errors=errors,
     )
     (artifact_dir / "summary.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")
     return result
+
+
+def token_usage_from_trace_usage(usage: TraceUsage) -> TokenUsage:
+    return TokenUsage(
+        provider=usage.provider,
+        source=usage.source,
+        observed=usage.observed,
+        usage_record_count=usage.usage_record_count,
+        selected_record_count=usage.selected_record_count,
+        input_tokens=usage.input_tokens,
+        cached_input_tokens=usage.cached_input_tokens,
+        cache_creation_input_tokens=usage.cache_creation_input_tokens,
+        output_tokens=usage.output_tokens,
+        reasoning_output_tokens=usage.reasoning_output_tokens,
+        provider_total_tokens=usage.provider_total_tokens,
+        derived_total_tokens=usage.derived_total_tokens,
+        effective_total_tokens=usage.total_tokens,
+    )
+
+
+def flat_token_total(usage: TokenUsage | None) -> int:
+    if usage is None or usage.total_tokens is None:
+        return 0
+    return usage.total_tokens
+
+
+def usage_provider_for_backend(backend: AgentBackend) -> UsageProvider:
+    if backend.name == "codex":
+        return "codex"
+    if backend.name == "claude":
+        return "claude"
+    return "unknown"
 
 
 def prepare_side_workspace(repo_root: Path, case: EvalCase, side: str, side_dir: Path, skill_dir: Path | None = None) -> None:
@@ -205,10 +252,11 @@ def prepare_side_workspace(repo_root: Path, case: EvalCase, side: str, side_dir:
     side_dir.mkdir(parents=True)
     if case.fixture_dir is None:
         raise ValueError(f"case {case.id} has no fixture_dir")
+    staged_fixture_source_files(case.fixture_dir)
     shutil.copytree(
         case.fixture_dir,
         side_dir / "service",
-        ignore=shutil.ignore_patterns("eval", "*_eval.json", ".observe", ".venv", "__pycache__", "*.pyc", "uv.lock", "*.db"),
+        ignore=fixture_workspace_ignore,
     )
     copy_eval_inputs(
         case.fixture_dir,
@@ -219,13 +267,23 @@ def prepare_side_workspace(repo_root: Path, case: EvalCase, side: str, side_dir:
         skills_dir = side_dir / ".agents" / "skills"
         skills_dir.mkdir(parents=True)
         target = resolve_skill_source(repo_root, case.skill, case.skill_source, skill_dir)
+        staged_skill_source_files(target)
         if not (target / "SKILL.md").exists():
             raise FileNotFoundError(f"missing skill source: {target / 'SKILL.md'}")
-        create_skill_link(target, skills_dir / target.name)
+        shutil.copytree(
+            target,
+            skills_dir / target.name,
+            ignore=skill_workspace_ignore,
+        )
 
         references = repo_root / "skills" / "references"
         if references.exists():
-            create_skill_link(references, skills_dir / "references")
+            shared_skill_reference_source_files(repo_root)
+            shutil.copytree(
+                references,
+                skills_dir / "references",
+                ignore=skill_workspace_ignore,
+            )
 
 
 def copy_eval_inputs(
@@ -235,33 +293,7 @@ def copy_eval_inputs(
 ) -> None:
     """Expose only prompt-approved eval seeds, never eval definitions."""
 
-    validate_eval_input_paths(eval_inputs)
-    if not eval_inputs:
-        return
-    input_root = fixture_dir / "eval" / "inputs"
-    if (fixture_dir / "eval").is_symlink() or input_root.is_symlink():
-        raise ValueError(f"eval input directory must not be a symlink: {input_root}")
-    resolved_input_root = input_root.resolve()
-    for value in eval_inputs:
-        relative = Path(value)
-        source = fixture_dir / relative
-        if source.is_symlink() or not source.is_file():
-            raise ValueError(
-                f"eval_inputs entry must name a regular fixture file: {value}"
-            )
-        try:
-            source.resolve().relative_to(resolved_input_root)
-        except ValueError as exc:
-            raise ValueError(
-                f"eval_inputs entry resolves outside eval/inputs: {value}"
-            ) from exc
+    for relative, source in fixture_eval_input_sources(fixture_dir, eval_inputs):
         destination = service_dir / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination, follow_symlinks=False)
-
-
-def create_skill_link(target: Path, link: Path) -> None:
-    try:
-        os.symlink(target, link, target_is_directory=True)
-    except OSError:
-        shutil.copytree(target, link)

@@ -115,15 +115,15 @@ which existing appenders remain active before editing.
 
   | Existing log configuration | Required action |
   |---|---|
-  | exporter unset/empty and endpoint absent or detected-local | Default the exporter to `otlp` for the local Obstudio baseline |
-  | exporter `otlp` and endpoint absent or detected-local | Preserve `otlp` and use the detected local Observer endpoint |
+  | exporter unset/empty and endpoint absent or detected-local | Default the exporter to `otlp` for the local Splunk Observability Studio baseline |
+  | exporter `otlp` and endpoint absent or detected-local | Preserve `otlp` and use the detected local Splunk Observability Studio endpoint |
   | exporter unset/`otlp` and endpoint non-local | Fail closed before the agent starts its log path; report the operator-owned boundary conflict |
   | `none` | Keep it disabled; do not add another provider, exporter, or bridge |
   | any other explicit value | Preserve it as operator-owned; do not supplement it with a local pipeline |
 
 - When the logs exporter is absent/`otlp`, set the signal-specific OTLP/HTTP
   endpoint to `http://localhost:4318/v1/logs` for a host JVM or the equivalent
-  detected Observer service address in Docker. Accept an explicit endpoint on
+  detected Splunk Observability Studio service address in Docker. Accept an explicit endpoint on
   that branch only when it matches the detected local receiver and its
   protocol/path tuple. If it is non-local or direct-cloud, do not enable the
   agent-owned log provider/bridge; fail closed and report the boundary conflict
@@ -136,7 +136,7 @@ which existing appenders remain active before editing.
   Keep the logs endpoint local and do not copy a realm, ingest URL, access
   token, auth header, exporter, or forwarding flag into log configuration.
   Reject a generic header from the local log path even when signal-specific
-  logs headers are present, because the SDK may merge both. Obstudio cloud
+  logs headers are present, because the SDK may merge both. Splunk Observability Studio cloud
   forwarding remains traces and metrics only.
 - Treat log bodies, arguments, throwable rendering, markers, structured
   messages, and MDC/context data as a privacy surface. Capture only reviewed,
@@ -316,7 +316,7 @@ case "${OBSTUDIO_OBSERVER_TARGET:-host}" in
   docker)
     local_http_endpoint=http://observer:4318
     local_grpc_endpoint=http://observer:4317 ;;
-  *) fail "unsupported Observer target" ;;
+  *) fail "unsupported Splunk Observability Studio target" ;;
 esac
 case "$logs_protocol" in
   http/protobuf)
@@ -330,7 +330,7 @@ if [ -z "$logs_endpoint" ]; then
   logs_endpoint=$local_logs_endpoint
   add_logs_endpoint=1
 elif [ "$logs_endpoint" != "$local_logs_endpoint" ]; then
-  fail "OTLP logs endpoint is not the detected local Observer"
+  fail "OTLP logs endpoint is not the detected local Splunk Observability Studio"
 fi
 if [ -n "$generic_endpoint" ] && \
    [ "$generic_endpoint" != "$local_http_endpoint" ] && \
@@ -616,7 +616,7 @@ Keep an HTTP/protobuf logs endpoint paired with the complete `/v1/logs` path.
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` for Java agent 2.x | Common protocol when using port 4318 |
 | `OTEL_LOGS_EXPORTER` | `otlp` only when absent and the logs endpoint is absent or detected-local | `none` disables agent log export; any other explicit value is preserved |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the local baseline | Signal-specific log transport |
-| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for a host JVM | Signal-specific local Observer application-log destination |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for a host JVM | Signal-specific local Splunk Observability Studio application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Only signal-specific operator-owned log headers; never inherit a generic cloud credential |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | unset | Use these instead of a generic endpoint for direct-cloud trace/metric export |
 | `OTEL_EXPORTER_OTLP_TRACES_HEADERS` / `OTEL_EXPORTER_OTLP_METRICS_HEADERS` | unset | Keep cloud credentials signal-specific; never copy them to logs |
@@ -625,7 +625,7 @@ Keep an HTTP/protobuf logs endpoint paired with the complete `/v1/logs` path.
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
 
-For local development with the Observer:
+For local development with Splunk Observability Studio:
 
 Use this explicit HTTP baseline only when preflight found no operator-owned
 logs exporter, protocol, or endpoint. If any of those is configured -- including
@@ -651,8 +651,8 @@ generic cloud variables from the launch environment. A signal-specific local
 logs endpoint alone does not prevent a generic cloud header from being
 inherited or merged, even when a signal-specific logs header is also present.
 Do not configure a logs cloud header or a cloud log-forwarding pipeline;
-Obstudio forwards only traces and metrics. On the absent/`otlp` branch, accept
-an explicit logs endpoint only when it matches the detected local Observer;
+Splunk Observability Studio forwards only traces and metrics. On the absent/`otlp` branch, accept
+an explicit logs endpoint only when it matches the detected local Splunk Observability Studio;
 otherwise fail before the agent starts and report the operator-owned boundary
 conflict. Preserve `none` and non-OTLP exporter branches without interpreting
 their endpoint.
@@ -664,7 +664,7 @@ their endpoint.
 Agent-installed logging instrumentation requires full-runtime proof; a config
 diff or trace IDs printed in stdout is not evidence of OTLP log export.
 
-1. Start the local Observer and the real application startup path with the
+1. Start the local Splunk Observability Studio and the real application startup path with the
    Java agent. Exercise a deterministic Logback/Log4j call with a unique,
    sanitized body/category and known severity inside an active span. Also emit
    one record outside a span to prove the expected absence of correlation.
@@ -693,17 +693,17 @@ diff or trace IDs printed in stdout is not evidence of OTLP log export.
    equal the active span; for the out-of-span record, assert no fabricated
    correlation.
 4. Prove the original console/file/platform appender still writes the record
-   exactly once. Check both the original sink and Observer count so an existing
+   exactly once. Check both the original sink and Splunk Observability Studio count so an existing
    manual appender plus the agent cannot hide a duplicate export.
 5. Terminate the JVM normally and confirm a final pre-shutdown record arrives.
    Rely on the Java agent's JVM shutdown hook; do not add an application SDK or
    hook to make this test pass.
 6. Rerun the same launch and trigger with `OTEL_LOGS_EXPORTER=none`. Require
-   zero matching OTLP records in Observer while the original console/file sink
+   zero matching OTLP records in Splunk Observability Studio while the original console/file sink
    still contains the message and configured traces/metrics continue to work.
    Repeat with any other explicit exporter value used by the project and prove
    it was preserved rather than supplemented.
-7. When cloud trace/metric export or Obstudio forwarding is enabled, prove the
+7. When cloud trace/metric export or Splunk Observability Studio forwarding is enabled, prove the
    application record remains visible only in the local Explorer, generic
    cloud endpoint/header settings are absent from the log path, and no cloud
    log exporter, credential, or forwarding flag was configured.
@@ -736,6 +736,6 @@ Use the `-javaagent` JVM flag in the `bootRun` task or application config.
   HTTP duration metrics flush promptly.
 - **Version management**: When using the Java agent, do not also add OTel SDK dependencies -- the agent bundles its own SDK. Only add `opentelemetry-api` for custom instrumentation.
 - **Application logs**: Let the agent's detected Logback/Log4j appender export
-  to the signal-specific local Observer endpoint. Keep existing appenders,
+  to the signal-specific local Splunk Observability Studio endpoint. Keep existing appenders,
   avoid a second SDK or bridge, use reviewed MDC allowlists rather than `*`,
   and let the agent flush on JVM shutdown.

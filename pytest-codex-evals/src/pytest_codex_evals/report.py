@@ -1,11 +1,31 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from pathlib import Path
 from typing import Any
 
-from .definitions import CaseResult, GradeCheckResult, SideResult, ValidationResult
+from .definitions import (
+    CaseResult,
+    GradeCheckResult,
+    SideResult,
+    TokenUsage,
+    ValidationResult,
+)
+from .eval_files import (
+    eval_file_layout,
+    fixture_eval_input_sources,
+    iter_eval_files,
+    regular_source_file,
+    runtime_definition_asset_files,
+    runtime_repository_source_files,
+    shared_runtime_source_files,
+    shared_skill_reference_source_files,
+    staged_fixture_source_files,
+    staged_skill_source_files,
+    source_tree_files,
+)
 from .reports import ReportTemplate, template_for_kind
 
 
@@ -15,6 +35,16 @@ SIDE_ATTRS = {
     "with_baseline": "baseline",
 }
 RAW_RUNS_DIR = "runs"
+TOKEN_USAGE_FIELDS = (
+    "input_tokens",
+    "cached_input_tokens",
+    "cache_creation_input_tokens",
+    "output_tokens",
+    "reasoning_output_tokens",
+    "provider_total_tokens",
+    "derived_total_tokens",
+)
+SOURCE_MANIFEST_DIGEST_VERSION = 2
 
 
 def write_session_results(runs: list[dict[str, Any]]) -> None:
@@ -161,7 +191,14 @@ def kind_benchmark_from_payloads(
     ]
     if not live_payloads:
         raise ValueError(f"no {kind} live results found in {run_root}")
-    return build_kind_benchmark(repo_root, run_root, skill, kind, live_payloads)
+    validation_results = [
+        ValidationResult.model_validate(item)
+        for payload in payloads
+        if payload.get("mode") == "validation"
+        for item in payload.get("results", [])
+        if item.get("eval_kind") == kind
+    ]
+    return build_kind_benchmark(repo_root, run_root, skill, kind, live_payloads, validation_results)
 
 
 def build_kind_benchmark(
@@ -170,14 +207,19 @@ def build_kind_benchmark(
     skill: str,
     kind: str,
     live_payloads: list[dict[str, Any]],
+    validation_results: list[ValidationResult] | None = None,
 ) -> dict[str, Any]:
     evals = []
     failures = []
     metadata_sources = []
+    live_selection_keys: set[tuple[str, str, str]] = set()
     for payload in sorted(live_payloads, key=lambda item: str(item.get("mode", ""))):
         mode = str(payload["mode"])
         metadata_sources.append(payload.get("metadata", {}))
         results = [CaseResult.model_validate(item) for item in payload.get("results", [])]
+        live_selection_keys.update(
+            (result.id, result.base_id, result.prompt_id) for result in results
+        )
         result_paths = payload.get("result_paths", {})
         for base_id, group in grouped_case_results(results).items():
             item = aggregate_kind_case_group(kind, group)
@@ -187,7 +229,7 @@ def build_kind_benchmark(
         failures.extend(collect_kind_failures(results, kind, mode))
 
     metadata = kind_report_metadata(skill, run_root, kind, metadata_sources)
-    return {
+    benchmark = {
         "schema_version": 1,
         "kind": kind,
         "mode": metadata["mode"],
@@ -203,6 +245,718 @@ def build_kind_benchmark(
         "evals": evals,
         "failures": failures,
     }
+    provenance_results = validation_results or []
+    if provenance_results:
+        validation_selection_keys = {
+            (result.id, result.base_id, result.prompt_id)
+            for result in provenance_results
+        }
+        if validation_selection_keys != live_selection_keys:
+            raise ValueError(
+                "live report results do not match validation provenance selections"
+            )
+    provenance = source_provenance(repo_root, provenance_results)
+    if provenance:
+        benchmark["source"] = provenance
+    return benchmark
+
+
+def source_input_digests(
+    repo_root: Path,
+    skill: str,
+    kind: str,
+    skill_path: Path,
+    config_path: Path | None = None,
+    *,
+    definition_path: Path | None = None,
+    fixture_dir: Path | None = None,
+    prompt_id: str | None = None,
+    eval_inputs: list[str] | None = None,
+) -> dict[str, str]:
+    root = repo_root.resolve()
+    resolved_skill = skill_path.resolve()
+    try:
+        resolved_skill.relative_to(root)
+    except ValueError:
+        return {}
+
+    paths = staged_skill_source_files(resolved_skill)
+    paths.extend(shared_skill_reference_source_files(root))
+    eval_roles = {
+        "rubric": {"rubric"},
+        "sanity": {"sanity"},
+        "runtime": {"runtime"},
+        "validation": {"rubric", "runtime", "sanity"},
+    }.get(kind, set())
+    eval_root = root / "evals"
+    has_runtime_definition = False
+    if definition_path is not None:
+        if fixture_dir is None or prompt_id is None:
+            raise ValueError(
+                "selected eval provenance requires a fixture directory and prompt ID"
+            )
+        selected_paths, has_runtime_definition = selected_eval_source_files(
+            root,
+            skill,
+            eval_roles,
+            definition_path,
+            fixture_dir,
+            prompt_id,
+            eval_inputs,
+        )
+        paths.extend(selected_paths)
+    elif fixture_dir is not None or prompt_id is not None or eval_inputs is not None:
+        raise ValueError("selected eval provenance requires a definition path")
+    elif eval_roles and eval_root.is_dir():
+        for path in iter_eval_files(eval_root):
+            layout = eval_file_layout(path)
+            if layout is None or layout.role not in eval_roles:
+                continue
+            try:
+                definition = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError(f"cannot read eval definition: {path}: {exc}") from exc
+            if not isinstance(definition, dict):
+                raise ValueError(f"eval definition must be an object: {path}")
+            if definition.get("skill") == skill:
+                paths.append(path)
+                paths.extend(staged_fixture_source_files(layout.fixture_dir))
+                prompts = definition.get("prompts", [])
+                if not isinstance(prompts, list):
+                    raise ValueError(f"eval definition prompts must be a list: {path}")
+                for prompt in prompts:
+                    if not isinstance(prompt, dict):
+                        raise ValueError(
+                            f"eval definition prompt must be an object: {path}"
+                        )
+                    eval_inputs = prompt.get("eval_inputs")
+                    if eval_inputs is not None and (
+                        not isinstance(eval_inputs, list)
+                        or any(not isinstance(value, str) for value in eval_inputs)
+                    ):
+                        raise ValueError(
+                            f"eval definition eval_inputs must be a string list: {path}"
+                        )
+                    paths.extend(
+                        source
+                        for _relative, source in fixture_eval_input_sources(
+                            layout.fixture_dir,
+                            eval_inputs,
+                        )
+                    )
+                if layout.role == "runtime":
+                    has_runtime_definition = True
+                    paths.extend(runtime_definition_asset_files(path))
+    if has_runtime_definition:
+        paths.extend(shared_runtime_source_files(eval_root))
+        paths.extend(runtime_repository_source_files(root))
+
+    harness_root = root / "pytest-codex-evals"
+    harness_package_root = harness_root / "src" / "pytest_codex_evals"
+    if harness_package_root.is_dir():
+        paths.extend(
+            source_tree_files(
+                harness_package_root,
+                ("__pycache__", ".pytest_cache", ".DS_Store", "*.pyc"),
+            )
+        )
+    for name in ("pyproject.toml", "uv.lock"):
+        harness_metadata = harness_root / name
+        if source := regular_source_file(harness_metadata):
+            paths.append(source)
+    if config_path is not None:
+        config_source = regular_source_file(config_path)
+        if config_source is None:
+            raise ValueError(f"eval config input is missing: {config_path}")
+        try:
+            config_source.resolve().relative_to(root)
+        except ValueError as exc:
+            raise ValueError(
+                f"eval config input must stay within the repository: {config_path}"
+            ) from exc
+        paths.append(config_source)
+    elif eval_root.is_dir():
+        for path in sorted(eval_root.glob("codex-evals*.toml")):
+            if source := regular_source_file(path):
+                paths.append(source)
+    if eval_root.is_dir():
+        for name in ("pyproject.toml", "uv.lock"):
+            eval_metadata = eval_root / name
+            if source := regular_source_file(eval_metadata):
+                paths.append(source)
+
+    digests: dict[str, str] = {}
+    for path in sorted(set(paths)):
+        relative = path.resolve().relative_to(root).as_posix()
+        digests[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return digests
+
+
+def selected_eval_source_files(
+    repo_root: Path,
+    skill: str,
+    eval_roles: set[str],
+    definition_path: Path,
+    fixture_dir: Path,
+    prompt_id: str,
+    eval_inputs: list[str] | None,
+) -> tuple[list[Path], bool]:
+    definition_source = regular_source_file(definition_path)
+    if definition_source is None:
+        raise ValueError(f"selected eval definition is missing: {definition_path}")
+    try:
+        definition_source.resolve().relative_to(repo_root)
+        resolved_fixture = fixture_dir.resolve()
+        resolved_fixture.relative_to(repo_root)
+    except ValueError as exc:
+        raise ValueError("selected eval source must stay within the repository") from exc
+
+    layout = eval_file_layout(definition_source)
+    if layout is None or layout.role not in eval_roles:
+        raise ValueError(
+            f"selected eval definition does not match {sorted(eval_roles)}: "
+            f"{definition_path}"
+        )
+    if layout.fixture_dir.resolve() != resolved_fixture:
+        raise ValueError(
+            f"selected eval fixture does not match its definition: {fixture_dir}"
+        )
+    try:
+        definition = json.loads(definition_source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"cannot read eval definition: {definition_source}: {exc}"
+        ) from exc
+    if not isinstance(definition, dict):
+        raise ValueError(f"eval definition must be an object: {definition_source}")
+    if definition.get("skill") != skill:
+        raise ValueError(
+            f"selected eval definition does not target skill {skill}: "
+            f"{definition_source}"
+        )
+    prompts = definition.get("prompts", [])
+    if not isinstance(prompts, list):
+        raise ValueError(f"eval definition prompts must be a list: {definition_source}")
+    matching_prompts = [
+        prompt
+        for prompt in prompts
+        if isinstance(prompt, dict) and prompt.get("id") == prompt_id
+    ]
+    if len(matching_prompts) != 1:
+        raise ValueError(
+            f"selected eval prompt {prompt_id!r} is missing or duplicated: "
+            f"{definition_source}"
+        )
+    selected_inputs = matching_prompts[0].get("eval_inputs")
+    if selected_inputs is None:
+        selected_inputs = []
+    if (
+        not isinstance(selected_inputs, list)
+        or any(not isinstance(value, str) for value in selected_inputs)
+    ):
+        raise ValueError(
+            f"eval definition eval_inputs must be a string list: {definition_source}"
+        )
+    recorded_inputs = list(eval_inputs or [])
+    if selected_inputs != recorded_inputs:
+        raise ValueError(
+            f"selected eval inputs do not match prompt {prompt_id!r}: "
+            f"{definition_source}"
+        )
+
+    paths = [definition_source, *staged_fixture_source_files(resolved_fixture)]
+    paths.extend(
+        source
+        for _relative, source in fixture_eval_input_sources(
+            resolved_fixture,
+            recorded_inputs,
+        )
+    )
+    is_runtime = layout.role == "runtime"
+    if is_runtime:
+        paths.extend(runtime_definition_asset_files(definition_source))
+    return paths, is_runtime
+
+
+def source_input_digests_for_kinds(
+    repo_root: Path,
+    skill: str,
+    kinds: list[str],
+    skill_path: Path,
+    config_path: Path | None = None,
+) -> dict[str, str]:
+    files: dict[str, str] = {}
+    for kind in sorted(set(kinds)):
+        for path, digest in source_input_digests(
+            repo_root,
+            skill,
+            kind,
+            skill_path,
+            config_path,
+        ).items():
+            existing = files.get(path)
+            if existing is not None and existing != digest:
+                raise ValueError(f"source input changed while building manifest: {path}")
+            files[path] = digest
+    return files
+
+
+def source_input_digests_for_selections(
+    repo_root: Path,
+    skill: str,
+    selections: list[dict[str, Any]],
+    skill_path: Path,
+    config_path: Path | None = None,
+) -> dict[str, str]:
+    files: dict[str, str] = {}
+    for selection in selections:
+        manifest = source_input_digests(
+            repo_root,
+            skill,
+            selection["eval_kind"],
+            skill_path,
+            config_path,
+            definition_path=repo_root / selection["definition_path"],
+            fixture_dir=repo_root / selection["fixture_dir"],
+            prompt_id=selection["prompt_id"],
+            eval_inputs=selection["eval_inputs"],
+        )
+        for path, digest in manifest.items():
+            existing = files.get(path)
+            if existing is not None and existing != digest:
+                raise ValueError(f"source input changed while building manifest: {path}")
+            files[path] = digest
+    return files
+
+
+def source_provenance(
+    repo_root: Path,
+    results: list[ValidationResult],
+    *,
+    selection_scope: str | None = None,
+) -> dict[str, Any] | None:
+    manifest_results = [result for result in results if result.source_files]
+    manifests = [result.source_files for result in manifest_results]
+    if not manifests:
+        return None
+    files: dict[str, str] = {}
+    for manifest in manifests:
+        for path, digest in manifest.items():
+            existing = files.get(path)
+            if existing is not None and existing != digest:
+                raise ValueError(f"source input changed during eval run: {path}")
+            files[path] = digest
+    skill_paths = {
+        Path(result.skill_path).resolve().relative_to(repo_root.resolve()).as_posix()
+        for result in results
+        if result.source_files
+    }
+    if len(skill_paths) != 1:
+        raise ValueError("eval run contains inconsistent skill source paths")
+    config_paths = {
+        Path(result.config_path)
+        .resolve()
+        .relative_to(repo_root.resolve())
+        .as_posix()
+        for result in results
+        if result.source_files and result.config_path
+    }
+    if len(config_paths) > 1:
+        raise ValueError("eval run contains inconsistent config source paths")
+    eval_kinds = sorted({result.eval_kind for result in results if result.source_files})
+    selections: list[dict[str, Any]] | None = None
+    if manifest_results and all(
+        result.selected_eval_inputs is not None for result in manifest_results
+    ):
+        selections_by_key: dict[
+            tuple[str, str, str, str, tuple[str, ...]], dict[str, Any]
+        ] = {}
+        root = repo_root.resolve()
+        for result in manifest_results:
+            try:
+                definition_path = (
+                    Path(result.definition_path).resolve().relative_to(root).as_posix()
+                )
+                fixture_dir = (
+                    Path(result.fixture_dir).resolve().relative_to(root).as_posix()
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    "selected eval source path escapes the repository"
+                ) from exc
+            selected_inputs = tuple(result.selected_eval_inputs or [])
+            key = (
+                definition_path,
+                fixture_dir,
+                result.prompt_id,
+                result.eval_kind,
+                selected_inputs,
+            )
+            selections_by_key[key] = {
+                "definition_path": definition_path,
+                "fixture_dir": fixture_dir,
+                "prompt_id": result.prompt_id,
+                "eval_kind": result.eval_kind,
+                "eval_inputs": list(selected_inputs),
+            }
+        selections = [selections_by_key[key] for key in sorted(selections_by_key)]
+    skill_path = skill_paths.pop()
+    source_config_path = config_paths.pop() if config_paths else None
+    provenance: dict[str, Any] = {
+        "digest_version": SOURCE_MANIFEST_DIGEST_VERSION,
+        "digest": source_manifest_digest(
+            files,
+            digest_version=SOURCE_MANIFEST_DIGEST_VERSION,
+            eval_kinds=eval_kinds,
+            skill_path=skill_path,
+            config_path=source_config_path,
+            selections=selections,
+            selection_scope=selection_scope,
+        ),
+        "eval_kinds": eval_kinds,
+        "files": files,
+        "skill_path": skill_path,
+    }
+    if selections is not None:
+        provenance["selections"] = selections
+    if source_config_path is not None:
+        provenance["config_path"] = source_config_path
+    if selection_scope is not None:
+        provenance["selection_scope"] = selection_scope
+    return provenance
+
+
+def source_manifest_digest(
+    files: dict[str, str],
+    *,
+    digest_version: int,
+    eval_kinds: list[str] | None = None,
+    skill_path: str | None = None,
+    config_path: str | None = None,
+    selections: list[dict[str, Any]] | None = None,
+    selection_scope: str | None = None,
+) -> str:
+    digest = hashlib.sha256()
+    if digest_version == 1:
+        for path, file_digest in sorted(files.items()):
+            digest.update(path.encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(file_digest.encode("ascii"))
+            digest.update(b"\n")
+        return digest.hexdigest()
+    if digest_version != SOURCE_MANIFEST_DIGEST_VERSION:
+        raise ValueError(f"unsupported source manifest digest version: {digest_version}")
+    if eval_kinds is None or skill_path is None:
+        raise ValueError("source manifest v2 requires eval kinds and a skill path")
+    identity: dict[str, Any] = {
+        "digest_version": digest_version,
+        "eval_kinds": sorted(set(eval_kinds)),
+        "files": {path: files[path] for path in sorted(files)},
+        "skill_path": skill_path,
+    }
+    if config_path is not None:
+        identity["config_path"] = config_path
+    if selections is not None:
+        identity["selections"] = sorted(
+            selections,
+            key=lambda selection: (
+                selection["definition_path"],
+                selection["fixture_dir"],
+                selection["prompt_id"],
+                selection["eval_kind"],
+                tuple(selection["eval_inputs"]),
+            ),
+        )
+    if selection_scope is not None:
+        identity["selection_scope"] = selection_scope
+    digest.update(b"obstudio-source-manifest\0")
+    digest.update(
+        json.dumps(
+            identity,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    )
+    return digest.hexdigest()
+
+
+def source_selection_key(
+    selection: dict[str, Any],
+) -> tuple[str, str, str, str, tuple[str, ...]]:
+    return (
+        selection["definition_path"],
+        selection["fixture_dir"],
+        selection["prompt_id"],
+        selection["eval_kind"],
+        tuple(selection["eval_inputs"]),
+    )
+
+
+def full_validation_source_selections(
+    repo_root: Path,
+    skill: str,
+) -> list[dict[str, Any]]:
+    root = repo_root.resolve()
+    eval_root = root / "evals" if (root / "evals").is_dir() else root
+    selections: list[dict[str, Any]] = []
+    for path in iter_eval_files(eval_root):
+        layout = eval_file_layout(path)
+        if layout is None or layout.role is None:
+            continue
+        try:
+            definition = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"cannot read eval definition: {path}: {exc}") from exc
+        if not isinstance(definition, dict):
+            raise ValueError(f"eval definition must be an object: {path}")
+        if definition.get("skill") != skill:
+            continue
+        prompts = definition.get("prompts")
+        if not isinstance(prompts, list):
+            raise ValueError(f"eval definition prompts must be a list: {path}")
+        for prompt in prompts:
+            if not isinstance(prompt, dict):
+                raise ValueError(f"eval definition prompt must be an object: {path}")
+            prompt_id = prompt.get("id")
+            eval_inputs = prompt.get("eval_inputs", [])
+            if (
+                not isinstance(prompt_id, str)
+                or not prompt_id
+                or not isinstance(eval_inputs, list)
+                or any(not isinstance(value, str) for value in eval_inputs)
+            ):
+                raise ValueError(f"eval definition prompt selection is malformed: {path}")
+            selections.append(
+                {
+                    "definition_path": path.resolve().relative_to(root).as_posix(),
+                    "fixture_dir": layout.fixture_dir.resolve().relative_to(root).as_posix(),
+                    "prompt_id": prompt_id,
+                    "eval_kind": layout.role,
+                    "eval_inputs": eval_inputs,
+                }
+            )
+    return sorted(selections, key=source_selection_key)
+
+
+def source_manifest_selections(
+    source: dict[str, Any],
+    benchmark_path: Path,
+) -> list[dict[str, Any]] | None:
+    raw_selections = source.get("selections")
+    if raw_selections is None:
+        return None
+    if not isinstance(raw_selections, list) or not raw_selections:
+        raise ValueError(f"{benchmark_path}: source selections are malformed")
+
+    selections: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str, tuple[str, ...]]] = set()
+    for raw in raw_selections:
+        if not isinstance(raw, dict):
+            raise ValueError(f"{benchmark_path}: source selections are malformed")
+        definition_path = raw.get("definition_path")
+        fixture_dir = raw.get("fixture_dir")
+        prompt_id = raw.get("prompt_id")
+        eval_kind = raw.get("eval_kind")
+        eval_inputs = raw.get("eval_inputs")
+        if (
+            not isinstance(definition_path, str)
+            or not isinstance(fixture_dir, str)
+            or not isinstance(prompt_id, str)
+            or not prompt_id
+            or not isinstance(eval_kind, str)
+            or eval_kind not in {"rubric", "runtime", "sanity"}
+            or not isinstance(eval_inputs, list)
+            or any(not isinstance(value, str) for value in eval_inputs)
+        ):
+            raise ValueError(f"{benchmark_path}: source selections are malformed")
+        for relative in (definition_path, fixture_dir):
+            path = Path(relative)
+            if (
+                not relative
+                or path.is_absolute()
+                or path.as_posix() != relative
+                or any(part in {"", ".", ".."} for part in path.parts)
+            ):
+                raise ValueError(
+                    f"{benchmark_path}: source selection path is malformed"
+                )
+        key = source_selection_key(raw)
+        if key in seen:
+            raise ValueError(f"{benchmark_path}: source selections are duplicated")
+        seen.add(key)
+        selections.append(
+            {
+                "definition_path": definition_path,
+                "fixture_dir": fixture_dir,
+                "prompt_id": prompt_id,
+                "eval_kind": eval_kind,
+                "eval_inputs": eval_inputs,
+            }
+        )
+    return selections
+
+
+def verify_published_report_sources(repo_root: Path) -> list[Path]:
+    verified: list[Path] = []
+    root = repo_root.resolve()
+    benchmark_paths = sorted((root / "eval-reports").glob("*/*/benchmark.json"))
+    provenance_skills = {
+        path.parent.parent.name
+        for path in benchmark_paths
+        if isinstance(json.loads(path.read_text(encoding="utf-8")).get("source"), dict)
+    }
+    for benchmark_path in benchmark_paths:
+        benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+        source = benchmark.get("source")
+        if not isinstance(source, dict):
+            if benchmark_path.parent.parent.name in provenance_skills:
+                raise ValueError(f"{benchmark_path}: source manifest is missing; rerun the owning eval")
+            continue
+        files = source.get("files")
+        if not isinstance(files, dict) or not files:
+            raise ValueError(f"{benchmark_path}: source manifest is empty")
+        raw_digest_version = source.get("digest_version")
+        if raw_digest_version is None:
+            digest_version = 1
+        elif (
+            type(raw_digest_version) is not int
+            or raw_digest_version != SOURCE_MANIFEST_DIGEST_VERSION
+        ):
+            raise ValueError(
+                f"{benchmark_path}: source manifest digest version is malformed"
+            )
+        else:
+            digest_version = raw_digest_version
+        skill = benchmark.get("skill")
+        kind = benchmark.get("kind")
+        skill_path = source.get("skill_path")
+        if not isinstance(skill, str) or not isinstance(kind, str) or not isinstance(skill_path, str):
+            raise ValueError(f"{benchmark_path}: source identity is malformed")
+        eval_kinds = source.get("eval_kinds")
+        if eval_kinds is None:
+            if digest_version == SOURCE_MANIFEST_DIGEST_VERSION:
+                raise ValueError(f"{benchmark_path}: source eval kinds are malformed")
+            eval_kinds = [kind]
+        if (
+            not isinstance(eval_kinds, list)
+            or not eval_kinds
+            or any(
+                not isinstance(eval_kind, str)
+                or eval_kind not in {"rubric", "runtime", "sanity"}
+                for eval_kind in eval_kinds
+            )
+        ):
+            raise ValueError(f"{benchmark_path}: source eval kinds are malformed")
+        declared_eval_kinds = sorted(set(eval_kinds))
+        if kind != "validation" and declared_eval_kinds != [kind]:
+            raise ValueError(f"{benchmark_path}: source eval kinds do not match report kind")
+        selections = source_manifest_selections(source, benchmark_path)
+        if selections is not None and sorted(
+            {selection["eval_kind"] for selection in selections}
+        ) != declared_eval_kinds:
+            raise ValueError(
+                f"{benchmark_path}: source selections do not match eval kinds"
+            )
+        selection_scope = None
+        reconstruction_eval_kinds = declared_eval_kinds
+        if kind == "validation":
+            selection_scope = source.get("selection_scope")
+            if selection_scope == "full":
+                reconstruction_eval_kinds = ["rubric", "runtime", "sanity"]
+            elif selection_scope != "filtered":
+                raise ValueError(f"{benchmark_path}: validation source selection scope is malformed")
+        elif source.get("selection_scope") is not None:
+            raise ValueError(f"{benchmark_path}: source selection scope is malformed")
+        if (
+            digest_version == SOURCE_MANIFEST_DIGEST_VERSION
+            and kind == "validation"
+            and selection_scope == "full"
+        ):
+            if selections is None:
+                raise ValueError(
+                    f"{benchmark_path}: full validation source selections are missing"
+                )
+            try:
+                expected_selections = full_validation_source_selections(root, skill)
+            except (OSError, ValueError) as exc:
+                raise ValueError(
+                    f"{benchmark_path}: eval report inputs are stale; rerun the owning eval"
+                ) from exc
+            if sorted(selections, key=source_selection_key) != expected_selections:
+                raise ValueError(
+                    f"{benchmark_path}: eval report inputs are stale; rerun the owning eval"
+                )
+        resolved_skill_path = (root / skill_path).resolve()
+        try:
+            resolved_skill_path.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(f"{benchmark_path}: skill path escapes the repository: {skill_path}") from exc
+        source_config_path = source.get("config_path")
+        resolved_config_path = None
+        if source_config_path is not None:
+            if not isinstance(source_config_path, str) or not source_config_path:
+                raise ValueError(f"{benchmark_path}: source config path is malformed")
+            resolved_config_path = root / source_config_path
+            try:
+                resolved_config_path.resolve().relative_to(root)
+            except ValueError as exc:
+                raise ValueError(
+                    f"{benchmark_path}: config path escapes the repository: {source_config_path}"
+                ) from exc
+            metadata = benchmark.get("metadata")
+            if (
+                not isinstance(metadata, dict)
+                or metadata.get("config_path") != source_config_path
+            ):
+                raise ValueError(
+                    f"{benchmark_path}: source config path does not match report metadata"
+                )
+        try:
+            if selections is not None and selection_scope != "full":
+                current = source_input_digests_for_selections(
+                    root,
+                    skill,
+                    selections,
+                    resolved_skill_path,
+                    resolved_config_path,
+                )
+            else:
+                current = source_input_digests_for_kinds(
+                    root,
+                    skill,
+                    reconstruction_eval_kinds,
+                    resolved_skill_path,
+                    resolved_config_path,
+                )
+        except ValueError as exc:
+            raise ValueError(
+                f"{benchmark_path}: eval report inputs are stale; rerun the owning eval"
+            ) from exc
+        for relative, expected in files.items():
+            if not isinstance(relative, str) or not isinstance(expected, str):
+                raise ValueError(f"{benchmark_path}: source manifest is malformed")
+            path = (root / relative).resolve()
+            try:
+                path.relative_to(root)
+            except ValueError as exc:
+                raise ValueError(f"{benchmark_path}: source path escapes the repository: {relative}") from exc
+            if not path.is_file():
+                raise ValueError(f"{benchmark_path}: source input is missing: {relative}")
+        expected_digest = source.get("digest")
+        current_digest = source_manifest_digest(
+            current,
+            digest_version=digest_version,
+            eval_kinds=declared_eval_kinds,
+            skill_path=skill_path,
+            config_path=source_config_path,
+            selections=selections,
+            selection_scope=selection_scope,
+        )
+        if current != files or current_digest != expected_digest:
+            raise ValueError(f"{benchmark_path}: eval report inputs are stale; rerun the owning eval")
+        verified.append(benchmark_path)
+    return verified
 
 
 def aggregate_kind_case_group(kind: str, group: list[CaseResult]) -> dict[str, Any]:
@@ -231,6 +985,9 @@ def aggregate_kind_side(kind: str, results: list[CaseResult], side_key: str) -> 
         "tokens": sum(side.tokens for side in sides),
         "agent_tokens": sum(side.agent_tokens for side in sides),
         "error_count": sum(len(side.errors) for side in sides),
+        "agent_usage": aggregate_usage(
+            [side.agent_usage for side in sides], expected_records=len(sides)
+        ),
     }
     if kind == "rubric":
         rubric = [grade for side in sides if (grade := load_rubric_grade(side)) is not None]
@@ -240,6 +997,9 @@ def aggregate_kind_side(kind: str, results: list[CaseResult], side_key: str) -> 
         summary["rubric"] = None if not rubric else {"passed": rubric_passed, "total": rubric_total, "average_score": average(scores) if scores else None}
         summary["rubric_tokens"] = sum(side.rubric_tokens for side in sides)
         summary["rubric_duration_seconds"] = round(sum(side.rubric_duration_seconds for side in sides), 3)
+        summary["rubric_usage"] = aggregate_usage(
+            [side.rubric_usage for side in sides], expected_records=len(sides)
+        )
     else:
         summary["checks"] = aggregate_check_category(sides, kind)
     return summary
@@ -257,6 +1017,10 @@ def aggregate_kind_evals(evals: list[dict[str, Any]], side_key: str, kind: str) 
         "tokens": sum(int(side["tokens"]) for side in sides),
         "agent_tokens": sum(int(side["agent_tokens"]) for side in sides),
         "error_count": sum(int(side["error_count"]) for side in sides),
+        "agent_usage": aggregate_usage(
+            [side.get("agent_usage") for side in sides],
+            expected_records=sum(int(side["prompt_count"]) for side in sides),
+        ),
     }
     if kind == "rubric":
         rubric_summaries = [side["rubric"] for side in sides if side.get("rubric") is not None]
@@ -268,6 +1032,10 @@ def aggregate_kind_evals(evals: list[dict[str, Any]], side_key: str, kind: str) 
         }
         summary["rubric_tokens"] = sum(int(side.get("rubric_tokens") or 0) for side in sides)
         summary["rubric_duration_seconds"] = round(sum(float(side.get("rubric_duration_seconds") or 0.0) for side in sides), 3)
+        summary["rubric_usage"] = aggregate_usage(
+            [side.get("rubric_usage") for side in sides],
+            expected_records=sum(int(side["prompt_count"]) for side in sides),
+        )
     else:
         checks = [side["checks"] for side in sides]
         summary["checks"] = {
@@ -314,6 +1082,7 @@ def render_kind_report(skill: str, benchmark: dict[str, Any]) -> str:
     lines = [f"# {skill} {template.summary_title.replace(' Summary', '')} Codex Eval Report"]
     lines.extend(render_environment_table(benchmark["metadata"], "Mode"))
     lines.extend(render_kind_summary_section(template, benchmark["evals"]))
+    lines.extend(render_kind_usage_sections(kind, benchmark["evals"]))
     lines.extend(render_kind_failure_section(template, benchmark["failures"]))
     if template.evidence_title:
         lines.extend(["", f"## {template.evidence_title}", ""])
@@ -350,6 +1119,305 @@ def render_kind_summary_section(template: ReportTemplate, evals: list[dict[str, 
             )
         )
     return lines
+
+
+def render_kind_usage_sections(kind: str, evals: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    agent_rows = usage_rows(evals, "agent_usage")
+    if agent_rows:
+        lines.extend(render_usage_table("Agent Token Usage", agent_rows))
+    if kind == "rubric":
+        judge_rows = usage_rows(evals, "rubric_usage")
+        if judge_rows:
+            lines.extend(render_usage_table("Judge Token Usage", judge_rows))
+    return lines
+
+
+def render_usage_table(title: str, rows: list[dict[str, Any]]) -> list[str]:
+    lines = [
+        "",
+        f"## {title}",
+        "",
+        "| Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |",
+        "|---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        lines.append(
+            "| {mode} | {eval_id} | {service} | {side} | {provider} | {source} | {status} | {coverage} | {input} | {cached} | {creation} | {output} | {reasoning} | {provider_total} | {derived_total} |".format(
+                mode=markdown_cell(row["mode"]),
+                eval_id=markdown_cell(row["eval_id"]),
+                service=markdown_cell(row["service"]),
+                side=markdown_cell(row["side"]),
+                provider=markdown_cell(row["provider"]),
+                source=markdown_cell(row["source"]),
+                status=markdown_cell(row["status"]),
+                coverage=markdown_cell(row["coverage"]),
+                input=markdown_cell(row["input_tokens"]),
+                cached=markdown_cell(row["cached_input_tokens"]),
+                creation=markdown_cell(row["cache_creation_input_tokens"]),
+                output=markdown_cell(row["output_tokens"]),
+                reasoning=markdown_cell(row["reasoning_output_tokens"]),
+                provider_total=markdown_cell(row["provider_total_tokens"]),
+                derived_total=markdown_cell(row["derived_total_tokens"]),
+            )
+        )
+    return lines
+
+
+def usage_rows(evals: list[dict[str, Any]], usage_key: str) -> list[dict[str, Any]]:
+    if not any(
+        side.get(usage_key) is not None
+        for item in evals
+        for side_key in ("with_skill", "with_baseline")
+        if (side := item.get(side_key)) is not None
+    ):
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for item in evals:
+        for side_key in ("with_skill", "with_baseline"):
+            side = item.get(side_key)
+            if side is None:
+                continue
+            usage = side.get(usage_key)
+            rows.append(
+                {
+                    "mode": item.get("mode"),
+                    "eval_id": item.get("id"),
+                    "service": item.get("case"),
+                    "side": side_key,
+                    "provider": usage.get("provider", "unknown") if usage else "unknown",
+                    "source": usage.get("source", "unknown") if usage else "unknown",
+                    "status": usage_status(usage, int(side.get("prompt_count") or 0)),
+                    "coverage": usage_coverage(usage, int(side.get("prompt_count") or 0)),
+                    **{
+                        field: usage_value(usage, field, int(side.get("prompt_count") or 0))
+                        for field in TOKEN_USAGE_FIELDS
+                    },
+                }
+            )
+    return rows
+
+
+def usage_payload(value: TokenUsage | dict[str, Any] | None) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if isinstance(value, TokenUsage):
+        payload = value.model_dump(mode="json")
+        payload["effective_total_tokens"] = value.total_tokens
+        return payload
+    payload = dict(value)
+    if "effective_total_tokens" not in payload:
+        payload["effective_total_tokens"] = preferred_usage_total(payload)
+    return payload
+
+
+def preferred_usage_total(payload: dict[str, Any]) -> int | None:
+    coverage = payload.get("coverage")
+    if isinstance(coverage, dict):
+        records = int(coverage.get("record_count") or 0)
+        preferred_count = int(coverage.get("preferred_total_count") or 0)
+        if records == 0 or preferred_count != records:
+            return None
+        field_counts = coverage.get("field_counts") or {}
+        provider_count = int(field_counts.get("provider_total_tokens") or 0)
+        if (
+            provider_count == records
+            and payload.get("provider_total_tokens") is not None
+        ):
+            return int(payload["provider_total_tokens"])
+        derived_count = int(field_counts.get("derived_total_tokens") or 0)
+        if (
+            provider_count == 0
+            and derived_count == records
+            and payload.get("derived_total_tokens") is not None
+        ):
+            return int(payload["derived_total_tokens"])
+        return None
+    provider_total = payload.get("provider_total_tokens")
+    if provider_total is not None:
+        return int(provider_total)
+    derived_total = payload.get("derived_total_tokens")
+    if derived_total is not None:
+        return int(derived_total)
+    return None
+
+
+def aggregate_usage(
+    usages: list[TokenUsage | dict[str, Any] | None],
+    *,
+    expected_records: int | None = None,
+) -> dict[str, Any] | None:
+    payloads = [usage_payload(usage) for usage in usages]
+    modeled = [payload for payload in payloads if payload is not None]
+    if not modeled:
+        return None
+
+    field_counts = {field: 0 for field in TOKEN_USAGE_FIELDS}
+    field_values = {field: 0 for field in TOKEN_USAGE_FIELDS}
+    providers: list[str] = []
+    sources: list[str] = []
+    record_count = 0
+    modeled_count = 0
+    observed_count = 0
+    recognized_count = 0
+    usage_record_count = 0
+    selected_record_count = 0
+    preferred_total_count = 0
+    effective_total = 0
+    effective_total_count = 0
+
+    for payload in modeled:
+        coverage = payload.get("coverage")
+        if isinstance(coverage, dict):
+            child_records = int(coverage.get("record_count") or 0)
+            child_modeled = int(coverage.get("modeled_count") or 0)
+            child_observed = int(coverage.get("observed_count") or 0)
+            child_recognized = int(coverage.get("recognized_count") or 0)
+            child_field_counts = coverage.get("field_counts") or {}
+            child_preferred_count = coverage.get("preferred_total_count")
+            if child_preferred_count is None:
+                provider_count = int(
+                    child_field_counts.get("provider_total_tokens") or 0
+                )
+                derived_count = int(
+                    child_field_counts.get("derived_total_tokens") or 0
+                )
+                if (
+                    provider_count == child_records
+                    and payload.get("provider_total_tokens") is not None
+                ):
+                    child_preferred_count = child_records
+                elif (
+                    provider_count == 0
+                    and derived_count == child_records
+                    and payload.get("derived_total_tokens") is not None
+                ):
+                    child_preferred_count = child_records
+                else:
+                    child_preferred_count = 0
+        else:
+            child_records = 1
+            child_modeled = 1
+            child_observed = int(bool(payload.get("observed")))
+            child_recognized = int(
+                payload.get("effective_total_tokens") is not None
+                or any(payload.get(field) is not None for field in TOKEN_USAGE_FIELDS)
+            )
+            child_field_counts = {
+                field: int(payload.get(field) is not None)
+                for field in TOKEN_USAGE_FIELDS
+            }
+            child_preferred_count = int(
+                payload.get("effective_total_tokens") is not None
+            )
+
+        record_count += child_records
+        modeled_count += child_modeled
+        observed_count += child_observed
+        recognized_count += child_recognized
+        usage_record_count += int(payload.get("usage_record_count") or 0)
+        selected_record_count += int(payload.get("selected_record_count") or 0)
+        preferred_total_count += int(child_preferred_count or 0)
+        child_effective_total = payload.get("effective_total_tokens")
+        if child_effective_total is not None and int(child_preferred_count or 0) > 0:
+            effective_total += int(child_effective_total)
+            effective_total_count += int(child_preferred_count or 0)
+        providers.append(str(payload.get("provider") or "unknown"))
+        sources.append(str(payload.get("source") or "unknown"))
+
+        for field in TOKEN_USAGE_FIELDS:
+            count = int(child_field_counts.get(field) or 0)
+            field_counts[field] += count
+            if count and payload.get(field) is not None:
+                field_values[field] += int(payload[field])
+
+    record_count = max(record_count, expected_records or len(usages))
+    result: dict[str, Any] = {
+        "provider": combined_label(providers),
+        "source": combined_label(sources),
+        "observed": observed_count > 0,
+        "usage_record_count": usage_record_count,
+        "selected_record_count": selected_record_count,
+        **{
+            field: field_values[field] if field_counts[field] else None
+            for field in TOKEN_USAGE_FIELDS
+        },
+        "effective_total_tokens": (
+            effective_total if effective_total_count else None
+        ),
+        "coverage": {
+            "record_count": record_count,
+            "modeled_count": modeled_count,
+            "observed_count": observed_count,
+            "recognized_count": recognized_count,
+            "preferred_total_count": preferred_total_count,
+            "field_counts": field_counts,
+        },
+    }
+    return result
+
+
+def combined_label(values: list[str]) -> str:
+    unique = sorted(set(value or "unknown" for value in values))
+    if not unique:
+        return "unknown"
+    if len(unique) == 1:
+        return unique[0]
+    return "mixed"
+
+
+def usage_status(usage: dict[str, Any] | None, expected_records: int) -> str:
+    if usage is None:
+        return "legacy"
+    coverage = usage.get("coverage") or {}
+    records = int(coverage.get("record_count") or expected_records or 1)
+    modeled = int(coverage.get("modeled_count") or 0)
+    observed = int(coverage.get("observed_count") or 0)
+    recognized = int(coverage.get("recognized_count") or 0)
+    if modeled == 0:
+        return "legacy"
+    if observed == 0:
+        return "absent"
+    if recognized == 0:
+        return "unrecognized"
+    preferred_totals = int(coverage.get("preferred_total_count") or 0)
+    if recognized < records or preferred_totals < records:
+        return "partial"
+    return "measured"
+
+
+def usage_coverage(usage: dict[str, Any] | None, expected_records: int) -> str:
+    if usage is None:
+        return f"0/{expected_records} modeled"
+    coverage = usage.get("coverage") or {}
+    records = int(coverage.get("record_count") or expected_records or 1)
+    modeled = int(coverage.get("modeled_count") or 0)
+    observed = int(coverage.get("observed_count") or 0)
+    recognized = int(coverage.get("recognized_count") or 0)
+    parts = [f"{recognized}/{records} recognized"]
+    if observed != records or observed != recognized:
+        parts.append(f"{observed}/{records} observed")
+    if modeled != records:
+        parts.append(f"{modeled}/{records} modeled")
+    return "; ".join(parts)
+
+
+def usage_value(
+    usage: dict[str, Any] | None, field: str, expected_records: int
+) -> str:
+    if usage is None:
+        return "unknown"
+    coverage = usage.get("coverage") or {}
+    records = int(coverage.get("record_count") or expected_records or 1)
+    field_counts = coverage.get("field_counts") or {}
+    count = int(field_counts.get(field) or 0)
+    value = usage.get(field)
+    if count == 0 or value is None:
+        return "unknown"
+    if count < records:
+        return f"{int(value)} ({count}/{records})"
+    return str(int(value))
 
 
 def render_kind_failure_section(template: ReportTemplate, failures: list[dict[str, str]]) -> list[str]:
@@ -503,6 +1571,8 @@ def side_summary(side: SideResult | None) -> dict[str, Any] | None:
         "tokens": side.tokens,
         "agent_tokens": side.agent_tokens,
         "rubric_tokens": side.rubric_tokens,
+        "agent_usage": usage_payload(side.agent_usage),
+        "rubric_usage": usage_payload(side.rubric_usage),
         "errors": side.errors,
         "trace_path": side.trace_path,
         "final_message_path": side.final_message_path,
@@ -579,6 +1649,12 @@ def aggregate_side(results: list[CaseResult], side_key: str) -> dict[str, Any] |
         "tokens": sum(side.tokens for side in sides),
         "agent_tokens": sum(side.agent_tokens for side in sides),
         "rubric_tokens": sum(side.rubric_tokens for side in sides),
+        "agent_usage": aggregate_usage(
+            [side.agent_usage for side in sides], expected_records=len(sides)
+        ),
+        "rubric_usage": aggregate_usage(
+            [side.rubric_usage for side in sides], expected_records=len(sides)
+        ),
         "error_count": sum(len(side.errors) for side in sides),
     }
 
@@ -663,7 +1739,9 @@ def build_validation_benchmark(
             }
         )
 
-    return {
+    benchmark = {
+        "schema_version": 1,
+        "kind": "validation",
         "mode": "validation",
         "skill": skill,
         "metadata": metadata,
@@ -677,6 +1755,13 @@ def build_validation_benchmark(
             "runtime_check_count": sum(result.runtime_check_count for result in results),
         },
     }
+    selection_scope = metadata.get("validation_scope")
+    if selection_scope not in {"filtered", "full"}:
+        raise ValueError("validation report metadata is missing its selection scope")
+    provenance = source_provenance(repo_root, results, selection_scope=selection_scope)
+    if provenance:
+        benchmark["source"] = provenance
+    return benchmark
 
 
 def render_validation_report(skill: str, benchmark: dict[str, Any]) -> str:
@@ -719,6 +1804,10 @@ def report_metadata(
     metadata: dict[str, Any] | None,
 ) -> dict[str, Any]:
     normalized = dict(metadata or {})
+    # Raw run manifests need the repository root to locate artifacts, but the
+    # published benchmark is portable and must not expose a developer's local
+    # account name or workspace layout.
+    normalized.pop("repo_root", None)
     normalized.setdefault("mode", mode)
     normalized.setdefault("eval_kind", "validation" if mode == "validation" else "standard")
     normalized.setdefault("skill", skill)
@@ -844,12 +1933,64 @@ def format_rubric(side: dict[str, Any] | None) -> str:
 def format_tokens(side: dict[str, Any] | None) -> str:
     if side is None:
         return "-"
-    tokens = int(side.get("tokens") or 0)
+    usage = side.get("agent_usage")
+    if usage is not None:
+        tokens = complete_usage_total(usage)
+        if tokens is None:
+            coverage = usage.get("coverage") or {}
+            records = int(coverage.get("record_count") or 1)
+            preferred_count = int(coverage.get("preferred_total_count") or 0)
+            if preferred_count != records or "agent_tokens" not in side:
+                return "unknown"
+            tokens = int(side.get("agent_tokens") or 0)
+        return compact_token_count(tokens)
+    combined_tokens = int(side.get("tokens") or 0)
+    agent_tokens = int(side.get("agent_tokens") or 0)
+    rubric_tokens = int(side.get("rubric_tokens") or 0)
+    if agent_tokens != 0 or rubric_tokens != 0 or combined_tokens == 0:
+        tokens = agent_tokens
+    else:
+        tokens = combined_tokens
+    return compact_token_count(tokens)
+
+
+def complete_usage_total(usage: dict[str, Any]) -> int | None:
+    coverage = usage.get("coverage") or {}
+    records = int(coverage.get("record_count") or 1)
+    preferred_count = int(coverage.get("preferred_total_count") or 0)
+    if "effective_total_tokens" in usage:
+        if (
+            preferred_count == records
+            and usage.get("effective_total_tokens") is not None
+        ):
+            return int(usage["effective_total_tokens"])
+        return None
+    field_counts = coverage.get("field_counts") or {}
+    provider_count = int(field_counts.get("provider_total_tokens") or 0)
+    if provider_count == records and usage.get("provider_total_tokens") is not None:
+        return int(usage["provider_total_tokens"])
+    if provider_count > 0:
+        return None
+    derived_count = int(field_counts.get("derived_total_tokens") or 0)
+    if derived_count == records and usage.get("derived_total_tokens") is not None:
+        return int(usage["derived_total_tokens"])
+    return None
+
+
+def compact_token_count(tokens: int) -> str:
     if tokens >= 1_000_000:
-        return f"{tokens / 1_000_000:.1f}M"
+        return compact_scaled_token_count(tokens, 1_000_000, "M")
     if tokens >= 1_000:
-        return f"{tokens / 1_000:.1f}K"
+        return compact_scaled_token_count(tokens, 1_000, "K")
     return str(tokens)
+
+
+def compact_scaled_token_count(tokens: int, scale: int, suffix: str) -> str:
+    tenths, remainder = divmod(tokens * 10, scale)
+    if remainder * 2 > scale or (remainder * 2 == scale and tenths % 2 == 1):
+        tenths += 1
+    whole, decimal = divmod(tenths, 10)
+    return f"{whole}.{decimal}{suffix}"
 
 
 def format_duration(side: dict[str, Any] | None) -> str:

@@ -1,5 +1,6 @@
 import * as assert from 'node:assert/strict';
 import * as cp from 'node:child_process';
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as net from 'node:net';
@@ -7,11 +8,17 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { suite, test } from 'mocha';
 import * as vscode from 'vscode';
+import {
+	caseInsensitiveHeaderValue,
+	getCodexObstudioAuthorization,
+	getCodexObstudioSection,
+} from '../agent-integration-config';
 
 type RuntimeState = {
 	observerPort?: number;
 	observerUrl?: string;
 	panelHtml?: string;
+	panelTitle?: string;
 	panelVisible: boolean;
 	sharedMode: boolean;
 	statusBarCommand?: string;
@@ -23,6 +30,19 @@ type RuntimeState = {
 type SharedObserverHandle = {
 	baseUrl: string;
 	dispose: () => Promise<void>;
+	statePath?: string;
+};
+
+type SharedObserverPorts = {
+	grpc?: number;
+	http?: number;
+	ui?: number;
+};
+
+type ResolvedSharedObserverPorts = {
+	grpc: number;
+	http: number;
+	ui: number;
 };
 
 type FileSnapshot = {
@@ -32,6 +52,18 @@ type FileSnapshot = {
 };
 
 const sharedObserverStartupRetries = 5;
+
+function setTestEnvironmentVariable(name: string, value: string): () => void {
+	const original = process.env[name];
+	process.env[name] = value;
+	return () => {
+		if (original === undefined) {
+			delete process.env[name];
+			return;
+		}
+		process.env[name] = original;
+	};
+}
 
 async function waitFor<T>(load: () => Promise<T>, ready: (value: T) => boolean, timeoutMs: number): Promise<T> {
 	const deadline = Date.now() + timeoutMs;
@@ -52,7 +84,13 @@ async function waitFor<T>(load: () => Promise<T>, ready: (value: T) => boolean, 
 	if (lastError instanceof Error) {
 		throw lastError;
 	}
-	throw new Error('Timed out waiting for condition');
+	let lastDescription: string;
+	try {
+		lastDescription = JSON.stringify(last);
+	} catch {
+		lastDescription = String(last);
+	}
+	throw new Error(`Timed out waiting for condition; last value: ${lastDescription}`);
 }
 
 async function getExtension() {
@@ -85,6 +123,33 @@ async function getAvailablePort(): Promise<number> {
 	});
 }
 
+async function resolveSharedObserverPorts(ports: SharedObserverPorts): Promise<ResolvedSharedObserverPorts> {
+	const used = new Set<number>();
+	const resolvePort = async (name: keyof SharedObserverPorts): Promise<number> => {
+		const configured = ports[name];
+		if (configured !== undefined) {
+			if (used.has(configured)) {
+				throw new Error(`Shared Splunk Observability Studio test port ${configured} is configured more than once.`);
+			}
+			used.add(configured);
+			return configured;
+		}
+		for (let attempt = 0; attempt < 20; attempt += 1) {
+			const candidate = await getAvailablePort();
+			if (!used.has(candidate)) {
+				used.add(candidate);
+				return candidate;
+			}
+		}
+		throw new Error(`Unable to allocate a distinct ${name} test port.`);
+	};
+	return {
+		ui: await resolvePort('ui'),
+		grpc: await resolvePort('grpc'),
+		http: await resolvePort('http'),
+	};
+}
+
 function isRetryableSharedObserverStartupFailure(stderr: string): boolean {
 	return /\bEADDRINUSE\b/i.test(stderr) || /\baddress already in use\b/i.test(stderr);
 }
@@ -115,7 +180,7 @@ async function waitForHttpOrExit(url: string, child: cp.ChildProcess, timeoutMs:
 
 	while (Date.now() < deadline) {
 		if (child.exitCode !== null || child.killed) {
-			throw new Error(`Observer exited before becoming ready at ${url}.`);
+			throw new Error(`Splunk Observability Studio exited before becoming ready at ${url}.`);
 		}
 
 		try {
@@ -133,7 +198,7 @@ async function waitForHttpOrExit(url: string, child: cp.ChildProcess, timeoutMs:
 	}
 
 	if (child.exitCode !== null || child.killed) {
-		throw new Error(`Observer exited before becoming ready at ${url}.`);
+		throw new Error(`Splunk Observability Studio exited before becoming ready at ${url}.`);
 	}
 	if (lastError instanceof Error) {
 		throw lastError;
@@ -141,18 +206,27 @@ async function waitForHttpOrExit(url: string, child: cp.ChildProcess, timeoutMs:
 	throw new Error(`Timed out waiting for ${url}`);
 }
 
-async function startSharedObserver(binaryPath: string): Promise<SharedObserverHandle> {
+async function startSharedObserver(
+	binaryPath: string,
+	envOverrides: Record<string, string> = {},
+	ports: SharedObserverPorts = {},
+): Promise<SharedObserverHandle> {
 	let lastFailure: Error | undefined;
+	const stateDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-shared-state-'));
+	const statePath = path.join(stateDirectory, 'shared-observer.json');
 
 	for (let attempt = 1; attempt <= sharedObserverStartupRetries; attempt += 1) {
-		const port = await getAvailablePort();
-		const grpcPort = await getAvailablePort();
-		const httpPort = await getAvailablePort();
+		const resolvedPorts = await resolveSharedObserverPorts(ports);
+		const port = resolvedPorts.ui;
+		const grpcPort = resolvedPorts.grpc;
+		const httpPort = resolvedPorts.http;
 		const baseUrl = `http://127.0.0.1:${port}`;
 		const child = cp.spawn(binaryPath, [], {
 			env: {
 				...process.env,
+				...envOverrides,
 				HOST: '127.0.0.1',
+				OBSTUDIO_SHARED_OBSERVER_STATE_PATH: statePath,
 				PORT: String(port),
 				OTLP_GRPC_PORT: String(grpcPort),
 				OTLP_HTTP_PORT: String(httpPort),
@@ -170,7 +244,9 @@ async function startSharedObserver(binaryPath: string): Promise<SharedObserverHa
 				baseUrl,
 				dispose: async () => {
 					await terminateChild(child);
+					cleanupTempDir(stateDirectory);
 				},
+				statePath,
 			};
 		} catch (error) {
 			await terminateChild(child);
@@ -180,14 +256,16 @@ async function startSharedObserver(binaryPath: string): Promise<SharedObserverHa
 			if (attempt < sharedObserverStartupRetries && isRetryableSharedObserverStartupFailure(stderr)) {
 				continue;
 			}
+			cleanupTempDir(stateDirectory);
 			throw lastFailure;
 		}
 	}
 
+	cleanupTempDir(stateDirectory);
 	throw lastFailure ?? new Error('shared observer failed to start');
 }
 
-async function startSlowSharedObserver(delayMs: number): Promise<SharedObserverHandle> {
+async function startSlowSharedObserver(delayMs: number, version: string): Promise<SharedObserverHandle> {
 	const port = await getAvailablePort();
 	const baseUrl = `http://127.0.0.1:${port}`;
 	let healthRequestCount = 0;
@@ -201,12 +279,13 @@ async function startSlowSharedObserver(delayMs: number): Promise<SharedObserverH
 			response.end(JSON.stringify({
 				apiVersion: 'v1',
 				kind: 'obstudio',
+				version,
 			}));
 			return;
 		}
 
 		response.setHeader('Content-Type', 'text/html; charset=utf-8');
-		response.end('<!doctype html><title>Observer</title>');
+		response.end('<!doctype html><title>Splunk Observability Studio</title>');
 	});
 
 	await new Promise<void>((resolve, reject) => {
@@ -230,12 +309,25 @@ async function startSlowSharedObserver(delayMs: number): Promise<SharedObserverH
 	};
 }
 
-async function startDiscoverableSharedObserver(firstHealthDelayMs: number): Promise<SharedObserverHandle> {
+async function startDiscoverableSharedObserver(
+	firstHealthDelayMs: number,
+	cloudAuthorizations?: string[],
+	version?: string,
+): Promise<SharedObserverHandle> {
 	const port = await getAvailablePort();
-	const baseUrl = `http://127.0.0.1:${port}`;
+	const baseUrl = 'http://127.0.0.1:' + port;
+	const mcpUrl = baseUrl + '/mcp';
 	let healthRequestCount = 0;
+	const cloudStatus = {
+		connected: false,
+		enabled: false,
+		metrics: { configured: false },
+		traces: { configured: false },
+		version: 'V'.repeat(43),
+	};
 	const server = http.createServer(async (request, response) => {
-		if (request.url === '/api/health') {
+		const requestUrl = new URL(request.url ?? '/', baseUrl);
+		if (requestUrl.pathname === '/api/health') {
 			healthRequestCount += 1;
 			if (healthRequestCount === 1) {
 				await new Promise((resolve) => setTimeout(resolve, firstHealthDelayMs));
@@ -244,16 +336,54 @@ async function startDiscoverableSharedObserver(firstHealthDelayMs: number): Prom
 			response.end(JSON.stringify({
 				apiVersion: 'v1',
 				endpoints: {
+					mcp: mcpUrl,
 					otlpGrpc: '127.0.0.1:4317',
 					otlpHttp: 'http://127.0.0.1:4318',
 				},
 				kind: 'obstudio',
+				...(version === undefined ? {} : { version }),
+			}));
+			return;
+		}
+		if (requestUrl.pathname === '/api/splunk/export' && request.method === 'GET') {
+			response.setHeader('Content-Type', 'application/json');
+			response.end(JSON.stringify(cloudStatus));
+			return;
+		}
+		if (requestUrl.pathname === '/api/splunk/export/refresh' && request.method === 'POST') {
+			response.setHeader('Content-Type', 'application/json');
+			response.end(JSON.stringify(cloudStatus));
+			return;
+		}
+		if (requestUrl.pathname === '/api/splunk/export/realm' && cloudAuthorizations !== undefined) {
+			cloudAuthorizations.push(request.headers.authorization ?? '');
+			if (request.method !== 'POST' || request.headers.authorization !== undefined) {
+				response.writeHead(400, { 'Content-Type': 'application/json' });
+				response.end(JSON.stringify({ error: 'unexpected authorization' }));
+				return;
+			}
+			response.setHeader('Content-Type', 'application/json');
+			response.end(JSON.stringify({ realm: 'us1' }));
+			return;
+		}
+		if (requestUrl.pathname === '/api/splunk/free-account' && cloudAuthorizations !== undefined) {
+			cloudAuthorizations.push(request.headers.authorization ?? '');
+			if (request.method !== 'POST' || request.headers.authorization !== undefined) {
+				response.writeHead(400, { 'Content-Type': 'application/json' });
+				response.end(JSON.stringify({ error: 'unexpected authorization' }));
+				return;
+			}
+			response.setHeader('Content-Type', 'application/json');
+			response.end(JSON.stringify({
+				intakeAcknowledged: true,
+				realm: 'us1',
+				region: 'us',
 			}));
 			return;
 		}
 
 		response.setHeader('Content-Type', 'text/html; charset=utf-8');
-		response.end('<!doctype html><title>Observer</title>');
+		response.end('<!doctype html><title>Splunk Observability Studio</title>');
 	});
 
 	await new Promise<void>((resolve, reject) => {
@@ -275,6 +405,261 @@ async function startDiscoverableSharedObserver(firstHealthDelayMs: number): Prom
 			});
 		},
 	};
+}
+
+function writeObserverProcessFixture(
+	binaryPath: string,
+	version: string,
+	options: { legacyBearerAuth: boolean },
+): void {
+	const source = `#!/usr/bin/env node
+const http = require('node:http');
+const net = require('node:net');
+
+const host = process.env.HOST || '127.0.0.1';
+const port = Number(process.env.PORT);
+const otlpHttpPort = Number(process.env.OTLP_HTTP_PORT || '4318');
+const otlpGrpcPort = Number(process.env.OTLP_GRPC_PORT || '4317');
+const baseUrl = 'http://' + host + ':' + port;
+const mcpUrl = baseUrl + '/mcp';
+const controlToken = process.env.OBSTUDIO_CONTROL_TOKEN || '';
+const status = {
+  connected: false,
+  enabled: false,
+  metrics: { configured: false },
+  traces: { configured: false },
+  version: 'VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV',
+};
+
+function sendJson(response, statusCode, value) {
+  response.writeHead(statusCode, { 'Content-Type': 'application/json' });
+  response.end(JSON.stringify(value));
+}
+
+const server = http.createServer((request, response) => {
+  const requestUrl = new URL(request.url || '/', baseUrl);
+  if (requestUrl.pathname === '/api/health') {
+    const health = {
+      apiVersion: 'v1',
+      endpoints: {
+        mcp: mcpUrl,
+        otlpGrpc: '127.0.0.1:' + otlpGrpcPort,
+        otlpHttp: 'http://127.0.0.1:' + otlpHttpPort,
+      },
+      kind: 'obstudio',
+      mode: process.env.OBSTUDIO_MODE || 'standalone',
+      owner: process.env.OBSTUDIO_OWNER || 'cli',
+      version: ${JSON.stringify(version)},
+    };
+    sendJson(response, 200, health);
+    return;
+  }
+
+  const authorized = request.headers.authorization === 'Bearer ' + controlToken;
+  if (requestUrl.pathname === '/api/splunk/export' && request.method === 'GET') {
+    sendJson(response, 200, status);
+    return;
+  }
+  if (${JSON.stringify(options.legacyBearerAuth)} && !authorized) {
+    sendJson(response, 401, { error: 'unauthorized' });
+    return;
+  }
+  if (!${JSON.stringify(options.legacyBearerAuth)} && request.headers.authorization !== undefined) {
+    sendJson(response, 400, { error: 'unexpected authorization' });
+    return;
+  }
+  if (requestUrl.pathname === '/api/splunk/export/refresh') {
+    sendJson(response, 200, status);
+    return;
+  }
+  if (requestUrl.pathname === '/api/splunk/free-account') {
+    sendJson(response, 200, { intakeAcknowledged: true, realm: 'us1', region: 'us' });
+    return;
+  }
+  sendJson(response, 404, { error: 'not found' });
+});
+
+const otlpHttpServer = http.createServer((_request, response) => {
+  response.writeHead(204);
+  response.end();
+});
+const otlpGrpcServer = net.createServer((socket) => socket.end());
+let readyReceivers = 0;
+function receiverReady() {
+  readyReceivers += 1;
+  if (readyReceivers === 2) {
+    server.listen(port, host);
+  }
+}
+otlpHttpServer.listen(otlpHttpPort, host, receiverReady);
+otlpGrpcServer.listen(otlpGrpcPort, host, receiverReady);
+
+let stopping = false;
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    if (stopping) return;
+    stopping = true;
+    let openServers = 3;
+    const closed = () => {
+      openServers -= 1;
+      if (openServers === 0) process.exit(0);
+    };
+    server.close(closed);
+    otlpHttpServer.close(closed);
+    otlpGrpcServer.close(closed);
+  });
+}
+`;
+	fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
+	fs.writeFileSync(binaryPath, source, { mode: 0o755 });
+	fs.chmodSync(binaryPath, 0o755);
+}
+
+function writeNativeLegacyObserverProcessFixture(
+	binaryPath: string,
+	version: string,
+	options: { shutdownDelayMs?: number; vacateWhenFileExists?: string } = {},
+): void {
+	const sourcePath = `${binaryPath}.go`;
+	const source = `package main
+
+import (
+	"encoding/json"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+)
+
+func env(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func sendJSON(response http.ResponseWriter, status int, value any) {
+	response.Header().Set("Content-Type", "application/json")
+	response.WriteHeader(status)
+	_ = json.NewEncoder(response).Encode(value)
+}
+
+func main() {
+	host := env("HOST", "127.0.0.1")
+	port := env("PORT", "3000")
+	otlpHTTPPort := env("OTLP_HTTP_PORT", "4318")
+	otlpGRPCPort := env("OTLP_GRPC_PORT", "4317")
+	controlToken := os.Getenv("OBSTUDIO_CONTROL_TOKEN")
+	baseURL := "http://" + host + ":" + port
+	freeAccountStatus := http.StatusMethodNotAllowed
+	freeAccountError := "method not allowed"
+	if ${JSON.stringify(version)} == "0.0.20" {
+		freeAccountStatus = http.StatusUnauthorized
+		freeAccountError = "unauthorized"
+	}
+	status := map[string]any{
+		"connected": false,
+		"enabled": false,
+		"metrics": map[string]any{"configured": false},
+		"traces": map[string]any{"configured": false},
+		"version": "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV",
+	}
+	var observerListener net.Listener
+	var otlpHTTPListener net.Listener
+	var otlpGRPCListener net.Listener
+	vacatePath := ${JSON.stringify(options.vacateWhenFileExists ?? '')}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(response http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.URL.Path == "/api/health":
+			if vacatePath != "" {
+				if _, statErr := os.Stat(vacatePath); statErr == nil {
+					_ = observerListener.Close()
+					_ = otlpHTTPListener.Close()
+					_ = otlpGRPCListener.Close()
+					vacatePath = ""
+				}
+			}
+			sendJSON(response, http.StatusOK, map[string]any{
+				"apiVersion": "v1",
+				"endpoints": map[string]string{
+					"mcp": baseURL + "/mcp",
+					"otlpGrpc": host + ":" + otlpGRPCPort,
+					"otlpHttp": "http://" + host + ":" + otlpHTTPPort,
+				},
+				"kind": "obstudio",
+				"mode": env("OBSTUDIO_MODE", "standalone"),
+				"owner": env("OBSTUDIO_OWNER", "cli"),
+				"version": ${JSON.stringify(version)},
+			})
+		case request.URL.Path == "/api/splunk/export" && request.Method == http.MethodGet:
+			sendJSON(response, http.StatusOK, status)
+		case request.URL.Path == "/api/splunk/free-account" && request.Method == http.MethodPost:
+			sendJSON(response, freeAccountStatus, map[string]string{"error": freeAccountError})
+		case request.Header.Get("Authorization") != "Bearer "+controlToken:
+			sendJSON(response, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		default:
+			sendJSON(response, http.StatusNotFound, map[string]string{"error": "not found"})
+		}
+	})
+
+	var err error
+	observerListener, err = net.Listen("tcp", host+":"+port)
+	if err != nil {
+		panic(err)
+	}
+	otlpHTTPListener, err = net.Listen("tcp", host+":"+otlpHTTPPort)
+	if err != nil {
+		panic(err)
+	}
+	otlpGRPCListener, err = net.Listen("tcp", host+":"+otlpGRPCPort)
+	if err != nil {
+		panic(err)
+	}
+
+	observerServer := &http.Server{Handler: mux}
+	otlpHTTPServer := &http.Server{Handler: http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.WriteHeader(http.StatusNoContent)
+	})}
+	go func() { _ = observerServer.Serve(observerListener) }()
+	go func() { _ = otlpHTTPServer.Serve(otlpHTTPListener) }()
+	go func() {
+		for {
+			connection, acceptErr := otlpGRPCListener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			_ = connection.Close()
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop
+	_ = observerServer.Close()
+	time.Sleep(time.Duration(${options.shutdownDelayMs ?? 0}) * time.Millisecond)
+	_ = otlpHTTPServer.Close()
+	_ = otlpGRPCListener.Close()
+}
+`;
+	fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
+	fs.writeFileSync(sourcePath, source, { mode: 0o600 });
+	try {
+		cp.execFileSync('go', ['build', '-o', binaryPath, sourcePath], {
+			env: {
+				...process.env,
+				CGO_ENABLED: '0',
+				GOCACHE: process.env.GOCACHE ?? path.join(os.tmpdir(), 'obstudio-vscode-host-go-cache'),
+			},
+			stdio: 'pipe',
+		});
+	} finally {
+		fs.rmSync(sourcePath, { force: true });
+	}
+	fs.chmodSync(binaryPath, 0o755);
 }
 
 async function startConflictingHttpService(port: number): Promise<SharedObserverHandle> {
@@ -291,6 +676,37 @@ async function startConflictingHttpService(port: number): Promise<SharedObserver
 	return {
 		baseUrl: `http://127.0.0.1:${port}`,
 		dispose: async () => {
+			await new Promise<void>((resolve, reject) => {
+				server.close((error) => {
+					if (error) {
+						reject(error);
+						return;
+					}
+					resolve();
+				});
+			});
+		},
+	};
+}
+
+async function startUnresponsiveHttpService(port: number): Promise<SharedObserverHandle> {
+	const sockets = new Set<net.Socket>();
+	const server = net.createServer((socket) => {
+		sockets.add(socket);
+		socket.once('close', () => sockets.delete(socket));
+	});
+
+	await new Promise<void>((resolve, reject) => {
+		server.once('error', reject);
+		server.listen(port, '127.0.0.1', () => resolve());
+	});
+
+	return {
+		baseUrl: `http://127.0.0.1:${port}`,
+		dispose: async () => {
+			for (const socket of sockets) {
+				socket.destroy();
+			}
 			await new Promise<void>((resolve, reject) => {
 				server.close((error) => {
 					if (error) {
@@ -378,6 +794,18 @@ async function assertJSONMCPConfigured(
 	}
 
 	throw new Error(`Missing JSON MCP config in any expected path: ${filePaths.join(', ')}`);
+}
+
+function readCodexObstudioAuthorization(filePath: string): string | undefined {
+	const section = getCodexObstudioSection(fs.readFileSync(filePath, 'utf8'));
+	return section === undefined ? undefined : getCodexObstudioAuthorization(section);
+}
+
+function readJSONObstudioAuthorization(filePath: string): unknown {
+	const config = JSON.parse(fs.readFileSync(filePath, 'utf8')) as {
+		mcpServers?: { obstudio?: { headers?: Record<string, unknown> } };
+	};
+	return caseInsensitiveHeaderValue(config.mcpServers?.obstudio?.headers, 'Authorization');
 }
 
 async function assertJSONMCPPreservesExistingServer(
@@ -494,6 +922,17 @@ async function postJson(url: string): Promise<any> {
 	return requestJson(url, 'POST');
 }
 
+async function requestStatus(url: string, method: 'GET' | 'POST'): Promise<number> {
+	return new Promise((resolve, reject) => {
+		const request = http.request(url, { method }, (response) => {
+			response.resume();
+			resolve(response.statusCode ?? 0);
+		});
+		request.on('error', reject);
+		request.end();
+	});
+}
+
 async function requestJson(url: string, method: 'GET' | 'POST'): Promise<any> {
 	return new Promise((resolve, reject) => {
 		const request = http.request(url, { method }, (response) => {
@@ -533,7 +972,18 @@ suite('VS Code Host', () => {
 		);
 	});
 
-	test('fresh activation shows the Observer status bar item and wires it to the status menu', async function () {
+	test('shared observer startup allocates distinct configured and dynamic ports', async () => {
+		const ui = await getAvailablePort();
+		const resolved = await resolveSharedObserverPorts({ ui });
+		assert.equal(resolved.ui, ui);
+		assert.equal(new Set([resolved.ui, resolved.grpc, resolved.http]).size, 3);
+		await assert.rejects(
+			resolveSharedObserverPorts({ ui, grpc: ui }),
+			/configured more than once/,
+		);
+	});
+
+	test('fresh activation shows the Splunk Observability Studio status bar item and wires it to the status menu', async function () {
 		this.timeout(30_000);
 
 		await getExtension();
@@ -544,14 +994,14 @@ suite('VS Code Host', () => {
 				value
 				&& value.statusBarPresent
 				&& value.statusBarCommand === 'observability-studio.statusMenu'
-				&& value.statusBarText?.includes('Observer'),
+				&& value.statusBarText?.includes('Splunk Observability Studio'),
 			),
 			20_000,
 		);
 
 		assert.equal(state.statusBarPresent, true);
 		assert.equal(state.statusBarCommand, 'observability-studio.statusMenu');
-		assert.match(state.statusBarText ?? '', /Observer/);
+		assert.match(state.statusBarText ?? '', /Splunk Observability Studio/);
 	});
 
 	test('managed observer uses the configured port across restarts', async function () {
@@ -597,8 +1047,12 @@ suite('VS Code Host', () => {
 	test('extension reuses the healthy observer recorded in shared state', async function () {
 		this.timeout(30_000);
 
-		await getExtension();
-		const sharedObserver = await startDiscoverableSharedObserver(750);
+		const extension = await getExtension();
+		const sharedObserver = await startDiscoverableSharedObserver(
+			750,
+			undefined,
+			String(extension.packageJSON.version),
+		);
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
 		const originalHome = process.env.HOME;
 		const originalUserProfile = process.env.USERPROFILE;
@@ -610,7 +1064,7 @@ suite('VS Code Host', () => {
 		process.env.HOME = tempHome;
 		process.env.USERPROFILE = tempHome;
 		process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
-		fs.mkdirSync(stateDir, { recursive: true });
+		fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
 		fs.writeFileSync(
 			statePath,
 			JSON.stringify({
@@ -619,6 +1073,7 @@ suite('VS Code Host', () => {
 				mcpUrl: `${sharedObserver.baseUrl}/mcp`,
 				updatedAt: new Date().toISOString(),
 			}),
+			{ mode: 0o600 },
 		);
 
 		try {
@@ -655,12 +1110,1186 @@ suite('VS Code Host', () => {
 		}
 	});
 
+	test('extension reuses a CLI-managed Splunk Observability Studio without control credentials', async function () {
+		this.timeout(45_000);
+
+		const extension = await getExtension();
+		const cloudAuthorizations: string[] = [];
+		const managedObserver = await startDiscoverableSharedObserver(
+			0,
+			cloudAuthorizations,
+			String(extension.packageJSON.version),
+		);
+		const managedPort = Number(new URL(managedObserver.baseUrl).port);
+		const managedMCPUrl = managedObserver.baseUrl + '/mcp';
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const managedStatePath = path.join(stateDir, 'managed-control.json');
+		const codexConfigPath = path.join(tempHome, '.codex', 'config.toml');
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		const config = vscode.workspace.getConfiguration('observability-studio');
+
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+		delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+		fs.writeFileSync(managedStatePath, JSON.stringify({
+			baseUrl: managedObserver.baseUrl,
+			healthUrl: managedObserver.baseUrl + '/api/health',
+			mcpUrl: managedMCPUrl,
+			pid: process.pid,
+			updatedAt: new Date().toISOString(),
+		}), { mode: 0o600 });
+
+		try {
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+
+			const state = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(value?.sharedMode && value.observerUrl === managedObserver.baseUrl),
+				20_000,
+			);
+			assert.equal(state.sharedMode, true);
+			await vscode.commands.executeCommand('observability-studio.configureCodexMCP');
+			await assertCodexConfigured([codexConfigPath], managedMCPUrl);
+			assert.equal(readCodexObstudioAuthorization(codexConfigPath), undefined);
+
+			const realm = await vscode.commands.executeCommand<{ realm?: string }>(
+				'observability-studio.internal.resolveCloudRealmForTest',
+			);
+			assert.equal(realm?.realm, 'us1');
+			assert.deepEqual(cloudAuthorizations, ['']);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			cleanupTempDir(tempHome);
+			await managedObserver.dispose();
+		}
+	});
+
+	test('Free Edition signup works through CLI-managed Splunk Observability Studio state without credentials', async function () {
+		this.timeout(45_000);
+
+		const extension = await getExtension();
+		const cloudAuthorizations: string[] = [];
+		const managedObserver = await startDiscoverableSharedObserver(
+			0,
+			cloudAuthorizations,
+			String(extension.packageJSON.version),
+		);
+		const managedPort = Number(new URL(managedObserver.baseUrl).port);
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		const config = vscode.workspace.getConfiguration('observability-studio');
+
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+		delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+		fs.writeFileSync(
+			path.join(stateDir, 'managed-control.json'),
+			JSON.stringify({
+				baseUrl: managedObserver.baseUrl,
+				healthUrl: `${managedObserver.baseUrl}/api/health`,
+				mcpUrl: `${managedObserver.baseUrl}/mcp`,
+				pid: process.pid,
+				updatedAt: new Date().toISOString(),
+			}),
+			{ mode: 0o600 },
+		);
+
+		try {
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+
+			const response = await vscode.commands.executeCommand<{
+				freeAccount?: { intakeAcknowledged?: boolean };
+			}>('observability-studio.internal.createFreeAccountForTest');
+			assert.equal(response?.freeAccount?.intakeAcknowledged, true);
+			assert.deepEqual(cloudAuthorizations, ['']);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			cleanupTempDir(tempHome);
+			await managedObserver.dispose();
+		}
+	});
+
+	test('fresh install starts its bundled Splunk Observability Studio with credential-free Cloud controls', async function () {
+		this.timeout(45_000);
+		if (process.platform === 'win32') {
+			this.skip();
+		}
+
+		const extension = await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+		const currentBackendPath = path.join(extension.extensionPath, 'dist', 'observer', 'obstudio');
+		const currentBackendContents = fs.readFileSync(currentBackendPath);
+		const currentBackendMode = fs.statSync(currentBackendPath).mode;
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-fresh-home-'));
+		const statePath = path.join(tempHome, '.obstudio', 'shared-observer.json');
+		const observerPorts = await resolveSharedObserverPorts({});
+		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+
+		try {
+			process.env.HOME = tempHome;
+			process.env.USERPROFILE = tempHome;
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+			await vscode.commands.executeCommand(
+				'observability-studio.internal.setObserverOtlpPortsForTest',
+				{ grpc: observerPorts.grpc, http: observerPorts.http },
+			);
+			writeObserverProcessFixture(
+				currentBackendPath,
+				String(extension.packageJSON.version),
+				{ legacyBearerAuth: false },
+			);
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+
+			const state = await vscode.commands.executeCommand<RuntimeState>(
+				'observability-studio.internal.getRuntimeState',
+			);
+			assert.equal(state.sharedMode, false);
+			assert.equal(state.observerUrl, baseUrl);
+			const currentHealth = await fetchJson(`${baseUrl}/api/health`);
+			assert.equal(currentHealth.owner, 'vscode-extension');
+			assert.equal(currentHealth.mode, 'managed');
+			const response = await vscode.commands.executeCommand<{
+				freeAccount?: { intakeAcknowledged?: boolean };
+			}>('observability-studio.internal.createFreeAccountForTest');
+			assert.equal(response?.freeAccount?.intakeAcknowledged, true);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+			fs.writeFileSync(currentBackendPath, currentBackendContents, { mode: currentBackendMode });
+			fs.chmodSync(currentBackendPath, currentBackendMode);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(tempHome);
+		}
+	});
+
+	test('stale state with a dead Splunk Observability Studio PID does not block managed startup', async function () {
+		this.timeout(45_000);
+		if (process.platform === 'win32') {
+			this.skip();
+		}
+
+		const extension = await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+		const currentBackendPath = path.join(extension.extensionPath, 'dist', 'observer', 'obstudio');
+		const currentBackendContents = fs.readFileSync(currentBackendPath);
+		const currentBackendMode = fs.statSync(currentBackendPath).mode;
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-dead-pid-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const observerPorts = await resolveSharedObserverPorts({});
+		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
+		const stalePID = 2_147_483_647;
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+
+		try {
+			process.env.HOME = tempHome;
+			process.env.USERPROFILE = tempHome;
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+			await vscode.commands.executeCommand(
+				'observability-studio.internal.setObserverOtlpPortsForTest',
+				{ grpc: observerPorts.grpc, http: observerPorts.http },
+			);
+			writeObserverProcessFixture(
+				currentBackendPath,
+				String(extension.packageJSON.version),
+				{ legacyBearerAuth: false },
+			);
+			fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+			fs.writeFileSync(statePath, JSON.stringify({
+				baseUrl,
+				healthUrl: `${baseUrl}/api/health`,
+				mcpUrl: `${baseUrl}/mcp`,
+				pid: stalePID,
+				updatedAt: new Date(0).toISOString(),
+			}), { mode: 0o600 });
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+
+			await vscode.commands.executeCommand('observability-studio.openObserver');
+			const state = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
+					'observability-studio.internal.getRuntimeState',
+				)),
+				(value) => Boolean(value?.observerPort === observerPorts.ui && value.observerUrl === baseUrl),
+				20_000,
+			);
+			assert.equal(state.sharedMode, false);
+			const currentHealth = await fetchJson(`${baseUrl}/api/health`);
+			assert.equal(currentHealth.version, String(extension.packageJSON.version));
+			const response = await vscode.commands.executeCommand<{
+				freeAccount?: { intakeAcknowledged?: boolean };
+			}>('observability-studio.internal.createFreeAccountForTest');
+			assert.equal(response?.freeAccount?.intakeAcknowledged, true);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+			fs.writeFileSync(currentBackendPath, currentBackendContents, { mode: currentBackendMode });
+			fs.chmodSync(currentBackendPath, currentBackendMode);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(tempHome);
+		}
+	});
+
+	for (const legacyVersion of ['0.0.18', '0.0.20'] as const) {
+		test(`upgrade automatically replaces a pre-marker v${legacyVersion} extension Splunk Observability Studio`, async function () {
+			this.timeout(45_000);
+
+			const extension = await getExtension();
+			const config = vscode.workspace.getConfiguration('observability-studio');
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+			const observerBinaryName = process.platform === 'win32' ? 'obstudio.exe' : 'obstudio';
+			const currentBackendPath = path.join(extension.extensionPath, 'dist', 'observer', observerBinaryName);
+			const currentBackendContents = fs.readFileSync(currentBackendPath);
+			const currentBackendMode = fs.statSync(currentBackendPath).mode;
+			const legacyExtensionPath = path.join(
+				path.dirname(extension.extensionPath),
+				`splunk.observability-studio-${legacyVersion}`,
+			);
+			const legacyBackendPath = path.join(legacyExtensionPath, 'dist', 'observer', observerBinaryName);
+			const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-upgrade-home-'));
+			const legacyHome = fs.mkdtempSync(path.join(os.tmpdir(), `obstudio-v${legacyVersion.replaceAll('.', '')}-home-`));
+			const stateDir = path.join(tempHome, '.obstudio');
+			const statePath = path.join(stateDir, 'shared-observer.json');
+			const controlToken = crypto.randomBytes(32).toString('base64url');
+			const observerPorts = await resolveSharedObserverPorts({});
+			const managedPort = observerPorts.ui;
+			const baseUrl = `http://127.0.0.1:${managedPort}`;
+			const originalHome = process.env.HOME;
+			const originalUserProfile = process.env.USERPROFILE;
+			const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			const unrelatedObserver = await startDiscoverableSharedObserver(0);
+			let legacyProcess: cp.ChildProcess | undefined;
+
+			try {
+				await waitFor(
+					async () => {
+						try {
+							await vscode.commands.executeCommand(
+								'observability-studio.internal.setObserverOtlpPortsForTest',
+								{ grpc: observerPorts.grpc, http: observerPorts.http },
+							);
+							return true;
+						} catch {
+							await vscode.commands.executeCommand('observability-studio.stopObserver');
+							return false;
+						}
+					},
+					(value) => value,
+					10_000,
+				);
+				assert.equal(fs.existsSync(legacyExtensionPath), false, 'legacy fixture path should be unused');
+				writeObserverProcessFixture(
+					currentBackendPath,
+					String(extension.packageJSON.version),
+					{ legacyBearerAuth: false },
+				);
+				const exactLegacyBinary = process.env[
+					legacyVersion === '0.0.18' ? 'OBSTUDIO_V018_BINARY_PATH' : 'OBSTUDIO_V020_BINARY_PATH'
+				]?.trim();
+				if (process.env.CI) {
+					assert.ok(exactLegacyBinary, `CI must provide the exact v${legacyVersion} Splunk Observability Studio binary`);
+				}
+				if (exactLegacyBinary) {
+					fs.mkdirSync(path.dirname(legacyBackendPath), { recursive: true });
+					fs.copyFileSync(exactLegacyBinary, legacyBackendPath);
+					fs.chmodSync(legacyBackendPath, 0o755);
+				} else {
+					writeNativeLegacyObserverProcessFixture(legacyBackendPath, legacyVersion);
+				}
+				fs.writeFileSync(path.join(legacyExtensionPath, 'package.json'), JSON.stringify({
+					name: 'observability-studio',
+					publisher: 'Splunk',
+					version: legacyVersion,
+				}));
+
+				legacyProcess = cp.spawn(legacyBackendPath, [], {
+					env: {
+						...process.env,
+						HOME: legacyHome,
+						HOST: '127.0.0.1',
+						OBSTUDIO_CONTROL_TOKEN: controlToken,
+						OTLP_GRPC_PORT: String(observerPorts.grpc),
+						OTLP_HTTP_PORT: String(observerPorts.http),
+						PORT: String(managedPort),
+						USERPROFILE: legacyHome,
+					},
+					stdio: 'pipe',
+				});
+				await waitForHttpOrExit(`${baseUrl}/api/health`, legacyProcess, 10_000);
+				const legacyHealth = await fetchJson(`${baseUrl}/api/health`);
+				assert.equal(legacyHealth.version, legacyVersion);
+				assert.equal(legacyHealth.owner, 'cli');
+				assert.equal(legacyHealth.mode, 'standalone');
+				assert.equal(
+					await requestStatus(`${baseUrl}/api/splunk/export/refresh`, 'POST'),
+					401,
+					`v${legacyVersion} reproduces the protected Cloud refresh`,
+				);
+				assert.equal(
+					await requestStatus(`${baseUrl}/api/splunk/free-account`, 'POST'),
+					legacyVersion === '0.0.18' ? 405 : 401,
+					legacyVersion === '0.0.18'
+						? 'v0.0.18 reproduces the missing Free Edition signup endpoint'
+						: 'v0.0.20 reproduces the protected Free Edition signup endpoint',
+				);
+
+				process.env.HOME = tempHome;
+				process.env.USERPROFILE = tempHome;
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+				fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+				fs.writeFileSync(statePath, JSON.stringify({
+					baseUrl,
+					controlToken,
+					healthUrl: `${baseUrl}/api/health`,
+					mcpUrl: `${baseUrl}/mcp`,
+					...(legacyVersion === '0.0.20' ? { pid: legacyProcess.pid } : {}),
+					updatedAt: new Date().toISOString(),
+				}), { mode: 0o600 });
+
+				await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+				await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
+				await vscode.commands.executeCommand('observability-studio.internal.resetAgentIntegrationPromptState');
+				await vscode.commands.executeCommand('observability-studio.openObserver');
+
+				const upgradedState = await waitFor(
+					() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
+						'observability-studio.internal.getRuntimeState',
+					)),
+					(value) => Boolean(
+						value
+							&& value.observerPort === managedPort
+							&& value.observerUrl === baseUrl
+							&& !value.sharedMode,
+					),
+					20_000,
+				);
+				assert.equal(upgradedState.sharedMode, false);
+				await waitFor(
+					() => Promise.resolve(legacyProcess?.exitCode),
+					(exitCode) => exitCode !== null && exitCode !== undefined,
+					5_000,
+				);
+				legacyProcess = undefined;
+				const unrelatedHealth = await fetchJson(`${unrelatedObserver.baseUrl}/api/health`);
+				assert.equal(unrelatedHealth.kind, 'obstudio', 'a Splunk Observability Studio instance on another port must remain running');
+
+				const currentHealth = await fetchJson(`${baseUrl}/api/health`);
+				assert.equal(currentHealth.version, String(extension.packageJSON.version));
+				assert.equal(currentHealth.owner, 'vscode-extension');
+				assert.equal(currentHealth.mode, 'managed');
+
+				const response = await vscode.commands.executeCommand<{
+					freeAccount?: { intakeAcknowledged?: boolean };
+				}>('observability-studio.internal.createFreeAccountForTest');
+				assert.equal(response?.freeAccount?.intakeAcknowledged, true);
+			} finally {
+				await vscode.commands.executeCommand('observability-studio.stopObserver');
+				await waitFor(
+					async () => {
+						try {
+							await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+							return true;
+						} catch {
+							await vscode.commands.executeCommand('observability-studio.stopObserver');
+							return false;
+						}
+					},
+					(value) => value,
+					10_000,
+				);
+				if (legacyProcess !== undefined) {
+					await terminateChild(legacyProcess);
+				}
+				fs.writeFileSync(currentBackendPath, currentBackendContents, { mode: currentBackendMode });
+				fs.chmodSync(currentBackendPath, currentBackendMode);
+				process.env.HOME = originalHome;
+				process.env.USERPROFILE = originalUserProfile;
+				if (originalSharedObserverStatePath === undefined) {
+					delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+				} else {
+					process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+				}
+				await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+				await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+				cleanupTempDir(legacyExtensionPath);
+				cleanupTempDir(tempHome);
+				cleanupTempDir(legacyHome);
+				await unrelatedObserver.dispose();
+			}
+		});
+
+		test(`upgrade automatically replaces a CLI-started v${legacyVersion} Splunk Observability Studio on the managed port`, async function () {
+			this.timeout(45_000);
+
+			const extension = await getExtension();
+			const config = vscode.workspace.getConfiguration('observability-studio');
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+			const observerBinaryName = process.platform === 'win32' ? 'obstudio.exe' : 'obstudio';
+			const currentBackendPath = path.join(extension.extensionPath, 'dist', 'observer', observerBinaryName);
+			const currentBackendContents = fs.readFileSync(currentBackendPath);
+			const currentBackendMode = fs.statSync(currentBackendPath).mode;
+			const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-cli-upgrade-home-'));
+			const legacyHome = fs.mkdtempSync(path.join(os.tmpdir(), `obstudio-cli-v${legacyVersion.replaceAll('.', '')}-home-`));
+			const legacyBackendPath = path.join(tempHome, 'cli', observerBinaryName);
+			const stateDir = path.join(tempHome, '.obstudio');
+			const statePath = path.join(stateDir, 'shared-observer.json');
+			const observerPorts = await resolveSharedObserverPorts({});
+			const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
+			const originalHome = process.env.HOME;
+			const originalUserProfile = process.env.USERPROFILE;
+			const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			let legacyProcess: cp.ChildProcess | undefined;
+
+			try {
+				await waitFor(
+					async () => {
+						try {
+							await vscode.commands.executeCommand(
+								'observability-studio.internal.setObserverOtlpPortsForTest',
+								{ grpc: observerPorts.grpc, http: observerPorts.http },
+							);
+							return true;
+						} catch {
+							await vscode.commands.executeCommand('observability-studio.stopObserver');
+							return false;
+						}
+					},
+					(value) => value,
+					10_000,
+				);
+				writeObserverProcessFixture(
+					currentBackendPath,
+					String(extension.packageJSON.version),
+					{ legacyBearerAuth: false },
+				);
+				const exactLegacyBinary = process.env[
+					legacyVersion === '0.0.18' ? 'OBSTUDIO_V018_BINARY_PATH' : 'OBSTUDIO_V020_BINARY_PATH'
+				]?.trim();
+				if (process.env.CI) {
+					assert.ok(exactLegacyBinary, `CI must provide the exact v${legacyVersion} Splunk Observability Studio binary`);
+				}
+				if (exactLegacyBinary) {
+					fs.mkdirSync(path.dirname(legacyBackendPath), { recursive: true });
+					fs.copyFileSync(exactLegacyBinary, legacyBackendPath);
+					fs.chmodSync(legacyBackendPath, 0o755);
+				} else {
+					writeNativeLegacyObserverProcessFixture(legacyBackendPath, legacyVersion);
+				}
+
+				legacyProcess = cp.spawn(legacyBackendPath, [], {
+					env: {
+						...process.env,
+						HOME: legacyHome,
+						HOST: '127.0.0.1',
+						OBSTUDIO_CONTROL_TOKEN: crypto.randomBytes(32).toString('base64url'),
+						OTLP_GRPC_PORT: String(observerPorts.grpc),
+						OTLP_HTTP_PORT: String(observerPorts.http),
+						PORT: String(observerPorts.ui),
+						USERPROFILE: legacyHome,
+					},
+					stdio: 'pipe',
+				});
+				await waitForHttpOrExit(`${baseUrl}/api/health`, legacyProcess, 10_000);
+				const legacyHealth = await fetchJson(`${baseUrl}/api/health`);
+				assert.equal(legacyHealth.version, legacyVersion);
+				assert.equal(await requestStatus(`${baseUrl}/api/splunk/export/refresh`, 'POST'), 401);
+				assert.equal(
+					await requestStatus(`${baseUrl}/api/splunk/free-account`, 'POST'),
+					legacyVersion === '0.0.18' ? 405 : 401,
+				);
+
+				process.env.HOME = tempHome;
+				process.env.USERPROFILE = tempHome;
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+				fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+				fs.writeFileSync(statePath, JSON.stringify({
+					baseUrl,
+					healthUrl: `${baseUrl}/api/health`,
+					mcpUrl: `${baseUrl}/mcp`,
+					pid: legacyProcess.pid,
+					updatedAt: new Date().toISOString(),
+				}), { mode: 0o600 });
+
+				await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+				await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+				await vscode.commands.executeCommand('observability-studio.openObserver');
+
+				const upgradedState = await waitFor(
+					() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
+						'observability-studio.internal.getRuntimeState',
+					)),
+					(value) => Boolean(
+						value
+							&& value.observerPort === observerPorts.ui
+							&& value.observerUrl === baseUrl
+							&& !value.sharedMode,
+					),
+					20_000,
+				);
+				assert.equal(upgradedState.sharedMode, false);
+				await waitFor(
+					() => Promise.resolve(legacyProcess?.exitCode),
+					(exitCode) => exitCode !== null && exitCode !== undefined,
+					5_000,
+				);
+				legacyProcess = undefined;
+				const currentHealth = await fetchJson(`${baseUrl}/api/health`);
+				assert.equal(currentHealth.version, String(extension.packageJSON.version));
+				assert.equal(currentHealth.owner, 'vscode-extension');
+				assert.equal(currentHealth.mode, 'managed');
+				const response = await vscode.commands.executeCommand<{
+					freeAccount?: { intakeAcknowledged?: boolean };
+				}>('observability-studio.internal.createFreeAccountForTest');
+				assert.equal(response?.freeAccount?.intakeAcknowledged, true);
+			} finally {
+				if (legacyProcess !== undefined) {
+					await terminateChild(legacyProcess);
+				}
+				await vscode.commands.executeCommand('observability-studio.stopObserver');
+				await waitFor(
+					async () => {
+						try {
+							await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+							return true;
+						} catch {
+							await vscode.commands.executeCommand('observability-studio.stopObserver');
+							return false;
+						}
+					},
+					(value) => value,
+					10_000,
+				);
+				fs.writeFileSync(currentBackendPath, currentBackendContents, { mode: currentBackendMode });
+				fs.chmodSync(currentBackendPath, currentBackendMode);
+				process.env.HOME = originalHome;
+				process.env.USERPROFILE = originalUserProfile;
+				if (originalSharedObserverStatePath === undefined) {
+					delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+				} else {
+					process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+				}
+				await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+				await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+				cleanupTempDir(tempHome);
+				cleanupTempDir(legacyHome);
+			}
+		});
+	}
+
+	test('upgrade continues when a verified legacy Splunk Observability Studio vacates the managed port during retirement', async function () {
+		this.timeout(45_000);
+
+		const extension = await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+		const observerPorts = await resolveSharedObserverPorts({});
+		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-vacated-port-home-'));
+		const legacyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-vacated-port-legacy-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const vacatePath = path.join(tempHome, 'vacate-observer');
+		const observerBinaryName = process.platform === 'win32' ? 'obstudio.exe' : 'obstudio';
+		const legacyBackendPath = path.join(tempHome, 'legacy-observer', observerBinaryName);
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		let legacyProcess: cp.ChildProcess | undefined;
+
+		try {
+			await waitFor(
+				async () => {
+					try {
+						await vscode.commands.executeCommand(
+							'observability-studio.internal.setObserverOtlpPortsForTest',
+							{ grpc: observerPorts.grpc, http: observerPorts.http },
+						);
+						return true;
+					} catch {
+						await vscode.commands.executeCommand('observability-studio.stopObserver');
+						return false;
+					}
+				},
+				(value) => value,
+				10_000,
+			);
+			writeNativeLegacyObserverProcessFixture(
+				legacyBackendPath,
+				'0.0.20',
+				{ vacateWhenFileExists: vacatePath },
+			);
+			legacyProcess = cp.spawn(legacyBackendPath, [], {
+				env: {
+					...process.env,
+					HOME: legacyHome,
+					HOST: '127.0.0.1',
+					OTLP_GRPC_PORT: String(observerPorts.grpc),
+					OTLP_HTTP_PORT: String(observerPorts.http),
+					PORT: String(observerPorts.ui),
+					USERPROFILE: legacyHome,
+				},
+				stdio: 'pipe',
+			});
+			await waitForHttpOrExit(`${baseUrl}/api/health`, legacyProcess, 10_000);
+			fs.writeFileSync(vacatePath, 'vacate', { mode: 0o600 });
+
+			process.env.HOME = tempHome;
+			process.env.USERPROFILE = tempHome;
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+			fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+			fs.writeFileSync(statePath, JSON.stringify({
+				baseUrl,
+				healthUrl: `${baseUrl}/api/health`,
+				mcpUrl: `${baseUrl}/mcp`,
+				pid: legacyProcess.pid,
+				updatedAt: new Date().toISOString(),
+			}), { mode: 0o600 });
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.resetAgentIntegrationPromptState');
+
+			const upgradedState = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
+					'observability-studio.internal.getRuntimeState',
+				)),
+				(value) => Boolean(
+					value
+						&& value.observerPort === observerPorts.ui
+						&& value.observerUrl === baseUrl
+						&& !value.sharedMode,
+				),
+				20_000,
+			);
+			assert.equal(upgradedState.sharedMode, false);
+			const legacyPid = legacyProcess.pid;
+			assert.ok(legacyPid !== undefined, 'the legacy Splunk Observability Studio should have a process ID');
+			assert.equal(
+				legacyProcess.exitCode,
+				null,
+				'the extension should continue once the legacy process no longer owns any managed ports',
+			);
+			assert.equal(
+				legacyProcess.signalCode,
+				null,
+				'the extension must not terminate the legacy process after it vacates the managed ports',
+			);
+			assert.doesNotThrow(
+				() => process.kill(legacyPid, 0),
+				'the legacy process should remain alive after relinquishing the managed ports',
+			);
+			const currentHealth = await fetchJson(`${baseUrl}/api/health`);
+			assert.equal(currentHealth.version, String(extension.packageJSON.version));
+			assert.equal(currentHealth.owner, 'vscode-extension');
+			assert.equal(currentHealth.mode, 'managed');
+		} finally {
+			if (legacyProcess !== undefined) {
+				await terminateChild(legacyProcess);
+			}
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await waitFor(
+				async () => {
+					try {
+						await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+						return true;
+					} catch {
+						await vscode.commands.executeCommand('observability-studio.stopObserver');
+						return false;
+					}
+				},
+				(value) => value,
+				10_000,
+			);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(tempHome);
+			cleanupTempDir(legacyHome);
+		}
+	});
+
+	test('upgrade ignores an outdated CLI Splunk Observability Studio on another port and enables Cloud on the managed port', async function () {
+		this.timeout(45_000);
+
+		const extension = await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+		const observerBinaryName = process.platform === 'win32' ? 'obstudio.exe' : 'obstudio';
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-other-port-upgrade-home-'));
+		const legacyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-other-port-v020-home-'));
+		const legacyBackendPath = path.join(tempHome, 'cli', observerBinaryName);
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const legacyPorts = await resolveSharedObserverPorts({});
+		const legacyBaseUrl = `http://127.0.0.1:${legacyPorts.ui}`;
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		let legacyProcess: cp.ChildProcess | undefined;
+
+		try {
+			const exactLegacyBinary = process.env.OBSTUDIO_V020_BINARY_PATH?.trim();
+			if (process.env.CI) {
+				assert.ok(exactLegacyBinary, 'CI must provide the exact v0.0.20 Splunk Observability Studio binary');
+			}
+			if (exactLegacyBinary) {
+				fs.mkdirSync(path.dirname(legacyBackendPath), { recursive: true });
+				fs.copyFileSync(exactLegacyBinary, legacyBackendPath);
+				fs.chmodSync(legacyBackendPath, 0o755);
+			} else {
+				writeNativeLegacyObserverProcessFixture(legacyBackendPath, '0.0.20');
+			}
+
+			legacyProcess = cp.spawn(legacyBackendPath, [], {
+				env: {
+					...process.env,
+					HOME: legacyHome,
+					HOST: '127.0.0.1',
+					OBSTUDIO_CONTROL_TOKEN: crypto.randomBytes(32).toString('base64url'),
+					OBSTUDIO_HEALTH_PROOF_SECRET: crypto.randomBytes(32).toString('base64url'),
+					OTLP_GRPC_PORT: String(legacyPorts.grpc),
+					OTLP_HTTP_PORT: String(legacyPorts.http),
+					PORT: String(legacyPorts.ui),
+					USERPROFILE: legacyHome,
+				},
+				stdio: 'pipe',
+			});
+			await waitForHttpOrExit(`${legacyBaseUrl}/api/health`, legacyProcess, 10_000);
+			assert.equal(await requestStatus(`${legacyBaseUrl}/api/splunk/export/refresh`, 'POST'), 401);
+			const managedPorts = await resolveSharedObserverPorts({});
+			await waitFor(
+				async () => {
+					try {
+						await vscode.commands.executeCommand(
+							'observability-studio.internal.setObserverOtlpPortsForTest',
+							{ grpc: managedPorts.grpc, http: managedPorts.http },
+						);
+						return true;
+					} catch {
+						await vscode.commands.executeCommand('observability-studio.stopObserver');
+						return false;
+					}
+				},
+				(value) => value,
+				10_000,
+			);
+
+			process.env.HOME = tempHome;
+			process.env.USERPROFILE = tempHome;
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+			fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+			fs.writeFileSync(statePath, JSON.stringify({
+				baseUrl: legacyBaseUrl,
+				healthUrl: `${legacyBaseUrl}/api/health`,
+				mcpUrl: `${legacyBaseUrl}/mcp`,
+				pid: legacyProcess.pid,
+				updatedAt: new Date().toISOString(),
+			}), { mode: 0o600 });
+
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', managedPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.resetAgentIntegrationPromptState');
+			await vscode.commands.executeCommand('observability-studio.openObserver');
+
+			const state = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
+					'observability-studio.internal.getRuntimeState',
+				)),
+				(value) => Boolean(
+					value
+					&& value.observerPort === managedPorts.ui
+					&& value.observerUrl === `http://127.0.0.1:${managedPorts.ui}`
+					&& !value.sharedMode,
+				),
+				20_000,
+			);
+			assert.equal(state.sharedMode, false);
+			assert.equal(legacyProcess.exitCode, null, 'a Splunk Observability Studio instance on another port must not be terminated');
+			const response = await vscode.commands.executeCommand<{
+				freeAccount?: { intakeAcknowledged?: boolean };
+			}>('observability-studio.internal.createFreeAccountForTest');
+			assert.equal(response?.freeAccount?.intakeAcknowledged, true);
+		} finally {
+			if (legacyProcess !== undefined) {
+				await terminateChild(legacyProcess);
+			}
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await waitFor(
+				async () => {
+					try {
+						await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+						return true;
+					} catch {
+						await vscode.commands.executeCommand('observability-studio.stopObserver');
+						return false;
+					}
+				},
+				(value) => value,
+				10_000,
+			);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(tempHome);
+			cleanupTempDir(legacyHome);
+		}
+	});
+
+	test('upgrade blocks Cloud controls when the managed-port listener is not a Splunk Observability Studio executable', async function () {
+		this.timeout(45_000);
+
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-restart-required-home-'));
+		const legacyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-restart-required-legacy-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const observerPorts = await resolveSharedObserverPorts({});
+		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+		process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+
+		const extension = await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+		await waitFor(
+			async () => {
+				try {
+					await vscode.commands.executeCommand(
+						'observability-studio.internal.setObserverOtlpPortsForTest',
+						{ grpc: observerPorts.grpc, http: observerPorts.http },
+					);
+					return true;
+				} catch {
+					await vscode.commands.executeCommand('observability-studio.stopObserver');
+					return false;
+				}
+			},
+			(value) => value,
+			10_000,
+		);
+
+		const observerBinaryName = process.platform === 'win32' ? 'obstudio.exe' : 'obstudio';
+		const currentBackendPath = path.join(extension.extensionPath, 'dist', 'observer', observerBinaryName);
+		const currentBackendContents = fs.readFileSync(currentBackendPath);
+		const currentBackendMode = fs.statSync(currentBackendPath).mode;
+		const legacyExtensionPath = path.join(
+			path.dirname(extension.extensionPath),
+			'splunk.observability-studio-stale-fixture',
+		);
+		const legacyBackendPath = path.join(legacyExtensionPath, 'dist', 'observer', 'observer-proxy');
+		let legacyProcess: cp.ChildProcess | undefined;
+
+		try {
+			writeObserverProcessFixture(
+				currentBackendPath,
+				String(extension.packageJSON.version),
+				{ legacyBearerAuth: false },
+			);
+			writeNativeLegacyObserverProcessFixture(legacyBackendPath, 'stale-fixture');
+
+			legacyProcess = cp.spawn(legacyBackendPath, [], {
+				env: {
+					...process.env,
+					HOME: legacyHome,
+					HOST: '127.0.0.1',
+					OTLP_GRPC_PORT: String(observerPorts.grpc),
+					OTLP_HTTP_PORT: String(observerPorts.http),
+					PORT: String(observerPorts.ui),
+					USERPROFILE: legacyHome,
+				},
+				stdio: 'pipe',
+			});
+			await waitForHttpOrExit(`${baseUrl}/api/health`, legacyProcess, 10_000);
+
+			fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+			fs.writeFileSync(statePath, JSON.stringify({
+				baseUrl,
+				healthUrl: `${baseUrl}/api/health`,
+				mcpUrl: `${baseUrl}/mcp`,
+				pid: legacyProcess.pid,
+				updatedAt: new Date().toISOString(),
+			}), { mode: 0o600 });
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.openObserver');
+
+			const failedState = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
+					'observability-studio.internal.getRuntimeState',
+				)),
+				(value) => Boolean(
+					value
+					&& value.observerPort === undefined
+					&& value.observerUrl === undefined
+					&& value.panelHtml?.includes('<h2>Restart required</h2>')
+					&& value.panelHtml.includes(`localhost port ${observerPorts.ui}`)
+					&& value.panelHtml.includes(`PID ${legacyProcess?.pid}`)
+					&& value.panelHtml.includes('Cloud controls are unavailable'),
+				),
+				20_000,
+			);
+			assert.equal(failedState.sharedMode, false);
+			assert.equal(legacyProcess.exitCode, null, 'a non-Splunk Observability Studio executable must not be terminated');
+		} finally {
+			if (legacyProcess !== undefined) {
+				await terminateChild(legacyProcess);
+			}
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await waitFor(
+				async () => {
+					try {
+						await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+						return true;
+					} catch {
+						await vscode.commands.executeCommand('observability-studio.stopObserver');
+						return false;
+					}
+				},
+				(value) => value,
+				10_000,
+			);
+			fs.writeFileSync(currentBackendPath, currentBackendContents, { mode: currentBackendMode });
+			fs.chmodSync(currentBackendPath, currentBackendMode);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(legacyExtensionPath);
+			cleanupTempDir(tempHome);
+			cleanupTempDir(legacyHome);
+		}
+	});
+
+	test('upgrade resolves a missing PID and force-stops a slow standalone Splunk Observability Studio on the managed port', async function () {
+		this.timeout(45_000);
+
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-missing-pid-home-'));
+		const legacyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-missing-pid-legacy-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const observerPorts = await resolveSharedObserverPorts({});
+		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		const legacyBackendPath = path.join(tempHome, 'legacy-observer', process.platform === 'win32' ? 'obstudio.exe' : 'obstudio');
+		let legacyProcess: cp.ChildProcess | undefined;
+
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+		process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+
+		await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+		await waitFor(
+			async () => {
+				try {
+					await vscode.commands.executeCommand(
+						'observability-studio.internal.setObserverOtlpPortsForTest',
+						{ grpc: observerPorts.grpc, http: observerPorts.http },
+					);
+					return true;
+				} catch {
+					await vscode.commands.executeCommand('observability-studio.stopObserver');
+					return false;
+				}
+			},
+			(value) => value,
+			10_000,
+		);
+
+		try {
+			writeNativeLegacyObserverProcessFixture(
+				legacyBackendPath,
+				'0.0.18',
+				{ shutdownDelayMs: 7_000 },
+			);
+			legacyProcess = cp.spawn(legacyBackendPath, [], {
+				env: {
+					...process.env,
+					HOME: legacyHome,
+					HOST: '127.0.0.1',
+					OBSTUDIO_CONTROL_TOKEN: crypto.randomBytes(32).toString('base64url'),
+					OTLP_GRPC_PORT: String(observerPorts.grpc),
+					OTLP_HTTP_PORT: String(observerPorts.http),
+					PORT: String(observerPorts.ui),
+					USERPROFILE: legacyHome,
+				},
+				stdio: 'pipe',
+			});
+			await waitForHttpOrExit(`${baseUrl}/api/health`, legacyProcess, 10_000);
+			assert.equal(await requestStatus(`${baseUrl}/api/splunk/export/refresh`, 'POST'), 401);
+			assert.equal(await requestStatus(`${baseUrl}/api/splunk/free-account`, 'POST'), 405);
+
+			fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+			fs.writeFileSync(statePath, JSON.stringify({
+				baseUrl,
+				healthUrl: `${baseUrl}/api/health`,
+				mcpUrl: `${baseUrl}/mcp`,
+				updatedAt: new Date().toISOString(),
+			}), { mode: 0o600 });
+
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.openObserver');
+
+			const upgradedState = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
+					'observability-studio.internal.getRuntimeState',
+				)),
+				(value) => Boolean(
+					value
+						&& value.observerPort === observerPorts.ui
+						&& value.observerUrl === baseUrl
+						&& !value.sharedMode,
+				),
+				20_000,
+			);
+			assert.equal(upgradedState.sharedMode, false);
+			await waitFor(
+				() => Promise.resolve(Boolean(
+					legacyProcess
+					&& (legacyProcess.exitCode !== null || legacyProcess.signalCode !== null),
+				)),
+				(exited) => exited,
+				5_000,
+			);
+			if (process.platform !== 'win32') {
+				assert.equal(legacyProcess.signalCode, 'SIGKILL');
+			}
+			legacyProcess = undefined;
+			const currentHealth = await fetchJson(`${baseUrl}/api/health`);
+			assert.equal(currentHealth.owner, 'vscode-extension');
+			assert.equal(currentHealth.mode, 'managed');
+			const response = await vscode.commands.executeCommand<{
+				freeAccount?: { intakeAcknowledged?: boolean };
+			}>('observability-studio.internal.createFreeAccountForTest');
+			assert.equal(response?.freeAccount?.intakeAcknowledged, true);
+		} finally {
+			if (legacyProcess !== undefined) {
+				await terminateChild(legacyProcess);
+			}
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await waitFor(
+				async () => {
+					try {
+						await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+						return true;
+					} catch {
+						await vscode.commands.executeCommand('observability-studio.stopObserver');
+						return false;
+					}
+				},
+				(value) => value,
+				10_000,
+			);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(tempHome);
+			cleanupTempDir(legacyHome);
+		}
+	});
+
 	test('extension ignores mismatched shared state and continues with the managed observer', async function () {
 		this.timeout(30_000);
 
-		await getExtension();
+		const extension = await getExtension();
 		const mismatchedObserver = await startConflictingHttpService(await getAvailablePort());
-		const managedObserver = await startDiscoverableSharedObserver(0);
+		const managedObserver = await startDiscoverableSharedObserver(
+			0,
+			undefined,
+			String(extension.packageJSON.version),
+		);
 		const managedPort = Number(new URL(managedObserver.baseUrl).port);
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
 		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
@@ -718,8 +2347,12 @@ suite('VS Code Host', () => {
 		const originalHome = process.env.HOME;
 		const originalUserProfile = process.env.USERPROFILE;
 		const extension = await getExtension();
-		const firstSharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
-		const secondSharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
+		const firstSharedObserver = await startSharedObserver(
+			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
+		);
+		const secondSharedObserver = await startSharedObserver(
+			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
+		);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const firstSharedMcpUrl = `${firstSharedObserver.baseUrl}/mcp`;
 		const secondSharedMcpUrl = `${secondSharedObserver.baseUrl}/mcp`;
@@ -760,8 +2393,8 @@ suite('VS Code Host', () => {
 			);
 
 			const prompt = prompts.find((item) => item.message.includes('Enable Codex integration for Splunk Observability Studio?'));
-			assert.ok(prompt, 'expected the Codex integration prompt after changing the shared Observer URL');
-			assert.equal(prompt?.detail, `Install bundled skills and configure Codex to use the local Observer at ${secondSharedMcpUrl}.`);
+			assert.ok(prompt, 'expected the Codex integration prompt after changing the shared Splunk Observability Studio URL');
+			assert.equal(prompt?.detail, `Install bundled skills and configure Codex to use the local Splunk Observability Studio service at ${secondSharedMcpUrl}.`);
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await firstSharedObserver.dispose();
@@ -793,13 +2426,49 @@ suite('VS Code Host', () => {
 						return false;
 					}
 					return typeof value.panelHtml === 'string'
-						&& value.panelHtml.includes('Observer could not start')
+						&& value.panelHtml.includes('Splunk Observability Studio could not start')
 						&& value.panelHtml.includes(`http://127.0.0.1:${conflictPort}`)
-						&& value.panelHtml.includes('not Splunk Observability Studio')
+						&& value.panelHtml.includes(`Splunk Observability Studio UI port ${conflictPort}`)
+						&& value.panelHtml.includes('is already in use')
 						&& value.panelHtml.includes('observability-studio.managedObserverPort')
 						&& !value.panelHtml.includes('/api/health')
 						&& value.panelHtml.includes('after freeing the conflicting port');
 				},
+				20_000,
+			);
+			assert.equal(failedState.sharedMode, false);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await conflictService.dispose();
+		}
+	});
+
+	test('managed observer reports an occupied port when its health endpoint cannot respond', async function () {
+		this.timeout(30_000);
+
+		await getExtension();
+		const conflictPort = await getAvailablePort();
+		const conflictService = await startUnresponsiveHttpService(conflictPort);
+		const config = vscode.workspace.getConfiguration('observability-studio');
+
+		try {
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', conflictPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+			await vscode.commands.executeCommand('observability-studio.openObserver');
+			const failedState = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(
+					value
+					&& value.observerPort === undefined
+					&& value.observerUrl === undefined
+					&& typeof value.panelHtml === 'string'
+					&& value.panelHtml.includes(`Splunk Observability Studio UI port ${conflictPort}`)
+					&& value.panelHtml.includes('is already in use')
+					&& value.panelHtml.includes('after freeing the conflicting port')
+				),
 				20_000,
 			);
 			assert.equal(failedState.sharedMode, false);
@@ -829,7 +2498,7 @@ suite('VS Code Host', () => {
 						return false;
 					}
 					return typeof value.panelHtml === 'string'
-						&& value.panelHtml.includes('Observer could not start')
+						&& value.panelHtml.includes('Splunk Observability Studio could not start')
 						&& value.panelHtml.includes('observability-studio.managedObserverPort')
 						&& value.panelHtml.includes('4318')
 						&& value.panelHtml.includes('OTLP/HTTP');
@@ -843,7 +2512,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('configured shared observer hides raw health probe details when it is unreachable', async function () {
+	test('configured shared service hides raw health probe details when it is unreachable', async function () {
 		this.timeout(45_000);
 
 		await getExtension();
@@ -863,9 +2532,9 @@ suite('VS Code Host', () => {
 						return false;
 					}
 					return typeof value.panelHtml === 'string'
-						&& value.panelHtml.includes('Observer could not start')
+						&& value.panelHtml.includes('Splunk Observability Studio could not start')
 						&& value.panelHtml.includes(`http://127.0.0.1:${unreachablePort}`)
-						&& value.panelHtml.includes('could not reach the configured shared observer')
+						&& value.panelHtml.includes('could not reach the configured shared service')
 						&& value.panelHtml.includes('observability-studio.sharedObserverUrl')
 						&& !value.panelHtml.includes('/api/health')
 						&& !value.panelHtml.includes('ECONNREFUSED');
@@ -883,7 +2552,9 @@ suite('VS Code Host', () => {
 		this.timeout(30_000);
 
 		const extension = await getExtension();
-		const sharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
+		const sharedObserver = await startSharedObserver(
+			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
+		);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
@@ -932,6 +2603,7 @@ suite('VS Code Host', () => {
 					return value.panelVisible
 						&& value.sharedMode
 						&& value.observerUrl === sharedObserver.baseUrl
+						&& value.panelTitle === 'Splunk Observability Studio – Telemetry Explorer'
 						&& typeof value.panelHtml === 'string'
 						&& value.panelHtml.includes('main.js');
 				},
@@ -939,6 +2611,7 @@ suite('VS Code Host', () => {
 			);
 
 			assert.equal(state.panelVisible, true);
+			assert.equal(state.panelTitle, 'Splunk Observability Studio – Telemetry Explorer');
 			assert.equal(state.sharedMode, true);
 			assert.equal(state.observerUrl, sharedObserver.baseUrl);
 			assert.equal(state.panelHtml?.includes('<iframe '), false, 'observer UI should be the top-level webview');
@@ -979,7 +2652,9 @@ suite('VS Code Host', () => {
 		this.timeout(30_000);
 
 		const extension = await getExtension();
-		const sharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
+		const sharedObserver = await startSharedObserver(
+			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
+		);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
@@ -1107,7 +2782,9 @@ suite('VS Code Host', () => {
 		this.timeout(30_000);
 
 		const extension = await getExtension();
-		const sharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
+		const sharedObserver = await startSharedObserver(
+			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
+		);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
@@ -1323,12 +3000,178 @@ suite('VS Code Host', () => {
 
 			const prompt = prompts.find((item) => item.message.includes('Enable Codex integration for Splunk Observability Studio?'));
 			assert.ok(prompt, 'expected the Codex integration prompt to be shown');
-			assert.equal(prompt?.detail, `Install bundled skills and configure Codex to use the local Observer at ${sharedMcpUrl}.`);
+			assert.equal(prompt?.detail, `Install bundled skills and configure Codex to use the local Splunk Observability Studio service at ${sharedMcpUrl}.`);
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();
 			process.env.HOME = originalHome;
 			process.env.USERPROFILE = originalUserProfile;
+			cleanupTempDir(tempHome);
+		}
+	});
+
+	test('unowned stale authorization prompts before removal from every agent config format', async function () {
+		this.timeout(60_000);
+
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		const extension = await getExtension();
+		const sharedObserver = await startSharedObserver(
+			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
+		);
+		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
+		const statePath = path.join(tempHome, '.obstudio', 'shared-observer.json');
+		const codexConfigPath = path.join(tempHome, '.codex', 'config.toml');
+		const claudeConfigPath = path.join(tempHome, '.claude.json');
+		const cursorConfigPath = path.join(tempHome, '.cursor', 'mcp.json');
+		const kiroConfigPath = path.join(tempHome, '.kiro', 'settings', 'mcp.json');
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		const staleAuthorization = 'Bearer prior-extension-activation-token';
+
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+		process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+
+		try {
+			fs.mkdirSync(path.dirname(statePath), { recursive: true, mode: 0o700 });
+			fs.writeFileSync(
+				statePath,
+				JSON.stringify({
+					baseUrl: sharedObserver.baseUrl,
+					healthUrl: `${sharedObserver.baseUrl}/api/health`,
+					mcpUrl: sharedMcpUrl,
+					updatedAt: new Date().toISOString(),
+				}),
+				{ encoding: 'utf8', mode: 0o600 },
+			);
+			for (const agentDir of ['.codex', '.claude', '.cursor', '.kiro']) {
+				const skillsRoot = path.join(tempHome, agentDir, 'skills');
+				const bundledSkillDir = path.join(skillsRoot, 'obstudio', 'otel-instrument');
+				fs.mkdirSync(bundledSkillDir, { recursive: true });
+				fs.writeFileSync(path.join(bundledSkillDir, 'SKILL.md'), '# Installed skill\n', 'utf8');
+				fs.symlinkSync(path.join('obstudio', 'otel-instrument'), path.join(skillsRoot, 'otel-instrument'));
+			}
+			fs.mkdirSync(path.dirname(kiroConfigPath), { recursive: true });
+			fs.writeFileSync(
+				codexConfigPath,
+				[
+					'model = "gpt-5.4"',
+					'',
+					'[mcp_servers.obstudio]',
+					'enabled = true',
+					`url = "${sharedMcpUrl}"`,
+					`http_headers = { authorization = "${staleAuthorization}", "X-Observer-Test" = "preserved" }`,
+					'',
+				].join('\n'),
+				'utf8',
+			);
+			fs.writeFileSync(
+				claudeConfigPath,
+				JSON.stringify({
+					mcpServers: {
+						obstudio: {
+							headers: {
+								authorization: staleAuthorization,
+								'X-Observer-Test': 'preserved',
+							},
+							type: 'http',
+							url: sharedMcpUrl,
+						},
+					},
+				}, null, 2),
+				'utf8',
+			);
+			fs.writeFileSync(
+				cursorConfigPath,
+				JSON.stringify({
+					mcpServers: {
+						obstudio: {
+							headers: {
+								authorization: staleAuthorization,
+								'X-Observer-Test': 'preserved',
+							},
+							type: 'http',
+							url: sharedMcpUrl,
+						},
+					},
+				}, null, 2),
+				'utf8',
+			);
+			fs.writeFileSync(
+				kiroConfigPath,
+				JSON.stringify({
+					mcpServers: {
+						obstudio: {
+							headers: {
+								Authorization: staleAuthorization,
+								'X-Observer-Test': 'preserved',
+							},
+							url: sharedMcpUrl,
+						},
+					},
+				}, null, 2),
+				'utf8',
+			);
+
+			await config.update('sharedObserverUrl', sharedMcpUrl, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.internal.resetAgentIntegrationPromptState');
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+			await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(value && value.sharedMode && value.observerUrl === sharedObserver.baseUrl),
+				20_000,
+			);
+
+			const prompts = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<Array<{ detail?: string; message: string }>>(
+					'observability-studio.internal.getAgentIntegrationPrompts',
+				)),
+				(value) => Array.isArray(value) && value.some((item) =>
+					item.message.includes('Enable detected agent integrations for Splunk Observability Studio?'),
+				),
+				20_000,
+			);
+			const promptText = JSON.stringify(prompts);
+			assert.equal(promptText.includes(staleAuthorization), false);
+			assert.equal(readCodexObstudioAuthorization(codexConfigPath), staleAuthorization);
+			for (const configPath of [claudeConfigPath, cursorConfigPath, kiroConfigPath]) {
+				assert.equal(readJSONObstudioAuthorization(configPath), staleAuthorization);
+			}
+
+			const configured = await vscode.commands.executeCommand<string[]>(
+				'observability-studio.internal.configureDetectedAgentIntegrations',
+			);
+			assert.deepEqual(configured, ['Codex', 'Claude Code', 'Cursor', 'Kiro']);
+
+			const codexConfig = await waitForFileText(codexConfigPath);
+			assert.equal(codexConfig.includes(`"X-Observer-Test" = "preserved"`), true);
+			assert.equal((codexConfig.match(/authorization/gi) ?? []).length, 0);
+			for (const configPath of [claudeConfigPath, cursorConfigPath, kiroConfigPath]) {
+				const agentConfig = JSON.parse(await waitForFileText(configPath));
+				const headers = agentConfig.mcpServers.obstudio.headers as Record<string, string>;
+				const authorizationHeaders = Object.entries(headers).filter(([name]) => name.toLowerCase() === 'authorization');
+				assert.deepEqual(authorizationHeaders, []);
+				assert.equal(headers['X-Observer-Test'], 'preserved');
+			}
+
+			const alreadyCurrent = await vscode.commands.executeCommand<string[]>(
+				'observability-studio.internal.configureDetectedAgentIntegrations',
+			);
+			assert.deepEqual(alreadyCurrent, []);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await sharedObserver.dispose();
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
 			cleanupTempDir(tempHome);
 		}
 	});
@@ -1429,7 +3272,9 @@ suite('VS Code Host', () => {
 		const originalKiroConfigPath = originalHome ? path.join(originalHome, '.kiro', 'settings', 'mcp.json') : '';
 		const originalSnapshot = snapshotFile(originalKiroConfigPath);
 		const extension = await getExtension();
-		const sharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
+		const sharedObserver = await startSharedObserver(
+			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
+		);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 
@@ -1486,7 +3331,9 @@ suite('VS Code Host', () => {
 			await assertJSONMCPConfigured([kiroConfigPath], 'obstudio', sharedMcpUrl, false);
 			await assertKiroMCPPolicyPreserved(
 				[kiroConfigPath],
-				{ 'X-Observer-Test': 'preserved' },
+				{
+					'X-Observer-Test': 'preserved',
+				},
 			);
 			const repairedKiroConfig = JSON.parse(await waitForFileText(kiroConfigPath));
 			assert.deepEqual(repairedKiroConfig.mcpServers.obstudio.env, { OBSERVER_MODE: 'preserved' });
@@ -1519,7 +3366,9 @@ suite('VS Code Host', () => {
 		const originalKiroConfigPath = originalHome ? path.join(originalHome, '.kiro', 'settings', 'mcp.json') : '';
 		const originalSnapshot = snapshotFile(originalKiroConfigPath);
 		const extension = await getExtension();
-		const sharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
+		const sharedObserver = await startSharedObserver(
+			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
+		);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 		const skillsRoot = path.join(tempHome, '.kiro', 'skills');
@@ -1585,7 +3434,9 @@ suite('VS Code Host', () => {
 		const codexConfigPath = path.join(tempHome, '.codex', 'config.toml');
 		const cursorConfigPath = path.join(tempHome, '.cursor', 'mcp.json');
 		const extension = await getExtension();
-		const sharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
+		const sharedObserver = await startSharedObserver(
+			path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'),
+		);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 
@@ -1684,8 +3535,11 @@ suite('VS Code Host', () => {
 	test('openObserver retries when the shared backend health check times out once', async function () {
 		this.timeout(30_000);
 
-		await getExtension();
-		const sharedObserver = await startSlowSharedObserver(750);
+		const extension = await getExtension();
+		const sharedObserver = await startSlowSharedObserver(
+			750,
+			String(extension.packageJSON.version),
+		);
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
 
