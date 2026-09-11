@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "splunk-dashboard-publish",
-    "run_id": "20260910T194736289717Z",
+    "run_id": "20260911T023615185551Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -65,7 +65,7 @@
   },
   "source": {
     "digest_version": 2,
-    "digest": "dc87c8baa84e4a961dc15573ffe9c00c1d98624de273369cb3ec610479fa5db9",
+    "digest": "cd87b6763a54cfe9c61b08fd6d6a039aed9759f83c0324ce916b01519a43343d",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -73,7 +73,7 @@
     "files": {
       "evals/codex-evals.validation.toml": "ce69f042257fdb4a4c8d196f2f0f515fdc371316c02ab7d86aecc36267f7e940",
       "evals/dashboards/checkout-sync/dashboards.tf.seed": "ef9102bb785db77f42c07b2a35c5a8c9ed3889c2049dfc4454c6ca86b78ffe65",
-      "evals/dashboards/checkout-sync/eval/qual/dashboard-publish.json": "9cda7443a2e61fa660e4b40beef6a9ab32ab1bc3e1b6f17343a28af6aa44789f",
+      "evals/dashboards/checkout-sync/eval/qual/dashboard-publish.json": "43b8daa3159da995acaff992efe3ba8988172f69aa8c6c93a370808d8956cf7b",
       "evals/dashboards/checkout-sync/terraform.tfvars.seed": "5afe53a980059da0ff4fa95aa41cbe1f5a1f5460b1ab944ce7397e278f3d7c84",
       "evals/dashboards/checkout-sync/variables.tf.seed": "82a3d17935619c370bdee88d08de50f2b8203c8c7fb5a8a150397b8b76122e6f",
       "evals/pyproject.toml": "2c51312de8067b0c85fd99bfa8ad58a8d6870f67d8e8e368b869c7a04b004a0b",
@@ -119,7 +119,7 @@
       "skills/references/report-flow-contract.md": "83d235fa1aa93f709462839504ec76d9819ddcccecd34ebb3e56d34c44e49acc",
       "skills/references/scripts/observe_report.py": "90f84cdf0aa12d8ddb69b829790871bf5888ac0b3d7eb9beb29b397f82fa5170",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
-      "skills/references/splunk-api.md": "564b96e2e2658fd41b79dbdf6c1f4ce3838a3d0ac0799ce461078bf2e728c660",
+      "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "77c3e9b98a3a84fe0f7699f7ab40eabcf0dd40fe9cef231e4958b12653535a69",
       "skills/splunk-dashboard-publish/SKILL.md": "2b7eafd8985e8b031711691a6dee14e6eac9b64dd98065103ccaeb345d982e25",

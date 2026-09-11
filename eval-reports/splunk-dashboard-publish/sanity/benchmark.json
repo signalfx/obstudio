@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "splunk-dashboard-publish",
-    "run_id": "20260910T204304896136Z",
+    "run_id": "20260911T023636871461Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -22,10 +22,10 @@
     "with_skill": {
       "prompt_count": 2,
       "command_count": 2,
-      "duration_seconds": 34.492,
-      "agent_duration_seconds": 34.412,
-      "tokens": 82684,
-      "agent_tokens": 82684,
+      "duration_seconds": 29.291,
+      "agent_duration_seconds": 29.195,
+      "tokens": 83676,
+      "agent_tokens": 83676,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 2,
         "selected_record_count": 2,
-        "input_tokens": 82507,
+        "input_tokens": 83497,
         "cached_input_tokens": 56832,
         "cache_creation_input_tokens": null,
-        "output_tokens": 177,
+        "output_tokens": 179,
         "reasoning_output_tokens": 0,
         "provider_total_tokens": null,
-        "derived_total_tokens": 82684,
-        "effective_total_tokens": 82684,
+        "derived_total_tokens": 83676,
+        "effective_total_tokens": 83676,
         "coverage": {
           "record_count": 2,
           "modeled_count": 2,
@@ -80,10 +80,10 @@
       "with_skill": {
         "prompt_count": 2,
         "command_count": 2,
-        "duration_seconds": 34.492,
-        "agent_duration_seconds": 34.412,
-        "tokens": 82684,
-        "agent_tokens": 82684,
+        "duration_seconds": 29.291,
+        "agent_duration_seconds": 29.195,
+        "tokens": 83676,
+        "agent_tokens": 83676,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -91,14 +91,14 @@
           "observed": true,
           "usage_record_count": 2,
           "selected_record_count": 2,
-          "input_tokens": 82507,
+          "input_tokens": 83497,
           "cached_input_tokens": 56832,
           "cache_creation_input_tokens": null,
-          "output_tokens": 177,
+          "output_tokens": 179,
           "reasoning_output_tokens": 0,
           "provider_total_tokens": null,
-          "derived_total_tokens": 82684,
-          "effective_total_tokens": 82684,
+          "derived_total_tokens": 83676,
+          "effective_total_tokens": 83676,
           "coverage": {
             "record_count": 2,
             "modeled_count": 2,
@@ -125,21 +125,21 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-dashboard-publish/20260910T204304896136Z/results/sanity/skill-smoke/sanity-dashboard-publish/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-dashboard-publish/20260910T204304896136Z/results/sanity/skill-smoke/sanity-dashboard-publish/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-dashboard-publish/20260910T204304896136Z/results/sanity/skill-smoke/sanity-dashboard-publish/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-dashboard-publish/20260911T023636871461Z/results/sanity/skill-smoke/sanity-dashboard-publish/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-dashboard-publish/20260911T023636871461Z/results/sanity/skill-smoke/sanity-dashboard-publish/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-dashboard-publish/20260911T023636871461Z/results/sanity/skill-smoke/sanity-dashboard-publish/with_baseline.json"
       }
     }
   ],
   "failures": [],
   "source": {
     "digest_version": 2,
-    "digest": "abfaf4a1aeea59611859e5aa7f9ec0b8227be5512df0d5d464c4a889cb1c2c50",
+    "digest": "4dd39f2a42c9ad39a156bd3a60c600edb38ba6b511708b8b1f8e8455918d65bc",
     "eval_kinds": [
       "sanity"
     ],
     "files": {
-      "evals/codex-evals.toml": "700a77f80120bdf610939cc11951ce37a674a266b590c81bc1c9c139918ff3a3",
+      "evals/codex-evals.toml": "c0b019453c76a5b6d8692346f984ea91af04ca91331aa333b56d7a717b7b07c7",
       "evals/pyproject.toml": "2c51312de8067b0c85fd99bfa8ad58a8d6870f67d8e8e368b869c7a04b004a0b",
       "evals/sanity/skill-smoke/eval/sanity/dashboard-publish.json": "748bd26dfeeee534643ab02374c4c88459133e261f67f92c6380a027057079c2",
       "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9",
@@ -185,7 +185,7 @@
       "skills/references/report-flow-contract.md": "83d235fa1aa93f709462839504ec76d9819ddcccecd34ebb3e56d34c44e49acc",
       "skills/references/scripts/observe_report.py": "90f84cdf0aa12d8ddb69b829790871bf5888ac0b3d7eb9beb29b397f82fa5170",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
-      "skills/references/splunk-api.md": "564b96e2e2658fd41b79dbdf6c1f4ce3838a3d0ac0799ce461078bf2e728c660",
+      "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "77c3e9b98a3a84fe0f7699f7ab40eabcf0dd40fe9cef231e4958b12653535a69",
       "skills/splunk-dashboard-publish/SKILL.md": "2b7eafd8985e8b031711691a6dee14e6eac9b64dd98065103ccaeb345d982e25",
