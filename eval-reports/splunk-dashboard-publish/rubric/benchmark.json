@@ -199,7 +199,7 @@
   "failures": [],
   "source": {
     "digest_version": 2,
-    "digest": "c41163559a2d76b026de3fd8001bae1598ea98bacd57a2a407e646d9de1b5106",
+    "digest": "10f1e26a28cbda851e9a77b8f298888739b8a0210d53e3d93c596feaec1870a5",
     "eval_kinds": [
       "rubric"
     ],
@@ -249,12 +249,12 @@
       "skills/references/genai-readiness.md": "73e8af6407a4074ea7942df9e26be95b807e0bc69dd58e403819bc108db12209",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
-      "skills/references/report-flow-contract.md": "83d235fa1aa93f709462839504ec76d9819ddcccecd34ebb3e56d34c44e49acc",
-      "skills/references/scripts/observe_report.py": "90f84cdf0aa12d8ddb69b829790871bf5888ac0b3d7eb9beb29b397f82fa5170",
+      "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
+      "skills/references/scripts/observe_report.py": "0c53195a8c565c20075f4b142dc7c0fde9c41f4ef9804acfb79e3f2ef58e39d4",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "77c3e9b98a3a84fe0f7699f7ab40eabcf0dd40fe9cef231e4958b12653535a69",
+      "skills/references/tests/test_observe_report.py": "8800c90a9c2cf3bb1c10df957d5b6e8baa02a9e83b4d51671776638e47d3951f",
       "skills/splunk-dashboard-publish/SKILL.md": "2b7eafd8985e8b031711691a6dee14e6eac9b64dd98065103ccaeb345d982e25",
       "skills/splunk-dashboard-publish/references/dashboard-coverage-model.md": "8538452c7dfba51693c6a36befbe74a67b0e7f677db936496a850249e18442ce"
     },

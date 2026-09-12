@@ -16,6 +16,7 @@
   --accent: #3993ff;       /* interactiveColorAccent / ciscoBlue */
   --accent-soft: rgba(57, 147, 255, 0.18);
   --green: #85f415;        /* contentColorPositive */
+  --green-dim: #4e9a0a;    /* muted positive — for inline detail text */
   --blue: #61cafa;         /* contentColorInfo */
   --yellow: #f49106;       /* contentColorWarning */
   --purple: #ab74f1;       /* syntaxPurple */
@@ -7823,18 +7824,25 @@ code {
   margin: 10px 0 0;
 }
 
-.overview-score__totals {
+.overview-score__section {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: 6px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-soft);
 }
 
-.overview-score__totals .overview-score__row-label {
+.overview-score__section + .overview-score__section {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.overview-score__row--total .overview-score__row-label {
   font-weight: 600;
   color: var(--text);
+}
+
+.overview-score__section .overview-score__row:not(.overview-score__row--total) {
+  padding-left: 10px;
 }
 
 .overview-score__row {
@@ -7861,6 +7869,38 @@ code {
   white-space: nowrap;
 }
 
+.overview-score__row--full .overview-score__row-detail {
+  color: var(--green-dim);
+}
+
+.overview-score__row--empty .overview-score__row-detail {
+  color: var(--yellow);
+}
+
+.overview-score__row-detail--link {
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--font-xs);
+  font-family: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: none;
+  transition: text-decoration-color 0.1s;
+}
+
+.overview-score__row-detail--link:hover {
+  text-decoration: underline;
+}
+
+.overview-score__row .overview-score__row-detail--link {
+  color: var(--accent);
+}
+
+.overview-score__row--full .overview-score__row-detail--link {
+  color: var(--green-dim);
+}
+
 .overview-score__row-value {
   margin: 0;
   flex-shrink: 0;
@@ -7868,6 +7908,11 @@ code {
   font-size: var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--text);
+}
+
+.overview-score__row-detail-cell {
+  margin: 0;
+  flex-shrink: 0;
 }
 
 /* Shortfalls stand out; satisfied rows recede. */
@@ -7886,6 +7931,7 @@ code {
 .overview-score__stale {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 4px;
   margin-top: 10px;
   padding: 10px 12px;
@@ -7921,22 +7967,19 @@ code {
   font-family: var(--font-family-mono);
 }
 
-.overview-score__stale-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-}
 
-.overview-score__stale-actions .overview-checklist__nav {
-  margin-left: auto;
+.overview-score__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
 }
 
 .overview-score__source {
-  margin: 10px 0 0;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-soft);
+  flex: 1;
+  margin: 0;
   font-size: var(--font-xs);
   color: var(--text-dim);
   text-align: center;
@@ -8015,8 +8058,15 @@ code {
   background: var(--chrome);
 }
 
-.overview-checklist__title {
+.overview-checklist__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin: 0 0 12px;
+}
+
+.overview-checklist__title {
+  margin: 0;
   font-size: var(--font-label);
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -8241,7 +8291,17 @@ code {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--text-soft);
+}
+
+@keyframes overview-group-title-flash {
+  0% { color: #fff; transform: scale(1.27); }
+  100% { color: var(--text-soft); transform: scale(1); }
+}
+
+.overview-report__group-title--flash {
+  animation: overview-group-title-flash 2000ms ease-out;
+  transform-origin: left center;
 }
 
 .overview-report__count {
@@ -8349,9 +8409,6 @@ code {
   color: var(--accent);
 }
 
-.overview-callout__caret {
-  font-size: 9px;
-}
 
 @media (max-width: 720px) {
   .overview-tab__top {
@@ -8396,7 +8453,6 @@ code {
     margin-left: 25px;
   }
 }
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

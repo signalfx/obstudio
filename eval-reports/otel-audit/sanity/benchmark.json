@@ -134,7 +134,7 @@
   "failures": [],
   "source": {
     "digest_version": 2,
-    "digest": "8192617aca6f13eb48ea17fad0e29bf51a0886e27dbd84df1840c14c2f5c3e50",
+    "digest": "9441aea9d15ad2e5e6841ac18f41d56e9ab761a6edd4056d1fae3266f673aefb",
     "eval_kinds": [
       "sanity"
     ],
@@ -176,7 +176,7 @@
       "pytest-codex-evals/src/pytest_codex_evals/schemas/sanity.schema.json": "598666c521c62290a60a2b1f0e67eb8526ad80ebaa12f81e006c51454e7ddc8b",
       "pytest-codex-evals/src/pytest_codex_evals/trace.py": "b2ea2fbde127a030bac5098d54e0ca8aa0242db3106e52d99a7c36a8d1becf7c",
       "pytest-codex-evals/uv.lock": "4474921439df5db6da255d3b69b0ce1b0630c57b359146c4e8b03eefcecbd65e",
-      "skills/otel-audit/SKILL.md": "308ece4a6a4822a6445e4710e26fc2e14913a36b3c4518d2c50c4422ba130541",
+      "skills/otel-audit/SKILL.md": "d2b2712fc3a24190106527baeb674494988e5deda561b6b4ab5f642dd047cb34",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
       "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
       "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
@@ -186,12 +186,12 @@
       "skills/references/genai-readiness.md": "73e8af6407a4074ea7942df9e26be95b807e0bc69dd58e403819bc108db12209",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
-      "skills/references/report-flow-contract.md": "83d235fa1aa93f709462839504ec76d9819ddcccecd34ebb3e56d34c44e49acc",
-      "skills/references/scripts/observe_report.py": "90f84cdf0aa12d8ddb69b829790871bf5888ac0b3d7eb9beb29b397f82fa5170",
+      "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
+      "skills/references/scripts/observe_report.py": "0c53195a8c565c20075f4b142dc7c0fde9c41f4ef9804acfb79e3f2ef58e39d4",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "77c3e9b98a3a84fe0f7699f7ab40eabcf0dd40fe9cef231e4958b12653535a69"
+      "skills/references/tests/test_observe_report.py": "8800c90a9c2cf3bb1c10df957d5b6e8baa02a9e83b4d51671776638e47d3951f"
     },
     "skill_path": "skills/otel-audit",
     "selections": [

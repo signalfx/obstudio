@@ -4394,7 +4394,7 @@ th {{ color: var(--muted); font-size: 12px; }}
 <div class="tray" id="tray" hidden inert aria-hidden="true" aria-label="Instrumentation selection">
   <div class="wrap tray-bar">
     <div class="tray-command" aria-labelledby="instrumentCommandLabel">
-      <span class="tray-hint" id="instrumentCommandLabel">Copy this terminal command:</span>
+      <span class="tray-hint" id="instrumentCommandLabel">Copy this prompt and paste into AI chat</span>
       <input class="instrument-command" id="instrumentCommand" type="text" readonly aria-labelledby="instrumentCommandLabel">
     </div>
   </div>
