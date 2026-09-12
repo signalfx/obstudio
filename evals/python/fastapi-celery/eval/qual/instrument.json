@@ -16,8 +16,8 @@
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
-    "Instruments both the FastAPI web process and the Celery worker startup path.",
-    "Uses separate setup code and avoids SDK initialization on library import when inappropriate.",
+    "Instruments both the FastAPI web process and Celery worker so a fulfilled order emits a run/worker.fulfill_order consumer span under the worker service identity.",
+    "Calls separate explicit setup from API startup and Celery worker_process_init, keeps worker.py import provider-free, and does not rely only on Makefile, Docker, Compose, entrypoint, or CLI wrappers.",
     "Preserves Docker/Compose as the existing runtime shape.",
     "Keeps service name and deployment environment configurable per process.",
     "Does not add custom spans or metrics beyond auto-instrumentation without approval."

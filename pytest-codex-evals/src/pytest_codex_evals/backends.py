@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import threading
 from dataclasses import dataclass, field
@@ -9,6 +10,9 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .trace import ActionEvent, CommandEvent, TraceSummary, parse_events, parse_trace
+
+
+_IS_WINDOWS = os.name == "nt"
 
 
 @dataclass
@@ -59,6 +63,91 @@ class StreamedCommandResult:
     stderr: str
 
 
+def _process_group_popen_kwargs() -> dict[str, Any]:
+    if _IS_WINDOWS:
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _terminate_process_tree(
+    process: subprocess.Popen[str], *, process_group_id: int | None
+) -> list[str]:
+    """Best-effort cleanup for the isolated agent process tree.
+
+    POSIX descendants that create a new session and Windows detached or breakaway
+    descendants can escape these native group/tree mechanisms.
+    """
+
+    errors: list[str] = []
+    if _IS_WINDOWS:
+        try:
+            completed = subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            )
+            if completed.returncode != 0:
+                errors.append(f"taskkill exited with {completed.returncode}")
+        except BaseException as error:
+            errors.append(f"taskkill failed: {error}")
+    else:
+        if process_group_id is None:
+            errors.append("POSIX process group ID was not recorded")
+        else:
+            try:
+                os.killpg(process_group_id, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except BaseException as error:
+                errors.append(f"process-group kill failed: {error}")
+
+    try:
+        root_running = process.poll() is None
+    except BaseException as error:
+        errors.append(f"agent root poll failed: {error}")
+        root_running = True
+    if root_running:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+        except BaseException as error:
+            errors.append(f"agent root kill failed: {error}")
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired as error:
+        errors.append(f"agent root wait failed: {error}")
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+        except BaseException as kill_error:
+            errors.append(f"agent root retry kill failed: {kill_error}")
+        try:
+            process.wait(timeout=5)
+        except BaseException as wait_error:
+            errors.append(f"agent root retry wait failed: {wait_error}")
+    except BaseException as error:
+        errors.append(f"agent root wait failed: {error}")
+    return errors
+
+
+def _join_stream_threads(
+    threads: tuple[tuple[str, threading.Thread], ...], *, timeout: int = 5
+) -> list[str]:
+    errors: list[str] = []
+    for name, thread in threads:
+        try:
+            thread.join(timeout=timeout)
+            if thread.is_alive():
+                errors.append(f"{name} stream thread did not stop")
+        except BaseException as error:
+            errors.append(f"{name} stream thread cleanup failed: {error}")
+    return errors
+
+
 def run_streamed_command(
     cmd: list[str],
     *,
@@ -76,7 +165,9 @@ def run_streamed_command(
         env=env,
         text=True,
         bufsize=1,
+        **_process_group_popen_kwargs(),
     )
+    process_group_id = None if _IS_WINDOWS else process.pid
 
     stdout_thread = threading.Thread(
         target=_pump_stream,
@@ -90,16 +181,38 @@ def run_streamed_command(
     )
     stdout_thread.start()
     stderr_thread.start()
+    stream_threads = (
+        ("stdout", stdout_thread),
+        ("stderr", stderr_thread),
+    )
     try:
         returncode = process.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
-        stdout_thread.join(timeout=5)
-        stderr_thread.join(timeout=5)
+    except BaseException as error:
+        cleanup_errors: list[str] = []
+        try:
+            cleanup_errors.extend(
+                _terminate_process_tree(
+                    process,
+                    process_group_id=process_group_id,
+                )
+            )
+        except BaseException as cleanup_error:
+            cleanup_errors.append(f"process-tree cleanup failed: {cleanup_error}")
+        cleanup_errors.extend(_join_stream_threads(stream_threads))
+        for cleanup_error in cleanup_errors:
+            error.add_note(f"agent cleanup: {cleanup_error}")
         raise
-    stdout_thread.join()
-    stderr_thread.join()
+    cleanup_errors = _join_stream_threads(stream_threads)
+    if stdout_thread.is_alive() or stderr_thread.is_alive():
+        cleanup_errors = _terminate_process_tree(
+            process, process_group_id=process_group_id
+        )
+        cleanup_errors.extend(_join_stream_threads(stream_threads))
+    if cleanup_errors:
+        raise RuntimeError(
+            "agent process cleanup failed after command exit: "
+            + "; ".join(cleanup_errors)
+        )
     return StreamedCommandResult(
         returncode=returncode,
         stdout="".join(stdout_chunks),

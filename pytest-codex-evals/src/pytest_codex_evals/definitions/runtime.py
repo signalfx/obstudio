@@ -40,6 +40,7 @@ class EndpointExpectation(BaseModel):
     detail_path_template: str | None = None
     detail_id_field: str | None = None
     detail_contains_all: list[str] = Field(default_factory=list)
+    detail_contains_all_in_one: list[str] = Field(default_factory=list)
     record_checks: list[JSONRecordExpectation] = Field(default_factory=list)
 
 

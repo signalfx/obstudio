@@ -30,6 +30,7 @@
     "Uses the already-running Splunk Observability Studio without starting, stopping, restarting, or launching another Splunk Observability Studio instance. If the response mentions or encounters an inconclusive browser render, it does not treat that as proof that Splunk Observability Studio is unhealthy; a successful-render prompt need not add an irrelevant render-failure warning.",
     "States that the connection applies to the current running standalone Splunk Observability Studio process and must be entered again after Splunk Observability Studio restarts.",
     "Does not claim the organization is connected merely because the Cloud tab opened; connection success requires a later local UI or Splunk Observability Studio backend result.",
-    "For the newly-ready prompt, treats this as a separate later connection request and does not repeat, retract, contradict, or modify the earlier approved registration confirmation or resubmit signup; it need not mention the earlier confirmation."
+    "For the newly-ready prompt, treats this as a separate later connection request and does not repeat, retract, contradict, or modify the earlier approved registration confirmation or resubmit signup; it need not mention the earlier confirmation.",
+    "Routes every variant through the existing-organization connection handoff rather than account creation, while keeping credential entry outside agent context."
   ]
 }

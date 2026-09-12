@@ -1,0 +1,25 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "operator-owned-logs-header",
+      "eval_inputs": [
+        "eval/inputs/operator-owned-logs.env"
+      ],
+      "task": "Instrument the Flask service in ./service with baseline OpenTelemetry auto-instrumentation only; do not add custom business spans. Treat ./service/eval/inputs/operator-owned-logs.env as operator-owned configuration injected into the focused test and startup command. Preserve the file and its exact nonempty OTEL_EXPORTER_OTLP_LOGS_HEADERS setting. Refuse to apply that header to the default local Observer application-log exporter, and do not add an Obstudio-owned LoggerProvider, OTLP log exporter, processor, or logging bridge on that configured branch. Preserve the existing stdout/stderr logging sink and report the operator-owned boundary. Add and run focused tests that exercise both this configured-header branch and the otherwise identical default-local path with the header absent. In the absent-header test, remove the header only from the test process environment; do not edit the operator-owned input file."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service, including eval/inputs/operator-owned-logs.env, resulting startup or instrumentation files, focused tests, and the .observe instrumentation report when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Treats the nonempty OTEL_EXPORTER_OTLP_LOGS_HEADERS value from eval/inputs/operator-owned-logs.env as operator-owned: preserves the file and exact value, does not clear, rewrite, move, or copy it, and does not treat it as permission for the default local Observer exporter.",
+    "On the configured-header branch, fails closed or skips the Obstudio-owned local application-log path before constructing or registering any LoggerProvider, BatchLogRecordProcessor, OTLP log exporter, LoggingInstrumentor bridge, or duplicate handler; preserves the Flask application's existing stdout/stderr logging sink.",
+    "Reports the exact OTEL_EXPORTER_OTLP_LOGS_HEADERS boundary as operator-owned and states that default local Observer application-log export is not configured or proven on that branch; does not present the placeholder as a credential or claim that the local application-log path works.",
+    "Adds an executable focused test that sets the nonempty signal-specific logs header and proves no Obstudio-owned local provider, exporter, processor, bridge, or duplicate handler is created, then removes only that test-process header and proves the otherwise eligible absent-header path creates exactly one local Observer log exporter, processor, and bridge while preserving the original logging sink.",
+    "Keeps the normal absent-header local path on OTEL_LOGS_EXPORTER=otlp, http/protobuf, and http://localhost:4318/v1/logs, without copying generic or signal-specific headers into the exporter.",
+    "Preserves Flask routes and the project-native startup path, uses environment-driven service, trace, and metric configuration, runs the narrowest project-native validation, and records exact command evidence or an exact blocker without claiming blocked behavior verified. Judge effective resource values, including SDK-provided environment detectors, rather than requiring one merge implementation; inspect runtime evidence or run a focused read-only probe before claiming operator attributes are discarded."
+  ]
+}

@@ -1,371 +1,223 @@
 ---
 name: splunk-dashboard-publish
 description: >-
-  Diff local splunk-dashboard Terraform against live Splunk Observability Cloud
-  dashboards and create only the confirmed gaps. Reads
-  .observe/terraform/dashboards.tf, fetches live dashboards, dashboard groups,
-  and charts via the Splunk O11y REST API, classifies each group / dashboard /
-  chart as COVERED / GAP / UNCERTAIN with an explicit reason, shows a
-  confirmation diff, and creates gaps chart-first (POST /v2/chart then
-  POST /v2/dashboard). Writes .observe/dashboard-sync.md as a resumable ledger.
-  Use when the user types $splunk-dashboard-publish, asks to "sync dashboards",
-  "check which dashboards are missing", "create missing dashboards", or "push
-  dashboard gaps to Splunk".
+  Compare .observe/terraform/dashboards.tf with live Splunk Observability Cloud
+  groups, dashboards, and charts; classify COVERED/GAP/UNCERTAIN results,
+  confirm, and create only GAPs chart-first with a resumable ledger. Use for
+  $splunk-dashboard-publish, "sync dashboards", "check which dashboards are missing",
+  "create missing dashboards", or "push dashboard gaps to Splunk".
 metadata:
   author: otel-studio
   version: 0.1.2
   category: observability
 ---
 
-# Dashboard Publish -- Splunk O11y Dashboard Gap Analysis and Create
+# Dashboard Publish -- Splunk O11y Gap Analysis And Create
 
-## Overview
+Compare `$splunk-dashboard` Terraform with live Splunk Observability Cloud at
+group, dashboard, and chart levels; create only confirmed GAPs. Charts must
+exist before dashboards use their `chartId` values. Keep a ledger for
+idempotent reruns and orphan-chart recovery.
 
-Compare locally-generated dashboard Terraform (from `$splunk-dashboard`) against
-**live** Splunk Observability Cloud dashboards for the same service. Create only
-the genuine gaps — chart-first, then the dashboard that references them — and
-skip anything already covered. Write a persistent ledger so re-runs are
-idempotent and auditable, with an explicit reason for every verdict.
-
-This is the dashboard analogue of `$splunk-detector-publish` (detector publish). The key
-structural difference: a dashboard is a three-level object — group → dashboard →
-charts[] — and each chart is a **separate** REST object that must be created
-**before** the dashboard that references it by `chartId`.
-
-## When to Use
-
-- After `$splunk-dashboard` has produced `.observe/terraform/dashboards.tf`
-- When the user wants to push only the missing dashboards/charts to Splunk O11y
-  without duplicating dashboards that already exist
-- When auditing which dashboards are already live vs. still missing
-
-**When NOT to use:** If no local dashboard spec exists, instruct the user to run
+Without `.observe/terraform/dashboards.tf`, stop and request
 `$splunk-dashboard` first.
 
-## Auth and API
+Resolve paths in this entrypoint from the skill directory. Inside a loaded
+reference, resolve its relative paths from that reference's directory. Never
+resolve skill references from the service cwd or probe alternate copies unless
+a required file is missing. Read only the references routed by the selected mode.
 
-> Shared reference: `../references/splunk-api.md` is the single source of truth
-> for auth (`SPLUNK_ACCESS_TOKEN` → `X-SF-Token`), realm resolution
-> (`SPLUNK_REALM` first, then `observer_splunk_connection_realm`), the
-> **skip-on-500 paginated GET** loop, and HTTP-status handling (200 ok; 409 →
-> COVERED; 403/401 → stop; 400 → casing/SignalFlow check; only 500 skipped,
-> never a bare `except Exception`).
+## Always-Loaded Safety Contract
 
-All Splunk O11y data calls use the **Splunk REST API** directly. The optional
-read-only Splunk Observability Studio status call is used only to discover a default realm. If
-`SPLUNK_ACCESS_TOKEN` is missing, or neither `SPLUNK_REALM` nor the connected
-Splunk Observability Studio provides a realm, stop and tell the user. Treat the token as a secret —
-never log it or write it to the ledger.
+- Local planning and live comparison are read-only. Before any remote create,
+  update, or delete, show the complete diff and require explicit current
+  yes/no confirmation. Credentials, a prior run, or earlier confirmation are
+  not consent. A changed diff requires confirmation again.
+- Create only GAPs. On a COVERED dashboard, append only confirmed chart GAPs.
+  Never mutate UNCERTAIN objects.
+- Live REST auth uses `SPLUNK_ACCESS_TOKEN` from the environment as
+  `X-SF-Token`. Never log it, echo it, write it to
+  `.observe/dashboard-sync.md`, put it in prompt/report context, or persist a
+  real value in Terraform examples.
+- Resolve realm from non-empty `SPLUNK_REALM` first, then the connected
+  Splunk Observability Studio's realm-only lookup. That lookup is never a token source. If token
+  or realm is missing for a live run, stop with the exact prerequisite.
+- Fetch and reclassify live state on every run; the prior ledger is not proof
+  that an object remains COVERED or GAP. Use prior rows only for audit history
+  and orphan recovery.
+- Only HTTP 500 pages in paginated GET are skipped. Never swallow 401, 403,
+  parsing, transport, or other errors with a bare `except Exception`; an
+  incomplete fetch cannot become an empty list and false GAPs.
+- Writes are sequential. POST 200/201 records the returned ID; 409 requires a
+  GET and reuse of the existing ID; 400 requires casing/SignalFlow diagnosis;
+  401/403 stops without retry. Detailed PUT/race handling belongs to the live
+  reference.
+- Record every successful chart POST immediately in the ledger before the
+  dashboard write. If POST/PUT dashboard fails, keep every unreferenced chart
+  ID under `Orphan charts`. Reuse exact matches or `DELETE /v2/chart/{id}` only
+  when that cleanup was listed in the current confirmation diff.
+- Never expose or invent live IDs. Every group/dashboard/chart verdict and
+  ledger row has a concrete, non-empty Reason naming the criteria and values
+  compared.
+
+## Reference Router
+
+| Condition | Read | Authority |
+|---|---|---|
+| Explicit no-network request, unavailable network, or placeholder credentials | `references/offline-plan.md` | Local parsing, UNCERTAIN candidates, planned payloads/order, offline stop |
+| Any `program_text` is parsed | `../references/terraform-normalization.md` | `<<-EOF` dedent and every `${var.*}` resolution |
+| Chart wire type is needed | `references/chart-wire-contract.md` | HCL/local/REST type mapping and chart body |
+| Connected dry-run, live comparison, or mutation | `references/live-publish.md` | Fresh fetch, confirmation, dry-run stop or ordered mutation, orphan recovery, ledger |
+| Live API access | `../references/splunk-api.md` (routed by live publish) | Auth, realm, pagination, HTTP status, dashboard PUT |
+| Live classification | `references/dashboard-coverage-model.md` (routed by live publish) | Three-level structural match and reason criteria |
+| Ledger will be written | `../references/ledger-template.md` (routed by live publish) | Resumable ledger and incremental chart-ID writes |
+
+The local coverage model incorporates the shared
+`../references/coverage-decision-tree.md`; do not load the shared decision tree
+separately. Offline mode must not load `splunk-api.md`, `live-publish.md`, the
+live coverage model, or the ledger template.
+
+The generator vocabulary is in `../splunk-dashboard/references/dashboard-templates.md`; do
+not load it during publish.
 
 ## Process
 
-### Step 1 -- Locate Local Specs
+### 1. Locate And Parse Local Specs
 
-Look for `.observe/terraform/dashboards.tf` in the repository root.
+Require `.observe/terraform/dashboards.tf`. Optionally read
+`.observe/dashboards.md` for panel rationale and
+`.observe/dashboard-sync.md` for prior orphan IDs.
 
-- If it exists, proceed to Step 2.
-- If it is missing, stop and respond:
+Parse a three-level graph:
 
-> No local dashboard spec found at `.observe/terraform/dashboards.tf`. Please run
-> `$splunk-dashboard` first to generate the dashboard Terraform.
+1. `signalfx_dashboard_group`: HCL label, `name`, `description`.
+2. `signalfx_dashboard`: HCL label, `name`, `description`,
+   `dashboard_group`, and every chart placement (`chart_id`, `column`, `row`,
+   `width`, `height`).
+3. Each `signalfx_*_chart`: HCL label, `name`, chart type, and normalized
+   `program_text`; text charts carry `markdown` instead.
 
-Also read `.observe/dashboards.md` if present for the panel rationale that helps
-resolve ambiguous UNCERTAIN cases.
+Read `../references/terraform-normalization.md`. Dedent every indented
+`<<-EOF` heredoc and resolve every `${var.*}` from tfvars/defaults before
+comparison or planned POST. For offline plans, show each non-text chart's exact
+normalized `programText`; a placeholder or ellipsis is not proof of
+normalization. Fail rather than guess unresolved variables. HCL
+uses `program_text`, `chart_id`, and `dashboard_group`; REST uses
+`programText`, `chartId`, and `groupId`.
 
-Also read `.observe/dashboard-sync.md` (the ledger from any prior run) if it
-exists. Collect any chart IDs listed under **Orphan charts** — these are charts
-that were successfully POSTed in a previous run but whose dashboard POST/PUT
-failed, leaving them unreferenced. Before classifying any panel as GAP and
-creating a new chart, check whether a matching orphan ID exists (match by
-`name`, `programText` fingerprint, or metric+filter+type). If a match is found,
-reuse the orphan chart ID instead of creating a duplicate, then clear it from
-the orphan list. After the full run, explicitly delete any remaining unmatched
-orphan chart IDs via `DELETE /v2/chart/{id}` so they do not accumulate.
+Read `references/chart-wire-contract.md`. The publish path must recognize
+`TimeSeriesChart` and `SingleValue` as well as the remaining mapped types.
+`packageSpecifications` belongs in chart bodies.
 
-### Step 2 -- Parse Local Specs
+### 2. Select Offline Or Live Mode
 
-Parse each block in `dashboards.tf`:
+If network is unavailable, credentials are placeholders, or the user explicitly
+requires no network, read `references/offline-plan.md`. Do not read credentials
+or make a network call. Produce the complete local plan with every unqueried
+object marked `UNCERTAIN`, describe chart-first creation and orphan recovery,
+show exact normalized SignalFlow for every non-text chart, and print a planned
+dashboard body containing the literal `"tags": ["obstudio"]`. Then stop at the
+informational confirmation gate without creating, updating, or deleting.
 
-1. **`signalfx_dashboard_group`** — `name`, `description`.
-2. **`signalfx_dashboard`** — `name`, `dashboard_group` reference, and each
-   `chart { chart_id; column; row; width; height }` block (grid placement).
-3. **`signalfx_*_chart`** — for each chart resource: HCL label, `name`,
-   `program_text`, and the chart type (from the resource type —
-   `signalfx_time_chart` → `time_series`, `signalfx_single_value_chart` →
-   `single_value`, etc.; see `../splunk-dashboard/references/dashboard-templates.md`
-   for the full mapping).
+A dry-run request with usable live access is not offline: read
+`references/live-publish.md`, perform the read-only live fetch and structural
+classification, show real COVERED/GAP/UNCERTAIN results, and stop before every
+mutation even if the user answers yes. A later non-dry-run must re-fetch, show
+the diff, and obtain a new confirmation.
 
-**Normalize every chart `program_text` before any POST or comparison** per
-`../references/terraform-normalization.md`: `textwrap.dedent` the `<<-EOF`
-heredoc and resolve **every** `${var.*}` (service name and any per-panel knob).
-A literal `${var...}` or a leading-whitespace line makes the SignalFlow parser
-reject the create with **HTTP 400**. HCL field names are snake_case
-(`program_text`, `chart_id`, `dashboard_group`); the REST API uses camelCase
-(`programText`, `chartId`, `groupId`) — normalize when building bodies.
+Otherwise read `references/live-publish.md` before the first API call. It
+routes to the shared API, live coverage, and ledger contracts. Fetch groups and
+dashboards, then only the charts needed for candidate comparison. A successful
+empty list means all local objects are GAP; a failed fetch does not.
 
-Fail fast if the file is not parseable and tell the user.
+### 3. Classify At Three Levels
 
-### Step 3 -- Fetch Live Dashboards, Groups, and Charts
+Live mode applies `references/dashboard-coverage-model.md`:
 
-Using the skip-on-500 paginated GET loop from `../references/splunk-api.md`:
+- Group: name match is COVERED; absence is GAP.
+- Dashboard: match within group by name and panel set. A same-name live strict
+  subset is COVERED with chart-level GAPs; divergent extra/different content is
+  UNCERTAIN.
+- Chart: COVERED only when one live chart matches metric, resolved service
+  filter (`service.name` or equivalent `sf_service`), and chart type. Partial
+  matches are UNCERTAIN; absence of a complete match is GAP.
 
-- `GET /v2/dashboardgroup` — live groups (`id`, `name`).
-- `GET /v2/dashboard` — live dashboards (`id`, `name`, `groupId`, `charts[]`,
-  each `{ chartId, column, row, width, height }`).
-- `GET /v2/chart/{id}` — fetch a referenced chart's `programText` and type only
-  when needed to compare a candidate-matched dashboard's panels.
+Record every criterion that fired. A valid chart reason can say
+`metric http.server.request.duration + filter service.name=checkout + type
+time_series all matched live chart C-456`. Reject a generic note such as
+`matched live dashboard`.
 
-If the org has zero dashboards, every local dashboard is a GAP — proceed with an
-empty live list.
+### 4. Show The Confirmation Diff
 
-### Step 4 -- Classify Each Local Spec (group / dashboard / chart)
+Before any write, show separate Dashboard Groups, Dashboards, and Charts /
+Panels tables with a non-empty Reason on every row. Include
+resolved realm/source for live mode, exact operation counts, every UNCERTAIN
+row, and proposed orphan deletions.
 
-Apply `references/dashboard-coverage-model.md` (built on the shared
-`../references/coverage-decision-tree.md`). Classify at **three levels**, and for
-**every** verdict record the concrete reason it fired (see "Explicit coverage
-rationale" below):
-
-- **Dashboard group** — COVERED if a live group with the same name exists;
-  otherwise GAP (it is created before its dashboards).
-- **Dashboard** — COVERED if a live dashboard matches by name (or by group +
-  panel-metric set); GAP if none matches; UNCERTAIN if a same-named dashboard
-  exists but its panel set / metrics differ.
-- **Chart / panel** — within a matched dashboard, each local chart is
-  COVERED / GAP / UNCERTAIN against the live `charts[]` by `{ metric, filters,
-  chartType }` (the live chart's `programText` fetched per Step 3). This is what
-  lets sync add a missing panel to an otherwise-covered dashboard rather than
-  mislabeling the whole dashboard.
-
-The `service.name` and `sf_service` dimension keys are equivalent for the filter
-check; `program_text` (HCL) and `programText` (REST) are the same field.
-
-### Step 5 -- Confirmation Diff
-
-Print a structured diff before any writes, **with a non-empty Reason on every
-row**. Do not proceed until the user explicitly confirms (yes/no). Offer a dry
-run by checking the payload locally (SignalFlow normalization, required fields, chart-type constraints) before any POST — the Charts and Dashboards APIs have no `/validate` endpoint; only detectors do.
-
-**When network is unavailable (offline):** still produce the full confirmation
-diff and describe the creation plan you would execute. Explicitly state:
-1. Creation order — `POST /v2/dashboardgroup` first (if the group is a GAP) to
-   obtain the group ID, then `POST /v2/chart` for each GAP chart to collect chart
-   IDs, then `POST /v2/dashboard` referencing those `chartId` values with grid
-   placement. Charts must precede the dashboard that references them; the group
-   must precede the dashboard that belongs to it.
-2. Orphan-chart recovery — if the dashboard POST fails after charts were
-   already created, those charts exist but reference nothing; record their IDs
-   in the ledger so a re-run can reuse or delete them via `DELETE /v2/chart/{id}`
-   before recreating, never silently leaving orphans.
-
-```
+```markdown
 ## Dashboard Publish Diff — <service-name>
 
 ### Dashboard Groups
 | Local Group | Status | Reason |
-|-------------|--------|--------|
-| <service> Overview | GAP | no live dashboard group named "<service> Overview"; will create |
+|---|---|---|
 
 ### Dashboards
 | Local Dashboard | Group | Status | Reason |
-|-----------------|-------|--------|--------|
-| <service> RED | <service> Overview | GAP | no live dashboard named "<service> RED" in group; will create |
+|---|---|---|---|
 
 ### Charts / Panels
 | Local Chart | Metric | Type | Status | Reason |
-|-------------|--------|------|--------|--------|
-| p99_latency | http.server.request.duration | time_series | GAP | no live chart with metric=http.server.request.duration + filter service.name=<svc> + type time_series in dashboard |
+|---|---|---|---|---|
 
 ---
-N groups, N dashboards, N charts will be created. N UNCERTAIN need manual review.
+N groups, N dashboards, and N charts will be created or updated.
+N UNCERTAIN require review; N orphan charts are proposed for deletion.
 Confirm? (yes/no)
 ```
 
-If there are zero GAPs and zero UNCERTAINs, report all-COVERED, skip to Step 7,
-and write the ledger.
+With zero GAPs and UNCERTAINs, do no remote mutation. Write the all-COVERED
+ledger only in non-dry-run live mode; a connected dry run never writes one.
+Offline mode stops after its informational diff. A later online run must fetch,
+reclassify, show a new diff, and confirm again.
 
-### Step 6 -- Create GAPs (chart-first ordering)
+### 5. Execute Confirmed Live GAPs
 
-After the user confirms, create in this order (the critical difference from
-detector publish — a dashboard cannot be created before the charts it references):
+Only after `yes`, follow `references/live-publish.md`:
 
-1. **Ensure the dashboard group exists.** For each GAP group,
-   `POST /v2/dashboardgroup` with `{ name, description }`; collect the returned
-   `id`. For a COVERED group, reuse the live `id`.
-2. **Create each GAP chart first.** For each GAP panel,
-   `POST /v2/chart` with:
-   ```python
-   # Convert the Terraform/preview resource type to the REST API type name FIRST.
-   # The local spec stores snake_case names from the HCL resource type; the REST
-   # API requires PascalCase. Map before building options:
-   CHART_TYPE_MAP = {
-       "time_series":   "TimeSeriesChart",
-       "single_value":  "SingleValue",
-       "list":          "List",
-       "heatmap":       "Heatmap",
-       "text":          "Text",
-       "table":         "TableChart",
-       "event":         "EventFeed",
-   }
-   rest_type = CHART_TYPE_MAP.get(chart_type, chart_type)  # fall back to raw if unknown
+1. Ensure each GAP group exists with `POST /v2/dashboardgroup`.
+2. Reuse an exact matching orphan or create each GAP chart with
+   `POST /v2/chart`; persist every returned ID immediately.
+3. Create a missing dashboard with `POST /v2/dashboard`, referencing placed
+   chart IDs and including `"tags": ["obstudio"]`.
+4. For chart GAPs in a COVERED dashboard, fetch-merge-`PUT /v2/dashboard/{id}`;
+   never recreate the dashboard.
+5. Clear referenced orphan IDs and delete only still-unmatched, explicitly
+   confirmed orphans via `DELETE /v2/chart/{id}`.
 
-   # options body is TYPE-DEPENDENT — see constraints below
-   if rest_type == "TimeSeriesChart":
-       options = {"type": "TimeSeriesChart", "defaultPlotType": "LineChart", "colorBy": "Dimension"}
-   else:
-       # SingleValue, List, Heatmap, Text, TableChart: do NOT include defaultPlotType
-       options = {"type": rest_type, "colorBy": "Dimension"}
+Build chart bodies exactly as `references/chart-wire-contract.md` specifies.
 
-   body = {
-       "name": chart_name,
-       "programText": program_text,   # NORMALIZED per terraform-normalization.md
-       "options": options,
-       "packageSpecifications": "signalfx",
-   }
-   ```
+### 6. Write The Resumable Ledger And Summary
 
-   > **Chart API field notes:**
-   > - `signalfx_text_chart` (chart type `Text`) uses `options.markdown` for its
-   >   content — **not** `programText` or `program_text`. The `programText` field is
-   >   ignored for text charts; always put the markdown body in `options: {type: "Text",
-   >   markdown: "..."}`. Do not include `programText` in the POST body for a text chart.
-   > - `TimeSeriesChart` is the **only** chart type that accepts `defaultPlotType`.
-   >   All other types (`SingleValue`, `List`, `Heatmap`, `Text`, `TableChart`) reject
-   >   `defaultPlotType` with HTTP 400.
+For non-dry-run live runs, write `.observe/dashboard-sync.md` after success,
+partial failure, or an all-COVERED no-op with `../references/ledger-template.md`.
+Keep separate group/dashboard/chart
+tables, summary counts, IDs/deep links, concrete reasons, failures, and any
+remaining `Orphan charts`. Never write the access token.
 
-   **RED FLAGS on chart create (HTTP 400):**
-   - `defaultPlotType` in `options` for any non-`TimeSeriesChart` type → API rejects with 400.
-     Only `TimeSeriesChart` accepts `defaultPlotType`. Remove it for `SingleValue`, `List`,
-     `Heatmap`, `Text`, and `TableChart`.
-   - `.last()` in `programText` with no window argument → SignalFlow rejects with 400.
-     `.last()` requires an explicit window duration (e.g. `.last('1m')`). For gauge KPI panels
-     use `.mean()` instead — it is the safe no-argument aggregation.
-
-   Collect each returned chart `id`. Record every created chart id **immediately
-   after each successful POST** by appending a row to the in-progress ledger
-   file (write or rewrite `.observe/dashboard-sync.md` after each chart, not
-   only at Step 7). This incremental write ensures that if the run aborts
-   between chart creation and the final Step 7 ledger write, the chart IDs are
-   still persisted and can be reused or cleaned up on the next run rather than
-   left as silent orphans.
-3. **Create the dashboard or update an existing one.**
-
-   - **If the dashboard is GAP (does not exist):** `POST /v2/dashboard` with:
-     ```python
-     body = {
-         "name": dashboard_name,
-         "description": dashboard_description,
-         "groupId": group_id,            # from step 1
-         "charts": [
-             {"chartId": cid, "column": c, "row": r, "width": w, "height": h}
-             for (cid, c, r, w, h) in placed_charts
-         ],
-         "tags": ["obstudio"],
-     }
-     ```
-
-   - **If the dashboard is COVERED but has chart-level GAPs:** use
-     `PUT /v2/dashboard/{id}` to add only the new charts to the existing
-     dashboard, per `../references/splunk-api.md` ("Updating an existing
-     dashboard"). Fetch the live dashboard's current `charts[]`, append the
-     new `{"chartId": cid, ...}` entries, and PUT the merged array. Do **not**
-     recreate the whole dashboard — that would produce a duplicate.
-
-Status handling per `../references/splunk-api.md`: 200/201 → record id + app
-link; 409/duplicate → reclassify COVERED; 403 → token lacks dashboard-write
-scope, stop; 400 → field-casing or SignalFlow-normalization check. Create
-sequentially so progress is visible and failures are attributable.
-
-**Orphan-chart recovery:** if the dashboard POST fails after charts were created,
-the charts already exist but reference nothing. Record their ids in the ledger so
-a re-run can either reuse them (match by metric+filter+type) or delete them
-(`DELETE /v2/chart/{id}`) before recreating — never silently leave orphans.
-
-### Step 7 -- Write Ledger
-
-> Shared reference: `../references/ledger-template.md` defines the resumable
-> ledger shape with the required non-empty **Reason** column.
-
-Write or overwrite `.observe/dashboard-sync.md` after every run (success,
-partial failure, or zero-gap no-op):
-
-```markdown
-# Dashboard Publish Ledger: <service-name>
-
-**Date:** <YYYY-MM-DD>
-**Local spec:** `.observe/terraform/dashboards.tf`
-**Service filter resolved to:** `<service_name_value>`
-
-## Summary
-
-| Status | Count |
-|--------|-------|
-| COVERED | N |
-| GAP → Created | N |
-| GAP → Failed | N |
-| UNCERTAIN | N |
-
-## Dashboard Group Status
-
-| Local Group | Status | Group ID | Link | Reason |
-|-------------|--------|----------|------|--------|
-
-## Dashboard Status
-
-| Local Dashboard | Group | Status | Dashboard ID | Link | Reason |
-|-----------------|-------|--------|--------------|------|--------|
-
-## Chart Status
-
-| Local Chart | Metric | Type | Status | Chart ID | Reason |
-|-------------|--------|------|--------|----------|--------|
-
----
-*Generated by splunk-dashboard-publish on <YYYY-MM-DD>*
-```
-
-Every row's **Reason** must be non-empty and concrete (name the live object + the
-match basis for COVERED; what was searched and found absent for GAP; the specific
-divergence for UNCERTAIN). Deep links use
-`https://app.${realm}.signalfx.com/#/dashboard/{id}` with the resolved realm.
-
-### Step 8 -- Chat Summary
-
-Present a concise summary: groups/dashboards/charts already covered, created, and
-uncertain; the ledger path; and — if any creates failed — list them explicitly
-with the error and any orphaned chart ids to clean up. If UNCERTAIN specs remain,
-recommend re-running after the user reviews the diverging live dashboards.
-
-## Explicit Coverage Rationale (required)
-
-For **every** group, dashboard, and chart verdict, record the concrete reason it
-was classified COVERED / GAP / UNCERTAIN — which criteria fired and what was
-compared. This reason appears in the confirmation diff (Step 5) and is persisted
-in the ledger's **Reason** column (Step 7). A generic note ("matched live
-dashboard") is not acceptable.
-
-- **COVERED** → name the live object + the exact match basis, e.g.
-  `matched live dashboard "Checkout RED" (D-123): name match + 4/4 panel metrics present`
-  or `chart COVERED: metric http.server.request.duration + filter service.name=checkout + type time_series all matched live chart C-456`.
-- **GAP** → state what was searched and found absent, e.g.
-  `no live dashboard named "Checkout RED" in group "checkout"; will create` or
-  `panel GAP: no live chart with metric=... + filter=... found in dashboard D-123`.
-- **UNCERTAIN** → state the specific divergence, e.g.
-  `live dashboard "Checkout RED" exists but panels differ: local has p99_latency + error_rate; live has p50_latency only — not auto-creating, needs human review`.
-
-See `references/dashboard-coverage-model.md` for the per-criterion reason text
-and `../references/coverage-decision-tree.md` for the shared rule.
+Summarize covered, created, failed, and uncertain counts at each level; link the
+ledger; list every failure and orphan ID; and give the exact next action.
+Reruns always re-fetch live state and reuse persisted orphan IDs rather than
+creating duplicates.
 
 ## Red Flags
 
-- `.observe/terraform/dashboards.tf` missing — run `$splunk-dashboard` first.
-- `SPLUNK_ACCESS_TOKEN` unset — stop and tell the user.
-- No realm from `SPLUNK_REALM` or the connected Splunk Observability Studio — stop and tell the
-  user.
-- A chart `programText` still has a literal `${var.*}` or a leading-whitespace
-  line — it will 400 on create; re-normalize per
-  `../references/terraform-normalization.md`.
-- Dashboard POST attempted before its charts exist — wrong ordering; charts must
-  be POSTed first and referenced by `chartId`.
-- A dashboard POST fails after charts were created — orphaned charts; record
-  their ids and reuse or delete them on the next run.
-- POST returns 403 — token lacks dashboard-write scope; stop.
+- Missing dashboard Terraform: run `$splunk-dashboard`.
+- Missing live token or realm: stop; do not guess or use Splunk Observability Studio as a token
+  source.
+- Unresolved `${var.*}` or leading heredoc indentation: do not compare or POST.
+- Dashboard write before chart IDs exist: invalid order.
+- Dashboard failure after chart creation without an incremental orphan ledger:
+  unsafe and non-resumable.
+- 401/403: stop without retry. 400: distinguish REST casing from SignalFlow
+  normalization. Continuous 500s: treat as a likely auth/service problem, not
+  an empty live inventory.

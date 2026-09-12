@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | connect-splunk-observability-cloud |
-| Run ID | 20260911T020726957913Z |
+| Run ID | 20260911T195830773350Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -17,4 +17,4 @@ This report validates eval JSON, eval directory availability, and skill source a
 
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
-| plugins/obstudio/qual/connect-splunk-observability-cloud | plugins/obstudio | 3 | evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json | 0 | 9 | 0 |
+| plugins/obstudio/qual/connect-splunk-observability-cloud | plugins/obstudio | 3 | evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json | 0 | 10 | 0 |

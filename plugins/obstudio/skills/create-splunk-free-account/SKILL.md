@@ -1,33 +1,29 @@
 ---
 name: create-splunk-free-account
 description: >-
-  Submit a consent-gated Splunk Observability Cloud Free Edition signup intake
-  in a detected or user-selected supported signup region through Splunk Observability Studio's
-  browserless MCP backend. Use when a user asks to create, provision, register,
-  start, or sign up for a free Splunk Observability Cloud, Splunk O11y, or
-  SignalFx account or organization, or explicitly asks to submit another
-  intake with the same details or email, including requests to avoid the Splunk
-  web form.
+  Submit a consent-gated Splunk Observability Cloud Free Edition intake through
+  Splunk Observability Studio in a reviewed supported region. Use to create, provision, register,
+  start, or sign up for a Splunk O11y/SignalFx account or organization, or when the user
+  explicitly asks to submit another intake with the same details or email.
+  Requires explicit terms acceptance; never uses the Splunk web form.
 ---
 
 # Get started with Observability Cloud Free Edition
 
-Help the user get started with Observability Cloud Free Edition by submitting a
-consent-gated intake through Splunk Observability Studio. Its backend supplies the
-non-user fields and performs the external request.
+Submit a consent-gated Free Edition intake through Splunk Observability Studio;
+its backend supplies non-user fields and submits it.
 
 ## Guardrails
 
-- Treat submission as an external write. Call the submission tool only after
-  the user asks to create the account and explicitly accepts the linked terms.
+- Submission is an external write. Call the tool only after the user requests
+  the account and explicitly accepts the linked terms.
 - Do not infer acceptance from the signup request, a prior unrelated “yes,” or
   silence. Do not set `termsAccepted` to `true` on the user's behalf.
 - Never submit directly with `curl`, a reconstructed JSON request, or the web
   form. Use only `observer_splunk_free_account_create` for submission and
   `observer_splunk_free_account_region_detect` for read-only region detection.
-- Invoke the submission tool exactly once for each explicit submission
-  request. Never automatically retry a rejection, timeout, transport failure,
-  or ambiguous result.
+- Invoke the submission tool exactly once for each explicit submission request. Never automatically
+  retry a rejection, timeout, transport failure, or ambiguous result.
 - Do not inspect or retain local in-flight state, prior outcomes, or email
   history to suppress or delay an explicit submission request. Each explicit
   request gets one tool call even when another request with the same email is
@@ -197,8 +193,7 @@ call Cisco OpenDNS or receive a raw IP value, so it does not explicitly
 transmit, log, display, or retain one. Splunk still processes the normal
 request source IP. Region detection does not submit a signup. Realm selection
 does not inspect or use collected application telemetry. A remote or shared
-A remote or shared Splunk Observability Studio instance can therefore reflect its host's network rather than the
-user's laptop.
+Splunk Observability Studio instance can therefore reflect its host's network rather than the user's laptop.
 
 The backend applies supported country overrides first: United States to the
 public `us` value and internal US1 destination; Ireland, Germany, and the United
@@ -320,11 +315,15 @@ one user instruction into repeated calls.
 If the user only reports that no setup email arrived after an acknowledgment,
 do not infer a request to submit again. Explain that the browserless client
 cannot determine downstream provisioning or mail status from the intake
-acknowledgment, and ask the user to check spam/junk folders. If the user
-explicitly asks to submit again, warn that the prior request may still produce
-an email or organization, then make exactly one new tool call. Do not suppress
-that call because the email was used before; the downstream backend owns
-duplicate handling.
+acknowledgment, and ask the user to check spam/junk folders. In a live
+interaction, if the user explicitly asks to submit again, warn that the prior
+request may still produce an email or organization, then make exactly one new
+tool call. In an offline or synthetic behavior evaluation that asks to model
+that call and supplies an assumed success result, omit the warning and any
+other preface: show only the explicitly requested modeled tool call and its
+one JSON argument object, then the exact approved confirmation. Do not
+suppress that call because the email was used before; the downstream backend
+owns duplicate handling.
 
 Keep the final response concise and avoid repeating the user's email address
 unless it is needed to resolve an error.

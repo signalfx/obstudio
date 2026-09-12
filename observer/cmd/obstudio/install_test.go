@@ -6145,9 +6145,8 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 	assertSmokeJSONMCPConfig(t, filepath.Join(homeDir, ".cursor", "mcp.json"), filepath.Join(installedDirs["cursor"], binaryName))
 	assertSmokeJSONMCPConfig(t, filepath.Join(homeDir, ".kiro", "settings", "mcp.json"), filepath.Join(installedDirs["kiro"], binaryName))
 
-	observerPort := pickSmokePort(t)
-	otlpHTTPPort := pickSmokePort(t)
-	otlpGRPCPort := pickSmokePort(t)
+	ports := pickSmokePorts(t, 3)
+	observerPort, otlpHTTPPort, otlpGRPCPort := ports[0], ports[1], ports[2]
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", observerPort)
 	otlpHTTPURL := fmt.Sprintf("http://127.0.0.1:%d", otlpHTTPPort)
 
@@ -6433,18 +6432,34 @@ func assertSmokeJSONMCPConfig(t *testing.T, configPath, installedBinary string) 
 
 func pickSmokePort(t *testing.T) int {
 	t.Helper()
+	return pickSmokePorts(t, 1)[0]
+}
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("pick free port: %v", err)
-	}
-	defer listener.Close()
+func pickSmokePorts(t *testing.T, count int) []int {
+	t.Helper()
 
-	addr, ok := listener.Addr().(*net.TCPAddr)
-	if !ok {
-		t.Fatalf("expected TCP listener address, got %T", listener.Addr())
+	listeners := make([]net.Listener, 0, count)
+	defer func() {
+		for _, listener := range listeners {
+			_ = listener.Close()
+		}
+	}()
+
+	ports := make([]int, 0, count)
+	for range count {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("pick free ports: %v", err)
+		}
+		listeners = append(listeners, listener)
+
+		addr, ok := listener.Addr().(*net.TCPAddr)
+		if !ok {
+			t.Fatalf("expected TCP listener address, got %T", listener.Addr())
+		}
+		ports = append(ports, addr.Port)
 	}
-	return addr.Port
+	return ports
 }
 
 func stopSmokeProcess(cmd *exec.Cmd, done <-chan error) {

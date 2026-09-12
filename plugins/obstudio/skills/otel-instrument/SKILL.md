@@ -1,1373 +1,376 @@
 ---
 name: otel-instrument
 description: >-
-  Add OpenTelemetry traces, metrics, and local application logs using
-  auto-instrumentation and optional custom signals, write separate instrumentation Markdown
-  and HTML reports,
-  and run verification unless explicitly skipped or blocked. Use when the user
-  types $otel-instrument, asks to "add OTel", "add tracing", "add metrics",
-  "implement observability", "wire up telemetry", "instrument this service",
-  passes selected executable audit finding IDs with --ids, supplies
-  .observe/otel-selection.json,
-  asks to add a specific custom signal like "add a metric to track queue
-  depth", "add a span for payment processing", "track error rate for X", or
-  asks to add signals that make incidents faster to detect or localize, or asks
-  to instrument GenAI/LLM workflows with OpenTelemetry semantic conventions.
+  Add OpenTelemetry traces, metrics, and local application logs through
+  auto-instrumentation and selected custom signals, then write reports and
+  verify unless blocked. Use for $otel-instrument, approved audit IDs or
+  .observe/otel-selection.json, service instrumentation, specific spans or
+  metrics, incident-detection signals, and GenAI/LLM semantic conventions.
 ---
 
 # Instrument
 
-Add OpenTelemetry observability to applications using auto-instrumentation,
-default local application-log export, and optional custom spans or metrics.
+Add OpenTelemetry to the application path users run. Preserve runtime shape,
+telemetry contracts, and operator configuration. A broad OTel request is an
+implementation workflow: change the in-scope service, report, and verify or
+name the exact blocker.
 
-Prefer the application's current runtime shape. If the project already uses Docker/Compose or Kubernetes, fit instrumentation into that path. If the user does not have Docker or does not want Docker, do not introduce containers just for observability; use the host/native runtime patterns.
+Resolve entrypoint paths from the loaded `otel-instrument/SKILL.md` directory.
+Inside a loaded reference, resolve relative paths from its directory. Never use
+the service cwd or alternate copies unless required.
 
-Before editing application code, read `../references/report-flow-contract.md`
-and follow the Instrumentation Contract plus Reader-First Report Order. When
-`.observe/otel-audit.json` exists, also read
-`./references/json-approval-handoff.md` before editing; it owns canonical
-selection, instrumentation JSON, and human HTML. The technical Markdown report contract is defined inline below.
+## Load Guidance Progressively
 
-## Workflow
+Read only guidance that applies to the detected service:
 
-### 1. Preflight
+1. Always read `./references/project-runtime-validation.md`.
+2. Read exactly one detected-language guide, never all language guides:
+   `./references/languages/python.md`, `./references/languages/node.md`,
+   `./references/languages/java.md`, or `./references/languages/go.md`.
+   That guide owns package choices, setup examples, framework wiring, local-log
+   bridge details, and language-specific shutdown behavior.
+3. For report rules, use one heading-bounded extraction of
+   `../references/report-flow-contract.md`: keep the document prefix only until
+   the paragraph beginning `For an audit,`, keep `## Status Rules` only until
+   `## Audit Contract`, and keep `## Instrumentation Contract` only until
+   `## Verification Report Contract`. For example:
 
-Before editing anything, ground the plan with repo evidence:
+   ```bash
+   awk 'BEGIN { emit = 1 }
+     /^For an audit,/ { emit = 0 }
+     /^## Status Rules$/ { emit = 1 }
+     /^## Audit Contract$/ { emit = 0 }
+     /^## Instrumentation Contract$/ { emit = 1 }
+     /^## Verification Report Contract$/ { emit = 0 }
+     emit' <instrument-skill-dir>/../references/report-flow-contract.md
+   ```
 
-#### Canonical Audit And Selection Gate
+   Do not load audit-only reader guidance or the audit, verification, or
+   Splunk Configure contract sections for this workflow. Do not substitute
+   fixed line offsets; headings are the stable boundaries.
+4. If `.observe/otel-audit.json` exists or exact finding IDs were supplied,
+   read `./references/json-approval-handoff.md`. It is authoritative for
+   selection precedence, digest binding, instrumentation JSON, and HTML.
+5. Load `../references/incident-readiness.md` and
+   `./references/incident-implementation.md` only when the repo owns an
+   incident-readiness surface, the audit selects one, or the user supplies
+   incident evidence or asks for faster detection/localization.
+6. Load `../references/genai-readiness.md` and
+   `./references/genai-implementation.md` only when source owns an LLM, agent,
+   workflow, tool/function, MCP, retrieval, model/config, token/context,
+   evaluation, memory, or other GenAI surface. Follow the shared GenAI Semconv
+   Source, Single-Source Span, LLM Inference Lifecycle, token-pressure,
+   privacy, and closure contracts in full.
+7. Load `../references/full-runtime-acceptance.md` only when a claim depends on
+   the real agent/preload, framework route resolution, automatic metrics,
+   startup/exporter wiring, duplicate suppression, or a runtime-installed log
+   bridge. Load `./references/signal-mapping-guide.md` only when choosing a
+   custom signal type.
 
-When `.observe/otel-audit.json` exists, treat it as the canonical audit.
-Executable scope may come from a selected-audit copy's `review_selection`,
-from a materialized `.observe/otel-selection.json`, or from exact IDs supplied
-in the current request; when none are present and the user asks for bare or
-broad instrumentation, use deterministic `select --all`. `.observe/otel.html`
-is the audit and scope-planning surface. Never open or read an audit Markdown
-report. Before any application-code,
-dependency, runtime-config, or test edit, read and follow
-`./references/json-approval-handoff.md`. Do not proceed without a validated,
-nonempty executable selection. A valid answer-only handoff persists
-`decision_answers` but authorizes no code edits.
-Selection precedence is current-request exact `--ids`, then an existing or
-embedded repository selection, then an explicitly supplied saved-audit
-candidate, then an automatically adopted saved audit only when no repository
-selection exists, and finally bare/broad `select --all`. Unless current-request
-`--ids` already wrote a fresh selection, run the shared `adopt-selection` helper
-as an idempotent preflight step before reporting a missing selection. If the
-helper prints `PASS:` or `wrote`, immediately run `validate-flow` and continue
-the same `$otel-instrument` run; do not ask the user to move a download, save
-again, or rerun instrumentation. If no saved selection exists and the request is
-bare/broad, run `select --all`; if it prints manual-decision options, stop
-before edits and present those exact `--decision OTEL-###=option-id` choices.
-Never choose between mutually exclusive telemetry owners or paths. Stop before
-edits only when the audit is invalid, stale, not broad enough to imply all
-eligible work, or the bound/created selection has empty `approved_ids`.
-Implement exactly the dependency-closed selected IDs.
-Bind `.observe/otel-instrumentation.json` to the entire normalized selection
-with `selection_sha256`, not only to its audit and executable IDs. This digest
-includes `decision_answers`; changing an answer invalidates older
-instrumentation even when `approved_ids` is unchanged.
+## 1. Preflight And Scope Gate
+
+Ground the plan in repository evidence before the first edit.
+
+### Canonical audit and selection
+
+When `.observe/otel-audit.json` exists, it is the canonical audit. Follow
+`./references/json-approval-handoff.md` before changing application code, dependencies,
+runtime config, or tests. Validate the audit and a nonempty, dependency-closed
+selection; use current-request IDs first, then trusted repository selection,
+then a validated saved audit, and only use deterministic `select --all` for a
+bare or broad instrumentation request with no saved scope. Run the idempotent
+preflight exactly as follows: run the shared `adopt-selection` helper as an
+idempotent preflight step before reporting a missing selection. If the helper
+prints `PASS:` or `wrote`, immediately run `validate-flow` and continue the same
+`$otel-instrument` run; do not ask the user to move a download, save again, or
+rerun instrumentation. Never select
+`manual decision` or `external follow-up` findings, infer a decision from
+prose, bypass an unanswered dependency, or implement unselected work.
+
+Implement exactly the selected IDs plus executable dependencies added by
+`select`, which are `approved_ids` in canonical audit order, and run every
+named verification scenario at its authored `proof_level`. Bind
+`.observe/otel-instrumentation.json` to the complete normalized selection with
+`selection_sha256`, including `decision_answers`.
+
 When no canonical audit exists, a direct request for the standard
-auto-instrumentation and default-local-log baseline may proceed after this
-preflight without fabricating audit IDs or selection artifacts. Keep that
-no-audit path limited to the standard baseline: stop before custom signals,
-incident-readiness or GenAI work, or any request that needs finding-level scope,
-and ask the user to run `$otel-audit` first. Never infer scope from generated
-Markdown reports.
+auto-instrumentation and default-local-log baseline may proceed. Do not fabricate IDs or
+JSON overlays. When no canonical audit exists, stop before custom
+instrumentation and ask the user to run `$otel-audit` first. Never infer scope
+from a generated Markdown report.
 
-- Confirm the language and framework from actual dependency or source files
-- Read `./references/project-runtime-validation.md`, inventory the repository's
-  configured runtime and build/test commands, and select the locally available
-  project runtime before editing. Do not use the shell's default runtime when
-  wrappers, toolchain files, manifests, CI, or existing project environments
-  select another one.
-- Confirm the target process from the repo's real start surface: `docker-compose.yml`, Kubernetes manifests, `package.json` scripts, `Makefile`, `Procfile`, PM2 configs, Supervisor configs, systemd units, launchd plists, PowerShell scripts, or a plain shell command
-- Confirm existing telemetry indicators or record `none found`
-- Inventory existing telemetry consumer contracts before editing: metric names
-  and dimensions, span names and attributes, resource attributes, log
-  correlation fields, exporter settings, checked-in dashboards/detectors,
-  entity-mapping resources, and query/test fixtures. Adding OTel semantic
-  fields is encouraged, but do not silently remove, rename, or change the
-  meaning/cardinality of existing low-cardinality fields that consumers may
-  use. Preserve safe legacy aliases by default, replace unsafe high-cardinality
-  fields such as raw URL paths with bounded alternatives, and record every
-  preserved, breaking, or review-needed consumer contract in
+### Repository and runtime evidence
+
+- Detect language/framework from manifests and source. Select and probe the
+  project-configured runtime described by
+  `./references/project-runtime-validation.md`;
+  do not silently use a conflicting shell default.
+- Find the real executable/start surface (`cmd/.../main`, app module, package
+  script, Make target, Compose/Kubernetes config, service unit, or equivalent).
+  Instrument that boundary. Never initialize global providers merely because
+  an importable library package contains handlers or business logic.
+- Preserve the current host, container, or orchestrated startup path. Do not
+  introduce Docker or invent a web entrypoint just for telemetry.
+- If several runnable surfaces remain plausible, ask which matters. If this is
+  a library/tooling repo with no evident executable, stop instead of inventing
+  one.
+- Inventory existing trace, metric, and log providers (including lazy/global
+  construction), exporters, resources, propagation, bridges, shutdown paths,
+  and no-op branches. Existing ownership of one signal does not prove the
+  others are configured.
+- Inventory consumer-visible metric names/dimensions, span names/attributes,
+  resource/log fields, exporter settings, dashboards, detectors, entity maps,
+  queries, and tests. Prefer additive semconv fields, preserve safe legacy
+  aliases, and record compatible, breaking, or review-needed migrations in
   `telemetry_changes[].consumer_compatibility`.
-- Build a provider/exporter topology per signal before choosing SDK or preload
-  wiring. Find explicit and lazy provider construction, global registration,
-  exporters, resources, no-op branches, and shutdown paths, then prove
-  reachability from the selected process. For Python, run
-  `../otel-audit/scripts/scan_python_otel_topology.py <service-root>` when that
-  bundled scanner is available and reconcile its candidates with source.
-  Existing ownership of any one signal makes this an incremental integration;
-  it does not prove that the other signals are configured.
-- Inventory the application logging stack and every stdout, stderr, file,
-  platform, and existing OTLP sink. For a supported Python, Node.js, Java, or
-  Go logging stack, local Splunk Observability Studio OTLP log export is part of the default
-  Splunk Observability Studio baseline only when the exporter is absent or `otlp` and the logs
-  endpoint is absent or exactly the detected local Splunk Observability Studio receiver. Treat
-  `OTEL_LOGS_EXPORTER=none` as an explicit opt-out, and preserve every other
-  explicit exporter as operator-owned without validating or supplementing its
-  endpoint. An explicit non-local logs endpoint with an absent or `otlp`
-  exporter is an operator-owned boundary conflict: do not construct or enable
-  a Splunk Observability Studio log provider, exporter, or bridge; fail closed and report the
-  configuration for operator resolution. Plan one log provider, one exporter
-  path, and one bridge; preserve existing stdout/file sinks and identify any
-  duplicate bridge before editing.
-- Apply that log baseline to direct instrumentation requests even when no
-  canonical audit exists. A request that excludes custom business spans limits
-  span work only; it is not a log-export opt-out. Only the explicit exporter,
-  endpoint, and supported-stack conditions above may suppress the default local
-  log pipeline.
-- When `.observe/otel-audit.json` exists, use only the validated selected
-  findings and their referenced `verification.scenarios` and environments as
-  the implementation and validation plan. Preserve every stable finding,
-  scenario, and environment ID. Keep each `proof_level`; do not downgrade a
-  `full runtime` scenario to focused call-site proof.
-- Detect incident-readiness surfaces. Search source and configuration for
-  user-visible workflows, dependency clients, background jobs, queues/streams,
-  data freshness, input complexity, synthetic/canary checks, auth/edge paths,
-  capacity limits, and release/config context. When any are present or when the
-  user asks for faster incident detection/localization, load
-  `../references/incident-readiness.md`.
-- When incidents, postmortems, tickets, alerts, or failure examples are supplied,
-  use Incident-Evidence Mode from `../references/incident-readiness.md`: map
-  each failure mechanism to the owning code or platform surface and classify
-  the proposed signal as MTTD-improving, localization-only, or still uncovered
-  before editing.
-- Detect GenAI/LLM ownership. Search dependencies, config, and source for
-  provider clients, model gateways, agent/workflow orchestration, tool/function
-  dispatch, MCP when present, retrieval/RAG, model/deployment config, fallback,
-  token usage, prompt/response assembly, AI-derived data jobs, AI-path
-  synthetic/canary checks, and usage logging. When present, load
-  `../references/genai-readiness.md`.
-  Follow its GenAI Semconv Source Contract before editing: reconcile detected
-  AI surfaces with official semconv docs when available, record
-  live-or-snapshot provenance, and build a semconv closure matrix.
-- When GenAI incidents, postmortems, tickets, alerts, or failure examples are
-  part of the request, use GenAI incident-evidence mode from
-  `../references/genai-readiness.md`: map each AI pathway failure mechanism to
-  the owning provider/model gateway, workflow, tool/function execution or
-  AI-owned session/stream including MCP when present, retrieval/RAG, streaming,
-  token/context, prompt/response parser, safety/policy, AI-derived data,
-  model/config rollout, or AI-owned state surface before editing.
-- For Java projects, build a trace wiring inventory per `./references/languages/java.md` (Preflight section) and classify as `auto-only`, `custom-with-provider`, `custom-provider-external`, or `missing` before editing.
-- Confirm the planned `service.name`, `service.version`, and environment source.
-  Also record available low-cardinality region, platform, image/artifact,
-  config, and rollout sources. Prefer existing OTel semantic-convention or
-  platform resource attribute names, including `deployment.environment.name`,
-  `cloud.region`, `cloud.platform`, `container.image.name`, and
-  `container.image.tags`. Treat `deployment.environment`,
-  `deployment.region`, `deployment.platform`, and `container.image.tag` as
-  legacy or custom input aliases only, not names to newly emit or reasons to
-  duplicate the standard attributes.
-- Distinguish between application repos and tooling repos such as CLIs, MCP servers, workers, libraries, installers, and build tools. Instrument the executable path users or operators actually run today. Do not invent a web app, Docker path, or entrypoint that is not present.
-- If the repo has multiple runnable surfaces, instrument the one the user actually cares about; otherwise ask which one matters
-- If the repo is primarily tooling or library code and no runnable surface is obvious, stop and ask instead of inventing an app shell
-- Ask one focused clarifying question only if the target process or runtime shape is still ambiguous after checking the repo
-
-Do not proceed until you can state all of these clearly:
-
-- target process
-- runtime shape
-- `service.name`
-- environment dimension
-- incremental addition vs new scaffold
-- selected project runtime, probe command, and affected-module validation
-  command, or the exact prerequisite that makes validation unavailable
-- audit gap closure plan: rows in scope now, rows deferred by mode or explicit
-  user scope, and the scenario IDs that will prove each in-scope row
-- canonical audit ID and SHA-256, dependency-closed selected finding IDs
-  (`approved_ids`) in audit order, and the validated selection path when
-  `.observe/otel-audit.json` exists
-- for Java, trace source of truth (see `./references/languages/java.md` Preflight section)
-- incident-readiness surfaces and the workflow, dependency, input complexity,
-  freshness, backpressure, synthetic/canary, auth/edge, capacity, and
-  release/config signals to add or prove when the repo owns those surfaces
-- incident-evidence coverage when failure examples are supplied: failure
-  mechanism, owner, code surface, signal to add or prove, expected MTTD or
-  localization impact, and remaining external owner
-- GenAI workflow surfaces and the GenAI semantic-convention plus service-owned
-  readiness signals to add, when the repo owns LLM, agent, tool/function, MCP,
-  retrieval, streaming, model/config, token/context, prompt/response,
-  safety/policy, AI-derived data, memory/context, evaluation quality, content
-  capture, framework bridge, app-computed cost, or AI-owned state code
-- GenAI incident coverage when GenAI incidents or AI pathway failures are
-  supplied: failure mechanism, provider/model/tool/retrieval/config/prompt/
-  AI-derived-data owner, signal to add or prove, expected MTTD/localization
-  impact, and remaining non-code or dependency owner
-
-State these preflight values together in one explicit progress note before the
-first file edit. Do not defer `service.name` or environment ownership to the
-final report.
-
-### Fast Path: Targeted Custom Signal
-
-If the user is asking for a specific signal ("add a metric for queue depth",
-"track error rate on payments", "add a span for the indexing job") AND the
-preflight scan finds OTel SDK already initialized:
-
-1. Skip Steps 2-3 (dependencies and auto-instrumentation are already present).
-2. Go directly to Step 4 (Custom Instrumentation) with the user's request as context.
-3. Add only the requested signal — do not re-scaffold or re-wire existing setup.
-4. Proceed to Step 5 (project-runtime validation gate).
-
-When a canonical selection exists, this fast path still covers every selected
-ID, including executable dependencies added by `select`; never reduce it to one
-requested signal.
-
-If the preflight scan finds no OTel SDK, tell the user auto-instrumentation
-needs to be set up first and continue with the full workflow (Steps 2-3).
-
-### Audit-Driven Incident Readiness
-
-When the canonical audit contains partial or missing
-`current_instrumentation.incident_readiness` rows, reconcile each row through
-its selected finding with the same `area`. Treat the matched pair as one
-implementation contract. The
-readiness row names the surface and detection/localization impact; the gap row
-names the complete required fix and instrument mode; its acceptance scenarios
-name the code path, expected telemetry, proof level, and acceptance criteria.
-Do not create a second gap ledger or silently synthesize missing fields. If an
-older audit lacks the current prioritized gaps or verification plan, regenerate
-the audit before claiming one-to-one closure.
-
-If the user broadly asks to improve incident readiness or MTTD, resolve every
-safe app-owned incident gap to exact IDs and create the selection before
-editing. Do not choose one representative gap unless the user explicitly
-narrows scope. `manual decision` and `external follow-up` rows cannot enter
-the executable selection. A recorded `decision_answers` choice may unlock only
-the matching executable rows, which still require explicit selection. Track
-the named external owner outside instrumentation; never guess either boundary.
-
-Use `../references/incident-readiness.md` to turn each owned gap into concrete,
-low-cardinality signals. In particular, add or prove the applicable surfaces:
-
-- API/workflow outcome, errors, latency, and detector-ready request/job counts;
-- dependency timeout, retry, rate-limit, circuit-breaker, endpoint/target
-  health, availability, and operation outcome;
-- input complexity, freshness/age, queue depth/lag/oldest age, dropped or
-  rejected work, worker/pool saturation, and scheduled-job last success;
-- stream/long-lived connection open, auth, active count, duration, close reason,
-  timeout, cancellation, and send/write failure;
-- auth/identity/token/secret/certificate/edge failure reason, expiry/rotation,
-  route/config mismatch, and synthetic/canary result when owned;
-- CPU, memory, disk, inflight/concurrency, desired-vs-healthy,
-  startup/readiness/healthcheck, target-health, and autoscaling saturation when
-  observable by the app or its checked-in runtime configuration; and
-- low-cardinality service/artifact/config/schema/feature-flag/rollout context,
-  expected-vs-running state, compatibility failure, and rollout outcome.
-
-Do not treat a bare time-since-last-update or time-since-last-success gauge as
-detector-ready staleness when healthy idle periods are possible. Require a
-source-backed expected cadence, pending/backlogged work, or accepted input that
-should have produced the update. Without that evidence, classify the age gauge
-as context or `localization-only` and use backlog, queue delay, or missed
-schedule as the MTTD-improving detector input.
-
-For repositories with both web/API and background-worker processes, apply the
-Multi-Process Web And Worker Services contract in
-`../references/incident-readiness.md`. Each process needs a distinct,
-operator-overridable `service.name` default. Initialize its provider and
-framework instrumentations only from that process's actual entrypoint or
-startup hook; importing a worker/task module from the API must not configure
-worker telemetry. Instrument enqueue and task success/failure at their owning
-call sites, and explicitly record worker exception status before rethrowing.
-Framework hooks or assumed auto-instrumentation are not a substitute for an
-app-owned failure path when the readiness gap requires one.
-
-Focused incident-readiness tests must execute the success and failure call
-sites and assert emitted telemetry through an in-memory exporter or equivalent
-app-code seam. AST, grep, source-string, or compile-only checks are not telemetry
-proof. If dependencies cannot be restored or imported, keep the executable
-tests, report the exact blocker, and mark dynamic verification `Blocked` or
-`Not proven`; do not replace the tests with static assertions.
-
-For Go changes involving goroutines, channels, queues, asynchronous persistence
-or indexing, eviction, or observable callbacks, run `go test -race` for every
-changed package. If that cannot run, record the exact toolchain/platform blocker;
-a normal `go test` pass does not satisfy this concurrency gate.
-
-For incident evidence, target the failure mechanism rather than its endpoint
-symptom. Mark a signal `MTTD-improving` only when it can support a detector
-before or at first customer impact; mark it `localization-only` when it mainly
-narrows an already-detected fault. Endpoint RED metrics alone do not close an
-auth handshake, secret expiry, stale output, rollout skew, dependency target
-loss, stream lifecycle, or pool-saturation gap.
-
-Extend the internal Audit-Driven Gap Closure matrix with the readiness surface,
-required signals, MTTD/localization classification, implemented or proven
-signals, tests, remaining signals, and owner. A row cannot be `Working` while
-any required signal is absent, merely listed as a follow-up, or supported only
-by an unexecuted test. If no app-owned candidate can be patched accurately and
-safely, add no placeholder instrument; owner-map the exact prerequisite and
-keep the row `Deferred`, `Not configured`, or `Not proven` as appropriate.
-
-### Audit-Driven GenAI Readiness
-
-#### GenAI Readiness Contract
-
-If the canonical audit contains top-level `genai_readiness`, use those rows as
-the source of truth. The audit output is a contract, not background context.
-Parse each row by human-readable `surface` plus `required_signals`,
-`owner/source_files`, and `acceptance_criteria`. Use the surface name as the
-human-facing identifier throughout implementation and reporting.
-
-Reconcile every GenAI audit gap to a required instrumentation result:
-
-| Audit Gap | Required Instrumentation Result |
-|---|---|
-| App-owned + patchable | Code added + tests |
-| App-owned but unsafe/too large | Explicitly split into named follow-up batch |
-| Provider/platform-owned | Owner mapped with exact missing source |
-| Already covered | Proven with source path and signal name |
-
-For each surface row, produce and maintain a closure matrix:
-`surface -> required_signals -> implemented_signals -> tests ->
-remaining_signals -> status`. The final gate is strict: the instrumentation
-pass cannot say `covered`, `fixed`, `closed`, or `complete` unless every
-required GenAI signal is either implemented with tests, proven existing with
-source path and signal name, or explicitly owner-mapped with the exact missing
-source. Optimize for honesty over broad progress. Partial closure is acceptable;
-silent partial closure is the bug.
-
-For every GenAI instrumentation run, include a concise closure summary in the
-final response. It must name remaining GenAI signals, or say `Remaining signals: none`
-only when the closure matrix has no partial rows. Do not use unqualified
-phrases such as `expected coverage`, `covered`, or `complete` for a GenAI surface
-unless the related row is fully closed by the matrix.
-
-When the canonical audit declares GenAI ownership, project
-`## GenAI Readiness Closure` in `.observe/otel-instrumentation.md` after
-`## Audit Gap Closure` only for selected GenAI finding surfaces. Copy the
-selected surface and its complete `Required Signals` cell from the audit
-readiness table, then record `Implemented / proven`, `Tests`, `Remaining
-signals`, and `Result`. Use one row per selected GenAI finding area in selected
-finding order; do not include unselected readiness surfaces. Use `Working`,
-`Not working`, `Not proven`, `Not configured`, or `Deferred` to match the bound
-instrumentation or verification JSON status. `Working` requires `Remaining
-signals` to be exactly `None`; all other results must name the remaining
-signal, blocker, or external owner. Omit the section when the source audit
-explicitly declares `No` or when no selected finding maps to a GenAI readiness
-surface. If the ownership declaration and readiness table disagree, regenerate
-the source audit before instrumentation.
-
-When no canonical source audit exists, do not create `## GenAI Readiness
-Closure`, invent closure rows from the implementation pass, or continue
-audit-driven instrumentation.
-
-If the canonical audit contains `genai_readiness` rows with `partial` or
-`missing` status and the user asked to instrument, treat those rows as an
-approved request for custom GenAI readiness instrumentation. Do not stop after
-auto-instrumentation and do not ask the Step 4 custom-instrumentation question
-for GenAI gaps that the repo clearly owns.
-
-### Audit-Driven Gap Closure
-
-Treat the validated dependency-closed selected finding set as the implementation queue, not
-report background:
-
-- Implement exactly the selected IDs plus executable dependencies added by
-  `select`; never add unselected work. Priority orders the audit only and never
-  authorizes instrumentation scope.
-- Resolve broad instrumentation to exact audit IDs in `.observe/otel-selection.json` before editing.
-- Reject a selection containing `manual decision` or `external follow-up` IDs,
-  an unanswered manual dependency, an unknown answer, executable work outside
-  the recorded option's `unlocks`, or work blocked by an external follow-up.
-  `decision_answers` is separate from `requested_ids` and `approved_ids`; it
-  remains decision state and never auto-selects work. Manual and external
-  findings remain visible audit state; they are not implementation queue
-  entries.
-- Keep unselected findings visible in the immutable audit and audit HTML. Omit
-  them from instrumentation JSON, Markdown, and HTML.
-- A row may require only verification rather than code. Run the mapped
-  scenarios and do not invent a source change.
-- Reconcile GenAI gap rows with `## GenAI Readiness`; the readiness row remains
-  the detailed required-signal contract and the prioritized gap remains the
-  user-facing work item.
-
-Build an internal closure matrix before editing:
-`finding ID -> area -> priority -> required fix -> instrument mode -> planned action ->
-verification scenarios`. Update it after validation and verification. Do not
-mark a row `Working` merely because code changed or a shared helper test
-passed. Closure requires the source change or proven existing implementation,
-the applicable project-runtime validation gate, and `$otel-verify` proof at the
-audit scenario's proof level. In particular, execute every named route, span
-call site, metric path, log pipeline, and duplicate-prevention scenario the row
-references.
-
-### Implementation Report And Handoff
-
-Always write `.observe/otel-instrumentation.md`. In canonical flow,
-`./references/json-approval-handoff.md` remains the machine-schema and
-instrumentation-HTML authority: write and validate
-`.observe/otel-instrumentation.json`, render
-`.observe/otel-instrumentation.html`, keep every selected finding exactly once,
-and leave `.observe/otel.html` as the audit surface. On the permitted direct
-baseline path where canonical JSON is absent, write the technical Markdown
-report only, identify the source audit and selected scope as `not applicable
-(direct baseline)`, and do not create instrumentation JSON/HTML or fabricate
-audit IDs. Do not infer scope from generated Markdown reports.
-Users open `.observe/otel-instrumentation.html` after instrumentation to review
-the selected findings, what code/config changed, how observability improves,
-telemetry proof, product-delivery status, and remaining prerequisites. Do not
-use it to change selected scope; direct scope changes back to `.observe/otel.html`
-and rerun instrumentation from the newly saved or copied command.
-
-#### Reader Order
-
-Use this shape:
-
-```markdown
-# OTel Instrumentation Report: <service>
-
-**Result:** Pass | Partial | Fail | Blocked
-**Source audit:** `.observe/otel-audit.json` | not applicable (direct baseline)
-**Selected scope:** `.observe/otel-selection.json` | not applicable (direct baseline)
-**Verification report:** `.observe/otel-verify.md` | not run | blocked
-**Detector report:** `.observe/detectors.md` | not requested | blocked
-
-## Executive Summary
-## Flow
-## Files Changed
-## Signals Changed
-## Audit Gap Closure
-<!-- Include the next section only for a GenAI source audit. -->
-## GenAI Readiness Closure
-## Validation Gates
-## Verification Handoff / Results
-## Detector Handoff / Results
-## Remaining Gaps
-## Next Steps
-```
-
-#### Signals Changed
-
-`Signals Changed` is the implementation-change inventory. Include:
-
-| Signal type | Added | Modified | Removed | Product result / next product action | Evidence | Verification status |
-|---|---|---|---|---|---|---|
-| Traces/spans | exact span names or `None` | exact changes or `None` | exact removals or `None` | waterfall/map/filter result and follow-up | source paths + tests/harnesses | verified/partial/not run/blocked |
-| Metrics | exact metric names or `None` | exact changes or `None` | exact removals or `None` | chart/dashboard/detector action | source paths + tests/harnesses | verified/partial/not run/blocked |
-| Logs/events | bridge/event names or `None` | exact changes or `None` | exact removals or `None` | query/correlation result and follow-up | source paths + tests/harnesses | verified/partial/not run/blocked |
-| Runtime/config | service/exporter/env/startup settings or `None` | exact changes or `None` | exact removals or `None` | service/environment/export diagnostics | startup/config paths | verified/partial/not run/blocked |
-| Dependencies | OTel packages or `None` | version/package changes or `None` | removed packages or `None` | enabled runtime behavior | manifest/lockfile paths | verified/partial/not run/blocked |
-
-Do not claim a removal unless the previous report or Git diff proves the signal
-or configuration existed and current source proves it was removed. Use `None`
-for empty cells. The final response must summarize added, modified, removed, and
-unchanged signals by signal type and point to this report.
-If any item changes an existing telemetry consumer contract, include a concise
-`Consumer compatibility` subsection that lists the existing contract, whether
-the change is compatible, breaking, or requires review, and the migration for
-breaking changes.
-
-For canonical scope, treat every instrumentation
-`findings[].telemetry_changes[]` row as the durable code-to-product mapping.
-Preserve its stable item ID, concrete code/config change, exact source or call
-site, signal kind, newly added attributes/dimensions, product view, audit
-scenarios, and item-specific follow-up actions. A free-text finding `changes`
-list is not item coverage. Preserve audit-authored keys and bounded values
-exactly. Never auto-publish without the downstream review workflow.
-
-##### Incident Readiness Signal Roles
-
-For selected incident-readiness work, include this nested table:
-
-| Surface | Exact signal | Role | Detector use / reason | Proof | Remaining owner / prerequisite |
-|---|---|---|---|---|---|
-
-Use exactly `MTTD-improving`, `localization-only`,
-`provider/platform-owned`, or `uncovered` in `Role`. Write one row per exact
-added or proven signal; do not group metric names. Use `None` for `Exact signal`
-only when owner-mapping an unavailable prerequisite, and name that owner or
-prerequisite in the final column. This is a signal-role inventory, not another
-gap ledger; reconcile audited surfaces through `Audit Gap Closure`.
-
-#### Audit Gap Closure
-
-This is the reader-facing technical reconciliation. Stable IDs and exact
-selected scope live in canonical JSON.
-
-| Finding | What changed | Tested | Result | Evidence / reason |
-|---|---|---|---|---|
-| OTEL-### — exact audit title | concrete code/config change or `No code change` | scenario IDs and test mode | Working / Not working / Not proven / Not configured | direct evidence or exact blocker |
-
-Use one row per selected audit finding and keep unselected findings out of this
-implementation report. Canonical instrumentation JSON contains selected rows
-only. `Not working` requires an executed failed check.
-`Not proven` means the required scenario did not run or lacked a prerequisite.
-Use `Not configured` when requested implementation is absent.
-
-For every selected canonical row, project `What changed`, `Tested`, and
-`Evidence / reason` exactly from instrumentation JSON `changes`, `tests`, and
-`evidence` arrays in source order. After verification, only `Result` comes from
-the bound verify row. Do not paraphrase projection cells independently.
-
-For a GenAI audit, `GenAI Readiness Closure` is the detailed signal-level
-reconciliation and `Audit Gap Closure` remains the prioritized user work queue.
-Neither substitutes for the other. Follow the loaded GenAI reference for its
-machine closure and rollup.
-
-Derive `**Result:**` from all applicable closure tables. Do not use `Pass` while
-an audit row is `Not working`, `Not proven`, or `Not configured`, or a GenAI row
-is `Not working`, `Not proven`, or `Not configured`. Use `Partial` when
-meaningful proof passed but any such row remains. `Deferred` may coexist with
-`Pass` only when the exact external owner or explicit scope decision is
-recorded.
-
-#### Validation And Verification Handoff
-
-For canonical flow, validate the audit, selection, instrumentation overlay, and
-available verification overlay and render the human instrumentation HTML using
-`json-approval-handoff.md`. Do not continue audit-driven instrumentation without
-canonical JSON.
-
-Maintain `## Verification Handoff / Results` using
-`./references/project-runtime-validation.md`. Record the selected runtime, exact local-safe
-commands and outcomes, changed source-to-scenario mappings, the `$otel-verify`
-result/report path, and blocked prerequisites. This is not proof of emitted
-telemetry unless a test, harness, or collector actually observed it.
-
-Use the canonical audit, validated selection, and selected findings' referenced
-verification scenarios as the handoff contract. Do not copy unrelated report
-sections into audit or instrumentation reports.
-
-When the user asks broadly to apply GenAI readiness skills, improve GenAI MTTD,
-or fix found GenAI gaps, treat the scope as **all discovered app-owned GenAI
-gaps**. Do not select one representative or highest-value gap unless the user
-explicitly narrows the scope to that gap.
-
-Close code-evidenced AI pathway surfaces from `../references/genai-readiness.md`:
-provider/model gateway, agent/workflow orchestration, tool/function execution
-or AI-owned session/stream lifecycle including MCP when present, retrieval/RAG,
-streaming response lifecycle, token/context pressure, safety/policy outcome,
-prompt/response assembly, AI-derived data freshness, memory/context operations,
-evaluation quality, content governance, framework bridge configuration,
-app-computed cost, model/config rollout, and AI-owned cache/session state.
-
-For evaluation quality surfaces, code evidence such as evaluator classes,
-scoring functions, LLM-as-judge calls, feedback processors, `EvalScore` models,
-faithfulness/similarity/expectation metrics, pass/fail labels, or quality
-report exporters is enough to require eval instrumentation.
-Metrics-only coverage does not satisfy selected-trace eval visibility. Add or prove
-`gen_ai.evaluation.result` on the relevant workflow/evaluation span with
-`gen_ai.evaluation.name`, `gen_ai.evaluation.score.value` when numeric scores
-exist, `gen_ai.evaluation.score.label` when labels/verdicts exist, and safe
-parent linkage. Also add or prove detector-ready score distribution, pass/fail
-or violation count, sample count/rate, evaluator duration/error/no-data, and
-freshness by low-cardinality workflow/model/evaluation name. If the service
-only emits eval counters, histograms, logs, or report files, keep the evaluation quality surface partial
-and name the missing span-level eval event and remaining detector metrics.
-
-For MCP, JSON-RPC, and tool dispatch, normalize request metadata before adding
-attributes or metric dimensions. Never record JSON-RPC request IDs, raw request
-IDs, session IDs, trace IDs, user/account/tenant IDs, raw tool arguments, raw
-payloads, prompts, completions, or retrieved content as metric dimensions.
-Use stable method names only from an allowlist or from known route/tool registration; otherwise record a low-cardinality method family such as
-`known_tool`, `unknown_method`, `invalid_request`, or `unsupported_method`.
-
-Prefer detector-ready metrics and span attributes for outcome, duration,
-timeout, retry, rate-limit, fallback, active AI-owned sessions/streams, close
-reason family, send/write failure, freshness, empty/low-confidence retrieval,
-token budget, prompt build failure, response parse failure, AI-derived data
-freshness, prompt/tool schema version, model/config readiness,
-model/config compatibility, expected-vs-running model/config state, truncation,
-rejection, LLM-call fanout, tool-call fanout, evaluation score/outcome,
-memory hit/miss or staleness, content capture mode/redaction, app-owned cost
-source, and version dimensions when the service can observe them accurately.
-Use OTel GenAI semconv names when possible: `gen_ai.evaluation.result`,
-`gen_ai.evaluation.name`, `gen_ai.evaluation.score.value`,
-`gen_ai.evaluation.score.label`, safe `gen_ai.evaluation.explanation`, memory
-operation names such as `search_memory`, `create_memory`, `update_memory`,
-`upsert_memory`, and `delete_memory`, and opt-in content attributes such as
-`gen_ai.input.messages`, `gen_ai.output.messages`,
-`gen_ai.system_instructions`, `gen_ai.retrieval.documents`,
-`gen_ai.retrieval.query.text`, `gen_ai.tool.definitions`, and
-`gen_ai.tool.call.arguments`. Treat framework bridges as covered only when
-OTel-compatible GenAI semconv output and privacy settings are proven. Treat cost
-as custom app-owned instrumentation only when the app owns an accurate pricing map; otherwise owner-map the billing or provider source. Generic non-AI runtime,
-platform, or job surfaces are out of scope for this GenAI section unless source
-evidence shows they carry or block the AI pathway.
-If GenAI incident evidence depends on missed, flapping, auto-resolved, or no-data alerts, record detector reliability evidence as a `$splunk-configure`
-handoff instead of adding app metrics for alert lifecycle behavior.
-
-For AI-owned streaming generators, WebSocket/SSE handlers, callback bridges,
-or protocol send loops, do not call stream lifecycle coverage complete without
-a send/write failure signal. Add a counter, span event, or low-cardinality
-outcome attribute for send/write failure when app code can observe it; otherwise
-owner-map the missing source explicitly to the framework/server/platform.
-
-For token/context pressure gaps, `gen_ai.client.token.usage` plus a
-context-window usage gauge does not close a broader token-pressure gap unless
-the audit contract only requires those two signals. If `required_signals`
-include context budget percent, truncation rate, token-limit errors,
-prompt/tool schema size, LLM call count per turn, or tool call count per turn,
-mark the row partial until each signal is implemented, proven, or owner-mapped.
-When the user broadly asks for GenAI readiness without a preexisting audit
-contract, treat token/context pressure as requiring the same concrete signal
-check: token usage, context budget percent, truncation, token-limit errors,
-prompt/tool schema size or safe proxy, LLM-call count, and tool-call count when
-the app can observe them.
-Use this exact style when only token and context-window usage were added:
-`Partial: token usage and context window added; truncation, token-limit error, prompt/tool schema size, and LLM-call fanout remain missing.`
-
-If prompt/tool schema size cannot be measured safely, add a low-cardinality
-detector-ready proxy metric such as schema JSON length bucket, schema field count,
-prompt template length bucket, or tool count when the app can observe it.
-Span attributes like prompt template version, schema version, or one-off schema
-metadata help traces but do not close prompt/tool schema size pressure by themselves. If no safe metric or detector-ready existing signal exists, the
-closure matrix and final response must keep prompt/tool schema size in
-`remaining_signals` with the owner and missing source. Do the same for LLM-call
-and tool-call fanout: implement per-workflow counts when observable, prove an
-existing signal, or keep them explicitly partial.
-
-Final summaries, PR descriptions, and audit updates must not omit residual
-truncation, token-limit, prompt/tool schema size, LLM-call fanout, or
-tool-call fanout gaps when they were in the audit contract or when broad GenAI
-readiness instrumentation discovered the token/context surface.
-
-For tool/function execution, GenAI spans alone do not satisfy detector-ready
-tool coverage. When app code observes tool execution, add or prove a
-tool-specific duration histogram and tool error/timeout counter using a stable
-tool name and low-cardinality failure class. If only spans are safe, keep tool
-latency/error metrics in `remaining_signals` and do not claim detector-ready
-tool coverage.
-
-Do not call GenAI instrumentation complete when an app-owned provider/model,
-workflow, tool/function execution or AI-owned session/stream including MCP when
-present, retrieval, streaming, token/context, safety/policy, prompt/response,
-AI-derived data, memory/context, evaluation quality, content governance,
-framework bridge, app-computed cost, model/config rollout, or AI-owned
-cache/session surface remains only listed as a follow-up, unless the user
-explicitly narrowed scope.
-
-### 2. Dependencies
-
-Add the OpenTelemetry SDK and auto-instrumentation packages for the detected language. Load the appropriate reference file:
-
-| Language | Reference | Key packages |
-|----------|-----------|-------------|
-| Python   | `./references/languages/python.md` | `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, the stdlib logging bridge, framework instrumentation packages |
-| Node.js  | `./references/languages/node.md` | `@opentelemetry/sdk-node`, trace/metric/log OTLP exporters, `@opentelemetry/sdk-logs`, the detected logging bridge, framework instrumentation packages |
-| Java     | `./references/languages/java.md` | OTel Java agent (javaagent JAR) |
-| Go       | `./references/languages/go.md` | `go.opentelemetry.io/otel`, the log SDK and OTLP log exporter, and the detected `go.opentelemetry.io/contrib/bridges` package |
-
-### 3. Instrument
-
-Apply auto-instrumentation first, then add manual spans for key business operations. Read the language-specific reference for exact patterns.
-
-**Critical for APM error tracking:**
-- Set `otel.status_code` to `ERROR` on failures -- this is how APM backends identify errors
-- For HTTP server spans, 5xx responses set ERROR automatically per OTel semantic conventions
-- For custom spans wrapping business logic, explicitly set error status on exceptions
-- Reuse the app's current startup entrypoint instead of replacing it with a new Docker-only path
-- For Python, Node.js, and Java, prefer preload or agent wrappers plus env vars over large code refactors when auto-instrumentation already covers the framework
-- For host/native runtimes, default OTLP endpoints to loopback (`http://localhost:4318`) unless the existing platform already provides a collector address
-- For a supported application logging stack, default logs to the local Splunk Observability Studio
-  receiver with a signal-specific endpoint such as
-  `http://localhost:4318/v1/logs`. Do not let a generic direct-cloud OTLP
-  endpoint become the implicit log destination.
-- For Python web services, do not satisfy implementation by only changing a Makefile, Docker command, or shell wrapper. Add an explicit setup module such as `otel_setup.py` and wire the app entry point to call it before framework instrumentation is activated.
-- For Java/Spring Boot, prefer the OpenTelemetry Java agent. The final response must state the service-name setting (`OTEL_SERVICE_NAME` or `otel.service.name`), OTLP endpoint setting (`OTEL_EXPORTER_OTLP_ENDPOINT` or `otel.exporter.otlp.endpoint`), and that the agent provides HTTP server spans plus request duration metrics.
-
-#### Implementation Rules
-
-- Use only official OpenTelemetry packages (`go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib`, `@opentelemetry/*`, `opentelemetry-*`). Do not use community or third-party OTel wrappers. The only exceptions are library-maintained integrations where no official package exists (e.g. `go-redis/redisotel`, `XSAM/otelsql`).
-- Do not initialize the SDK more than once per process.
-- Find any existing OTel setup before adding new code. Extend it. Treat lazy
-  provider helpers and providers initialized on first instrument creation as
-  existing setup even when the startup wrapper itself contains no OTel call.
-- Keep one global provider per signal. When adding traces/logs around an
-  existing custom metrics provider, consolidate resource/exporter ownership or
-  adapt the helper to the shared provider; never let auto-instrumentation and
-  app code race to call `set_meter_provider`.
-- Preserve operator resource values. Merge app defaults only for absent keys;
-  do not overwrite `OTEL_SERVICE_NAME`, `deployment.environment`,
-  `deployment.environment.name`, or `service.version` from
-  `OTEL_RESOURCE_ATTRIBUTES`. Add a focused resource-merge test and assert the
-  effective resource in live OTLP evidence.
-- Preserve consumer-visible resource aliases when they are safe and already
-  emitted, such as a legacy realm or namespace attribute used by dashboards or
-  entity mappings. Add the OTel semantic resource attribute beside the alias
-  unless the audit/user explicitly approves a breaking migration; if an alias
-  is removed, mark the telemetry item `consumer_compatibility.status=breaking`
-  and name the migration.
-- Resolve the exporter per signal as an endpoint/protocol/path tuple. Pair gRPC
-  with the gRPC receiver (commonly `4317`) and `http/protobuf` with an HTTP
-  signal path such as `4318/v1/metrics`. Do not assume one generic endpoint
-  configures every exporter. A successful trace export does not prove metrics
-  or logs; exercise each configured signal and repair protocol errors before
-  reporting it as working.
-- Keep local application-log export separate from cloud export. When a generic
-  `OTEL_EXPORTER_OTLP_ENDPOINT` is a direct-cloud endpoint, configure traces and
-  metrics with their signal-specific endpoints and give logs a local Splunk Observability Studio
-  `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`. Never copy a Splunk realm, ingest URL,
-  access token, auth header, or cloud exporter into log configuration. Optional
-  Splunk Observability Studio cloud forwarding remains traces and metrics only; never add a log
-  forwarding flag or cloud logs pipeline. Remove a generic
-  `OTEL_EXPORTER_OTLP_HEADERS` value from the shared startup surface after
-  moving it to trace- and metric-specific headers; reject it from an
-  Splunk Observability Studio-owned local log path even when
-  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` is also set, because SDKs may merge generic
-  and signal-specific headers.
-- For Java trace wiring, DI binding, and provider rules, follow `./references/languages/java.md` (Implementation Rules section).
-- Place OTel initialization code in a separate file.
-- Minimize changes to existing code. Do not move functions between files.
-- Do not create spans for trivial helpers. Only span real diagnostic boundaries.
-- Set span status to ERROR and call recordException on failed operations.
-- When a framework-specific auto-instrumentation package only provides spans (not HTTP server metrics), wrap the outermost handler with `otelhttp.NewHandler` (Go) or equivalent to ensure `http.server.request.duration` and `http.server.active_requests` are emitted. Consult the Framework Selection Guide in the language reference for the correct wrapping pattern.
-- HTTP server instrumentation must produce request-duration metrics as well as
-  spans. Prefer the current stable metric `http.server.request.duration`. When
-  the installed SDK requires a semantic-convention stability opt-in, set it in
-  the launch environment before importing or constructing the instrumentor.
-  Accept `http.server.duration` only when the installed SDK truly emits the
-  alternate name and record that exact runtime evidence; never claim both names.
-- For local, Docker, and eval-style runtime checks, configure metric export to flush quickly. When constructing a metric reader manually, use the language equivalent of `OTEL_METRIC_EXPORT_INTERVAL` with a safe local default of `1000` ms and `OTEL_METRIC_EXPORT_TIMEOUT` with a safe local default of `500` ms instead of relying on SDK defaults.
-- Strictly adhere to OTel [semantic conventions](https://opentelemetry.io/docs/specs/semconv/) for span and metric naming and attributes for domains where such semantic conventions are defined.
-- For domains where OTel semantic conventions exist, use semantic-convention
-  names and attributes. Start with required spans, metrics, and attributes; add
-  recommended optional signals only when an approved readiness or verification
-  requirement depends on them, the service can observe the value accurately,
-  and privacy/cardinality rules permit it. Do not invent custom spans, metrics,
-  or attributes where a semantic-convention signal satisfies the requirement.
-- When changing an existing metric's dimensions or a span/resource/log
-  attribute contract, default to additive compatibility: keep safe existing
-  fields and add semantic-convention fields. A same-name metric with removed or
-  renamed dimensions is a breaking consumer change unless the removed dimension
-  is unsafe high-cardinality data; even then, report it as an intentional
-  breaking migration and provide the replacement query dimension.
-- Before adding any custom counter or histogram for an outcome that occurs
-  inside a call already covered by an auto-instrumented RED metric, check
-  whether that outcome can instead be recorded as an attribute on the existing
-  metric via the language's per-call metric-attribute hook (see
-  `#### Language-Specific Musts` below), rather than as a new standalone
-  metric. Each convention below defines its own error/status attributes for
-  exactly this purpose:
-  - [HTTP server/client metrics](https://opentelemetry.io/docs/specs/semconv/http/http-metrics/):
-    `http.server.request.duration` / `http.client.request.duration` carry
-    `error.type` and `http.response.status_code`.
-  - [RPC server/client metrics](https://opentelemetry.io/docs/specs/semconv/rpc/rpc-metrics/):
-    `rpc.server.call.duration` / `rpc.client.call.duration` carry `error.type`
-    and `rpc.response.status_code`. Only fall back to the legacy
-    `rpc.server.duration` / `rpc.client.duration` names when runtime evidence
-    shows the installed SDK still emits those instead.
-  - [Database client metrics](https://opentelemetry.io/docs/specs/semconv/database/database-metrics/):
-    `db.client.operation.duration` carries `error.type` and
-    `db.response.status_code`.
-  - [Messaging metrics](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-metrics/):
-    `messaging.client.operation.duration` and `messaging.process.duration`
-    carry `error.type` when the operation fails.
-
-  Prefer the attribute over a dedicated custom metric whenever the outcome
-  can be faithfully represented on the RED metric for that call *and* the
-  language has a way to set it there: either auto-instrumentation already
-  emits a relevant `error.type`/`*.response.status_code` attribute that
-  actually distinguishes this outcome, or the language has a supported
-  per-call metric-attribute hook that can set a standard *or custom*
-  attribute on the metric (see `#### Language-Specific Musts` below -- for
-  example Go's `otelhttp.Labeler`, which can attach a custom attribute like
-  `outcome.reason` even when the outcome is not expressible via the standard
-  status/error attributes alone). A dedicated custom metric is correct
-  whenever that's not the case: a queue-depth gauge or a background job
-  outcome with no inbound request has no call to attach to; or the outcome
-  is not expressible via the standard status/error attributes alone (for
-  example a business outcome that occurs once per request but is not
-  distinguishable from the standard attributes -- a logical failure returned
-  as HTTP 200, or two distinct failure causes sharing one HTTP status) and
-  the language's auto-instrumentation also has no per-call metric-attribute
-  hook to carry a custom attribute instead (Python's ASGI/WSGI hooks and
-  Node's `@opentelemetry/instrumentation-http` only add span attributes, not
-  metric attributes). In each of those cases, add the dedicated metric
-  instead of suppressing the only detector-ready signal for the outcome.
-- For incident-readiness work, follow
-  `../references/incident-readiness.md`. Instrument only source-evidenced
-  workflow, dependency, input-complexity, freshness, backpressure,
-  synthetic/canary, auth/edge, capacity, health/readiness, and release/config
-  surfaces. Prefer semantic-convention HTTP, RPC, database, messaging, process,
-  and runtime signals; add custom outcome, lag, freshness, queue, retry,
-  timeout, rate-limit, endpoint/target-health, drop/reject, circuit-breaker,
-  saturation, desired-vs-healthy, startup/readiness/healthcheck, compatibility,
-  and rollout signals only when the service owns and can observe them
-  accurately.
-- For GenAI/LLM code, follow `../references/genai-readiness.md`: create
-  baseline distributed tracing plus OTel GenAI spans for inference,
-  `invoke_agent`, `invoke_workflow`, `plan`, `execute_tool`, `retrieval`, and
-  memory operations where code evidence exists; emit
-  `gen_ai.client.operation.duration` and
-  `gen_ai.client.token.usage` when the data is available; use stable tool names;
-  add low-cardinality `error.type`; and avoid raw prompt, completion, retrieved
-  content, memory record, tool argument, evaluation explanation, user, tenant,
-  session, task, request, trace, or raw URL values in metric dimensions.
-- Prove every custom metric's exact name, unit, instrument type, and complete
-  emitted dimension sets. Lifecycle-specific counters must retain their
-  specific error class; generic terminal errors must not overwrite earlier
-  token-limit, truncation, timeout, provider, or tool classifications. Do not
-  attach transient terminal outcome/error dimensions to intermediate gauges or
-  size measurements unless the metric contract explicitly requires them.
-- For GenAI/LLM code, apply the `Single-Source GenAI Span Contract` before
-  adding manual spans. Inventory framework/vendor bridges, provider SDK hooks,
-  callbacks, middleware, auto-instrumentors, and existing app spans that can
-  emit GenAI telemetry. Choose one canonical GenAI span source per logical
-  operation: workflow, agent, model call, tool call, retrieval, memory operation, or
-  evaluation result. If a framework/vendor bridge already emits correct GenAI
-  semconv spans with lifecycle, privacy, model/tool attributes, and parent
-  context, keep that bridge and add only missing workflow/agent context,
-  aggregates, metrics, or owner mappings; do not create duplicate app-owned
-  `chat` or `execute_tool` spans for those same operations. If app-owned spans
-  are the canonical source, emit the complete app-owned span set and disable,
-  opt out of, or suppress overlapping framework/vendor GenAI instrumentation
-  using the discovered runtime mechanism, such as instrumentor names, bridge
-  settings, callback configuration, or provider-hook opt-out flags. Do not
-  hard-code this decision to one framework. Keep HTTP/database/runtime
-  auto-instrumentation when it does not create duplicate GenAI nodes.
-  When the process uses preload, agent, `opentelemetry-instrument`,
-  `NODE_OPTIONS --require`, or another auto-instrumentation bootstrap, apply
-  the suppression in the launch environment before the bootstrap runs. Update
-  the actual startup surfaces the repo uses, such as Makefile targets, service
-  runner scripts, Docker or Helm env, VS Code launch configs, procfiles,
-  systemd units, shell env generators, or generated env scripts. App module
-  code that mutates environment variables after import is only defense in depth
-  and is not sufficient proof because framework hooks may already be
-  registered.
-  Verification or static proof must show one GenAI node per logical operation,
-  no wrapper-only spans counted as tools, expected LLM/tool counts, stable
-  model/tool names, and workflow/agent parent shape such as
-  `invoke_workflow -> invoke_agent -> chat/execute_tool`. Required proof should
-  name stable model/tool names explicitly.
-- Preserve existing application stable business workflow identity when setting
-  `gen_ai.workflow.name` and workflow span names. Prefer constants, function or
-  handler names, workflow registrations, telemetry event names, docs, or prior
-  trace names. Do not derive GenAI workflow names from HTTP routes, request
-  resources, session/storage tables, or transport labels. If source evidence
-  shows a workflow is named `assistant_v3_turn`, keep `assistant_v3_turn`;
-  never rename it to `assistant_v3_session_turn`, `POST /v2/assistant/sessions`,
-  or another route/session-derived value. If the app has no stable workflow
-  identity, keep the HTTP route as the HTTP span and mark GenAI workflow
-  coverage partial instead of inventing a low-cardinality workflow name.
-  Do not invent names from HTTP routes or session-derived labels.
-- Preserve existing application stable agent identity when setting
-  `gen_ai.agent.name` and agent span names. Prefer framework agent names, agent
-  factory names, class names, registration names, callback owner names, docs, or
-  prior trace names. If source evidence shows a DeepAgents-backed agent, use the
-  discovered stable agent identity such as `deepagents`; never rename it to
-  `assistant_v3_agent`, `assistant`, `agent`, or another generic service-derived
-  wrapper name. If the app has no stable agent identity, keep agent coverage
-  partial instead of inventing one.
-- For app-owned LLM/model calls, apply the `LLM Inference Lifecycle Contract`.
-  Do not satisfy inference coverage with workflow-level token accounting,
-  final usage events, token usage, or model names only on the workflow span.
-  Add or prove a real model-call lifecycle span at the provider request
-  boundary: start before the call or stream starts, end after the
-  response/terminal stream event, and end with error status for exceptions,
-  cancellations, provider timeouts, or stream-close failures. In LangChain,
-  LangGraph, DeepAgents, callback, or event-stream based systems, hook
-  `on_chat_model_start`, `on_chat_model_end`, and `on_chat_model_error` or the
-  equivalent lifecycle callbacks. In direct SDK/model-gateway code, wrap the
-  provider call or streaming generator. The span must carry
-  `gen_ai.operation.name` such as `chat`, `generate_content`, or
-  `text_completion`, `gen_ai.provider.name`, `gen_ai.request.model` when known,
-  `gen_ai.response.model` when known, and token usage on that inference span
-  when provider usage is available.
-- Preserve the owning workflow/agent context for event-derived GenAI spans. In
-  callback, stream, LangChain, LangGraph, or DeepAgents integrations, capture
-  the workflow/agent context and use it when starting chat/model and tool
-  spans. Do not let callback-created `chat` or `execute_tool` spans attach to a
-  generic HTTP root span as siblings of the workflow. A representative trace
-  should prove a shape such as `workflow -> chat`, `workflow -> execute_tool`,
-  and follow-up `workflow -> chat` or `agent -> chat` edges.
-- Capture that workflow/agent context before opening long-lived helper/setup
-  spans such as memory store, checkpointer, database session, stream-writer,
-  resource setup, or lifecycle wrappers. These helper spans must not become the
-  parent for model/tool lifecycle spans. Event-derived `chat` and `execute_tool`
-  spans must use the captured workflow/agent context, not whichever helper span
-  happens to be current when a callback is translated. Store the workflow/agent
-  span object or context explicitly so stream cleanup writes aggregates to that
-  owner even if the current span has changed.
-  Use this rule for memory store, checkpointer, database session, stream-writer,
-  or resource setup paths: helper spans must not become the parent; capture the
-  workflow/agent context before opening helper spans, start event-derived `chat`
-  and `execute_tool` spans with that captured context, and write aggregate
-  counters to the workflow span, not to whichever current span is active.
-- In async generator, SSE, WebSocket, ping-loop, timeout-wrapper, or task handoff
-  paths that advance a stream with `create_task`, `wait`, `anext`, or equivalent
-  scheduling, do not keep an OpenTelemetry current-span context manager open
-  across yield/task boundaries. Start the workflow/agent span with an explicit
-  parent context, store a workflow span/context handle, pass that handle into the
-  callback/event translator, and end the workflow span manually after stream
-  cleanup.
-- When the captured workflow/agent context must travel through a request, turn
-  input, event payload, callback state, or config object that may be
-  immutable/frozen or owned by a framework, do not mutate that carrier in place.
-  Treat a carrier as immutable/frozen when source evidence shows frozen or
-  readonly declarations, record/value types, no mutation API, framework request
-  immutability patterns, or existing code constructs new copies instead of
-  mutating.
-  Use the app's idiomatic copy/replacement API: Python `dataclasses.replace`,
-  `attrs.evolve`, pydantic `model_copy(update=...)` or v1 `copy(update=...)`;
-  Java records, builders, or copy constructors; TypeScript object spread,
-  explicit `Readonly<T>` replacements, or `structuredClone` only for plain-data
-  carriers and never for live OTel `Context` or `Span` handles; Go value copies
-  with explicit field replacement; or the framework's request clone/with-context
-  API. If no safe copy path exists, use a separate invocation-scoped sidecar
-  context: a local object, context variable, request-scoped map, or callback
-  state keyed to the invocation lifecycle and cleared after cleanup. Do not key
-  sidecar context by raw user, tenant, session, request, or trace IDs. Add a
-  focused test, or explicit static proof when the repo has no test harness, that
-  proves the parent context is passed downstream and the original immutable
-  input remains unchanged; for Python, guard against `FrozenInstanceError`
-  regressions when a frozen dataclass or model is present.
-- Put aggregate selected-trace GenAI attributes on the workflow span or
-  most specific owning GenAI span, not on a generic HTTP root span or generic server span.
-  This includes `gen_ai.usage.input_tokens`,
-  `gen_ai.usage.output_tokens`, `gen_ai.usage.total_tokens`,
-  `assistant.llm.calls`, and `assistant.tool.calls`. The HTTP root can remain
-  the server entrypoint, but it should not become the evidence for a GenAI flow
-  card unless it is explicitly instrumented as the workflow span.
-- If runtime telemetry verification is unavailable, perform a static
-  instrumentation proof before claiming GenAI trace coverage: identify the
-  model-call source file, the lifecycle hook or client wrapper, the created
-  inference span name, required `gen_ai.*` attributes, parent-context handoff,
-  aggregate-attribute placement, end/error path, and a focused test or compile
-  check. If the proof shows only workflow-level usage attributes and no
-  inference span, or chat/tool spans that are siblings of the workflow under a
-  generic HTTP root span, keep the surface partial in `remaining_signals`.
-- For local span-first trace explorers such as Splunk Observability Studio, metrics alone are not enough
-  for a selected-trace summary. When provider usage, model, tool,
-  memory, evaluation, or fanout data is available, also set safe span attributes
-  on the most specific GenAI span and aggregate to the workflow span when
-  useful: `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`,
-  `gen_ai.usage.total_tokens`, `gen_ai.request.model`,
-  `gen_ai.response.model`, service-owned LLM/tool call counts, stable
-  `gen_ai.tool.name`, memory operation names, evaluation names/labels, and
-  low-cardinality `error.type`.
-- For assistant, agent, or streaming workflows, instrument first non-ping event
-  or first chunk latency, timeout, cancellation, disconnect, close reason
-  family, and send/write failure. Normalize timeout classes such as
-  `first_event_timeout` instead of relying only on framework exception class
-  names, while still recording the exception on the span.
-- For custom attribute names use `{domain}.{noun}.{adjective}` format.
-- Span names must be low-cardinality (no IDs, no variable path segments).
-- Metric attributes must avoid high cardinality.
-- Preserve existing env-var patterns for operator-owned telemetry config. The
-  only endpoint literal the default log path may introduce is the
-  signal-specific local Splunk Observability Studio fallback; it must not inherit a generic
-  direct-cloud endpoint.
-- If the app is a library, provide an opt-in setup path rather than forcing SDK initialization on import.
-- Keep the codebase idiomatic. Match the repo's dependency manager, config style, and lifecycle patterns.
-- Obtain OTel Tracer, Meter once during startup and reuse it. Do not call `getTracer` or `getMeter` in hot paths.
-- Create metric instruments once during startup and reuse them. Do not create instruments in hot paths.
-- Metric instruments must be created with appropriate unit and description parameters.
-
-#### Default Local Application Log Export
-
-- Classify application logs during preflight as `local-otlp-default`,
+- Confirm `service.name`, `service.version`, and environment ownership. Preserve
+  operator values. Resolve an absent-value default from checked-in launch,
+  Compose, runtime-eval, fixture, documentation, and test contracts before
+  deriving one from the module, directory, or binary name. Never replace a
+  repository-owned service default with a generic or shortened name. Prefer
+  `deployment.environment.name`, `cloud.region`,
+  `cloud.platform`, `container.image.name`, and `container.image.tags`; treat
+  legacy aliases as existing inputs, not new duplicate attributes.
+- Inventory the application logging stack and every stdout, file, platform,
+  OTLP, and bridge path. Classify it as `local-otlp-default`,
   `explicitly-disabled`, `operator-owned`, `correlation-only`, or
-  `unsupported-stack`. Trace/MDC fields in stdout are correlation-only, not an
-  OTLP log pipeline.
-- For a supported Python, Node.js, Java, or Go application logging stack,
-  configure local Splunk Observability Studio OTLP export by default. Use the official log SDK,
-  batch processor/exporter, and the official bridge for the detected stack.
-  Keep one `LoggerProvider` and exactly one bridge/export path per record.
-- Preserve operator ownership. Never overwrite an explicitly set
-  `OTEL_LOGS_EXPORTER` or `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`.
-  `OTEL_LOGS_EXPORTER=none` disables the added provider/exporter and bridge.
-  Another explicit exporter is operator-owned and must not be supplemented
-  with a second local pipeline, but its provider/exporter/bridge must be proven;
-  an environment value by itself is not evidence of export. When the exporter
-  is absent or explicitly `otlp`, an explicit signal endpoint may be used by
-  the Splunk Observability Studio-owned pipeline only when it exactly matches the detected local
-  Splunk Observability Studio receiver for the selected runtime and protocol. Adapt the local
-  endpoint to the checked-in Docker/Compose service address when applicable.
-  Default an absent exporter to `otlp` and an absent endpoint to that detected
-  local receiver. If the explicit endpoint is non-local or direct-cloud, do not
-  construct or enable the Splunk Observability Studio provider/exporter/bridge; fail closed and
-  report the operator-owned boundary conflict. Do not validate the logs
-  endpoint on the `none` or other non-OTLP exporter branches, because those
-  branches remain wholly operator-owned.
-- Preserve existing stdout, stderr, file, and platform logging sinks. Add the
-  OTel bridge alongside them; do not replace their handlers, appenders,
-  transports, levels, formatters, or rotation policy. If the stack cannot fan
-  out safely, keep it `unsupported-stack` and report the exact missing bridge
-  instead of silently removing the existing sink.
-- Never derive the default log destination from a generic endpoint that points
-  directly at a cloud ingest service. Use a signal-specific local logs endpoint
-  and keep any direct-cloud endpoints signal-specific to traces and metrics.
-  Splunk Observability Studio cloud forwarding to Splunk is traces and metrics only. Do not add a
-  cloud log endpoint, cloud log header/token, cloud log exporter, or log
-  forwarding flag.
-- Resolve the log protocol independently. The local baseline is
-  `http/protobuf` with `/v1/logs`; when an explicit signal-specific protocol is
-  different, select its matching official exporter and endpoint shape or
-  report it unsupported. Never silently send HTTP to a gRPC endpoint. A generic
-  header must not be inherited or merged into logs: move
-  `OTEL_EXPORTER_OTLP_HEADERS` to trace/metric signal variables and remove the
-  generic value before enabling the local log path, even when an explicit
-  signal-specific log header is present. Preserve the operator-owned
-  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` value after the generic value is removed.
-- Before adding a bridge, search for auto-instrumentation, handlers, appenders,
-  transports, hooks, and worker-thread exporters that already send the same
-  record to OTel. Choose one owner and disable or omit the overlap. Preserve
-  correlation injection without creating a second exported record.
-- Apply privacy checks to the final logging pipeline: formatter fields,
-  adapters, MDC/context variables, framework access logs, and exception
-  rendering. Removing IDs from one `logger.*` call is insufficient when a
-  formatter or access logger adds them back. Keep raw request/user/tenant/
-  session IDs, raw dynamic URLs, exception text, and tracebacks out of the
-  approved application-log surface unless the policy explicitly permits them.
-- Add focused and full-runtime proof for log body/category, severity, shared
-  resource identity, trace/span correlation in an active span, redaction,
-  preservation of the existing sink, explicit `none` opt-out, and exactly one
-  OTLP record per application log call. When cloud trace/metric forwarding is
-  configured, also prove the log is visible in local Splunk Observability Studio and no cloud log
-  exporter or forwarding path was configured.
-- When `OTEL_LOGS_EXPORTER=none`, disable or bypass any previously discovered
-  application-log provider/bridge as needed to prove zero OTLP application log
-  records; leaving an already-active bridge in place is not a valid opt-out.
-- Report a missing default or requested local export pipeline as `Not
-  configured`, not `Not proven`. Use `Not proven` only after configuration
-  exists but its required runtime scenario did not run.
+  `unsupported-stack`.
+- For existing audit scope, map each selected finding to its planned change and
+  scenario IDs. A proof-only row may need no code change; do not invent one.
 
-#### Language-Specific Musts
+Before editing, state: executable, runtime/probe, service/environment source,
+provider topology, log classification, selected IDs and binding, changed
+consumer contracts, validation command, and scenarios. For incident or GenAI
+scope, also state the loaded reference, owned surfaces, required signals, and
+external owners.
 
-Python:
-- Add explicit dependency entries for `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, and each detected framework/client instrumentation package.
-- Create a separate setup file such as `otel_setup.py`, `telemetry.py`, or `instrumentation.py`.
-- Configure a shared `Resource.create({"service.name": ...})`, trace provider,
-  meter provider, and default local log provider/exporter in that setup file only
-  for signals the process does not already own. If a source-owned provider
-  exists, move or adapt its construction into the shared setup while preserving
-  existing wrappers, views, file-export modes, and tests; do not create a
-  second provider.
-- Import and call the setup function from the app entry point before creating or instrumenting the app.
-- For Flask, call `FlaskInstrumentor().instrument_app(app)`.
-- For FastAPI, call `FastAPIInstrumentor.instrument_app(app)` immediately
-  after app construction and before lifespan/startup begins. Do not first call
-  it inside lifespan: Starlette/FastAPI middleware installation is too late
-  after the application has started serving.
-- For Celery, call `CeleryInstrumentor().instrument()` in the worker path.
-- Keep existing Docker/Compose/Makefile commands, but update them only as the startup surface for the explicit setup, not as a replacement for app wiring.
-- For stdlib `logging` (including Flask/Django logging), use the current
-  `opentelemetry-instrumentation-logging` bridge backed by `LoggerProvider`,
-  `BatchLogRecordProcessor`, and the selected OTLP log exporter. Its guarded
-  setup must preserve logging configuration performed before or after OTel;
-  do not call `basicConfig(force=True)` or replace stdout/file handlers. For a
-  project pinned before OTel Python 1.40.0, retain the documented SDK
-  `LoggingHandler` compatibility path instead of forcing an upgrade. Shut the
-  log provider down with the other providers.
-- The ASGI/WSGI instrumentation underlying Flask/FastAPI already sets
-  `http.response.status_code` on `http.server.request.duration` for every
-  request, and `error.type` for a 5xx (or otherwise invalid) status, with no
-  extra code -- a plain 4xx client-error response does not set `error.type`
-  on a server span. `server_request_hook`/`response_hook` only set span
-  attributes, not metric attributes; they are not a route to a new dimension
-  on the duration metric itself. Do not add a standalone counter for a
-  request outcome the duration metric already attributes correctly.
+## 2. Implement The Selected Baseline
 
-Node.js:
-- Add `@opentelemetry/instrumentation-http` explicitly for HTTP server spans.
-- Add the detected framework instrumentation explicitly, for example `@opentelemetry/instrumentation-express` for Express.
-- Add `@opentelemetry/exporter-metrics-otlp-http` and `@opentelemetry/sdk-metrics` when wiring SDK-based metrics.
-- Add `@opentelemetry/exporter-logs-otlp-proto` for the default
-  `http/protobuf` path and
-  `@opentelemetry/sdk-logs`, pass one `BatchLogRecordProcessor` through
-  `NodeSDK.logRecordProcessors`, and add only the detected official bridge.
-  For detected `console.*` calls, use
-  `@opentelemetry/instrumentation-console` 0.3.0 only when the selected Node
-  runtime satisfies `^18.19.0 || >=20.6.0` and the project has
-  `@opentelemetry/api >=1.9.1`; it emits LogRecords while preserving console
-  output. Treat an older pinned runtime/API as unsupported instead of forcing
-  an upgrade. Otherwise select the detected Winston or Pino
-  instrumentation/transport bridge. Keep existing console/file transports.
-  Do not enable an instrumentation sender and an OTel transport for the same
-  logger; `sdk.shutdown()` must flush logs as well as traces and metrics.
-- Configure `PeriodicExportingMetricReader` with `exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000)` and `exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500)` so HTTP duration metrics export during short runtime checks.
-- Use the current `NodeSDK` metric reader option exactly as shown in the Node reference. Do not substitute `metricReaders` for `metricReader` unless the installed SDK version documents that option.
-- Do not rely on `@opentelemetry/auto-instrumentations-node` alone when specific framework packages are expected.
-- In the final response, name the updated preload command (`--require` or `--import`), the packages added, and that HTTP server spans plus request-duration metrics are expected.
-- `@opentelemetry/instrumentation-http` already sets `http.response.status_code`
-  on `http.server.request.duration` from the response for every request with no
-  extra code. It does not set `error.type` from a failing status code:
-  `error.type` there is reserved for a lower-level request/response transport
-  error (for example a socket error before a status was ever sent), not an
-  ordinary 4xx/5xx completion. Its hooks (`requestHook`, `responseHook`,
-  `startIncomingSpanHook`) only add span attributes, not metric attributes.
-  Do not add a standalone counter for a request outcome that `http.response.status_code`
-  already distinguishes; `@opentelemetry/instrumentation-http` has no per-call
-  metric-attribute hook, so a finer-grained reason dimension that the status
-  code alone cannot express does need its own custom metric here.
+Use the one detected-language guide for exact patterns. Apply
+auto-instrumentation first, then only approved custom signals.
 
-Go:
-- For HTTP services, use `otelhttp.NewHandler` as the outermost server handler so request-duration metrics are emitted, even when router-specific middleware is also used for route-aware spans.
-- For chi, gin, mux, or another router with parameterized routes, route-aware
-  server spans are required. Add the matching framework middleware inside the
-  outer `otelhttp.NewHandler`, then prove at least one parameterized route uses
-  its low-cardinality route pattern rather than a constant `server` span name.
-  Also prove the combined wrappers do not emit duplicate server spans.
-- Configure `sdkmetric.NewPeriodicReader` with an interval derived from `OTEL_METRIC_EXPORT_INTERVAL`, defaulting to `1000` ms, and a timeout derived from `OTEL_METRIC_EXPORT_TIMEOUT`, defaulting to `500` ms, for local runtime checks.
-- Add `go.opentelemetry.io/otel/sdk/log`,
-  `go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp`, and exactly
-  one official `go.opentelemetry.io/contrib/bridges` package matching the
-  detected logger. Register one global log provider, preserve the existing
-  stdout/file handler through fan-out, pass `context.Context` to logging calls
-  for trace correlation, and shut the log provider down.
-- In the final response, state the server handler wrapping, service-name setting, OTLP endpoint setting, and that HTTP server spans plus request-duration metrics are expected.
-- `otelhttp.NewHandler` already sets `http.response.status_code` on
-  `http.server.request.duration` from the response status with no extra code.
-  It does not set `error.type` from that status: `otelhttp`'s metric
-  attributes never include `error.type` for an ordinary 4xx/5xx completion.
-  When a handler needs a dimension `otelhttp` cannot derive from the
-  status code alone (a specific failure reason such as a downstream timeout
-  vs. a validation error, both returning the same HTTP status), pull the
-  `Labeler` that `otelhttp.NewHandler` already injects into the request
-  context and add the attribute from inside the handler instead of creating
-  a new counter:
-  ```go
-  labeler, _ := otelhttp.LabelerFromContext(r.Context())
-  labeler.Add(attribute.String("outcome.reason", "gateway_timeout"))
-  ```
-  No extra `otelhttp.NewHandler` option is needed; the labeler is present in
-  context for every request the handler already wraps. The older
-  `otelhttp.WithMetricAttributesFn` middleware option is deprecated in favor
-  of this per-request `Labeler`. A custom attribute like `outcome.reason` is
-  detector-ready without a standalone counter: see
-  `splunk-configure/references/detector-classification.md`'s "Evidenced
-  Non-Standard Outcome Attribute" rule, which generates an attribute-filtered
-  outcome detector directly from an evidenced non-standard histogram
-  attribute.
+### Ownership and executable boundary
 
-Java:
-- Use the Java agent for Spring Boot unless custom business spans are explicitly requested.
-- Avoid adding SDK dependencies to `pom.xml` for basic Spring Boot coverage.
-- Follow `./references/languages/java.md` Implementation Rules for DI binding, provider reuse, and dependency checks.
-- Wire the agent through the existing startup surface, `JAVA_TOOL_OPTIONS`, or a documented run command.
-- Default the Java agent's application log exporter to `otlp` only when
-  `OTEL_LOGS_EXPORTER` is absent and the logs endpoint is absent or matches the
-  detected local Splunk Observability Studio receiver. Set that local
-  `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, and rely on the agent's detected
-  Logback/Log4j bridge plus JVM shutdown hook. A non-local explicit endpoint on
-  the absent/`otlp` branch is a fail-closed boundary conflict and must not start
-  the agent-owned log path. Preserve explicit `none`, other exporter choices,
-  existing appenders, and any single existing OTel appender; never install a
-  second bridge.
-- In the final response, explicitly mention the agent setup or path,
-  `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, HTTP server spans, and
-  `http.server.request.duration`.
+- Initialize each signal provider once per process in a separate telemetry
+  setup file owned by the executable. Extend an existing provider rather than
+  racing to register a second global provider.
+- Keep importable libraries free of unconditional SDK/provider registration.
+  Library handlers may propagate context and add request-local telemetry, but
+  the executable entrypoint owns setup, outer framework wrapping, and shutdown.
+- Reuse the actual startup command. Python uses per-process setup unless the
+  user selects CLI-only; otherwise a wrapper is insufficient. Node
+  must preload before app imports; Java normally uses the agent; Go must call
+  setup and wrap the handler from `cmd/.../main` or its equivalent.
+- Obtain tracers/meters and create instruments during setup, not in hot paths.
+  Use official OTel packages, except a library-maintained integration where no
+  official package exists. Do not move business functions between files.
+- Merge app resource defaults only for absent keys. Preserve
+  `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, safe consumer aliases, and
+  one shared resource identity across traces, metrics, and logs.
+- Resolve endpoint, protocol, and path independently per signal. Pair gRPC
+  with its receiver and HTTP/protobuf with `/v1/traces`, `/v1/metrics`, or
+  `/v1/logs`. Prove each configured signal separately.
 
-### 4. Custom Instrumentation
+### HTTP and errors
 
-After auto-instrumentation is wired up, prompt the user:
+- Instrument the outermost executable HTTP server boundary so it emits server
+  spans and request-duration metrics. For Go stdlib HTTP this means
+  `otelhttp.NewHandler` wraps the real handler in the executable, not a library
+  constructor. Router middleware sits inside it when route-pattern spans are
+  needed. Prove low-cardinality route patterns and no duplicate server spans.
+- Prefer `http.server.request.duration`; accept an older alternative only with
+  runtime evidence. Use short local metric export interval/timeout defaults
+  from the language guide so short checks flush.
+- Record exceptions and set span status ERROR on failed custom operations.
+  Keep span names and metric dimensions low-cardinality.
+- Before adding a custom outcome counter/histogram inside an auto-instrumented
+  HTTP, RPC, database, or messaging call, use its standard RED attributes or a
+  supported per-call metric-attribute hook when those distinguish the outcome.
+  Add a dedicated metric when no call exists or the standard attributes and
+  language hooks cannot represent the detector-relevant distinction.
 
-> Auto-instrumentation is configured. Would you like me to add custom spans or metrics for your business logic?
+### Default Local Application Log Export
 
-Then wait for the user's answer.
+For a supported detected Python, Node, Java, or Go logging stack, local
+Splunk Observability Studio OTLP application-log export is part of the standard baseline:
 
-Skip this prompt when the user already asked for incident-readiness or GenAI/LLM
-workflow instrumentation, a specific custom signal, when an Audit-Driven
-Readiness path applies, or when a validated canonical selection exists. In
-canonical flow, the selection is the approval context and only selected work is
-implemented. When no canonical audit exists, stop before custom
-instrumentation and ask the user to run `$otel-audit` first.
+- A request that excludes custom business spans limits span work only; it is
+  not a log-export opt-out.
+- Export locally only when `OTEL_LOGS_EXPORTER` is absent/`otlp` and the
+  signal-specific logs endpoint is absent or exactly the detected local
+  Splunk Observability Studio receiver. Host default is `http://localhost:4318/v1/logs`; keep
+  checked-in container URLs. Never infer locality from hostname syntax.
+- `OTEL_LOGS_EXPORTER=none` disables the added local log path. Any other explicit exporter is
+  operator-owned; add no local provider, exporter, or bridge and do not treat
+  the environment value alone as proof that its pipeline works.
+- A non-local endpoint on the absent/`otlp` branch is a boundary conflict:
+  fail closed before constructing the local provider/bridge and report it.
+- The Splunk Observability Studio-owned local exporter must receive no cloud credential or auth
+  header. Move generic direct-cloud endpoints/headers to trace- and
+  metric-specific variables and remove the generic values. Do not pass
+  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` into the default local Splunk Observability Studio exporter;
+  an explicit logs header makes that path operator-owned and must be resolved
+  or proven separately. Splunk Observability Studio cloud forwarding to Splunk is traces and
+  metrics only.
+- Use one official bridge matching the detected logger, one LoggerProvider,
+  exactly one bridge/export path, and one shutdown path. Preserve every existing
+  console/file/platform sink and prevent duplicate bridge/export paths.
+- Pass the active request context to application logging. Preserve existing log
+  APIs/levels plus fixture, documentation, and test contracts for exact
+  body/category, severity, and default `service.name`; do not replace an
+  expectation with a generic example value. Preserve every distinct lifecycle-log
+  contract as well: a shutdown/startup warning is not a duplicate of the
+  request warning, and it needs trace/span IDs only if it runs inside an active
+  span. Do not invent, remove, merge, or rename log bodies to manufacture proof.
+- Apply privacy checks to the final pipeline, including formatters, adapters,
+  access logs, MDC/context, and exception rendering. Do not emit raw request,
+  user, tenant, session, URL, payload, secret, exception-text, or traceback
+  values unless policy explicitly permits them.
+- Focused and full-runtime proof must show the exact sanitized body/category,
+  severity, shared resource identity, nonempty trace/span IDs inside an active
+  request span, the preserved original sink, exactly one OTLP record per call,
+  a flushed final record, and zero records under `none`. A config diff or
+  stdout correlation fields alone are not OTLP export proof.
 
-- **If no**: proceed to the project-runtime validation gate (Step 5).
-- **If yes**: for each candidate point below, first check whether it occurs
-  inside a call an auto-instrumented RED metric already measures (HTTP, RPC,
-  DB, or messaging — see `#### Implementation Rules`); if so, prefer adding
-  an attribute to that existing metric via the language's per-call
-  metric-attribute hook over defining a new counter/histogram. Analyze the
-  codebase for high-value custom instrumentation points:
-  - Error handling paths that catch and handle exceptions
-  - Key business operations (payments, orders, user registration, etc.)
-  - External calls not covered by auto-instrumentation libraries
-  - Background workers and scheduled jobs
-  - Cache interactions without auto-instrumentation support
-  - Incident-readiness boundaries: customer-impact workflow outcome,
-    dependency timeout/retry/rate-limit/error and endpoint/target health, input
-    complexity, freshness, queue/backpressure, synthetic/canary result,
-    auth/edge failure, capacity saturation, desired-vs-healthy,
-    startup/readiness/healthcheck, traffic target health, and release/config
-    context when code evidence exists
-  - Incident-evidence boundaries: every supplied failure mechanism must map to
-    an added or proven code-owned signal or an explicit external owner; generic
-    endpoint metrics are insufficient when the mechanism is auth handshake,
-    secret expiry, stale output, rollout skew, dependency target health, stream
-    lifecycle, or pool saturation
-  - GenAI/LLM workflow boundaries: workflow span, agent/workflow invocation,
-    LLM inference, tool/function execution, MCP method dispatch when present,
-    retrieval, fallback, token usage, model/config readiness, prompt/response
-    parse outcome, safety/policy outcome, AI-derived data freshness, and
-    AI-owned session/stream lifecycle when code evidence exists
-  - Suggest specific spans and metrics with names, attributes, and rationale
-  - Apply after user approval
+Follow the detected-language guide for bridge APIs, shutdown order, provider
+reconciliation, and tests. If the stack cannot fan out safely, report
+`unsupported-stack`; do not remove an existing sink to force coverage.
 
-### 5. Validate The Implementation
+## 3. Conditional Custom Work
 
-Read and follow `./references/project-runtime-validation.md`. Local,
-deterministic validation is the default completion gate; do not ask for
-permission to run a project-configured syntax, compile, typecheck, import, or
-focused test command. Do not require full app startup, Docker, credentials,
-live providers, or an OTLP collector for this gate.
+### Targeted signal
 
-At minimum:
+If the user requested one specific custom signal and OTel is already
+initialized, preserve the existing setup and add only that signal. A canonical
+selection still requires every selected ID and dependency; it cannot be
+narrowed to one phrase from the request.
 
-1. Probe the selected project runtime and record the version actually used.
-2. Run static/config checks for changed scripts and manifests, including
-   `git diff --check` when Git is available.
-3. Compile, typecheck, or import every affected application module with the
-   selected project runtime.
-4. Run the smallest existing focused tests that exercise changed code. For
-   custom spans, metrics, or logs, add or update a focused repo-native test
-   when the existing test framework provides a practical in-memory OTel seam.
-   Build an exact signal closure matrix and execute every changed span name and
-   metric call site that should still emit, plus explicit absence proof for
-   every removed signal. Do not infer coverage for create, batch, update,
-   delete, route, tool, or workflow names solely from a shared helper's test.
-   Parameterize tests when those call sites share setup. For
-   detector-critical counters, histograms, and observable gauges, drive each
-   incident state to a non-default value and assert its emitted datapoint and
-   bounded dimensions; metric registration, name presence, or a zero-value
-   observation alone is not incident-readiness proof.
-   Map these executions back to every in-scope `Audit Gap Closure` row and its
-   declared verification scenarios.
-5. Confirm filtered tests actually ran by checking test output or generated
-   reports; a no-match guard is reactor plumbing, not test evidence.
-6. If a validation failure is caused by instrumentation changes, repair it and
-   repeat the affected gate until it passes. Do not finalize with a compile,
-   type, syntax, or import error on a modified line.
+After a direct no-audit standard baseline, ask whether the user wants custom
+spans or metrics. If yes, stop and route through `$otel-audit` first. Skip this
+question when selected audit scope, incident-readiness scope, GenAI scope, or a
+specific custom request already supplies approval.
 
-Skip command execution only when the user explicitly forbids verification or
-states that an external eval owns all checks. In that case, still perform
-source-level review, record `Not run` in the handoff, and do not describe the
-instrumentation as verified or complete. If the configured runtime or declared
-dependencies are unavailable, record `Blocked` with the exact prerequisite;
-do not fall back to an incompatible global runtime.
+### Incident readiness
 
-After the implementation gate, invoke or apply the `$otel-verify` workflow
-unless the user explicitly opts out or a concrete prerequisite blocks it. The
-instrumentation goal is not done until code viability is known and verification
-has run, been explicitly skipped by the user, or is documented as blocked.
+When applicable, follow `../references/incident-readiness.md` in full. Map each
+selected readiness gap to its owning code, exact low-cardinality signal,
+scenario, and `MTTD-improving`, `localization-only`, external-owner, or
+uncovered result. Do not call a row working while a required signal is absent,
+only proposed, or backed by static/registration proof. For Go changes touching
+goroutines, channels, queues, async persistence/indexing, eviction, or
+callbacks, run `go test -race` for every changed package or record the exact
+toolchain blocker.
 
-Record the verification result and `.observe/otel-verify.md` path in
-`.observe/otel-instrumentation.md`. If verification cannot run, record the exact
-blocking prerequisite and do not describe the instrumentation as verified.
+### GenAI readiness
 
-For canonical flow, write and validate `.observe/otel-instrumentation.json`
-with `json-approval-handoff.md`, invoke `$otel-verify` with the same bound
-selection unless explicitly skipped or concretely blocked, and refresh
-`.observe/otel-instrumentation.html` with the available verification overlay.
-Do not tell the user to rerun `$otel-verify`; name the concrete remaining repair,
-runtime prerequisite, or product-evidence step instead.
+Follow `../references/genai-readiness.md` in full and reconcile selected
+app-owned surfaces with its semconv closure matrix. Keep one canonical GenAI
+span source per operation, configure suppression before bootstrap, preserve
+stable workflow/agent names and parent context, and add model-call lifecycle
+spans rather than workflow-only usage. For local span-first trace explorers such as Splunk Observability Studio,
+metrics alone are not enough: put
+`gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, and
+`gen_ai.usage.total_tokens` on the owning span. Instrument streaming
+`first_event_timeout`, close-reason family, and send/write failure. Keep content
+opt-in, metric dimensions bounded, and every incomplete required signal in
+`remaining_signals`; use `Remaining signals: none` only when all are proven or
+owner-mapped.
 
-When verified metric evidence exists and the user requested detectors,
-alerting, monitors, Splunk configuration, or `$splunk-configure`, invoke or
-apply that workflow and include the detector/configure verification result in
-the instrumentation report.
+## 4. Validate And Verify
 
-When any claim depends on auto-instrumentation startup, framework route
-resolution, automatic metrics, duplicate automatic-span prevention,
-startup/exporter wiring, or runtime-installed OTLP logs, read
-`../references/full-runtime-acceptance.md` and require its conditional full
-runtime gate in the verification handoff. Attempt the gate without asking when
-the repository provides a safe local profile or fixtures. Otherwise record the
-exact prerequisite and keep those rows `Partial`, `Blocked`, or `Not proven`.
-`Not run` or `no collector was run` alone is not an acceptable blocker. For
-each required full-runtime row, record either the executed command and direct
-result or the concrete unavailable runtime, listener, dependency, credential,
-or fixture that prevented the attempt. Do not finalize while a safe local
-profile exists and the required gate has not been attempted.
+Follow `./references/project-runtime-validation.md`; keep one validation ledger keyed by gate and relevant inputs. After the last relevant edit run the runtime probe,
+`git diff --check`, syntax/config parsing, affected-module compile/type/import,
+the narrowest executing tests, signal assertions and removal proof, then any
+broader build/test warranted by shared wiring or manifests.
 
-### 6. Enable Debugging in VS Code
+Confirm test filters matched. Preserve passing gates until inputs change—never a passing gate merely for fresher report evidence;
+after repair rerun only the failed and dependent invalidated gates. Static checks do not
+replace executable telemetry proof when a practical seam exists. If runtime or
+dependencies are unavailable, record the prerequisite as `Blocked` or `Not
+proven`; never claim verification.
 
-This step is REQUIRED whenever `.vscode/launch.json` exists.
+For canonical scope, apply `$otel-verify` to the bound selection unless opted
+out or blocked. Resolve only `../otel-verify/SKILL.md` from the loaded skill;
+never search an absolute or user-global skill location; record it unavailable
+if absent. For a direct no-audit baseline, run inline
+project/full-runtime proof and record standalone `$otel-verify` as `not
+applicable (no canonical audit/selection)`. For startup claims, load and attempt
+`../references/full-runtime-acceptance.md` when a safe local profile exists.
+“Not run” or “no collector” alone is not a blocker. Record the executed
+command/result or the unavailable runtime, listener, dependency, credential,
+or fixture. Do not finalize while a safe required profile exists but has not
+been attempted.
 
-1. Check whether `.vscode/launch.json` exists.
-2. If it exists, update at least one debug configuration for this service to include:
-   - `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
-   - `OTEL_LOGS_EXPORTER=otlp` when no explicit exporter exists and the logs
-     endpoint is absent or is the detected local Splunk Observability Studio endpoint
-   - `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs` when the
-     exporter is absent/`otlp` and no explicit logs endpoint exists
-   - `OTEL_METRIC_EXPORT_INTERVAL=1000`
-   - `OTEL_BSP_SCHEDULE_DELAY=100`
-   If an absent/`otlp` exporter is paired with an explicit non-local logs
-   endpoint, do not add either logs setting; stop and report the operator-owned
-   boundary conflict instead of enabling a Splunk Observability Studio log path.
-3. After editing, report which configuration was updated, the file path, and whether the env vars were added or already present.
-4. If `.vscode/launch.json` exists and you do not update it, stop and explain why.
-5. If `.vscode/launch.json` does not exist, explicitly report: `No .vscode/launch.json found; Step 6 skipped.`
+## 5. Reports And Handoff
 
-### 7. Finalize
+Always write `.observe/otel-instrumentation.md` with the exact reader order and
+closure rules from the selected report-flow sections. It must include
+`## Signals Changed`, `## Audit Gap Closure`, validation evidence, verification
+handoff/results, remaining gaps, and next steps. `Signals Changed` is the
+implementation-change inventory: list exact added, modified, removed, and
+unchanged traces, metrics, logs, config, and dependencies. Claim removal only
+when the prior report or Git diff proves it.
 
-- In the final response, separate file changes from verified outcomes
-- State the selected project runtime, affected-module compile/type/import
-  result, focused tests that actually ran, and the verification result or
-  blocking prerequisite.
-- Write `.observe/otel-instrumentation.md` and include a `Signals Changed`
-  summary with added, modified, and removed traces/spans, metrics, logs/events,
-  runtime/config, and dependencies. If no prior audit existed, state that the
-  report establishes the implementation baseline.
-- In canonical flow, write and validate `.observe/otel-instrumentation.json`,
-  render `.observe/otel-instrumentation.html` using
-  `./references/json-approval-handoff.md`, and keep every selected finding
-  exactly once. Leave `.observe/otel.html` as the audit and scope surface;
-  never call unselected findings implemented.
-- Include selected `Audit Gap Closure` counts by `Working`, `Not working`, `Not
-  proven`, and `Not configured`. Do not report unselected findings as
-  implemented work.
-- For incident-readiness work, summarize each in-scope workflow, dependency,
-  input-complexity, freshness, backpressure, synthetic/canary, auth/edge,
-  capacity, health/readiness, and release/config surface as MTTD-improving,
-  localization-only, provider/platform-owned, or uncovered. Name every
-  remaining detector prerequisite and its owner; do not call the pass complete
-  while an app-owned required signal is only a follow-up unless the user
-  explicitly narrowed scope.
-- When the source audit declares GenAI ownership, include the complete
-  selected-scope `GenAI Readiness Closure` matrix and list every non-`Working`
-  remaining signal in the final response.
-- If canonical audit JSON is absent, stop before GenAI instrumentation and ask
-  the user to run `$otel-audit`; do not collapse absent GenAI readiness into a
-  generic implementation claim.
-- Include `$otel-verify` results and `.observe/otel-verify.md` path when run.
-  If detectors/configuration were requested, include `$splunk-configure`
-  outputs and `.observe/splunk-configure-verify.md` status when run.
-- In canonical flow, use the `render-instrumentation-html` command's returned
-  loopback links for both `otel-instrumentation.html` and `otel.html` in the
-  final response. Do not emit absolute local-file links for generated HTML and
-  do not open either report automatically. On the permitted direct baseline
-  path, link only the absolute `.observe/otel-instrumentation.md` report; do not
-  claim or link audit, selection, JSON, or HTML artifacts that were not created.
-  Keep Markdown and JSON report links as absolute local paths.
-- If verification is partial, say exactly what is working and what is still missing instead of reporting full success
-- Never say `complete`, `working`, or `verified` when the mandatory
-  compile/type/import gate failed, was blocked, or was not run. Use
-  `implemented; verification blocked/not run` and name the prerequisite.
-- Always include the service-name configuration, OTLP endpoint configuration, and which automatic spans/metrics are expected from the instrumentation.
-- State the selected log scope and the full-runtime acceptance result whenever
-  either is applicable.
-- For the default local log baseline, state the detected bridge, preserved
-  stdout/file sinks, effective `OTEL_LOGS_EXPORTER` and signal-specific local
-  logs endpoint, explicit opt-out behavior, duplicate-prevention proof, and
-  that cloud forwarding/configuration remains traces and metrics only.
-- For GenAI work, state which OTel GenAI operations were instrumented, which
-  GenAI metrics are expected, whether trace continuity should produce a nested
-  workflow/agent/tool/chat/retrieval shape, and which privacy/cardinality limits
-  were enforced.
-- For GenAI incident-evidence work, include a concise coverage summary by
-  incident class or repo surface: MTTD-improving, localization-only, or
-  uncovered. Name any remaining provider/model, workflow, tool/function
-  execution or AI-owned session/stream including MCP when present, retrieval,
-  streaming, token/context, prompt/response, safety/policy, AI-derived data,
-  model/config rollout, or AI-owned cache/session owner that still blocks
-  detector-ready coverage.
+With canonical scope, use `./references/json-approval-handoff.md` to write and validate
+`.observe/otel-instrumentation.json`, render
+`.observe/otel-instrumentation.html`, and project every dependency-closed
+selected finding exactly once. Keep unselected findings out. Use one Audit Gap
+Closure row per selected finding and derive the report result from all closure
+rows. Include `## GenAI Readiness Closure` only when the source audit declares
+GenAI ownership; never invent it on the direct baseline path.
 
-## Credential Safety
+After verification, refresh the instrumentation HTML with the bound verify
+overlay. Leave `.observe/otel.html` audit-only. Use the render command's
+returned loopback links for both `otel-instrumentation.html` and `otel.html`.
+Keep Markdown and JSON report links as absolute local paths, and do not open
+either report automatically. If canonical JSON is absent, write/link only the
+technical Markdown baseline report and do not claim audit, selection, JSON, or
+HTML artifacts. In that report, record source audit and selected scope as
+`not applicable (direct baseline)`. On the permitted direct baseline
+  path, link only the absolute `.observe/otel-instrumentation.md` report.
 
-When the project uses or introduces env files:
+Validate artifacts with their validator or targeted heading/status checks. Do
+not reread a complete report solely to compose the final response or duplicate
+the detailed command ledger across report sections.
 
-1. **Ensure `.env` is gitignored before writing secrets**: Check `.gitignore` for `.env`. If it is missing, add it. Never allow a `.env` with access tokens to be committed.
-2. **Create or update `.env.example` with safe placeholders**: Do this whenever the instrumentation introduces env vars. `.env.example` must never contain real tokens.
-3. **Verify no tokens in tracked files**: Search tracked config files for access tokens and confirm no real token values appear in files that would be committed.
+The final response must separate files changed from proven outcomes and state:
+selected runtime; compile/import and focused-test results; verification result
+or exact blocker; service-name, environment, and per-signal endpoint settings;
+expected automatic spans/metrics; application-log classification, bridge,
+preserved sinks, opt-out, duplicate-prevention and runtime proof; added,
+modified, removed, and unchanged signals; selected closure counts; and every
+remaining incident/GenAI owner or signal. Never say complete, working, or
+verified when a mandatory gate failed, was blocked, or did not run.
 
-## Scope
+If verified metric evidence exists and the user requested alerting, dashboards,
+detectors, or Splunk configuration, invoke or apply `$splunk-configure` and
+include its output/verification status.
 
-- **New apps**: Full scaffold matching the current runtime shape: instrumentation, SDK init, env var config
-- **Existing apps**: Incremental -- detect what's already present, add only what's missing
+## 6. VS Code Debugging
+
+If `.vscode/launch.json` exists, update at least one relevant configuration or
+stop and explain why. Preserve operator-owned settings and add missing safe
+local defaults:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+- `OTEL_LOGS_EXPORTER=otlp` only on the eligible local branch
+- `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs` only on that
+  same branch
+- `OTEL_METRIC_EXPORT_INTERVAL=1000`
+- `OTEL_BSP_SCHEDULE_DELAY=100`
+
+Do not add local log settings over `none`, another exporter, a non-local logs
+endpoint, or an explicit logs header. Report the configuration and whether
+each value was added or already present. If the file is absent, report exactly:
+`No .vscode/launch.json found; Step 6 skipped.`
+
+## Credential Safety And Scope
+
+- Before writing secrets to an env file, ensure `.env` is ignored. Put only
+  safe placeholders in `.env.example` and scan tracked config for real tokens.
+- Existing apps: add only missing selected coverage. New apps: fit the full
+  baseline into their current runtime shape. Libraries: provide opt-in setup;
+  never initialize an SDK on import.
+- Do not auto-publish dashboards, detectors, telemetry, or credentials. This
+  skill changes the scoped repository and writes local `.observe/` artifacts;
+  external mutation requires the appropriate downstream workflow and approval.

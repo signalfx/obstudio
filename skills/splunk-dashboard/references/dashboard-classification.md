@@ -1,9 +1,8 @@
 # Dashboard Classification Rules
 
-Rules for grouping metrics from an otel-audit report into dashboard panels. The
-dashboard analogue of `splunk-configure/references/detector-classification.md`:
-the same signal categories (latency / error / throughput / saturation), but each
-metric maps to a **panel** (chart type + grid placement) instead of a detector.
+Self-contained rules for grouping metrics from an otel-audit report into
+dashboard panels. They use latency, error, throughput, and saturation categories,
+but each metric maps to a **panel** (chart type + grid placement), not a detector.
 
 The counter/error gate here is deliberately **broader** than the detector skill's,
 so the two are not identical: this doc treats a name ending in `.processed` as a
@@ -84,22 +83,36 @@ a `single_value` panel (current saturation) and optionally a `time_series` trend
 
 ### GenAI
 
-When the canonical audit has `genai_readiness[]` rows, GenAI findings, or
-source evidence that maps the metric to an LLM/GenAI workflow, and GenAI
-metrics exist, group them into their **own** `signalfx_dashboard` inside a
-separate GenAI dashboard group. Mirror the GenAI categories from
-`splunk-configure/references/detector-classification.md` (genai-latency,
-genai-token-pressure, genai-provider, genai-tool, etc.) but render each as a
-panel: latency/duration → `time_series` percentile; token usage → `time_series`
-or `single_value`; provider/tool error counts → `time_series`. A missing GenAI
-signal is a preview/instrumentation prerequisite — never an invented panel.
+Classify a metric as GenAI only when `gen_ai.*` or canonical
+`genai_readiness`/finding/evidence explicitly ties it to an owned LLM workflow;
+generic words such as model, memory, quality, or cost alone do not qualify. Put
+source-backed GenAI metrics in their **own** dashboard and group. First match:
+
+- `genai-latency`: model/workflow/first-token latency or duration.
+- `genai-token-pressure`: token/context/cache counts or ratios.
+- `genai-provider`: provider/model errors, timeouts, or fallbacks.
+- `genai-tool`: tool call count, duration, or outcome.
+- `genai-model-config`: requested/response model, deployment, config, readiness,
+  or canary state.
+- `genai-workflow-fanout`: agent/model/tool call counts, fanout, workflow timeout,
+  or outcome.
+- `genai-retrieval`: retrieval/vector/embedding/rerank duration or outcome.
+- `genai-memory-context`: memory/context/session state, hit, miss, or outcome.
+- `genai-evaluation-quality`: score, factuality, hallucination, or toxicity.
+- `genai-content-governance`: bounded numeric capture, redaction, privacy, or
+  policy outcomes; never raw content.
+- `genai-cost`: app-computed cost, spend, or billing-health metrics.
+
+Duration uses a `time_series` percentile; counts, outcomes, and cost use a
+`time_series` sum; current state, score, or ratio uses `single_value` with an
+optional trend. A missing signal is an instrumentation prerequisite, never an
+invented panel.
 
 ## Exclusion rules
 
-Skip a metric (no panel) when it matches the detector skill's exclusion rules:
-auto-instrumented library duplicates when a custom equivalent exists, generic
-runtime/host metrics without an actionable view, and informational-only metrics
-(`process.uptime`, version gauges). Record each skipped metric with a reason.
+Skip auto-instrumented library duplicates when a custom equivalent exists,
+generic runtime/host metrics without an actionable view, and informational-only
+metrics (`process.uptime`, version gauges). Record each skip with a reason.
 
 ## Grid placement (12-column)
 

@@ -1,0 +1,22 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "container-topology",
+      "eval_inputs": ["eval/inputs/runtime-topology.env"],
+      "task": "Instrument the Go key-value store service in ./service with baseline OpenTelemetry auto-instrumentation only; do not add custom business spans. Treat ./service/eval/inputs/runtime-topology.env as checked-in deployment evidence and preserve it. Configure local application-log export so its checked-in container mode uses the exact Observer receiver from that file while a host-native mode retains the standard localhost fallback. Accept only the exact active checked-in local receiver, reject arbitrary hostname-shaped endpoints before constructing the log provider or bridge, preserve the console log sink, and add focused tests for the container, host, and rejected-endpoint branches."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service, including eval/inputs/runtime-topology.env, resulting startup or instrumentation files, focused tests, and the .observe instrumentation report when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Preserves eval/inputs/runtime-topology.env and uses its checked-in OBSTUDIO_OBSERVER_RUNTIME=container selection with the exact http://observer:4318/v1/logs application-log receiver rather than replacing it with loopback.",
+    "Retains http://localhost:4318/v1/logs as the host-native fallback through a deterministic checked-in selector or exact allowlist; container and host behavior do not depend on hostname-shape inference.",
+    "On the absent/otlp application-log branch, accepts an explicit endpoint only when it is the exact active checked-in local receiver and rejects an arbitrary same-shape hostname before constructing or registering the LoggerProvider, exporter, processor, or logging bridge.",
+    "Keeps direct-cloud endpoints, headers, credentials, and generic endpoint inference out of the Obstudio-owned application-log path while preserving the existing standard-log console sink and exact go-kvstore service identity.",
+    "Adds executable focused tests proving exact container selection, host fallback selection, and fail-closed rejection of an arbitrary same-shape hostname without provider or bridge construction; runs the narrowest project-native validation and records exact evidence or a truthful blocker."
+  ]
+}

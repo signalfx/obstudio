@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import re
 import subprocess
 import sys
 import unittest
@@ -14,6 +15,8 @@ SKILL_DIR = Path(__file__).parents[1]
 SKILL = SKILL_DIR / "SKILL.md"
 WRAPPER = SKILL_DIR / "scripts" / "observe_report.py"
 FLOW = SKILL_DIR / "references" / "json-approval-handoff.md"
+DIRECT = SKILL_DIR / "references" / "direct-verification.md"
+REPORT = SKILL_DIR / "references" / "verification-report.md"
 WRAPPER_SPEC = importlib.util.spec_from_file_location(
     "otel_verify_observe_report_wrapper", WRAPPER
 )
@@ -23,6 +26,60 @@ WRAPPER_SPEC.loader.exec_module(WRAPPER_MODULE)
 
 
 class JsonApprovalFlowGuidanceTest(unittest.TestCase):
+    def test_entrypoint_routes_heavy_modes_without_loading_them_by_default(self) -> None:
+        skill = SKILL.read_text(encoding="utf-8")
+
+        self.assertLessEqual(len(skill.encode()), 12_000)
+        self.assertIn("## Progressive Disclosure", skill)
+        self.assertIn("## Existing Durable Proof Packet", skill)
+        self.assertIn("Do not read `references/direct-verification.md`", skill)
+        self.assertIn("stop before\n`## Splunk Configure Contract`", skill)
+        self.assertIn("Inside a loaded\nreference", skill)
+        self.assertIn("from that reference's directory", skill)
+        self.assertTrue(DIRECT.is_file())
+        self.assertTrue(REPORT.is_file())
+
+        for relative in re.findall(r"`([^`]+\.md)`", skill):
+            if relative.startswith(".observe/"):
+                continue
+            target = (SKILL_DIR / relative).resolve()
+            self.assertTrue(target.is_file(), f"entrypoint routes to missing {relative}")
+            self.assertTrue(target.is_relative_to(SKILL_DIR.parent.resolve()))
+
+    def test_nested_reference_routes_resolve_from_their_owner(self) -> None:
+        references = sorted((SKILL_DIR / "references").glob("*.md"))
+
+        for owner in references:
+            for relative in re.findall(r"`([^`]+\.md)`", owner.read_text()):
+                if relative.startswith(".observe/"):
+                    continue
+                target = (owner.parent / relative).resolve()
+                self.assertTrue(target.is_file(), f"{owner} routes to missing {relative}")
+                self.assertTrue(target.is_relative_to(SKILL_DIR.parent.resolve()))
+
+    def test_progressive_references_retain_execution_and_report_contracts(self) -> None:
+        direct = DIRECT.read_text(encoding="utf-8")
+        report = REPORT.read_text(encoding="utf-8")
+
+        for required in (
+            "instrumentation-introduced",
+            "Generated SDK spans, metrics, or logs",
+            "../../references/full-runtime-acceptance.md",
+            "Verified: unit+OTLP",
+            "Not configured",
+            "$otel-instrument",
+        ):
+            self.assertIn(required, direct)
+        for required in (
+            "## What Changed",
+            "## Tested And Working",
+            "## Not Working Or Not Proven",
+            "## Proof",
+            "validate_reader_report.py",
+            "raw trace IDs or span IDs",
+        ):
+            self.assertIn(required, report)
+
     def test_consumes_the_same_bound_selection(self) -> None:
         skill = SKILL.read_text(encoding="utf-8")
         text = skill + FLOW.read_text(encoding="utf-8")

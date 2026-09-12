@@ -1,0 +1,128 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "checkout-genai-dashboard-fixture",
+    "service_name": "checkout",
+    "commit": "fixture",
+    "language": "go",
+    "framework": "chi",
+    "date": "2026-09-09",
+    "status": "Pass",
+    "genai_ownership_detected": true
+  },
+  "summary": [
+    "The checkout assistant emits bounded, app-owned GenAI configuration, fanout, governance, and cost metrics."
+  ],
+  "flow": "audit -> dashboard",
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "Go chi dashboard fixture",
+      "source": "otel-audit-genai.json"
+    },
+    {
+      "check": "Entry point",
+      "finding": "Checkout assistant metric inventory",
+      "source": "assistant_metrics.go:12-48"
+    },
+    {
+      "check": "Route source",
+      "finding": "No request route is required for this metric-only dashboard fixture",
+      "source": "assistant_metrics.go:12-48"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Go service exports the audited metrics",
+      "source": "assistant_metrics.go:12-48"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "assistant_metrics.go:12-48"
+    },
+    {
+      "check": "Model configuration",
+      "finding": "Requested-model mismatches and deployment readiness are recorded as bounded numeric metrics",
+      "source": "assistant_metrics.go:18-27"
+    },
+    {
+      "check": "Workflow fanout",
+      "finding": "Per-operation fanout is recorded without request or user identifiers",
+      "source": "assistant_metrics.go:29-33"
+    },
+    {
+      "check": "Content governance",
+      "finding": "Redaction failures are counted without recording prompt or completion content",
+      "source": "assistant_metrics.go:35-39"
+    },
+    {
+      "check": "Cost",
+      "finding": "The application computes request cost from provider usage data",
+      "source": "assistant_metrics.go:41-48"
+    }
+  ],
+  "signal_flow": {
+    "component_flow_map": "checkout assistant [SOURCE-COVERED] -> model workflow [SOURCE-COVERED] -> bounded GenAI metrics [SOURCE-COVERED]"
+  },
+  "routes": [],
+  "current_instrumentation": {
+    "spans": [],
+    "metrics": [
+      {
+        "name": "gen_ai.request.model.config.mismatch.count",
+        "source": "assistant_metrics.go:18-22",
+        "type": "custom",
+        "attributes": ["service.name", "gen_ai.request.model", "gen_ai.response.model"]
+      },
+      {
+        "name": "gen_ai.model.deployment.readiness",
+        "source": "assistant_metrics.go:24-27",
+        "type": "custom",
+        "attributes": ["service.name", "gen_ai.request.model"]
+      },
+      {
+        "name": "gen_ai.workflow.fanout.count",
+        "source": "assistant_metrics.go:29-33",
+        "type": "custom",
+        "attributes": ["service.name", "gen_ai.operation.name"]
+      },
+      {
+        "name": "gen_ai.content.redaction.failures.count",
+        "source": "assistant_metrics.go:35-39",
+        "type": "custom",
+        "attributes": ["service.name", "gen_ai.operation.name"]
+      },
+      {
+        "name": "gen_ai.request.cost",
+        "source": "assistant_metrics.go:41-48",
+        "type": "custom",
+        "attributes": ["service.name", "gen_ai.provider.name", "gen_ai.request.model"]
+      },
+      {
+        "name": "checkout.order.cost",
+        "source": "checkout.go:70",
+        "type": "custom",
+        "attributes": ["service.name"]
+      }
+    ],
+    "logs": [],
+    "incident_readiness": []
+  },
+  "genai_readiness": [
+    {
+      "surface": "Checkout assistant operational metrics",
+      "status": "covered",
+      "evidence": "assistant_metrics.go:12-48",
+      "required_signals": "model configuration, workflow fanout, bounded content-governance outcomes, and app-computed cost",
+      "owner": "App-owned: assistant_metrics.go",
+      "acceptance_criteria": "The five named gen_ai metrics remain bounded and record no raw prompt or completion content.",
+      "impact": "Operators can localize configuration, fanout, governance, and cost regressions."
+    }
+  ],
+  "findings": [],
+  "verification": {
+    "environments": [],
+    "scenarios": []
+  }
+}

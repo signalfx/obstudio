@@ -3,18 +3,45 @@
 from __future__ import annotations
 
 import json
+import re
+import signal
 import subprocess
+import sys
+import time
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
+AUDIT_SKILL = SKILLS / "otel-audit" / "SKILL.md"
+AUDIT_REFERENCES = SKILLS / "otel-audit" / "references"
 LANGUAGES = SKILLS / "otel-instrument" / "references" / "languages"
+INSTRUMENT_SKILL = SKILLS / "otel-instrument" / "SKILL.md"
+INSTRUMENT_RUNTIME = (
+    SKILLS / "otel-instrument" / "references" / "project-runtime-validation.md"
+)
+KVSTORE_RUBRIC = ROOT / "evals" / "go" / "kvstore" / "eval" / "qual" / "instrument.json"
+KVSTORE_TOPOLOGY_RUBRIC = (
+    ROOT
+    / "evals"
+    / "go"
+    / "kvstore"
+    / "eval"
+    / "qual"
+    / "instrument-container-topology.json"
+)
+KVSTORE_RUNTIME = ROOT / "evals" / "go" / "kvstore" / "eval" / "runtime" / "instrument.json"
 
 
 def _read(path: Path) -> str:
     assert path.is_file(), f"Expected file not found: {path}"
-    return path.read_text(encoding="utf-8")
+    text = path.read_text(encoding="utf-8")
+    if path == AUDIT_SKILL:
+        text += "\n" + "\n".join(
+            reference.read_text(encoding="utf-8")
+            for reference in sorted(AUDIT_REFERENCES.rglob("*.md"))
+        )
+    return text
 
 
 def _normalized(path: Path) -> str:
@@ -83,6 +110,114 @@ def test_audit_selects_missing_supported_local_logs_by_default() -> None:
         "Splunk Observability Studio cloud forwarding to Splunk is traces and metrics only",
     ):
         assert term in instrument
+
+
+def test_instrument_preserves_repo_service_and_distinct_log_contracts() -> None:
+    instrument = _normalized(INSTRUMENT_SKILL)
+    for term in (
+        "Resolve an absent-value default from checked-in launch, Compose, runtime-eval, fixture, documentation, and test contracts",
+        "Never replace a repository-owned service default with a generic or shortened name",
+        "a shutdown/startup warning is not a duplicate of the request warning",
+        "it needs trace/span IDs only if it runs inside an active span",
+        "Do not invent, remove, merge, or rename log bodies to manufacture proof",
+    ):
+        assert term in instrument
+
+    rubric = " ".join(json.loads(_read(KVSTORE_RUBRIC))["rubric"])
+    runtime = _read(KVSTORE_RUNTIME)
+    for term in (
+        "go-kvstore",
+        "request-context warning",
+        "distinct existing shutdown warning",
+        "without requiring request correlation outside an active span",
+    ):
+        assert term in rubric
+    for body in ("runtime request completed", "runtime shutdown completed"):
+        assert body in runtime
+
+
+def test_go_init_example_passes_the_checked_in_service_name() -> None:
+    guide = _read(LANGUAGES / "go.md")
+
+    assert "const localObserverLogsEndpoint" in guide
+    assert "metric.Int64Observer" in guide
+    assert "localSplunk Observability StudioLogsEndpoint" not in guide
+    assert "metric.Int64Splunk Observability Studio" not in guide
+    assert "projectServiceName string" in guide
+    assert "repository's existing checked-in service-name" in guide
+    assert (
+        "shutdown, err := initOTel(runCtx, existingLogHandler, projectServiceName)"
+        in guide
+    )
+    assert "initOTel(runCtx, existingLogHandler)" not in guide
+
+
+def test_go_dependency_resolution_is_bounded_after_network_failure() -> None:
+    runtime = _normalized(INSTRUMENT_RUNTIME)
+    go = _normalized(LANGUAGES / "go.md")
+
+    for term in (
+        "one project-native dependency attempt",
+        "one batched declared-cache/version inventory",
+        "at most one compatible offline retry",
+        "Do not enumerate or read dependency source unless a compile error requires one specific API check",
+        "Never repeat full file inventories",
+        "cleanup checks",
+        "record the exact network, cache, version, or API blocker",
+        "Never add or change `replace`, `exclude`, or `toolchain` directives solely to fit the local cache",
+    ):
+        assert term in runtime
+
+    for term in (
+        "one project-native attempt",
+        "one batched declared-cache/version inventory",
+        "at most one compatible offline retry",
+        "Do not recursively search or read module-cache source",
+        "Do not repeat full repository inventories or cleanup probes",
+        "record the exact blocker",
+        "Never add or change `replace`, `exclude`, or `toolchain` solely to fit cached modules",
+    ):
+        assert term in go
+
+
+def test_instrument_reuses_inventory_and_validation_evidence() -> None:
+    skill = _normalized(ROOT / "skills/otel-instrument/SKILL.md")
+    runtime = _normalized(INSTRUMENT_RUNTIME)
+    full_runtime = _normalized(ROOT / "skills/references/full-runtime-acceptance.md")
+
+    for term in (
+        "one validation ledger keyed by gate and relevant inputs",
+        "rerun only the failed and dependent invalidated gates",
+        "never a passing gate merely for fresher report evidence",
+        "never search an absolute or user-global skill location",
+        "not applicable (no canonical audit/selection)",
+        "Do not reread a complete report solely to compose the final response",
+    ):
+        assert term in skill
+
+    for term in (
+        "Build one bounded inventory before editing",
+        "prune `.git`, `.gocache`, `.gomodcache`",
+        "Resolve whether the service is a Git worktree once",
+        "Preserve a passing gate until a relevant input changes",
+        "sole detailed command inventory",
+    ):
+        assert term in runtime
+
+    assert "Do not launch the application solely to reproduce it" in full_runtime
+
+
+def test_instrument_progressive_reference_paths_resolve_from_declared_bases() -> None:
+    skill_dir = INSTRUMENT_SKILL.parent
+    owners = [INSTRUMENT_SKILL, *sorted((skill_dir / "references").rglob("*.md"))]
+
+    for owner in owners:
+        for relative in re.findall(r"`((?:\./|\.\./)[^`]+\.md)`", _read(owner)):
+            if "<" in relative or "{" in relative:
+                continue
+            target = (owner.parent / relative).resolve()
+            assert target.is_file(), f"{owner} routes to missing {relative}"
+            assert target.is_relative_to(SKILLS.resolve())
 
 
 def test_all_language_guides_define_local_logs_and_cloud_boundary() -> None:
@@ -160,6 +295,8 @@ def test_shell_wrappers_only_add_local_log_configuration_for_otlp() -> None:
     assert 'scan_otel_options "${JAVA_TOOL_OPTIONS:-}"' in java
     assert 'for otel_jvm_arg in "$@"; do' in java
     assert '-Dotel.exporter.otlp.endpoint)' in java
+    assert '-Dotel.javaagent.configuration-file)' in java
+    assert "OTEL_JAVAAGENT_CONFIGURATION_FILE" in java
     assert '[ "$generic_endpoint" != "$local_http_endpoint" ]' in java
     assert '[ "$generic_endpoint" != "$local_grpc_endpoint" ]' in java
     assert java.index('if [ "$logs_exporter" != otlp ]; then') < java.index(
@@ -179,7 +316,7 @@ def test_python_cli_preserves_non_otlp_bridge_ownership(tmp_path: Path) -> None:
         launcher,
         _fenced_code_after(
             LANGUAGES / "python.md",
-            "## Auto-Instrumentation (CLI Wrapper)",
+            "## CLI Wrapper (Explicit Zero-Code Exception)",
             "bash",
         ),
     )
@@ -322,6 +459,65 @@ def test_java_launcher_accepts_local_generic_endpoint_and_empty_exporter(
         "ARG=-Dotel.exporter.otlp.logs.endpoint=http://localhost:4318/v1/logs\n"
         in empty_exporter.stdout
     )
+
+
+def test_java_launcher_rejects_configuration_files_on_local_log_branch(
+    tmp_path: Path,
+) -> None:
+    launcher, base_env = _java_launcher(tmp_path)
+
+    for env in (
+        {
+            **base_env,
+            "OTEL_JAVAAGENT_CONFIGURATION_FILE": "/etc/otel/agent.properties",
+        },
+        {
+            **base_env,
+            "JAVA_TOOL_OPTIONS": (
+                "-Dotel.javaagent.configuration-file=/etc/otel/agent.properties"
+            ),
+            "OTEL_LOGS_EXPORTER": "otlp",
+        },
+    ):
+        result = subprocess.run(
+            [launcher, "-jar", "app.jar"],
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+        assert result.returncode == 1
+        assert "remove the Java-agent configuration file" in result.stderr
+        assert "JAVA_CALLED=1" not in result.stdout
+
+    operator_owned = subprocess.run(
+        [launcher, "-jar", "app.jar"],
+        env={
+            **base_env,
+            "OTEL_JAVAAGENT_CONFIGURATION_FILE": "/etc/otel/agent.properties",
+            "OTEL_LOGS_EXPORTER": "console",
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "JAVA_CALLED=1" in operator_owned.stdout
+
+    cleared_by_property = subprocess.run(
+        [
+            launcher,
+            "-Dotel.javaagent.configuration-file=",
+            "-jar",
+            "app.jar",
+        ],
+        env={
+            **base_env,
+            "OTEL_JAVAAGENT_CONFIGURATION_FILE": "/etc/otel/agent.properties",
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "JAVA_CALLED=1" in cleared_by_property.stdout
 
 
 def test_java_launcher_rejects_argfiles_and_ambiguous_option_environments(
@@ -517,6 +713,22 @@ def test_language_rubrics_grade_the_default_local_log_contract() -> None:
         assert "cloud" in contract
 
 
+def test_java_instrument_prompts_expose_the_fixture_service_identity() -> None:
+    definition = json.loads(
+        _read(ROOT / "evals/java/springboot-basic/eval/qual/instrument.json")
+    )
+
+    for prompt in definition["prompts"]:
+        assert "java-springboot-basic service identity" in prompt["task"]
+
+    log_proof = next(
+        item for item in definition["rubric"] if "request-context warning" in item
+    )
+    assert "For configuration-file-headers" in log_proof
+    assert "Not proven or Blocked" in log_proof
+    assert "never claims the warning was exported" in log_proof
+
+
 def test_direct_no_custom_span_prompts_still_grade_default_local_logs() -> None:
     rubric_paths = (
         ROOT / "evals/python/flask-basic/eval/qual/instrument.json",
@@ -589,7 +801,27 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
 
     for path, (service_name, record_count) in runtime_cases.items():
         definition = json.loads(_read(path))
+        prompt = definition["prompts"][0]
         default_check, opt_out_check = definition["checks"]
+
+        assert prompt["eval_inputs"] == ["eval/inputs/runtime-topology.env"]
+        assert "./service/eval/inputs/runtime-topology.env" in prompt["task"]
+        topology = path.parents[1] / "inputs" / "runtime-topology.env"
+        assert _read(topology).splitlines() == [
+            "# Checked-in local runtime topology for the managed demo check.",
+            "OBSTUDIO_OBSERVER_RUNTIME=container",
+            "OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318",
+            "OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf",
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://observer:4318/v1/logs",
+            "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/protobuf",
+        ]
+
+        compose = _read(path.with_name("docker-compose.yml"))
+        assert (
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://observer:4318/v1/logs"
+            in compose
+        )
+        assert "OBSTUDIO_OBSERVER_RUNTIME=container" in compose
 
         assert default_check["environment"]["CODEX_EVAL_OTEL_LOGS_EXPORTER"] == ""
         assert default_check["stop_services_before_validation"] == ["app"]
@@ -605,10 +837,17 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
             or check["id"] == "request-context-logs"
         )
         assert record_check["match"] == {"body": "runtime request completed"}
-        assert record_check["field_contains"] == {"severityText": "WARN"}
-        assert record_check["field_equals"] == {
-            "resource.serviceName": service_name
-        }
+        if service_name == "go-kvstore":
+            assert "field_contains" not in record_check
+            assert record_check["field_equals"] == {
+                "severityNumber": 13,
+                "resource.serviceName": service_name,
+            }
+        else:
+            assert record_check["field_contains"] == {"severityText": "WARN"}
+            assert record_check["field_equals"] == {
+                "resource.serviceName": service_name
+            }
         assert record_check["non_empty"] == ["traceId", "spanId"]
         assert record_check["exact_count"] == record_count
         assert record_check["unique_by"] == ["traceId", "spanId"]
@@ -619,13 +858,20 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
             for check in default_logs["record_checks"]
             if check["id"] == "shutdown-log"
         )
-        assert shutdown_check == {
+        expected_shutdown = {
             "id": "shutdown-log",
             "match": {"body": "runtime shutdown completed"},
-            "field_contains": {"severityText": "WARN"},
             "field_equals": {"resource.serviceName": service_name},
             "exact_count": 1,
         }
+        if service_name == "go-kvstore":
+            expected_shutdown["field_equals"] = {
+                "severityNumber": 13,
+                "resource.serviceName": service_name,
+            }
+        else:
+            expected_shutdown["field_contains"] = {"severityText": "WARN"}
+        assert shutdown_check == expected_shutdown
 
         default_sink = default_check["expect"]["service_logs"][0]
         assert default_sink["occurrences"]["runtime request completed"] == record_count
@@ -652,6 +898,155 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
         opt_out_sink = opt_out_check["expect"]["service_logs"][0]
         assert opt_out_sink["occurrences"]["runtime request completed"] == record_count
         assert opt_out_sink["occurrences"]["runtime shutdown completed"] == 1
+
+
+def test_runtime_regressions_keep_python_setup_go_levels_and_node_startup() -> None:
+    instrument = _normalized(INSTRUMENT_SKILL)
+    python = _normalized(LANGUAGES / "python.md")
+    go = _normalized(LANGUAGES / "go.md")
+    fastapi_runtime = json.loads(
+        _read(
+            ROOT
+            / "evals/python/fastapi-celery/eval/runtime/instrument.json"
+        )
+    )
+    fastapi_qual = json.loads(
+        _read(ROOT / "evals/python/fastapi-celery/eval/qual/instrument.json")
+    )
+    kvstore_main = _read(ROOT / "evals/go/kvstore/cmd/kvstore-server/main.go")
+    node_runtime_image = _read(
+        ROOT / "evals/node/express-basic/eval/runtime/App.Dockerfile"
+    )
+    node_runtime_compose = _read(
+        ROOT / "evals/node/express-basic/eval/runtime/docker-compose.yml"
+    )
+    node_signal_proxy = _read(
+        ROOT / "evals/node/express-basic/eval/runtime/npm-signal-proxy.sh"
+    )
+
+    assert "Python uses per-process setup" in instrument
+    assert "user selects CLI-only" in instrument
+    assert "Preserve existing log APIs/levels" in instrument
+    assert "CLI Wrapper (Explicit Zero-Code Exception)" in python
+    assert "wrapper-only startup edits fail" in python
+    assert "per-process setup below" in python
+    assert "worker_process_init" in python
+    for term in (
+        "while `worker.py` loads",
+        "create providers and instrument only inside each child's `worker_process_init`",
+        "Never lazy-import local setup",
+        "mask it with `PYTHONPATH`",
+        "real prefork child",
+        "API producers call",
+        "CeleryInstrumentor().instrument()",
+        "before the first publish",
+        "one trace contains its HTTP server and worker consumer spans",
+        "Never pair current `LoggingInstrumentor` with an SDK `LoggingHandler`",
+        "one exported record per input, not one handler class",
+    ):
+        assert term in python
+    assert "severity number (`WARN` is 13)" in go
+    assert 'slog.Warn("runtime shutdown completed")' in kvstore_main
+
+    fastapi_task = fastapi_runtime["prompts"][0]["task"]
+    assert "API startup must use a separate explicit OTel setup module" in fastapi_task
+    assert "instrument its Celery producer before publishing tasks" in fastapi_task
+    assert "POST /orders context propagates to the worker" in fastapi_task
+    assert "import the side-effect-free setup callable and CeleryInstrumentor at module load" in fastapi_task
+    assert "do not lazy-import either inside worker_process_init" in fastapi_task
+    assert "Provider-free import means those imports have no setup side effect" in fastapi_task
+    assert "worker_process_init" in fastapi_task
+    assert "wrapper-only instrumentation is insufficient" in fastapi_task
+
+    trace_expectation = fastapi_runtime["checks"][0]["expect"]["endpoints"][0]
+    assert trace_expectation["detail_path_template"] == "/api/query/traces/{id}"
+    assert trace_expectation["detail_id_field"] == "traceId"
+    assert trace_expectation["detail_contains_all_in_one"] == [
+        "POST /orders",
+        "fastapi-celery-worker",
+        "run/worker.fulfill_order",
+    ]
+    assert any("run/worker.fulfill_order" in row for row in fastapi_qual["rubric"])
+    assert any("worker_process_init" in row for row in fastapi_qual["rubric"])
+
+    assert 'CMD ["npm", "run", "dev"]' in node_runtime_image
+    assert '"./instrumentation.js"' not in node_runtime_image
+    assert (
+        'entrypoint: ["/bin/sh", "/usr/local/bin/npm-signal-proxy.sh"]'
+        in node_runtime_compose
+    )
+    assert 'command: ["npm", "run", "dev"]' in node_runtime_compose
+    assert (
+        "./npm-signal-proxy.sh:/usr/local/bin/npm-signal-proxy.sh:ro"
+        in node_runtime_compose
+    )
+    assert '"$@" &' in node_signal_proxy
+    assert "forward_and_wait()" in node_signal_proxy
+    assert 'signal_leaves "$runner_pid"' in node_signal_proxy
+    assert 'wait "$runner_pid"' in node_signal_proxy
+
+
+def test_node_runtime_signal_proxy_preserves_child_status(tmp_path: Path) -> None:
+    proxy = ROOT / "evals/node/express-basic/eval/runtime/npm-signal-proxy.sh"
+    ready = tmp_path / "ready"
+    child = tmp_path / "child.py"
+    child.write_text(
+        "import signal, sys, time\n"
+        "from pathlib import Path\n"
+        "signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))\n"
+        "Path(sys.argv[1]).touch()\n"
+        "while True: time.sleep(1)\n",
+        encoding="utf-8",
+    )
+
+    process = subprocess.Popen(["/bin/sh", proxy, sys.executable, child, ready])
+    try:
+        deadline = time.monotonic() + 5
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready.exists()
+        process.send_signal(signal.SIGTERM)
+        assert process.wait(timeout=5) == 0
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=5)
+
+    failed = subprocess.run(
+        ["/bin/sh", proxy, "/bin/sh", "-c", "exit 7"],
+        timeout=5,
+    )
+    assert failed.returncode == 7
+
+
+def test_host_and_container_local_receiver_policy_uses_checked_in_evidence() -> None:
+    instrument = _normalized(INSTRUMENT_SKILL)
+    go = _normalized(LANGUAGES / "go.md")
+    node = _normalized(LANGUAGES / "node.md")
+    python = _normalized(LANGUAGES / "python.md")
+
+    assert "keep checked-in container URLs" in instrument
+    assert "Never infer locality from hostname syntax" in instrument
+    for guide in (go, node):
+        assert "checked-in host" in guide
+        assert "exact allowlist" in guide
+    assert "hostname syntax" in go
+    assert "same-shape hostnames" in node
+    assert "its two branches are the allowlist" in python
+
+    definition = json.loads(_read(KVSTORE_TOPOLOGY_RUBRIC))
+    prompt = definition["prompts"][0]
+    rubric = " ".join(definition["rubric"])
+    assert prompt["eval_inputs"] == ["eval/inputs/runtime-topology.env"]
+    assert "./service/eval/inputs/runtime-topology.env" in prompt["task"]
+    for term in (
+        "http://observer:4318/v1/logs",
+        "http://localhost:4318/v1/logs",
+        "exact active checked-in local receiver",
+        "arbitrary same-shape hostname",
+        "before constructing",
+    ):
+        assert term in rubric
 
 
 def test_runtime_fixtures_emit_one_shutdown_marker_from_signal_lifecycle() -> None:
@@ -807,6 +1202,19 @@ def test_runtime_observer_keeps_grpc_loopback_when_http_is_container_visible() -
         assert "target: 3000" in observer_service
         assert "host_ip: 127.0.0.1" in observer_service
 
-        definition = json.loads(_read(compose_file.with_name("instrument.json")))
+
+def test_isolated_runtime_checks_do_not_clear_observer_over_docker_bridge() -> None:
+    runtime_definitions = sorted(
+        ROOT.glob("evals/**/eval/runtime/instrument.json")
+    )
+    assert runtime_definitions
+
+    for path in runtime_definitions:
+        definition = json.loads(_read(path))
         for check in definition["checks"]:
-            assert check["expect"]["clear_path"] is None
+            expect = check["expect"]
+            assert "clear_path" in expect, f"{path}: clear_path must be explicit"
+            assert expect["clear_path"] is None, (
+                f"{path}: each check starts a fresh Compose project; clearing through "
+                "the Docker bridge violates Splunk Observability Studio's local-mutation boundary"
+            )

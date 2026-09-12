@@ -4,6 +4,37 @@ Rules for mapping metrics from an otel-audit report into detector categories.
 Use the priority order below when multiple rules match; the first qualifying
 category in that order wins.
 
+## Category Display Names
+
+Use this mapping for report and chat summary labels. The slug remains the
+machine-facing classification value.
+
+| Category slug | Display name |
+|---|---|
+| `impact-classification` | Impact Classification |
+| `auth-edge` | Auth/Edge |
+| `customer-impact` | Customer Impact |
+| `freshness` | Freshness |
+| `backpressure` | Backpressure |
+| `dependency` | Dependency |
+| `capacity-saturation` | Capacity Saturation |
+| `genai-latency` | GenAI Latency |
+| `genai-token-pressure` | GenAI Token Pressure |
+| `genai-provider` | GenAI Provider |
+| `genai-tool` | GenAI Tool |
+| `genai-model-config` | GenAI Model Config |
+| `genai-workflow-fanout` | GenAI Workflow Fanout |
+| `genai-retrieval` | GenAI Retrieval |
+| `genai-memory-context` | GenAI Memory Context |
+| `genai-evaluation-quality` | GenAI Evaluation Quality |
+| `genai-content-governance` | GenAI Content Governance |
+| `genai-cost` | GenAI Cost |
+| `latency` | Latency |
+| `error` | Error |
+| `throughput` | Throughput |
+| `saturation` | Saturation |
+| `release-context` | Release Context |
+
 ## Route-Level De-duplication
 
 Before classifying individual metrics, group candidate metrics that share the
@@ -61,9 +92,8 @@ detector generation.
 ### Evidenced Non-Standard Outcome Attribute
 
 A histogram may carry a custom attribute that is not `error.type` or a
-`*.response.status_code` key (for example `outcome.reason` set via a
-per-call metric-attribute hook, as in `otel-instrument/SKILL.md`'s
-`Labeler` pattern) but that audit or source evidence shows takes on a value
+`*.response.status_code` key (for example `outcome.reason` set via an HTTP
+per-call metric-attribute hook) but that audit or source evidence shows takes on a value
 present only for a failing outcome on that route -- for example
 `outcome.reason` observed as `gateway_timeout` only on non-2xx responses.
 Generate an attribute-filtered outcome detector for that route from the
@@ -95,10 +125,8 @@ a standard error/status attribute:
   this additional detector covers a separate, non-standard dimension and is
   not a second Error detector for the same signal.
 
-This mirrors the check `$otel-instrument` performs before adding a new custom
-metric (see `otel-instrument/SKILL.md` `#### Implementation Rules`): if the
-attribute already exists on the RED metric, alert on the attribute rather
-than standing up a second detector for a second metric.
+If the attribute already exists on the RED metric, alert on that attribute
+rather than standing up a second detector on a redundant metric.
 
 ## Classification Rules
 

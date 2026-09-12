@@ -7,26 +7,26 @@
 | Mode | with_skill |
 | Eval kind | sanity |
 | Skill | splunk-dashboard |
-| Run ID | 20260911T020832878259Z |
+| Run ID | 20260911T211448593670Z |
 | Agent model | gpt-5.5 |
 | Workers | 1 |
-| Config | evals/codex-evals.toml |
+| Config | evals/codex-evals.token-benchmark.toml |
 
 ## Sanity Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-red/sanity/dashboard | dashboards/checkout-red | 1 | 100% (11/11) | 483.6K | 4.7m | - | - | - |
-| with_skill | sanity/skill-smoke/sanity/dashboard | sanity/skill-smoke | 2 | 100% (6/6) | 80.8K | 37.9s | - | - | - |
-| with_skill | sanity/skill-smoke/sanity/dashboard-no-audit | sanity/skill-smoke | 1 | 100% (5/5) | 63.0K | 31.8s | - | - | - |
+| with_skill | dashboards/checkout-red/sanity/dashboard | dashboards/checkout-red | 1 | 100% (11/11) | 264.7K | 2.9m | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/dashboard | sanity/skill-smoke | 2 | 100% (6/6) | 65.1K | 23.7s | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/dashboard-no-audit | sanity/skill-smoke | 1 | 100% (5/5) | 50.0K | 18.8s | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-red/sanity/dashboard | dashboards/checkout-red | with_skill | codex | cumulative | measured | 1/1 recognized | 471757 | 425600 | unknown | 11852 | 4690 | unknown | 483609 |
-| with_skill | sanity/skill-smoke/sanity/dashboard | sanity/skill-smoke | with_skill | codex | cumulative | measured | 2/2 recognized | 80560 | 56832 | unknown | 221 | 0 | unknown | 80781 |
-| with_skill | sanity/skill-smoke/sanity/dashboard-no-audit | sanity/skill-smoke | with_skill | codex | cumulative | measured | 1/1 recognized | 62394 | 49280 | unknown | 570 | 298 | unknown | 62964 |
+| with_skill | dashboards/checkout-red/sanity/dashboard | dashboards/checkout-red | with_skill | codex | cumulative | measured | 1/1 recognized | 256764 | 230528 | unknown | 7951 | 1328 | unknown | 264715 |
+| with_skill | sanity/skill-smoke/sanity/dashboard | sanity/skill-smoke | with_skill | codex | cumulative | measured | 2/2 recognized | 64925 | 50688 | unknown | 165 | 0 | unknown | 65090 |
+| with_skill | sanity/skill-smoke/sanity/dashboard-no-audit | sanity/skill-smoke | with_skill | codex | cumulative | measured | 1/1 recognized | 49740 | 42112 | unknown | 297 | 106 | unknown | 50037 |
 
 ## Sanity Failures
 

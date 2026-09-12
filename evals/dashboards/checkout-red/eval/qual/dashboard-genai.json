@@ -1,0 +1,27 @@
+{
+  "skill": "splunk-dashboard",
+  "language": "dashboards",
+  "service": "checkout-red",
+  "prompts": [
+    {
+      "id": "genai-classification",
+      "eval_inputs": ["eval/inputs/otel-audit-genai.json"],
+      "task": "Treat ./service as the project root. Create ./service/.observe and copy ./service/eval/inputs/otel-audit-genai.json to ./service/.observe/otel-audit.json. Use $splunk-dashboard to generate local dashboard Terraform, variables, example tfvars, Markdown report, and Observer preview from that selected audit. Preserve the source-backed distinction between GenAI model configuration, workflow fanout, content governance, and app-computed cost; do not treat a generic cost-named metric as GenAI. Do not invent missing telemetry, expose raw content, call any network, or run Terraform."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect the selected audit at ./service/eval/inputs/otel-audit-genai.json and every generated file under ./service/.observe, especially terraform/dashboards.tf, dashboards.md, and dashboards.preview.json.",
+    "Inspect ./trace.jsonl to verify audit-gate ordering, the three routed local dashboard references, and the absence of network calls or Terraform execution.",
+    "Read ./last_message.md for the agent final response and ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Binds the selected canonical GenAI audit and creates a separate GenAI dashboard group and dashboard containing panels for each of the five source-backed gen_ai metrics; it neither silently drops those metrics nor invents unavailable telemetry.",
+    "Classifies gen_ai.request.model.config.mismatch.count and gen_ai.model.deployment.readiness as genai-model-config, gen_ai.workflow.fanout.count as genai-workflow-fanout, gen_ai.content.redaction.failures.count as genai-content-governance, and gen_ai.request.cost as genai-cost, with the classifications visible in the report or artifact names/descriptions.",
+    "Uses a time_series sum for mismatch, fanout, governance-outcome, and app-computed cost metrics, and a single_value panel with an optional trend for deployment readiness; all SignalFlow is filtered to the audited checkout service.",
+    "Does not classify checkout.order.cost as GenAI merely because its name contains cost, and does not emit any raw prompt, completion, user, session, or tool-argument content in Terraform, preview, reports, or dimensions.",
+    "Writes valid three-level Terraform with a signalfx_dashboard_group, signalfx_dashboard, one signalfx_*_chart resource per referenced panel, bounded 12-column layout, sensitive api_token variable, and no detector-only detect()/when()/threshold() tail.",
+    "Writes schemaVersion 1 dashboards.preview.json whose groups -> dashboards -> charts tree agrees with the Terraform resources, chart types, programs, and grid positions and uses only time_series|single_value|list|heatmap|text|table.",
+    "Writes dashboards.md with source-backed category and chart rationale, explicitly records the skipped generic checkout.order.cost metric and reason, and reports missing signals only as prerequisites rather than fabricated panels.",
+    "Uses the dashboard skill's local progressive route after the audit gate, performs no network access or Terraform execution, and hands off to a later apply or $splunk-dashboard-publish step without claiming anything was deployed."
+  ]
+}

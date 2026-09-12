@@ -3,11 +3,15 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Add OpenTelemetry instrumentation to the Java Spring Boot service in ./service. Prefer the OpenTelemetry Java agent and avoid unnecessary application code changes. Assume no custom business spans are requested."
+      "task": "Add OpenTelemetry instrumentation to the Java Spring Boot service in ./service. Preserve the fixture's java-springboot-basic service identity. Prefer the OpenTelemetry Java agent and avoid unnecessary application code changes. Assume no custom business spans are requested."
     },
     {
       "id": "runtime-preserving",
-      "task": "Instrument the Java Spring Boot service in ./service with OpenTelemetry while preserving controller behavior. Prefer javaagent auto-instrumentation over programmatic SDK code. Add auto-instrumentation only; do not add custom business spans."
+      "task": "Instrument the Java Spring Boot service in ./service with OpenTelemetry while preserving controller behavior and the fixture's java-springboot-basic service identity. Prefer javaagent auto-instrumentation over programmatic SDK code. Add auto-instrumentation only; do not add custom business spans."
+    },
+    {
+      "id": "configuration-file-headers",
+      "task": "Instrument the Java Spring Boot service in ./service with OpenTelemetry while preserving its existing runtime and the fixture's java-springboot-basic service identity. The deployment currently sets OTEL_JAVAAGENT_CONFIGURATION_FILE=/etc/otel/agent.properties, and that unreviewed file may define otel.exporter.otlp.logs.headers. Keep direct-cloud credentials out of the default local Splunk Observability Studio log exporter without reading or echoing the file's secret values. Prefer the Java agent, make the guarded launch behavior explicit, and explain what happens when an operator instead selects a higher-precedence non-OTLP logs exporter."
     }
   ],
   "judge_inputs": [
@@ -20,9 +24,9 @@
     "Keeps Spring controller code minimal and does not replace auto-instrumentation with broad manual tracing.",
     "Configures service name and OTLP endpoint through environment variables or JVM system properties.",
     "Defaults the Java agent application log exporter to OTLP only when the operator has not selected a value and sends logs to the signal-specific local Splunk Observability Studio /v1/logs endpoint through exactly one agent-owned Logback bridge.",
-    "Exports the fixture's request-context warning exactly once with its body, WARN severity, java-springboot-basic resource identity, and non-empty trace and span IDs while preserving every configured Logback console or file appender.",
+    "For the direct and runtime-preserving prompts, exports the fixture's request-context warning exactly once with its body, WARN severity, java-springboot-basic resource identity, and non-empty trace and span IDs while preserving every configured Logback console or file appender. For configuration-file-headers, instead keeps the existing Logback sink active and marks local OTLP log delivery Not proven or Blocked because the unreviewed configuration file correctly prevents enabling that exporter; it never claims the warning was exported on the refused branch.",
     "Honors effective OTEL_LOGS_EXPORTER=none or another explicit operator-owned value from environment variables, JAVA_TOOL_OPTIONS, or launcher -D arguments without adding a manual SDK, appender, provider, or second bridge, while the original Logback sink remains active.",
-    "Uses one guarded host/container entrypoint that resolves environment, JAVA_TOOL_OPTIONS, and launcher -D precedence, rejects argfiles plus quoted/backslash-escaped values and non-space/tab control whitespace across JAVA_TOOL_OPTIONS, JDK_JAVA_OPTIONS, and _JAVA_OPTIONS, skips launcher option values, stops property scanning at the main class/JAR/module/source target, treats an empty -Dotel.logs.exporter= as default OTLP without adding a duplicate key, accepts either exact local generic receiver independently of the logs protocol, and rejects non-local signal-specific or generic OTLP endpoints and generic headers before Java starts; direct cloud remains trace/metric-only.",
+    "Uses one guarded host/container entrypoint that resolves environment, JAVA_TOOL_OPTIONS, and launcher -D precedence, rejects argfiles plus quoted/backslash-escaped values and non-space/tab control whitespace across JAVA_TOOL_OPTIONS, JDK_JAVA_OPTIONS, and _JAVA_OPTIONS, skips launcher option values, stops property scanning at the main class/JAR/module/source target, treats an empty -Dotel.logs.exporter= as default OTLP without adding a duplicate key, accepts either exact local generic receiver independently of the logs protocol, and rejects non-local signal-specific or generic OTLP endpoints and generic headers before Java starts; direct cloud remains trace/metric-only. On the local absent/OTLP branch it also rejects an effective OTEL_JAVAAGENT_CONFIGURATION_FILE or -Dotel.javaagent.configuration-file source because that file can hide logs headers; a higher-precedence explicit non-OTLP exporter bypasses the local path unchanged.",
     "Relies on the Java agent's single JVM shutdown hook to flush its log processor; it does not add an application-owned shutdown hook or second SDK.",
     "Explains how the Java agent provides HTTP server spans and request duration metrics.",
     "Preserves existing Maven/Spring Boot runtime behavior."

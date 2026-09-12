@@ -96,6 +96,7 @@ test-interactive-otel-scripts: ## Run interactive OTel report and selection unit
 	$(PYTHON) -m unittest discover -s skills/otel-audit/tests -p 'test_*.py'
 	$(PYTHON) -m unittest discover -s skills/otel-instrument/tests -p 'test_*.py'
 	$(PYTHON) -m unittest discover -s skills/otel-verify/tests -p 'test_*.py'
+	cd $(EVALS_DIR) && uv run pytest -q ../skills/splunk-dashboard/tests ../skills/splunk-dashboard-publish/tests ../skills/splunk-detector-publish/tests
 	$(MAKE) -C $(EVALS_DIR) test-interactive-guidance
 
 test-agent-policy: ## Run deterministic agent-policy and guideline contract tests

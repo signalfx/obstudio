@@ -2,14 +2,11 @@
 name: splunk-configure
 description: >-
   Generate Splunk Observability Cloud detector and dashboard Terraform from
-  existing observability reports. Reads .observe/otel-audit.json plus
-  instrumentation and verification reports when available, classifies proven or explicitly
-  accepted metrics and readiness gaps, outputs HCL with SignalFlow program_text,
-  and writes local configure verification. Use when the user types
-  $splunk-configure, asks to generate detectors or dashboards, audit alert
-  coverage, distinguish app-down from degraded impact, build blast-radius
-  views, improve MTTD or incident localization, or add GenAI/LLM detector
-  coverage.
+  canonical .observe audit, approved instrumentation, and verification
+  evidence. Use for $splunk-configure, detectors, dashboards, alert-coverage
+  audits, app-down versus degraded impact, blast-radius views, MTTD or incident
+  localization, and GenAI/LLM coverage. Generate only from proven or explicitly
+  accepted metrics; report readiness gaps instead of inventing signals.
 metadata:
   author: otel-studio
   version: 0.2.0
@@ -27,8 +24,18 @@ resources only from source-backed metrics that are verified or explicitly
 accepted as source-only inputs. Report missing or unverified readiness coverage
 as instrumentation prerequisites instead of inventing alerts from absent data.
 
-Before writing outputs, read `../references/report-flow-contract.md` and follow
-the Splunk Configure Contract plus Splunk Configure Verification.
+Before writing outputs, read only the tail of
+`../references/report-flow-contract.md` starting at
+`## Splunk Configure Contract`; it contains both the Splunk Configure Contract
+and Splunk Configure Verification. Do not load the preceding audit,
+instrumentation, or verification sections unless resolving a concrete contract
+conflict.
+
+Resolve paths in this entrypoint from the directory containing this `SKILL.md`.
+Inside a loaded reference, resolve relative paths from that reference's
+directory. Shared entrypoint references use `../references/`; configure-only
+references and scripts use `references/` and `scripts/`. Read the exact routed
+path; do not probe for alternate copies unless it is missing.
 
 When a prompt mentions MTTD, faster incident detection, better alerts, easier
 incident debugging, or blast-radius visibility, generate detectors and
@@ -200,6 +207,10 @@ applicable instrumentation prerequisites and alert coverage matrix. Create
 specification. Recommend `$otel-instrument` for missing signals and
 `$otel-verify` for implemented signals that lack proof.
 
+For `alert-coverage-audit` mode, load the Alert Coverage Audit Output section in
+`references/terraform-templates.md` even when no detector-ready metric exists;
+it owns the required matrix rows independently of Terraform generation.
+
 ### Step 3 -- Classify Metrics into Detector Categories
 
 When candidate metrics exist, load `references/detector-classification.md` and
@@ -354,56 +365,18 @@ aggregations or filters (for example a Latency detector with no filter, an
 Error detector filtered to `error.type`, and a Throughput detector with only
 the route filter) are not duplicates and are all expected.
 
-```hcl
-resource "signalfx_detector" "<category>_<sanitized_metric_name>" {
-  name        = "${var.service_name} <Category> - <metric_name>"
-  description = "Detects <category> anomalies for <metric_name>"
-
-  program_text = <<-EOF
-    <SignalFlow program from template>
-  EOF
-
-  rule {
-    description  = "<Category> threshold breached"
-    severity     = "<severity from template>"
-    detect_label = "<label from template>"
-
-    notifications = [var.notification_channel]
-  }
-}
-```
+Use the exact provider, detector, SignalFlow, rule, and threshold-variable
+shapes in `references/terraform-templates.md`; that reference owns the HCL
+examples and category defaults.
 
 Sanitize metric names for HCL identifiers: replace dots and hyphens with
 underscores, strip leading digits.
 
 #### `.observe/terraform/variables.tf`
 
-```hcl
-variable "realm" {
-  description = "Splunk Observability Cloud realm"
-  type        = string
-}
-
-variable "api_token" {
-  description = "Splunk Observability Cloud API token"
-  type        = string
-  sensitive   = true
-}
-
-variable "service_name" {
-  description = "Service name for detector naming"
-  type        = string
-  default     = "<service-name from report>"
-}
-
-variable "notification_channel" {
-  description = "Notification target for detector alerts"
-  type        = string
-}
-
-# Per-detector threshold overrides
-<one variable block per detector with its default threshold>
-```
+Follow the variable shapes in `references/terraform-templates.md`. Declare
+`realm`, sensitive `api_token`, `service_name`, `notification_channel`, and one
+defaulted threshold variable per detector.
 
 #### `.observe/terraform/dashboards.tf`
 
@@ -509,14 +482,9 @@ definition.
 
 #### `.observe/terraform/terraform.tfvars.example`
 
-Generate a `.tfvars.example` file the user copies and fills in to apply:
-
-```hcl
-realm                = ""   # Splunk Observability Cloud realm
-api_token            = ""   # Splunk O11y API token (org-level, detector write)
-service_name         = "<service-name from report>"
-notification_channel = ""   # e.g. "Email,team@example.com" or PagerDuty routing key
-```
+Generate the exact `.tfvars.example` shape from
+`references/terraform-templates.md` for the user to copy and fill in before an
+apply.
 
 Do NOT include per-detector threshold variables in this file -- they already have
 sensible defaults in `variables.tf`. Include `realm`, `api_token`, and
@@ -534,156 +502,33 @@ dimensions, units, and evidence; it must not define a separate result or
 duplicate the report-flow contract. `.observe/splunk-configure-verify.md`
 remains the authoritative proof report.
 
-Use the following structure:
+Use the Splunk Configure Contract in
+`../references/report-flow-contract.md` for status semantics and evidence
+ownership. Keep the detector report deterministic with this reader order:
+`Executive Summary`, `Flow`, `Summary`, applicable detector categories,
+`Skipped Metrics`, conditional `Instrumentation Prerequisites`, conditional
+`Alert Coverage Matrix`, conditional `GenAI Instrumentation Prerequisites`,
+`Classification Rules Applied`, `Terraform Output`, and `Next Steps`.
+Start with `# Detectors Report: <service-name>` and record the exact `Result`,
+language, framework, date, source audit, instrumentation, verification, and
+output path. Use `Category | Count | Severity | Detection Method` for the
+summary and `File | Contents` for the Terraform inventory. Set `Flow` to
+`audit -> instrument -> verify -> configure -> configure-verify`.
 
-```markdown
-# Detectors Report: <service-name>
+The summary and category names come from
+`references/detector-classification.md`; detector methods, defaults, and
+severities come from `references/terraform-templates.md`. Do not copy those
+authorities into the report. Each generated detector row must retain category,
+metric, source, threshold variable, and default. Each skipped row must state a
+reason. Use these compact prerequisite schemas:
 
-**Result:** Pass | Partial | Fail | Blocked
-**Language:** <lang> | **Framework:** <framework> | **Date:** <YYYY-MM-DD>
-**Source audit:** `.observe/otel-audit.json`
-**Source instrumentation:** `.observe/otel-instrumentation.md` | not found
-**Source verification:** `.observe/otel-verify.md` | not found
-**Output:** `.observe/terraform/`
+- instrumentation: `Area | Audit Status | Missing Signal | Why No Detector Was Generated | Next Step`
+- GenAI: `Surface | Audit Status | Missing Signal | Why No Detector Was Generated | Next Step`
+- alert coverage: `Incident Pattern | Existing/Generated Coverage | Missing Signal or Dashboard | Detection/Localization Risk | Next Step`
 
-## Executive Summary
-- <detectors generated count and most important covered category>
-- <metrics skipped because missing/unverified>
-- <configuration validation result>
-- <next action>
-
-## Flow
-`audit -> instrument -> verify -> configure -> configure-verify`
-
-## Summary
-
-| Category   | Count | Severity | Detection Method |
-|------------|-------|----------|------------------|
-| Latency    | N     | Warning  | P99 static threshold |
-| Error      | N     | Critical | Sudden change (mean + stddev) |
-| Saturation | N     | Warning  | Static threshold |
-| Throughput | N     | Major    | Sudden change (mean + stddev) |
-| Freshness  | N     | Critical | Static lag/age threshold |
-| Backpressure | N   | Major    | Static lag/depth threshold |
-| Dependency | N     | Major    | Latency/error/timeout threshold |
-| Customer Impact | N | Critical | Workflow success/error/latency threshold |
-| Impact Classification | N | Critical | App-down/degraded workflow rollup |
-| Auth/Edge | N | Critical | Login/edge success/error/latency threshold |
-| Capacity Saturation | N | Major | Resource/quota/throttle/restart threshold |
-| GenAI Latency | N | Major | P99 or sudden change |
-| GenAI Token Pressure | N | Major | Token/context threshold or baseline |
-| GenAI Provider | N | Critical | Error/timeout/rate-limit/fallback |
-| GenAI Tool | N | Major | Tool error/latency/fanout |
-| GenAI Model Config | N | Critical | Readiness/mismatch failure |
-| GenAI Workflow Fanout | N | Major | LLM/tool call fanout |
-| GenAI Retrieval | N | Major | Retrieval error/latency/staleness |
-| GenAI Memory Context | N | Major | Memory/context latency, error, freshness, or permission failure |
-| GenAI Evaluation Quality | N | Major | Evaluation score, violation, error, no-data, or freshness |
-| GenAI Content Governance | N | Critical | Unsafe capture, redaction, truncation, or policy failure |
-| GenAI Cost | N | Major | Cost spike, budget/quota pressure, or billing freshness |
-| **Total**  | **N** | | |
-
-## Latency Detectors
-
-P99 percentile against a static threshold. Default: **1.0s**.
-
-| # | Detector | Metric | Source | Threshold Variable | Default |
-|---|----------|--------|--------|-------------------|---------|
-| 1 | `latency_<id>` | `<metric>` | <source> | `latency_<id>_threshold` | 1.0 |
-
-## Error Detectors
-
-Sudden-change detection using `against_recent.detector_mean_std` (above baseline).
-Default: **3.0 stddev**, 5m current window vs 1h history.
-
-| # | Detector | Metric | Source | Threshold Variable | Default |
-|---|----------|--------|--------|-------------------|---------|
-| 1 | `error_<id>` | `<metric>` | <source> | `error_<id>_stddev` | 3.0 |
-
-## Saturation Detectors
-
-Gauge value against a static threshold. Default: **85.0**.
-
-| # | Detector | Metric | Source | Threshold Variable | Default |
-|---|----------|--------|--------|-------------------|---------|
-| 1 | `saturation_<id>` | `<metric>` | <source> | `saturation_<id>_threshold` | 85.0 |
-
-## Throughput Detectors
-
-Sudden-change detection using `against_recent.detector_mean_std` (out-of-band).
-Default: **3.0 stddev**, 5m current window vs 1h history.
-
-| # | Detector | Metric | Source | Threshold Variable | Default |
-|---|----------|--------|--------|-------------------|---------|
-| 1 | `throughput_<id>` | `<metric>` | <source> | `throughput_<id>_stddev` | 3.0 |
-
-## Skipped Metrics
-
-| Metric | Reason |
-|--------|--------|
-| `<metric>` | <why it was not classified> |
-
-## Instrumentation Prerequisites
-
-| Area | Audit Status | Missing Signal | Why No Detector Was Generated | Next Step |
-|------|--------------|----------------|-------------------------------|-----------|
-| Data freshness | missing | newest event age, ingest lag, dropped records by reason | No accepted, proven metric exists in the source reports | Run `$otel-instrument` to add data freshness signals |
-| Dependency health | missing | endpoint health, target health, availability, timeout/rate-limit count, or unhealthy target count | No accepted, proven dependency health metric exists | Run `$otel-instrument` or configure platform telemetry for dependency health signals |
-| Capacity health | missing | disk saturation, desired-vs-healthy, startup/readiness/healthcheck failure, restart count, or traffic target health | No accepted, proven runtime/platform metric exists | Run `$otel-instrument` or add platform telemetry before creating detectors |
-
-## Alert Coverage Matrix
-
-Use this section for `alert-coverage-audit` mode and include it in the detector
-report when readiness coverage is partial or missing.
-
-| Incident Pattern | Existing/Generated Coverage | Missing Signal or Dashboard | Detection/Localization Risk | Next Step |
-|---|---|---|---|---|
-| Primary workflow unavailable | {detector/dashboard or "none found"} | {workflow impact metric, dependency metric, or synthetic/client telemetry signal} | {why detection/debugging remains slow} | {configure detector or instrument signal} |
-| Ingest lag/drops | {detector/dashboard or "none found"} | {freshness/drop/lag signal} | {risk} | {next step} |
-| Auth/domain-routing/edge | {detector/dashboard or "none found"} | {auth/edge workflow signal} | {risk} | {next step} |
-| Critical business workflow | {detector/dashboard or "none found"} | {workflow outcome signal} | {risk} | {next step} |
-| Multi-region blast radius | {detector/dashboard or "none found"} | {region/environment/workflow rollup} | {risk} | {next step} |
-| Dependency endpoint health | {detector/dashboard or "none found"} | {endpoint health, target health, unavailable, timeout, rate-limit, or unhealthy target signal} | {risk} | {next step} |
-| Capacity saturation | {detector/dashboard or "none found"} | {CPU/memory/disk/quota/throttle/concurrency/restart/readiness/desired-vs-healthy/platform signal} | {risk} | {next step} |
-| Release/config correlation | {dashboard filter/event overlay or "none found"} | {service.version, deployment.environment.name, cloud.region, cloud.platform, container.image.name/tags, artifact version, config version, or rollout/canary id} | {risk} | {next step} |
-| Detector reliability | {detector/dashboard evidence or "none found"} | {missing no-data handling, anti-flap tuning, auto-resolve guard, data-quality signal, or alert route evidence} | {risk} | {tune detector, fix alert coverage, or instrument app-owned missing signal} |
-
-## GenAI Instrumentation Prerequisites
-
-Include this section when canonical `genai_readiness[]`, GenAI findings, or
-bound instrumentation/verification overlays show that any required GenAI signal
-is missing, partial, or not yet proven.
-
-| Surface | Audit Status | Missing Signal | Why No Detector Was Generated | Next Step |
-|---------|--------------|----------------|-------------------------------|-----------|
-| Token/context pressure | partial | truncation rate, token-limit errors, prompt/tool schema size, LLM-call fanout | Matching metrics are absent or only token usage exists | Run `$otel-instrument` to close the named GenAI signals or owner-map them |
-
-## Classification Rules Applied
-
-<include the decision flowchart from references/detector-classification.md>
-
-## Terraform Output
-
-| File | Contents |
-|------|----------|
-| `detectors.tf` | N `signalfx_detector` resources with inline SignalFlow |
-| `dashboards.tf` | dashboard group, dashboard, and panel resources for classified metrics when metric evidence exists |
-| `variables.tf` | 4 required + N threshold variables |
-| `terraform.tfvars.example` | Template for required variables |
-
-## Next Steps
-
-1. Review configure verification and resolve any unproven inputs
-2. Copy and fill in credentials
-3. Review threshold defaults and run `terraform init` plus `terraform plan`
-4. Use `$splunk-sync` to publish confirmed detector gaps, or apply reviewed
-   Terraform when Terraform will own detectors and dashboards
-5. Tune thresholds based on production baselines
-
----
-*Generated by splunk-configure on <YYYY-MM-DD>*
-```
-
+Include source artifact paths, the `.observe/terraform/` inventory, exact
+configure result, and publish/apply next steps. Never report an unproven metric
+as covered.
 ### Step 6 -- Validate Configure Output
 
 Always create `.observe/splunk-configure-verify.md` for a completed configure
@@ -769,6 +614,9 @@ python3 <splunk-configure-skill-dir>/scripts/validate_configure_output.py \
   --verify-report .observe/otel-verify.md
 ```
 
+Treat that command as the validator's interface. Do not read its source before
+running it; inspect only the code relevant to an unexplained failure.
+
 For every metric the user explicitly accepted as source-only, append
 `--allow-source-only-metric <exact-metric-name>`. Never use that option merely
 because `.observe/otel-verify.md` is absent.
@@ -785,33 +633,13 @@ when Terraform is available. The bundled script validates detector resources,
 not dashboard resources; use the explicit dashboard evidence checks above and
 do not attribute dashboard proof to the script.
 
-Use this report shape:
-
-```markdown
-# Splunk Configure Verification: <service-name>
-
-**Result:** Pass | Partial | Fail | Blocked
-**Source:** `.observe/detectors.md`
-**Terraform:** `.observe/terraform/`
-
-## Executive Summary
-
-<1-2 sentence overall verdict>
-
-## What Was Added
-
-| Resource Label | Metric | Detect Condition | Severity |
-|----------------|--------|-----------------|----------|
-| latency_<id> | <metric_name> | P99 > threshold | Warning |
-| error_<id> | <metric_name> | rate anomaly (mean+stddev) | Critical |
-| saturation_<id> | <metric_name> | mean > threshold | Warning |
-| throughput_<id> | <metric_name> | rate anomaly (out-of-band) | Major |
-
-## Tested And Working
-## Not Yet Proven
-## Validation Notes
-## Next Steps
-```
+Use the exact report shape and heading order under Splunk Configure
+Verification in `../references/report-flow-contract.md`; it owns the result
+semantics, authenticated-plan gate, headings, and order. Populate those
+sections with concrete evidence from the validation requirements above.
+Under `What Was Added`, list every detector as
+`Resource Label | Metric | Detect Condition | Severity`; do not replace the
+per-detector inventory with an aggregate summary.
 
 For a prerequisites-only run with no detector-ready metrics, still write the
 configure verification report, record that Terraform validation was not run,
@@ -821,129 +649,12 @@ the run `Pass`.
 
 ### Step 7 -- Chat Summary
 
-After generating all files and configure verification, present a summary:
-
-```
-## Detectors Generated
-
-| Category    | Count |
-|-------------|-------|
-| Latency     | N     |
-| Error       | N     |
-| Saturation  | N     |
-| Throughput  | N     |
-| Freshness   | N     |
-| Backpressure | N    |
-| Dependency  | N     |
-| Customer Impact | N |
-| Impact Classification | N |
-| Auth/Edge | N |
-| Capacity Saturation | N |
-| GenAI Latency | N |
-| GenAI Token Pressure | N |
-| GenAI Provider | N |
-| GenAI Tool | N |
-| GenAI Model Config | N |
-| GenAI Workflow Fanout | N |
-| GenAI Retrieval | N |
-| GenAI Memory Context | N |
-| GenAI Evaluation Quality | N |
-| GenAI Content Governance | N |
-| GenAI Cost | N |
-
-**Output:** `.observe/terraform/`
-
-Files:
-- `.observe/terraform/detectors.tf` — N detector resources
-- `.observe/terraform/dashboards.tf` — service dashboard and panel resources when accepted metric evidence exists
-- `.observe/terraform/variables.tf` — realm, api_token, service_name, notification_channel + N threshold variables
-- `.observe/terraform/terraform.tfvars.example` — copy to `terraform.tfvars`, fill in credentials
-- `.observe/terraform/.gitignore` — excludes provider cache, local state, and credential tfvars
-- `.observe/terraform/.terraform.lock.hcl` — provider selection produced by successful init
-- `.observe/detectors.md` — full detectors report with classification details
-- `.observe/dashboards.md` — dashboard panels, filters, evidence, and readiness prerequisites
-- `.observe/splunk-configure-verify.md` — Terraform/SignalFlow/coverage/safety validation
-
-**Configure verification:** Pass | Partial | Fail | Blocked
-
-Next:
-1. `cp .observe/terraform/terraform.tfvars.example .observe/terraform/terraform.tfvars`
-2. Fill in `realm`, `api_token`, and `notification_channel` in `terraform.tfvars`
-3. `cd .observe/terraform && terraform init && terraform plan`
-4. Use `$splunk-sync` to compare and publish only confirmed detector gaps, or
-   apply the reviewed Terraform when the user chooses Terraform-managed
-   detectors and dashboards
-```
-
-## Output Templates
-
-### detectors.tf Shape
-
-```hcl
-terraform {
-  required_providers {
-    signalfx = {
-      source  = "splunk-terraform/signalfx"
-      version = "~> 9.0"
-    }
-  }
-}
-
-provider "signalfx" {
-  auth_token = var.api_token
-  api_url    = "https://api.${var.realm}.signalfx.com"
-}
-
-resource "signalfx_detector" "latency_http_server_request_duration" {
-  name        = "${var.service_name} Latency - http.server.request.duration"
-  description = "Detects high p99 latency for http.server.request.duration"
-
-  program_text = <<-EOF
-    A = data('http.server.request.duration', filter=filter('service.name', '${var.service_name}')).percentile(pct=99).publish(label='P99 Latency')
-    detect(when(A > threshold(${var.latency_http_server_request_duration_threshold}))).publish('P99 Latency Too High')
-  EOF
-
-  rule {
-    description  = "P99 latency exceeds threshold"
-    severity     = "Warning"
-    detect_label = "P99 Latency Too High"
-
-    notifications = [var.notification_channel]
-  }
-}
-```
-
-### variables.tf Shape
-
-```hcl
-variable "realm" {
-  description = "Splunk Observability Cloud realm"
-  type        = string
-}
-
-variable "api_token" {
-  description = "Splunk Observability Cloud API token"
-  type        = string
-  sensitive   = true
-}
-
-variable "service_name" {
-  description = "Service name for detector naming"
-  type        = string
-  default     = "my-service"
-}
-
-variable "notification_channel" {
-  description = "Notification target for detector alerts"
-  type        = string
-}
-
-variable "latency_http_server_request_duration_threshold" {
-  description = "P99 latency threshold in seconds for http.server.request.duration"
-  type        = number
-  default     = 1.0
-}
-```
+After generating and validating outputs, summarize category counts from
+`references/detector-classification.md`, the `.observe/terraform/` path, files
+actually written, the exact configure verification result, unproven work, and
+the next review, credential, plan, and publish/apply actions. Do not paste HCL
+or empty category tables into chat; `references/terraform-templates.md` owns
+the output shapes.
 
 ## Warning Signs
 

@@ -20,6 +20,7 @@
     "Chart program_text reuses the data('<metric>', filter=filter('service.name', ...)).<agg>().publish(...) SignalFlow pattern with a visualization aggregation (percentile for latency, sum for rate/errors) and carries NO detect()/when()/threshold() alerting tail.",
     "Writes variables.tf with realm, api_token marked sensitive = true, and service_name, plus a terraform.tfvars.example, and never hard-codes a real token.",
     "Writes .observe/dashboards.preview.json as valid JSON with schemaVersion 1 and a groups -> dashboards -> charts tree whose chartType values come from the time_series|single_value|list|heatmap|text|table vocabulary and whose layout matches the Terraform grid placement.",
-    "Writes a .observe/dashboards.md report explaining the panel classification rationale and hands off to terraform apply or the dashboard publish skill without performing any network call."
+    "Writes a .observe/dashboards.md report explaining the panel classification rationale and hands off to terraform apply or the dashboard publish skill without performing any network call.",
+    "Uses the dashboard skill's progressive route for this ordinary RED fixture: after confirming the audit contains metrics, reads the local classification, template, and artifact contracts without scanning unrelated skills or loading the full shared SignalFlow/Terraform-normalization references; performs only local generation/validation and does not run terraform."
   ]
 }

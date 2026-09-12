@@ -20,7 +20,6 @@
     "splunk-detector-publish"
   ],
   "report-flow-contract.md": [
-    "otel-audit",
     "otel-instrument",
     "otel-verify",
     "splunk-configure"

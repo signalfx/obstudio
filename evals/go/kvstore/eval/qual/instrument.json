@@ -19,12 +19,15 @@
     "Instruments the executable server path under cmd/kvstore-server, not the library package on import.",
     "Preserves the existing kvstore package APIs and avoids moving business logic.",
     "Uses otelhttp.NewHandler for stdlib HTTP routing and keeps span names low-cardinality.",
-    "Reads service name and OTLP endpoint from environment or safe defaults.",
+    "Reads service name and OTLP endpoint from environment or safe defaults, preserving the checked-in go-kvstore service identity rather than deriving a shortened name from the module or binary.",
     "Bridges the existing standard logger through exactly one official Go logging bridge and one shared-resource batched OTLP LoggerProvider targeting the signal-specific local Splunk Observability Studio /v1/logs endpoint by default.",
-    "Exports each fixture request-context warning exactly once with its body, WARN severity, go-kvstore resource identity, and non-empty unique trace and span IDs while preserving the existing standard-log console sink.",
+    "Preserves both fixture log contracts: exports each request-context warning exactly once with its existing body, WARN severity, go-kvstore resource identity, and non-empty unique trace and span IDs; preserves the distinct existing shutdown warning exactly once with WARN severity and go-kvstore identity without requiring request correlation outside an active span; and keeps both records in the standard-log console sink.",
     "Honors OTEL_LOGS_EXPORTER=none and another explicit operator-owned exporter by installing no local LoggerProvider or bridge while leaving the standard-log console sink active.",
     "Keeps generic or signal-specific cloud endpoints, headers, credentials, and forwarding out of the application-log path; direct cloud remains trace/metric-only and logs stay local unless explicitly operator-owned.",
     "Uses one shutdown path on every normal or signal-driven server exit so the single log provider and its batch processor flush once.",
-    "Updates the existing .vscode/launch.json as required by the skill instructions."
+    "Updates the existing .vscode/launch.json as required by the skill instructions.",
+    "Treats the general request to add OpenTelemetry as an instrumentation workflow, not an audit-only response: changes the service, writes the instrumentation report, and performs or truthfully blocks verification.",
+    "On this direct no-audit path, performs inline project and applicable full-runtime proof without loading or relying on an external installed otel-verify skill, and records standalone otel-verify as not applicable because no canonical audit/selection exists.",
+    "Uses progressive disclosure for this Go-only service: reads the Go guide and applicable shared references without loading the Python, Node.js, Java, incident-readiness, or GenAI guidance when repository evidence does not require them."
   ]
 }

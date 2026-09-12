@@ -70,30 +70,24 @@ LoggingInstrumentor().instrument(
 )
 ```
 
-The instrumentor installs the stdlib-to-OTel handler by default and protects it
-across later `basicConfig`, `dictConfig`, and `fileConfig` calls without
-replacing the application's console/file handlers. On
-`opentelemetry-instrumentation-logging` 0.64b0+ (paired with Python OTel
-1.43.0+), pass `inject_trace_context=True` to add `otelTraceID`, `otelSpanID`,
-`otelTraceSampled`, and `otelServiceName` to the original stdlib `LogRecord`
-without changing its format. Keep `set_logging_format=False` to preserve the
-existing stdout/file format. For an older locked instrumentation version, omit
-the unsupported `inject_trace_context` argument; the OTLP handler still derives
-correlation from the current OTel context independently. If the older
-stdout/file formatter itself must consume those fields, use
-`OTEL_PYTHON_LOG_CORRELATION=true` or `set_logging_format=True` and update an
-already-created formatter explicitly. That older option also asks
-`logging.basicConfig` to install the OTel format, which may be a no-op when
-handlers already exist and does not enable OTLP export. For a project pinned
-before Python OTel 1.40.0, inspect the installed APIs and retain the older SDK
-`LoggingHandler` compatibility path rather than upgrading dependencies solely
-to copy this example.
+The instrumentor owns the stdlib-to-OTel handler and preserves existing sinks
+across later logging reconfiguration. On instrumentation 0.64b0+ with Python
+OTel 1.43.0+, `inject_trace_context=True` adds OTel IDs to the original record;
+keep `set_logging_format=False`. For an older locked instrumentation version,
+omit the unsupported `inject_trace_context` argument; export correlation still
+uses active context. Use `OTEL_PYTHON_LOG_CORRELATION=true` or
+`set_logging_format=True` only when the original formatter needs those fields;
+this formatting option does not enable OTLP export. Before Python OTel 1.40.0,
+inspect the installed APIs and retain the SDK `LoggingHandler` compatibility
+path rather than upgrading solely for this example.
 
 ---
 
-## Auto-Instrumentation (CLI Wrapper)
+## CLI Wrapper (Explicit Zero-Code Exception)
 
-Reuse the current app command and wrap it with the OTel auto-instrumentation agent. Do not introduce Docker just for observability.
+Use this wrapper only when the user explicitly selects CLI-only ownership.
+Otherwise use per-process setup below; wrapper-only startup edits fail.
+Reuse the current command and do not introduce Docker just for observability.
 
 ```bash
 #!/bin/sh
@@ -124,6 +118,10 @@ if [ "$OTEL_LOGS_EXPORTER" = otlp ]; then
     echo "move generic OTLP headers to trace/metric signal variables and remove the generic value" >&2
     exit 1
   fi
+  if [ -n "${OTEL_EXPORTER_OTLP_LOGS_HEADERS:-}" ]; then
+    echo "OTEL_EXPORTER_OTLP_LOGS_HEADERS is operator-owned; refusing the default local Splunk Observability Studio exporter" >&2
+    exit 1
+  fi
 fi
 if [ "$OTEL_LOGS_EXPORTER" = none ]; then
   # Ensure the explicit opt-out cannot inherit the zero-code default bridge.
@@ -144,19 +142,8 @@ pass the same command the project already uses, for example
 `uvicorn`. Do not inline only the final `opentelemetry-instrument` command and
 drop the policy checks.
 
-If the project already runs in Docker:
-```dockerfile
-COPY otel-entrypoint.sh /usr/local/bin/otel-entrypoint
-RUN chmod 0755 /usr/local/bin/otel-entrypoint
-ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
-ENV OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-ENV OBSTUDIO_OBSERVER_RUNTIME=container
-ENV OTEL_LOGS_EXPORTER=otlp
-ENV OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/protobuf
-ENV OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4318/v1/logs
-ENTRYPOINT ["/usr/local/bin/otel-entrypoint"]
-CMD ["python", "app.py"]
-```
+For existing Docker, copy the wrapper, make it the entrypoint, retain the
+current command, and select its checked-in container branch through Compose.
 
 Generate the wrapper's `container` branch with the exact local Splunk Observability Studio service
 address detected in the project topology, then select that checked-in branch
@@ -197,9 +184,16 @@ Create a separate file for OTel setup. Configure providers before creating the
 application object (Flask app, FastAPI app, etc.), but install the logging
 bridge only after the application has established its existing console/file
 handlers and before it begins serving.
-For Python services, this explicit setup file is the default implementation
-path; a Makefile or Docker command that only wraps the process with
-`opentelemetry-instrument` is not enough by itself.
+For Python services, this setup is required unless the user selected the
+zero-code exception above; wrapper-only commands are insufficient.
+For prefork Celery, import setup and `CeleryInstrumentor` while `worker.py`
+loads; create providers and instrument only inside each child's
+`worker_process_init`. Never lazy-import local setup or mask it with
+`PYTHONPATH`; prove emission from a real prefork child. API producers call
+`CeleryInstrumentor().instrument()` after provider setup and before the first
+publish so HTTP context enters task messages; worker imports stay provider-free.
+Prove one trace contains its HTTP server and worker consumer spans under
+distinct service identities.
 
 ### Existing provider reconciliation
 
@@ -268,6 +262,11 @@ def _use_default_local_log_export():
             "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local "
             "Splunk Observability Studio; refusing to create a Splunk Observability Studio log provider or bridge"
         )
+    if os.environ.get("OTEL_EXPORTER_OTLP_LOGS_HEADERS", "").strip():
+        raise RuntimeError(
+            "OTEL_EXPORTER_OTLP_LOGS_HEADERS is operator-owned; refusing to "
+            "apply it to the default local Splunk Observability Studio exporter"
+        )
     return True
 
 
@@ -281,8 +280,8 @@ def _local_log_exporter():
             f"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL={protocol!r}"
         )
 
-    # Reject generic headers even when logs headers are present: SDKs may merge
-    # both sources and leak a cloud credential into the local log request.
+    # Reject generic headers independently; the eligibility gate above already
+    # rejects signal-specific headers for this default unauthenticated path.
     if os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip():
         raise RuntimeError(
             "move generic OTLP headers to trace/metric signal variables and "
@@ -291,7 +290,7 @@ def _local_log_exporter():
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
     if not endpoint:
         endpoint = LOCAL_OBSERVER_LOGS_ENDPOINT
-    return OTLPLogExporter(endpoint=endpoint)
+    return OTLPLogExporter(endpoint=endpoint, headers={})
 
 
 def configure_opentelemetry():
@@ -388,6 +387,12 @@ boundary conflict rather than converting it to local or cloud export. If
 `OTEL_LOGS_EXPORTER=none`, or another explicit exporter is selected, the helper
 leaves logging untouched without validating that operator-owned endpoint. Do
 not broaden the condition to install local OTLP alongside another exporter.
+When a practical test seam exists, exercise `configure_opentelemetry()` and its
+returned bridge installer on both logs-header branches. Spy on constructors and
+handler state to prove that a nonempty signal-specific header creates zero local
+log providers, exporters, processors, or bridges, while the otherwise identical
+header-absent branch creates exactly one of each and preserves every original
+logging handler.
 Call the returned `install_logging_bridge` exactly once after the application's
 logging configuration has established its original sinks. Attach `shutdown`
 to the existing server/worker graceful lifecycle after it stops accepting work
@@ -400,7 +405,9 @@ provider or signal handler during reloads or per worker request.
 `LoggingInstrumentor` is the current stdlib-to-OTel bridge. Its handler is an
 additional path, and its guarded configuration wrappers let later application
 logging setup proceed before reattaching the OTel handler. Do not use
-`logging.basicConfig(force=True)`. On 0.64b0+/1.43.0+,
+`logging.basicConfig(force=True)`. Never pair current `LoggingInstrumentor` with
+an SDK `LoggingHandler`; it already owns the bridge. Prove one exported record
+per input, not one handler class. On 0.64b0+/1.43.0+,
 `inject_trace_context=True` injects the OTel fields without changing the
 existing text format; `set_logging_format=False` preserves that format. On an
 older locked version, omit the unsupported injection argument. The OTLP handler
@@ -557,8 +564,7 @@ async def process_order(order_id: str) -> Order:
 Before adding a custom counter or histogram for an outcome that happens
 inside a request the ASGI/WSGI instrumentation already covers, check
 whether it belongs as an attribute on `http.server.request.duration`
-instead — see `../../SKILL.md` `#### Implementation Rules` and the
-`Python:` entry under `#### Language-Specific Musts`. The instrumentation
+instead — see `../../SKILL.md` `### HTTP and errors`. The instrumentation
 already sets `http.response.status_code` on that metric for every request,
 and `error.type` for a 5xx (or otherwise invalid) status, with no extra code
 -- a plain 4xx client-error response does not set `error.type` on a server
@@ -634,14 +640,14 @@ destination.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Common OTLP endpoint; protocol must match |
-| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the Splunk Observability Studio-owned local log path, even when logs headers are set |
+| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the default local log path |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | Common protocol when using port 4318 |
 | `OTEL_EXPORTER_OTLP_<SIGNAL>_ENDPOINT` | unset | Per-signal endpoint, including `/v1/<signal>` for HTTP exporters |
 | `OTEL_EXPORTER_OTLP_<SIGNAL>_PROTOCOL` | unset | Per-signal `grpc` or `http/protobuf` |
 | `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or detected-local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for host/native Splunk Observability Studio runs | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
-| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Explicit headers are operator-owned and are never applied to the default local Splunk Observability Studio exporter |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
@@ -683,11 +689,11 @@ endpoint on local Splunk Observability Studio. Never copy a Splunk ingest URL, r
 generic cloud header, cloud exporter, or forwarding flag into the log pipeline.
 For the absent/`otlp` branch, reject a non-local explicit logs endpoint before
 constructing the provider or handler, preserve it as operator configuration,
-report the boundary conflict, and require the operator to resolve it. Also
-reject any generic OTLP header on the local branch even when signal-specific
-logs headers exist; move the generic credentials to trace/metric variables and
-remove the generic setting. Splunk Observability Studio cloud forwarding remains traces and
-metrics only.
+report the boundary conflict, and require the operator to resolve it. Reject
+generic OTLP headers on the local branch and move those credentials to
+trace/metric variables. Also reject an explicit signal-specific logs header:
+it is operator-owned configuration and must not be applied to the default local
+Splunk Observability Studio exporter. Splunk Observability Studio cloud forwarding remains traces and metrics only.
 
 Verify one sanitized record at each required severity both outside and inside
 an active span. Assert its body/category, severity, shared `service.name`,

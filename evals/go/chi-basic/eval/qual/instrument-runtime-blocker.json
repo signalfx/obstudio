@@ -1,0 +1,25 @@
+{
+  "skill": "otel-instrument",
+  "language": "go",
+  "service": "chi-basic",
+  "prompts": [
+    {
+      "id": "conclusive-listener-blocker",
+      "eval_inputs": [
+        "eval/inputs/conclusive-listener-probe.txt"
+      ],
+      "task": "Behavior evaluation only: do not modify application code, dependencies, runtime configuration, or tests. Use $otel-instrument and treat ./service/eval/inputs/conclusive-listener-probe.txt as the sanitized current-run prerequisite probe after instrumentation and the build-viability gate passed. No focused telemetry proof or runtime telemetry proof ran. Decide whether to launch the real application solely to reproduce that primitive failure. State the full-runtime row and overall instrumentation verification status, preserve the successful build evidence separately, give the exact next action, and explain how the decision changes for an ambiguous probe or an application-code/configuration/test failure."
+    }
+  ],
+  "judge_inputs": [
+    "Read ./service/eval/inputs/conclusive-listener-probe.txt for the current-run prerequisite evidence.",
+    "Read ./last_message.md for the instrumentation runtime decision.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Applies the otel-instrument full-runtime acceptance contract and recognizes the same-runtime bind attempt on the exact configured :8000 listener as a conclusive primitive prerequisite failure.",
+    "Does not launch or repeatedly retry the real application solely to reproduce the conclusive listener failure; it leaves application code, dependencies, runtime configuration, and tests unchanged.",
+    "Records the runtime-only GET /health row as Blocked or Not proven with the exact occupied-listener evidence and next action to free :8000 before rerunning full-runtime proof. Because no meaningful telemetry proof ran, it does not claim Pass, complete, working, or verified and reports the overall instrumentation verification result as Blocked while preserving the successful build viability result separately.",
+    "States that an ambiguous primitive probe or a failure attributable to application code, configuration, or tests does not justify suppressing the real application launch and must proceed through normal investigation/runtime proof."
+  ]
+}

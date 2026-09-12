@@ -163,9 +163,11 @@ with urllib.request.urlopen(put_req, timeout=15) as resp:
     updated = json.load(resp)
 ```
 
-Status handling on `PUT`: 200 → updated; 404 → dashboard was deleted since
-fetch, re-classify as GAP and create from scratch; 403/401 → stop; 400 → same
-field-casing / normalization check as POST.
+Status handling on `PUT`: 200 → updated; 404 → the confirmed live state is
+stale, so stop writes, re-fetch, reclassify, show a new diff, and obtain new
+confirmation before any create; 403/401 → stop; 400 → same field-casing /
+normalization check as POST. Never turn a PUT 404 directly into an unconfirmed
+POST.
 
 ## Red flags
 

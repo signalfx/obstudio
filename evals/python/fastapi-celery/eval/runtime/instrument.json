@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "runtime-preserving",
-      "task": "Instrument the FastAPI and Celery service in ./service with OpenTelemetry while preserving the existing Docker Compose runtime. Add auto-instrumentation only."
+      "task": "Instrument the FastAPI and Celery service in ./service with OpenTelemetry while preserving the existing Docker Compose runtime. Add auto-instrumentation only. The API startup must use a separate explicit OTel setup module and instrument its Celery producer before publishing tasks so the POST /orders context propagates to the worker. In worker.py, import the side-effect-free setup callable and CeleryInstrumentor at module load; do not lazy-import either inside worker_process_init. Provider-free import means those imports have no setup side effect: only invoke setup and Celery instrumentation inside worker_process_init. Makefile-, Dockerfile-, Compose-, entrypoint-, or CLI-wrapper-only instrumentation is insufficient."
     }
   ],
   "checks": [
@@ -20,7 +20,14 @@
             "url": "/api/query/traces",
             "field_checks": {
               "span_names": ["GET /health", "GET /orders", "POST /orders"]
-            }
+            },
+            "detail_path_template": "/api/query/traces/{id}",
+            "detail_id_field": "traceId",
+            "detail_contains_all_in_one": [
+              "POST /orders",
+              "fastapi-celery-worker",
+              "run/worker.fulfill_order"
+            ]
           },
           {
             "id": "metrics",

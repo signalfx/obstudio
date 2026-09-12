@@ -6,9 +6,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT_SKILL = ROOT / "skills" / "otel-audit" / "SKILL.md"
+AUDIT_REFERENCES = ROOT / "skills" / "otel-audit" / "references"
 INSTRUMENT_SKILL = ROOT / "skills" / "otel-instrument" / "SKILL.md"
 VERIFY_SKILL = ROOT / "skills" / "otel-verify" / "SKILL.md"
 INSTRUMENT_HANDOFF = ROOT / "skills" / "otel-instrument" / "references" / "json-approval-handoff.md"
+INSTRUMENT_RUNTIME_REF = (
+    ROOT
+    / "skills"
+    / "otel-instrument"
+    / "references"
+    / "project-runtime-validation.md"
+)
 VERIFY_HANDOFF = ROOT / "skills" / "otel-verify" / "references" / "json-approval-handoff.md"
 AUDIT_INPUT = ROOT / "evals" / "go" / "chi-basic" / "eval" / "inputs" / "otel-audit.json"
 REPORT_TOOL = ROOT / "skills" / "references" / "scripts" / "observe_report.py"
@@ -19,6 +27,24 @@ INSTRUMENT_EVAL = (
 )
 CHI_CANONICAL_VERIFY_EVAL = (
     ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "verify.json"
+)
+CHI_DIRECT_VERIFY_EVAL = (
+    ROOT
+    / "evals"
+    / "go"
+    / "chi-basic"
+    / "eval"
+    / "qual"
+    / "verify-runtime-blocker.json"
+)
+CHI_DIRECT_VERIFY_PROBE = (
+    ROOT
+    / "evals"
+    / "go"
+    / "chi-basic"
+    / "eval"
+    / "inputs"
+    / "conclusive-listener-probe.txt"
 )
 CHI_DIRECT_INSTRUMENT_EVAL = (
     ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "instrument.json"
@@ -32,10 +58,53 @@ CHI_DECISION_INSTRUMENT_EVAL = (
     / "qual"
     / "instrument-decision-gated.json"
 )
+CHI_RUNTIME_BLOCKER_INSTRUMENT_EVAL = (
+    ROOT
+    / "evals"
+    / "go"
+    / "chi-basic"
+    / "eval"
+    / "qual"
+    / "instrument-runtime-blocker.json"
+)
+
+
+def _instrument_report_contract() -> str:
+    text = REPORT_FLOW.read_text(encoding="utf-8")
+    status_marker = "\n## Status Rules\n"
+    audit_marker = "\n## Audit Contract\n"
+    instrument_marker = "\n## Instrumentation Contract\n"
+    verify_marker = "\n## Verification Report Contract\n"
+    assert text.count("\nFor an audit,") == 1
+    for marker in (status_marker, audit_marker, instrument_marker, verify_marker):
+        assert text.count(marker) == 1
+    prefix = text.split("\nFor an audit,", 1)[0].rstrip()
+    status = "## Status Rules\n" + text.split(status_marker, 1)[1].split(
+        audit_marker, 1
+    )[0].rstrip()
+    instrument = "## Instrumentation Contract\n" + text.split(
+        instrument_marker, 1
+    )[1].split(verify_marker, 1)[0].rstrip()
+    return "\n\n".join((prefix, status, instrument)) + "\n"
 
 
 def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+    text = path.read_text(encoding="utf-8")
+    if path == AUDIT_SKILL:
+        text += "\n" + "\n".join(
+            reference.read_text(encoding="utf-8")
+            for reference in sorted(AUDIT_REFERENCES.rglob("*.md"))
+        )
+    if path == INSTRUMENT_SKILL:
+        text += "\n".join(
+            (
+                "",
+                INSTRUMENT_RUNTIME_REF.read_text(encoding="utf-8"),
+                _instrument_report_contract(),
+                INSTRUMENT_HANDOFF.read_text(encoding="utf-8"),
+            )
+        )
+    return text
 
 
 def _eval_contract(path: Path) -> str:
@@ -66,7 +135,8 @@ def test_reader_report_contracts_are_available() -> None:
         "verification-report.md",
     )
 
-    assert "#### Reader Order" in instrument
+    assert "## Reader-First Report Order" in instrument
+    assert "## Instrumentation Contract" in instrument
     assert "## Reader Report" in verify
 
 
@@ -140,32 +210,59 @@ def test_human_html_usage_flow_is_documented() -> None:
 
     assert "The reviewer uses `.observe/otel.html` to understand findings" in audit
     assert "It is not a proof report" in audit
-    assert "Users open `.observe/otel-instrumentation.html` after instrumentation" in instrument
-    assert "Do not use it to change selected scope" in instrument
+    assert "Open `.observe/otel-instrumentation.html` after `$otel-instrument`" in instrument
+    assert "not as a place to change audit scope" in instrument
 
 
 def test_instrument_keeps_interactive_contract() -> None:
-    instrument = _read(INSTRUMENT_SKILL)
+    core = INSTRUMENT_SKILL.read_text(encoding="utf-8")
     resolved = _resolved_contract(
         INSTRUMENT_SKILL,
         "instrumentation-report.md",
         "genai-instrumentation.md",
     )
     handoff = _read(INSTRUMENT_HANDOFF)
-    opening = instrument.split("## Workflow", 1)[0]
-    canonical_gate = instrument.split(
-        "#### Canonical Audit And Selection Gate", 1
-    )[1].split("### Fast Path", 1)[0]
 
+    assert "`../references/report-flow-contract.md`" in core
+    assert "use one heading-bounded extraction" in core
+    assert "fixed line offsets" in core
+    normalized_core = " ".join(core.split())
+    assert "loaded `otel-instrument/SKILL.md` directory" in normalized_core
+    assert "loaded reference, resolve relative paths from its directory" in normalized_core
     assert (
-        "Before editing application code, read "
-        "`../references/report-flow-contract.md`" in opening
+        "<instrument-skill-dir>/../references/report-flow-contract.md" in core
     )
-    assert "`./references/json-approval-handoff.md`" in opening
-    assert "read and follow `./references/json-approval-handoff.md`" in " ".join(
-        canonical_gate.split()
+    assert REPORT_FLOW.is_file()
+    assert "`./references/json-approval-handoff.md`" in core
+    core_normalized = " ".join(core.split())
+    assert "It is authoritative for selection precedence" in core_normalized
+    assert "## Reader-First Report Order" in resolved
+    assert "## Selection Gate" in handoff
+
+
+def test_instrument_report_contract_route_excludes_unrelated_sections() -> None:
+    routed = _instrument_report_contract()
+
+    for required in (
+        "# OTel Report Flow Contract",
+        "## Canonical Artifact Chain",
+        "## Document Ownership",
+        "## Human HTML Usage Flow",
+        "## Reader-First Report Order",
+        "## Status Rules",
+        "## Instrumentation Contract",
+    ):
+        assert required in routed
+    assert "For an audit," not in routed
+    for excluded_heading in (
+        "Audit Contract",
+        "Verification Report Contract",
+        "Splunk Configure Contract",
+    ):
+        assert f"\n## {excluded_heading}\n" not in routed
+    assert routed.rstrip().endswith(
+        "explicit scope decision is fully recorded."
     )
-    assert "#### Reader Order" in resolved
 
 
 def test_instrument_interactive_references_are_resolvable() -> None:
@@ -174,7 +271,7 @@ def test_instrument_interactive_references_are_resolvable() -> None:
 
     assert "./references/json-approval-handoff.md" in instrument
     assert INSTRUMENT_HANDOFF.is_file()
-    assert "#### Signals Changed" in resolved
+    assert "## Signals Changed" in resolved
 
 
 def test_verify_keeps_interactive_contract() -> None:
@@ -246,6 +343,44 @@ def test_instrument_keeps_verification_results_in_bound_overlay() -> None:
     assert "do not duplicate them as new instrumentation schema fields" in handoff
 
 
+def test_instrumentation_phase_validation_is_not_bound_verification() -> None:
+    instrument = " ".join(_read(INSTRUMENT_SKILL).split())
+    rubric = " ".join(
+        json.loads(_read(CHI_DIRECT_INSTRUMENT_EVAL))["rubric"]
+    )
+
+    assert "instrumentation-phase validation, never item proof" in instrument
+    assert "With bound verification, HTML names the repair" in instrument
+    assert "HTML keeps per-finding proof and OTLP/product visibility not run/not proven" in instrument
+    assert "details stay in Markdown" in instrument
+    assert "With a bound verification overlay, detailed item/scenario proof and coverage come from that overlay" in rubric
+    assert "placeholder satisfies the HTML proof and coverage requirement" in rubric
+    assert "detailed item/scenario proof is not required" in rubric
+    assert "instrumentation-phase harness or exporter tests stay separately labeled" in rubric
+    assert "rather than being promoted to bound proof" in rubric
+
+
+def test_instrument_preflight_records_deployment_environment_ownership() -> None:
+    instrument = " ".join(_read(INSTRUMENT_SKILL).split())
+    rubric = " ".join(
+        json.loads(_read(CHI_DIRECT_INSTRUMENT_EVAL))["rubric"]
+    )
+
+    assert "Before editing, record the `deployment.environment.name` source or explicit absence" in instrument
+    assert "preserve operator `OTEL_RESOURCE_ATTRIBUTES`" in instrument
+    assert "deployment.environment.name source or explicit absence before editing" in rubric
+
+
+def test_instrument_rubric_allows_standard_runtime_auto_instrumentation() -> None:
+    rubric = " ".join(
+        json.loads(_read(CHI_DIRECT_INSTRUMENT_EVAL))["rubric"]
+    )
+
+    assert "does not add unselected OTEL-002 task.created, OTEL-004 task.create" in rubric
+    assert "The Go guide's standard runtime metrics baseline" in rubric
+    assert "is not a drive-by custom signal" in rubric
+
+
 def test_instrumentation_meta_result_never_uses_not_run() -> None:
     handoff = " ".join(_read(INSTRUMENT_HANDOFF).split())
 
@@ -260,11 +395,11 @@ def test_manual_decision_answers_are_separate_and_gate_matching_work() -> None:
     instrument = " ".join(_read(INSTRUMENT_SKILL).split())
     handoff = " ".join(_read(INSTRUMENT_HANDOFF).split())
 
-    for text in (audit, flow):
+    for text in (audit,):
         for term in ("two or three", "`decision_options`", "`outcome`", "`unlocks`"):
             assert term in text
         assert "pairwise disjoint" in text
-    assert "explicit selectable `decision_options`" in flow
+    assert "two or three explicit `decision_options`" in audit
 
     for text in (flow, instrument, handoff):
         for term in (
@@ -324,6 +459,55 @@ def test_representative_evals_require_canonical_artifacts_and_scope() -> None:
     assert ".observe/otel-instrumentation.json" in instrument
     assert ".observe/otel-instrumentation.html" in instrument
     assert ".observe/otel-verify.json" in verify
+
+
+def test_direct_verify_eval_covers_conclusive_runtime_blocker() -> None:
+    canonical = json.loads(_read(CHI_CANONICAL_VERIFY_EVAL))
+    direct = json.loads(_read(CHI_DIRECT_VERIFY_EVAL))
+    contract = " ".join(
+        [item["task"] for item in direct["prompts"]]
+        + direct["rubric"]
+        + [_read(CHI_DIRECT_VERIFY_PROBE)]
+    )
+
+    assert [item["id"] for item in canonical["prompts"]] == [
+        "canonical-proof-packet"
+    ]
+    assert [item["id"] for item in direct["prompts"]] == [
+        "conclusive-listener-blocker"
+    ]
+    assert direct["prompts"][0]["eval_inputs"] == [
+        "eval/inputs/canonical-verify-evidence.txt",
+        "eval/inputs/conclusive-listener-probe.txt",
+        "eval/inputs/otel-audit.json",
+        "eval/inputs/otel-instrumentation.json",
+        "eval/inputs/otel-selection.json",
+    ]
+    for term in (
+        "new direct verification",
+        "exact bound audit -> selection -> instrumentation chain",
+        "Write the bound canonical verification JSON",
+        "Current-run prerequisite probe",
+        "same selected Go runtime",
+        "Checked-in application listener: :8000",
+        "does not launch",
+        "overall result as Blocked",
+        "ambiguous probe",
+        "application code, configuration, or tests",
+        "free :8000 and rerun full-runtime proof",
+        "does not substitute generated SDK telemetry",
+    ):
+        assert term in contract
+
+
+def test_direct_instrument_eval_distinguishes_build_from_telemetry_proof() -> None:
+    definition = json.loads(_read(CHI_RUNTIME_BLOCKER_INSTRUMENT_EVAL))
+    task = definition["prompts"][0]["task"]
+    rubric = " ".join(definition["rubric"])
+
+    assert "build-viability gate passed" in task
+    assert "No focused telemetry proof or runtime telemetry proof ran" in task
+    assert "overall instrumentation verification result as Blocked" in rubric
 
 
 def test_audit_final_handoff_requires_only_browser_link() -> None:

@@ -186,6 +186,18 @@ def validate_endpoint_expectations(
                 evidence,
                 failures,
             )
+        if ep.detail_contains_all_in_one:
+            check_detail_expectations(
+                base_url,
+                text,
+                ep.id,
+                ep.detail_path_template or "",
+                ep.detail_id_field or "id",
+                ep.detail_contains_all_in_one,
+                evidence,
+                failures,
+                require_single_detail=True,
+            )
 
     if failures:
         return False, "; ".join(failures)
@@ -500,6 +512,8 @@ def check_detail_expectations(
     detail_contains_all: list[str],
     evidence: list[str],
     failures: list[str],
+    *,
+    require_single_detail: bool = False,
 ) -> None:
     if not detail_contains_all or not detail_path_template:
         return
@@ -522,12 +536,20 @@ def check_detail_expectations(
         detail_url = detail_path_template.replace("{id}", item_id)
         detail_texts.append(request_json_text(service_url(base_url, detail_url)))
 
-    combined = "\n".join(detail_texts)
-    missing = [v for v in detail_contains_all if v.lower() not in combined.lower()]
-    if missing:
-        failures.append(f"{scope} missing detail_contains_all: {', '.join(missing)}")
+    haystacks = detail_texts if require_single_detail else ["\n".join(detail_texts)]
+    matched = any(
+        all(value.lower() in haystack.lower() for value in detail_contains_all)
+        for haystack in haystacks
+    )
+    field = (
+        "detail_contains_all_in_one"
+        if require_single_detail
+        else "detail_contains_all"
+    )
+    if not matched:
+        failures.append(f"{scope} missing {field}: {', '.join(detail_contains_all)}")
     else:
-        evidence.append(f"{scope} matched detail_contains_all: {', '.join(detail_contains_all)}")
+        evidence.append(f"{scope} matched {field}: {', '.join(detail_contains_all)}")
 
 
 # ---------------------------------------------------------------------------

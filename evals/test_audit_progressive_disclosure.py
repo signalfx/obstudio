@@ -1,13 +1,83 @@
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "otel-audit" / "SKILL.md"
-REPORT_FLOW = ROOT / "skills" / "references" / "report-flow-contract.md"
+REFERENCES = ROOT / "skills" / "otel-audit" / "references"
 
 
 def normalized(path: Path) -> str:
-    return " ".join(path.read_text(encoding="utf-8").split())
+    text = path.read_text(encoding="utf-8")
+    if path == SKILL:
+        text += "\n" + "\n".join(
+            reference.read_text(encoding="utf-8")
+            for reference in sorted(REFERENCES.rglob("*.md"))
+        )
+    return " ".join(text.split())
+
+
+def test_audit_loads_only_relevant_contracts() -> None:
+    entrypoint = SKILL.read_text(encoding="utf-8")
+
+    assert len(entrypoint.encode("utf-8")) <= 10_000
+    for route in (
+        "references/languages/{go,python,node,java}.md",
+        "references/telemetry-assessment.md",
+        "../references/incident-readiness.md",
+        "../references/genai-readiness.md",
+        "references/genai-audit.md",
+        "references/report-contract.md",
+    ):
+        assert route in entrypoint
+
+    assert "do not load or restate unrelated language guidance" in " ".join(
+        entrypoint.split()
+    )
+    assert "do not load either reference for non-GenAI services" in " ".join(
+        entrypoint.split()
+    )
+    assert "one bounded `rg --files` inventory" in entrypoint
+    assert "Do not repeat a complete file listing" in entrypoint
+    assert "Do not load the shared" in entrypoint
+    assert "LLM Inference Lifecycle Contract" not in entrypoint
+    assert "@opentelemetry/instrumentation-express" not in entrypoint
+
+    for reference in (
+        REFERENCES / "telemetry-assessment.md",
+        REFERENCES / "genai-audit.md",
+        REFERENCES / "report-contract.md",
+        *(REFERENCES / "languages").glob("*.md"),
+    ):
+        assert reference.is_file()
+
+
+def test_local_report_contract_is_the_single_audit_authority() -> None:
+    entrypoint = " ".join(SKILL.read_text(encoding="utf-8").split())
+    report = " ".join(
+        (REFERENCES / "report-contract.md").read_text(encoding="utf-8").split()
+    )
+
+    assert "sole authority for audit artifacts and handoff" in entrypoint
+    assert "sole normative audit artifact, reader, and handoff contract" in report
+    assert "consult only its `## Audit Contract`" not in report
+    assert "if an ambiguity remains" not in entrypoint
+
+
+def test_nested_audit_reference_routes_resolve_from_their_owner() -> None:
+    skills = (ROOT / "skills").resolve()
+    for owner in sorted(REFERENCES.rglob("*.md")):
+        for relative in re.findall(r"`([^`]+\.md)`", owner.read_text()):
+            if relative.startswith(".observe/") or "{" in relative:
+                continue
+            target = (owner.parent / relative).resolve()
+            assert target.is_file(), f"{owner} routes to missing {relative}"
+            assert target.is_relative_to(skills)
+
+    assessment = REFERENCES / "telemetry-assessment.md"
+    scanner_route = "../scripts/scan_python_otel_topology.py"
+    assert scanner_route in assessment.read_text(encoding="utf-8")
+    assert (assessment.parent / scanner_route).resolve().is_file()
 
 
 def test_audit_renderer_owns_the_canonical_reader_projection() -> None:
@@ -26,12 +96,42 @@ def test_audit_renderer_owns_the_canonical_reader_projection() -> None:
     ):
         assert term.replace("`", "") in skill.replace("`", "")
 
+    for term in (
+        "the only failure is starting the loopback report server",
+        "Do not inspect the helper implementation",
+        "repeat the same server start without a concrete environment remedy",
+        "include that proven error class",
+        "bind: operation not permitted",
+        "do not shorten it to \"the server could not start.\"",
+        "say that it exposed no deeper cause",
+        "never invent a review URL",
+        "exact one-line handoff applies only when links.review_report exists",
+    ):
+        assert term.replace("`", "") in skill.replace("`", "")
+
+
+def test_audit_routes_and_scenarios_stay_parameterized() -> None:
+    report = " ".join(
+        (REFERENCES / "report-contract.md").read_text(encoding="utf-8").split()
+    )
+
+    for term in (
+        "required query-name shape",
+        "/kv/{key}",
+        "/search?word={word}",
+        "http.route values remain path-only",
+        "never embed concrete key, query, path-parameter, request-body, tenant, or user values",
+        "an existing key",
+        "a missing key",
+        "same low-cardinality route templates",
+    ):
+        assert term.replace("`", "") in report.replace("`", "")
+
 
 def test_audit_human_report_is_one_priority_ordered_decision_view() -> None:
     skill = normalized(SKILL)
-    flow = normalized(REPORT_FLOW)
 
-    for text in (skill, flow):
+    for text in (skill,):
         for term in (
             "exactly one findings list ordered by",
             "Priority defines ordering only",
@@ -48,9 +148,8 @@ def test_audit_human_report_is_one_priority_ordered_decision_view() -> None:
 
 def test_audit_finding_cards_keep_technical_detail_collapsed() -> None:
     skill = normalized(SKILL)
-    flow = normalized(REPORT_FLOW)
 
-    for text in (skill, flow):
+    for text in (skill,):
         for term in (
             "expanded narrative decision-sized",
             "Gap, Why it matters, a mode-aware required action, and Next step",
@@ -66,9 +165,8 @@ def test_audit_finding_cards_keep_technical_detail_collapsed() -> None:
 
 def test_audit_selection_handoff_preserves_explicit_user_intent() -> None:
     skill = normalized(SKILL)
-    flow = normalized(REPORT_FLOW)
 
-    for text in (skill, flow):
+    for text in (skill,):
         for term in (
             "neutral Select checkbox",
             "requested_ids",
@@ -84,9 +182,8 @@ def test_audit_selection_handoff_preserves_explicit_user_intent() -> None:
 
 def test_audit_does_not_promote_context_or_mutually_exclusive_branches_to_findings() -> None:
     skill = normalized(SKILL)
-    flow = normalized(REPORT_FLOW)
 
-    for text in (skill, flow):
+    for text in (skill,):
         for term in (
             "Do not create manual or external findings just to record product/runtime choices",
             "billing, cost, safety policy, content-governance, or external business context",

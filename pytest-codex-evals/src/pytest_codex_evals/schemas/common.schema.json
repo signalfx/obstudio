@@ -129,6 +129,7 @@
         "detail_path_template": { "type": "string" },
         "detail_id_field": { "type": "string" },
         "detail_contains_all": { "type": "array", "items": { "type": "string" } },
+        "detail_contains_all_in_one": { "type": "array", "items": { "type": "string" } },
         "record_checks": {
           "type": "array",
           "items": { "$ref": "#/$defs/jsonRecordExpectation" }

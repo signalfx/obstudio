@@ -135,9 +135,9 @@ which existing appenders remain active before editing.
   settings, then remove the generic cloud settings from the startup surface.
   Keep the logs endpoint local and do not copy a realm, ingest URL, access
   token, auth header, exporter, or forwarding flag into log configuration.
-  Reject a generic header from the local log path even when signal-specific
-  logs headers are present, because the SDK may merge both. Splunk Observability Studio cloud
-  forwarding remains traces and metrics only.
+  Reject generic and signal-specific headers from the default local log path.
+  Explicit log headers are operator-owned and require a separately proven
+  pipeline. Splunk Observability Studio cloud forwarding remains traces and metrics only.
 - Treat log bodies, arguments, throwable rendering, markers, structured
   messages, and MDC/context data as a privacy surface. Capture only reviewed,
   bounded keys with the detected appender's
@@ -182,8 +182,10 @@ fail() { printf '%s\n' "$*" >&2; exit 1; }
 logs_exporter=${OTEL_LOGS_EXPORTER:-}
 logs_protocol=${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL:-}
 logs_endpoint=${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}
+logs_headers=${OTEL_EXPORTER_OTLP_LOGS_HEADERS:-}
 generic_endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 generic_headers=${OTEL_EXPORTER_OTLP_HEADERS:-}
+javaagent_configuration_file=${OTEL_JAVAAGENT_CONFIGURATION_FILE:-}
 logs_exporter_d=0
 logs_protocol_d=0
 logs_endpoint_d=0
@@ -211,10 +213,14 @@ read_otel_property() {
       logs_protocol=$otel_property_value; logs_protocol_d=1 ;;
     -Dotel.exporter.otlp.logs.endpoint)
       logs_endpoint=$otel_property_value; logs_endpoint_d=1 ;;
+    -Dotel.exporter.otlp.logs.headers)
+      logs_headers=$otel_property_value ;;
     -Dotel.exporter.otlp.endpoint)
       generic_endpoint=$otel_property_value ;;
     -Dotel.exporter.otlp.headers)
       generic_headers=$otel_property_value ;;
+    -Dotel.javaagent.configuration-file)
+      javaagent_configuration_file=$otel_property_value ;;
   esac
 }
 
@@ -288,6 +294,16 @@ scan_otel_launcher_args ${JDK_JAVA_OPTIONS:-}
 scan_otel_launcher_args "$@"
 scan_otel_options "${_JAVA_OPTIONS:-}"
 
+# A Java-agent configuration file can set logs exporter, endpoint, or headers
+# below this wrapper's visible environment/JVM-property layer. Preserve it only
+# when a higher-precedence explicit non-OTLP exporter bypasses the local path.
+if [ -n "$javaagent_configuration_file" ]; then
+  case "$logs_exporter" in
+    ""|otlp)
+      fail "remove the Java-agent configuration file or expand its reviewed settings into explicit environment/JVM properties before enabling local log export" ;;
+  esac
+fi
+
 add_logs_exporter=0
 add_logs_protocol=0
 add_logs_endpoint=0
@@ -340,6 +356,9 @@ fi
 if [ -n "$generic_headers" ]; then
   fail "move generic OTLP headers to trace/metric signal variables and remove the generic value"
 fi
+if [ -n "$logs_headers" ]; then
+  fail "OTLP logs headers are operator-owned; refusing the default local Splunk Observability Studio exporter"
+fi
 
 case "${OBSTUDIO_JAVA_LOG_DEFAULTS:-environment}" in
   environment)
@@ -358,6 +377,14 @@ esac
 
 exec java "$@"
 ```
+
+The guarded local-log branch rejects an effective
+`OTEL_JAVAAGENT_CONFIGURATION_FILE` or
+`-Dotel.javaagent.configuration-file=...`. A properties file can otherwise
+hide a logs exporter, endpoint, or credential header from the ownership checks.
+Move reviewed settings to explicit environment variables or JVM properties;
+an explicit higher-precedence non-OTLP logs exporter still bypasses the local
+path unchanged.
 
 Invoke the checked-in launcher with the project's existing Java arguments:
 
@@ -556,7 +583,7 @@ public Item getItem(@SpanAttribute("item.id") String id) {
 Before adding a custom counter or histogram for an outcome that happens
 inside a request the Java agent already covers, check whether it belongs as
 an attribute on `http.server.request.duration` instead — see `../../SKILL.md`
-`#### Implementation Rules`. The agent already sets
+`### HTTP and errors`. The agent already sets
 `http.response.status_code` on that metric for every request, and
 `error.type` for a 5xx (or otherwise invalid) status, with no extra code --
 a plain 4xx client-error response does not set `error.type` on a server
@@ -612,12 +639,12 @@ Keep an HTTP/protobuf logs endpoint paired with the complete `/v1/logs` path.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Common OTLP endpoint only when it is local or collector-owned; never leave a direct-cloud value for logs to inherit |
-| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the agent-owned local log path, even when logs headers are set |
+| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the default local log path |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` for Java agent 2.x | Common protocol when using port 4318 |
 | `OTEL_LOGS_EXPORTER` | `otlp` only when absent and the logs endpoint is absent or detected-local | `none` disables agent log export; any other explicit value is preserved |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the local baseline | Signal-specific log transport |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for a host JVM | Signal-specific local Splunk Observability Studio application-log destination |
-| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Only signal-specific operator-owned log headers; never inherit a generic cloud credential |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Explicit headers are operator-owned and are never applied to the default local Splunk Observability Studio exporter |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | unset | Use these instead of a generic endpoint for direct-cloud trace/metric export |
 | `OTEL_EXPORTER_OTLP_TRACES_HEADERS` / `OTEL_EXPORTER_OTLP_METRICS_HEADERS` | unset | Keep cloud credentials signal-specific; never copy them to logs |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
@@ -649,9 +676,10 @@ If an existing generic endpoint/header targets cloud ingest, first move those
 values to the trace- and metric-specific variables in the table and remove the
 generic cloud variables from the launch environment. A signal-specific local
 logs endpoint alone does not prevent a generic cloud header from being
-inherited or merged, even when a signal-specific logs header is also present.
-Do not configure a logs cloud header or a cloud log-forwarding pipeline;
-Splunk Observability Studio forwards only traces and metrics. On the absent/`otlp` branch, accept
+inherited or merged. An explicit signal-specific logs header is operator-owned
+and must not be applied to the default local Splunk Observability Studio exporter. Do not configure
+a logs cloud header or a cloud log-forwarding pipeline; Splunk Observability Studio forwards only
+traces and metrics. On the absent/`otlp` branch, accept
 an explicit logs endpoint only when it matches the detected local Splunk Observability Studio;
 otherwise fail before the agent starts and report the operator-owned boundary
 conflict. Preserve `none` and non-OTLP exporter branches without interpreting

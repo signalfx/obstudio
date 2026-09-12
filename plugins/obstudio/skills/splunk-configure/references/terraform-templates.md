@@ -9,6 +9,53 @@ templates to generate `.observe/terraform/detectors.tf` resources.
 > dashboard chart generator). The detector templates below add the
 > `detect()/when()/threshold()` tail to that base fragment.
 
+## Provider and Base Variables
+
+Emit this provider preamble once in `detectors.tf`:
+
+```hcl
+terraform {
+  required_providers {
+    signalfx = {
+      source  = "splunk-terraform/signalfx"
+      version = "~> 9.0"
+    }
+  }
+}
+
+provider "signalfx" {
+  auth_token = var.api_token
+  api_url    = "https://api.${var.realm}.signalfx.com"
+}
+```
+
+Emit these base declarations once in `variables.tf`, followed by the
+category-specific threshold variables below:
+
+```hcl
+variable "realm" {
+  description = "Splunk Observability Cloud realm"
+  type        = string
+}
+
+variable "api_token" {
+  description = "Splunk Observability Cloud API token"
+  type        = string
+  sensitive   = true
+}
+
+variable "service_name" {
+  description = "Service name for detector naming"
+  type        = string
+  default     = "<service-name from report>"
+}
+
+variable "notification_channel" {
+  description = "Notification target for detector alerts"
+  type        = string
+}
+```
+
 ## Latency Detector
 
 Monitors p99 latency using a static threshold on histogram percentile data.

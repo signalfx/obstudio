@@ -1,0 +1,9 @@
+Fresh live comparison: dashboard group checkout is COVERED; dashboard checkout
+service overview is COVERED; one latency chart is GAP.
+User confirmation: yes, for exactly that displayed mutation set.
+Mutation already completed: POST /v2/chart returned chart-new-1 and the orphan
+ledger recorded it.
+Current dashboard fetch before attachment: id dashboard-7 with its original
+charts[] placements.
+Attachment attempt: PUT /v2/dashboard/dashboard-7 returned HTTP 404.
+No request has been made after the 404.

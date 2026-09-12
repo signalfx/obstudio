@@ -7,7 +7,12 @@ and leave a deterministic handoff for `$otel-verify`.
 
 ## Runtime Candidate Inventory
 
-Build this inventory before editing:
+Build one bounded inventory before editing. Batch manifest, entrypoint, test,
+startup, and configuration discovery; prune `.git`, `.gocache`, `.gomodcache`,
+`node_modules`, `.venv`, `vendor`, `build`, `target`, and generated directories.
+Reuse the inventory until a relevant file changes. Resolve whether the service
+is a Git worktree once; if it is not, record Git gates unavailable and do not
+invoke Git again.
 
 ```markdown
 | Surface | Config evidence | Candidate runner/env | Probe command | Outcome | Selected? |
@@ -66,6 +71,20 @@ project config is not an application failure.
 - Respect `go` and `toolchain` directives and record any toolchain download or
   network prerequisite.
 - Prefer focused package tests and project environment from Make/CI commands.
+- Bound dependency resolution. Make one project-native dependency attempt. If
+  it fails on network access, perform one batched declared-cache/version
+  inventory using `go.mod`, `go.sum`, `go env GOMODCACHE`, and a shallow check
+  for all required modules; do not recursively enumerate the module cache. If
+  that inventory proves one mutually compatible cached version set, make the
+  manifest change as one batch and run at most one compatible offline retry
+  (for example with `GOPROXY=off`). Do not enumerate or read dependency source
+  unless a compile error requires one specific API check in one named package.
+  After that retry, record the exact network, cache, version, or API blocker.
+  Never repeat full file inventories, global cache searches, version probes,
+  cleanup checks, or speculative offline retries.
+  Never add or change `replace`, `exclude`, or `toolchain` directives solely to
+  fit the local cache. Preserve repository-owned directives. If the declared
+  compatible versions cannot materialize, mark dependency resolution `Blocked`.
 
 ### .NET, Rust, Ruby, And PHP
 
@@ -99,7 +118,9 @@ Examples of minimum gates:
 
 ## Mandatory Validation Gate
 
-Run these in order:
+Keep one validation ledger keyed by gate and the source, config, manifest,
+dependency, or test inputs that can invalidate it. Run these in order after the
+last relevant edit:
 
 1. Static integrity: `git diff --check` when available, plus parser/syntax
    checks for changed scripts and configuration.
@@ -122,6 +143,9 @@ application code compiles or emits telemetry.
 - Repair introduced syntax, compile, type, import, test, and startup-config
   failures before finalizing, then rerun the failed gate and any dependent
   checks.
+- Preserve a passing gate until a relevant input changes. Never rerun it for a
+  fresher timestamp, report evidence, or without a demonstrated stale-cache
+  risk; after repair rerun only failed and dependent invalidated gates.
 - Preserve unrelated user changes. Do not reset, checkout, stash, or rewrite
   them to establish a baseline.
 - When attribution is ambiguous, use compiler locations, focused tests, source
@@ -166,6 +190,9 @@ automatic metric, duplicate suppression, startup wiring, or runtime-installed
 log bridge, classify it as a conditional full-runtime row and apply
 `../../references/full-runtime-acceptance.md` during `$otel-verify`.
 
-Build/test evidence proves implementation viability only. Mark emitted
+Treat the validation ledger as the sole detailed command inventory. In
+`Build And Test Evidence`, reference its stable gate ID and status rather than
+copying the full command evidence a second time. Build/test evidence proves
+implementation viability only. Mark emitted
 telemetry as verified only when an app-code test or harness observed the span,
 metric datapoint, log record, resource, or exporter behavior.

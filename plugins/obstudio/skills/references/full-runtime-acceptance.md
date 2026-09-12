@@ -37,6 +37,12 @@ prove the number, kind, name, or attributes of real server spans.
    is alive, following the verifier's explorer witness contract.
 7. Shut down the process and dependencies cleanly after evidence is captured.
 
+A current-run probe using the same selected runtime that conclusively proves a
+required primitive unavailable—such as listener binding or local OTLP
+connectivity—is the concrete runtime blocker. Do not launch the application
+solely to reproduce it. Still launch when the probe is ambiguous or the prior
+failure is specific to application code, configuration, or tests.
+
 If the repository has no safe local profile and creating one would change
 application behavior materially, record the exact prerequisite and mark the
 runtime rows `Blocked` or `Not proven`. Do not substitute a generated SDK
