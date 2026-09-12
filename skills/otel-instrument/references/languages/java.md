@@ -185,6 +185,7 @@ logs_endpoint=${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}
 logs_headers=${OTEL_EXPORTER_OTLP_LOGS_HEADERS:-}
 generic_endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 generic_headers=${OTEL_EXPORTER_OTLP_HEADERS:-}
+javaagent_configuration_file=${OTEL_JAVAAGENT_CONFIGURATION_FILE:-}
 logs_exporter_d=0
 logs_protocol_d=0
 logs_endpoint_d=0
@@ -218,6 +219,8 @@ read_otel_property() {
       generic_endpoint=$otel_property_value ;;
     -Dotel.exporter.otlp.headers)
       generic_headers=$otel_property_value ;;
+    -Dotel.javaagent.configuration-file)
+      javaagent_configuration_file=$otel_property_value ;;
   esac
 }
 
@@ -290,6 +293,16 @@ scan_otel_options "${JAVA_TOOL_OPTIONS:-}"
 scan_otel_launcher_args ${JDK_JAVA_OPTIONS:-}
 scan_otel_launcher_args "$@"
 scan_otel_options "${_JAVA_OPTIONS:-}"
+
+# A Java-agent configuration file can set logs exporter, endpoint, or headers
+# below this wrapper's visible environment/JVM-property layer. Preserve it only
+# when a higher-precedence explicit non-OTLP exporter bypasses the local path.
+if [ -n "$javaagent_configuration_file" ]; then
+  case "$logs_exporter" in
+    ""|otlp)
+      fail "remove the Java-agent configuration file or expand its reviewed settings into explicit environment/JVM properties before enabling local log export" ;;
+  esac
+fi
 
 add_logs_exporter=0
 add_logs_protocol=0
@@ -364,6 +377,14 @@ esac
 
 exec java "$@"
 ```
+
+The guarded local-log branch rejects an effective
+`OTEL_JAVAAGENT_CONFIGURATION_FILE` or
+`-Dotel.javaagent.configuration-file=...`. A properties file can otherwise
+hide a logs exporter, endpoint, or credential header from the ownership checks.
+Move reviewed settings to explicit environment variables or JVM properties;
+an explicit higher-precedence non-OTLP logs exporter still bypasses the local
+path unchanged.
 
 Invoke the checked-in launcher with the project's existing Java arguments:
 

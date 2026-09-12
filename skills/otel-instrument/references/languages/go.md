@@ -188,7 +188,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
-const localSplunk Observability StudioLogsEndpoint = "http://localhost:4318/v1/logs"
+const localObserverLogsEndpoint = "http://localhost:4318/v1/logs"
 
 func initOTel(
 	ctx context.Context,
@@ -326,7 +326,7 @@ func useDefaultLocalLogExport() (bool, error) {
 	}
 
 	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"))
-	if endpoint != "" && endpoint != localSplunk Observability StudioLogsEndpoint {
+	if endpoint != "" && endpoint != localObserverLogsEndpoint {
 		return false, errors.New(
 			"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local " +
 				"Splunk Observability Studio; refusing to create a Splunk Observability Studio log provider or bridge",
@@ -360,7 +360,7 @@ func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, erro
 
 	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"))
 	if endpoint == "" {
-		endpoint = localSplunk Observability StudioLogsEndpoint
+		endpoint = localObserverLogsEndpoint
 	}
 	// The default local Splunk Observability Studio path is unauthenticated. Supplying an explicit
 	// empty map also prevents environment headers from becoming its credential.
@@ -702,7 +702,7 @@ func initMetrics() error {
 	_, err = meter.Int64ObservableGauge("orders.queue.depth",
 		metric.WithDescription("Current order queue depth"),
 		metric.WithUnit("{orders}"),
-		metric.WithInt64Callback(func(_ context.Context, o metric.Int64Splunk Observability Studio) error {
+		metric.WithInt64Callback(func(_ context.Context, o metric.Int64Observer) error {
 			o.Observe(int64(getQueueDepth()))
 			return nil
 		}))

@@ -3,29 +3,27 @@ name: create-splunk-free-account
 description: >-
   Submit a consent-gated Splunk Observability Cloud Free Edition intake through
   Splunk Observability Studio in a reviewed supported region. Use to create, provision, register,
-  start, or sign up for a free Splunk O11y/SignalFx account, or when the user
+  start, or sign up for a Splunk O11y/SignalFx account or organization, or when the user
   explicitly asks to submit another intake with the same details or email.
-  Requires explicit terms acceptance and never uses the Splunk web form.
+  Requires explicit terms acceptance; never uses the Splunk web form.
 ---
 
 # Get started with Observability Cloud Free Edition
 
-Help the user get started with Observability Cloud Free Edition by submitting a
-consent-gated intake through Splunk Observability Studio. Its backend supplies the
-non-user fields and performs the external request.
+Submit a consent-gated Free Edition intake through Splunk Observability Studio;
+its backend supplies non-user fields and submits it.
 
 ## Guardrails
 
-- Treat submission as an external write. Call the submission tool only after
-  the user asks to create the account and explicitly accepts the linked terms.
+- Submission is an external write. Call the tool only after the user requests
+  the account and explicitly accepts the linked terms.
 - Do not infer acceptance from the signup request, a prior unrelated “yes,” or
   silence. Do not set `termsAccepted` to `true` on the user's behalf.
 - Never submit directly with `curl`, a reconstructed JSON request, or the web
   form. Use only `observer_splunk_free_account_create` for submission and
   `observer_splunk_free_account_region_detect` for read-only region detection.
-- Invoke the submission tool exactly once for each explicit submission
-  request. Never automatically retry a rejection, timeout, transport failure,
-  or ambiguous result.
+- Invoke the submission tool exactly once for each explicit submission request. Never automatically
+  retry a rejection, timeout, transport failure, or ambiguous result.
 - Do not inspect or retain local in-flight state, prior outcomes, or email
   history to suppress or delay an explicit submission request. Each explicit
   request gets one tool call even when another request with the same email is
@@ -195,8 +193,7 @@ call Cisco OpenDNS or receive a raw IP value, so it does not explicitly
 transmit, log, display, or retain one. Splunk still processes the normal
 request source IP. Region detection does not submit a signup. Realm selection
 does not inspect or use collected application telemetry. A remote or shared
-A remote or shared Splunk Observability Studio instance can therefore reflect its host's network rather than the
-user's laptop.
+Splunk Observability Studio instance can therefore reflect its host's network rather than the user's laptop.
 
 The backend applies supported country overrides first: United States to the
 public `us` value and internal US1 destination; Ireland, Germany, and the United

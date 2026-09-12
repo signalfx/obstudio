@@ -360,12 +360,24 @@ def verify_exact_skill_catalog(skills_root: Path) -> None:
             details.append("extra: " + ", ".join(map(str, extra)))
         raise RuntimeError("staged plugin skill catalog mismatch; " + "; ".join(details))
 
-    names = [read_skill_name(skills_root / path) for path in sorted(actual_paths)]
-    if any(name is None for name in names):
+    names = {
+        path: read_skill_name(skills_root / path) for path in sorted(actual_paths)
+    }
+    if any(name is None for name in names.values()):
         raise RuntimeError("every staged SKILL.md must declare a valid frontmatter name")
-    if len(names) != len(set(names)):
+    mismatches = [
+        f"{path}: {name!r} != {path.parent.name!r}"
+        for path, name in names.items()
+        if name != path.parent.name
+    ]
+    if mismatches:
+        raise RuntimeError(
+            "staged skill frontmatter name must match its directory; "
+            + "; ".join(mismatches)
+        )
+    if len(names) != len(set(names.values())):
         raise RuntimeError("staged plugin skill names must be unique")
-    if set(names) != EXPECTED_SKILL_NAMES:
+    if set(names.values()) != EXPECTED_SKILL_NAMES:
         raise RuntimeError("staged plugin skill names do not match the expected catalog")
 
 

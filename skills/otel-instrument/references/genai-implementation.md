@@ -102,7 +102,7 @@ against `FrozenInstanceError`.
 
 ## Span-First And Detector-Ready Signals
 
-For local span-first trace explorers such as Obstudio, metrics alone are not enough for a selected-trace summary. Put safe `gen_ai.usage.input_tokens`,
+For local span-first trace explorers such as Splunk Observability Studio, metrics alone are not enough for a selected-trace summary. Put safe `gen_ai.usage.input_tokens`,
 `gen_ai.usage.output_tokens`, `gen_ai.usage.total_tokens`, model, stable tool,
 memory, evaluation, fanout, and `error.type` attributes on the most specific
 owning GenAI span and aggregate to the workflow when useful.

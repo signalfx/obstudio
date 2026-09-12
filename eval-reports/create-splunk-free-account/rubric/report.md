@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | create-splunk-free-account |
-| Run ID | 20260910T171254803464Z |
+| Run ID | 20260911T202316422103Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,43 +18,46 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | plugins/obstudio/qual/free-account | plugins/obstudio | 1 | 100% (11/11), avg score 100 | 40.9K | 1.0m | - | - | - |
-| with_skill | plugins/obstudio/qual/free-account-accepted | plugins/obstudio | 1 | 100% (7/7), avg score 100 | 40.8K | 47.5s | - | - | - |
-| with_skill | plugins/obstudio/qual/free-account-location-privacy | plugins/obstudio | 1 | 100% (10/10), avg score 100 | 41.4K | 1.2m | - | - | - |
-| with_skill | plugins/obstudio/qual/free-account-native-form | plugins/obstudio | 1 | 100% (8/8), avg score 100 | 36.5K | 1.1m | - | - | - |
-| with_skill | plugins/obstudio/qual/free-account-outcome-unknown | plugins/obstudio | 1 | 100% (6/6), avg score 100 | 40.7K | 53.0s | - | - | - |
-| with_skill | plugins/obstudio/qual/free-account-region-review-gate | plugins/obstudio | 1 | 100% (5/5), avg score 100 | 36.0K | 48.2s | - | - | - |
-| with_skill | plugins/obstudio/qual/free-account-resubmit-same-email | plugins/obstudio | 1 | 100% (6/6), avg score 100 | 41.2K | 46.2s | - | - | - |
-| with_skill | plugins/obstudio/qual/free-account-setup-pending | plugins/obstudio | 1 | 100% (5/5), avg score 100 | 36.2K | 48.7s | - | - | - |
-| with_skill | plugins/obstudio/qual/free-account-tool-unavailable | plugins/obstudio | 1 | 100% (5/5), avg score 100 | 40.3K | 37.5s | - | - | - |
+| with_skill | plugins/obstudio/qual/free-account | plugins/obstudio | 1 | 100% (11/11), avg score 100 | 36.2K | 57.8s | - | - | - |
+| with_skill | plugins/obstudio/qual/free-account-accepted | plugins/obstudio | 1 | 100% (7/7), avg score 100 | 40.7K | 54.5s | - | - | - |
+| with_skill | plugins/obstudio/qual/free-account-location-privacy | plugins/obstudio | 1 | 100% (10/10), avg score 100 | 36.8K | 1.1m | - | - | - |
+| with_skill | plugins/obstudio/qual/free-account-native-form | plugins/obstudio | 1 | 100% (8/8), avg score 100 | 41.2K | 57.9s | - | - | - |
+| with_skill | plugins/obstudio/qual/free-account-outcome-unknown | plugins/obstudio | 1 | 100% (6/6), avg score 100 | 36.1K | 39.2s | - | - | - |
+| with_skill | plugins/obstudio/qual/free-account-region-review-gate | plugins/obstudio | 1 | 100% (5/5), avg score 100 | 36.2K | 50.1s | - | - | - |
+| with_skill | plugins/obstudio/qual/free-account-resubmit-live-warning | plugins/obstudio | 1 | 100% (4/4), avg score 100 | 40.6K | 33.0s | - | - | - |
+| with_skill | plugins/obstudio/qual/free-account-resubmit-same-email | plugins/obstudio | 1 | 100% (6/6), avg score 100 | 36.5K | 43.7s | - | - | - |
+| with_skill | plugins/obstudio/qual/free-account-setup-pending | plugins/obstudio | 1 | 100% (5/5), avg score 100 | 36.3K | 52.6s | - | - | - |
+| with_skill | plugins/obstudio/qual/free-account-tool-unavailable | plugins/obstudio | 1 | 100% (5/5), avg score 100 | 40.3K | 35.9s | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | plugins/obstudio/qual/free-account | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 40312 | 28416 | unknown | 600 | 349 | unknown | 40912 |
-| with_skill | plugins/obstudio/qual/free-account-accepted | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 40309 | 20224 | unknown | 470 | 163 | unknown | 40779 |
-| with_skill | plugins/obstudio/qual/free-account-location-privacy | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 40221 | 28416 | unknown | 1164 | 516 | unknown | 41385 |
-| with_skill | plugins/obstudio/qual/free-account-native-form | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 35639 | 25344 | unknown | 849 | 516 | unknown | 36488 |
-| with_skill | plugins/obstudio/qual/free-account-outcome-unknown | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 40257 | 28416 | unknown | 436 | 188 | unknown | 40693 |
-| with_skill | plugins/obstudio/qual/free-account-region-review-gate | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 35631 | 25344 | unknown | 414 | 207 | unknown | 36045 |
-| with_skill | plugins/obstudio/qual/free-account-resubmit-same-email | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 40440 | 28416 | unknown | 734 | 431 | unknown | 41174 |
-| with_skill | plugins/obstudio/qual/free-account-setup-pending | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 35594 | 17152 | unknown | 597 | 444 | unknown | 36191 |
-| with_skill | plugins/obstudio/qual/free-account-tool-unavailable | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 40098 | 28416 | unknown | 232 | 130 | unknown | 40330 |
+| with_skill | plugins/obstudio/qual/free-account | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 35658 | 17152 | unknown | 527 | 332 | unknown | 36185 |
+| with_skill | plugins/obstudio/qual/free-account-accepted | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 40343 | 20224 | unknown | 391 | 84 | unknown | 40734 |
+| with_skill | plugins/obstudio/qual/free-account-location-privacy | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 35626 | 17152 | unknown | 1185 | 474 | unknown | 36811 |
+| with_skill | plugins/obstudio/qual/free-account-native-form | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 40379 | 13056 | unknown | 870 | 516 | unknown | 41249 |
+| with_skill | plugins/obstudio/qual/free-account-outcome-unknown | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 35544 | 25344 | unknown | 531 | 319 | unknown | 36075 |
+| with_skill | plugins/obstudio/qual/free-account-region-review-gate | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 35663 | 17152 | unknown | 508 | 302 | unknown | 36171 |
+| with_skill | plugins/obstudio/qual/free-account-resubmit-live-warning | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 40223 | 20224 | unknown | 411 | 278 | unknown | 40634 |
+| with_skill | plugins/obstudio/qual/free-account-resubmit-same-email | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 35853 | 26368 | unknown | 630 | 326 | unknown | 36483 |
+| with_skill | plugins/obstudio/qual/free-account-setup-pending | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 35668 | 17152 | unknown | 654 | 443 | unknown | 36322 |
+| with_skill | plugins/obstudio/qual/free-account-tool-unavailable | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 40094 | 20224 | unknown | 236 | 132 | unknown | 40330 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | plugins/obstudio/qual/free-account | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 52930 | 33920 | unknown | 1755 | 708 | unknown | 54685 |
-| with_skill | plugins/obstudio/qual/free-account-accepted | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 37042 | 28416 | unknown | 1137 | 484 | unknown | 38179 |
-| with_skill | plugins/obstudio/qual/free-account-location-privacy | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 32805 | 18176 | unknown | 1518 | 570 | unknown | 34323 |
-| with_skill | plugins/obstudio/qual/free-account-native-form | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 36995 | 20224 | unknown | 1431 | 573 | unknown | 38426 |
-| with_skill | plugins/obstudio/qual/free-account-outcome-unknown | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 36509 | 28416 | unknown | 976 | 364 | unknown | 37485 |
-| with_skill | plugins/obstudio/qual/free-account-region-review-gate | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 48284 | 27776 | unknown | 1205 | 525 | unknown | 49489 |
-| with_skill | plugins/obstudio/qual/free-account-resubmit-same-email | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 32637 | 26368 | unknown | 920 | 276 | unknown | 33557 |
-| with_skill | plugins/obstudio/qual/free-account-setup-pending | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 36615 | 28416 | unknown | 1118 | 473 | unknown | 37733 |
-| with_skill | plugins/obstudio/qual/free-account-tool-unavailable | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 36266 | 27392 | unknown | 632 | 116 | unknown | 36898 |
+| with_skill | plugins/obstudio/qual/free-account | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 32697 | 26368 | unknown | 1784 | 766 | unknown | 34481 |
+| with_skill | plugins/obstudio/qual/free-account-accepted | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 32524 | 26368 | unknown | 1011 | 335 | unknown | 33535 |
+| with_skill | plugins/obstudio/qual/free-account-location-privacy | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 32935 | 26368 | unknown | 1733 | 728 | unknown | 34668 |
+| with_skill | plugins/obstudio/qual/free-account-native-form | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 32053 | 17152 | unknown | 1135 | 379 | unknown | 33188 |
+| with_skill | plugins/obstudio/qual/free-account-outcome-unknown | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 31844 | 25344 | unknown | 800 | 207 | unknown | 32644 |
+| with_skill | plugins/obstudio/qual/free-account-region-review-gate | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 31971 | 17152 | unknown | 966 | 376 | unknown | 32937 |
+| with_skill | plugins/obstudio/qual/free-account-resubmit-live-warning | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 31755 | 17152 | unknown | 607 | 86 | unknown | 32362 |
+| with_skill | plugins/obstudio/qual/free-account-resubmit-same-email | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 32721 | 26368 | unknown | 887 | 225 | unknown | 33608 |
+| with_skill | plugins/obstudio/qual/free-account-setup-pending | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 31930 | 25344 | unknown | 1283 | 601 | unknown | 33213 |
+| with_skill | plugins/obstudio/qual/free-account-tool-unavailable | plugins/obstudio | with_skill | codex | cumulative | measured | 1/1 recognized | 31620 | 25344 | unknown | 824 | 254 | unknown | 32444 |
 
 ## Rubric Failures
 

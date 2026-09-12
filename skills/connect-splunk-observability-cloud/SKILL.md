@@ -1,17 +1,16 @@
 ---
 name: connect-splunk-observability-cloud
 description: >-
-  Open the running local Splunk Observability Studio Cloud tab for credential entry
-  outside agent context. Use to connect an existing or newly ready Splunk
-  Observability Cloud organization, or configure Splunk O11y/SignalFx outside
-  the Splunk Observability Studio IDE extension. Never collect credentials. Do not use this skill
-  to create a Free Edition account; use $create-splunk-free-account for signup.
+  Open the existing local Splunk Observability Studio Cloud tab for credential
+  entry outside agent context. Use to connect an existing or newly ready Splunk
+  Observability Cloud organization or configure Splunk O11y/SignalFx outside
+  the Splunk Observability Studio IDE extension. Never collect credentials. Do not use this skill to create
+  a Free Edition account; use $create-splunk-free-account for signup.
 ---
 
 # Connect Splunk Observability Cloud
 
-Hand credential entry to the existing local Splunk Observability Studio Cloud UI. The agent must
-never collect or transmit the access token itself.
+Use the existing local Cloud UI; never collect or transmit the access token.
 
 ## Guardrails
 

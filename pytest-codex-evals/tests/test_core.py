@@ -45,6 +45,7 @@ from pytest_codex_evals.backends import (
 )
 from pytest_codex_evals.graders.runtime import (
     base_url_from_port_output,
+    check_detail_expectations,
     check_json_record_expectations,
     compose_ps_records,
     grade_runtime,
@@ -77,6 +78,7 @@ from pytest_codex_evals.plugin import (
     validation_result,
 )
 from pytest_codex_evals.runner import (
+    new_run_root,
     prepare_side_workspace,
     run_case,
     token_usage_from_trace_usage,
@@ -1168,6 +1170,66 @@ def test_command_runner_normal_exit_cleans_up_open_descendant_streams(
     assert result.returncode == 0
     assert killpg_calls == [(456, backend_module.signal.SIGKILL)]
     assert [thread.joins for thread in FakeThread.instances] == [2, 2]
+
+
+def test_command_runner_surfaces_failed_normal_exit_cleanup(
+    monkeypatch, tmp_path: Path
+):
+    class FakeProcess:
+        pid = 456
+        stdout = io.StringIO("")
+        stderr = io.StringIO("")
+        returncode = 0
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+    class StuckThread:
+        def __init__(self, **_kwargs):
+            pass
+
+        def start(self):
+            pass
+
+        def join(self, timeout=None):
+            pass
+
+        def is_alive(self):
+            return True
+
+    monkeypatch.setattr(backend_module, "_IS_WINDOWS", True)
+    monkeypatch.setattr(
+        backend_module.subprocess,
+        "CREATE_NEW_PROCESS_GROUP",
+        512,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        backend_module.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: FakeProcess(),
+    )
+    monkeypatch.setattr(backend_module.threading, "Thread", StuckThread)
+    monkeypatch.setattr(
+        backend_module.subprocess,
+        "run",
+        lambda command, **_kwargs: subprocess.CompletedProcess(command, 128),
+    )
+
+    with pytest.raises(RuntimeError, match="agent process cleanup failed") as raised:
+        run_streamed_command(
+            ["agent"],
+            stdout_path=tmp_path / "trace.jsonl",
+            stderr_path=tmp_path / "stderr.txt",
+            timeout=10,
+        )
+
+    assert "taskkill exited with 128" in str(raised.value)
+    assert "stdout stream thread did not stop" in str(raised.value)
+    assert "stderr stream thread did not stop" in str(raised.value)
 
 
 def test_command_runner_interrupt_terminates_process_group(monkeypatch, tmp_path: Path):
@@ -3872,6 +3934,68 @@ def test_runtime_trace_correlation_requires_span_in_observer_detail(
     ]
 
 
+def test_runtime_single_detail_expectation_rejects_markers_split_across_traces(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import pytest_codex_evals.graders.runtime as runtime_grader
+
+    details = {
+        "trace-a": '{"spans":[{"name":"POST /orders"}]}',
+        "trace-b": (
+            '{"spans":[{"serviceName":"fastapi-celery-worker",'
+            '"name":"run/worker.fulfill_order"}]}'
+        ),
+    }
+
+    monkeypatch.setattr(
+        runtime_grader,
+        "request_text",
+        lambda url, **_kwargs: (200, details[url.rsplit("/", 1)[-1]]),
+    )
+    failures: list[str] = []
+    check_detail_expectations(
+        "http://observer",
+        '[{"traceId":"trace-a"},{"traceId":"trace-b"}]',
+        "traces",
+        "/api/query/traces/{id}",
+        "traceId",
+        ["POST /orders", "fastapi-celery-worker", "run/worker.fulfill_order"],
+        [],
+        failures,
+        require_single_detail=True,
+    )
+
+    assert failures == [
+        "traces missing detail_contains_all_in_one: POST /orders, "
+        "fastapi-celery-worker, run/worker.fulfill_order"
+    ]
+
+    details["trace-b"] = (
+        '{"spans":[{"name":"POST /orders"},'
+        '{"serviceName":"fastapi-celery-worker",'
+        '"name":"run/worker.fulfill_order"}]}'
+    )
+    evidence: list[str] = []
+    failures = []
+    check_detail_expectations(
+        "http://observer",
+        '[{"traceId":"trace-a"},{"traceId":"trace-b"}]',
+        "traces",
+        "/api/query/traces/{id}",
+        "traceId",
+        ["POST /orders", "fastapi-celery-worker", "run/worker.fulfill_order"],
+        evidence,
+        failures,
+        require_single_detail=True,
+    )
+
+    assert failures == []
+    assert evidence == [
+        "traces matched detail_contains_all_in_one: POST /orders, "
+        "fastapi-celery-worker, run/worker.fulfill_order"
+    ]
+
+
 @pytest.mark.parametrize(
     ("records", "failure"),
     [
@@ -4524,6 +4648,43 @@ def test_run_case_preserves_timeout_streams_before_temp_cleanup(tmp_path: Path):
     )
     assert not (artifact_dir / "stale.txt").exists()
     assert not (artifact_dir / "summary.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("skill", "../../../outside"),
+        ("skill", "nested/skill"),
+        ("skill", ".."),
+        ("run_id", "../outside"),
+        ("run_id", "nested/run"),
+        ("run_id", ".."),
+    ),
+)
+def test_new_run_root_rejects_unsafe_components(
+    tmp_path: Path, field: str, value: str
+):
+    values = {"skill": "sample-skill", "run_id": "run-1", field: value}
+
+    with pytest.raises(ValueError, match=f"{field} must be a safe path component"):
+        new_run_root(tmp_path, values["skill"], values["run_id"])
+
+
+@pytest.mark.skipif(
+    backend_module._IS_WINDOWS,
+    reason="creating directory symlinks can require elevated Windows privileges",
+)
+def test_new_run_root_rejects_skill_symlink_escape(tmp_path: Path):
+    output_root = tmp_path / ".workspace" / "codex-evals"
+    output_root.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (output_root / "sample-skill").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(
+        ValueError, match="must stay within .workspace/codex-evals"
+    ):
+        new_run_root(tmp_path, "sample-skill", "run-1")
 
 
 def test_run_case_rejects_unsafe_artifact_path_components(tmp_path: Path):

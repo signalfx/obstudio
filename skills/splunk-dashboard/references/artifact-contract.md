@@ -1,13 +1,12 @@
 # Dashboard Artifact Contract
 
-Use this contract after metrics have been classified. Keep the Terraform,
-Observer preview, report, and final response consistent with the same panel
-inventory.
+After metric classification, keep Terraform, Splunk Observability Studio
+preview, report, and final response aligned to one panel inventory.
 
 ## Contents
 
 - [Terraform files](#terraform-files)
-- [Observer preview](#observer-preview)
+- [Splunk Observability Studio preview](#splunk-observability-studio-preview)
 - [Human report](#human-report)
 - [Validation and handoff](#validation-and-handoff)
 
@@ -51,9 +50,9 @@ api_token    = ""   # Splunk O11y API token (org-level, dashboard write)
 service_name = "<audited-service-name>"
 ```
 
-## Observer preview
+## Splunk Observability Studio preview
 
-Write `.observe/dashboards.preview.json` as strict JSON, not JSONC:
+Write `.observe/dashboards.preview.json` as JSON, not JSONC:
 
 ```json
 {
@@ -86,7 +85,7 @@ standard `${var.service_name}` to the audited service name. If another
 its complete precedence rules. No unresolved interpolation may remain.
 
 The preview is a one-to-one resolved projection of `dashboards.tf`: preserve
-each chart's label, type, SignalFlow query, and grid placement. The Observer does
+each chart's label, type, SignalFlow query, and grid placement. Splunk Observability Studio does
 not parse HCL. Each layout must satisfy the 12-column constraints and match the
 corresponding dashboard `chart {}` block exactly.
 
@@ -106,8 +105,8 @@ Write `.observe/dashboards.md` with:
 4. a 12-column grid map;
 5. every skipped metric with a concrete reason;
 6. missing GenAI signals as instrumentation prerequisites when applicable; and
-7. next steps for copying the tfvars example, setting realm/token, previewing in
-   Observer, and then explicitly choosing `$splunk-dashboard-publish` or
+7. next steps to copy the tfvars example, set realm/token, preview in Splunk
+   Observability Studio, then explicitly choose `$splunk-dashboard-publish` or
    `terraform apply`.
 
 Never describe a finding or expected signal as a generated panel. Never expose
@@ -122,5 +121,5 @@ references, `sensitive = true`, unresolved variables, and detector-only
 SignalFlow tails. Do not call a network endpoint and do not run Terraform.
 
 The final response names generated dashboards/panels and all five artifact
-paths, then points to the Observer **Dashboards** tab. Present publishing or
+paths, then points to Splunk Observability Studio's **Dashboards** tab. Present publishing or
 `terraform apply` only as user-controlled follow-up actions.

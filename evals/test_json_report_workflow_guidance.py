@@ -58,6 +58,15 @@ CHI_DECISION_INSTRUMENT_EVAL = (
     / "qual"
     / "instrument-decision-gated.json"
 )
+CHI_RUNTIME_BLOCKER_INSTRUMENT_EVAL = (
+    ROOT
+    / "evals"
+    / "go"
+    / "chi-basic"
+    / "eval"
+    / "qual"
+    / "instrument-runtime-blocker.json"
+)
 
 
 def _instrument_report_contract() -> str:
@@ -217,10 +226,9 @@ def test_instrument_keeps_interactive_contract() -> None:
     assert "`../references/report-flow-contract.md`" in core
     assert "use one heading-bounded extraction" in core
     assert "fixed line offsets" in core
-    assert "directory containing the loaded `otel-instrument/SKILL.md`" in " ".join(
-        core.split()
-    )
-    assert "from that reference's directory" in core
+    normalized_core = " ".join(core.split())
+    assert "loaded `otel-instrument/SKILL.md` directory" in normalized_core
+    assert "loaded reference, resolve relative paths from its directory" in normalized_core
     assert (
         "<instrument-skill-dir>/../references/report-flow-contract.md" in core
     )
@@ -490,6 +498,16 @@ def test_direct_verify_eval_covers_conclusive_runtime_blocker() -> None:
         "does not substitute generated SDK telemetry",
     ):
         assert term in contract
+
+
+def test_direct_instrument_eval_distinguishes_build_from_telemetry_proof() -> None:
+    definition = json.loads(_read(CHI_RUNTIME_BLOCKER_INSTRUMENT_EVAL))
+    task = definition["prompts"][0]["task"]
+    rubric = " ".join(definition["rubric"])
+
+    assert "build-viability gate passed" in task
+    assert "No focused telemetry proof or runtime telemetry proof ran" in task
+    assert "overall instrumentation verification result as Blocked" in rubric
 
 
 def test_audit_final_handoff_requires_only_browser_link() -> None:

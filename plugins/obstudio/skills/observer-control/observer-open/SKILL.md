@@ -7,20 +7,15 @@ description: >-
 
 # Open Splunk Observability Studio
 
-Use this skill to open the local Splunk Observability Studio UI.
-
-This skill is read-only. It must not start, stop, or restart any Splunk Observability Studio
-process. It is limited to the loopback Splunk Observability Studio UI at
-`http://127.0.0.1:3000/`.
+Open only the loopback Studio UI at `http://127.0.0.1:3000/`. This skill is
+read-only and must not start, stop, or restart Studio.
 
 ## Steps
 
-1. If Splunk Observability Studio MCP is configured to a non-default endpoint, report:
-   `Splunk Observability Studio MCP is configured to a non-default endpoint: <url>. For safety,
-   this command skill only verifies or controls the default loopback Splunk Observability Studio
-   at 127.0.0.1:3000. I will not probe or control the custom endpoint. Use the
-   MCP server directly, update the config back to the default local Splunk Observability Studio,
-   or manually verify the custom Splunk Observability Studio.`
+1. If Studio MCP uses a non-default endpoint, report its URL and explain that
+   this skill only verifies the default loopback Studio at `127.0.0.1:3000`.
+   Do not probe or control the custom endpoint; use MCP directly, restore the
+   default, or verify it manually.
 2. If a host-provided browser is available, open `http://127.0.0.1:3000/` in
    it. Do not follow alternate hosts from MCP or user config. Confirm the
    Telemetry Explorer only when the browser shows it loaded; otherwise report
@@ -28,9 +23,9 @@ process. It is limited to the loopback Splunk Observability Studio UI at
 3. If no host-provided browser is available, provide the clickable URL
    `http://127.0.0.1:3000/`. Do not launch an OS browser without the user's
    explicit approval.
-4. If a shell probe is needed, request narrow elevated/outside-sandbox approval
-   before running it, and check only
+4. If a shell probe is needed, explicitly say that narrow
+   elevated/outside-sandbox approval is required before running it, and check only
    `http://127.0.0.1:3000/` or `http://127.0.0.1:3000/api/health`.
-5. If elevated access is denied or the endpoint cannot be verified from the
-   available context, report `sandbox-unverified`; do not report Splunk Observability Studio
-   as unhealthy based only on sandbox-local reachability.
+5. If access is denied or verification is unavailable, report
+   `sandbox-unverified`; endpoint reachability does not prove the UI rendered,
+   and sandbox-local failure alone does not prove Studio unhealthy.

@@ -186,10 +186,14 @@ bridge only after the application has established its existing console/file
 handlers and before it begins serving.
 For Python services, this setup is required unless the user selected the
 zero-code exception above; wrapper-only commands are insufficient.
-For prefork Celery, import the side-effect-free setup callable and
-`CeleryInstrumentor` while `worker.py` loads, but create providers and instrument
-only inside each child's `worker_process_init`. Never lazy-import local setup
-there or mask it with `PYTHONPATH`; prove emission from a real prefork child.
+For prefork Celery, import setup and `CeleryInstrumentor` while `worker.py`
+loads; create providers and instrument only inside each child's
+`worker_process_init`. Never lazy-import local setup or mask it with
+`PYTHONPATH`; prove emission from a real prefork child. API producers call
+`CeleryInstrumentor().instrument()` after provider setup and before the first
+publish so HTTP context enters task messages; worker imports stay provider-free.
+Prove one trace contains its HTTP server and worker consumer spans under
+distinct service identities.
 
 ### Existing provider reconciliation
 

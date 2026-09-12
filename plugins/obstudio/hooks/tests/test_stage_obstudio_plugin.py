@@ -71,6 +71,22 @@ class StageObstudioPluginTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "skill catalog mismatch"):
                 STAGE.verify_staged_plugin(output, host="all")
 
+    def test_verify_rejects_skill_names_swapped_between_directories(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            output = Path(tempdir) / "obstudio"
+            STAGE.stage_plugin(output)
+            audit = output / "skills" / "otel-audit" / "SKILL.md"
+            verify = output / "skills" / "otel-verify" / "SKILL.md"
+            audit_text = audit.read_text(encoding="utf-8")
+            verify_text = verify.read_text(encoding="utf-8")
+            audit.write_text(verify_text, encoding="utf-8")
+            verify.write_text(audit_text, encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                RuntimeError, "frontmatter name must match its directory"
+            ):
+                STAGE.verify_staged_plugin(output, host="all")
+
     def test_staged_plugin_excludes_skill_tests_and_caches(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio"

@@ -7,39 +7,37 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20260910T005019089216Z |
+| Run ID | 20260912T001348020695Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
 | Workers | 1 |
-| Config | evals/codex-evals.token-benchmark-network.toml |
+| Config | evals/codex-evals.toml |
 
 ## Rubric Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/fastapi-celery/qual/instrument | python/fastapi-celery | 1 | 100% (5/5), avg score 92 | 1.3M | 12.4m | - | - | - |
+| with_skill | go/chi-basic/qual/instrument-runtime-blocker | go/chi-basic | 1 | 100% (4/4), avg score 97 | 168.8K | 3.2m | - | - | - |
+| with_skill | java/springboot-basic/qual/instrument | java/springboot-basic | 1 | 100% (10/10), avg score 88 | 1.8M | 13.9m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/fastapi-celery/qual/instrument | python/fastapi-celery | with_skill | codex | cumulative | measured | 1/1 recognized | 1256994 | 1152640 | unknown | 28488 | 8351 | unknown | 1285482 |
+| with_skill | go/chi-basic/qual/instrument-runtime-blocker | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 165027 | 112512 | unknown | 3780 | 1922 | unknown | 168807 |
+| with_skill | java/springboot-basic/qual/instrument | java/springboot-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1770781 | 1678848 | unknown | 27261 | 11635 | unknown | 1798042 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/fastapi-celery/qual/instrument | python/fastapi-celery | with_skill | codex | cumulative | measured | 1/1 recognized | 127061 | 89984 | unknown | 4792 | 2600 | unknown | 131853 |
+| with_skill | go/chi-basic/qual/instrument-runtime-blocker | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 193693 | 157952 | unknown | 4670 | 1672 | unknown | 198363 |
+| with_skill | java/springboot-basic/qual/instrument | java/springboot-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 451150 | 379776 | unknown | 11446 | 8463 | unknown | 462596 |
 
 ## Rubric Failures
 
-| Mode | Service | Side | Prompt | Result | Evidence |
-|---|---|---|---|---|---|
-| with_skill | go/kvstore | with_skill | direct | rubric:rubric-5 FAIL | service/cmd/kvstore-server/otel.go:94-100 creates sdklog LoggerProvider and otelslog handler; service/kvstore/store.go:227,314,322 and service/cmd/kvstore-server/main.go:42,66 still use standard log.Printf paths that are not sent through otelslog. |
-| with_skill | go/kvstore | with_skill | direct | rubric:rubric-6 FAIL | service/kvstore/http.go:61-65 emits slog.WarnContext with r.Context(); service/cmd/kvstore-server/otel.go:29-31 sets defaultServiceName = 'kvstore'; service/cmd/kvstore-server/otel_test.go:69 asserts 'kvstore'. |
-| with_skill | go/kvstore | with_skill | direct | rubric:rubric-7 FAIL | service/cmd/kvstore-server/otel.go:149-159 returns an error for non-local OTEL_EXPORTER_OTLP_LOGS_ENDPOINT when OTEL_LOGS_EXPORTER is otlp; main.go:31-32 fatal-exits on initOTel error. |
-| with_skill | go/kvstore | with_skill | direct | rubric:rubric-8 FAIL | service/cmd/kvstore-server/otel.go:167-169 rejects OTEL_EXPORTER_OTLP_HEADERS entirely; :176-178 allows OTEL_EXPORTER_OTLP_LOGS_HEADERS to flow through when set. |
+No rubric failures.
 
 ## Result JSON
 

@@ -27,9 +27,30 @@ def new_run_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
 
+def _safe_path_component(value: str, field: str) -> str:
+    component = Path(value)
+    if (
+        not value
+        or "\\" in value
+        or component.is_absolute()
+        or len(component.parts) != 1
+        or component.parts[0] in {".", ".."}
+        or component.as_posix() != value
+    ):
+        raise ValueError(f"{field} must be a safe path component")
+    return value
+
+
 def new_run_root(repo_root: Path, skill: str, run_id: str | None = None) -> Path:
-    run_id = run_id or new_run_id()
-    return repo_root / ".workspace" / "codex-evals" / skill / run_id
+    safe_skill = _safe_path_component(skill, "skill")
+    safe_run_id = _safe_path_component(run_id or new_run_id(), "run_id")
+    output_root = (repo_root / ".workspace" / "codex-evals").resolve()
+    run_root = (output_root / safe_skill / safe_run_id).resolve()
+    try:
+        run_root.relative_to(output_root)
+    except ValueError as exc:
+        raise ValueError("eval run root must stay within .workspace/codex-evals") from exc
+    return run_root
 
 
 def _case_artifact_roots(run_root: Path, case: EvalCase) -> tuple[Path, Path]:
@@ -38,16 +59,7 @@ def _case_artifact_roots(run_root: Path, case: EvalCase) -> tuple[Path, Path]:
         ("service", case.service),
         ("prompt_id", case.prompt_id),
     ):
-        component = Path(value)
-        if (
-            not value
-            or "\\" in value
-            or component.is_absolute()
-            or len(component.parts) != 1
-            or component.parts[0] in {".", ".."}
-            or component.as_posix() != value
-        ):
-            raise ValueError(f"case {field} must be a safe path component")
+        _safe_path_component(value, f"case {field}")
 
     resolved_run_root = run_root.resolve()
     cases_root = (resolved_run_root / "cases").resolve()

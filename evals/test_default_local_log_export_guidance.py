@@ -139,6 +139,10 @@ def test_instrument_preserves_repo_service_and_distinct_log_contracts() -> None:
 def test_go_init_example_passes_the_checked_in_service_name() -> None:
     guide = _read(LANGUAGES / "go.md")
 
+    assert "const localObserverLogsEndpoint" in guide
+    assert "metric.Int64Observer" in guide
+    assert "localSplunk Observability StudioLogsEndpoint" not in guide
+    assert "metric.Int64Splunk Observability Studio" not in guide
     assert "projectServiceName string" in guide
     assert "repository's existing checked-in service-name" in guide
     assert (
@@ -291,6 +295,8 @@ def test_shell_wrappers_only_add_local_log_configuration_for_otlp() -> None:
     assert 'scan_otel_options "${JAVA_TOOL_OPTIONS:-}"' in java
     assert 'for otel_jvm_arg in "$@"; do' in java
     assert '-Dotel.exporter.otlp.endpoint)' in java
+    assert '-Dotel.javaagent.configuration-file)' in java
+    assert "OTEL_JAVAAGENT_CONFIGURATION_FILE" in java
     assert '[ "$generic_endpoint" != "$local_http_endpoint" ]' in java
     assert '[ "$generic_endpoint" != "$local_grpc_endpoint" ]' in java
     assert java.index('if [ "$logs_exporter" != otlp ]; then') < java.index(
@@ -453,6 +459,65 @@ def test_java_launcher_accepts_local_generic_endpoint_and_empty_exporter(
         "ARG=-Dotel.exporter.otlp.logs.endpoint=http://localhost:4318/v1/logs\n"
         in empty_exporter.stdout
     )
+
+
+def test_java_launcher_rejects_configuration_files_on_local_log_branch(
+    tmp_path: Path,
+) -> None:
+    launcher, base_env = _java_launcher(tmp_path)
+
+    for env in (
+        {
+            **base_env,
+            "OTEL_JAVAAGENT_CONFIGURATION_FILE": "/etc/otel/agent.properties",
+        },
+        {
+            **base_env,
+            "JAVA_TOOL_OPTIONS": (
+                "-Dotel.javaagent.configuration-file=/etc/otel/agent.properties"
+            ),
+            "OTEL_LOGS_EXPORTER": "otlp",
+        },
+    ):
+        result = subprocess.run(
+            [launcher, "-jar", "app.jar"],
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+        assert result.returncode == 1
+        assert "remove the Java-agent configuration file" in result.stderr
+        assert "JAVA_CALLED=1" not in result.stdout
+
+    operator_owned = subprocess.run(
+        [launcher, "-jar", "app.jar"],
+        env={
+            **base_env,
+            "OTEL_JAVAAGENT_CONFIGURATION_FILE": "/etc/otel/agent.properties",
+            "OTEL_LOGS_EXPORTER": "console",
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "JAVA_CALLED=1" in operator_owned.stdout
+
+    cleared_by_property = subprocess.run(
+        [
+            launcher,
+            "-Dotel.javaagent.configuration-file=",
+            "-jar",
+            "app.jar",
+        ],
+        env={
+            **base_env,
+            "OTEL_JAVAAGENT_CONFIGURATION_FILE": "/etc/otel/agent.properties",
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "JAVA_CALLED=1" in cleared_by_property.stdout
 
 
 def test_java_launcher_rejects_argfiles_and_ambiguous_option_environments(
@@ -646,6 +711,22 @@ def test_language_rubrics_grade_the_default_local_log_contract() -> None:
         assert "local Splunk Observability Studio" in contract
         assert "OTEL_LOGS_EXPORTER=none" in contract
         assert "cloud" in contract
+
+
+def test_java_instrument_prompts_expose_the_fixture_service_identity() -> None:
+    definition = json.loads(
+        _read(ROOT / "evals/java/springboot-basic/eval/qual/instrument.json")
+    )
+
+    for prompt in definition["prompts"]:
+        assert "java-springboot-basic service identity" in prompt["task"]
+
+    log_proof = next(
+        item for item in definition["rubric"] if "request-context warning" in item
+    )
+    assert "For configuration-file-headers" in log_proof
+    assert "Not proven or Blocked" in log_proof
+    assert "never claims the warning was exported" in log_proof
 
 
 def test_direct_no_custom_span_prompts_still_grade_default_local_logs() -> None:
@@ -856,6 +937,10 @@ def test_runtime_regressions_keep_python_setup_go_levels_and_node_startup() -> N
         "Never lazy-import local setup",
         "mask it with `PYTHONPATH`",
         "real prefork child",
+        "API producers call",
+        "CeleryInstrumentor().instrument()",
+        "before the first publish",
+        "one trace contains its HTTP server and worker consumer spans",
         "Never pair current `LoggingInstrumentor` with an SDK `LoggingHandler`",
         "one exported record per input, not one handler class",
     ):
@@ -865,14 +950,19 @@ def test_runtime_regressions_keep_python_setup_go_levels_and_node_startup() -> N
 
     fastapi_task = fastapi_runtime["prompts"][0]["task"]
     assert "API startup must use a separate explicit OTel setup module" in fastapi_task
+    assert "instrument its Celery producer before publishing tasks" in fastapi_task
+    assert "POST /orders context propagates to the worker" in fastapi_task
+    assert "import the side-effect-free setup callable and CeleryInstrumentor at module load" in fastapi_task
+    assert "do not lazy-import either inside worker_process_init" in fastapi_task
+    assert "Provider-free import means those imports have no setup side effect" in fastapi_task
     assert "worker_process_init" in fastapi_task
-    assert "worker.py import stays provider-free" in fastapi_task
     assert "wrapper-only instrumentation is insufficient" in fastapi_task
 
     trace_expectation = fastapi_runtime["checks"][0]["expect"]["endpoints"][0]
     assert trace_expectation["detail_path_template"] == "/api/query/traces/{id}"
     assert trace_expectation["detail_id_field"] == "traceId"
-    assert trace_expectation["detail_contains_all"] == [
+    assert trace_expectation["detail_contains_all_in_one"] == [
+        "POST /orders",
         "fastapi-celery-worker",
         "run/worker.fulfill_order",
     ]

@@ -119,7 +119,7 @@ side effects, or manual curl steps.
 - Topology proof requires expected parent-child edges, links, or depth; span
   presence is not DAG proof.
 - Path proof requires the scenario trigger, expected signals/topology, and
-  collector/Obstudio evidence when OTLP is available.
+  collector/Splunk Observability Studio evidence when OTLP is available.
 - Runtime-only proof requires the real process with its agent, preload,
   middleware, or startup bootstrap. A direct handler or synthetic root cannot
   prove automatic span count/kind/route, automatic metrics, duplicate
@@ -156,7 +156,7 @@ record the exact prerequisite and leave the rows incomplete.
 
 ## Local OTLP And Explorer Proof
 
-When a local OTLP endpoint or Obstudio is available, try to pair deterministic
+When a local OTLP endpoint or Splunk Observability Studio is available, try to pair deterministic
 app-code assertions with export from the same scenario. Before claiming
 explorer visibility, read `explorer-witness.md`; it owns source lifetime,
 bounded queries, durable sanitized evidence, visibility wording, and shutdown.
@@ -175,7 +175,7 @@ bounded queries, durable sanitized evidence, visibility wording, and shutdown.
 - Mark `Verified: unit+OTLP` only when both direct assertions and saved local
   delivery evidence pass.
 
-Preserve raw Obstudio validator results, then classify each finding as
+Preserve raw Splunk Observability Studio validator results, then classify each finding as
 `actionable`, `registry mismatch`, `library-owned compatibility`, or `stale`.
 Moved registries, application-owned custom fields absent from a core registry,
 framework-owned fields, or expected exporter freshness do not alone prove the

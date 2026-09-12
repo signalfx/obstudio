@@ -15,10 +15,9 @@ telemetry contracts, and operator configuration. A broad OTel request is an
 implementation workflow: change the in-scope service, report, and verify or
 name the exact blocker.
 
-Resolve paths written in this entrypoint from the directory containing the
-loaded `otel-instrument/SKILL.md`. Inside a loaded reference, resolve relative
-paths from that reference's directory. Never resolve skill references from the
-service cwd or probe alternate skill copies unless a required file is missing.
+Resolve entrypoint paths from the loaded `otel-instrument/SKILL.md` directory.
+Inside a loaded reference, resolve relative paths from its directory. Never use
+the service cwd or alternate copies unless required.
 
 ## Load Guidance Progressively
 
@@ -139,12 +138,11 @@ from a generated Markdown report.
 - For existing audit scope, map each selected finding to its planned change and
   scenario IDs. A proof-only row may need no code change; do not invent one.
 
-Before editing, state together: target executable, runtime shape and probe,
-service name and environment source, existing-vs-new provider topology,
-application-log classification, selected IDs and audit/selection binding when
-present, changed consumer contracts, validation command, and scenario plan.
-For incident or GenAI scope, also state the loaded reference, owned surfaces,
-required signals, and remaining external owners.
+Before editing, state: executable, runtime/probe, service/environment source,
+provider topology, log classification, selected IDs and binding, changed
+consumer contracts, validation command, and scenarios. For incident or GenAI
+scope, also state the loaded reference, owned surfaces, required signals, and
+external owners.
 
 ## 2. Implement The Selected Baseline
 
@@ -212,7 +210,7 @@ Splunk Observability Studio OTLP application-log export is part of the standard 
   metric-specific variables and remove the generic values. Do not pass
   `OTEL_EXPORTER_OTLP_LOGS_HEADERS` into the default local Splunk Observability Studio exporter;
   an explicit logs header makes that path operator-owned and must be resolved
-  or proven separately. Splunk Observability Studio-to-Splunk cloud forwarding is traces and
+  or proven separately. Splunk Observability Studio cloud forwarding to Splunk is traces and
   metrics only.
 - Use one official bridge matching the detected logger, one LoggerProvider,
   exactly one bridge/export path, and one shutdown path. Preserve every existing
@@ -265,49 +263,43 @@ toolchain blocker.
 
 ### GenAI readiness
 
-When applicable, follow `../references/genai-readiness.md` in full. Reconcile
-all selected app-owned surfaces with its semconv closure matrix. Choose one
-canonical GenAI span source per logical operation; configure suppression before
-preload/bootstrap; preserve stable workflow/agent names and correct parent
-context; add real model-call lifecycle spans rather than workflow-only usage;
-keep content opt-in and metric dimensions bounded; and retain every incomplete
-required token/context, tool, retrieval, memory, evaluation, cost, or
-model/config signal in `remaining_signals`. `Remaining signals: none` is valid
-only when every required signal is implemented, proven, or owner-mapped.
+Follow `../references/genai-readiness.md` in full and reconcile selected
+app-owned surfaces with its semconv closure matrix. Keep one canonical GenAI
+span source per operation, configure suppression before bootstrap, preserve
+stable workflow/agent names and parent context, and add model-call lifecycle
+spans rather than workflow-only usage. For local span-first trace explorers such as Splunk Observability Studio,
+metrics alone are not enough: put
+`gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, and
+`gen_ai.usage.total_tokens` on the owning span. Instrument streaming
+`first_event_timeout`, close-reason family, and send/write failure. Keep content
+opt-in, metric dimensions bounded, and every incomplete required signal in
+`remaining_signals`; use `Remaining signals: none` only when all are proven or
+owner-mapped.
 
 ## 4. Validate And Verify
 
-Follow `./references/project-runtime-validation.md` and keep one validation ledger keyed by
-gate and relevant inputs. Run each locally safe project-configured gate after
-the last relevant edit:
+Follow `./references/project-runtime-validation.md`; keep one validation ledger keyed by gate and relevant inputs. After the last relevant edit run the runtime probe,
+`git diff --check`, syntax/config parsing, affected-module compile/type/import,
+the narrowest executing tests, signal assertions and removal proof, then any
+broader build/test warranted by shared wiring or manifests.
 
-1. runtime probe and `git diff --check` plus syntax/config parsing;
-2. compile, typecheck, or import every affected application module;
-3. the narrowest tests that execute changed code;
-4. in-memory or repo-native signal assertions for each changed call site and
-   explicit absence proof for removed signals; and
-5. a broader build/test only when shared wiring or manifests warrant it.
+Confirm test filters matched. Preserve passing gates until inputs change—never a passing gate merely for fresher report evidence;
+after repair rerun only the failed and dependent invalidated gates. Static checks do not
+replace executable telemetry proof when a practical seam exists. If runtime or
+dependencies are unavailable, record the prerequisite as `Blocked` or `Not
+proven`; never claim verification.
 
-Confirm test filters matched. Preserve a passing gate until one of its inputs
-changes; after repair, rerun only the failed and dependent invalidated gates,
-never a passing gate merely for fresher report evidence. Do not substitute static source checks for executable
-telemetry proof when a practical app-code seam exists. If the configured
-runtime/dependency is unavailable, record the exact prerequisite and use
-`Blocked` or `Not proven`; never claim verification.
-
-For canonical scope, apply `$otel-verify` against the same bound selection
-unless the user opts out or a prerequisite blocks it. Resolve only
-`../otel-verify/SKILL.md` from the loaded skill directory; never search an
-absolute or user-global skill location. If absent, record it unavailable. On
-the direct no-audit baseline, do not load
-`$otel-verify`: run inline project and applicable full-runtime proof, and record
-standalone `$otel-verify` as `not applicable (no canonical audit/selection)`.
-When a claim depends on real startup behavior, load and attempt
-`../references/full-runtime-acceptance.md` without asking if the repo has a
-safe local profile. “Not run” or “no collector” alone is not a blocker. Record
-the executed command/result or the unavailable runtime, listener, dependency,
-credential, or fixture. Do not finalize while a safe required profile exists
-but has not been attempted.
+For canonical scope, apply `$otel-verify` to the bound selection unless opted
+out or blocked. Resolve only `../otel-verify/SKILL.md` from the loaded skill;
+never search an absolute or user-global skill location; record it unavailable
+if absent. For a direct no-audit baseline, run inline
+project/full-runtime proof and record standalone `$otel-verify` as `not
+applicable (no canonical audit/selection)`. For startup claims, load and attempt
+`../references/full-runtime-acceptance.md` when a safe local profile exists.
+“Not run” or “no collector” alone is not a blocker. Record the executed
+command/result or the unavailable runtime, listener, dependency, credential,
+or fixture. Do not finalize while a safe required profile exists but has not
+been attempted.
 
 ## 5. Reports And Handoff
 

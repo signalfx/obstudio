@@ -509,6 +509,9 @@ def test_dashboard_publish_offline_rubric_requests_visible_grid_and_payload():
         assert field in rubric
     assert "hypothetical non-sent dry-run POST /v2/dashboard body" in task
     assert '"tags": ["obstudio"]' in task
+    assert "sole permitted fetch-merge-PUT" in task
+    assert "retain every existing charts[] placement and order" in task
+    assert "never otherwise mutate COVERED or UNCERTAIN" in task
     assert "hypothetical, non-sent dry-run POST /v2/dashboard body" in rubric
 
 

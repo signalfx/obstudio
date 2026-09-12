@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-audit |
-| Run ID | 20260911T021220597437Z |
+| Run ID | 20260911T202641553204Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,26 +18,23 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/kvstore/qual/audit | go/kvstore | 2 | 83% (10/12), avg score 86 | 7.0M | 28.3m | - | - | - |
+| with_skill | go/kvstore/qual/audit | go/kvstore | 2 | 100% (16/16), avg score 93 | 2.5M | 20.9m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/kvstore/qual/audit | go/kvstore | with_skill | codex | cumulative | measured | 2/2 recognized | 6924556 | 6603904 | unknown | 61909 | 24193 | unknown | 6986465 |
+| with_skill | go/kvstore/qual/audit | go/kvstore | with_skill | codex | cumulative | measured | 2/2 recognized | 2477909 | 2315136 | unknown | 44115 | 15563 | unknown | 2522024 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/kvstore/qual/audit | go/kvstore | with_skill | codex | cumulative | measured | 2/2 recognized | 730684 | 617216 | unknown | 13512 | 7401 | unknown | 744196 |
+| with_skill | go/kvstore/qual/audit | go/kvstore | with_skill | codex | cumulative | measured | 2/2 recognized | 1109799 | 940416 | unknown | 15779 | 8340 | unknown | 1125578 |
 
 ## Rubric Failures
 
-| Mode | Service | Side | Prompt | Result | Evidence |
-|---|---|---|---|---|---|
-| with_skill | go/kvstore | with_skill | direct | rubric:rubric-4 FAIL | OTEL-003 is titled Store persistence, index, and eviction telemetry is missing and covers persistAsync, enqueueIndex/indexLoop, evictOldestLocked, and loadFromDisk, but has priority required and instrument_mode default. |
-| with_skill | go/kvstore | with_skill | readiness-review | rubric:rubric-4 FAIL | OTEL-005 'Trace store operations and async persistence/index work' has priority required and instrument_mode default; OTEL-006 covers LRU eviction as recommended/fix all, with only the eviction span event marked optional. |
+No rubric failures.
 
 ## Result JSON
 

@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | splunk-detector-publish |
-| Run ID | 20260911T023722288908Z |
+| Run ID | 20260911T203727852826Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-detectors/qual/detector-publish | dashboards/checkout-detectors | 1 | 100% (7/7), avg score 98 | 208.0K | 4.5m | - | - | - |
+| with_skill | dashboards/checkout-detectors/qual/detector-publish | dashboards/checkout-detectors | 1 | 100% (8/8), avg score 100 | 137.3K | 3.1m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-detectors/qual/detector-publish | dashboards/checkout-detectors | with_skill | codex | cumulative | measured | 1/1 recognized | 201394 | 163456 | unknown | 6597 | 3241 | unknown | 207991 |
+| with_skill | dashboards/checkout-detectors/qual/detector-publish | dashboards/checkout-detectors | with_skill | codex | cumulative | measured | 1/1 recognized | 132877 | 114944 | unknown | 4422 | 2117 | unknown | 137299 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-detectors/qual/detector-publish | dashboards/checkout-detectors | with_skill | codex | cumulative | measured | 1/1 recognized | 296494 | 239616 | unknown | 5252 | 2830 | unknown | 301746 |
+| with_skill | dashboards/checkout-detectors/qual/detector-publish | dashboards/checkout-detectors | with_skill | codex | cumulative | measured | 1/1 recognized | 113286 | 76288 | unknown | 4483 | 2336 | unknown | 117769 |
 
 ## Rubric Failures
 

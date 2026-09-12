@@ -17,7 +17,7 @@ not load that shared decision tree separately.
 Read the token only from `SPLUNK_ACCESS_TOKEN` and send it only in the
 `X-SF-Token` header. Never print it or copy it to a prompt, command output,
 report, ledger, or file. Resolve realm from non-empty `SPLUNK_REALM` first, then
-the connected Observer's realm-only lookup. Observer never supplies the token.
+the connected Splunk Observability Studio realm-only lookup. Splunk Observability Studio never supplies the token.
 Stop if either prerequisite is absent.
 
 ## Fetch And Classify Fresh State
@@ -49,7 +49,7 @@ verdict.
 ## Fresh Confirmation Gate
 
 Show the complete detector diff and AutoDetect advisory before any POST. Include
-the resolved realm and whether it came from `SPLUNK_REALM` or Observer, exact GAP
+the resolved realm and whether it came from `SPLUNK_REALM` or Splunk Observability Studio, exact GAP
 count, sequential operation order, normalized payload identity, all UNCERTAIN
 rows, and concrete reasons/IDs for COVERED rows. Require explicit current yes/no.
 On no or ambiguity, stop.

@@ -116,7 +116,7 @@ ROUTING_TERMS = {
         "$splunk-detector-publish",
     ),
     PLUGIN_CONTROLS / "observer-open" / "SKILL.md": (
-        "Open the local Obstudio Observer",
+        "Open the local Splunk Observability Studio",
         "host-provided browser",
         "safe clickable-URL fallback",
     ),
@@ -136,7 +136,7 @@ ROUTING_TERMS = {
         "stop or disconnect",
         "intentionally wants",
         "managed runtime",
-        "shared Observer",
+        "shared Splunk Observability Studio",
     ),
 }
 
@@ -144,6 +144,13 @@ ROUTING_TERMS = {
 def _description(text: str) -> str:
     frontmatter = text.split("---", 2)[1]
     return frontmatter.split("description: >-", 1)[1].split("metadata:", 1)[0]
+
+
+def test_observer_open_keeps_probe_and_render_boundaries_explicit() -> None:
+    text = (PLUGIN_CONTROLS / "observer-open" / "SKILL.md").read_text()
+
+    assert "elevated/outside-sandbox approval" in text
+    assert "endpoint reachability does not prove the UI rendered" in text
 
 
 def test_network_benchmark_allows_long_running_demo_agents() -> None:

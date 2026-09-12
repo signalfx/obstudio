@@ -204,7 +204,7 @@ Use this shape for `.observe/otel-audit.json`:
           "product_view": "Trace waterfall and route filtering"
         }
       ],
-      "follow_up_actions": ["After instrumentation proof exists, filter the span in ObStudio before merge."]
+      "follow_up_actions": ["After instrumentation proof exists, filter the span in Splunk Observability Studio before merge."]
     }
   ],
   "verification": {
@@ -281,7 +281,7 @@ JSON requirements:
   distinguish quick wins from longer or choice-dependent work.
 - Every finding must include human impact, one concise `product_outcome`,
   required fix, evidence, acceptance criteria, expected telemetry with its
-  Splunk/ObStudio `product_view`, and at least one follow-up action. The outcome
+  Splunk Observability Studio `product_view`, and at least one follow-up action. The outcome
   states what the owner should see or gain after implementation and
   verification without claiming it is already proven. Include verification
   scenario IDs when runnable.

@@ -39,7 +39,7 @@ non-empty reason for every COVERED, GAP, and UNCERTAIN verdict.
 Show the complete group/dashboard/chart diff before any remote write. Include:
 
 - resolved realm and whether it came from `SPLUNK_REALM` or the connected
-  Observer realm-only lookup;
+  Splunk Observability Studio realm-only lookup;
 - every object to create or update;
 - every unmatched orphan chart proposed for deletion;
 - exact non-empty reasons and identifiers for COVERED objects;

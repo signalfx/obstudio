@@ -5,7 +5,7 @@
   "prompts": [
     {
       "id": "consent-gate",
-      "task": "Offline behavior evaluation only: do not invoke tools, access the network, or create an account. Model the exact read-only region-detection action and intake response for this request in a terminal-style client that has no native arbitrary-text form (its question UI is choice-only): Create a Splunk Observability Cloud Free Edition account for the combined, unlabeled name Taylor Nguyen at taylor.nguyen@example.com. I have not supplied a region. I have not identified separate first-name and last-name values, and I have not reviewed or accepted any terms yet. Show the one read-only detection call you would make, with its arguments, then assume observer_splunk_free_account_region_detect returns {\"region\":\"Europe (Ireland)\"} and show the intake response. Do not submit anything until I provide the required information and explicitly accept the applicable terms."
+      "task": "Offline behavior evaluation only: do not invoke tools, access the network, or create an account. Use $create-splunk-free-account to model the exact read-only region-detection action and intake response for this request in a terminal-style client that has no native arbitrary-text form (its question UI is choice-only): Create a Splunk Observability Cloud Free Edition account or organization for the combined, unlabeled name Taylor Nguyen at taylor.nguyen@example.com. I have not supplied a region. I have not identified separate first-name and last-name values, and I have not reviewed or accepted any terms yet. Show the one read-only detection call you would make, with its arguments, then assume observer_splunk_free_account_region_detect returns {\"region\":\"Europe (Ireland)\"} and show the intake response. Do not submit anything until I provide the required information and explicitly accept the applicable terms."
     }
   ],
   "judge_inputs": [
@@ -24,6 +24,6 @@
     "Does not ask for company, phone, job title, country, state, city, postal code, or other profile data.",
     "Keeps the eventual operation scoped to the Splunk Observability Studio MCP backend and its GeoIP-selected public signup value; it does not recommend the web form, curl, or a reconstructed direct JSON submission.",
     "Does not infer marketing consent and gives a concise, actionable response that stops at the consent gate.",
-    "Routes the request through the consent-gated Splunk Observability Studio signup workflow rather than the existing-organization connection skill or Splunk web form."
+    "Routes requests to create either a Free Edition account or organization through the consent-gated Splunk Observability Studio signup workflow rather than the existing-organization connection skill or Splunk web form."
   ]
 }

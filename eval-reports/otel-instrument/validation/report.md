@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20260910T190520959055Z |
+| Run ID | 20260912T004549699976Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -20,6 +20,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | go/chi-basic/qual/benchmark-instrument | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/benchmark-instrument.json | 0 | 3 | 0 |
 | go/chi-basic/qual/instrument | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/instrument.json | 0 | 7 | 0 |
 | go/chi-basic/qual/instrument-decision-gated | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/instrument-decision-gated.json | 0 | 4 | 0 |
+| go/chi-basic/qual/instrument-runtime-blocker | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/instrument-runtime-blocker.json | 0 | 4 | 0 |
 | go/chi-basic/runtime/instrument | go/chi-basic | 1 | evals/go/chi-basic/eval/runtime/instrument.json | 0 | 0 | 1 |
 | go/chi-partial/qual/instrument | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/instrument.json | 0 | 6 | 0 |
 | go/chi-partial/runtime/instrument | go/chi-partial | 1 | evals/go/chi-partial/eval/runtime/instrument.json | 0 | 0 | 1 |
@@ -32,7 +33,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/kafka-producer-consumer/qual/instrument | java/kafka-producer-consumer | 2 | evals/java/kafka-producer-consumer/eval/qual/instrument.json | 0 | 5 | 0 |
 | java/kafka-streams/qual/incident-readiness | java/kafka-streams | 1 | evals/java/kafka-streams/eval/qual/incident-readiness.json | 0 | 6 | 0 |
 | java/kafka-streams/qual/instrument | java/kafka-streams | 2 | evals/java/kafka-streams/eval/qual/instrument.json | 0 | 6 | 0 |
-| java/springboot-basic/qual/instrument | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/instrument.json | 0 | 10 | 0 |
+| java/springboot-basic/qual/instrument | java/springboot-basic | 3 | evals/java/springboot-basic/eval/qual/instrument.json | 0 | 10 | 0 |
 | node/express-basic/qual/instrument | node/express-basic | 2 | evals/node/express-basic/eval/qual/instrument.json | 0 | 9 | 0 |
 | node/express-basic/runtime/instrument | node/express-basic | 1 | evals/node/express-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
 | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/instrument.json | 0 | 8 | 0 |
