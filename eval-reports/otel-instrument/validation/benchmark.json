@@ -476,7 +476,7 @@
   },
   "source": {
     "digest_version": 2,
-    "digest": "09d20bf7ccc0ca76b00fc3e448035a23b9149d9716d29a8713e0eca6cc01a595",
+    "digest": "6935c41309d73f46748010a3efe4067d54445765f6af602e94efdf5aad750edf",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -782,6 +782,7 @@
       "skills/splunk-sync/references/coverage-model.md": "282117ad1cf0ff60a1a9cdc853983a8aa47729c6c2d216e251d6e992223b2ed1",
       "evals/go/chi-partial/eval/qual/instrument.json": "931f49ba387f6f2cfed899d6d7b8950cffec4f1f9a1d629b604551f74d217cad",
       "evals/go/chi-partial/go.mod": "c98802561b52e8e423a669a197c43ab62e8e7af5c19d83094b33beda1df2797f",
+      "evals/go/chi-partial/go.sum": "3708d13ed158e6020350066c8cda0777bdbf8ef6efb58907a7fa81eea61cb26b",
       "evals/go/chi-partial/main.go": "e395c48e36e43de4537eb493003c9d682557d496304a2d680006a96bea35a7d3",
       "evals/go/chi-partial/eval/runtime/App.Dockerfile": "a31ffaaedcf0ebdb3075b2ca807ebdd0030774fe36740f201bd11516447b7e47",
       "evals/go/chi-partial/eval/runtime/docker-compose.yml": "6299da539fca807228f0365a07c8bccd87b2012820461023a1b0a6c4a0fb9e92",
