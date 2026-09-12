@@ -34,8 +34,7 @@ evals/**/uv.lock
 evals/**/*.db
 evals/**/otel_setup.py
 evals/**/otel_*.py
-# Compiled eval fixture server binaries
-evals/**/*-server
+evals/**/go.sum
 
 # Skill eval workspaces
 .workspace/
@@ -46,7 +45,3 @@ pytest-codex-evals/dist/
 .npmrc
 .DS_Store
 .claude/
-
-# Playwright CLI cache and local test run output
-.playwright-cli/
-output/
