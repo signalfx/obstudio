@@ -182,8 +182,8 @@ block's closing fence without a trailing explanation.
 
 Do not ask for company, phone, job title, country, state, city, or postal code. Do not
 ask the user to discover a region; detect and prefill it, then let the user
-replace that value if needed. For each submission, the backend generates a
-fresh six-letter lowercase company placeholder. For
+replace that value if needed. For each submission, the backend submits
+`Unknown` as the company value. For
 location, the read-only detection tool causes Splunk Observability Studio to call Splunk's GeoIP
 endpoint without supplying an IP-address parameter. Splunk derives a coarse
 country, state, city, postal code, and sales region from the request's network
