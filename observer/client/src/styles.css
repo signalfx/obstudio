@@ -7874,7 +7874,7 @@ code {
 }
 
 .overview-score__row--empty .overview-score__row-detail {
-  color: var(--yellow);
+  color: var(--green-dim);
 }
 
 .overview-score__row-detail--link {
@@ -7898,7 +7898,7 @@ code {
 }
 
 .overview-score__row--full .overview-score__row-detail--link {
-  color: var(--green-dim);
+  color: var(--accent);
 }
 
 .overview-score__row-value {

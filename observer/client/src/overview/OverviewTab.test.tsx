@@ -494,6 +494,26 @@ describe("OverviewTab", () => {
     expect(badge.className).toContain("stream-toggle--muted");
   });
 
+  it("shows a checking badge on the cloud skills card while the connection check is pending", async () => {
+    // Status fetch never resolves; score fetch succeeds so the card renders.
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      if (String(input).includes("/api/splunk/export")) return new Promise(() => {});
+      return ok(makeScore({}));
+    }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector("#overview-cloud-skills")).toBeTruthy();
+    });
+
+    const cloudCard = container.querySelector("#overview-cloud-skills")!;
+    const badge = cloudCard.querySelector(".stream-toggle")!;
+    expect(badge.textContent).toContain("Checking");
+    expect(badge.className).toContain("stream-toggle--muted");
+    expect(cloudCard.querySelector(".overview-skills__empty-hint")?.textContent)
+      .toContain("Checking connection");
+  });
+
   it("explains what the cloud skills do in the connect prompt", async () => {
     stubStatusFetch({ connected: false });
     const { container } = render(<OverviewTab onOpenCloud={vi.fn()} />);
@@ -750,6 +770,41 @@ describe("OverviewTab", () => {
 
     // Clicking a jump link keeps the report panel open (it is already open by default).
     fireEvent.click(findingsLink as HTMLElement);
+    expect(container.querySelector("#overview-report-details")).toBeTruthy();
+  });
+
+  it("reopens the report panel when a quality jump link is clicked while the panel is collapsed", async () => {
+    stubScoreFetch(makeScore({
+      breakdown: {
+        coverage: 70,
+        coverageMax: 70,
+        quality: 10,
+        qualityMax: 30,
+        components: [
+          { label: "Findings", earned: 5, max: 15, detail: "3 gaps" },
+          { label: "Anti-patterns", earned: 5, max: 15, detail: "2 anti-patterns" },
+        ],
+      },
+    }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-score__breakdown")).toBeTruthy();
+    });
+
+    // Collapse the panel (it starts open by default).
+    const callout = container.querySelector(".overview-callout") as HTMLElement;
+    fireEvent.click(callout);
+    expect(container.querySelector("#overview-report-details")).toBeNull();
+
+    // Click the Findings jump link while the panel is closed.
+    const findingsLink = Array.from(container.querySelectorAll(".overview-score__row"))
+      .find((el) => el.querySelector(".overview-score__row-label")?.textContent === "Findings")
+      ?.querySelector(".overview-score__row-detail--link") as HTMLElement;
+    expect(findingsLink).toBeTruthy();
+    fireEvent.click(findingsLink);
+
+    // The panel must reopen.
     expect(container.querySelector("#overview-report-details")).toBeTruthy();
   });
 });

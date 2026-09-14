@@ -4614,12 +4614,12 @@ function findingNextStep(finding) {{
     return `${{eligibility.reason || "This finding cannot enter the current instrumentation selection"}}.`;
   }}
   if (requested.has(finding.id)) {{
-    return "This finding is selected. Copy and run the generated $otel-instrument command.";
+    return "This finding is selected. Copy the generated prompt and paste into AI chat.";
   }}
   if (selected.has(finding.id)) {{
-    return "This finding is included because selected work depends on it. Copy and run the generated $otel-instrument command.";
+    return "This finding is included because selected work depends on it. Copy the generated prompt and paste into AI chat.";
   }}
-  return "Select this finding, then copy and run the generated $otel-instrument command.";
+  return "Select this finding, then copy the generated prompt and paste into AI chat.";
 }}
 
 function renderCards() {{
