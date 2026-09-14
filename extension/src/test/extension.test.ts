@@ -1,7 +1,9 @@
 import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
+import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import WebSocket from 'ws';
@@ -34,6 +36,7 @@ import {
 	connectSplunkCloudWithStorage,
 	freeAccountSubmissionFailureIsOutcomeUnknown,
 	forgetSplunkCloudWithStorage,
+	initializeCloudBridgeState,
 	initializeSplunkCloudStatus,
 	isSkillDocsId,
 	isSupportedFreeAccountRegion,
@@ -65,6 +68,10 @@ import {
 	observerHostResponseByteLimit,
 } from '../observer-webview-host';
 import { ObserverWebviewTelemetry, webSocketURL } from '../observer-webview-telemetry';
+import {
+	LoopbackPortReservations,
+	loopbackPortsAreSimultaneouslyAvailable,
+} from '../observer-port-handoff';
 
 const extensionRoot = path.resolve(__dirname, '..', '..');
 const {
@@ -1115,6 +1122,259 @@ test('managed observer startup restores cloud export without opening the Cloud t
 	assert.match(
 		source,
 		/const startupCompleted = await observerCloudLifecycleOperations\.run\(async \(\) => \{[\s\S]*?completeObserverStart\(observerLifecycleState,\s*runId,\s*observerPort\)[\s\S]*?await restoreManagedObserverCloudConnection\(context\);[\s\S]*?return true;[\s\S]*?if \(!startupCompleted\)[\s\S]*?syncObserverUi\(\);/,
+	);
+});
+
+test('a hot-installed CIMD manifest cannot make disabled Cloud initialization fail', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+	const configurationStart = source.indexOf('function getSISCIMDOAuthConfiguration(');
+	const configurationEnd = source.indexOf('\nasync function loadCurrentSISCIMDOAuthSession(', configurationStart);
+	const initializeStart = source.indexOf("\t\tcase 'initialize': {");
+	const initializeEnd = source.indexOf("\n\t\tcase 'open-free-edition':", initializeStart);
+	assert.notEqual(configurationStart, -1);
+	assert.notEqual(configurationEnd, -1);
+	assert.notEqual(initializeStart, -1);
+	assert.notEqual(initializeEnd, -1);
+
+	const configuration = source.slice(configurationStart, configurationEnd);
+	const initialize = source.slice(initializeStart, initializeEnd);
+	assert.match(
+		configuration,
+		/resolveSISCIMDOAuthScope\(configuration\.get<string>\(sisCimdOAuthScopeSetting\)\)/,
+		'the runtime must own a fallback while VS Code still exposes the pre-upgrade manifest',
+	);
+	assert.match(
+		configuration,
+		/if \(scope === ''\) \{[\s\S]*?Set observability-studio\.sisCimdOAuthScope to at least one SIS-supported scope\./,
+		'an explicitly blank scope must remain invalid after applying the missing-value fallback',
+	);
+	assert.match(
+		initialize,
+		/return initializeCloudBridgeState\(\{[\s\S]*?cimdRegistrationEnabled: isSISCIMDRegistrationEnabled\(\),[\s\S]*?readCimdSession: \(\) => currentSISCIMDSessionStatus\(context\)/,
+		'disabled optional CIMD state must not be read during core Cloud initialization',
+	);
+});
+
+test('disabled CIMD initialization never reads optional session configuration', async () => {
+	const calls: string[] = [];
+	const status = { connected: false };
+	const result = await initializeCloudBridgeState({
+		cimdRegistrationEnabled: false,
+		readCimdSession: async () => {
+			calls.push('cimd');
+			throw new Error('newly contributed setting is not registered yet');
+		},
+		readStatus: async () => {
+			calls.push('read');
+			return status;
+		},
+		refreshStatus: async () => {
+			calls.push('refresh');
+			return status;
+		},
+	});
+
+	assert.deepEqual(calls, ['refresh']);
+	assert.deepEqual(result, { cimdRegistrationEnabled: false, status });
+});
+
+test('disabled CIMD initialization falls back to stored status without reading a session', async () => {
+	const calls: string[] = [];
+	const status = { connected: false };
+	const result = await initializeCloudBridgeState({
+		cimdRegistrationEnabled: false,
+		readCimdSession: async () => {
+			calls.push('cimd');
+			throw new Error('must not be read');
+		},
+		readStatus: async () => {
+			calls.push('read');
+			return status;
+		},
+		refreshStatus: async () => {
+			calls.push('refresh');
+			throw new Error('refresh failed');
+		},
+	});
+
+	assert.deepEqual(calls, ['refresh', 'read']);
+	assert.deepEqual(result, {
+		cimdRegistrationEnabled: false,
+		status,
+		warning: 'refresh failed',
+	});
+});
+
+test('disabled CIMD initialization propagates fallback status errors', async () => {
+	const fallbackError = new Error('stored status failed');
+	let cimdReads = 0;
+	await assert.rejects(
+		initializeCloudBridgeState({
+			cimdRegistrationEnabled: false,
+			readCimdSession: async () => {
+				cimdReads += 1;
+				throw new Error('must not be read');
+			},
+			readStatus: async () => { throw fallbackError; },
+			refreshStatus: async () => { throw new Error('refresh failed'); },
+		}),
+		(error) => error === fallbackError,
+	);
+	assert.equal(cimdReads, 0);
+});
+
+test('enabled CIMD initialization reads Cloud and session state concurrently', async () => {
+	const calls: string[] = [];
+	let resolveRefresh!: (value: unknown) => void;
+	let resolveSession!: (value: { subject: string }) => void;
+	const refresh = new Promise<unknown>((resolve) => { resolveRefresh = resolve; });
+	const session = new Promise<{ subject: string }>((resolve) => { resolveSession = resolve; });
+	const initialization = initializeCloudBridgeState({
+		cimdRegistrationEnabled: true,
+		readCimdSession: () => {
+			calls.push('cimd');
+			return session;
+		},
+		readStatus: async () => {
+			calls.push('read');
+			return { connected: false };
+		},
+		refreshStatus: () => {
+			calls.push('refresh');
+			return refresh;
+		},
+	});
+
+	assert.deepEqual(calls, ['refresh', 'cimd']);
+	resolveSession({ subject: 'user-123' });
+	resolveRefresh({ connected: true });
+	assert.deepEqual(await initialization, {
+		cimdRegistrationEnabled: true,
+		cimdSession: { subject: 'user-123' },
+		status: { connected: true },
+	});
+});
+
+test('enabled CIMD initialization retries only a failed session load', async () => {
+	const status = { connected: false };
+	let fallbackReads = 0;
+	let sessionReads = 0;
+	const result = await initializeCloudBridgeState({
+		cimdRegistrationEnabled: true,
+		readCimdSession: async () => {
+			sessionReads += 1;
+			if (sessionReads === 1) {
+				throw new Error('transient CIMD read failure');
+			}
+			return { subject: 'user-123' };
+		},
+		readStatus: async () => {
+			fallbackReads += 1;
+			return status;
+		},
+		refreshStatus: async () => status,
+	});
+
+	assert.equal(fallbackReads, 0);
+	assert.equal(sessionReads, 2);
+	assert.deepEqual(result, {
+		cimdRegistrationEnabled: true,
+		cimdSession: { subject: 'user-123' },
+		status,
+		warning: 'transient CIMD read failure',
+	});
+});
+
+test('enabled CIMD initialization preserves a session when Cloud refresh falls back', async () => {
+	let sessionReads = 0;
+	const result = await initializeCloudBridgeState({
+		cimdRegistrationEnabled: true,
+		readCimdSession: async () => {
+			sessionReads += 1;
+			return { subject: 'user-123' };
+		},
+		readStatus: async () => ({ connected: false }),
+		refreshStatus: async () => { throw new Error('refresh failed'); },
+	});
+
+	assert.deepEqual(result, {
+		cimdRegistrationEnabled: true,
+		cimdSession: { subject: 'user-123' },
+		status: { connected: false },
+		warning: 'refresh failed',
+	});
+	assert.equal(sessionReads, 1);
+});
+
+test('enabled CIMD initialization waits for the original refresh before retrying a failed session', async () => {
+	let resolveRefresh!: (value: unknown) => void;
+	const refresh = new Promise<unknown>((resolve) => { resolveRefresh = resolve; });
+	let fallbackStatusReads = 0;
+	let sessionReads = 0;
+	let initializationSettled = false;
+	const initialization = initializeCloudBridgeState({
+		cimdRegistrationEnabled: true,
+		readCimdSession: async () => {
+			sessionReads += 1;
+			if (sessionReads === 1) {
+				throw new Error('transient CIMD read failure');
+			}
+			return { subject: 'user-123' };
+		},
+		readStatus: async () => {
+			fallbackStatusReads += 1;
+			return { connected: false };
+		},
+		refreshStatus: () => refresh,
+	});
+	void initialization.then(
+		() => { initializationSettled = true; },
+		() => { initializationSettled = true; },
+	);
+
+	await new Promise<void>((resolve) => { setImmediate(resolve); });
+	assert.equal(initializationSettled, false);
+	assert.equal(sessionReads, 1);
+
+	resolveRefresh({ connected: true });
+	assert.deepEqual(await initialization, {
+		cimdRegistrationEnabled: true,
+		cimdSession: { subject: 'user-123' },
+		status: { connected: true },
+		warning: 'transient CIMD read failure',
+	});
+	assert.equal(fallbackStatusReads, 0);
+	assert.equal(sessionReads, 2);
+});
+
+test('enabled CIMD initialization still rejects when fallback session loading fails', async () => {
+	let sessionReads = 0;
+	await assert.rejects(
+		initializeCloudBridgeState({
+			cimdRegistrationEnabled: true,
+			readCimdSession: async () => {
+				sessionReads += 1;
+				throw new Error('CIMD failed');
+			},
+			readStatus: async () => ({ connected: false }),
+			refreshStatus: async () => ({ connected: true }),
+		}),
+		/CIMD failed/,
+	);
+	assert.equal(sessionReads, 2);
+});
+
+test('enabled CIMD initialization lets fallback status errors win over session warnings', async () => {
+	const fallbackError = new Error('stored status failed');
+	await assert.rejects(
+		initializeCloudBridgeState({
+			cimdRegistrationEnabled: true,
+			readCimdSession: async () => { throw new Error('CIMD failed'); },
+			readStatus: async () => { throw fallbackError; },
+			refreshStatus: async () => { throw new Error('refresh failed'); },
+		}),
+		(error) => error === fallbackError,
 	);
 });
 
@@ -2189,6 +2449,138 @@ test('all local Splunk Observability Studio reuse paths use the same bundled-ver
 	assert.doesNotMatch(startup, /0\.0\.18|0\.0\.20/);
 });
 
+test('temporary port reservations destroy reconnecting exporter sockets before closing', async () => {
+	const allocator = net.createServer();
+	await new Promise<void>((resolve, reject) => {
+		allocator.once('error', reject);
+		allocator.listen(0, '127.0.0.1', () => resolve());
+	});
+	const address = allocator.address();
+	assert.ok(address !== null && typeof address !== 'string');
+	const port = address.port;
+	await new Promise<void>((resolve) => allocator.close(() => resolve()));
+
+	const reservations = new LoopbackPortReservations();
+	let exporter: net.Socket | undefined;
+	try {
+		assert.equal(await reservations.reserve(port, performance.now() + 1_000), true);
+		const connectedExporter = net.createConnection({ host: '127.0.0.1', port });
+		exporter = connectedExporter;
+		const exporterClosed = new Promise<void>((resolve) => connectedExporter.once('close', () => resolve()));
+		await new Promise<void>((resolve, reject) => {
+			connectedExporter.once('connect', () => resolve());
+			connectedExporter.once('error', reject);
+		});
+		let closeTimeout: NodeJS.Timeout | undefined;
+		try {
+			await Promise.race([
+				reservations.close(),
+				new Promise<never>((_resolve, reject) => {
+					closeTimeout = setTimeout(
+						() => reject(new Error('port reservation close exceeded its bound')),
+						1_000,
+					);
+				}),
+			]);
+		} finally {
+			if (closeTimeout !== undefined) {
+				clearTimeout(closeTimeout);
+			}
+		}
+		await exporterClosed;
+		assert.equal(
+			await loopbackPortsAreSimultaneouslyAvailable([port], performance.now() + 1_000),
+			true,
+			'the temporary listener must release its port after rejecting the exporter connection',
+		);
+	} finally {
+		exporter?.destroy();
+		await reservations.close();
+	}
+});
+
+test('reload startup gives unavailable Observer listeners one bounded port handoff', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const startupStart = source.indexOf('async function startObserver(');
+	const startupEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', startupStart);
+	const startup = source.slice(startupStart, startupEnd);
+	const deadlineStart = startup.indexOf('const observerHandoffDeadline = performance.now()');
+	const waitStart = startup.indexOf('await waitForObserverPortHandoff(');
+	const portChecksStart = startup.indexOf('const backend = resolveBackend(');
+	assert.notEqual(deadlineStart, -1);
+	assert.notEqual(waitStart, -1);
+	assert.notEqual(portChecksStart, -1);
+	assert.ok(deadlineStart < waitStart);
+	assert.ok(waitStart < portChecksStart);
+	assert.match(
+		startup,
+		/discoveryStateAgeMs[\s\S]*?performance\.now\(\) \+ sharedObserverStartupWindowMs - discoveryStateAgeMs/,
+		'the fresh-discovery deadline must be monotonic after deriving its remaining wall-clock age',
+	);
+	assert.match(
+		startup,
+		/managedHandoffDiscovery[\s\S]*?loopbackPortsAreSimultaneouslyAvailable\(\s*\[observerOtlpGrpcPort, observerOtlpHttpPort, managedPort\],[\s\S]*?all prior Observer ports were released/,
+		'a matching discovery must stop retrying as soon as the outgoing process releases every required port',
+	);
+	assert.match(
+		startup,
+		/observerProbeMayRecover\(existingObserver\)[\s\S]*?waitForObserverPortHandoff\(\s*\[observerOtlpGrpcPort, observerOtlpHttpPort, managedPort\][\s\S]*?existingObserver = await probeObserver/,
+		'a recoverable managed Observer probe must bridge the prior-host handoff and then re-probe',
+	);
+	assert.match(startup, /while \(performance\.now\(\) < deadline\)/);
+	assert.doesNotMatch(startup, /bridgeStartupPortConflict|reuseCompetingExtensionObserver/);
+});
+
+test('provisionally reused extension Observers recover if the outgoing host stops them', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const monitorStart = source.indexOf('function monitorExtensionObserverHandoff(');
+	const monitorEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', monitorStart);
+	assert.notEqual(monitorStart, -1);
+	assert.notEqual(monitorEnd, -1);
+	const monitor = source.slice(monitorStart, monitorEnd);
+	assert.match(monitor, /health\.owner !== extensionManagedObserverOwner/);
+	assert.match(monitor, /health\.mode !== extensionManagedObserverMode/);
+	assert.match(monitor, /health\.version !== bundleVersion/);
+	assert.match(monitor, /observerDeactivationStarted/);
+	assert.match(monitor, /observerExplicitStopIntentCount > 0/);
+	assert.match(monitor, /observerCloudLifecycleOperations\.run/);
+	assert.match(
+		monitor,
+		/loopbackPortsAreSimultaneouslyAvailable\([\s\S]*?performance\.now\(\) \+ observerExtensionHandoffPortCheckMs[\s\S]*?observerCloudLifecycleOperations\.run[\s\S]*?performance\.now\(\) \+ observerExtensionHandoffPortCheckMs[\s\S]*?stopObserverRun\(observerLifecycleState\)/,
+		'a failed health probe must not invalidate provisional reuse until every required port is free',
+	);
+	assert.match(
+		monitor,
+		/stopObserverRun\(observerLifecycleState\);[\s\S]*?await ensureObserverRunning\(context, recoveryGeneration\)/,
+		'a confirmed handoff exit must invalidate the provisional reuse before starting a replacement',
+	);
+	assert.equal(
+		(source.match(/monitorExtensionObserverHandoff\(/g) ?? []).length,
+			3,
+			'only automatic local reuse paths may arm handoff monitoring',
+		);
+	assert.match(
+		source,
+		/existingObserver\.health\.version === bundleVersion[\s\S]*?monitorExtensionObserverHandoff/,
+		'a current-version service recovered after an earlier transient probe must be monitored during handoff',
+	);
+});
+
+test('health probe treats shutdown transport and truncated response errors as unavailable', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const probeStart = source.indexOf('async function probeObserver(');
+	const probeEnd = source.indexOf('\nfunction validateObserverHealth(', probeStart);
+	const probe = source.slice(probeStart, probeEnd);
+	for (const errorCode of ['ECONNABORTED', 'ECONNRESET', 'EPIPE']) {
+		assert.match(probe, new RegExp(`error\\.code === '${errorCode}'`));
+	}
+	assert.match(
+		probe,
+		/collectObserverHostHTTPResponse\([\s\S]*?\(error: Error\) => finish\(\(\) => resolve\(\{ status: 'unavailable', error \}\)\)/,
+		'the health probe must use the response collector whose executable tests cover aborted, closed, and errored streams',
+	);
+});
+
 test('manual lifecycle and panel commands settle configuration-triggered restarts before acting', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
 	for (const command of ['openObserver', 'startObserver', 'stopObserver', 'restartObserver']) {
@@ -2208,8 +2600,23 @@ test('manual lifecycle and panel commands settle configuration-triggered restart
 	const stopBody = source.slice(stopStart, source.indexOf('\n\t});', stopStart));
 	assert.match(
 		stopBody,
-		/observerBaseUrl === undefined[\s\S]*?observerLifecycleState\.status === 'stopped'/,
-		'Stop must clear an idle startup error instead of returning before the lifecycle reset',
+		/observerExplicitStopIntentCount \+= 1;[\s\S]*?await settleObserverConfigurationRestart\(\);[\s\S]*?await stopObserver\(\);[\s\S]*?observerExplicitStopIntentCount -= 1;/,
+		'Stop intent must be visible before awaiting configuration work and remain visible through shutdown',
+	);
+	const restartStart = source.indexOf("registerCommand('observability-studio.restartObserver', async () => {");
+	const restartBody = source.slice(restartStart, source.indexOf('\n\t});', restartStart));
+	assert.match(
+		restartBody,
+		/restartGeneration = observerLifecycleState\.currentRunId;[\s\S]*?observerExplicitStopIntentCount -= 1;[\s\S]*?ensureObserverRunning\(context, restartGeneration\)/,
+		'a later explicit Stop must prevent Restart from starting again after joining the same shutdown',
+	);
+	const stopFunctionStart = source.indexOf('async function stopObserver(): Promise<void>');
+	const stopFunctionEnd = source.indexOf('\nasync function shutdownObserverForExtensionUnload(', stopFunctionStart);
+	const stopFunction = source.slice(stopFunctionStart, stopFunctionEnd);
+	assert.match(
+		stopFunction,
+		/observerStartupPromise === undefined && observerBaseUrl === undefined[\s\S]*?stopObserverRun\(observerLifecycleState\)/,
+		'an idle explicit Stop must still invalidate any stale monitor recovery generation',
 	);
 });
 

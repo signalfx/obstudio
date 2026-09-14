@@ -143,7 +143,7 @@
   ],
   "source": {
     "digest_version": 2,
-    "digest": "c13c0e7f7c542e3b73a19e9a6710024e21e7a1439138ececea0d9b5339d044d9",
+    "digest": "6179dfb327cca04e007e8cf2e8f7dc647fc4df14c03ba94b15663d474c0c778a",
     "eval_kinds": [
       "runtime"
     ],
@@ -296,8 +296,8 @@
       "observer/internal/dashboards/preview_test.go": "cfc758ddef7f21b71bd3d29411537a1ba2b2726d0086c6d1dffac2601178bf8d",
       "observer/internal/dashboards/signalflow.go": "2ed8700cc09e2cf737d8a4161f5a4bca87ed83ce3baf100b712561fe7aa5f69a",
       "observer/internal/dashboards/signalflow_test.go": "7d6509492ab631116d81a9a28989a7327bc457ef602cc0f6a93fb1f8343f5a78",
-      "observer/internal/freeaccount/service.go": "a985d05b333d0ebabe4440d50ef512816c1a39d8f5f51fd12f6354c2683744ed",
-      "observer/internal/freeaccount/service_test.go": "28969f17315cbffbd44429cfabe7e01cee713d94acf13155fba434fac869facd",
+      "observer/internal/freeaccount/service.go": "a2710c079c963a7489e8017e5043f487e50caba1edaea8cdc5bb562a0c1894f4",
+      "observer/internal/freeaccount/service_test.go": "93cb793b2a65a7066554bd390944b0757da069d9931d26a43c1673180d6fac33",
       "observer/internal/integration/integration_test.go": "13f7b7e7445b1c8306aa3b3ab3b3aba015ffc10cca66a2e9ee48b7963fab0005",
       "observer/internal/mcp/free_account_test.go": "e621a84780b4247ad3082f449a0aa477b6644375ed16fcad2c27f67dcef3f5ec",
       "observer/internal/mcp/handler.go": "9a193cca67b95ef2ebc0a58c7cd513b0b9cc74e5f3bbf95387af3b994fe46f37",
@@ -386,7 +386,7 @@
       "skills/AGENTS.md": "131f2fc8113343662e8b2f189e58171045c2930369fed36d4be282a766bdf8ba",
       "skills/connect-splunk-observability-cloud/SKILL.md": "af23a50c8c32f635b1662fabb481b4e15f9db59abdbdd28e566d82c91443abda",
       "skills/connect-splunk-observability-cloud/agents/openai.yaml": "206b920092a097ec7ab0f92b97d457a6e794bdddcc7f2def837955ff8a756407",
-      "skills/create-splunk-free-account/SKILL.md": "5b12d0523151560bb204a79487d668ab200ff128f9480c33370046ea9f16f47f",
+      "skills/create-splunk-free-account/SKILL.md": "b7ebe91c9ab1adb6bd991bf03ef06d7a0be64dafce2812f87a648acbb8252ef2",
       "skills/create-splunk-free-account/agents/openai.yaml": "7767ebaee1f22c7cc76c22ff75676dcaf24e02821939b7229cc80a8b66e0a237",
       "skills/otel-audit/SKILL.md": "d2b2712fc3a24190106527baeb674494988e5deda561b6b4ab5f642dd047cb34",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",

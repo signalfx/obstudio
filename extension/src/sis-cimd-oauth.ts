@@ -14,6 +14,15 @@ const pemCertificatePattern = /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTI
 
 export const sisCIMDOAuthSessionSecretStorageKey = 'observability-studio.sis-cimd.oauth.session';
 export const sisCIMDOAuthRedirectUri = 'http://127.0.0.1:33418/callback';
+// VS Code 1.137 can hot-start updated same-ID extension code while the workbench
+// still retains the prior version's `contributes.configuration` registry. A setting
+// added by the update then reads as undefined until window reload; keep this
+// fallback identical to the package.json default.
+export const sisCIMDOAuthDefaultScope = 'openid offline_access';
+
+export function resolveSISCIMDOAuthScope(configuredScope: string | undefined): string {
+	return configuredScope?.trim() ?? sisCIMDOAuthDefaultScope;
+}
 
 export type SISCIMDOAuthConfiguration = {
 	clientId: string;

@@ -270,7 +270,7 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertIn("Splunk Observability Studio", claude_manifest["description"])
         self.assertNotIn("observer controls", claude_manifest["description"].lower())
         self.assertNotIn("$schema", claude_manifest)
-        self.assertNotIn("displayName", claude_manifest)
+        self.assertEqual(claude_manifest["displayName"], "Splunk Observability Studio")
 
         codex_hook = json.loads((plugin_root / "hooks" / "codex-hooks.json").read_text(encoding="utf-8"))
         codex_command = codex_hook["hooks"]["SessionStart"][0]["hooks"][0]["command"]

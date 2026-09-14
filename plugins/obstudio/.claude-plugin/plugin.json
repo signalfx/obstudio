@@ -1,5 +1,6 @@
 {
   "name": "obstudio",
+  "displayName": "Splunk Observability Studio",
   "version": "0.0.21",
   "description": "Splunk Observability Studio bundles local OpenTelemetry workflows and service controls for Claude Code.",
   "author": {
