@@ -53,7 +53,6 @@ func TestSubmitUsesSplunkGeoIPAndSendsCompleteUS1PayloadForEveryCall(t *testing.
 		GeoURL:     server.URL + "/geo",
 		SignupURL:  server.URL + "/signup",
 	})
-	service.companyRandom = bytes.NewReader([]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11})
 	request := Request{
 		FirstName:     "Ada",
 		LastName:      "Lovelace Byron",
@@ -78,7 +77,7 @@ func TestSubmitUsesSplunkGeoIPAndSendsCompleteUS1PayloadForEveryCall(t *testing.
 	if firstPayload.FirstName != "Ada" || firstPayload.LastName != "Lovelace Byron" || firstPayload.EmailAddress != "ada@example.com" {
 		t.Fatalf("unexpected identity payload: %+v", firstPayload)
 	}
-	if firstPayload.Company != "abcdef" || firstPayload.Title != "Developer" || firstPayload.Region != "us" {
+	if firstPayload.Company != "Unknown" || firstPayload.Title != "Developer" || firstPayload.Region != "us" {
 		t.Fatalf("unexpected fixed signup values: %+v", firstPayload)
 	}
 	if firstPayload.Country != "United States" || firstPayload.State != "Virginia" || firstPayload.City != "Ashburn" || firstPayload.PostalCode != "20149" {
@@ -112,12 +111,12 @@ func TestSubmitUsesSplunkGeoIPAndSendsCompleteUS1PayloadForEveryCall(t *testing.
 	if submitted[1].FirstName != "ADA" || submitted[1].LastName != "LOVELACE BYRON" || submitted[1].EmailAddress != "ADA@EXAMPLE.COM" {
 		t.Fatalf("second payload was not freshly submitted: %+v", submitted[1])
 	}
-	if submitted[1].Company != "ghijkl" {
-		t.Fatalf("second company = %q, want a fresh generated value", submitted[1].Company)
+	if submitted[1].Company != "Unknown" {
+		t.Fatalf("second company = %q, want Unknown", submitted[1].Company)
 	}
 }
 
-func TestSubmitUsesGeneratedSixLetterCompanyInsteadOfSharedDevPlaceholder(t *testing.T) {
+func TestSubmitUsesUnknownCompany(t *testing.T) {
 	var submittedCompany string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -129,11 +128,6 @@ func TestSubmitUsesGeneratedSixLetterCompanyInsteadOfSharedDevPlaceholder(t *tes
 				t.Errorf("decode signup: %v", err)
 			}
 			submittedCompany = payload.Company
-			if payload.Company == "dev" {
-				w.WriteHeader(http.StatusUnprocessableEntity)
-				_, _ = w.Write([]byte(`{"message":"Denied Person"}`))
-				return
-			}
 			_, _ = w.Write([]byte(`"OK"`))
 		default:
 			t.Fatalf("unexpected request path %s", r.URL.Path)
@@ -146,7 +140,6 @@ func TestSubmitUsesGeneratedSixLetterCompanyInsteadOfSharedDevPlaceholder(t *tes
 		GeoURL:     server.URL + "/geo",
 		SignupURL:  server.URL + "/signup",
 	})
-	service.companyRandom = bytes.NewReader([]byte{25, 0, 1, 2, 3, 4})
 	result, err := service.Submit(context.Background(), Request{
 		FirstName:     "Test",
 		LastName:      "Person",
@@ -159,49 +152,8 @@ func TestSubmitUsesGeneratedSixLetterCompanyInsteadOfSharedDevPlaceholder(t *tes
 	if !result.IntakeAcknowledged {
 		t.Fatalf("result = %+v, want acknowledged submission", result)
 	}
-	if len(submittedCompany) != 6 {
-		t.Fatalf("company = %q, want six letters", submittedCompany)
-	}
-	for _, character := range submittedCompany {
-		if character < 'a' || character > 'z' {
-			t.Fatalf("company = %q, want six lowercase ASCII letters", submittedCompany)
-		}
-	}
-	if submittedCompany != "zabcde" {
-		t.Fatalf("company = %q, want generated value zabcde", submittedCompany)
-	}
-}
-
-func TestSubmitReportsRandomCompanyFailureAsRetrySafeBeforePosting(t *testing.T) {
-	var signupCalls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/geo":
-			_, _ = w.Write([]byte(`{"data":{"countryName":"United States","countryCode":"US","region":"California","salesRegion":"AMER"}}`))
-		case "/signup":
-			signupCalls.Add(1)
-			_, _ = w.Write([]byte(`"OK"`))
-		default:
-			t.Fatalf("unexpected request path %s", r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	service := newTestService(t, Config{
-		HTTPClient: server.Client(),
-		GeoURL:     server.URL + "/geo",
-		SignupURL:  server.URL + "/signup",
-	})
-	service.companyRandom = strings.NewReader("")
-	_, err := service.Submit(context.Background(), Request{
-		FirstName:     "Test",
-		LastName:      "Person",
-		Email:         "test.person@example.com",
-		TermsAccepted: true,
-	})
-	assertSignupError(t, err, ErrorCodePreparation, true)
-	if signupCalls.Load() != 0 {
-		t.Fatalf("signup calls = %d, want no POST before company generation succeeds", signupCalls.Load())
+	if submittedCompany != "Unknown" {
+		t.Fatalf("company = %q, want Unknown", submittedCompany)
 	}
 }
 

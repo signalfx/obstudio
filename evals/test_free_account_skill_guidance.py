@@ -189,7 +189,7 @@ def test_free_account_skill_pins_backend_mapping_and_one_call_per_request() -> N
     text = _normalized(SKILL)
 
     for required in (
-        "fresh six-letter lowercase company placeholder",
+        "`Unknown` as the company value",
         "without supplying an IP-address parameter",
         "request's network source IP",
         "United States to the public `us` value and internal US1 destination",
