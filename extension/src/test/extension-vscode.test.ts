@@ -179,7 +179,9 @@ async function waitForHttpOrExit(url: string, child: cp.ChildProcess, timeoutMs:
 	let lastError: unknown;
 
 	while (Date.now() < deadline) {
-		if (child.exitCode !== null || child.killed) {
+		// child.killed only records that kill() successfully sent a signal; it is
+		// true while a shutdown-gated fixture is deliberately still alive.
+		if (child.exitCode !== null || child.signalCode !== null) {
 			throw new Error(`Splunk Observability Studio exited before becoming ready at ${url}.`);
 		}
 
@@ -518,7 +520,13 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 function writeNativeLegacyObserverProcessFixture(
 	binaryPath: string,
 	version: string,
-	options: { shutdownDelayMs?: number; vacateWhenFileExists?: string } = {},
+	options: {
+		healthFailureGatePath?: string;
+		postOtlpShutdownLingerMs?: number;
+		shutdownDelayMs?: number;
+		shutdownStartGatePath?: string;
+		vacateWhenFileExists?: string;
+	} = {},
 ): void {
 	const sourcePath = `${binaryPath}.go`;
 	const source = `package main
@@ -570,11 +578,19 @@ func main() {
 	var otlpHTTPListener net.Listener
 	var otlpGRPCListener net.Listener
 	vacatePath := ${JSON.stringify(options.vacateWhenFileExists ?? '')}
+	healthFailureGatePath := ${JSON.stringify(options.healthFailureGatePath ?? '')}
+	shutdownStartGatePath := ${JSON.stringify(options.shutdownStartGatePath ?? '')}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(response http.ResponseWriter, request *http.Request) {
 		switch {
 		case request.URL.Path == "/api/health":
+			if healthFailureGatePath != "" {
+				if _, statErr := os.Stat(healthFailureGatePath); statErr == nil {
+					sendJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "temporarily unavailable"})
+					return
+				}
+			}
 			if vacatePath != "" {
 				if _, statErr := os.Stat(vacatePath); statErr == nil {
 					_ = observerListener.Close()
@@ -639,10 +655,19 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
+	if shutdownStartGatePath != "" {
+		for {
+			if _, statErr := os.Stat(shutdownStartGatePath); statErr == nil {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 	_ = observerServer.Close()
 	time.Sleep(time.Duration(${options.shutdownDelayMs ?? 0}) * time.Millisecond)
 	_ = otlpHTTPServer.Close()
 	_ = otlpGRPCListener.Close()
+	time.Sleep(time.Duration(${options.postOtlpShutdownLingerMs ?? 0}) * time.Millisecond)
 }
 `;
 	fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
@@ -1044,6 +1069,115 @@ suite('VS Code Host', () => {
 		}
 	});
 
+	test('stop wins when it joins a restart shutdown already in progress', async function () {
+		this.timeout(45_000);
+		if (process.platform === 'win32') {
+			this.skip();
+		}
+
+		const extension = await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+		const currentBackendPath = path.join(extension.extensionPath, 'dist', 'observer', 'obstudio');
+		const currentBackendContents = fs.readFileSync(currentBackendPath);
+		const currentBackendMode = fs.statSync(currentBackendPath).mode;
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-restart-stop-home-'));
+		const statePath = path.join(tempHome, '.obstudio', 'shared-observer.json');
+		const shutdownGatePath = path.join(tempHome, 'allow-observer-shutdown');
+		const observerPorts = await resolveSharedObserverPorts({});
+		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		let restartOperation: Thenable<unknown> | undefined;
+		let stopOperation: Thenable<unknown> | undefined;
+
+		try {
+			process.env.HOME = tempHome;
+			process.env.USERPROFILE = tempHome;
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+			await vscode.commands.executeCommand(
+				'observability-studio.internal.setObserverOtlpPortsForTest',
+				{ grpc: observerPorts.grpc, http: observerPorts.http },
+			);
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			// Let configuration-driven lifecycle work finish before replacing the
+			// bundled process with the shutdown-gated fixture under test.
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+			writeNativeLegacyObserverProcessFixture(
+				currentBackendPath,
+				String(extension.packageJSON.version),
+				{ shutdownStartGatePath: shutdownGatePath },
+			);
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+			await waitFor(
+				() => requestStatus(`${baseUrl}/api/health`, 'GET'),
+				(status) => status === 200,
+				10_000,
+			);
+
+			const activeRestartOperation = vscode.commands.executeCommand('observability-studio.restartObserver');
+			restartOperation = activeRestartOperation;
+			await waitFor(
+				async () => {
+					const state = await vscode.commands.executeCommand<RuntimeState>(
+						'observability-studio.internal.getRuntimeState',
+					);
+					const oldProcessStillServing = await requestStatus(`${baseUrl}/api/health`, 'GET').then(
+						(status) => status === 200,
+						() => false,
+					);
+					return state.observerUrl === undefined
+						&& state.observerPort === undefined
+						&& oldProcessStillServing;
+				},
+				(value) => value,
+				5_000,
+			);
+
+			let stopSettled = false;
+			const activeStopOperation = vscode.commands.executeCommand('observability-studio.stopObserver').then(() => {
+				stopSettled = true;
+			});
+			stopOperation = activeStopOperation;
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			assert.equal(stopSettled, false, 'Stop must join the gated shutdown instead of returning early');
+
+			fs.writeFileSync(shutdownGatePath, '', { mode: 0o600 });
+			await Promise.all([activeRestartOperation, activeStopOperation]);
+
+			const stoppedState = await vscode.commands.executeCommand<RuntimeState>(
+				'observability-studio.internal.getRuntimeState',
+			);
+			assert.equal(stoppedState.observerUrl, undefined);
+			assert.equal(stoppedState.observerPort, undefined);
+			assert.equal(stoppedState.sharedMode, false);
+			await assert.rejects(fetchJson(`${baseUrl}/api/health`));
+		} finally {
+			fs.writeFileSync(shutdownGatePath, '', { mode: 0o600 });
+			await Promise.allSettled([restartOperation, stopOperation].filter(
+				(operation): operation is Thenable<unknown> => operation !== undefined,
+			));
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+			fs.writeFileSync(currentBackendPath, currentBackendContents, { mode: currentBackendMode });
+			fs.chmodSync(currentBackendPath, currentBackendMode);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(tempHome);
+		}
+	});
+
 	test('extension reuses the healthy observer recorded in shared state', async function () {
 		this.timeout(30_000);
 
@@ -1389,6 +1523,236 @@ suite('VS Code Host', () => {
 		}
 	});
 
+	test('reload survives half-closed, transient-health, and undiscoverable outgoing extension observers', async function () {
+		this.timeout(45_000);
+		if (process.platform === 'win32') {
+			this.skip();
+		}
+
+		const extension = await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-reload-handoff-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const readyHealthFailureGatePath = path.join(tempHome, 'fail-ready-observer-health');
+		const readyShutdownGatePath = path.join(tempHome, 'allow-ready-observer-shutdown');
+		const observerPorts = await resolveSharedObserverPorts({});
+		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
+		const priorBackendPath = path.join(tempHome, 'prior-extension', 'dist', 'observer', 'obstudio');
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		let priorProcess: cp.ChildProcess | undefined;
+
+		try {
+			process.env.HOME = tempHome;
+			process.env.USERPROFILE = tempHome;
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+			await vscode.commands.executeCommand(
+				'observability-studio.internal.setObserverOtlpPortsForTest',
+				{ grpc: observerPorts.grpc, http: observerPorts.http },
+			);
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			// Configuration updates restart the observer. Settle and stop that work before
+			// constructing the prior-host shutdown window under test.
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+			writeNativeLegacyObserverProcessFixture(
+				priorBackendPath,
+				String(extension.packageJSON.version),
+				{ postOtlpShutdownLingerMs: 5_000, shutdownDelayMs: 5_200 },
+			);
+			priorProcess = cp.spawn(priorBackendPath, [], {
+				env: {
+					...process.env,
+					HOST: '127.0.0.1',
+					OBSTUDIO_MODE: 'managed',
+					OBSTUDIO_OWNER: 'vscode-extension',
+					OTLP_GRPC_PORT: String(observerPorts.grpc),
+					OTLP_HTTP_PORT: String(observerPorts.http),
+					PORT: String(observerPorts.ui),
+				},
+				stdio: 'pipe',
+			});
+			await waitForHttpOrExit(`${baseUrl}/api/health`, priorProcess, 10_000);
+
+			fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+			fs.writeFileSync(statePath, JSON.stringify({
+				baseUrl,
+				healthUrl: `${baseUrl}/api/health`,
+				mcpUrl: `${baseUrl}/mcp`,
+				pid: priorProcess.pid,
+				// This is process-start time, not handoff time. A reload must still work
+				// after the outgoing Observer has been running for a long time.
+				updatedAt: new Date(0).toISOString(),
+			}), { mode: 0o600 });
+
+			assert.equal(priorProcess.kill('SIGTERM'), true);
+			await waitFor(
+				async () => {
+					const uiUnavailable = await requestStatus(`${baseUrl}/api/health`, 'GET').then(
+						() => false,
+						() => true,
+					);
+					const otlpHttpAvailable = await requestStatus(
+						`http://127.0.0.1:${observerPorts.http}`,
+						'GET',
+					).then(
+						(status) => status === 204,
+						() => false,
+					);
+					return uiUnavailable
+						&& otlpHttpAvailable
+						&& priorProcess?.exitCode === null
+						&& priorProcess.signalCode === null;
+				},
+				(value) => value,
+				5_000,
+			);
+
+			// One start must bridge the prior host's half-shutdown state. A second
+			// command would mask the regression after the old process exits.
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+			const state = await vscode.commands.executeCommand<RuntimeState>(
+				'observability-studio.internal.getRuntimeState',
+			);
+			assert.equal(state.observerUrl, baseUrl, JSON.stringify(state));
+			assert.equal(state.observerPort, observerPorts.ui);
+			assert.equal(state.sharedMode, false);
+			assert.doesNotMatch(state.statusBarText ?? '', /^\$\(error\)/);
+
+			const currentHealth = await fetchJson(`${baseUrl}/api/health`);
+			assert.equal(currentHealth.version, String(extension.packageJSON.version));
+			assert.equal(currentHealth.owner, 'vscode-extension');
+			assert.equal(currentHealth.mode, 'managed');
+			assert.equal(priorProcess.exitCode, null, 'startup should proceed once ports are free, before old process exit');
+			assert.equal(priorProcess.signalCode, null, 'the old PID must still be alive after releasing its listeners');
+
+			await waitFor(
+				() => Promise.resolve(
+					priorProcess !== undefined
+					&& (priorProcess.exitCode !== null || priorProcess.signalCode !== null),
+				),
+				(value) => value,
+				7_000,
+			);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+			const readyPriorBackendPath = path.join(tempHome, 'ready-prior-extension', 'dist', 'observer', 'obstudio');
+			writeNativeLegacyObserverProcessFixture(
+				readyPriorBackendPath,
+				String(extension.packageJSON.version),
+				{
+					healthFailureGatePath: readyHealthFailureGatePath,
+					shutdownDelayMs: 1_200,
+					shutdownStartGatePath: readyShutdownGatePath,
+				},
+			);
+			priorProcess = cp.spawn(readyPriorBackendPath, [], {
+				env: {
+					...process.env,
+					HOST: '127.0.0.1',
+					OBSTUDIO_MODE: 'managed',
+					OBSTUDIO_OWNER: 'vscode-extension',
+					OTLP_GRPC_PORT: String(observerPorts.grpc),
+					OTLP_HTTP_PORT: String(observerPorts.http),
+					PORT: String(observerPorts.ui),
+				},
+				stdio: 'pipe',
+			});
+			await waitForHttpOrExit(`${baseUrl}/api/health`, priorProcess, 10_000);
+			// Shared-state publication is intentionally non-fatal in the Observer.
+			// The incoming host must still recognize a live extension-owned service,
+			// survive transient health failures, and recover after it shuts down.
+			fs.rmSync(statePath, { force: true });
+			assert.equal(priorProcess.kill('SIGTERM'), true);
+			fs.writeFileSync(readyHealthFailureGatePath, '', { mode: 0o600 });
+			const restoreReadyHealth = setTimeout(
+				() => fs.rmSync(readyHealthFailureGatePath, { force: true }),
+				1_200,
+			);
+			try {
+				await vscode.commands.executeCommand('observability-studio.startObserver');
+			} finally {
+				clearTimeout(restoreReadyHealth);
+				fs.rmSync(readyHealthFailureGatePath, { force: true });
+			}
+			const provisionalState = await vscode.commands.executeCommand<RuntimeState>(
+				'observability-studio.internal.getRuntimeState',
+			);
+			assert.equal(provisionalState.sharedMode, true, 'the first ready probe should reuse the outgoing process provisionally');
+			assert.equal(priorProcess.exitCode, null);
+			assert.equal(priorProcess.signalCode, null);
+
+			fs.writeFileSync(readyHealthFailureGatePath, '', { mode: 0o600 });
+			await new Promise<void>((resolve) => setTimeout(resolve, 1_200));
+			const transientFailureState = await vscode.commands.executeCommand<RuntimeState>(
+				'observability-studio.internal.getRuntimeState',
+			);
+			assert.equal(transientFailureState.sharedMode, true, 'health failures alone must not trigger replacement');
+			assert.doesNotMatch(transientFailureState.statusBarText ?? '', /^\$\(error\)/);
+			assert.equal(priorProcess.exitCode, null);
+			assert.equal(priorProcess.signalCode, null);
+			fs.rmSync(readyHealthFailureGatePath, { force: true });
+			await waitForHttpOrExit(`${baseUrl}/api/health`, priorProcess, 2_000);
+			await vscode.commands.executeCommand(
+				'observability-studio.internal.holdCloudLifecycleForHandoffTest',
+			);
+			const shutdownReleasedAt = Date.now();
+			fs.writeFileSync(readyShutdownGatePath, '', { mode: 0o600 });
+
+			const recoveredState = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
+					'observability-studio.internal.getRuntimeState',
+				)),
+				(value) => Boolean(
+					value
+					&& value.observerPort === observerPorts.ui
+					&& value.observerUrl === baseUrl
+					&& !value.sharedMode,
+				),
+				15_000,
+			);
+			assert.ok(
+				Date.now() - shutdownReleasedAt >= 6_500,
+				'recovery must wait for the queued Cloud operation beyond the original handoff deadline',
+			);
+			assert.equal(recoveredState.observerPort, observerPorts.ui);
+			const recoveredHealth = await fetchJson(`${baseUrl}/api/health`);
+			assert.equal(recoveredHealth.version, String(extension.packageJSON.version));
+			assert.equal(recoveredHealth.owner, 'vscode-extension');
+			assert.equal(recoveredHealth.mode, 'managed');
+		} finally {
+			if (
+				priorProcess !== undefined
+				&& priorProcess.exitCode === null
+				&& priorProcess.signalCode === null
+			) {
+				const priorExit = new Promise<void>((resolve) => priorProcess?.once('exit', () => resolve()));
+				priorProcess.kill('SIGKILL');
+				await Promise.race([
+					priorExit,
+					new Promise<void>((resolve) => setTimeout(resolve, 2_000)),
+				]);
+			}
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(tempHome);
+		}
+	});
+
 	for (const legacyVersion of ['0.0.18', '0.0.20'] as const) {
 		test(`upgrade automatically replaces a pre-marker v${legacyVersion} extension Splunk Observability Studio`, async function () {
 			this.timeout(45_000);
@@ -1503,7 +1867,7 @@ suite('VS Code Host', () => {
 					healthUrl: `${baseUrl}/api/health`,
 					mcpUrl: `${baseUrl}/mcp`,
 					...(legacyVersion === '0.0.20' ? { pid: legacyProcess.pid } : {}),
-					updatedAt: new Date().toISOString(),
+					updatedAt: new Date(0).toISOString(),
 				}), { mode: 0o600 });
 
 				await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);

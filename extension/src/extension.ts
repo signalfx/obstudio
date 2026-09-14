@@ -6,6 +6,7 @@ import * as https from 'node:https';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import * as vscode from 'vscode';
 import {
 	createAgentIntegrationConfigFingerprint,
@@ -46,6 +47,10 @@ import {
 	stopObserverRun,
 } from './observer-lifecycle';
 import {
+	loopbackPortsAreSimultaneouslyAvailable,
+	uniqueLoopbackPorts,
+} from './observer-port-handoff';
+import {
 	getObserverErrorWebviewHtml,
 	getObserverLoadingWebviewHtml,
 	getObserverStoppedWebviewHtml,
@@ -70,6 +75,7 @@ import {
 	connectSplunkCloudWithStorage,
 	forgetSplunkCloudWithStorage,
 	freeAccountSubmissionFailureIsOutcomeUnknown,
+	initializeCloudBridgeState,
 	initializeSplunkCloudStatus,
 	isSupportedFreeAccountRegion,
 	maxCloudDestinationBytes,
@@ -116,6 +122,7 @@ import {
 	deleteSISCIMDOAuthSession,
 	loadStoredSISCIMDOAuthSession,
 	registerClientWithSIS,
+	resolveSISCIMDOAuthScope,
 	sisCIMDOAuthRedirectUri,
 	storeSISCIMDOAuthSession,
 	type SISCIMDOAuthConfiguration,
@@ -141,6 +148,7 @@ let observerUsesSharedServer = false;
 let observerWebviewRootUri: vscode.Uri | undefined;
 let observerPanelTelemetry: ObserverWebviewTelemetry | undefined;
 let observerDeactivationStarted = false;
+let observerExplicitStopIntentCount = 0;
 const observerHostRequestCancellations = new Map<string, () => void>();
 let sisCIMDOAuthFlowPromise: Promise<boolean> | undefined;
 let sisCIMDOAuthAbortController: AbortController | undefined;
@@ -184,6 +192,9 @@ const observerCloudRollbackTokenHeader = 'X-Obstudio-Cloud-Rollback-Token';
 const observerShutdownTerminationTimeoutMs = 2_000;
 const observerShutdownPostExitDelayMs = 300;
 const observerExtensionUnloadDeadlineMs = 4_500;
+const observerExtensionHandoffWindowMs = 6_500;
+const observerExtensionHandoffMonitorIntervalMs = 250;
+const observerExtensionHandoffPortCheckMs = 1_000;
 const outdatedManagedObserverShutdownTimeoutMs = 5_000;
 const outdatedManagedObserverForceShutdownTimeoutMs = 2_000;
 const agentIntegrationPromptDismissedPrefix = 'agentIntegrationPromptDismissed.';
@@ -319,7 +330,12 @@ type ObserverProbeResult =
 		status: 'ready';
 	}
 	| { error: Error; status: 'unavailable' }
-	| { reason: string; status: 'mismatch' };
+	| { reason: string; retryable?: boolean; status: 'mismatch' };
+
+function observerProbeMayRecover(result: ObserverProbeResult): boolean {
+	return result.status === 'unavailable'
+		|| (result.status === 'mismatch' && result.retryable === true);
+}
 
 type PortReservation = {
 	port: number;
@@ -551,25 +567,36 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	const stopDisposable = vscode.commands.registerCommand('observability-studio.stopObserver', async () => {
-		await settleObserverConfigurationRestart();
-		if (
-			observerProcess === undefined
-			&& observerStartupPromise === undefined
-			&& observerBaseUrl === undefined
-			&& observerLifecycleState.status === 'stopped'
-		) {
-			void vscode.window.showInformationMessage('Splunk Observability Studio is not running.');
-			return;
+		observerExplicitStopIntentCount += 1;
+		try {
+			await settleObserverConfigurationRestart();
+			const wasIdle = observerProcess === undefined
+				&& observerStartupPromise === undefined
+				&& observerBaseUrl === undefined
+				&& observerLifecycleState.status === 'stopped';
+			await stopObserver();
+			void vscode.window.showInformationMessage(
+				wasIdle
+					? 'Splunk Observability Studio is not running.'
+					: 'Splunk Observability Studio stopped.',
+			);
+		} finally {
+			observerExplicitStopIntentCount -= 1;
 		}
-		await stopObserver();
-		void vscode.window.showInformationMessage('Splunk Observability Studio stopped.');
 	});
 
 	const restartDisposable = vscode.commands.registerCommand('observability-studio.restartObserver', async () => {
-		await settleObserverConfigurationRestart();
-		await stopObserver();
+		let restartGeneration: number;
+		observerExplicitStopIntentCount += 1;
 		try {
-			await ensureObserverRunning(context);
+			await settleObserverConfigurationRestart();
+			await stopObserver();
+			restartGeneration = observerLifecycleState.currentRunId;
+		} finally {
+			observerExplicitStopIntentCount -= 1;
+		}
+		try {
+			await ensureObserverRunning(context, restartGeneration);
 			refreshObserverPanel();
 			void maybeOfferDetectedAgentIntegrations(context);
 		} catch (error) {
@@ -715,6 +742,21 @@ export async function activate(context: vscode.ExtensionContext) {
 					observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
 				},
 			),
+			vscode.commands.registerCommand(
+				'observability-studio.internal.holdCloudLifecycleForHandoffTest',
+				async () => {
+					let markStarted!: () => void;
+					const started = new Promise<void>((resolve) => { markStarted = resolve; });
+					const hold = observerCloudLifecycleOperations.run(async () => {
+						markStarted();
+						await delay(observerExtensionHandoffWindowMs + 500);
+					});
+					void hold.catch((error) => {
+						logObserverLifecycle(`Cloud lifecycle test hold failed: ${getErrorMessage(error)}`);
+					});
+					await started;
+				},
+			),
 		]
 		: [];
 
@@ -760,7 +802,7 @@ function getSISCIMDOAuthConfiguration(): SISCIMDOAuthConfiguration {
 	const configuration = vscode.workspace.getConfiguration('observability-studio');
 	const issuer = configuration.get<string>(sisCimdOAuthIssuerSetting)?.trim() || sisCimdOAuthDefaultIssuer;
 	const clientId = configuration.get<string>(sisCimdOAuthClientIdSetting)?.trim() || sisCimdOAuthDefaultClientId;
-	const scope = configuration.get<string>(sisCimdOAuthScopeSetting)?.trim() ?? '';
+	const scope = resolveSISCIMDOAuthScope(configuration.get<string>(sisCimdOAuthScopeSetting));
 	const redirectUri = configuration.get<string>(sisCimdOAuthRedirectUriSetting)?.trim()
 		|| sisCIMDOAuthRedirectUri;
 	const developmentCaBundlePath = configuration
@@ -892,14 +934,36 @@ async function clearSISSession(context: vscode.ExtensionContext): Promise<boolea
 // Splunk Observability Studio process lifecycle
 // ---------------------------------------------------------------------------
 
-async function ensureObserverRunning(context: vscode.ExtensionContext): Promise<void> {
+async function ensureObserverRunning(
+	context: vscode.ExtensionContext,
+	expectedLifecycleGeneration?: number,
+): Promise<void> {
+	if (
+		observerDeactivationStarted
+		|| (expectedLifecycleGeneration !== undefined && observerExplicitStopIntentCount > 0)
+		|| (expectedLifecycleGeneration !== undefined
+			&& observerLifecycleState.currentRunId !== expectedLifecycleGeneration)
+	) {
+		return;
+	}
 	if (observerStartupPromise !== undefined) {
 		logObserverLifecycle('Start requested while startup is already in progress; waiting for existing startup.');
 		return observerStartupPromise;
 	}
 	if (observerStopOperation.current !== undefined) {
+		if (expectedLifecycleGeneration !== undefined) {
+			return;
+		}
 		logObserverLifecycle('Start requested while stop is in progress; waiting for Splunk Observability Studio shutdown.');
 		await observerStopOperation.current;
+	}
+	if (
+		observerDeactivationStarted
+		|| (expectedLifecycleGeneration !== undefined && observerExplicitStopIntentCount > 0)
+		|| (expectedLifecycleGeneration !== undefined
+			&& observerLifecycleState.currentRunId !== expectedLifecycleGeneration)
+	) {
+		return;
 	}
 	if (observerLifecycleState.status === 'running' && observerBaseUrl !== undefined) {
 		logObserverLifecycle(`Start requested while Splunk Observability Studio is already running at ${observerBaseUrl}.`);
@@ -975,6 +1039,12 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			return;
 		}
 
+		const managedPort = getConfiguredManagedObserverPort();
+		const managedObserverBaseUrl = buildManagedObserverBaseUrl(managedPort);
+		const managedEndpoints = observerEndpointRolesForBase(managedObserverBaseUrl);
+		const observerHandoffDeadline = performance.now() + observerExtensionHandoffWindowMs;
+		const managedHandoffDiscovery = discoveredState !== undefined
+			&& sharedDiscoveryMatchesRestBase(discoveredState, managedObserverBaseUrl);
 		const discoveredObserver = discoveredState === undefined
 			? undefined
 			: preferredObserverDiscoveryForBase(
@@ -990,13 +1060,23 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				{ requireStableOtlp: true },
 			);
 			assertObserverRunCurrent(observerLifecycleState, runId);
-			while (
-				discoveryProbe.status === 'unavailable'
-				&& discoveredObserver.updatedAtMs !== undefined
-				&& discoveredObserver.updatedAtMs <= Date.now()
-				&& Date.now() - discoveredObserver.updatedAtMs < sharedObserverStartupWindowMs
-			) {
-				await delay(100);
+			const discoveryStateAgeMs = discoveredObserver.updatedAtMs === undefined
+				? undefined
+				: Date.now() - discoveredObserver.updatedAtMs;
+			const discoveryStartupDeadline = discoveryStateAgeMs !== undefined
+				&& discoveryStateAgeMs >= 0
+				&& discoveryStateAgeMs < sharedObserverStartupWindowMs
+				? performance.now() + sharedObserverStartupWindowMs - discoveryStateAgeMs
+				: undefined;
+			const retryDiscoveryProbe = async () => {
+				if (discoveryStartupDeadline === undefined) {
+					return;
+				}
+				const remainingMs = discoveryStartupDeadline - performance.now();
+				if (remainingMs <= 0) {
+					return;
+				}
+				await delay(Math.min(100, remainingMs));
 				assertObserverRunCurrent(observerLifecycleState, runId);
 				discoveryProbe = await probeObserver(
 					discoveredEndpoints,
@@ -1004,6 +1084,30 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 					{ requireStableOtlp: true },
 				);
 				assertObserverRunCurrent(observerLifecycleState, runId);
+			};
+			while (
+				observerProbeMayRecover(discoveryProbe)
+				&& discoveryStartupDeadline !== undefined
+				&& performance.now() < discoveryStartupDeadline
+			) {
+				// Observer writes this fresh discovery only after its UI and both OTLP
+				// listeners are bound. If every required port is now free, the recorded
+				// process exited during hot-install handoff rather than still starting.
+				if (
+					managedHandoffDiscovery
+					&& await loopbackPortsAreSimultaneouslyAvailable(
+						[observerOtlpGrpcPort, observerOtlpHttpPort, managedPort],
+						discoveryStartupDeadline,
+					)
+				) {
+					assertObserverRunCurrent(observerLifecycleState, runId);
+					logObserverLifecycle(
+						`Run ${runId}: fresh discovery became unavailable and all prior Observer ports were released.`,
+					);
+					break;
+				}
+				assertObserverRunCurrent(observerLifecycleState, runId);
+				await retryDiscoveryProbe();
 			}
 			const retirement = await retireMismatchedManagedPortObserver(
 				discoveredObserver,
@@ -1030,6 +1134,13 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 					appendObserverOutputLine(`Reusing discovered shared Splunk Observability Studio service at ${discoveredObserver.baseUrl}`);
 					if (completeObserverStart(observerLifecycleState, runId, discoveredPort)) {
 						syncObserverUi();
+						monitorExtensionObserverHandoff(
+							context,
+							discoveredEndpoints,
+							discoveryProbe.health,
+							bundleVersion,
+							runId,
+						);
 					}
 					return;
 				}
@@ -1044,9 +1155,6 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			);
 		}
 
-		const managedPort = getConfiguredManagedObserverPort();
-		const managedObserverBaseUrl = buildManagedObserverBaseUrl(managedPort);
-		const managedEndpoints = observerEndpointRolesForBase(managedObserverBaseUrl);
 		const managedDiscovery = managedState;
 		if (
 			managedDiscovery !== undefined
@@ -1096,8 +1204,17 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				);
 			}
 		}
-		const existingObserver = await probeObserver(managedEndpoints, 500, { requireStableOtlp: true });
+		let existingObserver = await probeObserver(managedEndpoints, 500, { requireStableOtlp: true });
 		assertObserverRunCurrent(observerLifecycleState, runId);
+		if (observerProbeMayRecover(existingObserver)) {
+			await waitForObserverPortHandoff(
+				[observerOtlpGrpcPort, observerOtlpHttpPort, managedPort],
+				observerHandoffDeadline,
+				runId,
+			);
+			existingObserver = await probeObserver(managedEndpoints, 500, { requireStableOtlp: true });
+			assertObserverRunCurrent(observerLifecycleState, runId);
+		}
 
 		if (existingObserver.status === 'ready') {
 			if (existingObserver.health.version === bundleVersion) {
@@ -1106,6 +1223,13 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				appendObserverOutputLine(`Reusing shared Splunk Observability Studio service at ${managedObserverBaseUrl}`);
 				if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
 					syncObserverUi();
+					monitorExtensionObserverHandoff(
+						context,
+						managedEndpoints,
+						existingObserver.health,
+						bundleVersion,
+						runId,
+					);
 				}
 				return;
 			}
@@ -1341,6 +1465,150 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 
 	observerStartupPromise = startupPromise;
 	return observerStartupPromise;
+}
+
+async function waitForObserverPortHandoff(
+	ports: readonly number[],
+	deadline: number,
+	runId: number,
+): Promise<void> {
+	const uniquePorts = uniqueLoopbackPorts(ports);
+	if (await loopbackPortsAreSimultaneouslyAvailable(ports, deadline)) {
+		assertObserverRunCurrent(observerLifecycleState, runId);
+		return;
+	}
+	assertObserverRunCurrent(observerLifecycleState, runId);
+	logObserverLifecycle(
+		`Run ${runId}: waiting for unavailable Splunk Observability Studio ports ${uniquePorts.join(', ')} `
+		+ 'to finish an extension-host handoff.',
+	);
+	while (performance.now() < deadline) {
+		if (await loopbackPortsAreSimultaneouslyAvailable(uniquePorts, deadline)) {
+			assertObserverRunCurrent(observerLifecycleState, runId);
+			logObserverLifecycle(`Run ${runId}: prior Splunk Observability Studio ports were released together.`);
+			return;
+		}
+		assertObserverRunCurrent(observerLifecycleState, runId);
+		const remainingMs = deadline - performance.now();
+		if (remainingMs <= 0) {
+			break;
+		}
+		await delay(Math.min(100, remainingMs));
+		assertObserverRunCurrent(observerLifecycleState, runId);
+	}
+	logObserverLifecycle(`Run ${runId}: extension-host port handoff window expired.`);
+}
+
+function monitorExtensionObserverHandoff(
+	context: vscode.ExtensionContext,
+	endpoints: ObserverEndpointRoles,
+	health: ObserverHealth,
+	bundleVersion: string,
+	runId: number,
+): void {
+	if (
+		health.owner !== extensionManagedObserverOwner
+		|| health.mode !== extensionManagedObserverMode
+		|| health.version !== bundleVersion
+	) {
+		return;
+	}
+	const restPort = observerPortFromUrl(endpoints.restBaseUrl);
+	if (restPort === undefined) {
+		return;
+	}
+	const ports = uniqueLoopbackPorts([
+		observerOtlpGrpcPort,
+		observerOtlpHttpPort,
+		restPort,
+	]);
+
+	void (async () => {
+		const deadline = performance.now() + observerExtensionHandoffWindowMs;
+		while (performance.now() < deadline) {
+			await delay(observerExtensionHandoffMonitorIntervalMs);
+			if (
+				observerDeactivationStarted
+				|| observerExplicitStopIntentCount > 0
+				|| !isObserverRunCurrent(observerLifecycleState, runId)
+				|| observerProcess !== undefined
+				|| observerBaseUrl !== endpoints.restBaseUrl
+			) {
+				return;
+			}
+			const probe = await probeObserver(endpoints, 500, { requireStableOtlp: true });
+			if (!isObserverRunCurrent(observerLifecycleState, runId)) {
+				return;
+			}
+			if (probe.status === 'ready') {
+				continue;
+			}
+			if (!(await loopbackPortsAreSimultaneouslyAvailable(
+				ports,
+				performance.now() + observerExtensionHandoffPortCheckMs,
+			))) {
+				continue;
+			}
+			if (
+				observerDeactivationStarted
+				|| observerExplicitStopIntentCount > 0
+				|| !isObserverRunCurrent(observerLifecycleState, runId)
+				|| observerProcess !== undefined
+				|| observerBaseUrl !== endpoints.restBaseUrl
+			) {
+				return;
+			}
+			const recoveryGeneration = await observerCloudLifecycleOperations.run(async () => {
+				if (
+					observerDeactivationStarted
+					|| observerExplicitStopIntentCount > 0
+					|| observerStopOperation.current !== undefined
+					|| !isObserverRunCurrent(observerLifecycleState, runId)
+					|| observerProcess !== undefined
+					|| observerBaseUrl !== endpoints.restBaseUrl
+				) {
+					return undefined;
+				}
+				if (!(await loopbackPortsAreSimultaneouslyAvailable(
+					ports,
+					performance.now() + observerExtensionHandoffPortCheckMs,
+				))) {
+					return undefined;
+				}
+				if (
+					observerDeactivationStarted
+					|| observerExplicitStopIntentCount > 0
+					|| observerStopOperation.current !== undefined
+					|| !isObserverRunCurrent(observerLifecycleState, runId)
+					|| observerProcess !== undefined
+					|| observerBaseUrl !== endpoints.restBaseUrl
+				) {
+					return undefined;
+				}
+				logObserverLifecycle(
+					`Run ${runId}: reused extension-owned Splunk Observability Studio released all ports during host handoff; recovering.`,
+				);
+				stopObserverRun(observerLifecycleState);
+				setObserverEndpoints(undefined);
+				observerUsesSharedServer = false;
+				syncObserverUi();
+				return observerLifecycleState.currentRunId;
+			});
+			if (recoveryGeneration === undefined) {
+				continue;
+			}
+			try {
+				await ensureObserverRunning(context, recoveryGeneration);
+			} catch (error) {
+				if (!isObserverLifecycleCancelled(error)) {
+					logObserverLifecycle(`Automatic host-handoff recovery failed: ${getErrorMessage(error)}`);
+				}
+			}
+			return;
+		}
+	})().catch((error) => {
+		logObserverLifecycle(`Extension-host handoff monitor failed: ${getErrorMessage(error)}`);
+	});
 }
 
 async function retireMismatchedManagedPortObserver(
@@ -1621,11 +1889,12 @@ async function stopObserver(): Promise<void> {
 	const queuedStop = observerCloudLifecycleOperations.run(async () => {
 		const proc = observerProcess;
 		if (proc === undefined && observerStartupPromise === undefined && observerBaseUrl === undefined) {
-			if (observerLifecycleState.status !== 'stopped') {
-				stopObserverRun(observerLifecycleState);
-				observerUsesSharedServer = false;
-				syncObserverUi();
-			}
+			// Even an apparently idle explicit stop advances the generation. A
+			// handoff monitor may have cleared its old run immediately before this
+			// queued operation and must not revive that stale recovery generation.
+			stopObserverRun(observerLifecycleState);
+			observerUsesSharedServer = false;
+			syncObserverUi();
 			logObserverLifecycle('Stop requested but Splunk Observability Studio is already idle.');
 			return;
 		}
@@ -1997,28 +2266,14 @@ async function performCloudBridgeActionExclusive(
 			// Registration (registerClientWithSIS) is a stateless probe with nothing
 			// persisted to restore, unlike a login session -- cimdRegistrationVerified
 			// only ever becomes true as the direct result of a 'setup-cimd' response
-			// within this webview session. The login session itself DOES persist
-			// (context.secrets), so cimdSession is restored here, on both the happy
-			// and the recoverable-error path below.
-			const cimdRegistrationEnabled = isSISCIMDRegistrationEnabled();
-			try {
-				const [status, cimdSession] = await Promise.all([
-					refreshSplunkCloudConnection(context),
-					currentSISCIMDSessionStatus(context),
-					]);
-					return { cimdRegistrationEnabled, cimdSession, status };
-				} catch (error) {
-					const [status, cimdSession] = await Promise.all([
-					getObserverCloudJSON('/api/splunk/export'),
-					currentSISCIMDSessionStatus(context),
-				]);
-				return {
-					cimdRegistrationEnabled,
-					cimdSession,
-					status,
-					warning: getErrorMessage(error),
-				};
-			}
+			// within this webview session. The login session itself persists in
+			// context.secrets and is restored here whenever CIMD is enabled.
+			return initializeCloudBridgeState({
+				cimdRegistrationEnabled: isSISCIMDRegistrationEnabled(),
+				readCimdSession: () => currentSISCIMDSessionStatus(context),
+				readStatus: () => getObserverCloudJSON('/api/splunk/export'),
+				refreshStatus: () => refreshSplunkCloudConnection(context),
+			});
 		}
 		case 'open-free-edition':
 			await openCloudExternalUrl(splunkFreeEditionUrl);
@@ -2757,29 +3012,30 @@ async function probeObserver(
 		};
 
 		const request = client.request(target, { method: 'GET' }, (response) => {
-			let body = '';
-			response.setEncoding('utf8');
-			response.on('data', (chunk) => {
-				body += chunk;
-			});
-			response.on('end', () => {
-				if ((response.statusCode ?? 0) !== 200) {
+			void collectObserverHostHTTPResponse(
+				response,
+				request,
+				observerHostResponseByteLimit(target),
+			).then((result) => {
+				if (result.status !== 200) {
 					finish(() => resolve({
 						status: 'mismatch',
-						reason: `${target.toString()} returned status ${response.statusCode ?? 0}`,
+						reason: `${target.toString()} returned status ${result.status}`,
+						retryable: result.status >= 500,
 					}));
 					return;
 				}
 
 				let parsed: unknown;
 				try {
-					parsed = JSON.parse(body);
+					parsed = JSON.parse(result.body);
 				} catch {
-					const contentType = response.headers['content-type'] ?? '(none)';
+					const contentType = result.headers?.['content-type'] ?? '(none)';
 					finish(() => resolve({
 						status: 'mismatch',
 						reason: `${target.toString()} returned invalid JSON `
-							+ `(content-type: ${contentType}, length: ${body.length})`,
+							+ `(content-type: ${contentType}, length: ${result.body.length})`,
+						retryable: true,
 					}));
 					return;
 				}
@@ -2791,7 +3047,7 @@ async function probeObserver(
 				}
 
 				finish(() => resolve({ status: 'ready', health: parsed as ObserverHealth }));
-			});
+			}, (error: Error) => finish(() => resolve({ status: 'unavailable', error })));
 		});
 
 		request.setTimeout(timeoutMs, () => {
@@ -2802,7 +3058,14 @@ async function probeObserver(
 			}));
 		});
 		request.once('error', (error: NodeJS.ErrnoException) => {
-			if (error.code === 'ECONNREFUSED' || error.code === 'EHOSTUNREACH' || error.code === 'ENOTFOUND') {
+			if (
+				error.code === 'ECONNABORTED'
+				|| error.code === 'ECONNREFUSED'
+				|| error.code === 'ECONNRESET'
+				|| error.code === 'EHOSTUNREACH'
+				|| error.code === 'ENOTFOUND'
+				|| error.code === 'EPIPE'
+			) {
 				finish(() => resolve({ status: 'unavailable', error }));
 				return;
 			}
