@@ -48,6 +48,10 @@ context, report `sandbox-unverified`, not unhealthy.
 
 ## Managed bootstrap boundary
 
+The SessionStart hook requires Python 3 on `PATH` (`python3`, `python`, or
+Windows `py -3`) to run the shared bootstrap. If no supported interpreter is
+available, the hook exits with code 2 and the managed runtime is not prepared.
+
 If the user trusts the SessionStart hook, the bootstrap may:
 
 - download a Splunk Observability Studio release binary;

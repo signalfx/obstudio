@@ -7,6 +7,13 @@ It packages the canonical skill sources from `../../skills/`, points both hosts
 at the local Splunk Observability Studio MCP endpoint via [`.mcp.json`](./.mcp.json), and includes
 host-specific SessionStart hook manifests for first-run bootstrap.
 
+## Prerequisites
+
+Python 3 is required for the SessionStart bootstrap. It must be available on
+`PATH` as `python3`, `python`, or Windows `py -3`. If none of these interpreters
+is available, the hook exits with code 2 and the managed Splunk Observability
+Studio runtime cannot be bootstrapped automatically.
+
 ## How to get started
 
 1. Install the **Splunk Observability Studio** plugin.
