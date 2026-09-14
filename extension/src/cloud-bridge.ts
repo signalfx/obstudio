@@ -621,6 +621,75 @@ export function initializeSplunkCloudStatus(options: {
 		: options.readStatus();
 }
 
+export type CloudBridgeInitializationResult<TSession> = {
+	cimdRegistrationEnabled: boolean;
+	cimdSession?: TSession;
+	status: unknown;
+	warning?: string;
+};
+
+export async function initializeCloudBridgeState<TSession>(options: {
+	cimdRegistrationEnabled: boolean;
+	readCimdSession: () => Promise<TSession>;
+	readStatus: () => Promise<unknown>;
+	refreshStatus: () => Promise<unknown>;
+}): Promise<CloudBridgeInitializationResult<TSession>> {
+	if (!options.cimdRegistrationEnabled) {
+		try {
+			return {
+				cimdRegistrationEnabled: false,
+				status: await options.refreshStatus(),
+			};
+		} catch (error) {
+			return {
+				cimdRegistrationEnabled: false,
+				warning: cloudErrorMessage(error),
+				status: await options.readStatus(),
+			};
+		}
+	}
+
+	const [refreshedStatus, initialCimdSession] = await Promise.allSettled([
+		options.refreshStatus(),
+		options.readCimdSession(),
+	]);
+	if (refreshedStatus.status === 'fulfilled' && initialCimdSession.status === 'fulfilled') {
+		return {
+			cimdRegistrationEnabled: true,
+			cimdSession: initialCimdSession.value,
+			status: refreshedStatus.value,
+		};
+	}
+
+	const warning = cloudErrorMessage(
+		refreshedStatus.status === 'rejected'
+			? refreshedStatus.reason
+			: initialCimdSession.status === 'rejected'
+				? initialCimdSession.reason
+				: new Error('Cloud initialization failed'),
+	);
+	const [fallbackStatus, fallbackCimdSession] = await Promise.allSettled([
+		refreshedStatus.status === 'fulfilled'
+			? Promise.resolve(refreshedStatus.value)
+			: options.readStatus(),
+		initialCimdSession.status === 'fulfilled'
+			? Promise.resolve(initialCimdSession.value)
+			: options.readCimdSession(),
+	]);
+	if (fallbackStatus.status === 'rejected') {
+		throw fallbackStatus.reason;
+	}
+	if (fallbackCimdSession.status === 'rejected') {
+		throw fallbackCimdSession.reason;
+	}
+	return {
+		cimdRegistrationEnabled: true,
+		cimdSession: fallbackCimdSession.value,
+		status: fallbackStatus.value,
+		warning,
+	};
+}
+
 function isValidSplunkTokenSecret(value: string): boolean {
 	return value.length > 0
 		&& Buffer.byteLength(value, 'utf8') <= maxCloudAccessTokenBytes

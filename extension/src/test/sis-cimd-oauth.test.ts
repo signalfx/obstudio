@@ -15,6 +15,8 @@ import {
 	parseSISCIMDOAuthSession,
 	registerClientWithSIS,
 	requestSISCIMD,
+	resolveSISCIMDOAuthScope,
+	sisCIMDOAuthDefaultScope,
 	sisCIMDOAuthRedirectUri,
 	sisCIMDOAuthSessionMatchesConfiguration,
 	storeSISCIMDOAuthSession,
@@ -170,6 +172,36 @@ const originalCA = https.globalAgent.options.ca;
 https.globalAgent.options.ca = testRootCertificate;
 test.after(() => {
 	https.globalAgent.options.ca = originalCA;
+});
+
+test('missing SIS CIMD OAuth scope uses the runtime default', () => {
+	assert.equal(resolveSISCIMDOAuthScope(undefined), sisCIMDOAuthDefaultScope);
+});
+
+test('runtime and manifest SIS CIMD OAuth scope defaults stay identical', async () => {
+	const manifest = JSON.parse(
+		await fs.readFile(path.resolve(__dirname, '..', '..', 'package.json'), 'utf8'),
+	) as {
+		contributes?: {
+			configuration?: {
+				properties?: Record<string, { default?: unknown }>;
+			};
+		};
+	};
+	assert.equal(
+		manifest.contributes?.configuration?.properties?.['observability-studio.sisCimdOAuthScope']?.default,
+		sisCIMDOAuthDefaultScope,
+	);
+});
+
+test('an explicitly blank SIS CIMD OAuth scope remains blank for validation', () => {
+	for (const scope of ['', '   ', '\t\n']) {
+		assert.equal(resolveSISCIMDOAuthScope(scope), '', scope);
+	}
+});
+
+test('a custom SIS CIMD OAuth scope is trimmed and preserved', () => {
+	assert.equal(resolveSISCIMDOAuthScope('  openid custom_scope  '), 'openid custom_scope');
 });
 
 test('validateClientID accepts only exact HTTPS URLs with a non-root path', () => {
