@@ -659,11 +659,11 @@ narrative decision-sized. Its four first-level fields are
 the action `Instrumentation change` for executable work, `Decision needed` for
 a manual prerequisite, and `External requirement` for an external
 prerequisite. For a currently selectable executable finding, `Next step` is to
-select the finding, copy the generated command, and run `$otel-instrument`; do not
+select the finding, copy the generated prompt, and run `$otel-instrument`; do not
 present authored verification or dashboard work as
 the reviewer's immediate action.
 Keep that copy synchronized with selection state: selected work proceeds to
-the generated command, an auto-added dependency explains why it is included, and
+the generated prompt, an auto-added dependency explains why it is included, and
 blocked work names the blocking `OTEL-###` IDs and directs the reviewer to
 resolve them first. Show a compact telemetry shape on the card from exact
 `expected_telemetry[*].type` counts, including configuration and resource
@@ -967,7 +967,7 @@ command must be regenerated from the current explicit `requested_ids`
 and canonical `decision_answers` as
 `$otel-instrument --ids OTEL-001,OTEL-002 --decision OTEL-003=option-id <absolute-service-root>`.
 Embed the validated absolute service root supplied to `finalize-audit` in the
-HTML payload and use it in the generated command, including when the report is
+HTML payload and use it in the generated prompt, including when the report is
 served over loopback HTTP. Keep `file://` path inference only as a compatibility
 fallback; a normally finalized report must never show the literal
 `<service-root>` placeholder.
@@ -1081,7 +1081,7 @@ Do not perform telemetry execution inside the audit workflow. The report's
 `Verification Plan` is a proof plan consumed downstream; it is not the
 reviewer's immediate command.
 
-- Recommend selecting executable findings, copying the generated command, and
+- Recommend selecting executable findings, copying the generated prompt, and
   running `$otel-instrument` for source gaps. `$otel-instrument` owns the internal
   verification child after implementation.
 - Do not present `$otel-verify` or generic `run verification` as the audit

@@ -23,7 +23,8 @@
     "Reports no OTel SDK initialization and no go.opentelemetry.io dependencies.",
     "Calls out missing HTTP server spans, request duration, request rate, error visibility, and OTLP exporter wiring.",
     "Mentions otelhttp or otelchi as the appropriate Go HTTP instrumentation path.",
-    "Writes schema-v2 .observe/otel-audit.json with stable selectable finding IDs and complete downstream instrumentation context; renders a self-contained, decision-first .observe/otel.html with finding selection, copyable instrumentation handoff, and collapsed technical details while retaining complete machine context in canonical JSON.",
+    "Writes schema-v2 .observe/otel-audit.json with stable selectable finding IDs and complete downstream instrumentation context; renders a self-contained, decision-first .observe/otel.html with finding selection, a copyable instrumentation prompt (the tray label reads 'Copy this prompt and paste into AI chat', not 'Copy this terminal command'), and collapsed technical details while retaining complete machine context in canonical JSON.",
+    "The rendered .observe/otel.html finding-level Next step for a selectable executable finding says 'copy the generated prompt' to run $otel-instrument, not 'copy the generated command'.",
     "Renders .observe/otel.html as a decision-first findings view with GenAI ownership detected as No and a matching Audit Evidence row, while preserving machine context in canonical .observe/otel-audit.json and not rendering separate Incident or GenAI readiness ledger sections.",
     "The final response contains exactly one line: Review report: [otel.html](http://127.0.0.1:<port>/<token>/otel.html), using the loopback-only URL returned by finalize-audit. It does not open the browser automatically and does not include a machine-report link, summary bullets, finding counts, recommendations, or artifact-write narration."
   ]

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   fetchInstrumentationScore,
   fetchSplunkExportStatus,
@@ -106,39 +106,56 @@ export function formatScoreValue(value: number): string {
  * One line of the score derivation: what it is worth, what it earned, and why.
  * A row that earned nothing is dimmed so the shortfalls stand out.
  */
-function ScoreRow({ label, earned, max, detail }: {
+const QUALITY_COMPONENT_LABELS = new Set(["Findings", "Anti-patterns"]);
+const COVERAGE_COMPONENT_ORDER = ["Metrics", "Spans", "Logs"];
+
+function ScoreRow({ label, earned, max, detail, onDetailClick, isTotal }: {
   label: string;
   earned: number;
   max: number;
   detail?: string;
+  onDetailClick?: () => void;
+  isTotal?: boolean;
 }): React.ReactElement {
   const state = max > 0 && earned >= max ? "full" : earned > 0 ? "partial" : "empty";
 
   return (
-    <div className={`overview-score__row overview-score__row--${state}`}>
-      <dt className="overview-score__row-label">
-        {label}
-        {detail ? <span className="overview-score__row-detail">{detail}</span> : null}
-      </dt>
-      <dd className="overview-score__row-value">
-        {formatScoreValue(earned)}/{formatScoreValue(max)}
+    <div className={`overview-score__row overview-score__row--${state}${isTotal ? " overview-score__row--total" : ""}`}>
+      <dt className="overview-score__row-label">{label}</dt>
+      <dd className={detail ? "overview-score__row-detail-cell" : "overview-score__row-value"}>
+        {detail ? (
+          onDetailClick ? (
+            <button
+              type="button"
+              className="overview-score__row-detail overview-score__row-detail--link"
+              onClick={onDetailClick}
+            >
+              {detail}
+            </button>
+          ) : (
+            <span className="overview-score__row-detail">{detail}</span>
+          )
+        ) : (
+          `${formatScoreValue(earned)}/${formatScoreValue(max)}`
+        )}
       </dd>
     </div>
   );
 }
 
 /** One titled group of report bullets inside the disclosure section. */
-function ReportList({ title, items, emptyLabel }: {
+function ReportList({ title, items, emptyLabel, id }: {
   title: string;
   items: string[] | null | undefined;
   emptyLabel: string;
+  id?: string;
 }): React.ReactElement {
   // Tolerate a null field from an older server build that marshalled empty
   // slices as null.
   const entries = items ?? [];
 
   return (
-    <div className="overview-report__group">
+    <div className="overview-report__group" id={id}>
       <h3 className="overview-report__group-title">
         {title}
         {entries.length > 0 ? <span className="overview-report__count">{entries.length}</span> : null}
@@ -161,16 +178,20 @@ function ReportList({ title, items, emptyLabel }: {
  * When `empty` is supplied the skills are withheld and that node is rendered
  * instead — used to gate the cloud skills behind a live connection.
  */
-function SkillCard({ id, title, items, onOpenSkillDocs, empty }: {
+function SkillCard({ id, title, items, onOpenSkillDocs, empty, badge }: {
   id: string;
   title: string;
   items: OverviewChecklistItem[];
   onOpenSkillDocs: (event: React.MouseEvent<HTMLAnchorElement>, skill: SkillDocsId) => void;
   empty?: React.ReactNode;
+  badge?: React.ReactNode;
 }): React.ReactElement {
   return (
     <article className="overview-checklist" id={id} aria-labelledby={`${id}-title`}>
-      <h2 className="overview-checklist__title" id={`${id}-title`}>{title}</h2>
+      <div className="overview-checklist__header">
+        <h2 className="overview-checklist__title" id={`${id}-title`}>{title}</h2>
+        {badge}
+      </div>
       {empty ?? (
         <ul className="overview-checklist__list">
           {items.map((item) => {
@@ -236,7 +257,37 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
   // user to run a command they may already have run.
   const [scoreState, setScoreState] = useState<"loading" | "loaded" | "error">("loading");
   const [scoreReloads, setScoreReloads] = useState(0);
-  const [reportOpen, setReportOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(true);
+  const [scrollTarget, setScrollTarget] = useState<string | null>(null);
+
+  const scrollAndFlash = useCallback((id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    const heading = el.querySelector<HTMLElement>(".overview-report__group-title");
+    if (heading) {
+      heading.classList.remove("overview-report__group-title--flash");
+      void heading.offsetWidth; // force reflow so re-clicks retrigger the animation
+      heading.classList.add("overview-report__group-title--flash");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (reportOpen && scrollTarget) {
+      scrollAndFlash(scrollTarget);
+      setScrollTarget(null);
+    }
+  }, [reportOpen, scrollTarget, scrollAndFlash]);
+
+  const openReportAt = useCallback((target: string) => {
+    if (reportOpen) {
+      scrollAndFlash(target);
+    } else {
+      setReportOpen(true);
+      setScrollTarget(target);
+    }
+  }, [reportOpen, scrollAndFlash]);
+
   // Tri-state: a failed status request is not the same as a confirmed
   // disconnection, and must not be shown as one.
   const [cloudStatus, setCloudStatus] = useState<"loading" | "connected" | "disconnected" | "error">("loading");
@@ -327,35 +378,47 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
           {scored ? (
             <article
               className={`overview-score overview-score--${scoreTone(scored.score)}${scored.stale ? " is-stale" : ""}`}
-              aria-label={`Instrumentation score ${scored.score} out of 100, ${summaryLabel}`}
+              aria-label={`Audit score ${scored.score} out of 100, ${summaryLabel}`}
             >
-              <p className="overview-score__label" aria-hidden="true">Instrumentation Score</p>
+              <p className="overview-score__label" aria-hidden="true">Audit Score</p>
               <p className="overview-score__value" aria-hidden="true">
-                {scored.score}<span className="overview-score__max">/100</span>
+                {scored.score}<span className="overview-score__max">%</span>
               </p>
 
               <dl className="overview-score__breakdown">
-                <div className="overview-score__totals">
-                  <ScoreRow
-                    label="Coverage"
-                    earned={scored.breakdown.coverage}
-                    max={scored.breakdown.coverageMax}
-                  />
-                  <ScoreRow
-                    label="Quality"
-                    earned={scored.breakdown.quality}
-                    max={scored.breakdown.qualityMax}
-                  />
+                <div className="overview-score__section">
+                  <ScoreRow isTotal label="Coverage" earned={scored.breakdown.coverage} max={scored.breakdown.coverageMax} />
+                  {scored.breakdown.components.filter((c) => !QUALITY_COMPONENT_LABELS.has(c.label)).sort((a, b) => {
+                    const ai = COVERAGE_COMPONENT_ORDER.indexOf(a.label);
+                    const bi = COVERAGE_COMPONENT_ORDER.indexOf(b.label);
+                    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+                  }).map((component) => (
+                    <ScoreRow
+                      key={component.label}
+                      label={component.label}
+                      earned={component.earned}
+                      max={component.max}
+                      detail={component.detail}
+                    />
+                  ))}
                 </div>
-                {scored.breakdown.components.map((component) => (
-                  <ScoreRow
-                    key={component.label}
-                    label={component.label}
-                    earned={component.earned}
-                    max={component.max}
-                    detail={component.detail}
-                  />
-                ))}
+                <div className="overview-score__section">
+                  <ScoreRow isTotal label="Quality" earned={scored.breakdown.quality} max={scored.breakdown.qualityMax} />
+                  {scored.breakdown.components.filter((c) => QUALITY_COMPONENT_LABELS.has(c.label)).map((component) => (
+                    <ScoreRow
+                      key={component.label}
+                      label={component.label}
+                      earned={component.earned}
+                      max={component.max}
+                      detail={component.detail}
+                      onDetailClick={
+                        component.label === "Findings" ? () => openReportAt("overview-report-gaps") :
+                        component.label === "Anti-patterns" ? () => openReportAt("overview-report-anti-patterns") :
+                        undefined
+                      }
+                    />
+                  ))}
+                </div>
               </dl>
 
               {scored.stale ? (
@@ -381,32 +444,34 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                       current code.
                     </p>
                   )}
-                  <span className="overview-score__stale-actions">
-                    <span className="command-chip">
-                      <code className="overview-checklist__command">{OTEL_AUDIT_SKILL.command}</code>
-                      <CopyTextButton
-                        text={OTEL_AUDIT_SKILL.command}
-                        label={`${OTEL_AUDIT_SKILL.command} command`}
-                      />
-                    </span>
-                    <button type="button" className="overview-checklist__nav" onClick={() => setScoreReloads((n) => n + 1)}>
-                      <span aria-hidden="true">↻</span> Refresh
-                    </button>
+                  <span className="command-chip">
+                    <code className="overview-checklist__command">{OTEL_AUDIT_SKILL.command}</code>
+                    <CopyTextButton
+                      text={OTEL_AUDIT_SKILL.command}
+                      label={`${OTEL_AUDIT_SKILL.command} command`}
+                    />
                   </span>
                 </div>
               ) : null}
 
               {/* The commit is shown even when current, so the reader always
                   has the reference point the score describes. */}
-              <p className="overview-score__source">
-                From {scored.source}
-                {scored.generatedAt ? ` · ${scored.generatedAt}` : ""}
-                {scored.auditCommit ? ` · ${shortCommit(scored.auditCommit)}` : ""}
-              </p>
+              <div className="overview-score__footer">
+                <p className="overview-score__source">
+                  From {scored.source}
+                  {scored.generatedAt ? ` · ${scored.generatedAt}` : ""}
+                  {scored.auditCommit ? ` · ${shortCommit(scored.auditCommit)}` : ""}
+                </p>
+                {scored.stale ? (
+                  <button type="button" className="overview-checklist__nav" onClick={() => setScoreReloads((n) => n + 1)}>
+                    <span aria-hidden="true">↻</span> Refresh
+                  </button>
+                ) : null}
+              </div>
             </article>
           ) : (
-            <article className="overview-score overview-score--empty" aria-label="Instrumentation score unavailable">
-              <p className="overview-score__label" aria-hidden="true">Instrumentation Score</p>
+            <article className="overview-score overview-score--empty" aria-label="Audit score unavailable">
+              <p className="overview-score__label" aria-hidden="true">Audit Score</p>
               <p className="overview-score__value overview-score__value--empty" aria-hidden="true">—</p>
               {scoreState === "error" ? (
                 <>
@@ -440,6 +505,22 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
               title="Observability Cloud Skills"
               items={CLOUD_SKILLS}
               onOpenSkillDocs={openSkillDocs}
+              badge={
+                <span
+                  role="status"
+                  className={`stream-toggle stream-toggle--status ${
+                    cloudStatus === "connected" ? "stream-toggle--live"
+                    : cloudStatus === "loading" ? "stream-toggle--muted"
+                    : "stream-toggle--muted"
+                  }`}
+                >
+                  <span className="stream-toggle__dot" aria-hidden="true" />
+                  {cloudStatus === "connected" ? "Connected"
+                    : cloudStatus === "loading" ? "Checking…"
+                    : cloudStatus === "error" ? "Unavailable"
+                    : "Not connected"}
+                </span>
+              }
               empty={cloudStatus === "connected" ? null : (
                 <div className="overview-skills__empty">
                   {cloudStatus === "loading" ? (
@@ -501,7 +582,6 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
               </span>
               <span className="overview-callout__action">
                 {reportOpen ? "Hide details" : "Show details"}
-                <span className="overview-callout__caret" aria-hidden="true">{reportOpen ? "▾" : "▸"}</span>
               </span>
             </button>
 
@@ -546,8 +626,8 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                   </p>
                 ) : null}
 
-                <ReportList title="Gaps" items={scored.gaps} emptyLabel="No gaps reported." />
-                <ReportList title="Anti-patterns" items={scored.antiPatterns} emptyLabel="None detected." />
+                <ReportList id="overview-report-gaps" title="Gaps" items={scored.gaps} emptyLabel="No gaps reported." />
+                <ReportList id="overview-report-anti-patterns" title="Anti-patterns" items={scored.antiPatterns} emptyLabel="None detected." />
                 <ReportList title="Recommendations" items={scored.recommendations} emptyLabel="No recommendations." />
               </section>
             ) : null}

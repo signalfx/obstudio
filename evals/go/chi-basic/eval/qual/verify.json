@@ -21,6 +21,7 @@
   "rubric": [
     "Runs the canonical bound-flow validator and preserves exact audit_sha256, selection_sha256, and instrumentation_sha256 bindings rather than treating the four JSON files independently.",
     "Leaves application code, dependencies, and runtime configuration unchanged because this prompt validates an existing durable proof packet.",
-    "Writes a reader-first .observe/otel-verify.md that says generated trace rather than exposing raw trace or span identifiers, and uses Splunk Observability Studio when naming any explorer evidence source."
+    "Writes a reader-first .observe/otel-verify.md that says generated trace rather than exposing raw trace or span identifiers, and uses Splunk Observability Studio when naming any explorer evidence source.",
+    "Does not regenerate .observe/otel.html or alter its selection tray; reads the bound proof packet from the canonical JSON overlays (audit_sha256, selection_sha256, instrumentation_sha256) and writes verification state exclusively to .observe/otel-verify.json and the refreshed .observe/otel-instrumentation.html."
   ]
 }

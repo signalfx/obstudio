@@ -4394,7 +4394,7 @@ th {{ color: var(--muted); font-size: 12px; }}
 <div class="tray" id="tray" hidden inert aria-hidden="true" aria-label="Instrumentation selection">
   <div class="wrap tray-bar">
     <div class="tray-command" aria-labelledby="instrumentCommandLabel">
-      <span class="tray-hint" id="instrumentCommandLabel">Copy this terminal command:</span>
+      <span class="tray-hint" id="instrumentCommandLabel">Copy this prompt and paste into AI chat</span>
       <input class="instrument-command" id="instrumentCommand" type="text" readonly aria-labelledby="instrumentCommandLabel">
     </div>
   </div>
@@ -4614,12 +4614,12 @@ function findingNextStep(finding) {{
     return `${{eligibility.reason || "This finding cannot enter the current instrumentation selection"}}.`;
   }}
   if (requested.has(finding.id)) {{
-    return "This finding is selected. Copy and run the generated $otel-instrument command.";
+    return "This finding is selected. Copy the generated prompt and paste into AI chat.";
   }}
   if (selected.has(finding.id)) {{
-    return "This finding is included because selected work depends on it. Copy and run the generated $otel-instrument command.";
+    return "This finding is included because selected work depends on it. Copy the generated prompt and paste into AI chat.";
   }}
-  return "Select this finding, then copy and run the generated $otel-instrument command.";
+  return "Select this finding, then copy the generated prompt and paste into AI chat.";
 }}
 
 function renderCards() {{
