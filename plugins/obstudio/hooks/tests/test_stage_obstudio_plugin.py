@@ -185,6 +185,47 @@ class StageObstudioPluginTest(unittest.TestCase):
                     '{\n  "name": "obstudio",\n  "version": "1.2.3",\n  "skills": ["./skills/"]\n}\n',
                 )
 
+    def _write_plugin_root(self, tempdir, claude_version, codex_version):
+        plugin_root = Path(tempdir) / "obstudio"
+        for manifest_dir, version in ((".claude-plugin", claude_version), (".codex-plugin", codex_version)):
+            (plugin_root / manifest_dir).mkdir(parents=True)
+            (plugin_root / manifest_dir / "plugin.json").write_text(
+                json.dumps({"name": "obstudio", "version": version, "skills": ["./skills/"]}),
+                encoding="utf-8",
+            )
+        return plugin_root
+
+    def test_check_committed_manifest_versions_accepts_matching_versions(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            plugin_root = self._write_plugin_root(tempdir, "1.2.3", "1.2.3")
+            STAGE.check_committed_manifest_versions(plugin_root=plugin_root)
+
+    def test_check_committed_manifest_versions_rejects_mismatched_hosts(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            plugin_root = self._write_plugin_root(tempdir, "1.2.3", "1.2.4")
+            with self.assertRaisesRegex(RuntimeError, "plugin manifest versions disagree"):
+                STAGE.check_committed_manifest_versions(plugin_root=plugin_root)
+
+    def test_check_committed_manifest_versions_accepts_matching_release_tag(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            plugin_root = self._write_plugin_root(tempdir, "1.2.3", "1.2.3")
+            STAGE.check_committed_manifest_versions("v1.2.3", plugin_root=plugin_root)
+
+    def test_check_committed_manifest_versions_rejects_release_tag_mismatch(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            plugin_root = self._write_plugin_root(tempdir, "1.2.3", "1.2.3")
+            with self.assertRaisesRegex(RuntimeError, "does not match release tag"):
+                STAGE.check_committed_manifest_versions("v9.9.9", plugin_root=plugin_root)
+
+    def test_cli_check_manifest_versions_routes_release_tag(self):
+        with mock.patch.object(
+            sys, "argv", ["stage_obstudio_plugin.py", "--check-manifest-versions", "--release-tag", "v1.2.3"]
+        ):
+            with mock.patch.object(STAGE, "check_committed_manifest_versions") as check:
+                self.assertEqual(STAGE.main(), 0)
+
+        check.assert_called_once_with("v1.2.3")
+
     def test_cli_bump_manifests_routes_release_tag(self):
         with mock.patch.object(sys, "argv", ["stage_obstudio_plugin.py", "--bump-manifests", "--release-tag", "v1.2.3"]):
             with mock.patch.object(STAGE, "bump_committed_manifest_versions") as bump:
@@ -227,7 +268,9 @@ class StageObstudioPluginTest(unittest.TestCase):
         marketplace_path = Path(__file__).resolve().parents[4] / ".claude-plugin" / "marketplace.json"
         marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
 
-        self.assertNotIn("description", marketplace)
+        # Top-level `description` is an optional, officially supported marketplace.json
+        # field (claude plugin validate has accepted it since Claude Code v2.1.120).
+        self.assertIn("Splunk Observability Studio", marketplace["description"])
         self.assertEqual(marketplace["name"], "obstudio")
         self.assertEqual(marketplace["plugins"][0]["name"], "obstudio")
         self.assertEqual(marketplace["plugins"][0]["displayName"], "Splunk Observability Studio")

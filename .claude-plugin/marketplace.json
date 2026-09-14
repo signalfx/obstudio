@@ -3,6 +3,7 @@
   "owner": {
     "name": "Splunk"
   },
+  "description": "Splunk Observability Studio bundles local OpenTelemetry workflows and service controls for Claude Code.",
   "plugins": [
     {
       "name": "obstudio",

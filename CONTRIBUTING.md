@@ -175,6 +175,10 @@ call out this repository-settings follow-up explicitly.
 | extension | `npm run test:all` |
 | client | `npx vitest run` |
 | agent-policy | Agent instruction routing, review IDs, skill/eval pairing, skill parity, and command references |
+| claude-plugin-validate | Runs claude's built-in validation checks |
+| plugin-skills-synced | Makes sure the plugin is synchronized with canonical skills |
+| plugin-manifest-versions | Makes sure that the manifest versions of claude and codex skills agree |
+| skill-description-length | Makes sure that the frontmatter descriptions of skills are under the 1536 character cap |
 | Required CI | Aggregate result for all mandatory CI and policy checks |
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
