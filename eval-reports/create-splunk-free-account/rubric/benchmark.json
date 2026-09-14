@@ -959,7 +959,7 @@
   "failures": [],
   "source": {
     "digest_version": 2,
-    "digest": "0c5d8e38efbd61a251a2db99778f742a417bb790f686c913f7e12d583f8fbe50",
+    "digest": "2437d600b0661a5cc704a231afade28a83463499a3a55fc2859c3964fdd5dc6c",
     "eval_kinds": [
       "rubric"
     ],
@@ -1013,7 +1013,7 @@
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "8800c90a9c2cf3bb1c10df957d5b6e8baa02a9e83b4d51671776638e47d3951f",
+      "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
       "evals/plugins/obstudio/eval/qual/free-account-location-privacy.json": "3a8d6e02d92baf0b2dd613c04787a67467009cb98248d92878c498c3b1c97c23",
       "evals/plugins/obstudio/eval/qual/free-account-native-form.json": "8a56fb23aa0d59f41aad45d291a608aa42711b5777990b542b03a4be6ae42599",
       "evals/plugins/obstudio/eval/qual/free-account-outcome-unknown.json": "f56ac4f3d5e49ac7641cd6a0ae3303dafbd6e583d4725c0508d5f28da40e88fc",

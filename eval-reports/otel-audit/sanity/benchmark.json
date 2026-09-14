@@ -134,7 +134,7 @@
   "failures": [],
   "source": {
     "digest_version": 2,
-    "digest": "745e9bf473f8b9edff5aa6db9a4c360b3b161d85a44a598a5dfe0d53c3aafa26",
+    "digest": "c53868e7f247b1426fe48e8708914b777b8484e88bb492c1918e5de182793bcd",
     "eval_kinds": [
       "sanity"
     ],
@@ -191,7 +191,7 @@
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "8800c90a9c2cf3bb1c10df957d5b6e8baa02a9e83b4d51671776638e47d3951f"
+      "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c"
     },
     "skill_path": "skills/otel-audit",
     "selections": [

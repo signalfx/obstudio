@@ -436,7 +436,7 @@
   ],
   "source": {
     "digest_version": 2,
-    "digest": "414184cae1b4af52e15948c3476a7c02cb60b0535fbcccfe1f42244b0917adb7",
+    "digest": "529b24f4069ec638b77bc45bcfa215ae4d9855177d75f1add1cf3d18ccf4f76c",
     "eval_kinds": [
       "rubric"
     ],
@@ -503,7 +503,7 @@
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "8800c90a9c2cf3bb1c10df957d5b6e8baa02a9e83b4d51671776638e47d3951f",
+      "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
       "evals/go/chi-basic/eval/qual/instrument-decision-gated.json": "1604ebf6626a7ebc97406d3bc8299a7bf44003d6f2eb6f9bda6f89b408d934df",
       "evals/go/chi-basic/eval/qual/instrument.json": "69732371ba5e2c21a348d443b00070392c6f57f274c985d1c47f6ade30437792"
     },

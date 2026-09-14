@@ -199,7 +199,7 @@
   "failures": [],
   "source": {
     "digest_version": 2,
-    "digest": "6d3b2acdbb6048c429014e61922a4fab1e6fe969da0b2d95756a871a72ca51b5",
+    "digest": "75b1dcd7285867806d2f1a6858fde5e7b420360c1abde839f0bdc63f2e511264",
     "eval_kinds": [
       "rubric"
     ],
@@ -252,7 +252,7 @@
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "8800c90a9c2cf3bb1c10df957d5b6e8baa02a9e83b4d51671776638e47d3951f",
+      "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
       "skills/splunk-dashboard/SKILL.md": "4ce9bfa9e909b180e0e021af777bfce7bb081edd1dbb7f831e6572b1186954f1",
       "skills/splunk-dashboard/references/dashboard-classification.md": "ba6dff4b76e63dad7356e304e083962a06b581c6925628ff778a6f6fab4efa87",
       "skills/splunk-dashboard/references/dashboard-templates.md": "a29c329acef70470dbc79c937c83ac32108bffc7b0a051fd8176768f0a028d44"

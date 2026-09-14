@@ -302,7 +302,7 @@
   },
   "source": {
     "digest_version": 2,
-    "digest": "466467c2bad7e954aec80e12da2dce74626ad0f2835d2f5d54e84244da1fce56",
+    "digest": "2915f88294ed1d9d2f7666d5d4381ad78b91a8642561cb96878c8aa1cf3ca764",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -361,7 +361,7 @@
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "8800c90a9c2cf3bb1c10df957d5b6e8baa02a9e83b4d51671776638e47d3951f",
+      "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
       "evals/go/chi-partial/eval/qual/audit.json": "f3ee529239047e5771c74fdf99feba0b1b3cdcc8a4a815bc8123dfd60b9476d9",
       "evals/go/chi-partial/go.mod": "c98802561b52e8e423a669a197c43ab62e8e7af5c19d83094b33beda1df2797f",
       "evals/go/chi-partial/go.sum": "3708d13ed158e6020350066c8cda0777bdbf8ef6efb58907a7fa81eea61cb26b",

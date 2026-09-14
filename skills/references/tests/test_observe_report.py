@@ -2099,7 +2099,7 @@ class ObserveReportTest(unittest.TestCase):
             self.assertIn("function findingNextStep(finding)", html)
             self.assertIn('eligibility.blockers.join(", ")', html)
             self.assertIn(
-                "This finding is selected. Copy and run the generated $otel-instrument command.",
+                "This finding is selected. Copy the generated prompt and paste into AI chat.",
                 html,
             )
             self.assertIn("included because selected work depends on it", html)

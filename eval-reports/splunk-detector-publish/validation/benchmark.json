@@ -65,7 +65,7 @@
   },
   "source": {
     "digest_version": 2,
-    "digest": "b9d6f05916583e33566d4d89973a8b045e55d694741eb7c27298274e1bfe6b9b",
+    "digest": "9b0e137702d14dac5c25c7bbe8cd9c0359abd20e1a30c5fc98bc908f99f2a113",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -121,7 +121,7 @@
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "8800c90a9c2cf3bb1c10df957d5b6e8baa02a9e83b4d51671776638e47d3951f",
+      "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
       "skills/splunk-detector-publish/SKILL.md": "2a168cdea73b81e46ed39cb8bded81f83f5647bb0d65afd740b19b4fd5dec1ea",
       "skills/splunk-detector-publish/references/coverage-model.md": "9bca7ef0a57794f8d2f87173a51a4d9315dd4b4c311906ab90ba8014b43ccc92",
       "evals/sanity/skill-smoke/eval/sanity/detector-publish.json": "1774a7e5ab89bb505033f7f83b788741e6f8925f6de9034fcd5431e944384020",
