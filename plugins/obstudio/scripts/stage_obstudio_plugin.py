@@ -101,6 +101,14 @@ def main() -> int:
         action="store_true",
         help="bump the committed Claude and Codex plugin manifests to --release-tag and exit",
     )
+    parser.add_argument(
+        "--check-manifest-versions",
+        action="store_true",
+        help=(
+            "verify the committed Claude and Codex plugin manifest versions agree "
+            "with each other (and with --release-tag, when given) and exit"
+        ),
+    )
     args = parser.parse_args()
 
     if args.sync_plugin_skills:
@@ -113,6 +121,9 @@ def main() -> int:
         if not args.release_tag:
             raise RuntimeError("--release-tag is required with --bump-manifests")
         bump_committed_manifest_versions(release_version_from_tag(args.release_tag))
+        return 0
+    if args.check_manifest_versions:
+        check_committed_manifest_versions(args.release_tag)
         return 0
 
     output = args.output.expanduser().resolve()
@@ -166,6 +177,37 @@ def bump_committed_manifest_versions(version: str, plugin_root: Path = PLUGIN_RO
         updated.append(manifest_path)
         print(f"bumped {manifest_path} -> {version}")
     return updated
+
+
+def check_committed_manifest_versions(release_tag: str = "", plugin_root: Path = PLUGIN_ROOT) -> None:
+    """Verify the committed Claude/Codex plugin manifest versions agree with each other.
+
+    When ``release_tag`` is given, also verify both manifests already match it.
+    """
+    versions: dict[str, str] = {}
+    for selected_host in PLUGIN_HOSTS:
+        manifest_path = plugin_root / (".claude-plugin" if selected_host == "claude" else ".codex-plugin") / "plugin.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        version = manifest.get("version") if isinstance(manifest, dict) else None
+        if not isinstance(version, str) or not SEMVER_PATTERN.fullmatch(version):
+            raise RuntimeError(f"manifest version must be a semver string: {manifest_path}")
+        versions[selected_host] = version
+
+    if versions["claude"] != versions["codex"]:
+        raise RuntimeError(
+            "plugin manifest versions disagree: "
+            f"claude={versions['claude']!r} codex={versions['codex']!r}"
+        )
+
+    if release_tag:
+        expected = release_version_from_tag(release_tag)
+        if versions["claude"] != expected:
+            raise RuntimeError(
+                f"plugin manifest version {versions['claude']!r} does not match "
+                f"release tag {release_tag!r} (expected {expected!r})"
+            )
+
+    print(f"plugin manifest versions agree: {versions['claude']}")
 
 
 def _write_manifest_version(manifest_path: Path, version: str) -> None:

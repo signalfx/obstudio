@@ -29,6 +29,69 @@ jobs:
           AGENT_POLICY_BASE: ${{ github.event.pull_request.base.sha || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.event.before) || format('origin/{0}', github.event.repository.default_branch) }}
         run: make agent-policy-check
 
+  plugin-skills-synced:
+    name: Plugin - Canonical skill consistency sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify committed plugin skills match canonical skills
+        run: make check-obstudio-plugin-skills
+
+  plugin-manifest-versions:
+    name: Plugin - Manifest versions agree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify Claude/Codex plugin manifest versions agree
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          release_tag=""
+          if [[ "$HEAD_REF" == bot/sync-plugin-version-* ]]; then
+            release_tag="${HEAD_REF#bot/sync-plugin-version-}"
+          fi
+          make check-plugin-manifest-versions RELEASE_TAG="$release_tag"
+
+  claude-plugin-validate:
+    name: Plugin - Claude validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Validate obstudio plugin and marketplace manifest
+        run: make check-claude-plugin-validate
+
+  skill-description-length:
+    name: Skills - Description length cap check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify SKILL.md descriptions stay within the 1,536 character cap
+        run: make check-skill-description-length
+
   observer:
     name: Splunk Observability Studio – vet, build & test
     runs-on: ubuntu-latest
@@ -295,6 +358,10 @@ jobs:
     if: ${{ always() }}
     needs:
       - agent-policy
+      - plugin-skills-synced
+      - plugin-manifest-versions
+      - claude-plugin-validate
+      - skill-description-length
       - observer
       - interactive-otel-scripts
       - observer-smoke
