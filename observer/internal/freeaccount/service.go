@@ -5,7 +5,6 @@ package freeaccount
 import (
 	"bytes"
 	"context"
-	cryptorand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +25,7 @@ const (
 	defaultState               = "California"
 	defaultRealm               = "us1"
 	defaultMarketRegion        = "AMER"
+	defaultCompany             = "Unknown"
 	signupRegionUS             = "us"
 	signupRegionIreland        = "Europe (Ireland)"
 	signupRegionAustralia      = "apac-au"
@@ -134,7 +134,6 @@ type Service struct {
 	geoTimeout    time.Duration
 	signupTimeout time.Duration
 	diagnostics   *log.Logger
-	companyRandom io.Reader
 }
 
 // New creates a Free Edition signup service.
@@ -158,7 +157,6 @@ func New(config Config) *Service {
 		geoTimeout:    durationDefault(config.GeoTimeout, 3*time.Second),
 		signupTimeout: durationDefault(config.SignupTimeout, 15*time.Second),
 		diagnostics:   diagnostics,
-		companyRandom: cryptorand.Reader,
 	}
 }
 
@@ -465,17 +463,13 @@ func (s *Service) submitOnce(ctx context.Context, identity identity, location si
 			destination, _ = destinationForLocation(location)
 		}
 	}
-	company, err := randomCompanyName(s.companyRandom)
-	if err != nil {
-		return Result{}, preparationError()
-	}
 	payload := signupPayload{
 		FirstName:          identity.firstName,
 		LastName:           identity.lastName,
 		EmailAddress:       identity.email,
 		Title:              "Developer",
 		BusinessPhone:      "",
-		Company:            company,
+		Company:            defaultCompany,
 		Country:            location.country,
 		State:              location.state,
 		City:               location.city,
@@ -559,18 +553,6 @@ func (s *Service) submitOnce(ctx context.Context, identity identity, location si
 	default:
 		return Result{}, outcomeUnknownError()
 	}
-}
-
-func randomCompanyName(random io.Reader) (string, error) {
-	const alphabet = "abcdefghijklmnopqrstuvwxyz"
-	value := make([]byte, 6)
-	if _, err := io.ReadFull(random, value); err != nil {
-		return "", err
-	}
-	for index := range value {
-		value[index] = alphabet[int(value[index])%len(alphabet)]
-	}
-	return string(value), nil
 }
 
 func (s *Service) recordSignupResponseDiagnostic(statusCode int, classification signupResponseClassification) {
