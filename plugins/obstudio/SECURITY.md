@@ -19,7 +19,7 @@ configuration and product policy.
 |---|---|
 | Core workflow skills: `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, and `$splunk-dashboard` | Can read or edit repository files, run project verification commands, and generate local reports or Terraform. These skills do not manage a background Splunk Observability Studio instance or create live Splunk resources. |
 | Splunk Observability Studio and MCP controls: the bundled MCP configuration, SessionStart hook, and `$observer-open`, `$observer-status`, `$observer-restart`, and `$observer-stop` | Can connect to local endpoints and may download, start, or manage Splunk Observability Studio. Local health and control checks may require narrow elevated access. The command skills use the default Splunk Observability Studio endpoint and do not follow, probe, or control custom MCP endpoints automatically. |
-| Splunk publishers: `$splunk-detector-publish`, `$splunk-dashboard-publish`, and their deprecated `-sync` aliases | Can call Splunk Observability Cloud APIs and create confirmed detector or dashboard gaps when explicitly invoked with credentials that have the required permissions. |
+| Splunk publishers: `$splunk-detector-publish` and `$splunk-dashboard-publish` | Can call Splunk Observability Cloud APIs and create confirmed detector or dashboard gaps when explicitly invoked with credentials that have the required permissions. |
 
 Configured OTLP exporters can send telemetry to their configured destinations.
 Repository edits, project commands, process control, and Splunk publishing

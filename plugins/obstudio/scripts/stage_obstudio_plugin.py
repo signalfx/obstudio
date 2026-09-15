@@ -35,9 +35,7 @@ PLUGIN_SHARED_SKILL_ENTRIES = (
     "splunk-configure",
     "splunk-dashboard",
     "splunk-dashboard-publish",
-    "splunk-dashboard-sync",
     "splunk-detector-publish",
-    "splunk-sync",
 )
 PLUGIN_SKILL_ENTRIES = (
     "observer-control/observer-open",
@@ -53,8 +51,6 @@ PLUGIN_SKILL_ENTRIES = (
     "observer-control/observer-stop",
     "splunk-detector-publish",
     "splunk-dashboard-publish",
-    "splunk-sync",
-    "splunk-dashboard-sync",
     "references",
 )
 

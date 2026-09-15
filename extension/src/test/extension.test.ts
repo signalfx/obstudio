@@ -2735,7 +2735,7 @@ test('skill docs ids cover the skills the Overview tab offers', () => {
 		assert.ok(isSkillDocsId(expected), `${expected} should be a known skill id`);
 	}
 	assert.equal(skillDocsIds.length, 6);
-	assert.equal(isSkillDocsId('splunk-sync'), false);
+	assert.equal(isSkillDocsId('not-a-skill'), false);
 	assert.equal(isSkillDocsId(''), false);
 });
 
@@ -2758,9 +2758,19 @@ test('every skill id maps to its own documentation URL', () => {
 });
 
 test('unknown skill ids resolve to no URL', () => {
-	for (const bogus of ['splunk-sync', 'https://evil.example.com', '../../etc/passwd', '', undefined, null, 7]) {
+	for (const bogus of ['not-a-skill', 'https://evil.example.com', '../../etc/passwd', '', undefined, null, 7]) {
 		assert.equal(skillDocsUrl(bogus), undefined, `${String(bogus)} should not resolve`);
 	}
+});
+
+test('retired splunk-sync skill is not exposed in the docs registry', () => {
+	assert.equal(isSkillDocsId('splunk-sync'), false);
+	assert.equal(skillDocsUrl('splunk-sync'), undefined);
+});
+
+test('retired splunk-dashboard-sync skill is not exposed in the docs registry', () => {
+	assert.equal(isSkillDocsId('splunk-dashboard-sync'), false);
+	assert.equal(skillDocsUrl('splunk-dashboard-sync'), undefined);
 });
 
 test('IDE host accepts the audit report action without a payload', () => {
