@@ -32,12 +32,12 @@ SPLUNK_DASHBOARD_REFS = SKILLS_DIR / "splunk-dashboard" / "references"
 DASHBOARD_CLASSIFICATION = SPLUNK_DASHBOARD_REFS / "dashboard-classification.md"
 DASHBOARD_TEMPLATES = SPLUNK_DASHBOARD_REFS / "dashboard-templates.md"
 
-# Dashboard publish skill (canonical; splunk-dashboard-sync is the deprecated stub).
+# Dashboard publish skill.
 SPLUNK_DASHBOARD_PUBLISH = SKILLS_DIR / "splunk-dashboard-publish" / "SKILL.md"
 SPLUNK_DASHBOARD_PUBLISH_REFS = SKILLS_DIR / "splunk-dashboard-publish" / "references"
 DASHBOARD_COVERAGE_MODEL = SPLUNK_DASHBOARD_PUBLISH_REFS / "dashboard-coverage-model.md"
 
-# Detector publish skill (canonical; splunk-sync is the deprecated stub).
+# Detector publish skill.
 SPLUNK_DETECTOR_PUBLISH = SKILLS_DIR / "splunk-detector-publish" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
 DASHBOARD_PUBLISH_OFFLINE_EVAL = (

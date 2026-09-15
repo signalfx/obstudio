@@ -318,5 +318,3 @@ Outputs:
 | `$splunk-dashboard` | Generate Splunk O11y dashboard Terraform from audit and verification reports |
 | `$splunk-detector-publish` | Diff local detector Terraform against live Splunk detectors and create only the gaps |
 | `$splunk-dashboard-publish` | Diff local dashboard Terraform against live Splunk dashboards and create only the gaps |
-| `$splunk-sync` | (deprecated, use `$splunk-detector-publish`) Backward-compatible alias |
-| `$splunk-dashboard-sync` | (deprecated, use `$splunk-dashboard-publish`) Backward-compatible alias |

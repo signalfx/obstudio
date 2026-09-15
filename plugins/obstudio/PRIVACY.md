@@ -10,7 +10,7 @@ operating system, and user-invoked tools have their own privacy behavior.
 |---|---|
 | Core workflow skills: `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, and `$splunk-dashboard` | Can read or edit repository files and generate local reports or Terraform. They do not manage a background Splunk Observability Studio instance or create live Splunk resources. |
 | Splunk Observability Studio and MCP controls: the bundled MCP configuration, SessionStart hook, and `$observer-open`, `$observer-status`, `$observer-restart`, and `$observer-stop` | Interact with local endpoints and may download, start, or manage Splunk Observability Studio. Health or control checks may require narrow elevated access. The command skills use the default Splunk Observability Studio endpoint and do not follow, probe, or control custom MCP endpoints automatically. |
-| Splunk publishers: `$splunk-detector-publish`, `$splunk-dashboard-publish`, and their deprecated `-sync` aliases | Call Splunk Observability Cloud APIs only when explicitly invoked. They can create dashboards or detectors and require credentials with the corresponding API permissions. |
+| Splunk publishers: `$splunk-detector-publish` and `$splunk-dashboard-publish` | Call Splunk Observability Cloud APIs only when explicitly invoked. They can create dashboards or detectors and require credentials with the corresponding API permissions. |
 
 ## What the plugin does not add
 

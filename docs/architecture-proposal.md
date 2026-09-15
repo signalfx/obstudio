@@ -87,12 +87,10 @@ skills/
 ├── splunk-configure/      # Generate Splunk O11y detector Terraform from an audit
 ├── splunk-detector-publish/ # Diff local detector specs against live Splunk detectors;
 │                            # create only the confirmed gaps via the Splunk REST API
-│                            # (replaces deprecated $splunk-sync)
 ├── splunk-dashboard/        # Generate Splunk O11y dashboard Terraform from an audit
 │                            # (group + dashboards + per-panel charts) and a preview sidecar
 ├── splunk-dashboard-publish/ # Diff local dashboards/charts against live Splunk dashboards;
 │                             # create only the confirmed gaps (chart-first) via the REST API
-│                             # (replaces deprecated $splunk-dashboard-sync)
 └── references/            # Shared skill prose (Splunk API, normalization, SignalFlow,
                            # ledger, coverage decision tree) included by the skills above
 ```
@@ -549,7 +547,7 @@ are shown explicitly so engineers can work independently.
 | Component    | Layer | Deliverable                                                                          | Depends On |
 | ------------ | ----- | ------------------------------------------------------------------------------------ | ---------- |
 | **Splunk Observability Studio** | 1     | OTLP ingest, web UI, MCP server, Splunk metrics/traces forwarding                   | —          |
-| **Skills**   | 1     | `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, `$splunk-detector-publish` (~~`$splunk-sync`~~ deprecated), `$splunk-dashboard`, `$splunk-dashboard-publish` (~~`$splunk-dashboard-sync`~~ deprecated) (REST-direct) | —          |
+| **Skills**   | 1     | `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, `$splunk-detector-publish`, `$splunk-dashboard`, `$splunk-dashboard-publish` (REST-direct) | —          |
 
 
 Splunk Observability Studio and Skills have no dependency on each other. They can be developed,
