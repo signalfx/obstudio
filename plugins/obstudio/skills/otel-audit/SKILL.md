@@ -12,6 +12,7 @@ description: >-
   faster to detect or localize, or asks whether GenAI/LLM workflows follow
   OpenTelemetry semantic conventions. Do NOT use for implementing code changes
   -- use $otel-instrument instead.
+allowed-tools: Read Grep Glob Write Bash(python3 */scripts/observe_report.py *) Bash(python3 */scripts/scan_python_otel_topology.py *) Bash(rg *)
 ---
 
 # Audit -- Observability Coverage Scan

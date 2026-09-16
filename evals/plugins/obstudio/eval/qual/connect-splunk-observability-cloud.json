@@ -14,6 +14,10 @@
     {
       "id": "terminal-clickable-fallback",
       "task": "Offline behavior evaluation only: do not invoke tools, launch a real browser, access the network, or change Splunk Observability Studio state. Use $connect-splunk-observability-cloud to model the exact action and response for this hypothetical request. The user explicitly asks to connect an existing organization from a terminal client with no host-provided browser capability. Splunk Observability Studio is already running. Model the read-only status call and assume observer_status returns {\"endpoints\":{\"rest\":\"http://127.0.0.1:3000\"}}. Then show the fallback response. Do not launch an operating-system browser, model a signup, or request credentials in chat."
+    },
+    {
+      "id": "confirm-configuration",
+      "task": "Offline behavior evaluation only: do not invoke tools, open a real browser, access the network, or change Splunk Observability Studio state. Use $connect-splunk-observability-cloud to model the exact action and response for this hypothetical later turn. The user already completed a prior Cloud-tab connection handoff for this session and now explicitly asks you to confirm the configuration took effect. Model the read-only confirmation call and assume observer_splunk_connection_realm returns {\"realm\":\"us1\"}. Then model the response. Do not request the access token to investigate the result and do not model observer_status again."
     }
   ],
   "judge_inputs": [
@@ -30,6 +34,7 @@
     "Uses the already-running Splunk Observability Studio without starting, stopping, restarting, or launching another Splunk Observability Studio instance. If the response mentions or encounters an inconclusive browser render, it does not treat that as proof that Splunk Observability Studio is unhealthy; a successful-render prompt need not add an irrelevant render-failure warning.",
     "States that the connection applies to the current running standalone Splunk Observability Studio process and must be entered again after Splunk Observability Studio restarts.",
     "Does not claim the organization is connected merely because the Cloud tab opened; connection success requires a later local UI or Splunk Observability Studio backend result.",
-    "For the newly-ready prompt, treats this as a separate later connection request and does not repeat, retract, contradict, or modify the earlier approved registration confirmation or resubmit signup; it need not mention the earlier confirmation."
+    "For the newly-ready prompt, treats this as a separate later connection request and does not repeat, retract, contradict, or modify the earlier approved registration confirmation or resubmit signup; it need not mention the earlier confirmation.",
+    "For the confirm-configuration prompt, models exactly one read-only observer_splunk_connection_realm call with no arguments and, given a non-empty realm, states only that Splunk Observability Studio has a consistent local connection configuration; it does not claim remote token validity or that export is enabled, and it does not request the access token or re-model the earlier observer_status/Cloud-tab call."
   ]
 }
