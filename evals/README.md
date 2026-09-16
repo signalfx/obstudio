@@ -127,6 +127,27 @@ without any log-forwarding surface. This supplies live receiver-side proof of
 the trace/metric-only cloud boundary without duplicating a fake cloud service in
 every language topology.
 
+## Isolated Codex Home for Live Evals
+
+Live evals use a dedicated Codex home at
+`.workspace/codex-evals/codex-home`, rather than your normal personal Codex
+home. This keeps personal skills, plugins, and configuration from affecting
+eval results. The fixture still injects the skill being evaluated through its
+workspace-local `.agents/skills` directory.
+
+Authenticate the dedicated home once before your first local live eval:
+
+```bash
+make eval-codex-login
+```
+
+When prompted, sign in with the same account/email you normally use for Codex.
+The login applies only to this ignored, eval-specific home; it does not change
+or sign out your normal Codex app, IDE, or CLI sessions. You only need to log
+in again if you use a different machine or change `EVAL_CODEX_HOME`. Live eval
+targets check this authentication before starting and tell you to run
+`make eval-codex-login` if it is missing.
+
 ## Commands
 
 | Target | Purpose |

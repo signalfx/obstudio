@@ -125,6 +125,17 @@ def _pump_stream(pipe: Any, output_path: Path, chunks: list[str]) -> None:
 
 def _codex_subprocess_env(exec_dir: Path | None = None) -> dict[str, str]:
     env = os.environ.copy()
+    eval_home = env.get("CODEX_EVAL_HOME", "").strip()
+    if eval_home:
+        resolved_eval_home = Path(eval_home).expanduser().resolve()
+        if not resolved_eval_home.is_dir():
+            raise ValueError(
+                "CODEX_EVAL_HOME must be an existing directory; run make eval-codex-home first"
+            )
+        # Keep live evals independent of a developer's personal skills, plugins,
+        # and Codex configuration. The fixture still provides the skill under
+        # test through its workspace-local .agents/skills directory.
+        env["CODEX_HOME"] = str(resolved_eval_home)
     clean_package_config = (
         env.get("CODEX_EVAL_CLEAN_PACKAGE_CONFIG", "1").strip().lower()
     )

@@ -352,6 +352,28 @@ def test_codex_subprocess_env_uses_sandbox_local_package_caches(
     assert env["PIP_CACHE_DIR"] == str(tmp_path / ".pip-cache")
 
 
+def test_codex_subprocess_env_uses_isolated_eval_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    eval_home = tmp_path / "codex-home"
+    eval_home.mkdir()
+    monkeypatch.setenv("CODEX_HOME", "/personal/codex-home")
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(eval_home))
+
+    env = _codex_subprocess_env()
+
+    assert env["CODEX_HOME"] == str(eval_home.resolve())
+
+
+def test_codex_subprocess_env_rejects_missing_eval_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(tmp_path / "missing-codex-home"))
+
+    with pytest.raises(ValueError, match="make eval-codex-home"):
+        _codex_subprocess_env()
+
+
 def test_codex_backend_uses_current_workspace_write_flags(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
