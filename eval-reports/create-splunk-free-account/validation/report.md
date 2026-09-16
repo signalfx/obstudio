@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | create-splunk-free-account |
-| Run ID | 20260914T151615806243Z |
+| Run ID | 20260923T164052656194Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -25,4 +25,5 @@ This report validates eval JSON, eval directory availability, and skill source a
 | plugins/obstudio/qual/free-account-region-review-gate | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-region-review-gate.json | 0 | 5 | 0 |
 | plugins/obstudio/qual/free-account-resubmit-same-email | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-resubmit-same-email.json | 0 | 6 | 0 |
 | plugins/obstudio/qual/free-account-setup-pending | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-setup-pending.json | 0 | 5 | 0 |
+| plugins/obstudio/qual/free-account-submit-after-consent | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-submit-after-consent.json | 0 | 1 | 0 |
 | plugins/obstudio/qual/free-account-tool-unavailable | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-tool-unavailable.json | 0 | 5 | 0 |

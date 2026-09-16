@@ -11,7 +11,8 @@
   "judge_inputs": [
     "Inspect ./service/.observe for the resulting files when present, especially ./service/.observe/terraform/detectors.tf, ./service/.observe/terraform/variables.tf, ./service/.observe/detectors.md, and ./service/.observe/splunk-configure-verify.md.",
     "Read ./last_message.md for the agent final response.",
-    "Read ./grade.json for run guard checks."
+    "Read ./grade.json for run guard checks.",
+    "Read ./trace.jsonl for the exact shell commands the agent ran."
   ],
   "rubric": [
     "Reads the audit at .observe/otel-audit.json and classifies the checkout metrics into detector categories: latency (http.server.request.duration → P99 threshold) and at least one of throughput or saturation (http.server.request.duration count or http.server.active_requests).",
@@ -21,6 +22,8 @@
     "Writes variables.tf with realm, api_token marked sensitive = true, and service_name, plus at least one tunable variable per detector (either a static threshold variable like latency_threshold_s, error_rate_threshold, throughput_min_threshold OR a baseline parameter like fire_lasting_duration, clear_lasting_duration), and a terraform.tfvars.example; never hard-codes a real token or a literal service name in program_text.",
     "Writes .observe/detectors.md summarising the classified detectors, their metrics, severities, and rationale, and hands off to terraform apply or the canonical $splunk-detector-publish skill without performing any network call; it does not refer users to the retired $splunk-sync alias.",
     "Writes .observe/splunk-configure-verify.md listing each generated detector with at least its resource label (or name), the metric it monitors, and its severity as a verification checklist; full detect condition text is desirable but not required for this criterion to pass.",
-    "Reads canonical .observe/otel-audit.json and related instrumentation artifacts to generate Terraform rather than re-running any instrumentation prompt; does not touch .observe/otel.html or its selection tray."
+    "Reads canonical .observe/otel-audit.json and related instrumentation artifacts to generate Terraform rather than re-running any instrumentation prompt; does not touch .observe/otel.html or its selection tray.",
+    "Runs the bundled scripts/validate_configure_output.py validator against the generated .observe/terraform, .observe/detectors.md, and .observe/splunk-configure-verify.md after generating Terraform, and treats a validator failure as configure failure; .observe/splunk-configure-verify.md reflects that validator's result rather than an unrun or skipped check, and the response does not claim terraform validate ran since Terraform was never executed.",
+    "Reads ./trace.jsonl and confirms it never invokes terraform apply, terraform destroy, or any terraform subcommand other than fmt, init, validate, or plan; applying or destroying infrastructure is never this skill's job."
   ]
 }

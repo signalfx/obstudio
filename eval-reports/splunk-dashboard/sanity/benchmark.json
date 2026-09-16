@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "splunk-dashboard",
-    "run_id": "20260911T020832878259Z",
+    "run_id": "20260922T164126781738Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -16,51 +16,51 @@
     "config_path": "evals/codex-evals.toml"
   },
   "summary": {
-    "eval_count": 3,
-    "prompt_count": 4,
+    "eval_count": 1,
+    "prompt_count": 1,
     "failure_count": 0,
     "with_skill": {
-      "prompt_count": 4,
-      "command_count": 27,
-      "duration_seconds": 352.095,
-      "agent_duration_seconds": 351.821,
-      "tokens": 627354,
-      "agent_tokens": 627354,
+      "prompt_count": 1,
+      "command_count": 21,
+      "duration_seconds": 205.724,
+      "agent_duration_seconds": 205.649,
+      "tokens": 428112,
+      "agent_tokens": 428112,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
-        "usage_record_count": 4,
-        "selected_record_count": 4,
-        "input_tokens": 614711,
-        "cached_input_tokens": 531712,
-        "cache_creation_input_tokens": null,
-        "output_tokens": 12643,
-        "reasoning_output_tokens": 4988,
+        "usage_record_count": 1,
+        "selected_record_count": 1,
+        "input_tokens": 418303,
+        "cached_input_tokens": 377088,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 9809,
+        "reasoning_output_tokens": 3278,
         "provider_total_tokens": null,
-        "derived_total_tokens": 627354,
-        "effective_total_tokens": 627354,
+        "derived_total_tokens": 428112,
+        "effective_total_tokens": 428112,
         "coverage": {
-          "record_count": 4,
-          "modeled_count": 4,
-          "observed_count": 4,
-          "recognized_count": 4,
-          "preferred_total_count": 4,
+          "record_count": 1,
+          "modeled_count": 1,
+          "observed_count": 1,
+          "recognized_count": 1,
+          "preferred_total_count": 1,
           "field_counts": {
-            "input_tokens": 4,
-            "cached_input_tokens": 4,
-            "cache_creation_input_tokens": 0,
-            "output_tokens": 4,
-            "reasoning_output_tokens": 4,
+            "input_tokens": 1,
+            "cached_input_tokens": 1,
+            "cache_creation_input_tokens": 1,
+            "output_tokens": 1,
+            "reasoning_output_tokens": 1,
             "provider_total_tokens": 0,
-            "derived_total_tokens": 4
+            "derived_total_tokens": 1
           }
         }
       },
       "checks": {
-        "passed": 22,
-        "total": 22,
+        "passed": 11,
+        "total": 11,
         "skipped": 0
       }
     },
@@ -78,11 +78,11 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 23,
-        "duration_seconds": 282.33,
-        "agent_duration_seconds": 282.186,
-        "tokens": 483609,
-        "agent_tokens": 483609,
+        "command_count": 21,
+        "duration_seconds": 205.724,
+        "agent_duration_seconds": 205.649,
+        "tokens": 428112,
+        "agent_tokens": 428112,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -90,14 +90,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 471757,
-          "cached_input_tokens": 425600,
-          "cache_creation_input_tokens": null,
-          "output_tokens": 11852,
-          "reasoning_output_tokens": 4690,
+          "input_tokens": 418303,
+          "cached_input_tokens": 377088,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 9809,
+          "reasoning_output_tokens": 3278,
           "provider_total_tokens": null,
-          "derived_total_tokens": 483609,
-          "effective_total_tokens": 483609,
+          "derived_total_tokens": 428112,
+          "effective_total_tokens": 428112,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -107,7 +107,7 @@
             "field_counts": {
               "input_tokens": 1,
               "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 0,
+              "cache_creation_input_tokens": 1,
               "output_tokens": 1,
               "reasoning_output_tokens": 1,
               "provider_total_tokens": 0,
@@ -124,141 +124,16 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-dashboard/20260911T020832878259Z/results/dashboards/checkout-red/sanity-dashboard/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-dashboard/20260911T020832878259Z/results/dashboards/checkout-red/sanity-dashboard/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-dashboard/20260911T020832878259Z/results/dashboards/checkout-red/sanity-dashboard/with_baseline.json"
-      }
-    },
-    {
-      "id": "sanity/skill-smoke/sanity/dashboard",
-      "case": "sanity/skill-smoke",
-      "language": "sanity",
-      "service": "skill-smoke",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "visualize"
-      ],
-      "with_skill": {
-        "prompt_count": 2,
-        "command_count": 2,
-        "duration_seconds": 37.924,
-        "agent_duration_seconds": 37.835,
-        "tokens": 80781,
-        "agent_tokens": 80781,
-        "error_count": 0,
-        "agent_usage": {
-          "provider": "codex",
-          "source": "cumulative",
-          "observed": true,
-          "usage_record_count": 2,
-          "selected_record_count": 2,
-          "input_tokens": 80560,
-          "cached_input_tokens": 56832,
-          "cache_creation_input_tokens": null,
-          "output_tokens": 221,
-          "reasoning_output_tokens": 0,
-          "provider_total_tokens": null,
-          "derived_total_tokens": 80781,
-          "effective_total_tokens": 80781,
-          "coverage": {
-            "record_count": 2,
-            "modeled_count": 2,
-            "observed_count": 2,
-            "recognized_count": 2,
-            "preferred_total_count": 2,
-            "field_counts": {
-              "input_tokens": 2,
-              "cached_input_tokens": 2,
-              "cache_creation_input_tokens": 0,
-              "output_tokens": 2,
-              "reasoning_output_tokens": 2,
-              "provider_total_tokens": 0,
-              "derived_total_tokens": 2
-            }
-          }
-        },
-        "checks": {
-          "passed": 6,
-          "total": 6,
-          "skipped": 0
-        }
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-dashboard/20260911T020832878259Z/results/sanity/skill-smoke/sanity-dashboard/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-dashboard/20260911T020832878259Z/results/sanity/skill-smoke/sanity-dashboard/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-dashboard/20260911T020832878259Z/results/sanity/skill-smoke/sanity-dashboard/with_baseline.json"
-      }
-    },
-    {
-      "id": "sanity/skill-smoke/sanity/dashboard-no-audit",
-      "case": "sanity/skill-smoke",
-      "language": "sanity",
-      "service": "skill-smoke",
-      "prompt_count": 1,
-      "prompts": [
-        "missing-audit"
-      ],
-      "with_skill": {
-        "prompt_count": 1,
-        "command_count": 2,
-        "duration_seconds": 31.841,
-        "agent_duration_seconds": 31.8,
-        "tokens": 62964,
-        "agent_tokens": 62964,
-        "error_count": 0,
-        "agent_usage": {
-          "provider": "codex",
-          "source": "cumulative",
-          "observed": true,
-          "usage_record_count": 1,
-          "selected_record_count": 1,
-          "input_tokens": 62394,
-          "cached_input_tokens": 49280,
-          "cache_creation_input_tokens": null,
-          "output_tokens": 570,
-          "reasoning_output_tokens": 298,
-          "provider_total_tokens": null,
-          "derived_total_tokens": 62964,
-          "effective_total_tokens": 62964,
-          "coverage": {
-            "record_count": 1,
-            "modeled_count": 1,
-            "observed_count": 1,
-            "recognized_count": 1,
-            "preferred_total_count": 1,
-            "field_counts": {
-              "input_tokens": 1,
-              "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 0,
-              "output_tokens": 1,
-              "reasoning_output_tokens": 1,
-              "provider_total_tokens": 0,
-              "derived_total_tokens": 1
-            }
-          }
-        },
-        "checks": {
-          "passed": 5,
-          "total": 5,
-          "skipped": 0
-        }
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-dashboard/20260911T020832878259Z/results/sanity/skill-smoke/sanity-dashboard-no-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-dashboard/20260911T020832878259Z/results/sanity/skill-smoke/sanity-dashboard-no-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-dashboard/20260911T020832878259Z/results/sanity/skill-smoke/sanity-dashboard-no-audit/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-dashboard/20260922T164126781738Z/results/dashboards/checkout-red/sanity-dashboard/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-dashboard/20260922T164126781738Z/results/dashboards/checkout-red/sanity-dashboard/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-dashboard/20260922T164126781738Z/results/dashboards/checkout-red/sanity-dashboard/with_baseline.json"
       }
     }
   ],
   "failures": [],
   "source": {
     "digest_version": 2,
-    "digest": "0cb70f9c6a6e14abaeb2250b403f8664c7cda03d48d45f72f0a9459075c0665a",
+    "digest": "aa9361a5bee250dff6236e8609126526a46d473032f36c49afd0498e7ca73883",
     "eval_kinds": [
       "sanity"
     ],
@@ -312,12 +187,9 @@
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
-      "skills/splunk-dashboard/SKILL.md": "4ce9bfa9e909b180e0e021af777bfce7bb081edd1dbb7f831e6572b1186954f1",
+      "skills/splunk-dashboard/SKILL.md": "68eab6066a3e55df3818eff43528b0b6be9517277cbf7d7b9801791c1d009c71",
       "skills/splunk-dashboard/references/dashboard-classification.md": "ba6dff4b76e63dad7356e304e083962a06b581c6925628ff778a6f6fab4efa87",
-      "skills/splunk-dashboard/references/dashboard-templates.md": "a29c329acef70470dbc79c937c83ac32108bffc7b0a051fd8176768f0a028d44",
-      "evals/sanity/skill-smoke/eval/sanity/dashboard-no-audit.json": "bf0827bb92ddfae2222bfd46ac60d2c0628bb1ce41e30033692c7ccc4dbdd8f8",
-      "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9",
-      "evals/sanity/skill-smoke/eval/sanity/dashboard.json": "10c407fbbb660426bdd9cb2a5fec9706b00bfb2a008d1ff78a19baa02bbde5e8"
+      "skills/splunk-dashboard/references/dashboard-templates.md": "a29c329acef70470dbc79c937c83ac32108bffc7b0a051fd8176768f0a028d44"
     },
     "skill_path": "skills/splunk-dashboard",
     "selections": [
@@ -325,27 +197,6 @@
         "definition_path": "evals/dashboards/checkout-red/eval/sanity/dashboard.json",
         "fixture_dir": "evals/dashboards/checkout-red",
         "prompt_id": "generate",
-        "eval_kind": "sanity",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/sanity/skill-smoke/eval/sanity/dashboard-no-audit.json",
-        "fixture_dir": "evals/sanity/skill-smoke",
-        "prompt_id": "missing-audit",
-        "eval_kind": "sanity",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/sanity/skill-smoke/eval/sanity/dashboard.json",
-        "fixture_dir": "evals/sanity/skill-smoke",
-        "prompt_id": "direct",
-        "eval_kind": "sanity",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/sanity/skill-smoke/eval/sanity/dashboard.json",
-        "fixture_dir": "evals/sanity/skill-smoke",
-        "prompt_id": "visualize",
         "eval_kind": "sanity",
         "eval_inputs": []
       }
