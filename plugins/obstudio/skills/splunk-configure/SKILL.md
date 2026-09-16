@@ -676,7 +676,7 @@ is missing, partial, or not yet proven.
 1. Review configure verification and resolve any unproven inputs
 2. Copy and fill in credentials
 3. Review threshold defaults and run `terraform init` plus `terraform plan`
-4. Use `$splunk-sync` to publish confirmed detector gaps, or apply reviewed
+4. Use `$splunk-detector-publish` to publish confirmed detector gaps, or apply reviewed
    Terraform when Terraform will own detectors and dashboards
 5. Tune thresholds based on production baselines
 
@@ -870,7 +870,7 @@ Next:
 1. `cp .observe/terraform/terraform.tfvars.example .observe/terraform/terraform.tfvars`
 2. Fill in `realm`, `api_token`, and `notification_channel` in `terraform.tfvars`
 3. `cd .observe/terraform && terraform init && terraform plan`
-4. Use `$splunk-sync` to compare and publish only confirmed detector gaps, or
+4. Use `$splunk-detector-publish` to compare and publish only confirmed detector gaps, or
    apply the reviewed Terraform when the user chooses Terraform-managed
    detectors and dashboards
 ```

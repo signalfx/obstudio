@@ -10,10 +10,6 @@ REPORT_FLOW = SKILLS_DIR / "references" / "report-flow-contract.md"
 OTEL_VERIFY = SKILLS_DIR / "otel-verify" / "SKILL.md"
 SPLUNK_CONFIGURE = SKILLS_DIR / "splunk-configure" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
-SPLUNK_SYNC = SKILLS_DIR / "splunk-sync" / "SKILL.md"
-SPLUNK_SYNC_REFS = SKILLS_DIR / "splunk-sync" / "references"
-# splunk-sync was renamed to splunk-detector-publish; the full detector contract
-# now lives in the canonical skill and splunk-sync is a deprecation stub.
 SPLUNK_DETECTOR_PUBLISH = SKILLS_DIR / "splunk-detector-publish" / "SKILL.md"
 SPLUNK_DETECTOR_PUBLISH_REFS = SKILLS_DIR / "splunk-detector-publish" / "references"
 
@@ -1125,12 +1121,9 @@ def test_genai_guidance_stays_generic():
 
 
 # ---------------------------------------------------------------------------
-# splunk-detector-publish skill (canonical; formerly splunk-sync)
+# splunk-detector-publish skill
 #
 # The full detector-publish contract lives in skills/splunk-detector-publish.
-# skills/splunk-sync is a backward-compatibility deprecation stub that redirects
-# to it, so the full-contract checks below target the canonical skill and the
-# alias only gets dedicated redirect/deprecation checks further down.
 # ---------------------------------------------------------------------------
 
 
@@ -1233,29 +1226,3 @@ def test_splunk_detector_publish_skill_normalizes_program_text_before_create():
     )
     # The failure is a SignalFlow parse 400, distinct from a field-name 400.
     assert "400" in text, "SKILL.md must document the HTTP 400 SignalFlow-parse failure"
-
-
-# ---------------------------------------------------------------------------
-# splunk-sync deprecation alias (redirects to splunk-detector-publish)
-# ---------------------------------------------------------------------------
-
-
-def test_splunk_sync_alias_exists_and_is_a_redirect_stub():
-    text = _read(SPLUNK_SYNC)
-    lowered = text.lower()
-    assert "deprecated" in lowered, (
-        "splunk-sync/SKILL.md must announce that the skill is deprecated"
-    )
-    assert "splunk-detector-publish" in text, (
-        "splunk-sync/SKILL.md must redirect to the canonical splunk-detector-publish skill"
-    )
-
-
-def test_splunk_sync_alias_does_not_duplicate_full_contract():
-    # The alias is a thin stub, not a second copy of the detector contract that
-    # could silently drift from the canonical skill.
-    text = _read(SPLUNK_SYNC)
-    assert len(text.splitlines()) < 60, (
-        "splunk-sync/SKILL.md should be a short redirect stub, not a full skill copy; "
-        "the canonical contract lives in splunk-detector-publish"
-    )
