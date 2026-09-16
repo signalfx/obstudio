@@ -2156,6 +2156,8 @@ def test_live_report_source_manifest_detects_changed_and_added_inputs(tmp_path: 
     )
     harness_source.parent.mkdir(parents=True)
     harness_source.write_text("def side_prompt(): pass\n", encoding="utf-8")
+    harness_backend = harness_source.parent / "backends.py"
+    harness_backend.write_text("def run_agent(): pass\n", encoding="utf-8")
     schema_path = harness_source.parent / "schemas" / "rubric_grade.schema.json"
     schema_path.parent.mkdir()
     schema_path.write_text('{"type":"object"}\n', encoding="utf-8")
@@ -2290,6 +2292,16 @@ def test_live_report_source_manifest_detects_changed_and_added_inputs(tmp_path: 
         tmp_path / "eval-reports" / "sample-skill" / "validation" / "benchmark.json",
     ]
 
+    # The temporary harness exemption avoids refreshing every report for
+    # evaluator-only changes. Non-harness inputs remain freshness-gated below.
+    harness_backend.write_text("def run_agent(): return True\n", encoding="utf-8")
+    assert len(verify_published_report_sources(tmp_path)) == 2
+
+    harness_source.write_text("def side_prompt(): return True\n", encoding="utf-8")
+    assert len(verify_published_report_sources(tmp_path)) == 2
+    harness_source.write_text("def side_prompt(): pass\n", encoding="utf-8")
+    assert len(verify_published_report_sources(tmp_path)) == 2
+
     fixture_source.write_text("package changed\n", encoding="utf-8")
     with pytest.raises(ValueError, match="inputs are stale"):
         verify_published_report_sources(tmp_path)
@@ -2358,8 +2370,7 @@ def test_live_report_source_manifest_detects_changed_and_added_inputs(tmp_path: 
 
     (eval_dir / "added.json").unlink()
     schema_path.write_text('{"type":"array"}\n', encoding="utf-8")
-    with pytest.raises(ValueError, match="inputs are stale"):
-        verify_published_report_sources(tmp_path)
+    assert len(verify_published_report_sources(tmp_path)) == 2
     schema_path.write_text('{"type":"object"}\n', encoding="utf-8")
 
     selected_config.write_text("[pytest]\nchanged = true\n", encoding="utf-8")
