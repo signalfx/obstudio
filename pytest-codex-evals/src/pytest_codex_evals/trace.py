@@ -151,11 +151,7 @@ def extract_actions(events: list[dict[str, Any]]) -> list[ActionEvent]:
         if not isinstance(item, dict):
             continue
         item_type = str(item.get("type") or "")
-        # Codex can emit preflight status errors (for example, a warning that
-        # skill descriptions were shortened to fit the context budget) before
-        # the first task action. These are not agent actions and must not make
-        # the skill-instructions-read guard report a false failure.
-        if not item_type or item_type in {"agent_message", "reasoning", "error"}:
+        if not item_type or item_type in {"agent_message", "reasoning"}:
             continue
         item_id = str(item.get("id") or "")
         status = action_status(event, item)

@@ -1341,32 +1341,6 @@ def test_with_skill_guard_rejects_successful_read_after_failed_first_read(
     assert "before another action" in check.evidence
 
 
-def test_with_skill_guard_ignores_codex_preflight_error_before_skill_read(
-    tmp_path: Path,
-):
-    skill_path = write_loaded_skill(tmp_path, "otel-audit")
-    events = [
-        {
-            "type": "item.completed",
-            "item": {
-                "id": "preflight-warning",
-                "type": "error",
-                "message": "Skill descriptions were shortened to fit the skills context budget.",
-            },
-        },
-        codex_command_event(
-            "cat .agents/skills/otel-audit/SKILL.md",
-            "completed",
-            item_id="read-1",
-            output=skill_path.read_text(encoding="utf-8"),
-        ),
-    ]
-
-    check = instruction_guard_check(tmp_path, events)
-
-    assert check.passed is True
-
-
 @pytest.mark.parametrize(
     ("command", "output"),
     [
