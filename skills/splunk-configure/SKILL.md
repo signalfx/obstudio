@@ -10,6 +10,7 @@ description: >-
   coverage, distinguish app-down from degraded impact, build blast-radius
   views, improve MTTD or incident localization, or add GenAI/LLM detector
   coverage.
+allowed-tools: Read, Write, Grep, Glob, Bash(terraform *), Bash(python3 */scripts/validate_configure_output.py *)
 metadata:
   author: otel-studio
   version: 0.2.0

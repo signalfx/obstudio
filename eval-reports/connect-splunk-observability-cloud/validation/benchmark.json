@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "connect-splunk-observability-cloud",
-    "run_id": "20260911T190811713531Z",
+    "run_id": "20260918T181226078017Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -26,8 +26,9 @@
       "case": "plugins/obstudio",
       "language": "plugins",
       "service": "obstudio",
-      "prompt_count": 3,
+      "prompt_count": 4,
       "prompts": [
+        "confirm-configuration",
         "existing-organization-browser",
         "newly-ready-organization-browser",
         "terminal-clickable-fallback"
@@ -36,27 +37,27 @@
       "eval_dir": "evals/plugins/obstudio",
       "skill_path": "skills/connect-splunk-observability-cloud",
       "sanity_check_count": 0,
-      "rubric_check_count": 9,
+      "rubric_check_count": 10,
       "runtime_check_count": 0
     }
   ],
   "summary": {
     "eval_count": 1,
-    "case_count": 3,
-    "prompt_count": 3,
+    "case_count": 4,
+    "prompt_count": 4,
     "sanity_check_count": 0,
-    "rubric_check_count": 27,
+    "rubric_check_count": 40,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 2,
-    "digest": "d4a47310196e8810715b75463049fad4a11c232e8080e540477c1c7b064ab15b",
+    "digest": "c3a969c108847db1366fd56cff2a7fd58f0bccc2e4d8f4197087b9aab2c968da",
     "eval_kinds": [
       "rubric"
     ],
     "files": {
       "evals/codex-evals.validation.toml": "ce69f042257fdb4a4c8d196f2f0f515fdc371316c02ab7d86aecc36267f7e940",
-      "evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json": "e6c8b61d85107191cfca5b6bf3205b5f466501bcc2541629c00438697082ae41",
+      "evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json": "735bfaf27771dab522230f420ff802d4dc3974987657cfe0cbd8808495c4a127",
       "evals/pyproject.toml": "2c51312de8067b0c85fd99bfa8ad58a8d6870f67d8e8e368b869c7a04b004a0b",
       "evals/uv.lock": "ad811e95827dd15596c6b41c9a6e112dc011ce6eece83b3322054ff786b932b3",
       "pytest-codex-evals/pyproject.toml": "e356e980db8086d731a14dee7b6f508b60e43652ecf86d051b1a6faece0339db",
@@ -91,7 +92,7 @@
       "pytest-codex-evals/src/pytest_codex_evals/schemas/sanity.schema.json": "598666c521c62290a60a2b1f0e67eb8526ad80ebaa12f81e006c51454e7ddc8b",
       "pytest-codex-evals/src/pytest_codex_evals/trace.py": "b2ea2fbde127a030bac5098d54e0ca8aa0242db3106e52d99a7c36a8d1becf7c",
       "pytest-codex-evals/uv.lock": "4474921439df5db6da255d3b69b0ce1b0630c57b359146c4e8b03eefcecbd65e",
-      "skills/connect-splunk-observability-cloud/SKILL.md": "af23a50c8c32f635b1662fabb481b4e15f9db59abdbdd28e566d82c91443abda",
+      "skills/connect-splunk-observability-cloud/SKILL.md": "8db8a546f52f0fe56748f53abb4e26e0aa6609824e9f8e72b62937997ffa0417",
       "skills/connect-splunk-observability-cloud/agents/openai.yaml": "206b920092a097ec7ab0f92b97d457a6e794bdddcc7f2def837955ff8a756407",
       "skills/references/consumers.json": "cd8084854d7042b7ecc306ef1efca5f1866f1616c4c0ea0f6522e4bce4efd852",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
@@ -108,6 +109,13 @@
     },
     "skill_path": "skills/connect-splunk-observability-cloud",
     "selections": [
+      {
+        "definition_path": "evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json",
+        "fixture_dir": "evals/plugins/obstudio",
+        "prompt_id": "confirm-configuration",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
       {
         "definition_path": "evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json",
         "fixture_dir": "evals/plugins/obstudio",
