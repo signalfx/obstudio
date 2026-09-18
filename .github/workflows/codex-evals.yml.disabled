@@ -63,10 +63,15 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Create isolated eval Codex home
+        run: make eval-codex-home
+
       # openai/codex-action bootstraps the Codex CLI and Responses API proxy.
       # After this step, later shell steps in the same job can call `codex`.
       - name: Bootstrap Codex CLI
         uses: openai/codex-action@v1
+        env:
+          CODEX_HOME: ${{ github.workspace }}/.workspace/codex-evals/codex-home
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt: "Print the Codex version and exit."
@@ -74,6 +79,9 @@ jobs:
           safety-strategy: drop-sudo
 
       - name: Run live Codex A/B evals
+        env:
+          EVAL_CODEX_HOME: ${{ github.workspace }}/.workspace/codex-evals/codex-home
+          EVAL_CODEX_AUTH: external
         run: |
           make eval-all-ab \
             SKILL="${{ github.event.inputs.skill }}" \

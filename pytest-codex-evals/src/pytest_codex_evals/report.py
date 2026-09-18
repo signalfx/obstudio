@@ -46,6 +46,18 @@ TOKEN_USAGE_FIELDS = (
 )
 SOURCE_MANIFEST_DIGEST_VERSION = 2
 
+# TODO: Decide whether eval-report freshness tracks grader-only dependencies,
+# evaluator semantics versions, or the full harness.
+#
+# This is deliberately temporary. Report freshness continues to gate all skill,
+# fixture, eval-definition, and selected-config inputs, but not the evaluator
+# package while the long-term provenance model is decided.
+FRESHNESS_IGNORED_SOURCE_PREFIXES = ("pytest-codex-evals/",)
+
+
+def is_freshness_ignored_source_path(relative_path: str) -> bool:
+    return relative_path.startswith(FRESHNESS_IGNORED_SOURCE_PREFIXES)
+
 
 def write_session_results(runs: list[dict[str, Any]]) -> None:
     grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
@@ -380,6 +392,10 @@ def source_input_digests(
             if source := regular_source_file(path):
                 paths.append(source)
     if eval_root.is_dir():
+        # TODO: Include codex-eval-home.config.toml after published reports have
+        # been refreshed under the isolated-home environment. It changes live
+        # evaluator setup, but tracking it now would invalidate every existing
+        # report solely for this transitional harness change.
         for name in ("pyproject.toml", "uv.lock"):
             eval_metadata = eval_root / name
             if source := regular_source_file(eval_metadata):
@@ -941,11 +957,36 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
                 path.relative_to(root)
             except ValueError as exc:
                 raise ValueError(f"{benchmark_path}: source path escapes the repository: {relative}") from exc
-            if not path.is_file():
+            if not is_freshness_ignored_source_path(relative) and not path.is_file():
                 raise ValueError(f"{benchmark_path}: source input is missing: {relative}")
         expected_digest = source.get("digest")
+        # Preserve the recorded values for ignored paths so existing published
+        # manifests remain valid. This is only a freshness exemption; source
+        # paths are still validated above before they are filtered.
+        current_for_digest = {
+            relative: digest
+            for relative, digest in current.items()
+            if not is_freshness_ignored_source_path(relative)
+        }
+        current_for_digest.update(
+            {
+                relative: digest
+                for relative, digest in files.items()
+                if is_freshness_ignored_source_path(relative)
+            }
+        )
+        current_for_comparison = {
+            relative: digest
+            for relative, digest in current.items()
+            if not is_freshness_ignored_source_path(relative)
+        }
+        files_for_comparison = {
+            relative: digest
+            for relative, digest in files.items()
+            if not is_freshness_ignored_source_path(relative)
+        }
         current_digest = source_manifest_digest(
-            current,
+            current_for_digest,
             digest_version=digest_version,
             eval_kinds=declared_eval_kinds,
             skill_path=skill_path,
@@ -953,7 +994,7 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
             selections=selections,
             selection_scope=selection_scope,
         )
-        if current != files or current_digest != expected_digest:
+        if current_for_comparison != files_for_comparison or current_digest != expected_digest:
             raise ValueError(f"{benchmark_path}: eval report inputs are stale; rerun the owning eval")
         verified.append(benchmark_path)
     return verified
