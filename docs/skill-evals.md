@@ -151,8 +151,14 @@ make eval-all-ab SKILL=skills/otel-instrument
 with `AB=1`, `WITH=ab`, or the `*-ab` targets. The direct pytest form is:
 
 ```bash
+export CODEX_EVAL_HOME="$PWD/.workspace/codex-evals/codex-home"
+make eval-codex-auth
 cd evals && uv run pytest '<language>/<service>/eval/qual' -k "<prompt-id>" --skill "../skills/<skill-dir>" --codex-eval-kind rubric --ab
 ```
+
+The direct form above uses the default Codex backend. If the selected config
+uses Cursor or Claude, omit `CODEX_EVAL_HOME`; `make eval-codex-auth`
+automatically skips its Codex login check for those backends.
 
 The reusable pytest plugin lives in `pytest-codex-evals/`. It owns the generic
 Codex controls (`--skill`, `--codex-eval-config`, `--model`,

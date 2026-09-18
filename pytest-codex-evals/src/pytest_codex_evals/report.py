@@ -392,6 +392,10 @@ def source_input_digests(
             if source := regular_source_file(path):
                 paths.append(source)
     if eval_root.is_dir():
+        # TODO: Include codex-eval-home.config.toml after published reports have
+        # been refreshed under the isolated-home environment. It changes live
+        # evaluator setup, but tracking it now would invalidate every existing
+        # report solely for this transitional harness change.
         for name in ("pyproject.toml", "uv.lock"):
             eval_metadata = eval_root / name
             if source := regular_source_file(eval_metadata):

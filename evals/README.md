@@ -148,6 +148,19 @@ in again if you use a different machine or change `EVAL_CODEX_HOME`. Live eval
 targets check this authentication before starting and tell you to run
 `make eval-codex-login` if it is missing.
 
+For a direct `uv run pytest` live invocation rather than a Make target, export
+the same isolated home first and verify its authentication:
+
+```bash
+export CODEX_EVAL_HOME="$PWD/.workspace/codex-evals/codex-home"
+make eval-codex-auth
+cd evals && uv run pytest go/kvstore/eval/qual --skill ../skills/otel-instrument --codex-eval-kind rubric
+```
+
+This direct example uses the default Codex backend. A config using Cursor or
+Claude does not use `CODEX_EVAL_HOME`, and `make eval-codex-auth` skips the
+Codex login check for those backends.
+
 ## Commands
 
 | Target | Purpose |

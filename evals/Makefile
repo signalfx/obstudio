@@ -18,6 +18,8 @@ EVAL_BASELINE_CONFIG ?= codex-evals.baseline.toml
 EVAL_AB_CONFIG ?= codex-evals.ab.toml
 EVAL_CODEX_HOME ?= $(ROOT_DIR)/.workspace/codex-evals/codex-home
 EVAL_CODEX_HOME_TEMPLATE ?= $(CURDIR)/codex-eval-home.config.toml
+EVAL_AUTH_CONFIG ?= $(EVAL_CONFIG)
+EVAL_CODEX_AUTH ?= login
 SANITY_PATTERN ?= */*/eval/sanity
 RUBRIC_PATTERN ?= */*/eval/qual
 RUNTIME_PATTERN ?= */*/eval/runtime
@@ -50,6 +52,9 @@ EVAL_LIST_FLAGS = $(EVAL_FLAGS)
 EVAL_REPORT_SKILL_FLAG = $(if $(SKILL),--skill "$(EVAL_SKILL_PATH)",)
 EVAL_REPORT_FLAGS = --repo-root "$(ROOT_DIR)" $(EVAL_REPORT_SKILL_FLAG)
 EVAL_CODEX_ENV = CODEX_EVAL_HOME="$(EVAL_CODEX_HOME)"
+# Use the plugin's config parser so Make applies Codex authentication only when
+# the selected config actually uses the Codex backend.
+EVAL_AGENT_BACKEND = $(shell uv run python -c 'from pathlib import Path; from pytest_codex_evals.config import load_settings; print(load_settings(Path("$(EVAL_AUTH_CONFIG)")).agent_backend)')
 
 .PHONY: build test eval-codex-home eval-codex-login eval-codex-auth eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all eval-report-freshness test-eval-harness test-interactive-guidance test-all
 
@@ -65,8 +70,15 @@ eval-codex-home: ## Create the isolated Codex home used by live evals
 eval-codex-login: eval-codex-home ## Log into the isolated Codex home once for local live evals
 	@CODEX_HOME="$(EVAL_CODEX_HOME)" codex login
 
-eval-codex-auth: eval-codex-home ## Verify the isolated Codex home is authenticated for live evals
-	@if CODEX_HOME="$(EVAL_CODEX_HOME)" codex login status >/dev/null 2>&1; then \
+eval-codex-auth: eval-codex-home ## Verify Codex authentication when the selected backend is Codex
+	@if [ "$(EVAL_AGENT_BACKEND)" != "codex" ]; then \
+		echo "Skipping Codex authentication for $(EVAL_AGENT_BACKEND) backend"; \
+	elif [ "$(EVAL_CODEX_AUTH)" = "external" ]; then \
+		echo "Using externally provisioned Codex authentication for the isolated eval home: $(EVAL_CODEX_HOME)"; \
+	elif [ "$(EVAL_CODEX_AUTH)" != "login" ]; then \
+		echo "EVAL_CODEX_AUTH must be login or external" >&2; \
+		exit 2; \
+	elif CODEX_HOME="$(EVAL_CODEX_HOME)" codex login status >/dev/null 2>&1; then \
 		echo "Already successfully logged in to the isolated eval Codex home: $(EVAL_CODEX_HOME)"; \
 	else \
 		echo "The isolated eval Codex home is not authenticated: $(EVAL_CODEX_HOME)" >&2; \
@@ -82,15 +94,19 @@ eval-validation-report: ## Render the latest validation report from raw JSON
 
 eval-validation: eval-validation-test eval-validation-report ## Validate evals and render validation report
 
-eval-with-skill: eval-codex-auth ## Run Codex with the skill loaded, then grade sanity and rubric checks
+eval-with-skill: EVAL_AUTH_CONFIG = $(EVAL_CONFIG)
+eval-with-skill: eval-codex-auth ## Run the configured backend with the skill loaded, then grade sanity and rubric checks
 	@$(EVAL_CODEX_ENV) uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_TARGET) $(EVAL_PROMPT_FILTER) $(EVAL_FLAGS) $(EVAL_PROGRESS_FLAG)
 
-eval-with-baseline: eval-codex-auth ## Run Codex baseline with no skill loaded, then grade baseline checks
+eval-with-baseline: EVAL_AUTH_CONFIG = $(EVAL_BASELINE_CONFIG)
+eval-with-baseline: eval-codex-auth ## Run the configured backend with no skill loaded, then grade baseline checks
 	@$(EVAL_CODEX_ENV) uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_TARGET) $(EVAL_PROMPT_FILTER) $(EVAL_BASELINE_FLAGS) $(EVAL_PROGRESS_FLAG)
 
-eval-ab: eval-codex-auth ## Run Codex with_skill and with_baseline sides in one A/B comparison
+eval-ab: EVAL_AUTH_CONFIG = $(EVAL_AB_CONFIG)
+eval-ab: eval-codex-auth ## Run the configured backend with_skill and with_baseline sides in one A/B comparison
 	@$(EVAL_CODEX_ENV) uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_TARGET) $(EVAL_PROMPT_FILTER) $(EVAL_AB_FLAGS) $(EVAL_PROGRESS_FLAG)
 
+eval-sanity-test: EVAL_AUTH_CONFIG = $(EVAL_CONFIG)
 eval-sanity-test: eval-codex-auth ## Run quick loaded-skill sanity checks and write raw JSON
 	@$(EVAL_CODEX_ENV) uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_SANITY_TARGET) $(EVAL_SANITY_FILTER) $(EVAL_KIND_FLAGS) --codex-eval-kind sanity $(EVAL_PROGRESS_FLAG)
 
@@ -102,6 +118,7 @@ eval-sanity: eval-sanity-test eval-sanity-report ## Run quick loaded-skill sanit
 eval-sanity-ab: AB=1
 eval-sanity-ab: eval-sanity ## Run sanity checks with baseline
 
+eval-rubric-test: EVAL_AUTH_CONFIG = $(EVAL_CONFIG)
 eval-rubric-test: eval-codex-auth ## Run schema-constrained rubric grading; write raw JSON
 	@$(EVAL_CODEX_ENV) uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_RUBRIC_TARGET) $(EVAL_RUBRIC_FILTER) $(EVAL_KIND_FLAGS) --codex-eval-kind rubric $(EVAL_PROGRESS_FLAG)
 
@@ -113,6 +130,7 @@ eval-rubric: eval-rubric-test eval-rubric-report ## Run schema-constrained rubri
 eval-rubric-ab: AB=1
 eval-rubric-ab: eval-rubric ## Run rubric grading with baseline
 
+eval-runtime-test: EVAL_AUTH_CONFIG = $(EVAL_CONFIG)
 eval-runtime-test: eval-codex-auth ## Run Docker/Splunk Observability Studio runtime checks and write raw JSON
 	@$(EVAL_CODEX_ENV) uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_RUNTIME_TARGET) $(EVAL_RUNTIME_FILTER) $(EVAL_KIND_FLAGS) --codex-eval-kind runtime $(EVAL_PROGRESS_FLAG)
 
