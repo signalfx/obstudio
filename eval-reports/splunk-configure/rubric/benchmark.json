@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "splunk-configure",
-    "run_id": "20260701T171952987919Z",
+    "run_id": "20260921T234133309675Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
@@ -21,19 +21,81 @@
     "failure_count": 0,
     "with_skill": {
       "prompt_count": 1,
-      "command_count": 36,
-      "duration_seconds": 336.199,
-      "agent_duration_seconds": 230.753,
-      "tokens": 457956,
-      "agent_tokens": 383020,
+      "command_count": 32,
+      "duration_seconds": 492.085,
+      "agent_duration_seconds": 392.614,
+      "tokens": 1773149,
+      "agent_tokens": 1642374,
       "error_count": 0,
-      "rubric": {
-        "passed": 6,
-        "total": 6,
-        "average_score": 94.0
+      "agent_usage": {
+        "provider": "codex",
+        "source": "cumulative",
+        "observed": true,
+        "usage_record_count": 1,
+        "selected_record_count": 1,
+        "input_tokens": 1623028,
+        "cached_input_tokens": 1526016,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 19346,
+        "reasoning_output_tokens": 8756,
+        "provider_total_tokens": null,
+        "derived_total_tokens": 1642374,
+        "effective_total_tokens": 1642374,
+        "coverage": {
+          "record_count": 1,
+          "modeled_count": 1,
+          "observed_count": 1,
+          "recognized_count": 1,
+          "preferred_total_count": 1,
+          "field_counts": {
+            "input_tokens": 1,
+            "cached_input_tokens": 1,
+            "cache_creation_input_tokens": 1,
+            "output_tokens": 1,
+            "reasoning_output_tokens": 1,
+            "provider_total_tokens": 0,
+            "derived_total_tokens": 1
+          }
+        }
       },
-      "rubric_tokens": 74936,
-      "rubric_duration_seconds": 105.436
+      "rubric": {
+        "passed": 8,
+        "total": 8,
+        "average_score": 98.0
+      },
+      "rubric_tokens": 130775,
+      "rubric_duration_seconds": 99.296,
+      "rubric_usage": {
+        "provider": "codex",
+        "source": "cumulative",
+        "observed": true,
+        "usage_record_count": 1,
+        "selected_record_count": 1,
+        "input_tokens": 125899,
+        "cached_input_tokens": 82816,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 4876,
+        "reasoning_output_tokens": 2463,
+        "provider_total_tokens": null,
+        "derived_total_tokens": 130775,
+        "effective_total_tokens": 130775,
+        "coverage": {
+          "record_count": 1,
+          "modeled_count": 1,
+          "observed_count": 1,
+          "recognized_count": 1,
+          "preferred_total_count": 1,
+          "field_counts": {
+            "input_tokens": 1,
+            "cached_input_tokens": 1,
+            "cache_creation_input_tokens": 1,
+            "output_tokens": 1,
+            "reasoning_output_tokens": 1,
+            "provider_total_tokens": 0,
+            "derived_total_tokens": 1
+          }
+        }
+      }
     },
     "with_baseline": null
   },
@@ -49,28 +111,131 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 36,
-        "duration_seconds": 336.199,
-        "agent_duration_seconds": 230.753,
-        "tokens": 457956,
-        "agent_tokens": 383020,
+        "command_count": 32,
+        "duration_seconds": 492.085,
+        "agent_duration_seconds": 392.614,
+        "tokens": 1773149,
+        "agent_tokens": 1642374,
         "error_count": 0,
-        "rubric": {
-          "passed": 6,
-          "total": 6,
-          "average_score": 94.0
+        "agent_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 1,
+          "selected_record_count": 1,
+          "input_tokens": 1623028,
+          "cached_input_tokens": 1526016,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 19346,
+          "reasoning_output_tokens": 8756,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 1642374,
+          "effective_total_tokens": 1642374,
+          "coverage": {
+            "record_count": 1,
+            "modeled_count": 1,
+            "observed_count": 1,
+            "recognized_count": 1,
+            "preferred_total_count": 1,
+            "field_counts": {
+              "input_tokens": 1,
+              "cached_input_tokens": 1,
+              "cache_creation_input_tokens": 1,
+              "output_tokens": 1,
+              "reasoning_output_tokens": 1,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 1
+            }
+          }
         },
-        "rubric_tokens": 74936,
-        "rubric_duration_seconds": 105.436
+        "rubric": {
+          "passed": 8,
+          "total": 8,
+          "average_score": 98.0
+        },
+        "rubric_tokens": 130775,
+        "rubric_duration_seconds": 99.296,
+        "rubric_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 1,
+          "selected_record_count": 1,
+          "input_tokens": 125899,
+          "cached_input_tokens": 82816,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 4876,
+          "reasoning_output_tokens": 2463,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 130775,
+          "effective_total_tokens": 130775,
+          "coverage": {
+            "record_count": 1,
+            "modeled_count": 1,
+            "observed_count": 1,
+            "recognized_count": 1,
+            "preferred_total_count": 1,
+            "field_counts": {
+              "input_tokens": 1,
+              "cached_input_tokens": 1,
+              "cache_creation_input_tokens": 1,
+              "output_tokens": 1,
+              "reasoning_output_tokens": 1,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 1
+            }
+          }
+        }
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-configure/20260701T171952987919Z/results/dashboards/checkout-configure/qual-configure/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-configure/20260701T171952987919Z/results/dashboards/checkout-configure/qual-configure/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-configure/20260701T171952987919Z/results/dashboards/checkout-configure/qual-configure/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-configure/20260921T234133309675Z/results/dashboards/checkout-configure/qual-configure/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-configure/20260921T234133309675Z/results/dashboards/checkout-configure/qual-configure/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-configure/20260921T234133309675Z/results/dashboards/checkout-configure/qual-configure/with_baseline.json"
       }
     }
   ],
-  "failures": []
+  "failures": [],
+  "source": {
+    "digest_version": 3,
+    "digest": "08673830c762ed57584053473fac2692e5495fe80cc1247eeac85c34eece311c",
+    "eval_kinds": [
+      "rubric"
+    ],
+    "evaluator_semantics_version": 1,
+    "files": {
+      "evals/codex-evals.toml": "c0b019453c76a5b6d8692346f984ea91af04ca91331aa333b56d7a717b7b07c7",
+      "evals/dashboards/checkout-configure/eval/qual/configure.json": "b2c4e32dc67d532bd5f333af4cabd41de54e2ad4becb2a83d8b5a83a6cc71c93",
+      "evals/dashboards/checkout-configure/otel-audit.json": "ba1843457773445a06e59522e1572316d95075f2c007576fd4becd75da33ce7d",
+      "skills/references/consumers.json": "cd8084854d7042b7ecc306ef1efca5f1866f1616c4c0ea0f6522e4bce4efd852",
+      "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
+      "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
+      "skills/references/genai-readiness.md": "73e8af6407a4074ea7942df9e26be95b807e0bc69dd58e403819bc108db12209",
+      "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
+      "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
+      "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
+      "skills/references/scripts/observe_report.py": "8505513574a485f39b4197ee4995449dfe1ba4cf8730a6ee34c4215e90b2711e",
+      "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
+      "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
+      "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
+      "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
+      "skills/splunk-configure/SKILL.md": "3ff1a56614d94ab8023a099db1476a63dbaaf18ec0a1ba83ccc91b941ef965e5",
+      "skills/splunk-configure/references/detector-classification.md": "c389dc47e64719b46fe0ee8674231e6dc8f61c27d59d828c2bc10b5032971295",
+      "skills/splunk-configure/references/terraform-templates.md": "68dabdd5c40321baf57522de55cfa9c182557ed7791475998d814f004da835fc",
+      "skills/splunk-configure/scripts/validate_configure_output.py": "21e9f845308434499c6ae19d7d9043e5fcca01ae8840d6a68cc782e82c9fc09e",
+      "skills/splunk-configure/tests/test_validate_configure_output.py": "fdc01a7ef27c712df29a53b5ab5c21ad4de6ab5816301d337235226c113b8953"
+    },
+    "skill_path": "skills/splunk-configure",
+    "selections": [
+      {
+        "definition_path": "evals/dashboards/checkout-configure/eval/qual/configure.json",
+        "fixture_dir": "evals/dashboards/checkout-configure",
+        "prompt_id": "generate",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      }
+    ],
+    "config_path": "evals/codex-evals.toml"
+  }
 }

@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "runtime",
     "skill": "otel-instrument",
-    "run_id": "20260911T043511367063Z",
+    "run_id": "20260922T164313195047Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -16,51 +16,51 @@
     "config_path": "evals/codex-evals.toml"
   },
   "summary": {
-    "eval_count": 1,
-    "prompt_count": 1,
-    "failure_count": 1,
+    "eval_count": 6,
+    "prompt_count": 6,
+    "failure_count": 6,
     "with_skill": {
-      "prompt_count": 1,
-      "command_count": 92,
-      "duration_seconds": 1526.139,
-      "agent_duration_seconds": 1197.439,
-      "tokens": 5275394,
-      "agent_tokens": 5275394,
+      "prompt_count": 6,
+      "command_count": 385,
+      "duration_seconds": 4532.865,
+      "agent_duration_seconds": 3506.466,
+      "tokens": 15705879,
+      "agent_tokens": 15705879,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
-        "usage_record_count": 1,
-        "selected_record_count": 1,
-        "input_tokens": 5223511,
-        "cached_input_tokens": 5047936,
-        "cache_creation_input_tokens": null,
-        "output_tokens": 51883,
-        "reasoning_output_tokens": 23615,
+        "usage_record_count": 6,
+        "selected_record_count": 6,
+        "input_tokens": 15535414,
+        "cached_input_tokens": 14646400,
+        "cache_creation_input_tokens": 0,
+        "output_tokens": 170465,
+        "reasoning_output_tokens": 75008,
         "provider_total_tokens": null,
-        "derived_total_tokens": 5275394,
-        "effective_total_tokens": 5275394,
+        "derived_total_tokens": 15705879,
+        "effective_total_tokens": 15705879,
         "coverage": {
-          "record_count": 1,
-          "modeled_count": 1,
-          "observed_count": 1,
-          "recognized_count": 1,
-          "preferred_total_count": 1,
+          "record_count": 6,
+          "modeled_count": 6,
+          "observed_count": 6,
+          "recognized_count": 6,
+          "preferred_total_count": 6,
           "field_counts": {
-            "input_tokens": 1,
-            "cached_input_tokens": 1,
-            "cache_creation_input_tokens": 0,
-            "output_tokens": 1,
-            "reasoning_output_tokens": 1,
+            "input_tokens": 6,
+            "cached_input_tokens": 6,
+            "cache_creation_input_tokens": 6,
+            "output_tokens": 6,
+            "reasoning_output_tokens": 6,
             "provider_total_tokens": 0,
-            "derived_total_tokens": 1
+            "derived_total_tokens": 6
           }
         }
       },
       "checks": {
-        "passed": 1,
-        "total": 2,
+        "passed": 3,
+        "total": 9,
         "skipped": 0
       }
     },
@@ -68,21 +68,21 @@
   },
   "evals": [
     {
-      "id": "python/flask-basic/runtime/instrument",
-      "case": "python/flask-basic",
-      "language": "python",
-      "service": "flask-basic",
+      "id": "go/chi-basic/runtime/instrument",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
       "prompt_count": 1,
       "prompts": [
         "runtime-preserving"
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 92,
-        "duration_seconds": 1526.139,
-        "agent_duration_seconds": 1197.439,
-        "tokens": 5275394,
-        "agent_tokens": 5275394,
+        "command_count": 66,
+        "duration_seconds": 613.328,
+        "agent_duration_seconds": 607.557,
+        "tokens": 2659074,
+        "agent_tokens": 2659074,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -90,14 +90,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 5223511,
-          "cached_input_tokens": 5047936,
-          "cache_creation_input_tokens": null,
-          "output_tokens": 51883,
-          "reasoning_output_tokens": 23615,
+          "input_tokens": 2628672,
+          "cached_input_tokens": 2482944,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 30402,
+          "reasoning_output_tokens": 13049,
           "provider_total_tokens": null,
-          "derived_total_tokens": 5275394,
-          "effective_total_tokens": 5275394,
+          "derived_total_tokens": 2659074,
+          "effective_total_tokens": 2659074,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -107,7 +107,131 @@
             "field_counts": {
               "input_tokens": 1,
               "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 0,
+              "cache_creation_input_tokens": 1,
+              "output_tokens": 1,
+              "reasoning_output_tokens": 1,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 1
+            }
+          }
+        },
+        "checks": {
+          "passed": 0,
+          "total": 1,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/go/chi-basic/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/go/chi-basic/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/go/chi-basic/runtime-instrument/with_baseline.json"
+      }
+    },
+    {
+      "id": "go/chi-partial/runtime/instrument",
+      "case": "go/chi-partial",
+      "language": "go",
+      "service": "chi-partial",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 81,
+        "duration_seconds": 637.288,
+        "agent_duration_seconds": 630.388,
+        "tokens": 4166647,
+        "agent_tokens": 4166647,
+        "error_count": 0,
+        "agent_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 1,
+          "selected_record_count": 1,
+          "input_tokens": 4135293,
+          "cached_input_tokens": 3906816,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 31354,
+          "reasoning_output_tokens": 11282,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 4166647,
+          "effective_total_tokens": 4166647,
+          "coverage": {
+            "record_count": 1,
+            "modeled_count": 1,
+            "observed_count": 1,
+            "recognized_count": 1,
+            "preferred_total_count": 1,
+            "field_counts": {
+              "input_tokens": 1,
+              "cached_input_tokens": 1,
+              "cache_creation_input_tokens": 1,
+              "output_tokens": 1,
+              "reasoning_output_tokens": 1,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 1
+            }
+          }
+        },
+        "checks": {
+          "passed": 0,
+          "total": 1,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/go/chi-partial/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/go/chi-partial/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/go/chi-partial/runtime-instrument/with_baseline.json"
+      }
+    },
+    {
+      "id": "go/kvstore/runtime/instrument",
+      "case": "go/kvstore",
+      "language": "go",
+      "service": "kvstore",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 82,
+        "duration_seconds": 1021.666,
+        "agent_duration_seconds": 701.67,
+        "tokens": 3661729,
+        "agent_tokens": 3661729,
+        "error_count": 0,
+        "agent_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 1,
+          "selected_record_count": 1,
+          "input_tokens": 3628414,
+          "cached_input_tokens": 3443840,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 33315,
+          "reasoning_output_tokens": 13427,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 3661729,
+          "effective_total_tokens": 3661729,
+          "coverage": {
+            "record_count": 1,
+            "modeled_count": 1,
+            "observed_count": 1,
+            "recognized_count": 1,
+            "preferred_total_count": 1,
+            "field_counts": {
+              "input_tokens": 1,
+              "cached_input_tokens": 1,
+              "cache_creation_input_tokens": 1,
               "output_tokens": 1,
               "reasoning_output_tokens": 1,
               "provider_total_tokens": 0,
@@ -124,43 +248,272 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260911T043511367063Z/results/python/flask-basic/runtime-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260911T043511367063Z/results/python/flask-basic/runtime-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260911T043511367063Z/results/python/flask-basic/runtime-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/go/kvstore/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/go/kvstore/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/go/kvstore/runtime-instrument/with_baseline.json"
+      }
+    },
+    {
+      "id": "node/express-basic/runtime/instrument",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 45,
+        "duration_seconds": 845.919,
+        "agent_duration_seconds": 528.464,
+        "tokens": 1608016,
+        "agent_tokens": 1608016,
+        "error_count": 0,
+        "agent_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 1,
+          "selected_record_count": 1,
+          "input_tokens": 1584846,
+          "cached_input_tokens": 1481600,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 23170,
+          "reasoning_output_tokens": 12083,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 1608016,
+          "effective_total_tokens": 1608016,
+          "coverage": {
+            "record_count": 1,
+            "modeled_count": 1,
+            "observed_count": 1,
+            "recognized_count": 1,
+            "preferred_total_count": 1,
+            "field_counts": {
+              "input_tokens": 1,
+              "cached_input_tokens": 1,
+              "cache_creation_input_tokens": 1,
+              "output_tokens": 1,
+              "reasoning_output_tokens": 1,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 1
+            }
+          }
+        },
+        "checks": {
+          "passed": 0,
+          "total": 2,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/node/express-basic/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/node/express-basic/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/node/express-basic/runtime-instrument/with_baseline.json"
+      }
+    },
+    {
+      "id": "python/fastapi-celery/runtime/instrument",
+      "case": "python/fastapi-celery",
+      "language": "python",
+      "service": "fastapi-celery",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 72,
+        "duration_seconds": 655.405,
+        "agent_duration_seconds": 627.501,
+        "tokens": 2416691,
+        "agent_tokens": 2416691,
+        "error_count": 0,
+        "agent_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 1,
+          "selected_record_count": 1,
+          "input_tokens": 2385204,
+          "cached_input_tokens": 2257024,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 31487,
+          "reasoning_output_tokens": 15221,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 2416691,
+          "effective_total_tokens": 2416691,
+          "coverage": {
+            "record_count": 1,
+            "modeled_count": 1,
+            "observed_count": 1,
+            "recognized_count": 1,
+            "preferred_total_count": 1,
+            "field_counts": {
+              "input_tokens": 1,
+              "cached_input_tokens": 1,
+              "cache_creation_input_tokens": 1,
+              "output_tokens": 1,
+              "reasoning_output_tokens": 1,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 1
+            }
+          }
+        },
+        "checks": {
+          "passed": 1,
+          "total": 1,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/python/fastapi-celery/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/python/fastapi-celery/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/python/fastapi-celery/runtime-instrument/with_baseline.json"
+      }
+    },
+    {
+      "id": "python/flask-basic/runtime/instrument",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 39,
+        "duration_seconds": 759.259,
+        "agent_duration_seconds": 410.886,
+        "tokens": 1193722,
+        "agent_tokens": 1193722,
+        "error_count": 0,
+        "agent_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 1,
+          "selected_record_count": 1,
+          "input_tokens": 1172985,
+          "cached_input_tokens": 1074176,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 20737,
+          "reasoning_output_tokens": 9946,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 1193722,
+          "effective_total_tokens": 1193722,
+          "coverage": {
+            "record_count": 1,
+            "modeled_count": 1,
+            "observed_count": 1,
+            "recognized_count": 1,
+            "preferred_total_count": 1,
+            "field_counts": {
+              "input_tokens": 1,
+              "cached_input_tokens": 1,
+              "cache_creation_input_tokens": 1,
+              "output_tokens": 1,
+              "reasoning_output_tokens": 1,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 1
+            }
+          }
+        },
+        "checks": {
+          "passed": 1,
+          "total": 2,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/python/flask-basic/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/python/flask-basic/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260922T164313195047Z/results/python/flask-basic/runtime-instrument/with_baseline.json"
       }
     }
   ],
   "failures": [
+    {
+      "service": "go/chi-basic",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-telemetry FAIL",
+      "evidence": "Runtime check failed: docker compose -p codex-eval-87f876ba933e -f /private/tmp/obstudio-pr260-runtime-d8d5c3f0/evals/go/chi-basic/eval/runtime/docker-compose.yml up -d --build exited 1: Compose can now delegate builds to bake for better performance. To do so, set COMPOSE_BAKE=true. #0 building with \"desktop-linux\" instance using docker driver #1 [observer internal] load build definition from observer.Dockerfile #1 transferring dockerfile: 933B done #1 DONE 0.0s #2 [observer internal] load metadata for docker.io/library/golang:1.25-bookworm #2 ... #3 [observer internal] load metadata for docker.io/library/debian:bookworm-slim #3 DONE 0.5s #2 [observer internal] load metadata for docker.io/library/golang:1.25-bookworm #2 DONE 0.5s #4 [observer internal] load .dockerignore #4 transferring context: 2B done #4 DONE 0.0s #5 [observer stage-1 1/4] FROM docker.io/library/debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 #5 resolve docker.io/library/debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 done #5 DONE 0.0s #6 [observer build 1/8] FROM docker.io/library/golang:1.25-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437 #6 resolve docker.io/library/golang:1.25-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437 done #6 DONE 0.0s #7 [observer internal] load build context #7 transferring context: 811.29kB 0.4s done #7 DONE 0.4s #8 [observer build 3/8] COPY observer ./observer #8 CACHED #9 [observer build 5/8] COPY docs/examples.md ./docs/examples.md #9 CACHED #10 [observer build 8/8] RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/obstudio ./cmd/obstudio #10 CACHED #11 [observer build 6/8] WORKDIR /repo/observer #11 CACHED #12 [observer build 2/8] WORKDIR /repo #12 CACHED #13 [observer stage-1 3/4] COPY --from=build /out/obstudio /usr/local/bin/obstudio #13 CACHED #14 [observer stage-1 2/4] RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates lsof && rm -rf /var/lib/apt/lists/* #14 CACHED #15 [observer build 7/8] RUN go run ./cmd/stage-skills #15 CACHED #16 [observer build 4/8]",
+      "mode": "with_skill"
+    },
+    {
+      "service": "go/chi-partial",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-telemetry FAIL",
+      "evidence": "Runtime check failed: docker compose -p codex-eval-6740cbf40470 -f /private/tmp/obstudio-pr260-runtime-d8d5c3f0/evals/go/chi-partial/eval/runtime/docker-compose.yml up -d --build exited 1: Compose can now delegate builds to bake for better performance. To do so, set COMPOSE_BAKE=true. #0 building with \"desktop-linux\" instance using docker driver #1 [observer internal] load build definition from observer.Dockerfile #1 transferring dockerfile: 933B done #1 DONE 0.0s #2 [observer internal] load metadata for docker.io/library/golang:1.25-bookworm #2 ... #3 [observer internal] load metadata for docker.io/library/debian:bookworm-slim #3 DONE 0.2s #4 [observer stage-1 1/4] FROM docker.io/library/debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 #4 resolve docker.io/library/debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 done #4 DONE 0.0s #5 [observer build 1/8] FROM docker.io/library/golang:1.25-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437 #5 resolve docker.io/library/golang:1.25-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437 done #5 DONE 0.0s #2 [observer internal] load metadata for docker.io/library/golang:1.25-bookworm #2 DONE 0.2s #6 [observer internal] load .dockerignore #6 transferring context: 2B done #6 DONE 0.0s #7 [observer internal] load build context #7 transferring context: 105.85MB 1.4s done #7 DONE 1.4s #8 [observer stage-1 3/4] COPY --from=build /out/obstudio /usr/local/bin/obstudio #8 CACHED #9 [observer build 2/8] WORKDIR /repo #9 CACHED #10 [observer build 4/8] COPY skills ./skills #10 CACHED #11 [observer build 8/8] RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/obstudio ./cmd/obstudio #11 CACHED #12 [observer build 5/8] COPY docs/examples.md ./docs/examples.md #12 CACHED #13 [observer stage-1 2/4] RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates lsof && rm -rf /var/lib/apt/lists/* #13 CACHED #14 [observer build 3/8] COPY observer ./observer #14 CACHED #15 [observer build 6/8] WORKDIR /repo/observer #15 CACHED #16 [observer build 7/8] RUN go r",
+      "mode": "with_skill"
+    },
+    {
+      "service": "go/kvstore",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-telemetry FAIL",
+      "evidence": "Runtime check failed: command timed out after 300s: docker compose -p codex-eval-25462558db43 -f /private/tmp/obstudio-pr260-runtime-d8d5c3f0/evals/go/kvstore/eval/runtime/docker-compose.yml --profile traffic run --rm traffic; compose logs: observer-1 | observer-1 | Splunk Observability Studio (collector) observer-1 | Telemetry Explorer: http://127.0.0.1:3000 observer-1 | OTLP/HTTP receiver: http://0.0.0.0:4318 observer-1 | OTLP/gRPC receiver: 127.0.0.1:4317 observer-1 | MCP endpoint: http://0.0.0.0:3000/mcp observer-1 | Agent setup: obstudio install --target=<agent>[,<agent>...] observer-1 | observer-1 | Environment Variables observer-1 | OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED: observer-1 | observer-1 | 2026/09/22 16:55:05 [conntrack] could not resolve PID for 172.20.0.3|33296|172.20.0.2|4318: no matching lsof record for 172.20.0.2:4318->172.20.0.3:33296 observer-1 | 2026/09/22 16:55:05 [conntrack] could not resolve PID for 172.20.0.3|33304|172.20.0.2|4318: no matching lsof record for 172.20.0.2:4318->172.20.0.3:33304 app-1 | 2026/09/22 16:55:05 failed to initialize telemetry: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=\"http://observer:4318/v1/logs\" is not the detected local Splunk Observability Studio logs receiver \"http://localhost:4318/v1/logs\" app-1 | 2026/09/22 16:55:05 failed to initialize telemetry: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=\"http://observer:4318/v1/logs\" is not the detected local Splunk Observability Studio logs receiver \"http://localhost:4318/v1/logs\"",
+      "mode": "with_skill"
+    },
+    {
+      "service": "node/express-basic",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-telemetry FAIL",
+      "evidence": "Runtime check failed: command timed out after 300s: docker compose -p codex-eval-4ebf3b2cfb11 -f /private/tmp/obstudio-pr260-runtime-d8d5c3f0/evals/node/express-basic/eval/runtime/docker-compose.yml --profile traffic run --rm traffic; compose logs: app-1 | app-1 | > node-express-basic@0.1.0 dev app-1 | > node --require ./instrumentation.cjs app.js app-1 | app-1 | /app/instrumentation.cjs:87 app-1 | throw new Error( app-1 | ^ app-1 | app-1 | Error: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local Splunk Observability Studio receiver; refusing to enable the local log bridge app-1 | at localLogConfiguration (/app/instrumentation.cjs:87:11) app-1 | at Object.<anonymous> (/app/instrumentation.cjs:114:60) app-1 | at Module._compile (node:internal/modules/cjs/loader:1781:14) app-1 | at Object..js (node:internal/modules/cjs/loader:1913:10) app-1 | at Module.load (node:internal/modules/cjs/loader:1505:32) app-1 | at Function._load (node:internal/modules/cjs/loader:1309:12) app-1 | at wrapModuleLoad (node:internal/modules/cjs/loader:254:19) app-1 | at Module.require (node:internal/modules/cjs/loader:1527:12) app-1 | at node:internal/modules/cjs/loader:2071:12 app-1 | at loadPreloadModules (node:internal/process/pre_execution:756:5) app-1 | app-1 | Node.js v22.23.2 observer-1 | observer-1 | Splunk Observability Studio (collector) observer-1 | Telemetry Explorer: http://127.0.0.1:3000 observer-1 | OTLP/HTTP receiver: http://0.0.0.0:4318 observer-1 | OTLP/gRPC receiver: 127.0.0.1:4317 observer-1 | MCP endpoint: http://0.0.0.0:3000/mcp observer-1 | Agent setup: obstudio install --target=<agent>[,<agent>...] observer-1 | observer-1 | Environment Variables observer-1 | OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED: observer-1 |",
+      "mode": "with_skill"
+    },
+    {
+      "service": "node/express-basic",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-logs-opt-out FAIL",
+      "evidence": "Runtime check failed: app did not stop gracefully: state=exited, exit_code=1; compose logs: observer-1 | observer-1 | Splunk Observability Studio (collector) observer-1 | Telemetry Explorer: http://127.0.0.1:3000 observer-1 | OTLP/HTTP receiver: http://0.0.0.0:4318 observer-1 | OTLP/gRPC receiver: 127.0.0.1:4317 observer-1 | MCP endpoint: http://0.0.0.0:3000/mcp observer-1 | Agent setup: obstudio install --target=<agent>[,<agent>...] observer-1 | observer-1 | Environment Variables observer-1 | OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED: observer-1 | observer-1 | 2026/09/22 16:57:18 [conntrack] could not resolve PID for 172.21.0.3|40936|172.21.0.2|4318: no matching lsof record for 172.21.0.2:4318->172.21.0.3:40936 observer-1 | 2026/09/22 16:57:18 [conntrack] could not resolve PID for 172.21.0.3|40950|172.21.0.2|4318: no matching lsof record for 172.21.0.2:4318->172.21.0.3:40950 app-1 | app-1 | > node-express-basic@0.1.0 dev app-1 | > node --require ./instrumentation.cjs app.js app-1 | app-1 | listening on :8000 app-1 | runtime request completed app-1 | npm error path /app app-1 | npm error command failed app-1 | npm error signal SIGTERM app-1 | npm error command sh -c node --require ./instrumentation.cjs app.js app-1 | npm error A complete log of this run can be found in: /root/.npm/_logs/2026-09-22T16_57_17_272Z-debug-0.log",
+      "mode": "with_skill"
+    },
     {
       "service": "python/flask-basic",
       "side": "with_skill",
       "prompt": "runtime-preserving",
       "category": "runtime",
       "result": "runtime:observer-runtime-telemetry FAIL",
-      "evidence": "Runtime check failed: command timed out after 300s: docker compose -p codex-eval-4426aa005dcf -f /private/tmp/obstudio-pr241-runtime-922d241/evals/python/flask-basic/eval/runtime/docker-compose.yml --profile traffic run --rm traffic; compose logs: app-1 | Traceback (most recent call last): app-1 | File \"/app/.venv/bin/flask\", line 10, in <module> app-1 | sys.exit(main()) app-1 | ^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/flask/cli.py\", line 1131, in main app-1 | cli.main() app-1 | File \"/app/.venv/lib/python3.12/site-packages/click/core.py\", line 1552, in main app-1 | rv = self.invoke(ctx) app-1 | ^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/click/core.py\", line 2032, in invoke app-1 | return _process_result(sub_ctx.command.invoke(sub_ctx)) app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/click/core.py\", line 1415, in invoke app-1 | return ctx.invoke(self.callback, **ctx.params) app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/click/core.py\", line 910, in invoke app-1 | return callback(*args, **kwargs) app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/click/decorators.py\", line 93, in new_func app-1 | return ctx.invoke(f, obj, *args, **kwargs) app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/click/core.py\", line 910, in invoke app-1 | return callback(*args, **kwargs) app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/flask/cli.py\", line 979, in run_command app-1 | raise e from None app-1 | File \"/app/.venv/lib/python3.12/site-packages/flask/cli.py\", line 963, in run_command app-1 | app: WSGIApplication = info.load_app() # pyright: ignore app-1 | ^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/flask/cli.py\", line 349, in load_app app-1 | app = locate_app(import_name, name) app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/flask/cli.py\", line 245, in locate_app app-1 | __import__(module_name) app-1 | File \"/app/app.py\", line 8, in <module> app-1 | install_logging_bridge, shutdown_opentelemetry = configure_opentelemetry() app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/otel_setup.py\", line 136, in configure_opentelemetry app-1 | use_local_log_export = _use_default_local_log_export() app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/otel_setup.py\", line 96, in _use_default_local_log_export app-1 | raise RuntimeError( app-1 | RuntimeError: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local Splunk Observability Studio; refusing to create a local log provider or bridge observer-1 | observer-1 | Splunk Observability Studio (collector) observer-1 | Telemetry Explorer: http://127.0.0.1:3000 observer-1 | OTLP/HTTP receiver: http://0.0.0.0:4318 observer-1 | OTLP/gRPC receiver: 127.0.0.1:4317 observer-1 | MCP endpoint: http://0.0.0.0:3000/mcp observer-1 | Agent setup: obstudio install --target=<agent>[,<agent>...] observer-1 | observer-1 | Environment Variables observer-1 | OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED: observer-1 |",
+      "evidence": "Runtime check failed: command timed out after 300s: docker compose -p codex-eval-547ffeffb50e -f /private/tmp/obstudio-pr260-runtime-d8d5c3f0/evals/python/flask-basic/eval/runtime/docker-compose.yml --profile traffic run --rm traffic; compose logs: observer-1 | observer-1 | Splunk Observability Studio (collector) observer-1 | Telemetry Explorer: http://127.0.0.1:3000 observer-1 | OTLP/HTTP receiver: http://0.0.0.0:4318 observer-1 | OTLP/gRPC receiver: 127.0.0.1:4317 observer-1 | MCP endpoint: http://0.0.0.0:3000/mcp observer-1 | Agent setup: obstudio install --target=<agent>[,<agent>...] observer-1 | observer-1 | Environment Variables app-1 | warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/bin/python -> /private/tmp/obstudio-pr260-runtime-d8d5c3f0/home/.local/share/uv/python/cpython-3.13.5-macos-aarch64-none/bin/python3.13 app-1 | Using CPython 3.12.14 interpreter at: /usr/local/bin/python3 app-1 | Removed virtual environment at: .venv app-1 | Creating virtual environment at: .venv app-1 | Installed 31 packages in 418ms app-1 | Traceback (most recent call last): app-1 | File \"/app/.venv/bin/flask\", line 10, in <module> app-1 | sys.exit(main()) observer-1 | OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED: observer-1 | app-1 | ^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/flask/cli.py\", line 1131, in main app-1 | cli.main() app-1 | File \"/app/.venv/lib/python3.12/site-packages/click/core.py\", line 1552, in main app-1 | rv = self.invoke(ctx) app-1 | ^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/click/core.py\", line 2032, in invoke app-1 | return _process_result(sub_ctx.command.invoke(sub_ctx)) app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/click/core.py\", line 1415, in invoke app-1 | return ctx.invoke(self.callback, **ctx.params) app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/click/core.py\", line 910, in invoke app-1 | return callback(*args, **kwargs) app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/click/decorators.py\", line 93, in new_func app-1 | return ctx.invoke(f, obj, *args, **kwargs) app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/click/core.py\", line 910, in invoke app-1 | return callback(*args, **kwargs) app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/flask/cli.py\", line 979, in run_command app-1 | raise e from None app-1 | File \"/app/.venv/lib/python3.12/site-packages/flask/cli.py\", line 963, in run_command app-1 | app: WSGIApplication = info.load_app() # pyright: ignore app-1 | ^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/flask/cli.py\", line 349, in load_app app-1 | app = locate_app(import_name, name) app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/.venv/lib/python3.12/site-packages/flask/cli.py\", line 245, in locate_app app-1 | __import__(module_name) app-1 | File \"/app/app.py\", line 6, in <module> app-1 | install_logging_bridge, shutdown_opentelemetry = configure_opentelemetry() app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/otel_setup.py\", line 122, in configure_opentelemetry app-1 | use_local_log_export = _use_default_local_log_export() app-1 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ app-1 | File \"/app/otel_setup.py\", line 83, in _use_default_local_log_export app-1 | raise RuntimeError( app-1 | RuntimeError: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local Splunk Observability Studio receiver; refusing to create the default local OTLP log provider",
       "mode": "with_skill"
     }
   ],
   "source": {
-    "digest_version": 2,
-    "digest": "9a2300fb92d7196b89fec4f67b5920a260028ab697dac1d4212f7d8a624176f4",
+    "digest_version": 3,
+    "digest": "30f5e88d1e1de406a339b55a1551a9574f8f1443f56453159277117ac3a51bf8",
     "eval_kinds": [
       "runtime"
     ],
+    "evaluator_semantics_version": 1,
     "files": {
       "docs/examples.md": "894a8483b2099588d32bd389164df1d4aa528486b35205bd08120a122243e819",
       "evals/codex-evals.toml": "c0b019453c76a5b6d8692346f984ea91af04ca91331aa333b56d7a717b7b07c7",
-      "evals/pyproject.toml": "2c51312de8067b0c85fd99bfa8ad58a8d6870f67d8e8e368b869c7a04b004a0b",
-      "evals/python/flask-basic/Makefile": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe",
-      "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
-      "evals/python/flask-basic/eval/runtime/App.Dockerfile": "d0fe3f537e8365ac5c554006235e38b164269aa9a47d3b0d5d7da0cdf77847fa",
-      "evals/python/flask-basic/eval/runtime/docker-compose.yml": "4f34afe583d422b24bc9d78e401926614f28d85e7e0d783a5e10a98a2c43862b",
-      "evals/python/flask-basic/eval/runtime/instrument.json": "e461d93d2a93f31dd28a8ae2772e468d855c08037d6a68749911fc4d153d270c",
-      "evals/python/flask-basic/eval/runtime/run-traffic.sh": "d6a8d2d6d98eb10dc86af242acb5365649194db9e84f01c23aa350613ce0dc49",
-      "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f",
+      "evals/go/chi-basic/eval/runtime/App.Dockerfile": "a31ffaaedcf0ebdb3075b2ca807ebdd0030774fe36740f201bd11516447b7e47",
+      "evals/go/chi-basic/eval/runtime/docker-compose.yml": "aaef6fdeac28172cda7872d91bfb6381020f5a108f3b40f2d9d7926ed922152e",
+      "evals/go/chi-basic/eval/runtime/instrument.json": "2363a1400614fcc28a7ccd7550c33344ef504e55f56fdeb009cc632787cdca38",
+      "evals/go/chi-basic/eval/runtime/run-traffic.sh": "d6a8d2d6d98eb10dc86af242acb5365649194db9e84f01c23aa350613ce0dc49",
+      "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
+      "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
       "evals/runtime/observer.Dockerfile": "9fa6982f06286fb3e6cb0acc8f6a46132e559e75b7b9eb1a39fae61952f2a87b",
       "evals/runtime/traffic.Dockerfile": "d8baed51b1290f399d0d63173059970e1b744c4e0309c5e3ba3d2282a25d9c48",
-      "evals/uv.lock": "ad811e95827dd15596c6b41c9a6e112dc011ce6eece83b3322054ff786b932b3",
       "observer/.golangci.yml": "46bdc771110a0fe8680e2c5265a1c5d471e8210f266f90398f67ccf6b1506fe6",
       "observer/AGENTS.md": "9dc9233e31ba23e042e0bc80bfee6dc6970b603ad1c53b1092152431d516fddf",
       "observer/Dockerfile": "0284b8cb538aa262aa3aba452628a6cc411ccfde91730240641d399ae75e7fbe",
@@ -351,38 +704,6 @@
       "observer/load_all_tabs_demo.py": "37fa053fe49de2d984e76f0d8b67de7c1500e539fd6e5a057728281d736acaa1",
       "observer/load_severity_demo.py": "bb6b52221e13ca2bbacf4bb9da4a211412a0f9bb9798dd4b86c264083de96274",
       "observer/load_traces_demo.py": "ea8126a25efec6dbf8e54bd2af46328c993f78616f84d9aaf68b11069a849d3b",
-      "pytest-codex-evals/pyproject.toml": "e356e980db8086d731a14dee7b6f508b60e43652ecf86d051b1a6faece0339db",
-      "pytest-codex-evals/src/pytest_codex_evals/__init__.py": "b7a1a6542146ea0c4d860cbaacaba484b18b7556b04b11787e472bd051235d4f",
-      "pytest-codex-evals/src/pytest_codex_evals/__main__.py": "307299fda7b77d22c64cb51430ec75e5f59d78e9c948786afb3b2544fe45e4b7",
-      "pytest-codex-evals/src/pytest_codex_evals/ab.py": "316754af9db1b8b01ca95226e11e550d5f8e5545736127ccecce970da0ab4b9a",
-      "pytest-codex-evals/src/pytest_codex_evals/backends.py": "46f4abf6f0962f5d2d45c7941e7af1b957e967941221094ed4305df9cefb219f",
-      "pytest-codex-evals/src/pytest_codex_evals/cli.py": "4b13fa56a5a9f9a9676bd1e4ebc1ee5ed73574109ae6951b3e35392baa9b70ae",
-      "pytest-codex-evals/src/pytest_codex_evals/config.py": "44034f807c6e95fb85558eec0669e47e0cb1f5fa4e1fe1a0951aaf5747fce926",
-      "pytest-codex-evals/src/pytest_codex_evals/definitions/__init__.py": "fde160bf0ba46e9555037f2a61d24edd7b6dff5d81ccc9126c3c5e3b86d0eb66",
-      "pytest-codex-evals/src/pytest_codex_evals/definitions/base.py": "e1617a9e509ad4dae4e179c5ac816acb449312864da72bcc5e31566b1280cd55",
-      "pytest-codex-evals/src/pytest_codex_evals/definitions/rubric.py": "a3a2ec1ee6deb8612ae2a6df555bc9e0a6af542ce0ff6d576c7f4e7adc205ebc",
-      "pytest-codex-evals/src/pytest_codex_evals/definitions/runtime.py": "2050abd1b1248ca5537253a56629d08659cec489a334390c8aa72c2ee36a7d79",
-      "pytest-codex-evals/src/pytest_codex_evals/definitions/sanity.py": "70cd43a102a6e07a63612848a032925b058c849d4e2c9383bec7e0bfd8ade1dd",
-      "pytest-codex-evals/src/pytest_codex_evals/discovery.py": "5ffba5a570876d9bc12eae3b9a007699d1bda15de67dce504c17690b3c3f8813",
-      "pytest-codex-evals/src/pytest_codex_evals/eval_files.py": "728fdafdfe976d5bf905ee8eebc60c87ec9046aa9b247deca2ca647d8e5b02a9",
-      "pytest-codex-evals/src/pytest_codex_evals/graders/__init__.py": "338deff99946bf90b35c6ebd93d946b5297abd5c48bd50b132f0134b77c772a0",
-      "pytest-codex-evals/src/pytest_codex_evals/graders/rubric.py": "f28a4f8dce95d6384801787b194766f47a86f5b1bc2a9bb16f7ca81dc7e30247",
-      "pytest-codex-evals/src/pytest_codex_evals/graders/runtime.py": "7c88e33471f8bc93854bac11ee8e4b91944dfa94e1f7ad61b000daa87e001406",
-      "pytest-codex-evals/src/pytest_codex_evals/graders/sanity.py": "78a96be10b9745ce8e7c4812fa757c91c0e2066aafa120c3345b622a359333d2",
-      "pytest-codex-evals/src/pytest_codex_evals/graders/shared.py": "c49074bd8ce03acc61fb8fbade669193a6497d70bbe29c1f1361868b10b59e79",
-      "pytest-codex-evals/src/pytest_codex_evals/plugin.py": "784bc9568b0b0151ac4cdd7871ebf1da0e027e25cea49af1b94aa3054261c7a9",
-      "pytest-codex-evals/src/pytest_codex_evals/report.py": "840f53b6d840534981316ce436ad6f5d35f0a32b11c57701579de3f20a7d3154",
-      "pytest-codex-evals/src/pytest_codex_evals/reports/__init__.py": "5cc2742d160817be1afd199ec8c92df25690d169e1a89e34fbc86510c43a6622",
-      "pytest-codex-evals/src/pytest_codex_evals/reports/templates.py": "f73db35e6587630e49862e3c77e3c87e00e6e3e68ca421cd36ccb4fac73c44d7",
-      "pytest-codex-evals/src/pytest_codex_evals/runner.py": "07ca60c02101b25b74bebd2442999e80cf867b68cd7f22adfa1e2bd13d803763",
-      "pytest-codex-evals/src/pytest_codex_evals/schema_resources.py": "3664b9cdde07f3b67080336056dbf70faf175fe50f572e8cab5fd23889e81e45",
-      "pytest-codex-evals/src/pytest_codex_evals/schemas/common.schema.json": "411ce7113bba10cfca0c3dfcd7704fc027e95ee67a585d7320f71032b240c479",
-      "pytest-codex-evals/src/pytest_codex_evals/schemas/rubric.schema.json": "980d224a523ec0803d1608dd2c518a7297be62ec5db4f8451ea1210f1f1af9ec",
-      "pytest-codex-evals/src/pytest_codex_evals/schemas/rubric_grade.schema.json": "b52866ddd773e31a17dd6c74a6162b3b9db377637777792045973695487293c8",
-      "pytest-codex-evals/src/pytest_codex_evals/schemas/runtime.schema.json": "b186c2109a73e48c1fdb5808426ee98a67324ff3b4aa2b2371f523034e44e1d4",
-      "pytest-codex-evals/src/pytest_codex_evals/schemas/sanity.schema.json": "598666c521c62290a60a2b1f0e67eb8526ad80ebaa12f81e006c51454e7ddc8b",
-      "pytest-codex-evals/src/pytest_codex_evals/trace.py": "b2ea2fbde127a030bac5098d54e0ca8aa0242db3106e52d99a7c36a8d1becf7c",
-      "pytest-codex-evals/uv.lock": "4474921439df5db6da255d3b69b0ce1b0630c57b359146c4e8b03eefcecbd65e",
       "skills/AGENTS.md": "131f2fc8113343662e8b2f189e58171045c2930369fed36d4be282a766bdf8ba",
       "skills/connect-splunk-observability-cloud/SKILL.md": "af23a50c8c32f635b1662fabb481b4e15f9db59abdbdd28e566d82c91443abda",
       "skills/connect-splunk-observability-cloud/agents/openai.yaml": "206b920092a097ec7ab0f92b97d457a6e794bdddcc7f2def837955ff8a756407",
@@ -437,10 +758,89 @@
       "skills/splunk-dashboard-publish/SKILL.md": "2b7eafd8985e8b031711691a6dee14e6eac9b64dd98065103ccaeb345d982e25",
       "skills/splunk-dashboard-publish/references/dashboard-coverage-model.md": "8538452c7dfba51693c6a36befbe74a67b0e7f677db936496a850249e18442ce",
       "skills/splunk-detector-publish/SKILL.md": "2a168cdea73b81e46ed39cb8bded81f83f5647bb0d65afd740b19b4fd5dec1ea",
-      "skills/splunk-detector-publish/references/coverage-model.md": "9bca7ef0a57794f8d2f87173a51a4d9315dd4b4c311906ab90ba8014b43ccc92"
+      "skills/splunk-detector-publish/references/coverage-model.md": "9bca7ef0a57794f8d2f87173a51a4d9315dd4b4c311906ab90ba8014b43ccc92",
+      "evals/go/chi-partial/eval/runtime/App.Dockerfile": "a31ffaaedcf0ebdb3075b2ca807ebdd0030774fe36740f201bd11516447b7e47",
+      "evals/go/chi-partial/eval/runtime/docker-compose.yml": "6299da539fca807228f0365a07c8bccd87b2012820461023a1b0a6c4a0fb9e92",
+      "evals/go/chi-partial/eval/runtime/instrument.json": "c1a7b42ea9d100d4e9952c366240265a500d54aa4cabb1a2c2db46a6ef908be0",
+      "evals/go/chi-partial/eval/runtime/run-traffic.sh": "29450dcc4fd6e36fc2362d585b77d88501da44de93563c8c82ce0d66d67a8007",
+      "evals/go/chi-partial/go.mod": "c98802561b52e8e423a669a197c43ab62e8e7af5c19d83094b33beda1df2797f",
+      "evals/go/chi-partial/go.sum": "3708d13ed158e6020350066c8cda0777bdbf8ef6efb58907a7fa81eea61cb26b",
+      "evals/go/chi-partial/main.go": "e395c48e36e43de4537eb493003c9d682557d496304a2d680006a96bea35a7d3",
+      "evals/go/kvstore/.vscode/launch.json": "91385f78513beaadd967bbfddfe03e992f8d2fa54a7f86e6a17ef3562a1691c8",
+      "evals/go/kvstore/Makefile": "557b16aa60d316634e43c3650f02c06305ddcc006e07ded16bee7452cabe9fa7",
+      "evals/go/kvstore/README.md": "c2a26d0c47d09fd3a3c1c0bce2bea508429a58df8788048724619621dcb15ac2",
+      "evals/go/kvstore/cmd/kvstore-server/main.go": "1596386f423b0b52f043025469fa182d95db9bc4ddeb0c6f1c64e1c6c85c4524",
+      "evals/go/kvstore/eval/runtime/App.Dockerfile": "a5fd8ddcda7b4d4aa9345c8b1f906ed8455a7e6b542731dd41ffad176f573d43",
+      "evals/go/kvstore/eval/runtime/docker-compose.yml": "bfc44bfc0cce60c2f5b0c9cdb05e1194c5b541c508776e6b63aa71be69129076",
+      "evals/go/kvstore/eval/runtime/instrument.json": "ad82e8140747a503612dcaf755167d19ff3ae162b85c8694f157de696a4c825c",
+      "evals/go/kvstore/eval/runtime/run-traffic.sh": "0ce27d46da8c0c21f7f79739bea2e567730fd522e3adb035a03cf18fe8a1578e",
+      "evals/go/kvstore/go.mod": "c1c4cd5d7467d1ac3c999f0a424f6b7d38bfa368f826f77ff5b1d1836c935d3e",
+      "evals/go/kvstore/kvstore/http.go": "697458d084a0ed413c78c75f7dfcbd3fa13d13704a78e9d7dd609cf817bd9f5c",
+      "evals/go/kvstore/kvstore/http_test.go": "a12102b9726850b60830d36f924446b2c0044b893319e6d184d1daf25355ac3d",
+      "evals/go/kvstore/kvstore/store.go": "eb8c09d0220e8816f3f6bb8a6fae9c86c44823048065ed12cf56cf9f6e6b98fd",
+      "evals/go/kvstore/kvstore/store_test.go": "23532aff7f33ce9ce0937e10b915c0b3e136b6382c98c16aada5fcf711b0c96b",
+      "evals/go/kvstore/spec.md": "4eb0f6f554cb707e1a3290b6b76a1f5e74af5100d2938fb2734e079798d29c7a",
+      "evals/node/express-basic/app.js": "e21a658ea62dd0aba6890cb8514a37eb08d10282ae078165473371db042934b5",
+      "evals/node/express-basic/eval/runtime/App.Dockerfile": "647895132e893051a7d4e1c52a2d7ff1a25bb2f54ff5cab39c063c1234435bed",
+      "evals/node/express-basic/eval/runtime/docker-compose.yml": "4a40788e01f11bd028fcb2d25d09d29899cc91278298f66a846c957fa2e07510",
+      "evals/node/express-basic/eval/runtime/instrument.json": "0b500eaeaf16280f4414413743fc12a81c3e8572a00d486d0c926c0622c94d0c",
+      "evals/node/express-basic/eval/runtime/run-traffic.sh": "d6a8d2d6d98eb10dc86af242acb5365649194db9e84f01c23aa350613ce0dc49",
+      "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
+      "evals/python/fastapi-celery/Dockerfile": "3e969493246aedab9e8853cf67d46349927bb8bf539cec91f339801e21abc47f",
+      "evals/python/fastapi-celery/Makefile": "8403be2e415c0666604e4311051933595559f5272ffe891de4328cc8d7df25aa",
+      "evals/python/fastapi-celery/app.py": "2dcc2c24037dba31b4dee309a005be4179ab3396e97d2a1e87a93c5aae6d760c",
+      "evals/python/fastapi-celery/docker-compose.yml": "8170f2f746522ea541976a0900991c9b39914e5bdee9424e0831f6d8f3e2d751",
+      "evals/python/fastapi-celery/eval/runtime/App.Dockerfile": "e9df52ba5a6154c8a6e3534bf2c65c68bea5c174f35f83343bb4528c461833ba",
+      "evals/python/fastapi-celery/eval/runtime/docker-compose.yml": "fea4b60c449764cc2c896ecf2a95cdaec1faafdbd801ca69151fe6f8e0d41787",
+      "evals/python/fastapi-celery/eval/runtime/instrument.json": "de954595d7eed630777f3d6bdbf70d7b86815e164c242438c12a3dbfc9bbfaf5",
+      "evals/python/fastapi-celery/eval/runtime/run-traffic.sh": "dc4f502650d699e6bb819e2f86165c9e075586d9c089f71af8ba9a322565e245",
+      "evals/python/fastapi-celery/pyproject.toml": "486ece182067449ec1cbd8f0cdb18184cfe0278fedb7fee81e9c6975da0e1e79",
+      "evals/python/fastapi-celery/worker.py": "ac138d80a191757a1dba95cc57d6f69628486e9aee73efa8925d605e72ccd65d",
+      "evals/python/flask-basic/Makefile": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe",
+      "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
+      "evals/python/flask-basic/eval/runtime/App.Dockerfile": "d0fe3f537e8365ac5c554006235e38b164269aa9a47d3b0d5d7da0cdf77847fa",
+      "evals/python/flask-basic/eval/runtime/docker-compose.yml": "4f34afe583d422b24bc9d78e401926614f28d85e7e0d783a5e10a98a2c43862b",
+      "evals/python/flask-basic/eval/runtime/instrument.json": "e461d93d2a93f31dd28a8ae2772e468d855c08037d6a68749911fc4d153d270c",
+      "evals/python/flask-basic/eval/runtime/run-traffic.sh": "d6a8d2d6d98eb10dc86af242acb5365649194db9e84f01c23aa350613ce0dc49",
+      "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f"
     },
     "skill_path": "skills/otel-instrument",
     "selections": [
+      {
+        "definition_path": "evals/go/chi-basic/eval/runtime/instrument.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "runtime-preserving",
+        "eval_kind": "runtime",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-partial/eval/runtime/instrument.json",
+        "fixture_dir": "evals/go/chi-partial",
+        "prompt_id": "runtime-preserving",
+        "eval_kind": "runtime",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/kvstore/eval/runtime/instrument.json",
+        "fixture_dir": "evals/go/kvstore",
+        "prompt_id": "runtime-preserving",
+        "eval_kind": "runtime",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/runtime/instrument.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "runtime-preserving",
+        "eval_kind": "runtime",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/fastapi-celery/eval/runtime/instrument.json",
+        "fixture_dir": "evals/python/fastapi-celery",
+        "prompt_id": "runtime-preserving",
+        "eval_kind": "runtime",
+        "eval_inputs": []
+      },
       {
         "definition_path": "evals/python/flask-basic/eval/runtime/instrument.json",
         "fixture_dir": "evals/python/flask-basic",
