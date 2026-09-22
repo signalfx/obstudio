@@ -100,7 +100,6 @@ def evaluator_semantics_fixture(tmp_path: Path):
 @pytest.mark.parametrize(
     ("contents", "error"),
     [
-        (None, "evaluator semantics file is missing"),
         ("version = [", "evaluator semantics file contains invalid TOML"),
         ("other = 1\n", "evaluator semantics version is missing"),
         ('version = "1"\n', "evaluator semantics version must be a positive integer"),
@@ -118,6 +117,19 @@ def test_evaluator_semantics_version_rejects_invalid_configuration(
         path.write_text(contents, encoding="utf-8")
 
     with pytest.raises(ValueError, match=error):
+        evaluator_semantics_version(tmp_path)
+
+
+def test_evaluator_semantics_version_defaults_when_not_configured(tmp_path: Path):
+    (tmp_path / "evals" / "evaluator-semantics.toml").unlink()
+
+    assert evaluator_semantics_version(tmp_path) == 1
+
+
+def test_evaluator_semantics_version_rejects_invalid_encoding(tmp_path: Path):
+    path = tmp_path / "evals" / "evaluator-semantics.toml"
+    path.write_bytes(b"\xff")
+    with pytest.raises(ValueError, match="cannot read evaluator semantics file"):
         evaluator_semantics_version(tmp_path)
 
 
@@ -1971,13 +1983,68 @@ def test_report_freshness_rejects_invalid_evaluator_semantics_configuration(
         selected_prompt_ids=("direct",),
         selection_scope="filtered",
     )
-    (tmp_path / "evals" / "evaluator-semantics.toml").unlink()
+    (tmp_path / "evals" / "evaluator-semantics.toml").write_text(
+        "version = [", encoding="utf-8"
+    )
 
     with pytest.raises(
         ValueError,
-        match="evaluator semantics configuration is invalid: evaluator semantics file is missing",
+        match="evaluator semantics configuration is invalid: evaluator semantics file contains invalid TOML",
     ):
         verify_published_report_sources(tmp_path)
+
+
+@pytest.mark.parametrize("recorded_version", [None, "1", 0, -1])
+def test_report_freshness_rejects_malformed_recorded_evaluator_semantics_version(
+    tmp_path: Path, recorded_version: object | None
+):
+    benchmark_path = _write_validation_manifest_fixture(
+        tmp_path,
+        selected_prompt_ids=("direct",),
+        selection_scope="filtered",
+    )
+    benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    if recorded_version is None:
+        benchmark["source"].pop("evaluator_semantics_version")
+    else:
+        benchmark["source"]["evaluator_semantics_version"] = recorded_version
+    benchmark_path.write_text(json.dumps(benchmark), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="evaluator semantics version is malformed"):
+        verify_published_report_sources(tmp_path)
+
+
+def test_report_freshness_accepts_v2_source_manifests(tmp_path: Path):
+    benchmark_path = _write_validation_manifest_fixture(
+        tmp_path,
+        selected_prompt_ids=("direct",),
+        selection_scope="filtered",
+    )
+    benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    source = benchmark["source"]
+    source["digest_version"] = 2
+    source.pop("evaluator_semantics_version")
+    source["digest"] = source_manifest_digest(
+        source["files"],
+        digest_version=2,
+        eval_kinds=source.get("eval_kinds"),
+        skill_path=source.get("skill_path"),
+        config_path=source.get("config_path"),
+        selections=source.get("selections"),
+        selection_scope=source.get("selection_scope"),
+    )
+    benchmark_path.write_text(json.dumps(benchmark), encoding="utf-8")
+    (tmp_path / "evals" / "evaluator-semantics.toml").unlink()
+
+    assert verify_published_report_sources(tmp_path) == [benchmark_path]
+
+
+def test_report_freshness_allows_reports_without_legacy_manifests(tmp_path: Path):
+    report_path = tmp_path / "eval-reports" / "sample-skill" / "sanity" / "benchmark.json"
+    report_path.parent.mkdir(parents=True)
+    report_path.write_text(json.dumps({"skill": "sample-skill", "kind": "sanity"}), encoding="utf-8")
+
+    assert verify_published_report_sources(tmp_path) == []
 
 
 def test_source_manifest_v3_binds_sibling_prompt_selection(tmp_path: Path):

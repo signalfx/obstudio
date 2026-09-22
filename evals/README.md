@@ -292,6 +292,15 @@ without running a model and fails when a tracked input or the evaluator
 semantics version no longer matches; after a semantics bump, rerun the affected
 live evals and render their reports.
 
+This repository opts into that explicit policy with
+`evals/evaluator-semantics.toml`. The reusable harness remains compatible with
+repositories that do not have the file: they use the baseline semantics version
+`1`, and existing v1/v2 manifests remain verifiable. For a repository adopting
+the policy, add the file at `version = 1`, then rerun only reports being
+migrated to v3. To roll back a migration before publishing, remove the file and
+keep verifying the existing v1/v2 manifests; malformed configured files always
+fail verification.
+
 ## Fixture Apps
 
 | App | Stack | Run |

@@ -46,14 +46,17 @@ TOKEN_USAGE_FIELDS = (
 )
 SOURCE_MANIFEST_DIGEST_VERSION = 3
 EVALUATOR_SEMANTICS_PATH = Path("evals/evaluator-semantics.toml")
+DEFAULT_EVALUATOR_SEMANTICS_VERSION = 1
 
 
 def evaluator_semantics_version(repo_root: Path) -> int:
     path = repo_root / EVALUATOR_SEMANTICS_PATH
     try:
         contents = path.read_text(encoding="utf-8")
-    except FileNotFoundError as exc:
-        raise ValueError(f"evaluator semantics file is missing: {path}") from exc
+    except FileNotFoundError:
+        # The file was introduced with v3 manifests. Keep the package usable by
+        # repositories that have not opted into an explicit semantics policy.
+        return DEFAULT_EVALUATOR_SEMANTICS_VERSION
     except (OSError, UnicodeError) as exc:
         raise ValueError(f"cannot read evaluator semantics file: {path}") from exc
     try:
@@ -633,23 +636,36 @@ def source_provenance(
 def source_manifest_digest(
     files: dict[str, str],
     *,
-    evaluator_semantics_version: int,
-    eval_kinds: list[str],
-    skill_path: str,
+    digest_version: int = SOURCE_MANIFEST_DIGEST_VERSION,
+    evaluator_semantics_version: int | None = None,
+    eval_kinds: list[str] | None = None,
+    skill_path: str | None = None,
     config_path: str | None = None,
     selections: list[dict[str, Any]] | None = None,
     selection_scope: str | None = None,
 ) -> str:
     digest = hashlib.sha256()
-    if type(evaluator_semantics_version) is not int or evaluator_semantics_version <= 0:
-        raise ValueError("source manifest evaluator semantics version must be a positive integer")
+    if digest_version == 1:
+        for path, file_digest in sorted(files.items()):
+            digest.update(path.encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(file_digest.encode("ascii"))
+            digest.update(b"\n")
+        return digest.hexdigest()
+    if digest_version not in {2, SOURCE_MANIFEST_DIGEST_VERSION}:
+        raise ValueError(f"unsupported source manifest digest version: {digest_version}")
+    if eval_kinds is None or skill_path is None:
+        raise ValueError(f"source manifest v{digest_version} requires eval kinds and a skill path")
     identity: dict[str, Any] = {
-        "digest_version": SOURCE_MANIFEST_DIGEST_VERSION,
-        "evaluator_semantics_version": evaluator_semantics_version,
+        "digest_version": digest_version,
         "eval_kinds": sorted(set(eval_kinds)),
         "files": {path: files[path] for path in sorted(files)},
         "skill_path": skill_path,
     }
+    if digest_version == SOURCE_MANIFEST_DIGEST_VERSION:
+        if type(evaluator_semantics_version) is not int or evaluator_semantics_version <= 0:
+            raise ValueError("source manifest evaluator semantics version must be a positive integer")
+        identity["evaluator_semantics_version"] = evaluator_semantics_version
     if config_path is not None:
         identity["config_path"] = config_path
     if selections is not None:
@@ -797,38 +813,53 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
     verified: list[Path] = []
     root = repo_root.resolve()
     benchmark_paths = sorted((root / "eval-reports").glob("*/*/benchmark.json"))
-    try:
-        current_semantics_version = evaluator_semantics_version(root)
-    except ValueError as exc:
-        raise ValueError(f"evaluator semantics configuration is invalid: {exc}") from exc
+    provenance_skills = {
+        path.parent.parent.name
+        for path in benchmark_paths
+        if isinstance(json.loads(path.read_text(encoding="utf-8")).get("source"), dict)
+    }
     for benchmark_path in benchmark_paths:
         benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
         source = benchmark.get("source")
         if not isinstance(source, dict):
-            raise ValueError(f"{benchmark_path}: source manifest is missing; rerun the owning eval")
+            if benchmark_path.parent.parent.name in provenance_skills:
+                raise ValueError(f"{benchmark_path}: source manifest is missing; rerun the owning eval")
+            continue
         files = source.get("files")
         if not isinstance(files, dict) or not files:
             raise ValueError(f"{benchmark_path}: source manifest is empty")
-        digest_version = source.get("digest_version")
-        if type(digest_version) is not int:
+        raw_digest_version = source.get("digest_version")
+        if raw_digest_version is None:
+            digest_version = 1
+        elif (
+            type(raw_digest_version) is int
+            and raw_digest_version in {2, SOURCE_MANIFEST_DIGEST_VERSION}
+        ):
+            digest_version = raw_digest_version
+        else:
             raise ValueError(
                 f"{benchmark_path}: source manifest digest version is malformed"
             )
-        if digest_version != SOURCE_MANIFEST_DIGEST_VERSION:
-            raise ValueError(
-                f"{benchmark_path}: source manifest digest version is outdated; rerun the owning eval"
-            )
-        raw_semantics_version = source.get("evaluator_semantics_version")
-        if type(raw_semantics_version) is not int or raw_semantics_version <= 0:
-            raise ValueError(
-                f"{benchmark_path}: evaluator semantics version is malformed"
-            )
+        raw_semantics_version = None
+        current_semantics_version = None
+        if digest_version == SOURCE_MANIFEST_DIGEST_VERSION:
+            raw_semantics_version = source.get("evaluator_semantics_version")
+            if type(raw_semantics_version) is not int or raw_semantics_version <= 0:
+                raise ValueError(
+                    f"{benchmark_path}: evaluator semantics version is malformed"
+                )
+            try:
+                current_semantics_version = evaluator_semantics_version(root)
+            except ValueError as exc:
+                raise ValueError(f"evaluator semantics configuration is invalid: {exc}") from exc
         skill = benchmark.get("skill")
         kind = benchmark.get("kind")
         skill_path = source.get("skill_path")
         if not isinstance(skill, str) or not isinstance(kind, str) or not isinstance(skill_path, str):
             raise ValueError(f"{benchmark_path}: source identity is malformed")
         eval_kinds = source.get("eval_kinds")
+        if eval_kinds is None and digest_version == 1:
+            eval_kinds = [kind]
         if (
             not isinstance(eval_kinds, list)
             or not eval_kinds
@@ -859,7 +890,7 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
                 raise ValueError(f"{benchmark_path}: validation source selection scope is malformed")
         elif source.get("selection_scope") is not None:
             raise ValueError(f"{benchmark_path}: source selection scope is malformed")
-        if kind == "validation" and selection_scope == "full":
+        if digest_version >= 2 and kind == "validation" and selection_scope == "full":
             if selections is None:
                 raise ValueError(
                     f"{benchmark_path}: full validation source selections are missing"
@@ -933,6 +964,7 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
         expected_digest = source.get("digest")
         current_digest = source_manifest_digest(
             current,
+            digest_version=digest_version,
             evaluator_semantics_version=current_semantics_version,
             eval_kinds=declared_eval_kinds,
             skill_path=skill_path,
@@ -940,10 +972,13 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
             selections=selections,
             selection_scope=selection_scope,
         )
-        if raw_semantics_version != current_semantics_version:
+        if (
+            digest_version == SOURCE_MANIFEST_DIGEST_VERSION
+            and raw_semantics_version != current_semantics_version
+        ):
             raise ValueError(f"{benchmark_path}: evaluator semantics version mismatch; rerun the owning eval")
         if current != files or current_digest != expected_digest:
-            raise ValueError(f"{benchmark_path}: inputs are stale due to eval report; rerun the owning eval")
+            raise ValueError(f"{benchmark_path}: eval report inputs are stale; rerun the owning eval")
         verified.append(benchmark_path)
     return verified
 
