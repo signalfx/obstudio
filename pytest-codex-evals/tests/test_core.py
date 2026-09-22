@@ -59,6 +59,7 @@ from pytest_codex_evals.report import (
     aggregate_usage,
     build_kind_benchmark,
     compact_token_count,
+    evaluator_semantics_version,
     format_tokens,
     normalize_rubric_score,
     render_reports_for_run_root,
@@ -87,6 +88,37 @@ from pytest_codex_evals.trace import (
 
 
 TOKEN_USAGE_FIXTURES = Path(__file__).parent / "fixtures" / "token_usage"
+
+
+@pytest.fixture(autouse=True)
+def evaluator_semantics_fixture(tmp_path: Path):
+    path = tmp_path / "evals" / "evaluator-semantics.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("version = 1\n", encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("contents", "error"),
+    [
+        (None, "evaluator semantics file is missing"),
+        ("version = [", "evaluator semantics file contains invalid TOML"),
+        ("other = 1\n", "evaluator semantics version is missing"),
+        ('version = "1"\n', "evaluator semantics version must be a positive integer"),
+        ("version = 0\n", "evaluator semantics version must be a positive integer"),
+        ("version = -1\n", "evaluator semantics version must be a positive integer"),
+    ],
+)
+def test_evaluator_semantics_version_rejects_invalid_configuration(
+    tmp_path: Path, contents: str | None, error: str
+):
+    path = tmp_path / "evals" / "evaluator-semantics.toml"
+    if contents is None:
+        path.unlink()
+    else:
+        path.write_text(contents, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=error):
+        evaluator_semantics_version(tmp_path)
 
 
 def test_side_prompt_generates_loaded_and_not_loaded_variants():
@@ -309,34 +341,23 @@ def test_ignored_skill_sources_are_neither_exposed_nor_manifested(tmp_path: Path
     ]
 
 
-@pytest.mark.parametrize(
-    "relative",
-    [
-        "pytest-codex-evals/src/pytest_codex_evals/linked.py",
-        "evals/codex-evals.linked.toml",
-    ],
-)
-def test_source_manifest_rejects_symlinked_harness_inputs(
-    tmp_path: Path,
-    relative: str,
-):
+def test_source_manifest_rejects_symlinked_eval_config(tmp_path: Path):
     skill_dir = tmp_path / "skills" / "sample-skill"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
     outside = tmp_path / "outside-input"
     outside.write_text("outside input\n", encoding="utf-8")
-    linked = tmp_path / relative
+    linked = tmp_path / "evals" / "codex-evals.linked.toml"
     linked.parent.mkdir(parents=True, exist_ok=True)
     linked.symlink_to(outside)
 
-    selected_config = linked if relative.startswith("evals/") else None
     with pytest.raises(ValueError, match="symlink"):
         source_input_digests(
             tmp_path,
             "sample-skill",
             "rubric",
             skill_dir,
-            selected_config,
+            linked,
         )
 
 
@@ -1925,14 +1946,15 @@ def _write_validation_manifest_fixture(
     )
 
 
-def test_source_manifest_v2_binds_validation_selection_scope(tmp_path: Path):
+def test_source_manifest_v3_binds_validation_selection_scope(tmp_path: Path):
     benchmark_path = _write_validation_manifest_fixture(
         tmp_path,
         selected_prompt_ids=("direct", "sibling"),
         selection_scope="full",
     )
     benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
-    assert benchmark["source"]["digest_version"] == 2
+    assert benchmark["source"]["digest_version"] == 3
+    assert benchmark["source"]["evaluator_semantics_version"] == 1
     assert verify_published_report_sources(tmp_path) == [benchmark_path]
 
     benchmark["source"]["selection_scope"] = "filtered"
@@ -1941,7 +1963,24 @@ def test_source_manifest_v2_binds_validation_selection_scope(tmp_path: Path):
         verify_published_report_sources(tmp_path)
 
 
-def test_source_manifest_v2_binds_sibling_prompt_selection(tmp_path: Path):
+def test_report_freshness_rejects_invalid_evaluator_semantics_configuration(
+    tmp_path: Path,
+):
+    _write_validation_manifest_fixture(
+        tmp_path,
+        selected_prompt_ids=("direct",),
+        selection_scope="filtered",
+    )
+    (tmp_path / "evals" / "evaluator-semantics.toml").unlink()
+
+    with pytest.raises(
+        ValueError,
+        match="evaluator semantics configuration is invalid: evaluator semantics file is missing",
+    ):
+        verify_published_report_sources(tmp_path)
+
+
+def test_source_manifest_v3_binds_sibling_prompt_selection(tmp_path: Path):
     benchmark_path = _write_validation_manifest_fixture(
         tmp_path,
         selected_prompt_ids=("direct",),
@@ -1956,7 +1995,7 @@ def test_source_manifest_v2_binds_sibling_prompt_selection(tmp_path: Path):
         verify_published_report_sources(tmp_path)
 
 
-def test_source_manifest_v2_rejects_incomplete_full_selection(tmp_path: Path):
+def test_source_manifest_v3_rejects_incomplete_full_selection(tmp_path: Path):
     benchmark_path = _write_validation_manifest_fixture(
         tmp_path,
         selected_prompt_ids=("direct",),
@@ -1965,21 +2004,6 @@ def test_source_manifest_v2_rejects_incomplete_full_selection(tmp_path: Path):
 
     with pytest.raises(ValueError, match="inputs are stale"):
         verify_published_report_sources(tmp_path)
-
-
-def test_source_manifest_without_version_uses_legacy_file_digest(tmp_path: Path):
-    benchmark_path = _write_validation_manifest_fixture(
-        tmp_path,
-        selected_prompt_ids=("direct",),
-        selection_scope="filtered",
-    )
-    benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
-    source = benchmark["source"]
-    source.pop("digest_version")
-    source["digest"] = source_manifest_digest(source["files"], digest_version=1)
-    benchmark_path.write_text(json.dumps(benchmark), encoding="utf-8")
-
-    assert verify_published_report_sources(tmp_path) == [benchmark_path]
 
 
 def test_live_report_rejects_unreported_validation_provenance(tmp_path: Path):
@@ -2151,20 +2175,13 @@ def test_live_report_source_manifest_detects_changed_and_added_inputs(tmp_path: 
         ),
         encoding="utf-8",
     )
-    harness_source = (
-        tmp_path / "pytest-codex-evals" / "src" / "pytest_codex_evals" / "ab.py"
-    )
-    harness_source.parent.mkdir(parents=True)
-    harness_source.write_text("def side_prompt(): pass\n", encoding="utf-8")
-    harness_backend = harness_source.parent / "backends.py"
-    harness_backend.write_text("def run_agent(): pass\n", encoding="utf-8")
-    schema_path = harness_source.parent / "schemas" / "rubric_grade.schema.json"
-    schema_path.parent.mkdir()
-    schema_path.write_text('{"type":"object"}\n', encoding="utf-8")
     selected_config = tmp_path / "evals" / "custom-eval-config.toml"
     selected_config.write_text("[pytest]\n", encoding="utf-8")
     selected_config_display = "evals/custom-eval-config.toml"
-
+    eval_pyproject = tmp_path / "evals" / "pyproject.toml"
+    eval_pyproject.write_text("[project]\nname = 'evals'\n", encoding="utf-8")
+    eval_lockfile = tmp_path / "evals" / "uv.lock"
+    eval_lockfile.write_text("version = 1\n", encoding="utf-8")
     run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
     grade = GradeResult(
         checks=[GradeCheckResult(id="check", description="check", passed=True)]
@@ -2247,16 +2264,11 @@ def test_live_report_source_manifest_detects_changed_and_added_inputs(tmp_path: 
         "evals/sample/service/eval/sanity/sample.json"
         not in benchmark["source"]["files"]
     )
-    assert (
-        "pytest-codex-evals/src/pytest_codex_evals/ab.py"
-        in benchmark["source"]["files"]
-    )
-    assert (
-        "pytest-codex-evals/src/pytest_codex_evals/schemas/rubric_grade.schema.json"
-        in benchmark["source"]["files"]
-    )
     assert benchmark["source"]["config_path"] == selected_config_display
     assert selected_config_display in benchmark["source"]["files"]
+    assert "evals/codex-eval-home.config.toml" not in benchmark["source"]["files"]
+    assert "evals/pyproject.toml" not in benchmark["source"]["files"]
+    assert "evals/uv.lock" not in benchmark["source"]["files"]
     assert "skills/references/shared.md" in benchmark["source"]["files"]
     assert (
         "skills/references/__pycache__/shared.cpython-313.pyc"
@@ -2292,14 +2304,11 @@ def test_live_report_source_manifest_detects_changed_and_added_inputs(tmp_path: 
         tmp_path / "eval-reports" / "sample-skill" / "validation" / "benchmark.json",
     ]
 
-    # The temporary harness exemption avoids refreshing every report for
-    # evaluator-only changes. Non-harness inputs remain freshness-gated below.
-    harness_backend.write_text("def run_agent(): return True\n", encoding="utf-8")
-    assert len(verify_published_report_sources(tmp_path)) == 2
-
-    harness_source.write_text("def side_prompt(): return True\n", encoding="utf-8")
-    assert len(verify_published_report_sources(tmp_path)) == 2
-    harness_source.write_text("def side_prompt(): pass\n", encoding="utf-8")
+    semantics_path = tmp_path / "evals" / "evaluator-semantics.toml"
+    semantics_path.write_text("version = 2\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="evaluator semantics version mismatch"):
+        verify_published_report_sources(tmp_path)
+    semantics_path.write_text("version = 1\n", encoding="utf-8")
     assert len(verify_published_report_sources(tmp_path)) == 2
 
     fixture_source.write_text("package changed\n", encoding="utf-8")
@@ -2369,13 +2378,17 @@ def test_live_report_source_manifest_detects_changed_and_added_inputs(tmp_path: 
     assert len(verify_published_report_sources(tmp_path)) == 2
 
     (eval_dir / "added.json").unlink()
-    schema_path.write_text('{"type":"array"}\n', encoding="utf-8")
-    assert len(verify_published_report_sources(tmp_path)) == 2
-    schema_path.write_text('{"type":"object"}\n', encoding="utf-8")
 
     selected_config.write_text("[pytest]\nchanged = true\n", encoding="utf-8")
     with pytest.raises(ValueError, match="inputs are stale"):
         verify_published_report_sources(tmp_path)
+
+    selected_config.write_text("[pytest]\n", encoding="utf-8")
+    assert len(verify_published_report_sources(tmp_path)) == 2
+
+    eval_pyproject.write_text("[project]\nname = 'changed-evals'\n", encoding="utf-8")
+    eval_lockfile.write_text("version = 2\n", encoding="utf-8")
+    assert len(verify_published_report_sources(tmp_path)) == 2
 
 
 def test_full_validation_source_detects_the_first_new_eval_kind(tmp_path: Path):

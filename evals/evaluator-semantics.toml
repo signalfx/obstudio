@@ -1,0 +1,4 @@
+# Bump this only when shared evaluator behavior can change a published live
+# eval result or its interpretation. Comments, docs, tests, and presentation
+# formatting do not require a bump.
+version = 1

@@ -279,14 +279,18 @@ baseline side.
 New reports also record a SHA-256 source manifest for the canonical skill tree,
 the shared skill references exposed to with-skill runs, each collected eval
 definition, its staged non-generated fixture and prompt-selected eval inputs,
-runtime support assets when applicable, eval configuration, the harness package
-code and schemas that ran them, and locked harness dependencies. Filtered runs
+runtime support assets when applicable, and eval configuration. Filtered runs
 exclude uncollected definitions and unused prompt inputs; full validation still
-detects newly added matching definitions. `make eval-report-freshness`
-recomputes those manifests without running a model and fails when a tracked
-report must be regenerated. Reports created before source manifests were
-introduced remain readable and acquire the guard on their next normal report
-run.
+detects newly added matching definitions.
+
+Shared evaluator behavior is tracked separately by the integer in
+`evals/evaluator-semantics.toml`. Bump it only when a harness, dependency, or
+shared eval-environment change can alter a published live-eval result or how it
+is interpreted (for example, a grader or agent-execution behavior change). Do
+not bump it for comments, tests, docs, or report-only formatting. `make eval-report-freshness` recomputes manifests
+without running a model and fails when a tracked input or the evaluator
+semantics version no longer matches; after a semantics bump, rerun the affected
+live evals and render their reports.
 
 ## Fixture Apps
 
