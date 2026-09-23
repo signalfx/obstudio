@@ -6,4 +6,4 @@ RUN npm install --omit=dev
 COPY . .
 
 EXPOSE 8000
-CMD ["npm", "run", "dev"]
+CMD ["node", "--import", "./instrumentation.js", "app.js"]

@@ -589,6 +589,8 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
 
     for path, (service_name, record_count) in runtime_cases.items():
         definition = json.loads(_read(path))
+        assert "runs the app in Docker Compose" in definition["prompts"][0]["task"]
+        assert "http://observer:4318/v1/logs" in definition["prompts"][0]["task"]
         default_check, opt_out_check = definition["checks"]
 
         assert default_check["environment"]["CODEX_EVAL_OTEL_LOGS_EXPORTER"] == ""
@@ -780,6 +782,25 @@ def test_runtime_observer_keeps_grpc_loopback_when_http_is_container_visible() -
         compose = _read(path)
         assert "HOST=0.0.0.0" in compose
         assert "OTLP_GRPC_HOST=127.0.0.1" in compose
+        assert "OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318" in compose
+
+    for path in (
+        ROOT / "evals/go/kvstore/eval/runtime/docker-compose.yml",
+        ROOT / "evals/node/express-basic/eval/runtime/docker-compose.yml",
+        ROOT / "evals/python/flask-basic/eval/runtime/docker-compose.yml",
+    ):
+        compose = _read(path)
+        assert "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://observer:4318/v1/logs" in compose
+
+    node_compose = _read(ROOT / "evals/node/express-basic/eval/runtime/docker-compose.yml")
+    assert "instrumentation.cjs" not in node_compose
+
+    fastapi_definition = json.loads(
+        _read(ROOT / "evals/python/fastapi-celery/eval/runtime/instrument.json")
+    )
+    fastapi_task = fastapi_definition["prompts"][0]["task"]
+    assert "lifespan" in fastapi_task
+    assert "do not call FastAPI.add_event_handler" in fastapi_task
 
     observer_main = _read(ROOT / "observer/cmd/obstudio/main.go")
     assert 'valueOrEnv(config.otlpGRPCHost, "OTLP_GRPC_HOST", host)' in observer_main

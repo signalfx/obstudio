@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "runtime-preserving",
-      "task": "Instrument the Go chi service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
+      "task": "Instrument the Go chi service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans. Use the official OpenTelemetry Go HTTP instrumentation that is already compatible with this module graph, such as otelhttp; do not invent or add an otelchi module/version unless it is confirmed to exist in the module proxy."
     }
   ],
   "checks": [
