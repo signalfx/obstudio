@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "splunk-configure",
-    "run_id": "20260921T233755782597Z",
+    "run_id": "20260923T213808844893Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -22,10 +22,10 @@
     "with_skill": {
       "prompt_count": 2,
       "command_count": 2,
-      "duration_seconds": 28.341,
-      "agent_duration_seconds": 28.095,
-      "tokens": 114974,
-      "agent_tokens": 114974,
+      "duration_seconds": 29.329,
+      "agent_duration_seconds": 29.255,
+      "tokens": 114150,
+      "agent_tokens": 114150,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 2,
         "selected_record_count": 2,
-        "input_tokens": 114156,
+        "input_tokens": 113384,
         "cached_input_tokens": 65024,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 818,
-        "reasoning_output_tokens": 645,
+        "output_tokens": 766,
+        "reasoning_output_tokens": 647,
         "provider_total_tokens": null,
-        "derived_total_tokens": 114974,
-        "effective_total_tokens": 114974,
+        "derived_total_tokens": 114150,
+        "effective_total_tokens": 114150,
         "coverage": {
           "record_count": 2,
           "modeled_count": 2,
@@ -80,10 +80,10 @@
       "with_skill": {
         "prompt_count": 2,
         "command_count": 2,
-        "duration_seconds": 28.341,
-        "agent_duration_seconds": 28.095,
-        "tokens": 114974,
-        "agent_tokens": 114974,
+        "duration_seconds": 29.329,
+        "agent_duration_seconds": 29.255,
+        "tokens": 114150,
+        "agent_tokens": 114150,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -91,14 +91,14 @@
           "observed": true,
           "usage_record_count": 2,
           "selected_record_count": 2,
-          "input_tokens": 114156,
+          "input_tokens": 113384,
           "cached_input_tokens": 65024,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 818,
-          "reasoning_output_tokens": 645,
+          "output_tokens": 766,
+          "reasoning_output_tokens": 647,
           "provider_total_tokens": null,
-          "derived_total_tokens": 114974,
-          "effective_total_tokens": 114974,
+          "derived_total_tokens": 114150,
+          "effective_total_tokens": 114150,
           "coverage": {
             "record_count": 2,
             "modeled_count": 2,
@@ -125,16 +125,16 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-configure/20260921T233755782597Z/results/sanity/skill-smoke/sanity-configure/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-configure/20260921T233755782597Z/results/sanity/skill-smoke/sanity-configure/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-configure/20260921T233755782597Z/results/sanity/skill-smoke/sanity-configure/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-configure/20260923T213808844893Z/results/sanity/skill-smoke/sanity-configure/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-configure/20260923T213808844893Z/results/sanity/skill-smoke/sanity-configure/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-configure/20260923T213808844893Z/results/sanity/skill-smoke/sanity-configure/with_baseline.json"
       }
     }
   ],
   "failures": [],
   "source": {
     "digest_version": 3,
-    "digest": "f0667e29c04287eb37d1905ab36dd98c85693c2edae847d82bf846b1bb812f08",
+    "digest": "350d3456cfec4bd677d657ccf793276684dca5f78a4b23bcbbfd5ecd8c82e00e",
     "eval_kinds": [
       "sanity"
     ],
@@ -155,7 +155,7 @@
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
-      "skills/splunk-configure/SKILL.md": "3ff1a56614d94ab8023a099db1476a63dbaaf18ec0a1ba83ccc91b941ef965e5",
+      "skills/splunk-configure/SKILL.md": "af20f028de3d6d9f0265511094583a8e5274ffca23fa2d4b8ac63eeef5076d99",
       "skills/splunk-configure/references/detector-classification.md": "c389dc47e64719b46fe0ee8674231e6dc8f61c27d59d828c2bc10b5032971295",
       "skills/splunk-configure/references/terraform-templates.md": "68dabdd5c40321baf57522de55cfa9c182557ed7791475998d814f004da835fc",
       "skills/splunk-configure/scripts/validate_configure_output.py": "21e9f845308434499c6ae19d7d9043e5fcca01ae8840d6a68cc782e82c9fc09e",

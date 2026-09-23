@@ -10,6 +10,7 @@ description: >-
   coverage, distinguish app-down from degraded impact, build blast-radius
   views, improve MTTD or incident localization, or add GenAI/LLM detector
   coverage.
+allowed-tools: Read, Write, Grep, Glob, Bash(terraform version *), Bash(terraform fmt *), Bash(terraform init *), Bash(terraform validate *), Bash(terraform plan *)
 metadata:
   author: otel-studio
   version: 0.2.0
@@ -701,7 +702,11 @@ Validation requirements:
    - `.observe/detectors.md`
    - `.observe/terraform/dashboards.tf` and `.observe/dashboards.md` when
      dashboard resources were generated
-2. If Terraform is installed, run:
+2. Check availability with `terraform version`, then, if Terraform is
+   installed, run only the read-only subcommands below. Never run
+   `terraform apply`, `terraform destroy`, or any other terraform subcommand:
+   applying or destroying infrastructure is the user's or
+   `$splunk-detector-publish`'s responsibility, never this skill's.
    - `terraform fmt -check -recursive .observe/terraform`
    - `terraform -chdir=.observe/terraform init -backend=false -input=false`
    - `terraform -chdir=.observe/terraform validate -json`
