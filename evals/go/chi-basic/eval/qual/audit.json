@@ -15,7 +15,8 @@
   "judge_inputs": [
     "Inspect ./service/.observe/otel-audit.json and ./service/.observe/otel.html when present.",
     "Read ./last_message.md for the agent final response.",
-    "Read ./grade.json for run guard checks."
+    "Read ./grade.json for run guard checks.",
+    "Read ./trace.jsonl for the exact shell commands the agent ran."
   ],
   "rubric": [
     "Identifies main.go as the entry point.",
@@ -26,6 +27,8 @@
     "Writes schema-v2 .observe/otel-audit.json with stable selectable finding IDs and complete downstream instrumentation context; renders a self-contained, decision-first .observe/otel.html with finding selection, a copyable instrumentation prompt (the tray label reads 'Copy this prompt and paste into AI chat', not 'Copy this terminal command'), and collapsed technical details while retaining complete machine context in canonical JSON.",
     "The rendered .observe/otel.html finding-level Next step for a selectable executable finding says 'copy the generated prompt' to run $otel-instrument, not 'copy the generated command'.",
     "Renders .observe/otel.html as a decision-first findings view with GenAI ownership detected as No and a matching Audit Evidence row, while preserving machine context in canonical .observe/otel-audit.json and not rendering separate Incident or GenAI readiness ledger sections.",
-    "The final response contains exactly one line: Review report: [otel.html](http://127.0.0.1:<port>/<token>/otel.html), using the loopback-only URL returned by finalize-audit. It does not open the browser automatically and does not include a machine-report link, summary bullets, finding counts, recommendations, or artifact-write narration."
+    "The final response contains exactly one line: Review report: [otel.html](http://127.0.0.1:<port>/<token>/otel.html), using the loopback-only URL returned by finalize-audit -- OR, if finalize-audit failed specifically because the sandbox denies binding 127.0.0.1 (not a canonical-input or renderer problem), exactly one line reading 'Local review server unavailable (sandbox denies loopback network access). Open the rendered report directly: [otel.html](<absolute-otel-html-path>)' with the real absolute path substituted. Either way, it does not open the browser automatically and does not include a machine-report link, summary bullets, finding counts, recommendations, or artifact-write narration, and it does not repeatedly retry finalize-audit against a sandbox-denied bind.",
+    "This is a Go service, not a Python repository, so neither the audit findings nor the final response report running or relying on the bundled scripts/scan_python_otel_topology.py scanner; provider/exporter topology evidence in .observe/otel-audit.json comes from Go source (main.go and its imports), not a Python-repository scan.",
+    "Reads ./trace.jsonl and confirms that every rg invocation uses only plain search flags (for example -n, -l, -i); it never passes --pre or --pre-glob, since those flags run an arbitrary external command against matched files instead of only searching them."
   ]
 }

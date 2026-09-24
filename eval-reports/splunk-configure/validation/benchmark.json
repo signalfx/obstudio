@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "splunk-configure",
-    "run_id": "20260921T233751464735Z",
+    "run_id": "20260923T184509016662Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -18,7 +18,7 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full"
+    "validation_scope": "filtered"
   },
   "evals": [
     {
@@ -34,46 +34,28 @@
       "eval_dir": "evals/dashboards/checkout-configure",
       "skill_path": "skills/splunk-configure",
       "sanity_check_count": 0,
-      "rubric_check_count": 8,
-      "runtime_check_count": 0
-    },
-    {
-      "id": "sanity/skill-smoke/sanity/configure",
-      "case": "sanity/skill-smoke",
-      "language": "sanity",
-      "service": "skill-smoke",
-      "prompt_count": 2,
-      "prompts": [
-        "configure",
-        "direct"
-      ],
-      "definition_path": "evals/sanity/skill-smoke/eval/sanity/configure.json",
-      "eval_dir": "evals/sanity/skill-smoke",
-      "skill_path": "skills/splunk-configure",
-      "sanity_check_count": 0,
-      "rubric_check_count": 0,
+      "rubric_check_count": 10,
       "runtime_check_count": 0
     }
   ],
   "summary": {
-    "eval_count": 2,
-    "case_count": 3,
-    "prompt_count": 3,
+    "eval_count": 1,
+    "case_count": 1,
+    "prompt_count": 1,
     "sanity_check_count": 0,
-    "rubric_check_count": 8,
+    "rubric_check_count": 10,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 3,
-    "digest": "4c63a0b6143390e48c06a21440d9f7d4ba535658e497cb57172643847c4d6726",
+    "digest": "4fd8eb791a6d0f64d3ea36b1afc90537e3d6c1a2766707e87e052c2da205a808",
     "eval_kinds": [
-      "rubric",
-      "sanity"
+      "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
       "evals/codex-evals.validation.toml": "ce69f042257fdb4a4c8d196f2f0f515fdc371316c02ab7d86aecc36267f7e940",
-      "evals/dashboards/checkout-configure/eval/qual/configure.json": "b2c4e32dc67d532bd5f333af4cabd41de54e2ad4becb2a83d8b5a83a6cc71c93",
+      "evals/dashboards/checkout-configure/eval/qual/configure.json": "c75759c1cbd7745595f689eb8ca1d0387e1ebb907855aeafd4612f1376c24a23",
       "evals/dashboards/checkout-configure/otel-audit.json": "ba1843457773445a06e59522e1572316d95075f2c007576fd4becd75da33ce7d",
       "skills/references/consumers.json": "cd8084854d7042b7ecc306ef1efca5f1866f1616c4c0ea0f6522e4bce4efd852",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
@@ -87,13 +69,11 @@
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
-      "skills/splunk-configure/SKILL.md": "3ff1a56614d94ab8023a099db1476a63dbaaf18ec0a1ba83ccc91b941ef965e5",
+      "skills/splunk-configure/SKILL.md": "af20f028de3d6d9f0265511094583a8e5274ffca23fa2d4b8ac63eeef5076d99",
       "skills/splunk-configure/references/detector-classification.md": "c389dc47e64719b46fe0ee8674231e6dc8f61c27d59d828c2bc10b5032971295",
       "skills/splunk-configure/references/terraform-templates.md": "68dabdd5c40321baf57522de55cfa9c182557ed7791475998d814f004da835fc",
       "skills/splunk-configure/scripts/validate_configure_output.py": "21e9f845308434499c6ae19d7d9043e5fcca01ae8840d6a68cc782e82c9fc09e",
-      "skills/splunk-configure/tests/test_validate_configure_output.py": "fdc01a7ef27c712df29a53b5ab5c21ad4de6ab5816301d337235226c113b8953",
-      "evals/sanity/skill-smoke/eval/sanity/configure.json": "4bcf81ab14664c2959d686bafe5dd567da44255e148ae0ec41a1ec6561113037",
-      "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9"
+      "skills/splunk-configure/tests/test_validate_configure_output.py": "fdc01a7ef27c712df29a53b5ab5c21ad4de6ab5816301d337235226c113b8953"
     },
     "skill_path": "skills/splunk-configure",
     "selections": [
@@ -103,23 +83,9 @@
         "prompt_id": "generate",
         "eval_kind": "rubric",
         "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/sanity/skill-smoke/eval/sanity/configure.json",
-        "fixture_dir": "evals/sanity/skill-smoke",
-        "prompt_id": "configure",
-        "eval_kind": "sanity",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/sanity/skill-smoke/eval/sanity/configure.json",
-        "fixture_dir": "evals/sanity/skill-smoke",
-        "prompt_id": "direct",
-        "eval_kind": "sanity",
-        "eval_inputs": []
       }
     ],
     "config_path": "evals/codex-evals.validation.toml",
-    "selection_scope": "full"
+    "selection_scope": "filtered"
   }
 }
