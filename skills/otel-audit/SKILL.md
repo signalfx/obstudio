@@ -12,6 +12,7 @@ description: >-
   faster to detect or localize, or asks whether GenAI/LLM workflows follow
   OpenTelemetry semantic conventions. Do NOT use for implementing code changes
   -- use $otel-instrument instead.
+allowed-tools: Read Grep Glob Write
 ---
 
 # Audit -- Observability Coverage Scan
@@ -284,7 +285,9 @@ proof.
   emits its expected name and topology.
 - Before writing a scenario, confirm every cited source path and symbol exists
   with `rg -n` or a language-aware index. Never hand off a guessed or stale
-  symbol name.
+  symbol name. Never invoke `rg` with `--pre` or `--pre-glob`; those flags run
+  an arbitrary external command against matched files rather than only
+  searching them. Use plain search flags only (for example `-n`, `-l`, `-i`).
 - Reference one or more exact test-environment IDs from every acceptance
   scenario. Put local-safe fixture strategy and missing prerequisites in the
   environment profile, not repeated prose in each scenario row.
@@ -940,8 +943,12 @@ the canonical JSON.
 
 Resolve both placeholders directly from the directory containing the loaded
 `otel-audit/SKILL.md`; never use a service-root or repository-root script by
-name. If finalization fails, repair the reported canonical input or renderer
-problem and rerun `finalize-audit`; never patch generated HTML.
+name. If finalization fails because of a canonical-input or renderer problem,
+repair it and rerun `finalize-audit`; never patch generated HTML. If it fails
+instead because the sandbox denies binding `127.0.0.1` (the reported error
+names a denied loopback socket, not an input or renderer problem), do not keep
+retrying `finalize-audit` -- retrying cannot succeed against a sandbox policy;
+use the sandbox-denied chat handoff below instead.
 
 `finalize-audit` starts or reuses a detached report server bound only to
 `127.0.0.1` on an available port and returns the HTTP Markdown link in
@@ -1075,6 +1082,19 @@ counts, recommendations, a machine-report link, artifact-write narration, or
 any other text in the final response. Keep the canonical JSON as an internal
 downstream artifact even though it is not linked in chat.
 
+If `finalize-audit` instead failed because the sandbox denies binding
+`127.0.0.1`, the final response must contain exactly this one line and
+nothing else, substituting the absolute `otel.html` path that `finalize-audit`
+already wrote to disk:
+
+```text
+Local review server unavailable (sandbox denies loopback network access). Open the rendered report directly: [otel.html](<absolute-otel-html-path>)
+```
+
+Do not add a second paragraph, do not mention `otel-audit.json` or its path,
+and do not include summary bullets, finding counts, recommendations, or
+artifact-write narration.
+
 ### Step 4 -- Downstream Handoff
 
 Do not perform telemetry execution inside the audit workflow. The report's
@@ -1103,7 +1123,11 @@ reviewer's immediate command.
 
 Use these tables to check whether each detected dependency has a matching
 auto-instrumentation package installed. Only flag gaps for dependencies that
-appear in the project.
+appear in the project. When a finding reports a missing auto-instrumentation
+package, name the exact package's short identifier (for example `otelchi`,
+`otelhttp`) from the matching table row in the finding text itself; a generic
+description of the underlying library or protocol (for example "chi/net/http
+instrumentation") without that package name is incomplete.
 
 ### Go
 

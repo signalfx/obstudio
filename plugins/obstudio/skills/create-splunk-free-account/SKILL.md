@@ -8,6 +8,7 @@ description: >-
   SignalFx account or organization, or explicitly asks to submit another
   intake with the same details or email, including requests to avoid the Splunk
   web form.
+allowed-tools: mcp__obstudio__observer_splunk_free_account_region_detect, mcp__obstudio__observer_splunk_free_account_create
 ---
 
 # Get started with Observability Cloud Free Edition
