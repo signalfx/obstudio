@@ -4,7 +4,7 @@
     {
       "id": "direct",
       "eval_inputs": ["eval/inputs/otel-audit.json"],
-      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json. Use the bundled selection flow to select OTEL-001, then instrument the AI assistant FastAPI service for the bounded app-owned GenAI lifecycle. Write and validate bound canonical selection and instrumentation JSON for the selected audit scope, then render compatibility Markdown and the self-contained instrumentation HTML. Add focused tests and run verification where practical."
+      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json. Use the bundled selection flow to request OTEL-002 and AO-002. Respect the dependency-closed scope, then instrument the AI assistant FastAPI service for the bounded app-owned GenAI lifecycle, preserve the search_docs tool operation while adding its selected nested retrieval operation, and persist the selected direct Splunk Agent Observability project and Agent Stream routing so the deployed app does not require Obstudio in its runtime path. Write and validate bound canonical selection and instrumentation JSON for the selected audit scope, then render compatibility Markdown and the self-contained instrumentation HTML. Add focused tests and run verification where practical."
     }
   ],
   "judge_inputs": [
@@ -16,9 +16,13 @@
     "Adds one reusable OpenTelemetry setup path and avoids duplicate SDK initialization.",
     "Instruments FastAPI plus app-owned assistant turn, provider/model call, tool execution, streaming lifecycle, token/context pressure, and feedback export surfaces.",
     "Uses OTel GenAI semantic-convention names where data is available, including gen_ai operation/model/provider attributes and token usage metrics.",
+    "Preserves exactly one execute_tool search_docs span and adds exactly one nested retrieval demo-knowledge-base span as its direct child, with gen_ai.operation.name=retrieval and stable gen_ai.data_source.id=demo-knowledge-base, while recording no raw retrieval query or document content.",
+    "Adds focused runtime telemetry proof for the search_docs path that asserts exactly one tool span, exactly one retrieval child span, their parent-child IDs, required retrieval attributes, and absence of gen_ai.retrieval.query.text and gen_ai.retrieval.documents.",
     "Handles partial token-pressure closure honestly by naming remaining truncation, token-limit, prompt/tool schema size, or fanout signals when not implemented.",
     "Adds or updates tests or compile checks and keeps raw prompts, completions, sessions, users, tenants, requests, and tool arguments out of metric dimensions.",
     "Writes bound canonical .observe/otel-selection.json and .observe/otel-instrumentation.json for the selected audit scope without rewriting the audit baseline.",
+    "Records OTEL-002 and AO-002 as the explicit requests and automatically includes their executable OTEL-001 and AO-001 prerequisites in canonical audit order; implements and reports every dependency-closed finding exactly once while leaving unselected work untouched.",
+    "Represents the project and Agent Stream work as configuration changes, not invented telemetry, and leaves durable direct application/deployment routing with operator-owned secret references so Obstudio is not required at runtime.",
     "Renders compatibility Markdown and the separate self-contained instrumentation HTML without rewriting the audit HTML.",
     "Runs otel-verify and produces reader-first What Changed, Tested And Working, Not Working Or Not Proven, and Proof results, or records an exact blocker and keeps the instrumentation result Partial."
   ]

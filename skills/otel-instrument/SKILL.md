@@ -27,6 +27,13 @@ and follow the Instrumentation Contract plus Reader-First Report Order. When
 `.observe/otel-audit.json` exists, also read
 `./references/json-approval-handoff.md` before editing; it owns canonical
 selection, instrumentation JSON, and human HTML. The technical Markdown report contract is defined inline below.
+When any selected finding uses
+`finding_group: splunk-agent-observability`, or the repository contains a
+`splunk_ao` dependency/import, also read
+`../references/splunk-agent-observability.md` before editing.
+When the selected service or its repository contains `OBSERVABILITY.md`, also
+read `../references/organization-observability-profile.md` and reconcile the
+applicable organization profile before editing.
 
 ## Workflow
 
@@ -81,6 +88,10 @@ Markdown reports.
   wrappers, toolchain files, manifests, CI, or existing project environments
   select another one.
 - Confirm the target process from the repo's real start surface: `docker-compose.yml`, Kubernetes manifests, `package.json` scripts, `Makefile`, `Procfile`, PM2 configs, Supervisor configs, systemd units, launchd plists, PowerShell scripts, or a plain shell command
+- When `OBSERVABILITY.md` exists, record its service-specific runtime,
+  identity, trace-boundary, privacy, and verification constraints, then prove
+  them against manifests and startup files. Report conflicts; do not let profile
+  prose override observed runtime facts or OTel safety requirements.
 - Confirm existing telemetry indicators or record `none found`
 - Inventory existing telemetry consumer contracts before editing: metric names
   and dimensions, span names and attributes, resource attributes, log
@@ -123,6 +134,10 @@ Markdown reports.
   the implementation and validation plan. Preserve every stable finding,
   scenario, and environment ID. Keep each `proof_level`; do not downgrade a
   `full runtime` scenario to focused call-site proof.
+- Keep selected Splunk Agent Observability configuration work in the same
+  dependency-closed implementation queue as OTel work. Do not infer scope from
+  a separate AO section or create a second selection ledger. The implemented
+  application or deployment must work without Obstudio in the runtime path.
 - Detect incident-readiness surfaces. Search source and configuration for
   user-visible workflows, dependency clients, background jobs, queues/streams,
   data freshness, input complexity, synthetic/canary checks, auth/edge paths,
@@ -384,6 +399,12 @@ report background:
 - Reconcile GenAI gap rows with `## GenAI Readiness`; the readiness row remains
   the detailed required-signal contract and the prioritized gap remains the
   user-facing work item.
+- For selected `finding_group: splunk-agent-observability` rows, implement the
+  source-backed product or routing configuration described by the finding and
+  its executable dependencies. Use `configuration` telemetry changes for
+  control-plane work rather than inventing spans or metrics. Leave durable
+  app/deployment configuration and secret references so runtime export does not
+  depend on Obstudio. Keep unselected AO findings untouched.
 
 Build an internal closure matrix before editing:
 `finding ID -> area -> priority -> required fix -> instrument mode -> planned action ->
@@ -490,7 +511,7 @@ selected scope live in canonical JSON.
 
 | Finding | What changed | Tested | Result | Evidence / reason |
 |---|---|---|---|---|
-| OTEL-### — exact audit title | concrete code/config change or `No code change` | scenario IDs and test mode | Working / Not working / Not proven / Not configured | direct evidence or exact blocker |
+| stable finding ID — exact audit title | concrete code/config change or `No code change` | scenario IDs and test mode | Working / Not working / Not proven / Not configured | direct evidence or exact blocker |
 
 Use one row per selected audit finding and keep unselected findings out of this
 implementation report. Canonical instrumentation JSON contains selected rows
@@ -672,7 +693,7 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 
 #### Implementation Rules
 
-- Use only official OpenTelemetry packages (`go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib`, `@opentelemetry/*`, `opentelemetry-*`). Do not use community or third-party OTel wrappers. The only exceptions are library-maintained integrations where no official package exists (e.g. `go-redis/redisotel`, `XSAM/otelsql`).
+- Use only official OpenTelemetry packages (`go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib`, `@opentelemetry/*`, `opentelemetry-*`) for app-owned OTel instrumentation. Do not use community or third-party OTel wrappers. The exceptions are library-maintained integrations where no official package exists (for example `go-redis/redisotel` and `XSAM/otelsql`) and a selected Splunk Agent Observability finding or explicit user choice that requires the supported `splunk-ao` SDK. Treat `splunk-ao` as a distinct span-owner/export integration, not as an official OTel instrumentation package.
 - Do not initialize the SDK more than once per process.
 - Find any existing OTel setup before adding new code. Extend it. Treat lazy
   provider helpers and providers initialized on first instrument creation as
@@ -798,6 +819,17 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   add low-cardinality `error.type`; and avoid raw prompt, completion, retrieved
   content, memory record, tool argument, evaluation explanation, user, tenant,
   session, task, request, trace, or raw URL values in metric dimensions.
+- For **Retrieval inside a tool**, preserve exactly one `execute_tool {tool}` span
+  and add exactly one nested `retrieval {source}` child span for the distinct
+  code-owned retrieval operation. Set `gen_ai.operation.name=retrieval` and a
+  stable low-cardinality `gen_ai.data_source.id`; do not replace the outer tool
+  span or count one operation as the other. Content capture remains off by
+  default: do not set `gen_ai.retrieval.query.text` or
+  `gen_ai.retrieval.documents` unless the selected finding explicitly requires
+  governed content capture. Add focused telemetry proof that executes the path,
+  asserts exactly one span of each kind, compares the retrieval parent span ID
+  with the tool span ID, and proves the raw query and document attributes are
+  absent.
 - Prove every custom metric's exact name, unit, instrument type, and complete
   emitted dimension sets. Lifecycle-specific counters must retain their
   specific error class; generic terminal errors must not overwrite earlier
@@ -834,6 +866,39 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   model/tool names, and workflow/agent parent shape such as
   `invoke_workflow -> invoke_agent -> chat/execute_tool`. Required proof should
   name stable model/tool names explicitly.
+- For Python `splunk_ao`, apply the **Splunk AO case-1 branch** from the shared
+  Agent Observability reference before changing providers or GenAI spans.
+  Classify `@log`, `SplunkAOLogger`, and supported wrappers/handlers as span
+  producers; classify `add_splunk_ao_span_processor` as export-only;
+  distinguish `configure_distributed_tracing` provider-plus-export behavior
+  from `instrument_distributed_tracing` transport-only behavior.
+  - With **no existing OpenTelemetry provider**, preserve valid `@log` or
+    framework-created operations as the canonical span source. Add the minimum
+    supported integration only for selected uncovered operations, and do not
+    add an app-owned OTel span around the same logical operation. Treat HTTP,
+    metrics, logs, streaming, sessions, and uncovered GenAI operations as
+    independent closure work.
+  - With an **existing OpenTelemetry provider**, preserve the caller-owned
+    provider and pass that exact instance once to
+    `add_splunk_ao_span_processor` when Splunk AO export is selected. Do not
+    create or install a second provider. Pass the same provider to supported
+    transport instrumentation only when selected and not already owned.
+  - Before adding `@log`, account for its documented capture of function
+    arguments and return values. Unless raw content capture is approved, use a
+    boundary whose arguments and result are already safe metadata or a
+    source-verified integration control that prevents raw capture; otherwise
+    keep an app-owned metadata-only OTel span or record the SDK privacy blocker.
+    Companion `redacted_input` or `redacted_output` values alone are not proof
+    that the original raw values were removed. Never expose raw
+    prompts, completions, retrieved documents, tool arguments/results,
+    identifiers, or secrets merely to gain an AO node.
+  - Add credential-free tests using an in-memory exporter, fake sink, or
+    monkeypatched SDK boundary. Assert provider identity, processor count,
+    shutdown/termination, expected parentage and one-node counts, content
+    absence with a unique sentinel, and duplicate-span prevention. When the
+    SDK-owned sink and caller-owned provider coexist, inspect both outputs.
+    Live delivery is separate proof;
+    do not require live credentials for the ownership tests.
 - Preserve existing application stable business workflow identity when setting
   `gen_ai.workflow.name` and workflow span names. Prefer constants, function or
   handler names, workflow registrations, telemetry event names, docs, or prior

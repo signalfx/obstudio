@@ -19,6 +19,10 @@
     "splunk-dashboard-publish",
     "splunk-detector-publish"
   ],
+  "organization-observability-profile.md": [
+    "otel-audit",
+    "otel-instrument"
+  ],
   "report-flow-contract.md": [
     "otel-audit",
     "otel-instrument",
@@ -33,6 +37,10 @@
   "signalflow-patterns.md": [
     "splunk-configure",
     "splunk-dashboard"
+  ],
+  "splunk-agent-observability.md": [
+    "otel-audit",
+    "otel-instrument"
   ],
   "splunk-api.md": [
     "splunk-dashboard-publish",

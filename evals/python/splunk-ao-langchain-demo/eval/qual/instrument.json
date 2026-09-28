@@ -1,0 +1,22 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "langchain-callback",
+      "task": "Improve and verify the local LangChain application in ./service without network access or credentials. Preserve SplunkAOCallback as the canonical owner for existing chain, model, and tool operations. Add only source-backed missing telemetry, keep content safe, and prove lifecycle and duplicate-span behavior using local tests and normal instrumentation and verification artifacts."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for changed source, tests, and generated instrumentation and verification artifacts.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Preserves SplunkAOCallback as the one canonical span producer for existing LangChain chain, DemoLocalLLM model, and lookup_weather tool operations; it does not add duplicate @log decorators or app-owned OTel spans around them.",
+    "Keeps the app runnable without an OpenAI API key, Splunk access token, or network call by retaining FakeListLLM and the supported ingestion_hook path; it does not claim that local capture proves live Splunk delivery.",
+    "Keeps captured callback input and output limited to explicit synthetic demo content, or introduces a source-verified control that prevents raw capture; it does not treat companion redacted fields as removal of raw content.",
+    "Preserves explicit logger.terminate() lifecycle ownership and verifies termination without adding an unrelated application-owned TracerProvider or provider.shutdown() path.",
+    "Adds or preserves focused tests that inspect the captured trace batch and prove exactly one support_agent chain, one DemoLocalLLM model operation, one lookup_weather tool operation, and correct parentage without external services.",
+    "Keeps changes in application-owned source and tests, produces normal instrumentation and verification artifacts, and marks unsupported live delivery or Agent Stream claims Not proven."
+  ]
+}

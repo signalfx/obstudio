@@ -1,0 +1,28 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "keep-galileo",
+      "eval_inputs": ["eval/inputs/otel-audit-owner-choice.json"],
+      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit-owner-choice.json to ./service/.observe/otel-audit.json. Record the decision OTEL-001=keep-galileo and request executable OTEL-002 through the bundled selection flow. Implement and verify only that branch."
+    },
+    {
+      "id": "use-splunk-ao",
+      "eval_inputs": ["eval/inputs/otel-audit-owner-choice.json"],
+      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit-owner-choice.json to ./service/.observe/otel-audit.json. Record the decision OTEL-001=use-splunk-ao and request executable AO-001 through the bundled selection flow. Implement and verify only that branch."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for changed source, dependency, startup, test, and .observe artifacts.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Implements only the option explicitly recorded in the bound selection and leaves the unchosen mutually exclusive branch untouched.",
+    "For keep-galileo, retains the Galileo processor and dependencies, adds the missing application-owned OTel streaming lifecycle closure without overlapping workflow/chat/tool spans, and does not install splunk-ao.",
+    "For use-splunk-ao, disables or removes overlapping Galileo processor and startup ownership before enabling splunk-ao, while preserving unrelated HTTP and application instrumentation.",
+    "Never edits installed Galileo package files, virtual environments, site-packages, node_modules, generated clients, or caches.",
+    "Writes bound selection and instrumentation artifacts that keep the manual decision outside requested_ids and approved_ids, include only the chosen option-unlocked executable finding, and leave the source audit unchanged.",
+    "Verification exercises the selected direct application path and checks intended project and Agent Stream routing, required Agent Observability field population, stable workflow/model/tool identities, and absence of duplicate logical-operation spans; unmet live prerequisites remain Not proven rather than Working."
+  ]
+}

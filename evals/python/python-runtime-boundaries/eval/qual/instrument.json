@@ -1,0 +1,21 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "runtime-boundaries",
+      "task": "Run $otel-instrument against the Python service in ./service. Preserve the Click, Gunicorn, Uvicorn, and Conda product surfaces and implement the complete safe application-owned observability baseline."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service source, startup files, manifests, OBSERVABILITY.md, tests, and generated .observe artifacts.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Removes the process-lifetime Click parent span and gives each independently scheduled task a fresh root trace, using a span link rather than parentage only when upstream scheduling causality exists; focused telemetry tests prove multiple tasks have distinct nonzero trace IDs.",
+    "Moves provider, exporter, metric-reader, logging-bridge, and shutdown ownership into each actual web worker without creating them in a Gunicorn preload master. It keeps one owner per signal and proves the configured Gunicorn/Uvicorn worker path rather than assuming monkey patches survive every process model.",
+    "Repairs the Conda launch so customer-python resolves its own Python, opentelemetry-instrument executable, distro, and matching framework instrumentation. It records dependencies in environment.yml or another source-owned manifest and does not install into or rely on a global interpreter.",
+    "Uses OBSERVABILITY.md for organization-specific service names, approved runtime, trace boundaries, and privacy constraints while validating those facts against source. No credentials, task arguments, customer IDs, Conda prefixes, or unbounded values enter telemetry.",
+    "Runs focused tests for Click trace separation and worker-local provider ownership, then attempts full-runtime proof for automatic spans, metrics, logs, duplicate prevention, worker shutdown, and both supported web launch paths; concrete unavailable prerequisites remain Not proven rather than Working."
+  ]
+}

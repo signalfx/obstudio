@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20260923T213745574174Z |
+| Run ID | 20260928T204653019194Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -34,7 +34,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/springboot-basic/qual/instrument | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/instrument.json | 0 | 10 | 0 |
 | node/express-basic/qual/instrument | node/express-basic | 2 | evals/node/express-basic/eval/qual/instrument.json | 0 | 9 | 0 |
 | node/express-basic/runtime/instrument | node/express-basic | 1 | evals/node/express-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
-| python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/instrument.json | 0 | 8 | 0 |
+| python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/instrument.json | 0 | 12 | 0 |
 | python/assistant-v3-framework-bridge-demo/qual/instrument | python/assistant-v3-framework-bridge-demo | 1 | evals/python/assistant-v3-framework-bridge-demo/eval/qual/instrument.json | 0 | 7 | 0 |
 | python/checkout-red-demo/qual/instrument | python/checkout-red-demo | 1 | evals/python/checkout-red-demo/eval/qual/instrument.json | 0 | 8 | 0 |
 | python/fastapi-celery/qual/incident-readiness | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/qual/incident-readiness.json | 0 | 7 | 0 |
@@ -42,5 +42,9 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/runtime/instrument.json | 0 | 0 | 1 |
 | python/flask-basic/qual/instrument | python/flask-basic | 2 | evals/python/flask-basic/eval/qual/instrument.json | 0 | 10 | 0 |
 | python/flask-basic/runtime/instrument | python/flask-basic | 1 | evals/python/flask-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
+| python/galileo-agent-demo/qual/instrument | python/galileo-agent-demo | 2 | evals/python/galileo-agent-demo/eval/qual/instrument.json | 0 | 6 | 0 |
 | python/mcp-ai-tool-demo/qual/instrument | python/mcp-ai-tool-demo | 1 | evals/python/mcp-ai-tool-demo/eval/qual/instrument.json | 0 | 7 | 0 |
+| python/python-runtime-boundaries/qual/instrument | python/python-runtime-boundaries | 1 | evals/python/python-runtime-boundaries/eval/qual/instrument.json | 0 | 5 | 0 |
+| python/splunk-ao-langchain-demo/qual/instrument | python/splunk-ao-langchain-demo | 1 | evals/python/splunk-ao-langchain-demo/eval/qual/instrument.json | 0 | 6 | 0 |
+| python/splunk-ao-ownership-demo/qual/instrument | python/splunk-ao-ownership-demo | 1 | evals/python/splunk-ao-ownership-demo/eval/qual/instrument.json | 0 | 6 | 0 |
 | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/eval/sanity/instrument.json | 0 | 0 | 0 |

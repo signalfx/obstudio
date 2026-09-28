@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the AI assistant FastAPI service in ./service for OpenTelemetry and GenAI readiness gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json first, then render self-contained ./service/.observe/otel.html from that JSON."
+      "task": "Scan the AI assistant FastAPI service in ./service for OpenTelemetry, GenAI readiness, and Splunk Agent Observability deployment gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json first, then render self-contained ./service/.observe/otel.html from that JSON."
     },
     {
       "id": "genai-readiness",
@@ -19,7 +19,10 @@
     "Identifies app.py, load_demo.py, pyproject.toml, and FastAPI routes for chat, streaming chat, stream inventory, feedback, and feedback export.",
     "Reports that the baseline service has no custom OpenTelemetry SDK setup, no GenAI semantic-convention spans or metrics, and no exporter/resource configuration beyond demo environment variables.",
     "Maps GenAI readiness gaps for provider/model calls, tool fanout, token/context pressure, streaming lifecycle, prompt/response outcome, and offline AI data export.",
+    "Detects that search_docs performs a code-owned document retrieval operation inside a generic tool dispatcher; reports a separate retrieval readiness row, selectable OTel retrieval finding, and verification scenario requiring a nested retrieval span with gen_ai.operation.name=retrieval instead of treating execute_tool search_docs as complete retrieval coverage.",
     "Writes schema-v2 .observe/otel-audit.json with GenAI ownership detected as Yes, a matching audit-evidence entry, and GenAI readiness data with one entry per readiness surface and explicit required signals; validates it before rendering HTML.",
+    "Represents source-backed Splunk Agent Observability product or routing gaps as selectable findings with finding_group=splunk-agent-observability in the canonical findings array, uses configuration rather than fabricated spans or metrics for control-plane work, and authors prerequisite dependencies where downstream work needs a project, Agent Stream, or OTel trace source.",
+    "Renders Splunk Agent Observability findings as a nested subsection under the one Findings section, with no peer top-level Agent Observability section or separate canonical AO ledger; selecting a downstream AO finding auto-includes executable prerequisites while preserving explicit intent separately.",
     "Keeps privacy and cardinality safe by not recommending raw prompt, completion, session, user, request, or tool argument values as metric dimensions.",
     "Renders self-contained .observe/otel.html from the validated JSON without making the reader view authoritative."
   ]

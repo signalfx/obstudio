@@ -144,6 +144,78 @@ def sample_report() -> dict[str, object]:
     }
 
 
+def sample_splunk_agent_observability_report() -> dict[str, object]:
+    data = sample_report()
+    data["findings"].extend(  # type: ignore[union-attr]
+        [
+            {
+                "id": "AO-001",
+                "finding_group": "splunk-agent-observability",
+                "title": "Agent Observability project is not configured",
+                "severity": "high",
+                "priority": "required",
+                "effort": "small",
+                "status": "proposed",
+                "area": "Agent Observability project",
+                "gap": "No source-backed project configuration is present.",
+                "impact": "Agent traces cannot be assigned to the intended project.",
+                "product_outcome": "The application has a durable Agent Observability project target.",
+                "required_fix": "Create or configure the Agent Observability project through a checked-in deployment path.",
+                "instrument_mode": "default",
+                "verification_scenarios": ["http.checkout.success"],
+                "dependencies": [],
+                "evidence": ["Makefile"],
+                "acceptance_criteria": ["The configured project can be resolved without Obstudio at runtime."],
+                "constraints": ["Do not put access tokens in tracked files."],
+                "expected_telemetry": [
+                    {
+                        "type": "configuration",
+                        "name": "agent-observability.project",
+                        "attributes": [],
+                        "product_view": "Agent Observability project routing",
+                    }
+                ],
+                "follow_up_actions": ["Confirm the project target before instrumentation."],
+            },
+            {
+                "id": "AO-002",
+                "finding_group": "splunk-agent-observability",
+                "title": "Dedicated Agent Stream is not configured",
+                "severity": "high",
+                "priority": "required",
+                "effort": "small",
+                "status": "proposed",
+                "area": "Dedicated Agent Stream",
+                "gap": "No source-backed Agent Stream configuration is present.",
+                "impact": "Agent traces remain unassigned or mix with unrelated applications.",
+                "product_outcome": "The application routes traces to its dedicated Agent Stream.",
+                "required_fix": "Create the Agent Stream and persist direct application export routing.",
+                "instrument_mode": "default",
+                "verification_scenarios": ["http.checkout.success"],
+                "dependencies": ["AO-001", "OTEL-001"],
+                "evidence": ["Makefile"],
+                "acceptance_criteria": ["A fresh application trace appears in the dedicated Agent Stream."],
+                "constraints": ["The deployed application must not require Obstudio in the data path."],
+                "expected_telemetry": [
+                    {
+                        "type": "configuration",
+                        "name": "agent-observability.agent-stream",
+                        "attributes": [],
+                        "product_view": "Dedicated Agent Stream",
+                    }
+                ],
+                "follow_up_actions": ["Confirm routing with a fresh application trace."],
+            },
+        ]
+    )
+    data["signal_flow"]["component_flow_map"] += (  # type: ignore[index]
+        "\n\nAgent Observability configuration\n"
+        "deployment [GAP: Agent Observability project] -> "
+        "Agent Stream [GAP: Dedicated Agent Stream]"
+    )
+    return data
+
+
 def make_manual_decision(finding: dict[str, object]) -> None:
     finding["instrument_mode"] = "manual decision"
     finding["decision_owner"] = "service telemetry owner"
@@ -1444,6 +1516,56 @@ class ObserveReportTest(unittest.TestCase):
             "Trace waterfall and route filtering",
         )
 
+    def test_normalizes_optional_splunk_agent_observability_finding_group(self) -> None:
+        legacy_report = MODULE.normalize_audit_report(sample_report())
+        grouped_report = MODULE.normalize_audit_report(
+            sample_splunk_agent_observability_report()
+        )
+
+        self.assertNotIn("finding_group", legacy_report["findings"][0])
+        self.assertEqual(
+            grouped_report["findings"][2]["finding_group"],
+            "splunk-agent-observability",
+        )
+        invalid = sample_splunk_agent_observability_report()
+        invalid["findings"][2]["finding_group"] = "separate-section"  # type: ignore[index]
+        with self.assertRaisesRegex(MODULE.ReportError, "finding_group"):
+            MODULE.normalize_audit_report(invalid)
+
+    def test_renders_splunk_agent_observability_as_nested_findings_subsection(self) -> None:
+        report = MODULE.normalize_audit_report(
+            sample_splunk_agent_observability_report()
+        )
+
+        html = MODULE.render_html(report, MODULE.empty_selection(report))
+
+        self.assertEqual(html.count('id="findings-heading"'), 1)
+        self.assertIn(
+            '<section class="finding-subsection" aria-labelledby="${esc(id)}"><h3 id="${esc(id)}">',
+            html,
+        )
+        self.assertIn(
+            '"splunk-agent-observability-findings-heading", "Splunk Agent Observability findings"',
+            html,
+        )
+        self.assertNotIn("<h2>Splunk Agent Observability", html)
+        self.assertNotIn('aria-labelledby="splunk-agent-observability-heading"', html)
+        self.assertIn('"id":"AO-001"', html)
+        self.assertIn('"id":"AO-002"', html)
+        self.assertIn('id="plan-${esc(f.id)}"', html)
+        self.assertIn("Agent Observability change", html)
+        self.assertIn('"type":"configuration"', html)
+
+    def test_splunk_agent_observability_selection_auto_includes_prerequisites(self) -> None:
+        report = MODULE.normalize_audit_report(
+            sample_splunk_agent_observability_report()
+        )
+
+        self.assertEqual(
+            MODULE.dependency_closure(report, ["AO-002"]),
+            ["OTEL-001", "AO-001", "AO-002"],
+        )
+
     def test_schema_v1_audit_digest_remains_backward_compatible(self) -> None:
         schema_v1 = sample_report()
         schema_v1["schema_version"] = 1
@@ -2455,12 +2577,12 @@ for (const [serviceRoot, input, expected] of cases) {
     def test_html_progressively_discloses_verbose_finding_details(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
         html = MODULE.render_html(report, MODULE.empty_selection(report))
-        render_cards = html.split("function renderCards()", 1)[1].split(
-            "function orderedSelection()", 1
+        render_finding_card = html.split("function renderFindingCard(f)", 1)[1].split(
+            "function renderCards()", 1
         )[0]
-        card_start = render_cards.index("return `<article")
-        card_end = render_cards.index("</article>`;", card_start)
-        card = render_cards[card_start:card_end]
+        card_start = render_finding_card.index("return `<article")
+        card_end = render_finding_card.index("</article>`;", card_start)
+        card = render_finding_card[card_start:card_end]
         details_start = card.index('<details class="finding-technical-details"')
         details_open_end = card.index(">", details_start) + 1
         details_end = card.index("</details>", details_open_end) + len("</details>")

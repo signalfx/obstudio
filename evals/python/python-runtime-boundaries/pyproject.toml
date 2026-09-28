@@ -1,0 +1,22 @@
+[project]
+name = "python-runtime-boundaries"
+version = "0.1.0"
+description = "Intentional Click, pre-fork worker, and Conda OpenTelemetry failure fixture"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "fastapi>=0.115",
+    "gunicorn>=23",
+    "opentelemetry-api>=1.38",
+    "opentelemetry-exporter-otlp>=1.38",
+    "opentelemetry-instrumentation-fastapi>=0.59b0",
+    "opentelemetry-sdk>=1.38",
+    "uvicorn-worker>=0.3",
+    "uvicorn[standard]>=0.34",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3"]
+
+[project.scripts]
+customer-jobs = "cli:cli"

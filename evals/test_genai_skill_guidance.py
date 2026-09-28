@@ -1,5 +1,6 @@
 """Deterministic checks for GenAI readiness skill guidance."""
 
+import json
 from pathlib import Path
 
 
@@ -12,6 +13,7 @@ SPLUNK_CONFIGURE = SKILLS_DIR / "splunk-configure" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
 SPLUNK_DETECTOR_PUBLISH = SKILLS_DIR / "splunk-detector-publish" / "SKILL.md"
 SPLUNK_DETECTOR_PUBLISH_REFS = SKILLS_DIR / "splunk-detector-publish" / "references"
+SPLUNK_AO_REF = SKILLS_DIR / "references" / "splunk-agent-observability.md"
 
 
 def _read(path: Path) -> str:
@@ -148,6 +150,132 @@ def test_genai_skills_require_single_canonical_span_source():
         term for term in instrument_only_terms if term not in instrument_normalized
     ]
     assert not missing
+
+
+def test_splunk_ao_skills_classify_span_ownership_and_export_only_paths():
+    audit = " ".join(_read(SKILLS_DIR / "otel-audit" / "SKILL.md").split())
+    instrument = " ".join(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split())
+    reference = " ".join(_read(SPLUNK_AO_REF).split())
+
+    detection_terms = [
+        "from splunk_ao import log",
+        "@log",
+        'span_type="tool"',
+        'span_type="retriever"',
+        "SplunkAOLogger",
+        "SplunkAOCallback",
+        "add_splunk_ao_span_processor",
+        "configure_distributed_tracing",
+        "instrument_distributed_tracing",
+    ]
+    assert not [term for term in detection_terms if term not in audit]
+    audit_outcome_terms = [
+        "separate selectable lifecycle finding",
+        "logger.terminate()",
+        "supported process teardown",
+    ]
+    assert not [term for term in audit_outcome_terms if term not in audit]
+
+    ownership_terms = [
+        "SDK span owner",
+        "export-only",
+        "transport-only",
+        "provider-plus-export",
+        "control-plane-only",
+        "one canonical span producer per logical operation",
+        "captures function arguments and return values",
+        "raw content capture is approved",
+        "caller-owned provider",
+        "provider.shutdown()",
+        "logger.terminate()",
+        "no live credentials",
+        "no duplicate workflow, model, tool, or retrieval spans",
+        "Do not leave the reader or a downstream skill to infer `export-only`",
+        "does not create missing workflow, model, tool, or retrieval operations",
+        "Do not weaken that fact to “may capture”",
+    ]
+    assert not [term for term in ownership_terms if term not in reference]
+
+    instrument_terms = [
+        "Splunk AO case-1 branch",
+        "existing OpenTelemetry provider",
+        "no existing OpenTelemetry provider",
+        "preserve valid `@log`",
+        "do not add an app-owned OTel span around the same logical operation",
+        "add_splunk_ao_span_processor",
+        "metadata-only",
+        "provider identity",
+        "processor count",
+        "duplicate-span",
+    ]
+    assert not [term for term in instrument_terms if term not in instrument]
+
+
+def test_splunk_ao_ownership_eval_is_local_and_outcome_based():
+    fixture = REPO_ROOT / "evals" / "python" / "splunk-ao-ownership-demo"
+    files = [
+        fixture / "decorator_app.py",
+        fixture / "existing_otel_app.py",
+        fixture / "pyproject.toml",
+        fixture / "eval" / "qual" / "audit.json",
+        fixture / "eval" / "qual" / "instrument.json",
+    ]
+    for file in files:
+        assert file.exists(), f"missing Splunk AO ownership fixture file: {file}"
+
+    audit_eval = json.loads(_read(fixture / "eval" / "qual" / "audit.json"))
+    instrument_eval = json.loads(
+        _read(fixture / "eval" / "qual" / "instrument.json")
+    )
+    combined = " ".join(
+        [
+            _read(fixture / "decorator_app.py"),
+            _read(fixture / "existing_otel_app.py"),
+            *audit_eval["rubric"],
+            *instrument_eval["rubric"],
+        ]
+    )
+    for term in (
+        "@log",
+        'span_type="tool"',
+        'span_type="retriever"',
+        "add_splunk_ao_span_processor",
+        "SDK-created spans",
+        "export-only",
+        "one canonical span producer",
+        "provider identity",
+        "raw question",
+        "raw retrieved documents",
+        "without live Splunk or model credentials",
+    ):
+        assert term in combined
+
+
+def test_splunk_ao_langchain_demo_is_local_runnable_and_outcome_based():
+    fixture = REPO_ROOT / "evals" / "python" / "splunk-ao-langchain-demo"
+    files = [
+        fixture / "app.py",
+        fixture / "README.md",
+        fixture / "pyproject.toml",
+        fixture / "tests" / "test_app.py",
+        fixture / "eval" / "qual" / "audit.json",
+        fixture / "eval" / "qual" / "instrument.json",
+    ]
+    for file in files:
+        assert file.exists(), f"missing Splunk AO LangChain demo file: {file}"
+
+    combined = " ".join(_read(file) for file in files)
+    for term in (
+        "SplunkAOCallback",
+        "FakeListLLM",
+        "ingestion_hook",
+        "logger.terminate()",
+        "no OpenAI API key",
+        "no Splunk access token",
+        "one canonical span producer",
+        "without network access",
+    ):
+        assert term in combined
 
 
 def test_genai_skills_require_pre_bootstrap_suppression_for_app_owned_spans():
@@ -387,6 +515,94 @@ def test_genai_reference_requires_ai_pathway_surface_patterns():
     assert not missing
 
 
+def test_otel_audit_requires_separate_retrieval_detection_inside_tools():
+    audit = " ".join(_read(SKILLS_DIR / "otel-audit" / "SKILL.md").split())
+    required_terms = [
+        "Retrieval detection inside tools",
+        "search_docs",
+        "retrieval-like operation",
+        "generic tool span is not complete retrieval coverage",
+        "separate retrieval readiness row",
+        "selectable retrieval finding",
+        "nested retrieval span",
+        "gen_ai.operation.name=retrieval",
+    ]
+    missing = [term for term in required_terms if term not in audit]
+    assert not missing
+
+
+def test_ai_assistant_instrument_case_requires_nested_retrieval_closure():
+    audit_input = json.loads(
+        _read(
+            REPO_ROOT
+            / "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json"
+        )
+    )
+    instrument_eval = json.loads(
+        _read(
+            REPO_ROOT
+            / "evals/python/ai-assistant-demo/eval/qual/instrument.json"
+        )
+    )
+    instrument_skill = " ".join(
+        _read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split()
+    )
+
+    findings = {finding["id"]: finding for finding in audit_input["findings"]}
+    retrieval = findings["OTEL-002"]
+    assert "finding_group" not in retrieval
+    assert retrieval["dependencies"] == ["OTEL-001"]
+    assert retrieval["verification_scenarios"] == ["genai.search_docs.retrieval"]
+    assert any(
+        item["type"] == "span"
+        and item["name"] == "retrieval demo-knowledge-base"
+        and "gen_ai.operation.name=retrieval" in item["attributes"]
+        and "gen_ai.data_source.id=demo-knowledge-base" in item["attributes"]
+        for item in retrieval["expected_telemetry"]
+    )
+
+    scenarios = {
+        scenario["id"]: scenario
+        for scenario in audit_input["verification"]["scenarios"]
+    }
+    scenario = " ".join(
+        json.dumps(scenarios["genai.search_docs.retrieval"], sort_keys=True).split()
+    ).lower()
+    for term in (
+        "exactly one execute_tool search_docs",
+        "exactly one nested retrieval demo-knowledge-base",
+        "parent",
+        "gen_ai.retrieval.query.text",
+        "gen_ai.retrieval.documents",
+    ):
+        assert term in scenario
+
+    prompt = instrument_eval["prompts"][0]["task"]
+    assert "OTEL-002 and AO-002" in prompt
+    rubric = " ".join(instrument_eval["rubric"]).lower()
+    for term in (
+        "exactly one execute_tool search_docs",
+        "exactly one nested retrieval demo-knowledge-base",
+        "gen_ai.operation.name=retrieval",
+        "gen_ai.data_source.id=demo-knowledge-base",
+        "direct child",
+        "no raw retrieval query or document content",
+    ):
+        assert term in rubric
+
+    for term in (
+        "Retrieval inside a tool",
+        "preserve exactly one `execute_tool {tool}` span",
+        "exactly one nested `retrieval {source}` child span",
+        "`gen_ai.operation.name=retrieval`",
+        "`gen_ai.data_source.id`",
+        "`gen_ai.retrieval.query.text`",
+        "`gen_ai.retrieval.documents`",
+        "parent span ID",
+    ):
+        assert term in instrument_skill
+
+
 def test_genai_reference_covers_evaluation_quality_contract():
     text = _read(GENAI_REF)
     required_terms = [
@@ -599,7 +815,9 @@ def test_audit_requires_single_deterministic_gap_section():
         "Deterministic gap section contract",
         "canonical audit has exactly one actionable gap source: `findings`",
         "Record GenAI detail in canonical `genai_readiness` rows",
-        "promote only service-owned OTel telemetry closure rows into `findings`",
+        "promote service-owned OTel telemetry closure rows into `findings`",
+        "put source-backed actionable product or routing gaps in the same `findings` array",
+        "finding_group: splunk-agent-observability",
         "keep the HTML decision view focused on those findings",
     ]
     assert not [term for term in required_terms if term not in normalized]
