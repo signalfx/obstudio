@@ -76,6 +76,7 @@ PROOF_LEVEL_ALIASES = {
     "either": "either",
 }
 SIGNAL_TYPES = {"span", "metric", "log", "resource", "configuration"}
+FINDING_GROUPS = {"opentelemetry", "splunk-agent-observability"}
 INCIDENT_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 GENAI_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 SCAN_BLOCKER_CHECKS = {
@@ -483,6 +484,9 @@ def normalize_finding(
     effort = text(row.get("effort"), f"{path}.effort")
     if effort not in EFFORTS:
         fail(f"{path}.effort must be one of {sorted(EFFORTS)}")
+    finding_group = optional_text(row.get("finding_group"), f"{path}.finding_group")
+    if finding_group is not None and finding_group not in FINDING_GROUPS:
+        fail(f"{path}.finding_group must be one of {sorted(FINDING_GROUPS)}")
     telemetry = []
     for index, item in enumerate(object_list(row.get("expected_telemetry", []), f"{path}.expected_telemetry")):
         item_path = f"{path}.expected_telemetry[{index}]"
@@ -631,6 +635,8 @@ def normalize_finding(
                 f"{path}.required_fix must contain the exact external_requirement "
                 "and no hidden service implementation handoff"
             )
+    if finding_group is not None:
+        report["finding_group"] = finding_group
     if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
         for index, value in enumerate(report["follow_up_actions"]):
             validate_audit_review_next_step(
@@ -4281,6 +4287,8 @@ h1 {{ margin: 8px 0 4px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; }}
 .findings-section {{ margin: 18px 0; }}
 .findings-section > h2 {{ color: var(--ink); font-size: 18px; margin: 0 0 12px; }}
 .findings-total {{ color: var(--muted); font-size: 13px; font-weight: 600; }}
+.finding-subsection + .finding-subsection {{ margin-top: 22px; }}
+.finding-subsection > h3 {{ color: var(--ink); font-size: 15px; letter-spacing: normal; margin: 0 0 10px; text-transform: none; }}
 .card {{ background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }}
 .card.done {{ border-color: #9bd5b7; }}
 .card.done .spine {{ background: var(--ok); }}
@@ -4579,6 +4587,7 @@ function syncFindingSelectionControl(input, finding) {{
 function findingPrimaryActionLabel(finding) {{
   if (finding.instrument_mode === "manual decision") return "Decision needed";
   if (finding.instrument_mode === "external follow-up") return "External requirement";
+  if (finding.finding_group === "splunk-agent-observability") return "Agent Observability change";
   return "Instrumentation change";
 }}
 
@@ -4622,8 +4631,7 @@ function findingNextStep(finding) {{
   return "Select this finding, then copy the generated prompt and paste into AI chat.";
 }}
 
-function renderCards() {{
-  document.getElementById("cards").innerHTML = DISPLAY_FINDINGS.map(f => {{
+function renderFindingCard(f) {{
     const lifecycle = lifecycleStatus(f);
     const mode = modeGuidance[f.instrument_mode];
     const telemetry = (f.expected_telemetry || []).map(item => `<li><b>${{esc(item.type)}} ${{esc(item.name)}}</b> — ${{esc(item.product_view)}}${{item.attributes?.length ? ` <code>${{esc(item.attributes.join(", "))}}</code>` : ""}}</li>`).join("");
@@ -4686,7 +4694,19 @@ function renderCards() {{
         </details>
       </div>
     </article>`;
-  }}).join("");
+}}
+
+function renderCards() {{
+  const rendered = DISPLAY_FINDINGS.map(f => ({{finding: f, html: renderFindingCard(f)}}));
+  const agentObservability = rendered.filter(row => row.finding.finding_group === "splunk-agent-observability");
+  const openTelemetry = rendered.filter(row => row.finding.finding_group !== "splunk-agent-observability");
+  const subsection = (id, label, rows) => rows.length
+    ? `<section class="finding-subsection" aria-labelledby="${{esc(id)}}"><h3 id="${{esc(id)}}">${{esc(label)}} <span class="findings-total">· ${{rows.length}}</span></h3>${{rows.map(row => row.html).join("")}}</section>`
+    : "";
+  document.getElementById("cards").innerHTML = agentObservability.length
+    ? subsection("opentelemetry-findings-heading", "OpenTelemetry findings", openTelemetry)
+      + subsection("splunk-agent-observability-findings-heading", "Splunk Agent Observability findings", agentObservability)
+    : rendered.map(row => row.html).join("");
   syncFindingSelectionState();
 }}
 

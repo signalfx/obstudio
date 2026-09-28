@@ -2039,6 +2039,53 @@ def test_report_freshness_accepts_v2_source_manifests(tmp_path: Path):
     assert verify_published_report_sources(tmp_path) == [benchmark_path]
 
 
+def test_report_freshness_ignores_shared_reference_changes_for_other_consumers(
+    tmp_path: Path,
+):
+    references = tmp_path / "skills" / "references"
+    references.mkdir(parents=True)
+    consumed = references / "consumed.md"
+    consumed.write_text("# Consumed\n", encoding="utf-8")
+    unrelated = references / "unrelated.md"
+    unrelated.write_text("# Unrelated\n", encoding="utf-8")
+    consumers = references / "consumers.json"
+    consumers.write_text(
+        json.dumps(
+            {
+                "consumed.md": ["sample-skill"],
+                "unrelated.md": ["other-skill"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    benchmark_path = _write_validation_manifest_fixture(
+        tmp_path,
+        selected_prompt_ids=("direct",),
+        selection_scope="filtered",
+    )
+
+    assert verify_published_report_sources(tmp_path) == [benchmark_path]
+
+    unrelated.write_text("# Unrelated changed\n", encoding="utf-8")
+    late_unrelated = references / "late-unrelated.md"
+    late_unrelated.write_text("# Late unrelated\n", encoding="utf-8")
+    consumers.write_text(
+        json.dumps(
+            {
+                "consumed.md": ["sample-skill"],
+                "unrelated.md": ["other-skill"],
+                "late-unrelated.md": ["other-skill"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert verify_published_report_sources(tmp_path) == [benchmark_path]
+
+    consumed.write_text("# Consumed changed\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="inputs are stale"):
+        verify_published_report_sources(tmp_path)
+
+
 def test_report_freshness_allows_reports_without_legacy_manifests(tmp_path: Path):
     report_path = tmp_path / "eval-reports" / "sample-skill" / "sanity" / "benchmark.json"
     report_path.parent.mkdir(parents=True)
