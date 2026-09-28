@@ -8,6 +8,7 @@ description: >-
   preview model for the local Splunk Observability Studio. Use when the user types
   $splunk-dashboard, asks to "generate a dashboard", "build a dashboard from
   the audit", "create charts for my service", or "visualize my metrics".
+allowed-tools: Read, Write, Grep, Glob
 metadata:
   author: otel-studio
   version: 0.1.0
@@ -259,6 +260,14 @@ generated, the files written (`dashboards.tf`, `variables.tf`,
 `terraform.tfvars.example`, `.observe/dashboards.md`,
 `.observe/dashboards.preview.json`), and the next steps — preview in Splunk Observability Studio
 Dashboards tab, then `$splunk-dashboard-publish` or `terraform apply`.
+
+This skill never runs `terraform` and has no bundled validator script (unlike
+`$splunk-configure`). Do not report "Validation passed," "verified," or any
+similar status for the generated Terraform or `.observe/dashboards.preview.json`
+in the chat summary, even when an internal sanity check (for example a JSON
+parse or a grep for unresolved variables) happened to succeed while authoring
+the files. State only what was generated and direct the user to run
+`terraform validate`/`terraform plan` or `$splunk-dashboard-publish` next.
 
 ## Red Flags
 

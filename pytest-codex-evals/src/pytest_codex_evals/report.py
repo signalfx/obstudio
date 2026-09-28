@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +25,6 @@ from .eval_files import (
     shared_skill_reference_source_files,
     staged_fixture_source_files,
     staged_skill_source_files,
-    source_tree_files,
 )
 from .reports import ReportTemplate, template_for_kind
 
@@ -44,7 +44,31 @@ TOKEN_USAGE_FIELDS = (
     "provider_total_tokens",
     "derived_total_tokens",
 )
-SOURCE_MANIFEST_DIGEST_VERSION = 2
+SOURCE_MANIFEST_DIGEST_VERSION = 3
+EVALUATOR_SEMANTICS_PATH = Path("evals/evaluator-semantics.toml")
+DEFAULT_EVALUATOR_SEMANTICS_VERSION = 1
+
+
+def evaluator_semantics_version(repo_root: Path) -> int:
+    path = repo_root / EVALUATOR_SEMANTICS_PATH
+    try:
+        contents = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        # The file was introduced with v3 manifests. Keep the package usable by
+        # repositories that have not opted into an explicit semantics policy.
+        return DEFAULT_EVALUATOR_SEMANTICS_VERSION
+    except (OSError, UnicodeError) as exc:
+        raise ValueError(f"cannot read evaluator semantics file: {path}") from exc
+    try:
+        data = tomllib.loads(contents)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"evaluator semantics file contains invalid TOML: {path}") from exc
+    version = data.get("version")
+    if version is None:
+        raise ValueError(f"evaluator semantics version is missing: {path}")
+    if type(version) is not int or version <= 0:
+        raise ValueError(f"evaluator semantics version must be a positive integer: {path}")
+    return version
 
 
 def write_session_results(runs: list[dict[str, Any]]) -> None:
@@ -351,19 +375,6 @@ def source_input_digests(
         paths.extend(shared_runtime_source_files(eval_root))
         paths.extend(runtime_repository_source_files(root))
 
-    harness_root = root / "pytest-codex-evals"
-    harness_package_root = harness_root / "src" / "pytest_codex_evals"
-    if harness_package_root.is_dir():
-        paths.extend(
-            source_tree_files(
-                harness_package_root,
-                ("__pycache__", ".pytest_cache", ".DS_Store", "*.pyc"),
-            )
-        )
-    for name in ("pyproject.toml", "uv.lock"):
-        harness_metadata = harness_root / name
-        if source := regular_source_file(harness_metadata):
-            paths.append(source)
     if config_path is not None:
         config_source = regular_source_file(config_path)
         if config_source is None:
@@ -379,12 +390,6 @@ def source_input_digests(
         for path in sorted(eval_root.glob("codex-evals*.toml")):
             if source := regular_source_file(path):
                 paths.append(source)
-    if eval_root.is_dir():
-        for name in ("pyproject.toml", "uv.lock"):
-            eval_metadata = eval_root / name
-            if source := regular_source_file(eval_metadata):
-                paths.append(source)
-
     digests: dict[str, str] = {}
     for path in sorted(set(paths)):
         relative = path.resolve().relative_to(root).as_posix()
@@ -602,11 +607,12 @@ def source_provenance(
         selections = [selections_by_key[key] for key in sorted(selections_by_key)]
     skill_path = skill_paths.pop()
     source_config_path = config_paths.pop() if config_paths else None
+    semantics_version = evaluator_semantics_version(repo_root)
     provenance: dict[str, Any] = {
         "digest_version": SOURCE_MANIFEST_DIGEST_VERSION,
         "digest": source_manifest_digest(
             files,
-            digest_version=SOURCE_MANIFEST_DIGEST_VERSION,
+            evaluator_semantics_version=semantics_version,
             eval_kinds=eval_kinds,
             skill_path=skill_path,
             config_path=source_config_path,
@@ -614,6 +620,7 @@ def source_provenance(
             selection_scope=selection_scope,
         ),
         "eval_kinds": eval_kinds,
+        "evaluator_semantics_version": semantics_version,
         "files": files,
         "skill_path": skill_path,
     }
@@ -629,7 +636,8 @@ def source_provenance(
 def source_manifest_digest(
     files: dict[str, str],
     *,
-    digest_version: int,
+    digest_version: int = SOURCE_MANIFEST_DIGEST_VERSION,
+    evaluator_semantics_version: int | None = None,
     eval_kinds: list[str] | None = None,
     skill_path: str | None = None,
     config_path: str | None = None,
@@ -644,16 +652,20 @@ def source_manifest_digest(
             digest.update(file_digest.encode("ascii"))
             digest.update(b"\n")
         return digest.hexdigest()
-    if digest_version != SOURCE_MANIFEST_DIGEST_VERSION:
+    if digest_version not in {2, SOURCE_MANIFEST_DIGEST_VERSION}:
         raise ValueError(f"unsupported source manifest digest version: {digest_version}")
     if eval_kinds is None or skill_path is None:
-        raise ValueError("source manifest v2 requires eval kinds and a skill path")
+        raise ValueError(f"source manifest v{digest_version} requires eval kinds and a skill path")
     identity: dict[str, Any] = {
         "digest_version": digest_version,
         "eval_kinds": sorted(set(eval_kinds)),
         "files": {path: files[path] for path in sorted(files)},
         "skill_path": skill_path,
     }
+    if digest_version == SOURCE_MANIFEST_DIGEST_VERSION:
+        if type(evaluator_semantics_version) is not int or evaluator_semantics_version <= 0:
+            raise ValueError("source manifest evaluator semantics version must be a positive integer")
+        identity["evaluator_semantics_version"] = evaluator_semantics_version
     if config_path is not None:
         identity["config_path"] = config_path
     if selections is not None:
@@ -820,23 +832,33 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
         if raw_digest_version is None:
             digest_version = 1
         elif (
-            type(raw_digest_version) is not int
-            or raw_digest_version != SOURCE_MANIFEST_DIGEST_VERSION
+            type(raw_digest_version) is int
+            and raw_digest_version in {2, SOURCE_MANIFEST_DIGEST_VERSION}
         ):
+            digest_version = raw_digest_version
+        else:
             raise ValueError(
                 f"{benchmark_path}: source manifest digest version is malformed"
             )
-        else:
-            digest_version = raw_digest_version
+        raw_semantics_version = None
+        current_semantics_version = None
+        if digest_version == SOURCE_MANIFEST_DIGEST_VERSION:
+            raw_semantics_version = source.get("evaluator_semantics_version")
+            if type(raw_semantics_version) is not int or raw_semantics_version <= 0:
+                raise ValueError(
+                    f"{benchmark_path}: evaluator semantics version is malformed"
+                )
+            try:
+                current_semantics_version = evaluator_semantics_version(root)
+            except ValueError as exc:
+                raise ValueError(f"evaluator semantics configuration is invalid: {exc}") from exc
         skill = benchmark.get("skill")
         kind = benchmark.get("kind")
         skill_path = source.get("skill_path")
         if not isinstance(skill, str) or not isinstance(kind, str) or not isinstance(skill_path, str):
             raise ValueError(f"{benchmark_path}: source identity is malformed")
         eval_kinds = source.get("eval_kinds")
-        if eval_kinds is None:
-            if digest_version == SOURCE_MANIFEST_DIGEST_VERSION:
-                raise ValueError(f"{benchmark_path}: source eval kinds are malformed")
+        if eval_kinds is None and digest_version == 1:
             eval_kinds = [kind]
         if (
             not isinstance(eval_kinds, list)
@@ -868,11 +890,7 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
                 raise ValueError(f"{benchmark_path}: validation source selection scope is malformed")
         elif source.get("selection_scope") is not None:
             raise ValueError(f"{benchmark_path}: source selection scope is malformed")
-        if (
-            digest_version == SOURCE_MANIFEST_DIGEST_VERSION
-            and kind == "validation"
-            and selection_scope == "full"
-        ):
+        if digest_version >= 2 and kind == "validation" and selection_scope == "full":
             if selections is None:
                 raise ValueError(
                     f"{benchmark_path}: full validation source selections are missing"
@@ -947,12 +965,18 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
         current_digest = source_manifest_digest(
             current,
             digest_version=digest_version,
+            evaluator_semantics_version=current_semantics_version,
             eval_kinds=declared_eval_kinds,
             skill_path=skill_path,
             config_path=source_config_path,
             selections=selections,
             selection_scope=selection_scope,
         )
+        if (
+            digest_version == SOURCE_MANIFEST_DIGEST_VERSION
+            and raw_semantics_version != current_semantics_version
+        ):
+            raise ValueError(f"{benchmark_path}: evaluator semantics version mismatch; rerun the owning eval")
         if current != files or current_digest != expected_digest:
             raise ValueError(f"{benchmark_path}: eval report inputs are stale; rerun the owning eval")
         verified.append(benchmark_path)

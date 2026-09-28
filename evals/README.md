@@ -127,6 +127,40 @@ without any log-forwarding surface. This supplies live receiver-side proof of
 the trace/metric-only cloud boundary without duplicating a fake cloud service in
 every language topology.
 
+## Isolated Codex Home for Live Evals
+
+Live evals use a dedicated Codex home at
+`.workspace/codex-evals/codex-home`, rather than your normal personal Codex
+home. This keeps personal skills, plugins, and configuration from affecting
+eval results. The fixture still injects the skill being evaluated through its
+workspace-local `.agents/skills` directory.
+
+Authenticate the dedicated home once before your first local live eval:
+
+```bash
+make eval-codex-login
+```
+
+When prompted, sign in with the same account/email you normally use for Codex.
+The login applies only to this ignored, eval-specific home; it does not change
+or sign out your normal Codex app, IDE, or CLI sessions. You only need to log
+in again if you use a different machine or change `EVAL_CODEX_HOME`. Live eval
+targets check this authentication before starting and tell you to run
+`make eval-codex-login` if it is missing.
+
+For a direct `uv run pytest` live invocation rather than a Make target, export
+the same isolated home first and verify its authentication:
+
+```bash
+export CODEX_EVAL_HOME="$PWD/.workspace/codex-evals/codex-home"
+make eval-codex-auth
+cd evals && uv run pytest go/kvstore/eval/qual --skill ../skills/otel-instrument --codex-eval-kind rubric
+```
+
+This direct example uses the default Codex backend. A config using Cursor or
+Claude does not use `CODEX_EVAL_HOME`, and `make eval-codex-auth` skips the
+Codex login check for those backends.
+
 ## Commands
 
 | Target | Purpose |
@@ -245,14 +279,27 @@ baseline side.
 New reports also record a SHA-256 source manifest for the canonical skill tree,
 the shared skill references exposed to with-skill runs, each collected eval
 definition, its staged non-generated fixture and prompt-selected eval inputs,
-runtime support assets when applicable, eval configuration, the harness package
-code and schemas that ran them, and locked harness dependencies. Filtered runs
+runtime support assets when applicable, and eval configuration. Filtered runs
 exclude uncollected definitions and unused prompt inputs; full validation still
-detects newly added matching definitions. `make eval-report-freshness`
-recomputes those manifests without running a model and fails when a tracked
-report must be regenerated. Reports created before source manifests were
-introduced remain readable and acquire the guard on their next normal report
-run.
+detects newly added matching definitions.
+
+Shared evaluator behavior is tracked separately by the integer in
+`evals/evaluator-semantics.toml`. Bump it only when a harness, dependency, or
+shared eval-environment change can alter a published live-eval result or how it
+is interpreted (for example, a grader or agent-execution behavior change). Do
+not bump it for comments, tests, docs, or report-only formatting. `make eval-report-freshness` recomputes manifests
+without running a model and fails when a tracked input or the evaluator
+semantics version no longer matches; after a semantics bump, rerun the affected
+live evals and render their reports.
+
+This repository opts into that explicit policy with
+`evals/evaluator-semantics.toml`. The reusable harness remains compatible with
+repositories that do not have the file: they use the baseline semantics version
+`1`, and existing v1/v2 manifests remain verifiable. For a repository adopting
+the policy, add the file at `version = 1`, then rerun only reports being
+migrated to v3. To roll back a migration before publishing, remove the file and
+keep verifying the existing v1/v2 manifests; malformed configured files always
+fail verification.
 
 ## Fixture Apps
 

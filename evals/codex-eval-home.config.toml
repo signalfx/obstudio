@@ -1,0 +1,7 @@
+# This file is copied to .workspace/codex-evals/codex-home/config.toml on the
+# first live eval. It is intentionally minimal: fixture workspaces provide the
+# skill under test, rather than inheriting a developer's personal skill catalog.
+
+# Keep any intentionally enabled skills' catalog metadata intact. Codex caps
+# explicit values at 10,000 tokens.
+skills.max_context_tokens = 10000

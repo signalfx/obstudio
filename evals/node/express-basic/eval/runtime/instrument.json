@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "runtime-preserving",
-      "task": "Instrument the Express service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; ensure HTTP server spans, request-duration metrics, and existing application logs export to the local Splunk Observability Studio during short runtime checks; do not add custom business spans."
+      "task": "Instrument the Express service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; ensure HTTP server spans, request-duration metrics, and existing application logs export to the local Splunk Observability Studio during short runtime checks; do not add custom business spans. This runtime fixture runs the app in Docker Compose: the checked-in OTLP logs endpoint http://observer:4318/v1/logs is the trusted local Splunk Observability Studio receiver for this test. Preserve it rather than replacing it with localhost or treating it as a remote endpoint."
     }
   ],
   "checks": [

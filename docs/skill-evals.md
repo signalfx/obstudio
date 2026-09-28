@@ -109,6 +109,28 @@ judge prompt is not tied to service-file based skills.
 
 ## Commands
 
+Live evals use an isolated Codex home at `.workspace/codex-evals/codex-home`.
+It prevents personal skills, plugins, and configuration from changing the
+evaluation environment. Authenticate it once before the first local live run:
+
+```bash
+make eval-codex-login
+```
+
+When Codex prompts you to sign in, use the same account/email that you normally
+use for Codex. This authorizes only the isolated eval home; it does not change
+your usual Codex home or sign you out of it. You need to do this once per
+machine and eval-home location. Live eval targets verify this authentication
+before starting and instruct you to run `make eval-codex-login` if it is
+missing.
+
+The generated home is ignored by git. It is used only by live eval targets such
+as `eval-sanity`, `eval-rubric`, `eval-runtime`, and `eval-all`; normal Codex
+app, IDE, and CLI sessions continue to use your usual Codex home. Override its
+location with `EVAL_CODEX_HOME=/absolute/path` when needed, for example in CI.
+The fixture still supplies the skill under test through its workspace-local
+`.agents/skills` directory.
+
 ```bash
 make test-eval-harness
 make test-pytest-plugin
@@ -129,8 +151,14 @@ make eval-all-ab SKILL=skills/otel-instrument
 with `AB=1`, `WITH=ab`, or the `*-ab` targets. The direct pytest form is:
 
 ```bash
+export CODEX_EVAL_HOME="$PWD/.workspace/codex-evals/codex-home"
+make eval-codex-auth
 cd evals && uv run pytest '<language>/<service>/eval/qual' -k "<prompt-id>" --skill "../skills/<skill-dir>" --codex-eval-kind rubric --ab
 ```
+
+The direct form above uses the default Codex backend. If the selected config
+uses Cursor or Claude, omit `CODEX_EVAL_HOME`; `make eval-codex-auth`
+automatically skips its Codex login check for those backends.
 
 The reusable pytest plugin lives in `pytest-codex-evals/`. It owns the generic
 Codex controls (`--skill`, `--codex-eval-config`, `--model`,

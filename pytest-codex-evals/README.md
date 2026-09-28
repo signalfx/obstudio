@@ -297,14 +297,24 @@ timestamped run directory and copies the latest summary to
 
 Report benchmarks include a SHA-256 manifest of the canonical skill tree, the
 collected eval definitions, their staged fixtures and prompt-selected inputs,
-eval configuration, harness package code and schemas, and locked harness
-dependencies. Filtered runs remain scoped to their collected cases; full
-validation also detects newly added matching definitions. Verify tracked
+and eval configuration. Filtered runs remain scoped to their collected cases;
+full validation also detects newly added matching definitions. Verify tracked
 manifests without invoking an agent or judge with:
 
 ```bash
 uv run codex-eval-harness verify-reports --repo-root .
 ```
+
+Version 3 manifests additionally record an evaluator-semantics version. A
+repository may opt into explicit evaluator freshness by adding
+`evals/evaluator-semantics.toml` with a positive integer `version`; when the
+file is absent, the harness uses the compatible baseline version `1`. Existing
+v1 and v2 manifests remain valid and can be verified or used to render new v3
+reports after an upgrade. To migrate, add the file and rerun only the reports
+you want to publish as v3; remove the file to roll back to the baseline policy.
+Changing an explicit version intentionally makes v3 reports stale, so rerun the
+affected evals before committing their refreshed reports. Invalid TOML or an
+invalid version is always an error.
 
 Each `benchmark.json` is kind-specific. Sanity reports contain only sanity
 check fields, rubric reports contain only rubric judge fields, and runtime

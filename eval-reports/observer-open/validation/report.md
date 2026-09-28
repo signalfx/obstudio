@@ -1,4 +1,4 @@
-# splunk-dashboard Codex Eval Validation Report
+# observer-open Codex Eval Validation Report
 
 This report validates eval JSON, eval directory availability, and skill source availability. It does not run Codex execution.
 
@@ -8,8 +8,8 @@ This report validates eval JSON, eval directory availability, and skill source a
 |---|---|
 | Mode | validation |
 | Eval kind | validation |
-| Skill | splunk-dashboard |
-| Run ID | 20260923T185032115811Z |
+| Skill | observer-open |
+| Run ID | 20260921T233751464735Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -17,5 +17,4 @@ This report validates eval JSON, eval directory availability, and skill source a
 
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
-| dashboards/checkout-red/qual/dashboard | dashboards/checkout-red | 1 | evals/dashboards/checkout-red/eval/qual/dashboard.json | 0 | 8 | 0 |
-| dashboards/checkout-red/sanity/dashboard | dashboards/checkout-red | 1 | evals/dashboards/checkout-red/eval/sanity/dashboard.json | 8 | 0 | 0 |
+| plugins/obstudio/qual/observer-open | plugins/obstudio | 2 | evals/plugins/obstudio/eval/qual/observer-open.json | 0 | 5 | 0 |
