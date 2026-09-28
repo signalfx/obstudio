@@ -15,5 +15,5 @@ long-running Python applications:
 inferred from OpenTelemetry conventions alone. The audit must validate that
 policy against the actual launch files and package manifests.
 
-Run `make known-failures` to prove the Click trace collapse and the inherited
-pre-fork provider ownership without requiring a collector.
+Run `make known-failures` to reproduce the Click trace collapse and providers
+created too early in the Gunicorn master without requiring a collector.

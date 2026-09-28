@@ -11,15 +11,15 @@ it does not require access to Splunk's private Python package registry. Once
 installed, the application and tests run without network access.
 
 "Credential-free" describes how the test runs; it is not part of the app name.
-The fixture proves framework callback ownership without pretending that local
-capture proves delivery to Splunk Observability Cloud. A production deployment
-would replace the local model and in-memory hook with operator-owned provider
-and Splunk configuration.
+The fixture proves the framework integration creates the expected trace without
+pretending that local capture proves delivery to Splunk Observability Cloud. A
+production deployment would replace the local model and in-memory hook with
+the configured model provider and Splunk settings.
 
-The callback is the one canonical span producer for the LangChain chain, model,
-and tool operations. Do not add app-owned OpenTelemetry spans around the same
-logical operations. The app explicitly calls `logger.terminate()` so completed
-work is drained and the SDK-owned lifecycle is testable.
+The callback creates the single expected span for each LangChain chain, model,
+and tool operation. Do not add another OpenTelemetry span around the same
+logical operation. The app explicitly calls `logger.terminate()` so completed
+work is drained and shutdown behavior is testable.
 
 Run it locally:
 

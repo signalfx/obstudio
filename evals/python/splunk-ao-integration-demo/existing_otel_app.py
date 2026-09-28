@@ -8,7 +8,7 @@ from splunk_ao import otel
 provider = TracerProvider()
 processor = otel.add_splunk_ao_span_processor(provider)
 trace.set_tracer_provider(provider)
-tracer = provider.get_tracer("splunk-ao-ownership-demo")
+tracer = provider.get_tracer("splunk-ao-integration-demo")
 
 
 def answer_question(question: str) -> str:

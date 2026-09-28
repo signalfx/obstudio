@@ -4,7 +4,7 @@ Copy this file to `OBSERVABILITY.md` at the repository or service root when
 organization-specific observability rules cannot be inferred from source.
 Keep it in version control with the application. Never put credentials in it.
 
-## Runtime ownership
+## Supported runtimes
 
 - Package/runtime manager and exact environment name:
 - Supported production, worker, CLI, and local launch commands:
@@ -16,7 +16,7 @@ Keep it in version control with the application. Never put credentials in it.
 - Operator-overridable `service.name` defaults by process:
 - Namespace, environment, region, version, and deployment attribute sources:
 - Local collector address by runtime shape:
-- Signal ownership when an agent, SDK, platform, or vendor bridge already exists:
+- Existing agents, SDKs, platforms, or vendor integrations that already emit telemetry:
 
 ## Trace and work boundaries
 
@@ -28,7 +28,7 @@ Keep it in version control with the application. Never put credentials in it.
 
 - Approved bounded attributes and metric dimensions:
 - Prohibited identifiers, content, paths, payloads, and log fields:
-- Content-capture, redaction, retention, and access owner:
+- Content-capture, redaction, retention, and access requirements and contacts:
 
 ## Verification
 

@@ -2,7 +2,7 @@
   "schema_version": 2,
   "kind": "otel-audit",
   "meta": {
-    "audit_id": "python-galileo-agent-owner-choice",
+    "audit_id": "python-galileo-agent-integration-choice",
     "service_name": "galileo-agent-demo",
     "commit": "fixture",
     "language": "python",
@@ -12,7 +12,7 @@
     "genai_ownership_detected": true
   },
   "summary": [
-    "Galileo currently exports the application's OTel GenAI spans; validated target-product evidence now requires the owner to choose between retaining that path and replacing it with splunk-ao for dedicated Agent Stream routing."
+    "Galileo currently exports the application's OTel GenAI spans; validated target-product evidence now requires a choice between retaining that path and replacing it with splunk-ao for dedicated Agent Stream routing."
   ],
   "flow": "audit -> decide -> select -> instrument -> verify",
   "evidence": [
@@ -43,7 +43,7 @@
     },
     {
       "check": "Target-product evidence",
-      "finding": "A later validated compatibility check established two mutually exclusive supported export owners for the requested dedicated Agent Stream",
+      "finding": "A later validated compatibility check established two mutually exclusive supported export paths for the requested dedicated Agent Stream",
       "source": "README.md:3-11"
     }
   ],
@@ -58,7 +58,7 @@
     }
   ],
   "signal_flow": {
-    "component_flow_map": "FastAPI stream [SOURCE-COVERED] -> Galileo processor [GAP: Canonical GenAI export owner] -> support_turn [GAP: Streaming lifecycle telemetry]\nReplacement branch -> splunk-ao [GAP: Splunk AO owner migration]"
+    "component_flow_map": "FastAPI stream [SOURCE-COVERED] -> Galileo processor [GAP: GenAI export path choice] -> support_turn [GAP: Streaming lifecycle telemetry]\nReplacement path -> splunk-ao [GAP: Splunk AO routing change]"
   },
   "current_instrumentation": {
     "spans": [
@@ -96,19 +96,19 @@
   "findings": [
     {
       "id": "OTEL-001",
-      "title": "Choose the canonical GenAI export owner",
+      "title": "Choose the GenAI export path",
       "severity": "high",
       "priority": "required",
       "effort": "decision",
       "status": "proposed",
-      "area": "Canonical GenAI export owner",
-      "gap": "Validated target-product evidence establishes two supported but mutually exclusive runtime export owners; enabling both would duplicate the same logical GenAI operations.",
-      "impact": "Without one selected owner, instrumentation can duplicate traces or silently route them through the wrong project and Agent Stream.",
-      "product_outcome": "The application has one explicit canonical GenAI export owner before any branch-specific change is made.",
-      "required_fix": "The AI platform owner must select whether Galileo remains canonical or is replaced by splunk-ao.",
+      "area": "GenAI export path",
+      "gap": "Validated target-product evidence establishes two supported but mutually exclusive runtime export paths; enabling both would duplicate the same logical GenAI operations.",
+      "impact": "Without one selected path, the application can duplicate traces or silently route them through the wrong project and Agent Stream.",
+      "product_outcome": "The application uses one explicit GenAI export path before either option is applied.",
+      "required_fix": "The AI platform team must select whether Galileo remains in place or is replaced by splunk-ao.",
       "instrument_mode": "manual decision",
       "decision_owner": "AI platform owner",
-      "decision_question": "Which supported runtime path should be the sole owner of GenAI span export and project/Agent Stream routing?",
+      "decision_question": "Which supported runtime path should handle GenAI span export and project/Agent Stream routing?",
       "decision_options": [
         {
           "id": "keep-galileo",
@@ -121,14 +121,14 @@
         {
           "id": "use-splunk-ao",
           "label": "Use splunk-ao",
-          "outcome": "Disable overlapping Galileo ownership and configure splunk-ao as the sole direct Agent Observability path.",
+          "outcome": "Disable the overlapping Galileo export path and configure splunk-ao as the direct Agent Observability path.",
           "unlocks": [
             "AO-001"
           ]
         }
       ],
       "verification_scenarios": [
-        "telemetry.owner.selection"
+        "telemetry.integration.selection"
       ],
       "dependencies": [],
       "evidence": [
@@ -136,21 +136,21 @@
         "README.md:3-11"
       ],
       "acceptance_criteria": [
-        "Exactly one supported GenAI export owner is recorded and only its executable branch can enter selection."
+        "Exactly one supported GenAI export path is recorded and only its executable option can enter selection."
       ],
       "constraints": [
-        "Do not enable Galileo and splunk-ao as overlapping owners for the same logical operations."
+        "Do not enable Galileo and splunk-ao as overlapping export paths for the same logical operations."
       ],
       "expected_telemetry": [
         {
           "type": "configuration",
-          "name": "genai.export.owner",
+          "name": "genai.export.path",
           "attributes": [],
-          "product_view": "Canonical GenAI export ownership"
+          "product_view": "Selected GenAI export path"
         }
       ],
       "follow_up_actions": [
-        "Record one owner choice before selecting branch-specific instrumentation."
+        "Record one export-path choice before selecting option-specific work."
       ]
     },
     {
@@ -226,11 +226,11 @@
       "priority": "required",
       "effort": "medium",
       "status": "proposed",
-      "area": "Splunk AO owner migration",
-      "gap": "The selected replacement branch requires splunk-ao to become the sole GenAI exporter and to persist direct project and Agent Stream routing.",
+      "area": "Splunk AO routing change",
+      "gap": "The selected replacement path requires splunk-ao to become the sole GenAI exporter and to persist direct project and Agent Stream routing.",
       "impact": "Leaving Galileo active would duplicate logical operations, while incomplete routing would leave traces unassigned or in the wrong stream.",
       "product_outcome": "A fresh application trace reaches the intended project and Agent Stream through splunk-ao with required fields and no duplicate nodes.",
-      "required_fix": "Disable the overlapping Galileo processor and startup ownership, add splunk-ao through supported application/deployment configuration, and persist operator-overridable project and Agent Stream routing.",
+      "required_fix": "Disable the overlapping Galileo processor and startup configuration, add splunk-ao through supported application/deployment configuration, and persist operator-overridable project and Agent Stream routing.",
       "instrument_mode": "default",
       "verification_scenarios": [
         "ao.routing.migration"
@@ -277,12 +277,12 @@
     ],
     "scenarios": [
       {
-        "id": "telemetry.owner.selection",
-        "trigger": "Resolve the canonical exporter decision before implementation",
+        "id": "telemetry.integration.selection",
+        "trigger": "Resolve the export-path decision before making changes",
         "entrypoint": "app.py:25",
-        "expected_signals": "one selected GenAI export owner",
+        "expected_signals": "one selected GenAI export path",
         "proof_level": "focused call-site",
-        "acceptance_criteria": "Only the executable branch unlocked by the recorded owner choice enters selection.",
+        "acceptance_criteria": "Only the executable option unlocked by the recorded export-path choice enters selection.",
         "environments": [
           "python.local"
         ]
@@ -312,9 +312,9 @@
     ]
   },
   "anti_patterns": [
-    "Running Galileo and splunk-ao as simultaneous owners for the same logical GenAI operations would duplicate traces."
+    "Running Galileo and splunk-ao as simultaneous export paths for the same logical GenAI operations would duplicate traces."
   ],
   "recommendation": [
-    "Record the exporter-owner decision, select only its unlocked executable finding, and run $otel-instrument."
+    "Record the export-path decision, select only its unlocked executable finding, and run $otel-instrument."
   ]
 }

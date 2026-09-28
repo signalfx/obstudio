@@ -486,7 +486,7 @@ around the owned workflow boundaries and owner-map the bridge/platform gaps.
 ### Existing Vendor SDK Preservation
 
 Treat an existing Galileo SDK integration, or another vendor GenAI bridge, as
-an existing telemetry owner rather than an implicit migration request. First
+working telemetry to preserve rather than an implicit migration request. First
 identify whether the integration is only an OTel processor/exporter, creates
 spans through wrappers or callbacks, or does both. A processor/exporter does not
 by itself prove that workflow, model, tool, retrieval, streaming, memory, or
@@ -502,11 +502,11 @@ vendor SDK merely because the target product can also consume that SDK.
 Never edit an installed dependency, virtual environment, `site-packages`,
 `node_modules`, generated client, or vendored cache to repair an SDK gap. Use a
 documented application hook or configuration surface, add an app-owned OTel
-closure, or record an exact external SDK-owner prerequisite. Changing an
+closure, or record the exact external SDK prerequisite. Changing an
 application-owned fork is a separate, explicitly selected scope.
 
-Offer a telemetry-owner decision only when source and target-product evidence
-proves that two supported implementations are both real and mutually exclusive.
+Offer an integration choice only when source and target-product evidence
+proves that two supported paths are both real and mutually exclusive.
 For example, keeping Galileo as the canonical processor and replacing it with
 `splunk-ao` are separate branches only when the required routing or field
 mapping cannot be satisfied by exporter-independent OTel plus the existing
@@ -514,11 +514,11 @@ Galileo path. Represent that case as one `manual decision` prerequisite whose
 options unlock separate executable findings. Do not offer a false migration
 choice when one branch is unsupported, unverified, or unnecessary.
 
-After the owner is selected, implement only that branch. A keep-existing branch
+After the path is selected, change only that branch. A keep-existing branch
 retains the current processor/bridge and adds only non-overlapping OTel closure.
 A replacement branch disables or removes the overlapping processor, wrappers,
-callbacks, or preload configuration before enabling the new owner. Never leave
-two GenAI owners emitting the same logical operation to the same destination.
+callbacks, or preload configuration before enabling the new path. Never leave
+two integrations emitting the same logical operation to the same destination.
 Verification must exercise the selected runtime path and prove the expected
 project/stream routing and field population when applicable, plus one canonical
 span node per logical operation with no duplicate workflow, model, tool,

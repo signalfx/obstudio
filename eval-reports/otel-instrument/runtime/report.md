@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | runtime |
 | Skill | otel-instrument |
-| Run ID | 20260928T212909279697Z |
+| Run ID | 20260928T233429535772Z |
 | Agent model | gpt-5.5 |
 | Runtime enabled | True |
 | Workers | 1 |
@@ -17,23 +17,23 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/runtime/instrument | go/chi-basic | 1 | 0% (0/1) | 2.8M | 9.0m | - | - | - |
-| with_skill | go/chi-partial/runtime/instrument | go/chi-partial | 1 | 0% (0/1) | 2.2M | 10.9m | - | - | - |
-| with_skill | go/kvstore/runtime/instrument | go/kvstore | 1 | 0% (0/2) | 1.4M | 8.5m | - | - | - |
-| with_skill | node/express-basic/runtime/instrument | node/express-basic | 1 | 0% (0/2) | 1.5M | 9.5m | - | - | - |
-| with_skill | python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | 0% (0/1) | 3.1M | 11.8m | - | - | - |
-| with_skill | python/flask-basic/runtime/instrument | python/flask-basic | 1 | 0% (0/2) | 2.9M | 12.6m | - | - | - |
+| with_skill | go/chi-basic/runtime/instrument | go/chi-basic | 1 | 0% (0/1) | 1.3M | 8.2m | - | - | - |
+| with_skill | go/chi-partial/runtime/instrument | go/chi-partial | 1 | 0% (0/1) | 4.3M | 10.7m | - | - | - |
+| with_skill | go/kvstore/runtime/instrument | go/kvstore | 1 | 0% (0/2) | 1.8M | 8.8m | - | - | - |
+| with_skill | node/express-basic/runtime/instrument | node/express-basic | 1 | 0% (0/2) | 2.0M | 8.7m | - | - | - |
+| with_skill | python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | 0% (0/1) | 2.3M | 9.0m | - | - | - |
+| with_skill | python/flask-basic/runtime/instrument | python/flask-basic | 1 | 0% (0/2) | 2.3M | 8.4m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/runtime/instrument | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2765500 | 2614272 | 0 | 27771 | 14201 | unknown | 2793271 |
-| with_skill | go/chi-partial/runtime/instrument | go/chi-partial | with_skill | codex | cumulative | measured | 1/1 recognized | 2163278 | 2014080 | 0 | 25403 | 9598 | unknown | 2188681 |
-| with_skill | go/kvstore/runtime/instrument | go/kvstore | with_skill | codex | cumulative | measured | 1/1 recognized | 1400731 | 1292032 | 0 | 26533 | 12608 | unknown | 1427264 |
-| with_skill | node/express-basic/runtime/instrument | node/express-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1442072 | 1265024 | 0 | 25761 | 13405 | unknown | 1467833 |
-| with_skill | python/fastapi-celery/runtime/instrument | python/fastapi-celery | with_skill | codex | cumulative | measured | 1/1 recognized | 3053915 | 2874368 | 0 | 37187 | 19302 | unknown | 3091102 |
-| with_skill | python/flask-basic/runtime/instrument | python/flask-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2914009 | 2789632 | 0 | 32689 | 16196 | unknown | 2946698 |
+| with_skill | go/chi-basic/runtime/instrument | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1256061 | 1143808 | 0 | 25556 | 13379 | unknown | 1281617 |
+| with_skill | go/chi-partial/runtime/instrument | go/chi-partial | with_skill | codex | cumulative | measured | 1/1 recognized | 4248707 | 3956224 | 0 | 32130 | 13784 | unknown | 4280837 |
+| with_skill | go/kvstore/runtime/instrument | go/kvstore | with_skill | codex | cumulative | measured | 1/1 recognized | 1758624 | 1611136 | 0 | 27834 | 11613 | unknown | 1786458 |
+| with_skill | node/express-basic/runtime/instrument | node/express-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1985997 | 1874944 | 0 | 25018 | 13128 | unknown | 2011015 |
+| with_skill | python/fastapi-celery/runtime/instrument | python/fastapi-celery | with_skill | codex | cumulative | measured | 1/1 recognized | 2282914 | 2162304 | 0 | 27660 | 11312 | unknown | 2310574 |
+| with_skill | python/flask-basic/runtime/instrument | python/flask-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2313647 | 2198272 | 0 | 24906 | 11027 | unknown | 2338553 |
 
 ## Runtime Failures
 

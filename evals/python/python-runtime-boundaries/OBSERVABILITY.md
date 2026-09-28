@@ -1,6 +1,6 @@
 # Organization Observability Profile
 
-## Runtime ownership
+## Supported runtimes
 
 - Production uses the Conda environment `customer-python` from
   `environment.yml`.
@@ -16,8 +16,9 @@
 - Each scheduled Click task is an independent transaction and must start a new
   trace. An upstream scheduling context may be represented by a span link, but
   it must not parent delayed tasks under one process-lifetime trace.
-- Each web worker owns and shuts down its own trace, metric, and log providers.
-  The Gunicorn master must not create provider background threads before fork.
+- Each web worker initializes and shuts down its own trace, metric, and log
+  providers. The Gunicorn master must not create provider background threads
+  before fork.
 
 ## Data handling
 

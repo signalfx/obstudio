@@ -18,13 +18,13 @@ The profile may define:
 
 - approved package/runtime managers, environment names, package channels, and
   exact production, worker, CLI, test, and local launch commands;
-- process models, preload behavior, worker classes, lifecycle hooks, and which
-  process owns each provider, exporter, instrumentation, and shutdown;
+- process models, preload behavior, worker classes, lifecycle hooks, and where
+  telemetry is initialized, exported, and shut down;
 - operator-overridable service names and resource-attribute sources;
 - transaction, trace, job, batch, stream, and delayed-work boundaries,
   including where a span link is preferred to parentage;
-- approved bounded attributes and dimensions, prohibited data, content
-  capture, redaction, retention, and access ownership; and
+- approved bounded attributes and dimensions, prohibited data, and content
+  capture, redaction, retention, and access requirements; and
 - safe project-runtime and full-runtime verification commands.
 
 Never place credentials, access tokens, private keys, or secret values in the
@@ -47,7 +47,7 @@ Use this precedence:
 4. generic skill defaults.
 
 Observed source and runtime facts do not silently lose to stale profile prose.
-When policy and implementation conflict, preserve the explicit user scope,
+When the profile and observed source conflict, preserve the explicit user scope,
 report the conflict with both evidence paths, and create or retain the concrete
 OTel closure gap. No profile may override credential safety, local-only log
 routing, privacy/cardinality limits, semantic conventions, or required proof.
@@ -64,7 +64,7 @@ into findings.
 
 Use validated profile values for service defaults, launch integration, and
 privacy controls. Preserve every supported launch surface unless the user
-narrows scope. Test the effective values and process ownership; do not claim a
-profile requirement is working merely because the file says so. If the
-configured runtime is unavailable, keep the implementation source-owned and
-mark its runtime proof `Not proven` with the exact prerequisite.
+narrows scope. Test the effective values and process-specific telemetry setup;
+do not claim a profile requirement is working merely because the file says so.
+If the configured runtime is unavailable, keep the change tied to the verified
+source and mark its runtime proof `Not proven` with the exact prerequisite.

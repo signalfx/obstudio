@@ -480,16 +480,15 @@ For Python with Splunk AO, make that inventory explicit. Search for
 `span_type="retriever"`, `SplunkAOLogger`, `SplunkAOCallback`, supported model
 or framework wrappers, `add_splunk_ao_span_processor`,
 `configure_distributed_tracing`, and `instrument_distributed_tracing`. Classify
-each path using the shared Splunk AO ownership contract as an SDK span owner,
-export-only, transport-only, provider-plus-export, or control-plane-only
-surface. Record the actual caller-owned or logger-owned provider/export
-lifecycle and content-capture mode. Never infer workflow, model, tool, or
+each path using the shared Splunk AO compatibility guidance as span creation,
+export-only, transport-only, combined setup, or resource management. Record
+the actual provider/export lifecycle and content-capture mode. Never infer workflow, model, tool, or
 retrieval coverage from an export-only processor, and never infer generic HTTP,
 metric, or log coverage merely from `@log`. When decorators, handlers, or
 wrappers overlap app-owned OTel spans, mark coverage partial until one canonical
 producer, safe content behavior, lifecycle, parentage, and duplicate absence are
 proven.
-Audit teardown for every detected Splunk AO span owner as an independent
+Audit teardown for every detected Splunk AO span source as an independent
 outcome. When an SDK-owned logger or sink lacks source proof of
 `logger.terminate()` or another supported process teardown, create a separate
 selectable lifecycle finding; do not hide it inside privacy, span-coverage, or

@@ -152,7 +152,7 @@ def test_genai_skills_require_single_canonical_span_source():
     assert not missing
 
 
-def test_splunk_ao_skills_classify_span_ownership_and_export_only_paths():
+def test_splunk_ao_skills_explain_span_creation_and_export_paths():
     audit = " ".join(_read(SKILLS_DIR / "otel-audit" / "SKILL.md").split())
     instrument = " ".join(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split())
     reference = " ".join(_read(SPLUNK_AO_REF).split())
@@ -176,16 +176,16 @@ def test_splunk_ao_skills_classify_span_ownership_and_export_only_paths():
     ]
     assert not [term for term in audit_outcome_terms if term not in audit]
 
-    ownership_terms = [
-        "SDK span owner",
+    compatibility_terms = [
+        "span creation",
         "export-only",
         "transport-only",
-        "provider-plus-export",
-        "control-plane-only",
-        "one canonical span producer per logical operation",
+        "combined setup",
+        "resource management",
+        "one span source per logical operation",
         "captures function arguments and return values",
         "raw content capture is approved",
-        "caller-owned provider",
+        "existing provider",
         "provider.shutdown()",
         "logger.terminate()",
         "no live credentials",
@@ -194,25 +194,25 @@ def test_splunk_ao_skills_classify_span_ownership_and_export_only_paths():
         "does not create missing workflow, model, tool, or retrieval operations",
         "Do not weaken that fact to “may capture”",
     ]
-    assert not [term for term in ownership_terms if term not in reference]
+    assert not [term for term in compatibility_terms if term not in reference]
 
     instrument_terms = [
-        "Splunk AO case-1 branch",
+        "Splunk AO Python compatibility",
         "existing OpenTelemetry provider",
         "no existing OpenTelemetry provider",
         "preserve valid `@log`",
         "do not add an app-owned OTel span around the same logical operation",
         "add_splunk_ao_span_processor",
         "metadata-only",
-        "provider identity",
+        "reuse of the existing provider",
         "processor count",
         "duplicate-span",
     ]
     assert not [term for term in instrument_terms if term not in instrument]
 
 
-def test_splunk_ao_ownership_eval_is_local_and_outcome_based():
-    fixture = REPO_ROOT / "evals" / "python" / "splunk-ao-ownership-demo"
+def test_splunk_ao_integration_eval_is_local_and_outcome_based():
+    fixture = REPO_ROOT / "evals" / "python" / "splunk-ao-integration-demo"
     files = [
         fixture / "decorator_app.py",
         fixture / "existing_otel_app.py",
@@ -221,7 +221,7 @@ def test_splunk_ao_ownership_eval_is_local_and_outcome_based():
         fixture / "eval" / "qual" / "instrument.json",
     ]
     for file in files:
-        assert file.exists(), f"missing Splunk AO ownership fixture file: {file}"
+        assert file.exists(), f"missing Splunk AO integration fixture file: {file}"
 
     audit_eval = json.loads(_read(fixture / "eval" / "qual" / "audit.json"))
     instrument_eval = json.loads(
@@ -242,8 +242,8 @@ def test_splunk_ao_ownership_eval_is_local_and_outcome_based():
         "add_splunk_ao_span_processor",
         "SDK-created spans",
         "export-only",
-        "one canonical span producer",
-        "provider identity",
+        "one span for every logical operation",
+        "provider reuse",
         "raw question",
         "raw retrieved documents",
         "without live Splunk or model credentials",
@@ -272,7 +272,7 @@ def test_splunk_ao_langchain_demo_is_local_runnable_and_outcome_based():
         "logger.terminate()",
         "no OpenAI API key",
         "no Splunk access token",
-        "one canonical span producer",
+        "single SplunkAOCallback span",
         "without network access",
     ):
         assert term in combined

@@ -12,11 +12,11 @@
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
-    "Classifies SplunkAOCallback as the existing SDK span owner for the LangChain chain, model, and tool operations; it does not classify the callback as export-only or propose duplicate app-owned OTel spans around those operations.",
+    "Explains that SplunkAOCallback already creates spans for the LangChain chain, model, and tool operations; it does not describe the callback as export-only or propose duplicate app-owned OTel spans around those operations.",
     "Recognizes DemoLocalLLM/FakeListLLM and the synthetic tool as local deterministic application behavior, and recognizes ingestion_hook as in-memory interception rather than proof of live Splunk delivery.",
     "Reports the callback's input/output content capture behavior and verifies that this fixture uses approved synthetic content; it does not generalize that synthetic demo safety to production prompts, responses, tool inputs, or tool outputs.",
-    "Checks the SDK-owned lifecycle independently and records the explicit logger.terminate() path as source-covered rather than inventing a missing provider.shutdown() requirement.",
-    "Requires one canonical span producer and one chain/model/tool node per logical operation, correct parentage, and no overlapping framework callback, decorator, or app-owned OTel instrumentation.",
+    "Checks the Splunk AO lifecycle independently and records the explicit logger.terminate() path as source-covered rather than inventing a missing provider.shutdown() requirement.",
+    "Requires one chain/model/tool node per logical operation, correct parentage, and no overlapping framework callback, decorator, or app-owned OTel instrumentation.",
     "Completes the audit without network access, an OpenAI API key, or a Splunk access token, while keeping live Agent Stream delivery Not proven."
   ]
 }

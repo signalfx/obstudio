@@ -1,0 +1,22 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "integration-paths",
+      "task": "Improve the two independent Python entrypoints in ./service without contacting Splunk or a model provider. Preserve valid Splunk AO @log operations in decorator_app.py, close its content-privacy and lifecycle gaps using supported application-level APIs, and do not wrap the same operations in duplicate app-owned OTel spans. Preserve the existing OpenTelemetry provider in existing_otel_app.py and keep Splunk AO export attached to that exact provider. Add focused, credential-free tests that prove provider reuse, processor count, lifecycle, safe content behavior, and absence of duplicate workflow, tool, and retrieval operations. Produce the canonical instrumentation JSON, the self-contained instrumentation HTML, and the verification artifacts; record anything that cannot be proven locally as Not proven."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect changed source, focused tests, and generated instrumentation and verification artifacts under ./service.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Keeps the existing SDK-created spans in decorator_app.py and does not add app-owned OTel spans around the same answer_question, search_documents, or get_weather operations.",
+    "Uses only a supported, source-verified path whose decorator arguments and results are already safe metadata, or a control that prevents raw capture at the source; it does not treat companion redacted_input or redacted_output fields as removal of the original raw values, and the raw question, account ID, return value, and raw retrieved documents are absent unless explicit capture approval exists.",
+    "Preserves the exact existing provider in existing_otel_app.py, attaches Splunk AO through the export-only add_splunk_ao_span_processor path exactly once, and does not create or install a second global provider.",
+    "Adds focused tests using fakes, monkeypatching, or in-memory capture without live Splunk or model credentials; proof covers provider reuse, processor count, provider shutdown, logger termination, and one span for every logical operation.",
+    "Verifies no duplicate workflow, model, tool, or retrieval spans across the two independent runtime paths and keeps unsupported live-delivery claims Not proven rather than Working.",
+    "Keeps all changes in the application's source and tests; it does not patch splunk-ao, site-packages, or generated SDK code, and the canonical instrumentation JSON plus self-contained HTML describe Splunk Agent Observability outcomes rather than internal ownership labels."
+  ]
+}

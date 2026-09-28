@@ -135,7 +135,7 @@ Markdown reports.
   scenario, and environment ID. Keep each `proof_level`; do not downgrade a
   `full runtime` scenario to focused call-site proof.
 - Keep selected Splunk Agent Observability configuration work in the same
-  dependency-closed implementation queue as OTel work. Do not infer scope from
+  dependency-closed selected-work queue as OTel work. Do not infer scope from
   a separate AO section or create a second selection ledger. The implemented
   application or deployment must work without Obstudio in the runtime path.
 - Detect incident-readiness surfaces. Search source and configuration for
@@ -402,7 +402,7 @@ report background:
 - For selected `finding_group: splunk-agent-observability` rows, implement the
   source-backed product or routing configuration described by the finding and
   its executable dependencies. Use `configuration` telemetry changes for
-  control-plane work rather than inventing spans or metrics. Leave durable
+  Agent Observability resource settings rather than inventing spans or metrics. Leave durable
   app/deployment configuration and secret references so runtime export does not
   depend on Obstudio. Keep unselected AO findings untouched.
 
@@ -693,7 +693,7 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 
 #### Implementation Rules
 
-- Use only official OpenTelemetry packages (`go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib`, `@opentelemetry/*`, `opentelemetry-*`) for app-owned OTel instrumentation. Do not use community or third-party OTel wrappers. The exceptions are library-maintained integrations where no official package exists (for example `go-redis/redisotel` and `XSAM/otelsql`) and a selected Splunk Agent Observability finding or explicit user choice that requires the supported `splunk-ao` SDK. Treat `splunk-ao` as a distinct span-owner/export integration, not as an official OTel instrumentation package.
+- Use only official OpenTelemetry packages (`go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib`, `@opentelemetry/*`, `opentelemetry-*`) for app-owned OTel instrumentation. Do not use community or third-party OTel wrappers. The exceptions are library-maintained integrations where no official package exists (for example `go-redis/redisotel` and `XSAM/otelsql`) and a selected Splunk Agent Observability finding or explicit user choice that requires the supported `splunk-ao` SDK. Treat `splunk-ao` as a supported span-creation and export integration, not as an official OTel instrumentation package.
 - Do not initialize the SDK more than once per process.
 - Find any existing OTel setup before adding new code. Extend it. Treat lazy
   provider helpers and providers initialized on first instrument creation as
@@ -866,20 +866,20 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   model/tool names, and workflow/agent parent shape such as
   `invoke_workflow -> invoke_agent -> chat/execute_tool`. Required proof should
   name stable model/tool names explicitly.
-- For Python `splunk_ao`, apply the **Splunk AO case-1 branch** from the shared
-  Agent Observability reference before changing providers or GenAI spans.
-  Classify `@log`, `SplunkAOLogger`, and supported wrappers/handlers as span
-  producers; classify `add_splunk_ao_span_processor` as export-only;
-  distinguish `configure_distributed_tracing` provider-plus-export behavior
-  from `instrument_distributed_tracing` transport-only behavior.
+- For Python `splunk_ao`, apply the **Splunk AO Python compatibility** guidance
+  from the shared Agent Observability reference before changing providers or
+  GenAI spans. Identify `@log`, `SplunkAOLogger`, and supported wrappers or
+  handlers as span creation; identify `add_splunk_ao_span_processor` as
+  export-only; distinguish `configure_distributed_tracing` combined setup from
+  `instrument_distributed_tracing` transport-only behavior.
   - With **no existing OpenTelemetry provider**, preserve valid `@log` or
-    framework-created operations as the canonical span source. Add the minimum
+    framework-created operations as the existing span source. Add the minimum
     supported integration only for selected uncovered operations, and do not
     add an app-owned OTel span around the same logical operation. Treat HTTP,
     metrics, logs, streaming, sessions, and uncovered GenAI operations as
     independent closure work.
-  - With an **existing OpenTelemetry provider**, preserve the caller-owned
-    provider and pass that exact instance once to
+  - With an **existing OpenTelemetry provider**, preserve that provider and
+    pass the exact instance once to
     `add_splunk_ao_span_processor` when Splunk AO export is selected. Do not
     create or install a second provider. Pass the same provider to supported
     transport instrumentation only when selected and not already owned.
@@ -893,12 +893,12 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     prompts, completions, retrieved documents, tool arguments/results,
     identifiers, or secrets merely to gain an AO node.
   - Add credential-free tests using an in-memory exporter, fake sink, or
-    monkeypatched SDK boundary. Assert provider identity, processor count,
+    monkeypatched SDK boundary. Assert reuse of the existing provider, processor count,
     shutdown/termination, expected parentage and one-node counts, content
     absence with a unique sentinel, and duplicate-span prevention. When the
-    SDK-owned sink and caller-owned provider coexist, inspect both outputs.
+    Splunk AO sink and application provider coexist, inspect both outputs.
     Live delivery is separate proof;
-    do not require live credentials for the ownership tests.
+    do not require live credentials for the compatibility tests.
 - Preserve existing application stable business workflow identity when setting
   `gen_ai.workflow.name` and workflow span names. Prefer constants, function or
   handler names, workflow registrations, telemetry event names, docs, or prior

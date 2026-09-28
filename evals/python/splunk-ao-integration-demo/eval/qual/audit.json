@@ -1,0 +1,22 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "integration-paths",
+      "task": "Audit the two independent Python entrypoints in ./service for OpenTelemetry and Splunk Agent Observability. decorator_app.py uses Splunk AO to create spans without an application OpenTelemetry provider. existing_otel_app.py uses an existing OpenTelemetry provider with Splunk AO attached for export. Do not modify source. Produce and validate the normal audit artifacts, and explain what is already covered, what is missing, and the safe next step for each entrypoint. Do not use live Splunk or model credentials."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service/decorator_app.py, ./service/existing_otel_app.py, ./service/pyproject.toml, and generated audit artifacts.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Explains in product-facing terms that decorator_app.py @log, span_type=tool, and span_type=retriever already create Splunk Agent Observability spans, while unrelated HTTP, metric, and log coverage still requires separate evidence.",
+    "Explains that existing_otel_app.py add_splunk_ao_span_processor exports spans from the application's existing OpenTelemetry provider but does not create missing workflow, model, tool, or retrieval spans.",
+    "Preserves one span for each logical operation and reports duplicate risk if app-owned OTel spans are added around existing @log operations, without presenting an internal ownership taxonomy as the user-facing feature.",
+    "Reports that @log captures function arguments and return values, identifies the raw account ID, raw question, and raw retrieved documents as unapproved content exposure in this fixture, and requires a verified metadata-only or redacted path before considering privacy closure complete.",
+    "Checks lifecycle independently: the existing OTel entrypoint must shut down its provider, while the Splunk AO logger path must have a proven logger termination or supported process teardown path.",
+    "Keeps both entrypoint analyses source-backed and completes the audit without live Splunk or model credentials."
+  ]
+}
