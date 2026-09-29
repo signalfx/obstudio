@@ -7,12 +7,12 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-audit |
-| Run ID | 20260928T200954020233Z |
+| Run ID | 20260928T200954020233Z-post-rebase |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
 | Workers | 1 |
-| Config | evals/codex-evals.toml |
+| Config | evals/codex-evals.validation.toml |
 
 ## Rubric Summary
 

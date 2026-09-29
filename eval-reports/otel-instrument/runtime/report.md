@@ -11,7 +11,7 @@
 | Agent model | gpt-5.5 |
 | Runtime enabled | True |
 | Workers | 1 |
-| Config | evals/codex-evals.toml |
+| Config | evals/codex-evals.validation.toml |
 
 ## Runtime Summary
 

@@ -13,7 +13,7 @@
     "rubric_enabled": false,
     "runtime_enabled": true,
     "workers": "1",
-    "config_path": "evals/codex-evals.toml"
+    "config_path": "evals/codex-evals.validation.toml"
   },
   "summary": {
     "eval_count": 6,
@@ -443,14 +443,14 @@
   "failures": [],
   "source": {
     "digest_version": 3,
-    "digest": "49bd5fe7211ab3c39848695b2d108146bf22092ee6576ed878cbffdb9e19573d",
+    "digest": "19673cc477aed885260cd68cfac85aaca06f5aae748ed0dcc3e47821e7f603ab",
     "eval_kinds": [
       "runtime"
     ],
     "evaluator_semantics_version": 1,
     "files": {
       "docs/examples.md": "894a8483b2099588d32bd389164df1d4aa528486b35205bd08120a122243e819",
-      "evals/codex-evals.toml": "c0b019453c76a5b6d8692346f984ea91af04ca91331aa333b56d7a717b7b07c7",
+      "evals/codex-evals.validation.toml": "ce69f042257fdb4a4c8d196f2f0f515fdc371316c02ab7d86aecc36267f7e940",
       "evals/go/chi-basic/eval/runtime/App.Dockerfile": "a31ffaaedcf0ebdb3075b2ca807ebdd0030774fe36740f201bd11516447b7e47",
       "evals/go/chi-basic/eval/runtime/docker-compose.yml": "aaef6fdeac28172cda7872d91bfb6381020f5a108f3b40f2d9d7926ed922152e",
       "evals/go/chi-basic/eval/runtime/instrument.json": "bc445f7699d4f6901be09759b95e4b6b90ecec3a1fef65385c0a8dd124e440d5",
@@ -752,6 +752,41 @@
     "skill_path": "skills/otel-instrument",
     "selections": [
       {
+        "definition_path": "evals/go/chi-basic/eval/runtime/instrument.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "runtime-preserving",
+        "eval_kind": "runtime",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-partial/eval/runtime/instrument.json",
+        "fixture_dir": "evals/go/chi-partial",
+        "prompt_id": "runtime-preserving",
+        "eval_kind": "runtime",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/kvstore/eval/runtime/instrument.json",
+        "fixture_dir": "evals/go/kvstore",
+        "prompt_id": "runtime-preserving",
+        "eval_kind": "runtime",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/runtime/instrument.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "runtime-preserving",
+        "eval_kind": "runtime",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/fastapi-celery/eval/runtime/instrument.json",
+        "fixture_dir": "evals/python/fastapi-celery",
+        "prompt_id": "runtime-preserving",
+        "eval_kind": "runtime",
+        "eval_inputs": []
+      },
+      {
         "definition_path": "evals/python/flask-basic/eval/runtime/instrument.json",
         "fixture_dir": "evals/python/flask-basic",
         "prompt_id": "runtime-preserving",
@@ -759,6 +794,6 @@
         "eval_inputs": []
       }
     ],
-    "config_path": "evals/codex-evals.toml"
+    "config_path": "evals/codex-evals.validation.toml"
   }
 }

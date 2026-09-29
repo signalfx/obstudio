@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20260928T211429017000Z",
+    "run_id": "20260929T044144845821Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -18,7 +18,7 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "filtered"
+    "validation_scope": "full"
   },
   "evals": [
     {
@@ -37,21 +37,275 @@
       "sanity_check_count": 0,
       "rubric_check_count": 11,
       "runtime_check_count": 0
+    },
+    {
+      "id": "go/chi-partial/qual/audit",
+      "case": "go/chi-partial",
+      "language": "go",
+      "service": "chi-partial",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/go/chi-partial/eval/qual/audit.json",
+      "eval_dir": "evals/go/chi-partial",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/kvstore/qual/audit",
+      "case": "go/kvstore",
+      "language": "go",
+      "service": "kvstore",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/go/kvstore/eval/qual/audit.json",
+      "eval_dir": "evals/go/kvstore",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-batch-consumer/qual/audit",
+      "case": "java/kafka-batch-consumer",
+      "language": "java",
+      "service": "kafka-batch-consumer",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/kafka-batch-consumer/eval/qual/audit.json",
+      "eval_dir": "evals/java/kafka-batch-consumer",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-listener-container/qual/audit",
+      "case": "java/kafka-listener-container",
+      "language": "java",
+      "service": "kafka-listener-container",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/kafka-listener-container/eval/qual/audit.json",
+      "eval_dir": "evals/java/kafka-listener-container",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-producer-consumer/qual/audit",
+      "case": "java/kafka-producer-consumer",
+      "language": "java",
+      "service": "kafka-producer-consumer",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/kafka-producer-consumer/eval/qual/audit.json",
+      "eval_dir": "evals/java/kafka-producer-consumer",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-streams/qual/audit",
+      "case": "java/kafka-streams",
+      "language": "java",
+      "service": "kafka-streams",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/kafka-streams/eval/qual/audit.json",
+      "eval_dir": "evals/java/kafka-streams",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/springboot-basic/qual/audit",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/springboot-basic/eval/qual/audit.json",
+      "eval_dir": "evals/java/springboot-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "node/express-basic/qual/audit",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/node/express-basic/eval/qual/audit.json",
+      "eval_dir": "evals/node/express-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "genai-readiness"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/assistant-v3-framework-bridge-demo/qual/audit",
+      "case": "python/assistant-v3-framework-bridge-demo",
+      "language": "python",
+      "service": "assistant-v3-framework-bridge-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "framework-bridge"
+      ],
+      "definition_path": "evals/python/assistant-v3-framework-bridge-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/assistant-v3-framework-bridge-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/checkout-red-demo/qual/audit",
+      "case": "python/checkout-red-demo",
+      "language": "python",
+      "service": "checkout-red-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "direct"
+      ],
+      "definition_path": "evals/python/checkout-red-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/checkout-red-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/fastapi-celery/qual/audit",
+      "case": "python/fastapi-celery",
+      "language": "python",
+      "service": "fastapi-celery",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/python/fastapi-celery/eval/qual/audit.json",
+      "eval_dir": "evals/python/fastapi-celery",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/flask-basic/qual/audit",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/python/flask-basic/eval/qual/audit.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/mcp-ai-tool-demo/qual/audit",
+      "case": "python/mcp-ai-tool-demo",
+      "language": "python",
+      "service": "mcp-ai-tool-demo",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "mcp-readiness"
+      ],
+      "definition_path": "evals/python/mcp-ai-tool-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/mcp-ai-tool-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "sanity/skill-smoke/sanity/audit",
+      "case": "sanity/skill-smoke",
+      "language": "sanity",
+      "service": "skill-smoke",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/sanity/skill-smoke/eval/sanity/audit.json",
+      "eval_dir": "evals/sanity/skill-smoke",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 0,
+      "runtime_check_count": 0
     }
   ],
   "summary": {
-    "eval_count": 1,
-    "case_count": 2,
-    "prompt_count": 2,
+    "eval_count": 16,
+    "case_count": 30,
+    "prompt_count": 30,
     "sanity_check_count": 0,
-    "rubric_check_count": 22,
+    "rubric_check_count": 177,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 3,
-    "digest": "5662ac0d7deafa02b36b61eaff83a420fe0ebcfbec2aacd9cf74944ad64a4062",
+    "digest": "8ed771680d1a6f854ea10568dc2404d3bd43ce26e34a1569165047683ba68b08",
     "eval_kinds": [
-      "rubric"
+      "rubric",
+      "sanity"
     ],
     "evaluator_semantics_version": 1,
     "files": {
@@ -196,9 +450,205 @@
         "prompt_id": "readiness-review",
         "eval_kind": "rubric",
         "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-partial/eval/qual/audit.json",
+        "fixture_dir": "evals/go/chi-partial",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-partial/eval/qual/audit.json",
+        "fixture_dir": "evals/go/chi-partial",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/kvstore/eval/qual/audit.json",
+        "fixture_dir": "evals/go/kvstore",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/kvstore/eval/qual/audit.json",
+        "fixture_dir": "evals/go/kvstore",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-batch-consumer/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-batch-consumer",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-batch-consumer/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-batch-consumer",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-listener-container/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-listener-container",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-listener-container/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-listener-container",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-producer-consumer/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-producer-consumer",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-producer-consumer/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-producer-consumer",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-streams/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-streams",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-streams/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-streams",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "genai-readiness",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/assistant-v3-framework-bridge-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/assistant-v3-framework-bridge-demo",
+        "prompt_id": "framework-bridge",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/checkout-red-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/checkout-red-demo",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/fastapi-celery/eval/qual/audit.json",
+        "fixture_dir": "evals/python/fastapi-celery",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/fastapi-celery/eval/qual/audit.json",
+        "fixture_dir": "evals/python/fastapi-celery",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/mcp-ai-tool-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/mcp-ai-tool-demo",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/mcp-ai-tool-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/mcp-ai-tool-demo",
+        "prompt_id": "mcp-readiness",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/sanity/skill-smoke/eval/sanity/audit.json",
+        "fixture_dir": "evals/sanity/skill-smoke",
+        "prompt_id": "direct",
+        "eval_kind": "sanity",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/sanity/skill-smoke/eval/sanity/audit.json",
+        "fixture_dir": "evals/sanity/skill-smoke",
+        "prompt_id": "readiness-review",
+        "eval_kind": "sanity",
+        "eval_inputs": []
       }
     ],
     "config_path": "evals/codex-evals.validation.toml",
-    "selection_scope": "filtered"
+    "selection_scope": "full"
   }
 }
