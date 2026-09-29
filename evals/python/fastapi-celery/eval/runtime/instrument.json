@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "runtime-preserving",
-      "task": "Instrument the FastAPI and Celery service in ./service with OpenTelemetry while preserving the existing Docker Compose runtime. Add auto-instrumentation only."
+      "task": "Instrument the FastAPI and Celery service in ./service with OpenTelemetry while preserving the existing Docker Compose runtime. Add auto-instrumentation only. Use FastAPI's supported lifespan context manager for application startup/shutdown when a lifecycle hook is needed; do not call FastAPI.add_event_handler or depend on deprecated/internal event-registration APIs. Register OTel shutdown exactly once and preserve the existing API and worker entrypoints."
     }
   ],
   "checks": [

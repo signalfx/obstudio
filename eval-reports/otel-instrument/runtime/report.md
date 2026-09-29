@@ -7,29 +7,37 @@
 | Mode | with_skill |
 | Eval kind | runtime |
 | Skill | otel-instrument |
-| Run ID | 20260923T211924075614Z |
+| Run ID | 20260929T012415104637Z-node-retry-merged |
 | Agent model | gpt-5.5 |
 | Runtime enabled | True |
 | Workers | 1 |
-| Config | evals/codex-evals.toml |
+| Config | evals/codex-evals.validation.toml |
 
 ## Runtime Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/flask-basic/runtime/instrument | python/flask-basic | 1 | 50% (1/2) | 1.9M | 17.4m | - | - | - |
+| with_skill | go/chi-basic/runtime/instrument | go/chi-basic | 1 | 100% (1/1) | 9.7M | 19.5m | - | - | - |
+| with_skill | go/chi-partial/runtime/instrument | go/chi-partial | 1 | 100% (1/1) | 3.0M | 11.5m | - | - | - |
+| with_skill | go/kvstore/runtime/instrument | go/kvstore | 1 | 100% (2/2) | 8.2M | 18.4m | - | - | - |
+| with_skill | python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | 100% (1/1) | 2.7M | 9.9m | - | - | - |
+| with_skill | python/flask-basic/runtime/instrument | python/flask-basic | 1 | 100% (2/2) | 2.3M | 9.4m | - | - | - |
+| with_skill | node/express-basic/runtime/instrument | node/express-basic | 1 | 100% (2/2) | 2.4M | 10.3m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/flask-basic/runtime/instrument | python/flask-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1891068 | 1781760 | 0 | 27040 | 14359 | unknown | 1918108 |
+| with_skill | go/chi-basic/runtime/instrument | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 9635653 | 9393920 | 0 | 50791 | 19673 | unknown | 9686444 |
+| with_skill | go/chi-partial/runtime/instrument | go/chi-partial | with_skill | codex | cumulative | measured | 1/1 recognized | 2982246 | 2830592 | 0 | 30763 | 11615 | unknown | 3013009 |
+| with_skill | go/kvstore/runtime/instrument | go/kvstore | with_skill | codex | cumulative | measured | 1/1 recognized | 8179614 | 7958272 | 0 | 48340 | 17017 | unknown | 8227954 |
+| with_skill | python/fastapi-celery/runtime/instrument | python/fastapi-celery | with_skill | codex | cumulative | measured | 1/1 recognized | 2679956 | 2541696 | 0 | 27817 | 11746 | unknown | 2707773 |
+| with_skill | python/flask-basic/runtime/instrument | python/flask-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2265851 | 2149888 | 0 | 25711 | 11196 | unknown | 2291562 |
+| with_skill | node/express-basic/runtime/instrument | node/express-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2338870 | 2175744 | 0 | 25274 | 13589 | unknown | 2364144 |
 
 ## Runtime Failures
 
-| Mode | Service | Side | Prompt | Result | Evidence |
-|---|---|---|---|---|---|
-| with_skill | python/flask-basic | with_skill | runtime-preserving | runtime:observer-runtime-telemetry FAIL | Runtime check failed: command timed out after 300s: docker compose -p codex-eval-d19bc613b573 -f /Users/bdrake/code/obstudio/evals/python/flask-basic/eval/runtime/docker-compose.yml --profile traffic run --rm traffic; compose logs: observer-1 \| observer-1 \| Splunk Observability Studio (collector) observer-1 \| Teleme... |
+No runtime failures.
 
 ## Compose Evidence
 
