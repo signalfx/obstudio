@@ -165,6 +165,13 @@ jobs:
           go-version-file: observer/go.mod
           cache-dependency-path: observer/go.sum
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Splunk Observability Studio plugin Claude hook shim tests
+        run: node --test plugins/obstudio/hooks/tests/test_bootstrap_claude.js
+
       - name: Run install smoke test
         working-directory: observer
         run: |
