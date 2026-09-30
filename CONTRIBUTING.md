@@ -330,11 +330,12 @@ remain the manual-install fallback.
 
 See [.goreleaser.yaml](.goreleaser.yaml) for the full release configuration.
 
-The release workflow publishes a separate checksum file for the Claude and
-Codex plugin archives. Its follow-up sync PR updates both plugin manifest
-versions and the Claude marketplace's versioned archive URL and SHA-256 from
-that file. Review and merge that PR to advance the published Claude marketplace
-entry. The Codex repo-local marketplace remains a path source.
+GoReleaser publishes one `checksums.txt` containing SHA-256 hashes for the
+Observer runtime archives, Claude and Codex plugin archives, and VSIX packages.
+Its follow-up sync PR updates both plugin manifest versions and the Claude
+marketplace's versioned archive URL and SHA-256 from that manifest. Review and
+merge that PR to advance the published Claude marketplace entry. The Codex
+repo-local marketplace remains a path source.
 
 For Claude development, temporarily change `.claude-plugin/marketplace.json`
 to use `"source": "./plugins/obstudio"` when testing the local marketplace;
