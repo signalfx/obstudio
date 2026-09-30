@@ -16,14 +16,16 @@ import subprocess
 import sys
 import time
 import tomllib
-import urllib.request
+import urllib.error
 import urllib.parse
+import urllib.request
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 
 RELEASE_BASE_URL = "https://github.com/signalfx/obstudio/releases/latest/download"
+RELEASES_BASE_URL = "https://github.com/signalfx/obstudio/releases/download"
 OBSTUDIO_HEALTH_URL = os.environ.get(
     "OBSTUDIO_HEALTH_URL",
     "http://127.0.0.1:3000/api/health",
@@ -435,6 +437,8 @@ def bootstrap_locked(
         return 0
 
     if is_bootstrapped(state_path, plugin_version, codex_config_path, codex_skills_path, plugin_mcp_path):
+        if plugin_host() == "claude":
+            warn_if_shared_runtime_version_mismatch(state_path, plugin_version)
         emit_context(
             f"{plugin_display_name()} is already bootstrapped for {host_name()}. "
             f"Use {skill_command('otel-audit')}, "
@@ -447,10 +451,12 @@ def bootstrap_locked(
         release_dir = plugin_data / "release" / artifact_suffix.removesuffix(".zip")
         release_dir.mkdir(parents=True, exist_ok=True)
         checksums_path = release_dir / "checksums.txt"
-        resolved_artifact, expected_checksum = fetch_expected_checksum(artifact_suffix, checksums_path)
-        release_version = resolve_release_version(resolved_artifact, artifact_suffix)
-
-        obstudio_binary = download_obstudio(plugin_data, artifact_suffix, resolved_artifact, expected_checksum)
+        obstudio_binary, resolved_artifact, expected_checksum, release_version, pin_fallback = resolve_runtime_release(
+            plugin_data,
+            artifact_suffix,
+            checksums_path,
+            plugin_version,
+        )
         install_source = "downloaded"
 
         prior_managed_pid = read_managed_bootstrap_state_pid(state_path)
@@ -514,6 +520,7 @@ def bootstrap_locked(
             {
                 "pluginVersion": plugin_version,
                 "releaseVersion": release_version,
+                "runtimePinFallback": pin_fallback,
                 "installSource": install_source,
                 "obstudioBinary": str(obstudio_binary),
                 "bootstrappedAt": datetime.now(timezone.utc).isoformat(),
@@ -521,22 +528,34 @@ def bootstrap_locked(
             },
         )
         if process_started:
-            emit_context(
+            message = (
                 f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills, "
                 "the local Splunk Observability Studio MCP config, and a background Splunk Observability Studio process "
                 "was started for the bundled HTTP MCP endpoint."
             )
         elif observer_state["mode"] == "managed":
-            emit_context(
+            message = (
                 f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills, "
                 "the local Splunk Observability Studio MCP config, and managed Splunk Observability Studio "
                 "is healthy."
             )
         else:
-            emit_context(
+            message = (
                 f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills "
                 "and the MCP config points at a shared Splunk Observability Studio service."
             )
+        if plugin_host() == "claude":
+            if pin_fallback:
+                message += (
+                    f" Runtime version {plugin_version} was unavailable; using Observer {release_version} instead."
+                )
+            running_version = normalize_obstudio_version((live_health or {}).get("version"))
+            if running_version and running_version != normalize_obstudio_version(plugin_version):
+                message += (
+                    f" The running shared Observer is version {running_version}, while the Claude plugin is "
+                    f"version {plugin_version}; it was left running."
+                )
+        emit_context(message)
         return 0
     except Exception as exc:  # pragma: no cover - defensive hook boundary
         emit_error(
@@ -745,6 +764,8 @@ def is_bootstrapped(
     if state.get("owner") == plugin_owner() and state.get("mode") == "managed":
         live_pid = find_pid_listening_on_url(health_url)
         expected_version = string_state_value(state, "releaseVersion")
+        if plugin_host() == "claude" and state.get("runtimePinFallback") is not True:
+            expected_version = plugin_version
         return bootstrap_state_proves_managed_owner(state_path, live_pid, health_payload, expected_version)
     return True
 
@@ -754,6 +775,7 @@ def download_obstudio(
     artifact_suffix: str,
     resolved_artifact: str,
     expected_checksum: str,
+    release_version: str | None = None,
 ) -> Path:
     release_dir = plugin_data / "release" / resolved_artifact.removesuffix(".zip")
     release_dir.mkdir(parents=True, exist_ok=True)
@@ -773,12 +795,20 @@ def download_obstudio(
         if extracted_dir.exists():
             shutil.rmtree(extracted_dir)
 
-    download_url = f"{RELEASE_BASE_URL}/{resolved_artifact}"
+    base_url = f"{RELEASES_BASE_URL}/v{release_version}" if release_version else RELEASE_BASE_URL
+    download_url = f"{base_url}/{resolved_artifact}"
     for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
         try:
             with urllib.request.urlopen(download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response, archive_path.open("wb") as output:
                 shutil.copyfileobj(response, output)
             break
+        except urllib.error.HTTPError as exc:
+            archive_path.unlink(missing_ok=True)
+            if release_version and exc.code == 404:
+                raise
+            if attempt == DOWNLOAD_ATTEMPTS:
+                raise RuntimeError(f"failed to download {resolved_artifact} after {DOWNLOAD_ATTEMPTS} attempts") from exc
+            time.sleep(attempt)
         except Exception as exc:  # pragma: no cover - network boundary
             archive_path.unlink(missing_ok=True)
             if attempt == DOWNLOAD_ATTEMPTS:
@@ -811,8 +841,26 @@ def download_obstudio(
 def fetch_expected_checksum(
     artifact_suffix: str,
     checksums_path: Path,
+    release_version: str | None = None,
 ) -> tuple[str, str]:
     checksums_path.parent.mkdir(parents=True, exist_ok=True)
+    if release_version:
+        cached_path = versioned_checksum_cache_path(checksums_path, release_version)
+        cached_result = parse_cached_checksum(cached_path, artifact_suffix)
+        if cached_result is not None and resolve_release_version(cached_result[0], artifact_suffix) == release_version:
+            return cached_result
+        checksum_url = f"{RELEASES_BASE_URL}/v{release_version}/checksums.txt"
+        with urllib.request.urlopen(checksum_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+            text = response.read().decode("utf-8")
+        result = parse_checksum(text, artifact_suffix)
+        if resolve_release_version(result[0], artifact_suffix) != release_version:
+            raise RuntimeError(f"checksum manifest does not match pinned release {release_version}")
+        try:
+            write_text_atomic(cached_path, text)
+        except OSError:
+            pass
+        return result
+
     last_error: Exception | None = None
     for download_url in (f"{RELEASE_BASE_URL}/checksums.txt",):
         try:
@@ -864,6 +912,48 @@ def fetch_expected_checksum(
     if cached_result is not None:
         return cached_result
     raise RuntimeError("failed to download release checksum manifest") from last_error
+
+
+def resolve_runtime_release(
+    plugin_data: Path,
+    artifact_suffix: str,
+    checksums_path: Path,
+    plugin_version: str,
+) -> tuple[Path, str, str, str, bool]:
+    """Download the preferred runtime, soft-pinning Claude to its plugin version."""
+    if plugin_host() == "claude" and re.fullmatch(
+        r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", plugin_version
+    ):
+        try:
+            artifact, checksum = fetch_expected_checksum(artifact_suffix, checksums_path, plugin_version)
+            binary = download_obstudio(plugin_data, artifact_suffix, artifact, checksum, plugin_version)
+            return binary, artifact, checksum, plugin_version, False
+        except urllib.error.HTTPError as exc:
+            if exc.code != 404:
+                raise
+
+    artifact, checksum = fetch_expected_checksum(artifact_suffix, checksums_path)
+    release_version = resolve_release_version(artifact, artifact_suffix)
+    binary = download_obstudio(plugin_data, artifact_suffix, artifact, checksum)
+    return binary, artifact, checksum, release_version, plugin_host() == "claude"
+
+
+def warn_if_shared_runtime_version_mismatch(state_path: Path, plugin_version: str) -> None:
+    state = read_bootstrap_state(state_path)
+    mode = string_state_value(state, "mode")
+    if mode not in {"shared", "external"} and not (
+        mode == "managed" and state.get("runtimePinFallback") is True
+    ):
+        return
+    health_url = string_state_value(state, "healthUrl") or OBSTUDIO_HEALTH_URL
+    health = fetch_obstudio_health(health_url)
+    running_version = normalize_obstudio_version((health or {}).get("version"))
+    expected_version = normalize_obstudio_version(plugin_version)
+    if running_version and expected_version and running_version != expected_version:
+        emit_context(
+            f"Claude plugin version {plugin_version} is using an already-running Observer version "
+            f"{running_version}; the shared runtime was left running."
+        )
 
 
 def parse_checksum(checksums_text: str, artifact_suffix: str) -> tuple[str, str]:

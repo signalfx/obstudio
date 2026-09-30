@@ -330,6 +330,26 @@ remain the manual-install fallback.
 
 See [.goreleaser.yaml](.goreleaser.yaml) for the full release configuration.
 
+The release workflow publishes a separate checksum file for the Claude and
+Codex plugin archives. Its follow-up sync PR updates both plugin manifest
+versions and the Claude marketplace's versioned archive URL and SHA-256 from
+that file. Review and merge that PR to advance the published Claude marketplace
+entry. The Codex repo-local marketplace remains a path source.
+
+For Claude development, temporarily change `.claude-plugin/marketplace.json`
+to use `"source": "./plugins/obstudio"` when testing the local marketplace;
+leave that change uncommitted. Alternatively, launch Claude Code with
+`--plugin-dir ./plugins/obstudio` to load the checkout directly without
+registering a marketplace. The latter does not test the published archive or
+marketplace update flow. A sibling `marketplace.local.json` file is not
+automatically discovered as a separate marketplace.
+
+Claude's bootstrap prefers the Observer release matching the Claude plugin
+version, and falls back to the latest release with a warning if the pinned
+release assets are unavailable. If a healthy Observer is already running at a
+different version, Claude reports the mismatch and reuses the shared runtime.
+Codex continues to select the latest Observer release.
+
 The pytest plugin is versioned in `pytest-codex-evals/pyproject.toml` and can be
 published from the same checkout when eval harness changes need a package
 release:

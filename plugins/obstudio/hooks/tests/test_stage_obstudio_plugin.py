@@ -116,6 +116,45 @@ class StageObstudioPluginTest(unittest.TestCase):
     def test_release_tag_accepts_semver_prerelease_and_build_metadata(self):
         self.assertEqual(STAGE.release_version_from_tag("v1.2.3-rc.1+build.42"), "1.2.3-rc.1+build.42")
 
+    def test_sync_claude_marketplace_pins_release_archive_and_checksum(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            marketplace_path = root / "marketplace.json"
+            checksums_path = root / "checksums.txt"
+            marketplace_path.write_text(
+                json.dumps(
+                    {
+                        "name": "obstudio",
+                        "plugins": [{"name": "obstudio", "source": "./plugins/obstudio"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            digest = "a" * 64
+            checksums_path.write_text(
+                f"{digest} *obstudio_claude_1.2.3.zip\n{'b' * 64} *obstudio_codex_1.2.3.zip\n",
+                encoding="utf-8",
+            )
+
+            STAGE.sync_claude_marketplace("v1.2.3", checksums_path, marketplace_path)
+
+            marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+            source = marketplace["plugins"][0]["source"]
+            self.assertEqual(source["source"], "archive")
+            self.assertEqual(
+                source["url"],
+                "https://github.com/signalfx/obstudio/releases/download/v1.2.3/obstudio_claude_1.2.3.zip",
+            )
+            self.assertEqual(source["sha256"], digest)
+
+    def test_sync_claude_marketplace_requires_exact_archive_checksum(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            checksums_path = root / "checksums.txt"
+            checksums_path.write_text(f"{'a' * 64} *obstudio_codex_1.2.3.zip\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "checksum for obstudio_claude_1.2.3.zip"):
+                STAGE.checksum_for_archive(checksums_path, "obstudio_claude_1.2.3.zip")
+
     def test_package_target_requires_tag_and_stamps_versioned_archives(self):
         root = Path(__file__).resolve().parents[4]
 
@@ -265,8 +304,14 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertEqual(marketplace["plugins"][0]["name"], "obstudio")
 
     def test_claude_marketplace_uses_legacy_compatible_metadata(self):
-        marketplace_path = Path(__file__).resolve().parents[4] / ".claude-plugin" / "marketplace.json"
+        repo_root = Path(__file__).resolve().parents[4]
+        marketplace_path = repo_root / ".claude-plugin" / "marketplace.json"
         marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+        plugin_manifest = json.loads(
+            (repo_root / "plugins" / "obstudio" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+        )
+        plugin_version = plugin_manifest["version"]
+        source = marketplace["plugins"][0]["source"]
 
         # Top-level `description` is an optional, officially supported marketplace.json
         # field (claude plugin validate has accepted it since Claude Code v2.1.120).
@@ -274,7 +319,13 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertEqual(marketplace["name"], "obstudio")
         self.assertEqual(marketplace["plugins"][0]["name"], "obstudio")
         self.assertEqual(marketplace["plugins"][0]["displayName"], "Splunk Observability Studio")
-        self.assertEqual(marketplace["plugins"][0]["source"], "./plugins/obstudio")
+        self.assertEqual(source["source"], "archive")
+        self.assertEqual(
+            source["url"],
+            f"https://github.com/signalfx/obstudio/releases/download/v{plugin_version}/"
+            f"obstudio_claude_{plugin_version}.zip",
+        )
+        self.assertRegex(source["sha256"], r"\A[0-9a-f]{64}\Z")
         self.assertIn("Splunk Observability Studio", marketplace["plugins"][0]["description"])
         self.assertNotIn("observer controls", marketplace["plugins"][0]["description"].lower())
         self.assertEqual(
