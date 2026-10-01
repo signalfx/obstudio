@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20260928T225615905860Z",
+    "run_id": "20261001T063316756538Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -365,8 +365,8 @@
     "runtime_check_count": 0
   },
   "source": {
-    "digest_version": 3,
-    "digest": "50ef81f41112edca0d0ddb47ffdd12cdb1b72f4eee7b3bd2127f552b262ca065",
+    "digest_version": 4,
+    "digest": "a0da8e4beee5678bbd20619f9fc96c8e09c0417155aa9a3a96ca0ed02b08e81d",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -389,15 +389,15 @@
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/organization-observability-profile.md": "54ab59313a7ac9f7f1e99136f311d2203348d879af098834d0e80b64241d76ed",
       "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
-      "skills/references/scripts/observe_report.py": "0d80c2142a542fde336109ee77800f7bf0791629585021e00f2a5e4fb12f4cd3",
+      "skills/references/scripts/observe_report.py": "7f12db2b0a72d788cf74cbd624154866ef975c3062d2bfe60cd8686f523ea40d",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-agent-observability.md": "9fde934642870af48bb3fd86e7f35b5e5e17d51efeaf32cac57551f0a2f1c67a",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "defcb705cfacaaab8c2af017f29b7aae5e1ecc492e6dc2ae01277f199a29625c",
+      "skills/references/tests/test_observe_report.py": "228dd9d73c16cf446c1452fcfef95b8360fb08639468c9d88469166635cd24ff",
       "evals/go/chi-partial/eval/qual/audit.json": "f3ee529239047e5771c74fdf99feba0b1b3cdcc8a4a815bc8123dfd60b9476d9",
-      "evals/go/chi-partial/go.mod": "c98802561b52e8e423a669a197c43ab62e8e7af5c19d83094b33beda1df2797f",
-      "evals/go/chi-partial/go.sum": "3708d13ed158e6020350066c8cda0777bdbf8ef6efb58907a7fa81eea61cb26b",
+      "evals/go/chi-partial/go.mod": "244c715a3ba6df3d65f09d0d71775db17e551ee2a9f6a0de70cc9ee64d8626c6",
+      "evals/go/chi-partial/go.sum": "4050499935ba75f7faef6e9ff6e29ab4bc1829376b1f9f38c5972ed63e78f916",
       "evals/go/chi-partial/main.go": "e395c48e36e43de4537eb493003c9d682557d496304a2d680006a96bea35a7d3",
       "evals/go/kvstore/.vscode/launch.json": "91385f78513beaadd967bbfddfe03e992f8d2fa54a7f86e6a17ef3562a1691c8",
       "evals/go/kvstore/Makefile": "557b16aa60d316634e43c3650f02c06305ddcc006e07ded16bee7452cabe9fa7",
@@ -467,7 +467,7 @@
       "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
       "evals/python/ai-assistant-demo/README.md": "fef16be3948e26460b7de715b05d2c14387c1fa974529b6c24a77a6666f52a4e",
       "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
-      "evals/python/ai-assistant-demo/eval/qual/audit.json": "2c334936dfae77cd5befb2126c34b56f585fe408990be8f2d1e3e26992a50227",
+      "evals/python/ai-assistant-demo/eval/qual/audit.json": "fd47472c8eae94ae35f6ea855c727a0f12054c5fc3af19f43f9596566339a752",
       "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
       "evals/python/ai-assistant-demo/pyproject.toml": "8afdfbe2ebc5a067e4fdcba6874cb7c2d5bf39331bf9972a76a25da06a67cf6d",
       "evals/python/assistant-v3-framework-bridge-demo/Makefile": "8b7c714132b889fa15ae8ae47455eeb3656a43a8718235f90c785245f9c62552",
@@ -528,6 +528,14 @@
       "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9"
     },
     "skill_path": "skills/otel-audit",
+    "shared_reference_consumers": [
+      "skills/references/genai-readiness.md",
+      "skills/references/incident-readiness.md",
+      "skills/references/organization-observability-profile.md",
+      "skills/references/report-flow-contract.md",
+      "skills/references/scripts/observe_report.py",
+      "skills/references/splunk-agent-observability.md"
+    ],
     "selections": [
       {
         "definition_path": "evals/go/chi-basic/eval/qual/audit.json",
