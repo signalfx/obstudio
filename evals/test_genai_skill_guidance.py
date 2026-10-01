@@ -522,7 +522,7 @@ def test_otel_audit_requires_separate_retrieval_detection_inside_tools():
         "search_docs",
         "retrieval-like operation",
         "generic tool span is not complete retrieval coverage",
-        "separate retrieval readiness row",
+        "retrieval-specific readiness row",
         "selectable retrieval finding",
         "nested retrieval span",
         "gen_ai.operation.name=retrieval",

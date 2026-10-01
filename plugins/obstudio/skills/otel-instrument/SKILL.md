@@ -31,9 +31,6 @@ When any selected finding uses
 `finding_group: splunk-agent-observability`, or the repository contains a
 `splunk_ao` dependency/import, also read
 `../references/splunk-agent-observability.md` before editing.
-When the selected service or its repository contains `OBSERVABILITY.md`, also
-read `../references/organization-observability-profile.md` and reconcile the
-applicable organization profile before editing.
 
 ## Workflow
 
@@ -88,10 +85,6 @@ Markdown reports.
   wrappers, toolchain files, manifests, CI, or existing project environments
   select another one.
 - Confirm the target process from the repo's real start surface: `docker-compose.yml`, Kubernetes manifests, `package.json` scripts, `Makefile`, `Procfile`, PM2 configs, Supervisor configs, systemd units, launchd plists, PowerShell scripts, or a plain shell command
-- When `OBSERVABILITY.md` exists, record its service-specific runtime,
-  identity, trace-boundary, privacy, and verification constraints, then prove
-  them against manifests and startup files. Report conflicts; do not let profile
-  prose override observed runtime facts or OTel safety requirements.
 - Confirm existing telemetry indicators or record `none found`
 - Inventory existing telemetry consumer contracts before editing: metric names
   and dimensions, span names and attributes, resource attributes, log

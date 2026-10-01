@@ -34,9 +34,6 @@ repository root for these paths.
 Before writing the report artifacts, read
 `../references/report-flow-contract.md` and follow the Audit Contract plus the
 Reader-First Report Order.
-When the selected service or its repository contains `OBSERVABILITY.md`, also
-read `../references/organization-observability-profile.md` and reconcile the
-applicable organization profile with source and runtime evidence.
 
 ## Process
 
@@ -106,10 +103,6 @@ Scan the repository to determine language, framework, and existing instrumentati
   - lockfiles, CI test commands, devcontainer config, and existing test layout
   - locally safe compile/type/import/test commands implied by project config
   Record configured requirements, not the shell's accidental default runtime.
-  For Python, include `environment.yml`, `conda-lock.yml`, Conda run targets,
-  the environment's Python and executable lookup, and the exact server worker
-  model when present. Package-manager identity alone is not instrumentation
-  coverage.
 9. Make one explicit GenAI ownership decision from the completed source scan:
   - `Yes` when any provider/model, agent/workflow, tool/MCP, retrieval/RAG,
     memory/context, evaluation, prompt/response, model/config, token usage, or
@@ -187,39 +180,6 @@ do not infer it only from the launch command or installed packages.
   invoked inside lifespan/startup can be too late; classify it as partial until
   source or runtime proof shows middleware was installed before the first
   request.
-
-**Python execution boundaries** -- when Click, Conda, Gunicorn, Uvicorn,
-uWSGI, multiprocessing, or another worker launcher is present, assess the exact
-logical-work and process boundaries instead of treating Python
-auto-instrumentation as one boolean:
-
-- Click does not choose trace lifetime. Inspect command/group callbacks,
-  scheduler or daemon loops, batch iterators, and any span/context kept current
-  around them. When separately scheduled tasks run beneath one command- or
-  process-lifetime span, report a trace-boundary gap even though every child
-  span is valid OTel. Require a fresh root trace per independent task. Preserve
-  delayed upstream causality with a span link rather than parentage when the
-  source or organization profile requires it. Keep one trace only when the
-  command itself is source-evidenced as one transaction.
-- For every web/worker launch surface, inventory server, worker class, worker
-  count, fork versus spawn model, preload flag, import order, auto-instrument
-  wrapper, provider/exporter/reader/processor construction PID, framework
-  patch timing, and shutdown hook separately for traces, metrics, and logs.
-  Provider or background-thread construction before a pre-fork boundary is
-  partial or unsafe until worker-local runtime evidence proves otherwise.
-- Do not generalize one process model to all multi-worker stacks. Gunicorn,
-  Gunicorn with an ASGI worker, and standalone Uvicorn can have different
-  per-signal behavior. Record one verification environment and scenario per
-  materially distinct supported launch path. Require full-runtime proof of
-  worker-local provider ownership, exact automatic spans/metrics/logs,
-  duplicate prevention, and shutdown/flush in at least two workers.
-- Conda is an interpreter and package-environment boundary, not an
-  unsupported-library diagnosis. Reconcile `environment.yml` or lockfiles,
-  Pip subsections, environment name, `conda run` ordering, target `python`,
-  target `python -m pip`, target `opentelemetry-instrument`, distro/configurator,
-  and matching instrumentation packages. A wrapper resolved outside the
-  target environment is a runtime-wiring gap. Name an unsupported library only
-  when the dependency scan proves that no matching instrumentation exists.
 
 **Spans inventory** -- build a list of every span source:
 
@@ -454,9 +414,12 @@ results become model context. A name such as `search_docs` is useful evidence
 but is not sufficient by itself; corroborate it with the implementation,
 dependency calls, returned matches/documents/scores, or the caller's use of the
 results. When a tool performs such a retrieval-like operation, a generic tool
-span is not complete retrieval coverage. Preserve the `execute_tool` operation,
-then require a separate retrieval readiness row and selectable retrieval
-finding for a nested retrieval span with
+span is not complete retrieval coverage. Before finalizing the audit, compare
+each confirmed retrieval call site against its tool span and check the JSON for
+two distinct items: a retrieval-specific readiness row and a selectable
+retrieval finding with its own ID. A combined "tool and retrieval" row or
+finding does not satisfy this check. Preserve the `execute_tool` operation,
+then require the nested retrieval span with
 `gen_ai.operation.name=retrieval` and a stable low-cardinality data-source
 identifier. Add an explicit retrieval verification scenario that proves its
 parentage under the tool span and does not capture document contents, query

@@ -1550,6 +1550,8 @@ class ObserveReportTest(unittest.TestCase):
             '"splunk-agent-observability-findings-heading", "Splunk Agent Observability findings"',
             html,
         )
+        self.assertNotIn('"opentelemetry-findings-heading", "OpenTelemetry findings"', html)
+        self.assertIn('openTelemetry.map(row => row.html).join("")', html)
         self.assertNotIn("<h2>Splunk Agent Observability", html)
         self.assertNotIn('aria-labelledby="splunk-agent-observability-heading"', html)
         self.assertIn('"id":"AO-001"', html)

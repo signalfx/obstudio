@@ -4703,10 +4703,8 @@ function renderCards() {{
   const subsection = (id, label, rows) => rows.length
     ? `<section class="finding-subsection" aria-labelledby="${{esc(id)}}"><h3 id="${{esc(id)}}">${{esc(label)}} <span class="findings-total">· ${{rows.length}}</span></h3>${{rows.map(row => row.html).join("")}}</section>`
     : "";
-  document.getElementById("cards").innerHTML = agentObservability.length
-    ? subsection("opentelemetry-findings-heading", "OpenTelemetry findings", openTelemetry)
-      + subsection("splunk-agent-observability-findings-heading", "Splunk Agent Observability findings", agentObservability)
-    : rendered.map(row => row.html).join("");
+  document.getElementById("cards").innerHTML = openTelemetry.map(row => row.html).join("")
+    + subsection("splunk-agent-observability-findings-heading", "Splunk Agent Observability findings", agentObservability);
   syncFindingSelectionState();
 }}
 

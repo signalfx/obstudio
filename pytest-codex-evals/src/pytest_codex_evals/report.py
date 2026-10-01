@@ -51,6 +51,27 @@ DEFAULT_EVALUATOR_SEMANTICS_VERSION = 1
 SHARED_REFERENCE_PREFIX = "skills/references/"
 SHARED_REFERENCE_CONSUMERS = f"{SHARED_REFERENCE_PREFIX}consumers.json"
 SHARED_REFERENCE_TEST_PREFIX = f"{SHARED_REFERENCE_PREFIX}tests/"
+# v3 reports recorded this consumer manifest's digest but not its contents.
+# Retain its known ownership so adding a new shared reference does not stale
+# unrelated reports while edits to formerly consumed references still do.
+LEGACY_SHARED_REFERENCE_CONSUMERS = {
+    "cd8084854d7042b7ecc306ef1efca5f1866f1616c4c0ea0f6522e4bce4efd852": {
+        "coverage-decision-tree.md": ("splunk-dashboard-publish", "splunk-detector-publish"),
+        "full-runtime-acceptance.md": ("otel-instrument", "otel-verify"),
+        "genai-readiness.md": ("otel-audit", "otel-instrument"),
+        "incident-readiness.md": ("otel-audit", "otel-instrument"),
+        "ledger-template.md": ("splunk-dashboard-publish", "splunk-detector-publish"),
+        "report-flow-contract.md": (
+            "otel-audit", "otel-instrument", "otel-verify", "splunk-configure"
+        ),
+        "scripts/observe_report.py": ("otel-audit", "otel-instrument", "otel-verify"),
+        "signalflow-patterns.md": ("splunk-configure", "splunk-dashboard"),
+        "splunk-api.md": ("splunk-dashboard-publish", "splunk-detector-publish"),
+        "terraform-normalization.md": (
+            "splunk-dashboard", "splunk-dashboard-publish", "splunk-detector-publish"
+        ),
+    },
+}
 
 
 def evaluator_semantics_version(repo_root: Path) -> int:
@@ -755,6 +776,21 @@ def shared_reference_consumer_paths(
     return declared, consumed
 
 
+def legacy_shared_reference_consumers(
+    files: dict[str, str], skill: str
+) -> set[str] | None:
+    manifest = LEGACY_SHARED_REFERENCE_CONSUMERS.get(
+        files.get(SHARED_REFERENCE_CONSUMERS, "")
+    )
+    if manifest is None:
+        return None
+    return {
+        f"{SHARED_REFERENCE_PREFIX}{relative}"
+        for relative, consumers in manifest.items()
+        if skill in consumers
+    }
+
+
 def source_inputs_match_for_skill(
     repo_root: Path,
     skill: str,
@@ -775,6 +811,8 @@ def source_inputs_match_for_skill(
             SHARED_REFERENCE_TEST_PREFIX
         ):
             return False
+        if recorded_consumed is None and path in recorded:
+            return True
         if path in declared or path in (recorded_consumed or set()):
             return path in relevant_consumed
         return True
@@ -967,6 +1005,8 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
                     f"{benchmark_path}: shared reference consumer identity is malformed"
                 )
             recorded_consumed = set(raw_recorded_consumed)
+        else:
+            recorded_consumed = legacy_shared_reference_consumers(files, skill)
         eval_kinds = source.get("eval_kinds")
         if eval_kinds is None and digest_version == 1:
             eval_kinds = [kind]
@@ -1083,6 +1123,8 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
                 SHARED_REFERENCE_TEST_PREFIX
             ):
                 return False
+            if recorded_consumed is None and relative in files:
+                return True
             if relative in declared_shared_paths or relative in (recorded_consumed or set()):
                 return relative in consumed_shared_paths | (recorded_consumed or set())
             return True

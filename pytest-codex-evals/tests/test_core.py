@@ -56,14 +56,17 @@ from pytest_codex_evals.graders.runtime import (
 from pytest_codex_evals.graders.sanity import grade_sanity
 from pytest_codex_evals.cli import main as cli_main
 from pytest_codex_evals.report import (
+    LEGACY_SHARED_REFERENCE_CONSUMERS,
     aggregate_usage,
     build_kind_benchmark,
     compact_token_count,
     evaluator_semantics_version,
     format_tokens,
+    legacy_shared_reference_consumers,
     normalize_rubric_score,
     render_reports_for_run_root,
     source_input_digests,
+    source_inputs_match_for_skill,
     source_manifest_digest,
     usage_status,
     verify_published_report_sources,
@@ -2109,6 +2112,94 @@ def test_report_freshness_ignores_shared_reference_changes_for_other_consumers(
     consumed.write_text("# Consumed changed\n", encoding="utf-8")
     with pytest.raises(ValueError, match="inputs are stale"):
         verify_published_report_sources(tmp_path)
+
+
+@pytest.mark.parametrize("digest_version", [2, 3])
+def test_legacy_report_stales_when_former_shared_reference_changes(
+    tmp_path: Path, digest_version: int
+):
+    references = tmp_path / "skills" / "references"
+    references.mkdir(parents=True)
+    shared = references / "shared.md"
+    shared.write_text("# Original\n", encoding="utf-8")
+    consumers = references / "consumers.json"
+    consumers.write_text(json.dumps({"shared.md": ["sample-skill"]}), encoding="utf-8")
+    benchmark_path = _write_validation_manifest_fixture(
+        tmp_path, selected_prompt_ids=("direct",), selection_scope="filtered"
+    )
+    benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    source = benchmark["source"]
+    source["digest_version"] = digest_version
+    source.pop("shared_reference_consumers", None)
+    if digest_version == 2:
+        source.pop("evaluator_semantics_version", None)
+    source["digest"] = source_manifest_digest(
+        source["files"],
+        digest_version=digest_version,
+        evaluator_semantics_version=source.get("evaluator_semantics_version"),
+        eval_kinds=source.get("eval_kinds"),
+        skill_path=source.get("skill_path"),
+        config_path=source.get("config_path"),
+        selections=source.get("selections"),
+        selection_scope=source.get("selection_scope"),
+    )
+    benchmark_path.write_text(json.dumps(benchmark), encoding="utf-8")
+    assert verify_published_report_sources(tmp_path) == [benchmark_path]
+
+    consumers.write_text(json.dumps({"shared.md": ["other-skill"]}), encoding="utf-8")
+    shared.write_text("# Changed\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="inputs are stale"):
+        verify_published_report_sources(tmp_path)
+    shared.unlink()
+    with pytest.raises(ValueError, match="source input is missing"):
+        verify_published_report_sources(tmp_path)
+
+
+def test_known_v3_consumer_map_keeps_unrelated_reports_fresh(tmp_path: Path):
+    digest = next(iter(LEGACY_SHARED_REFERENCE_CONSUMERS))
+    references = tmp_path / "skills" / "references"
+    references.mkdir(parents=True)
+    (references / "consumers.json").write_text(
+        json.dumps(
+            {
+                "genai-readiness.md": ["otel-audit", "otel-instrument"],
+                "report-flow-contract.md": ["otel-audit", "splunk-configure"],
+                "signalflow-patterns.md": ["splunk-configure"],
+                "splunk-agent-observability.md": ["otel-audit", "otel-instrument"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    recorded = {
+        "skills/references/consumers.json": digest,
+        "skills/references/genai-readiness.md": "old-genai",
+        "skills/references/report-flow-contract.md": "same-flow",
+        "skills/references/signalflow-patterns.md": "same-patterns",
+    }
+    current = {
+        "skills/references/consumers.json": "new-map",
+        "skills/references/genai-readiness.md": "new-genai",
+        "skills/references/report-flow-contract.md": "same-flow",
+        "skills/references/signalflow-patterns.md": "same-patterns",
+        "skills/references/splunk-agent-observability.md": "new-ao",
+    }
+    former = legacy_shared_reference_consumers(recorded, "splunk-configure")
+    assert former == {
+        "skills/references/report-flow-contract.md",
+        "skills/references/signalflow-patterns.md",
+    }
+    assert source_inputs_match_for_skill(
+        tmp_path, "splunk-configure", current, recorded, former
+    )
+    current["skills/references/report-flow-contract.md"] = "changed-flow"
+    assert not source_inputs_match_for_skill(
+        tmp_path, "splunk-configure", current, recorded, former
+    )
+    current["skills/references/report-flow-contract.md"] = "same-flow"
+    audit_former = legacy_shared_reference_consumers(recorded, "otel-audit")
+    assert not source_inputs_match_for_skill(
+        tmp_path, "otel-audit", current, recorded, audit_former
+    )
 
 
 def test_report_freshness_allows_reports_without_legacy_manifests(tmp_path: Path):

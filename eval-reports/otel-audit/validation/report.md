@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20261001T063316756538Z |
+| Run ID | 20261001T171036250198Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -33,7 +33,6 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/flask-basic/qual/audit | python/flask-basic | 2 | evals/python/flask-basic/eval/qual/audit.json | 0 | 6 | 0 |
 | python/galileo-agent-demo/qual/audit | python/galileo-agent-demo | 1 | evals/python/galileo-agent-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | python/mcp-ai-tool-demo/qual/audit | python/mcp-ai-tool-demo | 2 | evals/python/mcp-ai-tool-demo/eval/qual/audit.json | 0 | 6 | 0 |
-| python/python-runtime-boundaries/qual/audit | python/python-runtime-boundaries | 1 | evals/python/python-runtime-boundaries/eval/qual/audit.json | 0 | 5 | 0 |
 | python/splunk-ao-integration-demo/qual/audit | python/splunk-ao-integration-demo | 1 | evals/python/splunk-ao-integration-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | python/splunk-ao-langchain-demo/qual/audit | python/splunk-ao-langchain-demo | 1 | evals/python/splunk-ao-langchain-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | sanity/skill-smoke/sanity/audit | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/eval/sanity/audit.json | 0 | 0 | 0 |

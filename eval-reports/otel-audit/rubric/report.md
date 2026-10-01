@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-audit |
-| Run ID | 20261001T063334249488Z |
+| Run ID | 20261001T171120090917Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,25 +18,23 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | 94% (17/18), avg score 92 | 5.3M | 29.3m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 1 | 100% (9/9), avg score 94 | 2.1M | 14.2m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 2/2 recognized | 5215555 | 4803328 | 0 | 69696 | 21953 | unknown | 5285251 |
+| with_skill | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 2031066 | 1894912 | 0 | 30970 | 7595 | unknown | 2062036 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 2/2 recognized | 2761804 | 2479616 | 0 | 18925 | 8576 | unknown | 2780729 |
+| with_skill | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 953234 | 849536 | 0 | 10732 | 5326 | unknown | 963966 |
 
 ## Rubric Failures
 
-| Mode | Service | Side | Prompt | Result | Evidence |
-|---|---|---|---|---|---|
-| with_skill | python/ai-assistant-demo | with_skill | direct | rubric:rubric-4 FAIL | genai_readiness has one combined 'GenAI tool and retrieval telemetry' row; OTEL-004 is 'Tool execution and retrieval spans are missing'; scenario genai.retrieval.parentage expects a nested retrieval demo_docs span but only names gen_ai.operation.name as an attribute. |
+No rubric failures.
 
 ## Result JSON
 
