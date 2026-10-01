@@ -1121,7 +1121,7 @@ test('managed observer startup restores cloud export without opening the Cloud t
 
 	assert.match(
 		source,
-		/const startupCompleted = await observerCloudLifecycleOperations\.run\(async \(\) => \{[\s\S]*?completeObserverStart\(observerLifecycleState,\s*runId,\s*observerPort\)[\s\S]*?await restoreManagedObserverCloudConnection\(context\);[\s\S]*?return true;[\s\S]*?if \(!startupCompleted\)[\s\S]*?syncObserverUi\(\);/,
+		/const startupCompleted = await observerCloudLifecycleOperations\.run\(async \(\) => \{[\s\S]*?completeObserverStart\(observerLifecycleState,\s*runId,\s*discoveredPort\)[\s\S]*?await restoreManagedObserverCloudConnection\(context\);[\s\S]*?return true;[\s\S]*?if \(!startupCompleted\)[\s\S]*?syncObserverUi\(\);/,
 	);
 });
 
@@ -2314,7 +2314,7 @@ test('shared startup validates health without a credential or feature probe', ()
 	);
 	assert.match(
 		source,
-		/probeObserver\([\s\S]*?discoveredEndpoints,[\s\S]*?\{ requireStableOtlp: true \}/,
+		/let probe = await probeObserver\(endpoints, 500, \{ requireStableOtlp: true \}\)/,
 	);
 	assert.match(source, /const target = new URL\(endpoints\.healthUrl\)/);
 	const probeStart = source.indexOf('async function probeObserver(');
@@ -2323,130 +2323,73 @@ test('shared startup validates health without a credential or feature probe', ()
 	assert.doesNotMatch(probe, /challenge|proof|token|Authorization/i);
 });
 
-test('upgrade retirement verifies Splunk Observability Studio health and the executable path before terminating a PID', () => {
+test('discovery-model startup never pins the UI port and discovers it after spawn', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
 	const startupStart = source.indexOf('async function startObserver(');
-	const startupEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', startupStart);
+	const startupEnd = source.indexOf('\nasync function attachToDiscoveredObserver(', startupStart);
+	assert.notEqual(startupStart, -1);
+	assert.notEqual(startupEnd, -1);
+	const startup = source.slice(startupStart, startupEnd);
+
+	// The binary owns UI port selection: the extension must not inject PORT and
+	// must strip any inherited PORT so auto-scan is always exercised.
+	assert.doesNotMatch(
+		startup,
+		/(?<![A-Z_])PORT: String\(/,
+		'the extension must not inject a UI PORT into the spawned binary',
+	);
+	assert.match(
+		startup,
+		/delete managedObserverEnvironment\.PORT;/,
+		'an inherited PORT must be stripped so the binary always auto-scans',
+	);
+	// OTLP ports stay fixed and injected.
+	assert.match(startup, /OTLP_HTTP_PORT: String\(otlpHttpPort\)/);
+	assert.match(startup, /OTLP_GRPC_PORT: String\(otlpGrpcPort\)/);
+	// After spawn, the bound URL is discovered, not predicted.
+	assert.match(
+		startup,
+		/const discoveredEndpoints = await waitForSpawnedObserverDiscovery\(runId\)/,
+		'the spawn path must discover the bound URL from shared-observer.json',
+	);
+	assert.match(
+		startup,
+		/completeObserverStart\(observerLifecycleState, runId, discoveredPort\)/,
+		'startup must complete with the discovered port, not a predicted one',
+	);
+	// The deleted predicted-port reconciliation must be gone.
+	assert.doesNotMatch(startup, /managedPort|getConfiguredManagedObserverPort|retireMismatchedManagedPortObserver|waitForObserverPortHandoff|buildManagedObserverBaseUrl|ensurePortAvailable\(\{\s*port: managedPort/);
+});
+
+test('an exit-0 pre-flight is treated as attaching to an existing instance, not a failure', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const startupStart = source.indexOf('async function startObserver(');
+	const startupEnd = source.indexOf('\nasync function attachToDiscoveredObserver(', startupStart);
 	const startup = source.slice(startupStart, startupEnd);
 	assert.match(
 		startup,
-		/let discoveryProbe = await probeObserver\([\s\S]*?const retirement = await retireMismatchedManagedPortObserver\([\s\S]*?discoveryProbe\.status === 'ready'/,
+		/code === 0 && isObserverRunCurrent\(observerLifecycleState, runId\)[\s\S]*?observerDeferredToExistingInstance = true/,
+		'a binary exiting 0 during startup must leave the run active so discovery can attach',
 	);
-
-	const retirementStart = startupEnd + 1;
-	const retirementEnd = source.indexOf('\nasync function waitForProcessExit(', retirementStart);
-	const retirement = source.slice(retirementStart, retirementEnd);
-	assert.match(
-		retirement,
-		/const observerHealthVerified = observerHealth !== undefined;[\s\S]*?observerVersion === bundleVersion/,
-	);
-	assert.ok(
-		retirement.indexOf('if (!observerHealthVerified)')
-			< retirement.indexOf('const listenerInspection = await inspectListeningProcess(managedPort)'),
-		'Splunk Observability Studio health must be verified before inspecting the managed-port listener',
-	);
-	assert.match(
-		retirement,
-		/const listenerInspection = await inspectListeningProcess\(managedPort\)[\s\S]*?const listener = listenerInspection\.process[\s\S]*?isObserverExecutablePath\(processExecutablePath\)/,
-		'the listener PID must resolve to the Splunk Observability Studio executable',
-	);
-	assert.ok(
-		retirement.indexOf('const preStopInspection = await inspectListeningProcess(managedPort)')
-			< retirement.indexOf('const replacementProbe = await probeObserver('),
-		'the listener must be fixed before refreshing the health identity',
-	);
-	assert.ok(
-		retirement.indexOf('const replacementProbe = await probeObserver(')
-			< retirement.indexOf('const confirmedInspection = await inspectListeningProcess(managedPort)'),
-		'health must be refreshed before the final listener identity check',
-	);
-	assert.match(
-		retirement,
-		/const replacementProbe = await probeObserver\(\s*observerEndpointRolesForBase\(buildManagedObserverBaseUrl\(managedPort\)\),\s*500,\s*\{ requireStableOtlp: false \}/,
-		'the refreshed health identity must come from the canonical managed listener, not a state-file URL',
-	);
-	assert.ok(
-		retirement.indexOf('const confirmedInspection = await inspectListeningProcess(managedPort)')
-			< retirement.indexOf('await gracefullyTerminateProcess(pid)'),
-		'the port owner and executable must be reverified immediately before graceful termination',
-	);
-	assert.match(
-		retirement,
-		/confirmedListener\.pid !== pid[\s\S]*?processExecutablePathsEqual\(confirmedListener\.executablePath, processExecutablePath\)/,
-	);
-	assert.ok(
-		retirement.indexOf('const forceStopInspection = await inspectListeningProcess(managedPort)')
-			< retirement.indexOf('const currentProcessExecutablePath = await readProcessExecutablePath(pid)'),
-		'the managed port must be checked before falling back to process identity',
-	);
-	assert.ok(
-		retirement.indexOf('const currentProcessExecutablePath = await readProcessExecutablePath(pid)')
-			< retirement.indexOf('await forceTerminateProcess(pid)'),
-		'the original PID and executable path must be reverified before forced termination',
-	);
-	assert.match(
-		retirement,
-		/forceStopInspection\.status === 'ambiguous'[\s\S]*?forceStopInspection\.status === 'unavailable'/,
-	);
-	assert.match(
-		retirement,
-		/forceStopInspection\.status === 'unique'[\s\S]*?forceStopInspection\.process\.pid !== pid/,
-	);
-	assert.match(
-		retirement,
-		/currentProcessExecutablePath === undefined[\s\S]*?processExecutablePathsEqual\(currentProcessExecutablePath, processExecutablePath\)/,
-	);
-	assert.doesNotMatch(
-		retirement,
-		/process\.kill\(pid, 'SIGTERM'\)/,
-		'the upgrade path must not treat Node SIGTERM as graceful on Windows',
-	);
-	assert.doesNotMatch(
-		retirement,
-		/observerHealth\?\.owner|observerHealth\.mode|findOtherExtension|readProcessCommand|processCommand/,
-	);
-});
-
-test('upgrade retirement treats a vacated managed port as already retired', () => {
-	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
-	const retirementStart = source.indexOf('async function retireMismatchedManagedPortObserver(');
-	const retirementEnd = source.indexOf('\nasync function waitForProcessExit(', retirementStart);
-	const retirement = source.slice(retirementStart, retirementEnd);
-
-	for (const inspectionName of [
-		'listenerInspection',
-		'preStopInspection',
-		'replacementProbeInspection',
-		'confirmedInspection',
-	]) {
-		assert.match(
-			retirement,
-			new RegExp(
-				`const ${inspectionName} = await inspectListeningProcess\\(managedPort\\);[\\s\\S]*?`
-				+ `${inspectionName}\\.status === 'none'[\\s\\S]*?status: 'retired'`,
-			),
-			`${inspectionName} must distinguish a free port from failed or ambiguous inspection`,
-		);
-	}
 });
 
 test('all local Splunk Observability Studio reuse paths use the same bundled-version compatibility rule', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
 	const startupStart = source.indexOf('async function startObserver(');
-	const startupEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', startupStart);
+	const startupEnd = source.indexOf('\nasync function attachToDiscoveredObserver(', startupStart);
 	const startup = source.slice(startupStart, startupEnd);
 	assert.match(startup, /const bundleVersion = getBundleVersion\(context\)/);
 	assert.match(startup, /configuredProbe\.health\.version !== bundleVersion/);
-	assert.match(
-		startup,
-		/managedProbe\.status === 'ready'[\s\S]*?retireMismatchedManagedPortObserver\([\s\S]*?managedProbe\.health/,
-	);
-	assert.match(
-		startup,
-		/existingObserver\.health\.version === bundleVersion[\s\S]*?retireMismatchedManagedPortObserver\(/,
-	);
 	assert.match(startup, /startedProbe\.health\.version !== bundleVersion/);
 	assert.doesNotMatch(startup, /0\.0\.18|0\.0\.20/);
+
+	// The shared reuse path applies the same rule inside attachToDiscoveredObserver.
+	const attachStart = source.indexOf('async function attachToDiscoveredObserver(');
+	const attachEnd = source.indexOf('\nasync function waitForSpawnedObserverDiscovery(', attachStart);
+	assert.notEqual(attachStart, -1);
+	assert.notEqual(attachEnd, -1);
+	const attach = source.slice(attachStart, attachEnd);
+	assert.match(attach, /probe\.health\.version !== bundleVersion[\s\S]*?observerRestartRequiredError/);
 });
 
 test('temporary port reservations destroy reconnecting exporter sockets before closing', async () => {
@@ -2499,42 +2442,12 @@ test('temporary port reservations destroy reconnecting exporter sockets before c
 	}
 });
 
-test('reload startup gives unavailable Observer listeners one bounded port handoff', () => {
-	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
-	const startupStart = source.indexOf('async function startObserver(');
-	const startupEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', startupStart);
-	const startup = source.slice(startupStart, startupEnd);
-	const deadlineStart = startup.indexOf('const observerHandoffDeadline = performance.now()');
-	const waitStart = startup.indexOf('await waitForObserverPortHandoff(');
-	const portChecksStart = startup.indexOf('const backend = resolveBackend(');
-	assert.notEqual(deadlineStart, -1);
-	assert.notEqual(waitStart, -1);
-	assert.notEqual(portChecksStart, -1);
-	assert.ok(deadlineStart < waitStart);
-	assert.ok(waitStart < portChecksStart);
-	assert.match(
-		startup,
-		/discoveryStateAgeMs[\s\S]*?performance\.now\(\) \+ sharedObserverStartupWindowMs - discoveryStateAgeMs/,
-		'the fresh-discovery deadline must be monotonic after deriving its remaining wall-clock age',
-	);
-	assert.match(
-		startup,
-		/managedHandoffDiscovery[\s\S]*?loopbackPortsAreSimultaneouslyAvailable\(\s*\[observerOtlpGrpcPort, observerOtlpHttpPort, managedPort\],[\s\S]*?all prior Observer ports were released/,
-		'a matching discovery must stop retrying as soon as the outgoing process releases every required port',
-	);
-	assert.match(
-		startup,
-		/observerProbeMayRecover\(existingObserver\)[\s\S]*?waitForObserverPortHandoff\(\s*\[observerOtlpGrpcPort, observerOtlpHttpPort, managedPort\][\s\S]*?existingObserver = await probeObserver/,
-		'a recoverable managed Observer probe must bridge the prior-host handoff and then re-probe',
-	);
-	assert.match(startup, /while \(performance\.now\(\) < deadline\)/);
-	assert.doesNotMatch(startup, /bridgeStartupPortConflict|reuseCompetingExtensionObserver/);
-});
-
 test('provisionally reused extension Observers recover if the outgoing host stops them', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
 	const monitorStart = source.indexOf('function monitorExtensionObserverHandoff(');
-	const monitorEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', monitorStart);
+	const monitorEnd = source.indexOf('\nasync function retireMismatchedManagedPortObserver(', monitorStart) === -1
+		? source.indexOf('\nasync function stopObserver(', monitorStart)
+		: source.indexOf('\nasync function retireMismatchedManagedPortObserver(', monitorStart);
 	assert.notEqual(monitorStart, -1);
 	assert.notEqual(monitorEnd, -1);
 	const monitor = source.slice(monitorStart, monitorEnd);
@@ -2554,15 +2467,17 @@ test('provisionally reused extension Observers recover if the outgoing host stop
 		/stopObserverRun\(observerLifecycleState\);[\s\S]*?await ensureObserverRunning\(context, recoveryGeneration\)/,
 		'a confirmed handoff exit must invalidate the provisional reuse before starting a replacement',
 	);
+	// Monitoring is armed only from the two surviving reuse paths: the shared
+	// reuse (attachToDiscoveredObserver) and its own definition.
 	assert.equal(
 		(source.match(/monitorExtensionObserverHandoff\(/g) ?? []).length,
-			3,
+			2,
 			'only automatic local reuse paths may arm handoff monitoring',
 		);
 	assert.match(
 		source,
-		/existingObserver\.health\.version === bundleVersion[\s\S]*?monitorExtensionObserverHandoff/,
-		'a current-version service recovered after an earlier transient probe must be monitored during handoff',
+		/completeObserverStart\(observerLifecycleState, runId, discoveredPort\)\) \{[\s\S]*?monitorExtensionObserverHandoff\(context, endpoints, probe\.health, bundleVersion, runId\)/,
+		'a reused current-version service must be monitored during handoff',
 	);
 });
 

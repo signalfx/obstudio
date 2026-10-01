@@ -107,14 +107,7 @@ import {
 } from './observer-webview-host';
 import { ObserverWebviewTelemetry } from './observer-webview-telemetry';
 import {
-	forceTerminateProcess,
-	gracefullyTerminateProcess,
-	inspectListeningProcess,
-	isObserverExecutablePath,
-	processIsRunning,
-	processExecutablePathsEqual,
 	readListeningProcess,
-	readProcessExecutablePath,
 } from './process-control';
 import {
 	authorizeWithSISCIMD,
@@ -145,6 +138,10 @@ const splunkCloudConnectionStore = new SplunkCloudConnectionStore();
 const splunkCloudExportPreferenceStore = new SplunkCloudExportPreferenceStore();
 let observerStatusBarItem: vscode.StatusBarItem | undefined;
 let observerUsesSharedServer = false;
+// Set when a spawned binary exits 0 because its pre-flight detected an existing
+// instance it deferred to. Read by the post-spawn discovery wait so an exit-0 is
+// treated as an attach, not a startup failure. Reset at the start of each run.
+let observerDeferredToExistingInstance = false;
 let observerWebviewRootUri: vscode.Uri | undefined;
 let observerPanelTelemetry: ObserverWebviewTelemetry | undefined;
 let observerDeactivationStarted = false;
@@ -167,7 +164,6 @@ let lastObserverPanelRenderKey: string | undefined;
 const observerPanelViewType = 'observabilityStudioObserver';
 const observerPanelTitle = 'Splunk Observability Studio – Telemetry Explorer';
 const sharedObserverUrlSetting = 'sharedObserverUrl';
-const managedObserverPortSetting = 'managedObserverPort';
 const sisCimdRegistrationEnabledSetting = 'sisCimdRegistrationEnabled';
 const sisCimdOAuthIssuerSetting = 'sisCimdOAuthIssuer';
 const sisCimdOAuthClientIdSetting = 'sisCimdOAuthClientId';
@@ -180,7 +176,6 @@ const sisCimdOAuthDevelopmentCaBundlePathSetting = 'sisCimdOAuthDevelopmentCaBun
 const sisCimdOAuthDefaultIssuer = 'https://127.0.0.1:9090/test-tenant/sis/v1/rg/cimd-demo';
 const sisCimdOAuthDefaultClientId = 'https://127.0.0.1:9192/oauth/client-metadata.json';
 const managedObserverHost = '127.0.0.1';
-const defaultManagedObserverPort = 3000;
 const managedObserverStateFileName = 'managed-control.json';
 const observerKind = 'obstudio';
 const observerAPIVersion = 'v1';
@@ -195,8 +190,6 @@ const observerExtensionUnloadDeadlineMs = 4_500;
 const observerExtensionHandoffWindowMs = 6_500;
 const observerExtensionHandoffMonitorIntervalMs = 250;
 const observerExtensionHandoffPortCheckMs = 1_000;
-const outdatedManagedObserverShutdownTimeoutMs = 5_000;
-const outdatedManagedObserverForceShutdownTimeoutMs = 2_000;
 const agentIntegrationPromptDismissedPrefix = 'agentIntegrationPromptDismissed.';
 const agentSkillsBundleVersionPrefix = 'agentSkillsBundleVersion.';
 const agentIntegrationConfigFingerprintPrefix = 'agentIntegrationConfigFingerprint.v1.';
@@ -343,11 +336,6 @@ type PortReservation = {
 	settingName?: string;
 };
 
-type StartupHintCarrier = {
-	startupHint?: string;
-	startupTitle?: string;
-};
-
 type ManagedPortObserverRetirement =
 	| { status: 'ignored' }
 	| { status: 'not-applicable' }
@@ -358,23 +346,18 @@ function observerRestartRequiredError(
 	retirement: Extract<ManagedPortObserverRetirement, { status: 'restart-required' }>,
 	bundleVersion: string,
 ): Error {
-	const portLabel = retirement.port === undefined
-		? 'an unknown localhost port'
-		: `localhost port ${retirement.port}`;
-	const pidLabel = retirement.pid === undefined
-		? 'PID unavailable'
-		: `PID ${retirement.pid}`;
+	const urlLabel = retirement.port === undefined
+		? 'a running instance'
+		: `http://${managedObserverHost}:${retirement.port}`;
 	const restartMessage = retirement.version === undefined
-		? `Splunk Observability Studio on ${portLabel} (${pidLabel}) could not be verified as bundled version ${bundleVersion}. `
-			+ 'Cloud controls are unavailable until it is stopped.'
-		: `Splunk Observability Studio ${retirement.version} on ${portLabel} (${pidLabel}) does not match bundled version ${bundleVersion}. `
-			+ 'Cloud controls are unavailable until it is stopped.';
+		? `A Splunk Observability Studio instance already running at ${urlLabel} could not be verified as bundled version ${bundleVersion}. `
+			+ 'Restart VS Code to take over.'
+		: `A different Splunk Observability Studio version (${retirement.version}) is already running at ${urlLabel}. `
+			+ 'Restart VS Code to take over.';
 	const restartError = new Error(restartMessage);
 	Object.assign(restartError, {
 		startupHint: 'Restart VS Code, then run Splunk Observability Studio: Start. '
-			+ (retirement.pid === undefined
-				? 'If it remains running, stop Splunk Observability Studio on the displayed port and retry.'
-				: 'If it remains running, stop the displayed PID and retry.'),
+			+ 'If it remains running, stop the other Splunk Observability Studio instance and retry.',
 		startupTitle: 'Restart required',
 	});
 	return restartError;
@@ -442,10 +425,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 	);
 	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
-		if (
-			!event.affectsConfiguration(`observability-studio.${sharedObserverUrlSetting}`)
-			&& !event.affectsConfiguration(`observability-studio.${managedObserverPortSetting}`)
-		) {
+		if (!event.affectsConfiguration(`observability-studio.${sharedObserverUrlSetting}`)) {
 			return;
 		}
 		void enqueueObserverConfigurationRestart(context).catch((error) => {
@@ -996,6 +976,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			throw new Error('Splunk Observability Studio output channel is not initialized.');
 		}
 		const bundleVersion = getBundleVersion(context);
+		observerDeferredToExistingInstance = false;
 		const discoveredState = readSharedObserverDiscovery(
 			os.homedir(),
 			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
@@ -1039,262 +1020,24 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			return;
 		}
 
-		const managedPort = getConfiguredManagedObserverPort();
-		const managedObserverBaseUrl = buildManagedObserverBaseUrl(managedPort);
-		const managedEndpoints = observerEndpointRolesForBase(managedObserverBaseUrl);
-		const observerHandoffDeadline = performance.now() + observerExtensionHandoffWindowMs;
-		const managedHandoffDiscovery = discoveredState !== undefined
-			&& sharedDiscoveryMatchesRestBase(discoveredState, managedObserverBaseUrl);
-		const discoveredObserver = discoveredState === undefined
-			? undefined
-			: preferredObserverDiscoveryForBase(
-				discoveredState.baseUrl,
-				discoveredState,
-				managedState,
-			);
-		if (discoveredObserver !== undefined) {
-			const discoveredEndpoints = observerEndpointRolesForDiscovery(discoveredObserver);
-			let discoveryProbe = await probeObserver(
-				discoveredEndpoints,
-				500,
-				{ requireStableOtlp: true },
-			);
-			assertObserverRunCurrent(observerLifecycleState, runId);
-			const discoveryStateAgeMs = discoveredObserver.updatedAtMs === undefined
-				? undefined
-				: Date.now() - discoveredObserver.updatedAtMs;
-			const discoveryStartupDeadline = discoveryStateAgeMs !== undefined
-				&& discoveryStateAgeMs >= 0
-				&& discoveryStateAgeMs < sharedObserverStartupWindowMs
-				? performance.now() + sharedObserverStartupWindowMs - discoveryStateAgeMs
-				: undefined;
-			const retryDiscoveryProbe = async () => {
-				if (discoveryStartupDeadline === undefined) {
-					return;
-				}
-				const remainingMs = discoveryStartupDeadline - performance.now();
-				if (remainingMs <= 0) {
-					return;
-				}
-				await delay(Math.min(100, remainingMs));
-				assertObserverRunCurrent(observerLifecycleState, runId);
-				discoveryProbe = await probeObserver(
-					discoveredEndpoints,
-					500,
-					{ requireStableOtlp: true },
-				);
-				assertObserverRunCurrent(observerLifecycleState, runId);
-			};
-			while (
-				observerProbeMayRecover(discoveryProbe)
-				&& discoveryStartupDeadline !== undefined
-				&& performance.now() < discoveryStartupDeadline
-			) {
-				// Observer writes this fresh discovery only after its UI and both OTLP
-				// listeners are bound. If every required port is now free, the recorded
-				// process exited during hot-install handoff rather than still starting.
-				if (
-					managedHandoffDiscovery
-					&& await loopbackPortsAreSimultaneouslyAvailable(
-						[observerOtlpGrpcPort, observerOtlpHttpPort, managedPort],
-						discoveryStartupDeadline,
-					)
-				) {
-					assertObserverRunCurrent(observerLifecycleState, runId);
-					logObserverLifecycle(
-						`Run ${runId}: fresh discovery became unavailable and all prior Observer ports were released.`,
-					);
-					break;
-				}
-				assertObserverRunCurrent(observerLifecycleState, runId);
-				await retryDiscoveryProbe();
-			}
-			const retirement = await retireMismatchedManagedPortObserver(
-				discoveredObserver,
-				discoveryProbe.status === 'ready' ? discoveryProbe.health : undefined,
-				getConfiguredManagedObserverPort(),
+		// Managed path: the binary owns UI port selection (auto-scanning from
+		// 17900) and records the bound URL in shared-observer.json. The extension
+		// no longer predicts a port — it discovers the bound URL after spawn, and
+		// reuses any healthy, version-matching instance already recorded.
+		const reusableDiscovery = discoveredState ?? managedState;
+		if (reusableDiscovery !== undefined) {
+			const attached = await attachToDiscoveredObserver(
+				context,
+				reusableDiscovery,
 				bundleVersion,
-			);
-			assertObserverRunCurrent(observerLifecycleState, runId);
-			if (retirement.status === 'restart-required') {
-				throw observerRestartRequiredError(retirement, bundleVersion);
-			}
-			let discoveryDetail: string;
-			if (retirement.status === 'retired') {
-				discoveryDetail = 'the mismatched Splunk Observability Studio service on the managed port was stopped';
-			} else if (retirement.status === 'ignored') {
-				discoveryDetail = `Splunk Observability Studio ${discoveryProbe.status === 'ready'
-					? discoveryProbe.health.version || '(unversioned)'
-					: '(unversioned)'} does not match bundled version ${bundleVersion}`;
-			} else if (discoveryProbe.status === 'ready') {
-				setObserverEndpoints(discoveredEndpoints);
-				const discoveredPort = observerPortFromUrl(discoveredEndpoints.restBaseUrl);
-				if (discoveredPort !== undefined) {
-					observerUsesSharedServer = true;
-					appendObserverOutputLine(`Reusing discovered shared Splunk Observability Studio service at ${discoveredObserver.baseUrl}`);
-					if (completeObserverStart(observerLifecycleState, runId, discoveredPort)) {
-						syncObserverUi();
-						monitorExtensionObserverHandoff(
-							context,
-							discoveredEndpoints,
-							discoveryProbe.health,
-							bundleVersion,
-							runId,
-						);
-					}
-					return;
-				}
-				discoveryDetail = 'the discovered URL did not contain a usable port';
-			} else if (discoveryProbe.status === 'mismatch') {
-				discoveryDetail = discoveryProbe.reason;
-			} else {
-				discoveryDetail = getErrorMessage(discoveryProbe.error);
-			}
-			appendObserverOutputLine(
-				`Ignoring stale or incompatible shared Splunk Observability Studio state for ${discoveredObserver.baseUrl}: ${discoveryDetail}`,
-			);
-		}
-
-		const managedDiscovery = managedState;
-		if (
-			managedDiscovery !== undefined
-			&& sharedDiscoveryMatchesRestBase(managedDiscovery, managedObserverBaseUrl)
-		) {
-			const managedObserverEndpoints = observerEndpointRolesForDiscovery(
-				managedDiscovery,
-				managedObserverBaseUrl,
-			);
-			const managedProbe = await probeObserver(
-				managedObserverEndpoints,
-				500,
-				{ requireStableOtlp: true },
-			);
-			assertObserverRunCurrent(observerLifecycleState, runId);
-			if (managedProbe.status === 'ready') {
-				const retirement = await retireMismatchedManagedPortObserver(
-					managedDiscovery,
-					managedProbe.health,
-					managedPort,
-					bundleVersion,
-				);
-				assertObserverRunCurrent(observerLifecycleState, runId);
-				if (retirement.status === 'restart-required') {
-					throw observerRestartRequiredError(retirement, bundleVersion);
-				}
-				if (retirement.status === 'not-applicable') {
-					setObserverEndpoints(managedObserverEndpoints);
-					observerUsesSharedServer = true;
-					appendObserverOutputLine(
-						`Reusing Splunk Observability Studio at ${managedObserverEndpoints.restBaseUrl}`,
-					);
-					if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
-						syncObserverUi();
-					}
-					return;
-				}
-				appendObserverOutputLine(
-					`The previous Splunk Observability Studio service at ${managedObserverEndpoints.restBaseUrl} was stopped before managed startup.`,
-				);
-			} else {
-				const managedDetail = managedProbe.status === 'mismatch'
-					? managedProbe.reason
-					: getErrorMessage(managedProbe.error);
-				appendObserverOutputLine(
-					`Ignoring stale or incompatible Splunk Observability Studio state for ${managedObserverBaseUrl}: ${managedDetail}`,
-				);
-			}
-		}
-		let existingObserver = await probeObserver(managedEndpoints, 500, { requireStableOtlp: true });
-		assertObserverRunCurrent(observerLifecycleState, runId);
-		if (observerProbeMayRecover(existingObserver)) {
-			await waitForObserverPortHandoff(
-				[observerOtlpGrpcPort, observerOtlpHttpPort, managedPort],
-				observerHandoffDeadline,
 				runId,
 			);
-			existingObserver = await probeObserver(managedEndpoints, 500, { requireStableOtlp: true });
-			assertObserverRunCurrent(observerLifecycleState, runId);
-		}
-
-		if (existingObserver.status === 'ready') {
-			if (existingObserver.health.version === bundleVersion) {
-				observerUsesSharedServer = true;
-				setObserverEndpoints(managedEndpoints);
-				appendObserverOutputLine(`Reusing shared Splunk Observability Studio service at ${managedObserverBaseUrl}`);
-				if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
-					syncObserverUi();
-					monitorExtensionObserverHandoff(
-						context,
-						managedEndpoints,
-						existingObserver.health,
-						bundleVersion,
-						runId,
-					);
-				}
+			if (attached) {
 				return;
 			}
-			const retirement = await retireMismatchedManagedPortObserver(
-				{
-					baseUrl: managedObserverBaseUrl,
-					healthUrl: managedEndpoints.healthUrl,
-					mcpUrl: managedEndpoints.mcpUrl,
-				},
-				existingObserver.health,
-				managedPort,
-				bundleVersion,
-			);
-			assertObserverRunCurrent(observerLifecycleState, runId);
-			if (retirement.status === 'restart-required') {
-				throw observerRestartRequiredError(retirement, bundleVersion);
-			}
-			if (retirement.status === 'not-applicable') {
-				observerUsesSharedServer = true;
-				setObserverEndpoints(managedEndpoints);
-				appendObserverOutputLine(`Reusing Splunk Observability Studio at ${managedObserverBaseUrl}`);
-				if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
-					syncObserverUi();
-				}
-				return;
-			}
-			if (retirement.status !== 'retired') {
-				throw observerRestartRequiredError({
-					port: managedPort,
-					status: 'restart-required',
-					version: existingObserver.health.version,
-				}, bundleVersion);
-			}
-			appendObserverOutputLine(
-				`The previous Splunk Observability Studio service at ${managedObserverBaseUrl} was stopped before managed startup.`,
-			);
-		}
-
-		if (existingObserver.status === 'mismatch') {
-			appendObserverOutputLine(`Splunk Observability Studio health probe mismatch at ${managedObserverBaseUrl}: ${existingObserver.reason}`);
-			logObserverLifecycle(`Run ${runId}: existing service on ${managedObserverBaseUrl} did not match Splunk Observability Studio health: ${existingObserver.reason}`);
-			logObserverLifecycle(`Run ${runId}: checking whether managed port ${managedPort} remains occupied.`);
 		}
 
 		const backend = resolveBackend(context.extensionPath);
-		let observerPort: number;
-		try {
-			observerPort = await ensurePortAvailable({
-				port: managedPort,
-				role: 'Splunk Observability Studio UI',
-				settingName: managedObserverPortSetting,
-			});
-		} catch (error) {
-			const wrappedError = new Error(
-				`Cannot use ${managedObserverBaseUrl}: ${getErrorMessage(error)} ` +
-				`Configure observability-studio.${managedObserverPortSetting} or ` +
-				`observability-studio.${sharedObserverUrlSetting}.`,
-			);
-			if (typeof error === 'object' && error !== null && typeof (error as StartupHintCarrier).startupHint === 'string') {
-				Object.assign(wrappedError, { startupHint: (error as StartupHintCarrier).startupHint });
-			}
-			throw wrappedError;
-		}
-		logObserverLifecycle(`Run ${runId}: reserved UI port ${observerPort}.`);
-		assertObserverRunCurrent(observerLifecycleState, runId);
 
 		const otlpHttpPort = await ensurePortAvailable({
 			port: observerOtlpHttpPort,
@@ -1308,11 +1051,12 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		assertObserverRunCurrent(observerLifecycleState, runId);
 		logObserverLifecycle(`Run ${runId}: OTLP ports ready (HTTP ${otlpHttpPort}, gRPC ${otlpGrpcPort}).`);
 		observerUsesSharedServer = false;
-		setObserverEndpoints(managedEndpoints);
 
-		appendObserverOutputLine(`Starting ${backend.label} on ${managedObserverBaseUrl}`);
+		appendObserverOutputLine(`Starting ${backend.label}; it will select its own loopback UI port (auto-scanning from 17900).`);
 		appendObserverOutputLine(`OTLP/HTTP receiver listening on ${observerOtlpHttpEndpoint}`);
 		appendObserverOutputLine(`OTLP/gRPC receiver listening on ${observerOtlpGrpcEndpoint}`);
+		// Deliberately omit PORT: the binary owns UI port selection and records the
+		// bound URL in shared-observer.json, which the extension discovers after spawn.
 		const managedObserverEnvironment: NodeJS.ProcessEnv = {
 			...process.env,
 			...backend.env,
@@ -1321,7 +1065,6 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			OTLP_PORT: String(otlpHttpPort),
 			OTLP_HTTP_PORT: String(otlpHttpPort),
 			OTLP_GRPC_PORT: String(otlpGrpcPort),
-			PORT: String(observerPort),
 			OBSTUDIO_OWNER: extensionManagedObserverOwner,
 			OBSTUDIO_MODE: extensionManagedObserverMode,
 			// Pass the workspace root so the preview resolver locates
@@ -1336,6 +1079,9 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		delete managedObserverEnvironment.OBSTUDIO_CONTROL_TOKEN;
 		delete managedObserverEnvironment.OBSTUDIO_HEALTH_PROOF_SECRET;
 		delete managedObserverEnvironment.OBSTUDIO_PUBLIC_MCP_URL;
+		// An inherited PORT would pin the binary and defeat auto-scan — strip it so
+		// the binary always selects (or reuses) its own loopback UI port.
+		delete managedObserverEnvironment.PORT;
 		try {
 			startedProcess = cp.spawn(backend.command, backend.args, {
 				cwd: backend.cwd,
@@ -1371,6 +1117,19 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			if (observerProcess === startedProcess) {
 				observerProcess = undefined;
 			}
+			// Exit 0 during startup means the binary's pre-flight detected an
+			// already-running instance and deferred to it (writing/leaving the
+			// shared-observer.json that points at it). That is an attach, not a
+			// teardown — leave the run active so the discovery poll below attaches
+			// to the existing instance instead of failing the start.
+			if (code === 0 && isObserverRunCurrent(observerLifecycleState, runId)) {
+				observerDeferredToExistingInstance = true;
+				observerUsesSharedServer = true;
+				logObserverLifecycle(
+					`Run ${runId}: binary deferred to an already-running Splunk Observability Studio instance; discovering it.`,
+				);
+				return;
+			}
 			if (finishObserverRun(observerLifecycleState, runId)) {
 				setObserverEndpoints(undefined);
 				observerUsesSharedServer = false;
@@ -1398,16 +1157,28 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			}
 		});
 
-		const startedProbe = await waitForObserverReady(managedEndpoints, { requireStableOtlp: true }, runId);
+		// The binary selects its own UI port and records it in shared-observer.json.
+		// Poll for that file to appear, then probe the DISCOVERED endpoints — the
+		// extension no longer predicts the port.
+		const discoveredEndpoints = await waitForSpawnedObserverDiscovery(runId);
+		setObserverEndpoints(discoveredEndpoints);
+		const startedProbe = await waitForObserverReady(discoveredEndpoints, { requireStableOtlp: true }, runId);
 		if (startedProbe.health.version !== bundleVersion) {
+			throw observerRestartRequiredError({
+				port: observerPortFromUrl(discoveredEndpoints.restBaseUrl),
+				status: 'restart-required',
+				version: startedProbe.health.version,
+			}, bundleVersion);
+		}
+		const discoveredPort = observerPortFromUrl(discoveredEndpoints.restBaseUrl);
+		if (discoveredPort === undefined) {
 			throw new Error(
-				`Bundled Splunk Observability Studio reported version ${String(startedProbe.health.version)}, `
-				+ `expected ${bundleVersion}.`,
+				`Splunk Observability Studio reported an unusable URL: ${discoveredEndpoints.restBaseUrl}.`,
 			);
 		}
-		logObserverLifecycle(`Run ${runId}: Splunk Observability Studio is accepting connections at ${managedObserverBaseUrl}.`);
+		logObserverLifecycle(`Run ${runId}: Splunk Observability Studio is accepting connections at ${discoveredEndpoints.restBaseUrl}.`);
 		const startupCompleted = await observerCloudLifecycleOperations.run(async () => {
-			if (!completeObserverStart(observerLifecycleState, runId, observerPort)) {
+			if (!completeObserverStart(observerLifecycleState, runId, discoveredPort)) {
 				if (observerProcess === startedProcess) {
 					observerProcess = undefined;
 				}
@@ -1467,36 +1238,111 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 	return observerStartupPromise;
 }
 
-async function waitForObserverPortHandoff(
-	ports: readonly number[],
-	deadline: number,
+// Attempt to reuse an already-running Splunk Observability Studio recorded in a
+// discovery state file. Returns true if the extension attached to a healthy,
+// version-matching instance (startup is complete); false to fall through to
+// spawning a new managed instance. Throws observerRestartRequiredError when a
+// discovered instance is healthy but reports a mismatched version.
+async function attachToDiscoveredObserver(
+	context: vscode.ExtensionContext,
+	discovery: SharedObserverDiscovery,
+	bundleVersion: string,
 	runId: number,
-): Promise<void> {
-	const uniquePorts = uniqueLoopbackPorts(ports);
-	if (await loopbackPortsAreSimultaneouslyAvailable(ports, deadline)) {
-		assertObserverRunCurrent(observerLifecycleState, runId);
-		return;
+): Promise<boolean> {
+	const endpoints = observerEndpointRolesForDiscovery(discovery);
+	const discoveredPort = observerPortFromUrl(endpoints.restBaseUrl);
+	if (discoveredPort === undefined) {
+		appendObserverOutputLine(
+			`Ignoring Splunk Observability Studio discovery with an unusable URL: ${discovery.baseUrl}`,
+		);
+		return false;
 	}
+
+	let probe = await probeObserver(endpoints, 500, { requireStableOtlp: true });
 	assertObserverRunCurrent(observerLifecycleState, runId);
-	logObserverLifecycle(
-		`Run ${runId}: waiting for unavailable Splunk Observability Studio ports ${uniquePorts.join(', ')} `
-		+ 'to finish an extension-host handoff.',
-	);
-	while (performance.now() < deadline) {
-		if (await loopbackPortsAreSimultaneouslyAvailable(uniquePorts, deadline)) {
-			assertObserverRunCurrent(observerLifecycleState, runId);
-			logObserverLifecycle(`Run ${runId}: prior Splunk Observability Studio ports were released together.`);
-			return;
-		}
+
+	// A freshly-recorded instance may still be binding its listeners; give it the
+	// remainder of the startup window to become ready before giving up on reuse.
+	const stateAgeMs = discovery.updatedAtMs === undefined
+		? undefined
+		: Date.now() - discovery.updatedAtMs;
+	const startupDeadline = stateAgeMs !== undefined
+		&& stateAgeMs >= 0
+		&& stateAgeMs < sharedObserverStartupWindowMs
+		? performance.now() + sharedObserverStartupWindowMs - stateAgeMs
+		: undefined;
+	while (
+		observerProbeMayRecover(probe)
+		&& startupDeadline !== undefined
+		&& performance.now() < startupDeadline
+	) {
+		await delay(Math.min(100, Math.max(0, startupDeadline - performance.now())));
 		assertObserverRunCurrent(observerLifecycleState, runId);
-		const remainingMs = deadline - performance.now();
-		if (remainingMs <= 0) {
+		probe = await probeObserver(endpoints, 500, { requireStableOtlp: true });
+		assertObserverRunCurrent(observerLifecycleState, runId);
+	}
+
+	if (probe.status !== 'ready') {
+		const detail = probe.status === 'mismatch' ? probe.reason : getErrorMessage(probe.error);
+		appendObserverOutputLine(
+			`Ignoring stale or unreachable Splunk Observability Studio discovery for ${discovery.baseUrl}: ${detail}`,
+		);
+		return false;
+	}
+
+	if (probe.health.version !== bundleVersion) {
+		throw observerRestartRequiredError({
+			pid: discovery.pid,
+			port: discoveredPort,
+			status: 'restart-required',
+			version: probe.health.version,
+		}, bundleVersion);
+	}
+
+	setObserverEndpoints(endpoints);
+	observerUsesSharedServer = true;
+	appendObserverOutputLine(`Reusing Splunk Observability Studio at ${endpoints.restBaseUrl}`);
+	if (completeObserverStart(observerLifecycleState, runId, discoveredPort)) {
+		syncObserverUi();
+		monitorExtensionObserverHandoff(context, endpoints, probe.health, bundleVersion, runId);
+	}
+	return true;
+}
+
+// After spawning the binary with no PORT, poll shared-observer.json until the
+// bound URL appears and resolve the discovered endpoints. The binary writes this
+// file only after its UI and both OTLP listeners are bound, so a successful read
+// means the instance is reachable at the recorded URL.
+async function waitForSpawnedObserverDiscovery(
+	runId: number,
+): Promise<ObserverEndpointRoles> {
+	const deadline = performance.now() + sharedObserverStartupWindowMs;
+	let lastError: string | undefined;
+	while (performance.now() < deadline) {
+		assertObserverRunCurrent(observerLifecycleState, runId);
+		const discovery = readSharedObserverDiscovery(
+			os.homedir(),
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
+		);
+		if (discovery !== undefined && observerPortFromUrl(discovery.baseUrl) !== undefined) {
+			return observerEndpointRolesForDiscovery(discovery);
+		}
+		// The spawned process may have exited before writing discovery. If it
+		// deferred to an existing instance (exit 0), keep polling — that instance's
+		// state file is what we are waiting for. Otherwise, the exit handler has
+		// already failed the run and assertObserverRunCurrent will cancel us.
+		if (observerProcess === undefined && !observerDeferredToExistingInstance) {
+			lastError = 'the Splunk Observability Studio process exited before recording its bound port';
 			break;
 		}
-		await delay(Math.min(100, remainingMs));
-		assertObserverRunCurrent(observerLifecycleState, runId);
+		await delay(100);
 	}
-	logObserverLifecycle(`Run ${runId}: extension-host port handoff window expired.`);
+	assertObserverRunCurrent(observerLifecycleState, runId);
+	const message = lastError
+		?? 'Splunk Observability Studio did not record its bound port within the startup window';
+	const error = new Error(`Could not discover the Splunk Observability Studio port: ${message}.`);
+	Object.assign(error, { startupHint: getObserverStartupHint('generic') });
+	throw error;
 }
 
 function monitorExtensionObserverHandoff(
@@ -1609,275 +1455,6 @@ function monitorExtensionObserverHandoff(
 	})().catch((error) => {
 		logObserverLifecycle(`Extension-host handoff monitor failed: ${getErrorMessage(error)}`);
 	});
-}
-
-async function retireMismatchedManagedPortObserver(
-	discovery: SharedObserverDiscovery,
-	observerHealth: ObserverHealth | undefined,
-	managedPort: number,
-	bundleVersion: string,
-): Promise<ManagedPortObserverRetirement> {
-	const discoveryPort = observerPortFromUrl(discovery.baseUrl);
-	const observerHealthVerified = observerHealth !== undefined;
-	let observerVersion = observerHealth?.version;
-	if (observerHealthVerified && observerVersion === bundleVersion) {
-		return { status: 'not-applicable' };
-	}
-	if (discoveryPort !== managedPort) {
-		if (!observerHealthVerified) {
-			return { status: 'not-applicable' };
-		}
-		appendObserverOutputLine(
-			`Splunk Observability Studio ${observerVersion ?? '(unversioned)'} at ${discovery.baseUrl} does not match `
-			+ `bundled version ${bundleVersion}; leaving the other port untouched.`,
-		);
-		return {
-			status: 'ignored',
-		};
-	}
-	if (!observerHealthVerified) {
-		return { status: 'not-applicable' };
-	}
-	const listenerInspection = await inspectListeningProcess(managedPort);
-	if (listenerInspection.status === 'none') {
-		return { status: 'retired' };
-	}
-	if (listenerInspection.status !== 'unique') {
-		appendObserverOutputLine(
-			`Splunk Observability Studio at ${discovery.baseUrl} has no unique inspectable listener; refusing to stop it automatically.`,
-		);
-		return {
-			pid: discovery.pid,
-			port: discoveryPort,
-			status: 'restart-required',
-			version: observerVersion,
-		};
-	}
-	const listener = listenerInspection.process;
-	const { executablePath: processExecutablePath, pid } = listener;
-	if (discovery.pid !== undefined && discovery.pid !== pid) {
-		appendObserverOutputLine(
-			`Ignoring stale Splunk Observability Studio PID ${discovery.pid}; localhost port ${managedPort} belongs to PID ${pid}.`,
-		);
-	}
-	if (pid === process.pid) {
-		return { pid, port: discoveryPort, status: 'restart-required', version: observerVersion };
-	}
-	if (!processIsRunning(pid)) {
-		return { status: 'retired' };
-	}
-	if (processExecutablePath === undefined) {
-		if (!processIsRunning(pid)) {
-			return { status: 'retired' };
-		}
-		appendObserverOutputLine(
-			`Splunk Observability Studio PID ${pid} could not be inspected; refusing to stop it automatically.`,
-		);
-		return {
-			pid,
-			port: observerPortFromUrl(discovery.baseUrl),
-			status: 'restart-required',
-			version: observerVersion,
-		};
-	}
-	if (!isObserverExecutablePath(processExecutablePath)) {
-		appendObserverOutputLine(
-			`Splunk Observability Studio health was returned from ${discovery.baseUrl}, but localhost port ${managedPort} `
-			+ `belongs to ${processExecutablePath}; refusing to stop PID ${pid} automatically.`,
-		);
-		return {
-			pid,
-			port: discoveryPort,
-			status: 'restart-required',
-			version: observerVersion,
-		};
-	}
-	const restartRequired = (): ManagedPortObserverRetirement => ({
-		pid,
-		port: discoveryPort,
-		status: 'restart-required',
-		version: observerVersion,
-	});
-
-	const preStopInspection = await inspectListeningProcess(managedPort);
-	if (preStopInspection.status === 'none') {
-		return { status: 'retired' };
-	}
-	if (preStopInspection.status !== 'unique') {
-		appendObserverOutputLine(
-			`Could not reverify Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on localhost port ${managedPort}; `
-			+ `refusing to stop PID ${pid}.`,
-		);
-		return restartRequired();
-	}
-	const preStopListener = preStopInspection.process;
-	if (
-		preStopListener.pid !== pid
-		|| preStopListener.executablePath === undefined
-		|| !isObserverExecutablePath(preStopListener.executablePath)
-		|| !processExecutablePathsEqual(preStopListener.executablePath, processExecutablePath)
-	) {
-		appendObserverOutputLine(
-			`Could not reverify Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on localhost port ${managedPort}; `
-			+ `refusing to stop PID ${pid}.`,
-		);
-		return restartRequired();
-	}
-	const replacementProbe = await probeObserver(
-		observerEndpointRolesForBase(buildManagedObserverBaseUrl(managedPort)),
-		500,
-		{ requireStableOtlp: false },
-	);
-	if (replacementProbe.status !== 'ready') {
-		const replacementProbeInspection = await inspectListeningProcess(managedPort);
-		if (replacementProbeInspection.status === 'none') {
-			return { status: 'retired' };
-		}
-		appendObserverOutputLine(
-			`Could not refresh Splunk Observability Studio identity on localhost port ${managedPort}; refusing to stop PID ${pid}.`,
-		);
-		return restartRequired();
-	}
-	if (replacementProbe.health.version === bundleVersion) {
-		appendObserverOutputLine(
-			`Splunk Observability Studio on managed port ${managedPort} already reports bundled version ${bundleVersion}; reusing it.`,
-		);
-		return { status: 'not-applicable' };
-	}
-	observerVersion = replacementProbe.health.version;
-	const confirmedInspection = await inspectListeningProcess(managedPort);
-	if (confirmedInspection.status === 'none') {
-		return { status: 'retired' };
-	}
-	if (confirmedInspection.status !== 'unique') {
-		appendObserverOutputLine(
-			`Splunk Observability Studio ownership changed while verifying localhost port ${managedPort}; refusing to stop PID ${pid}.`,
-		);
-		return restartRequired();
-	}
-	const confirmedListener = confirmedInspection.process;
-	if (
-		confirmedListener.pid !== pid
-		|| confirmedListener.executablePath === undefined
-		|| !isObserverExecutablePath(confirmedListener.executablePath)
-		|| !processExecutablePathsEqual(confirmedListener.executablePath, processExecutablePath)
-	) {
-		appendObserverOutputLine(
-			`Splunk Observability Studio ownership changed while verifying localhost port ${managedPort}; refusing to stop PID ${pid}.`,
-		);
-		return restartRequired();
-	}
-
-	appendObserverOutputLine(
-		`Replacing Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} (PID ${pid}) `
-		+ `with bundled version ${bundleVersion}.`,
-	);
-	let gracefulTerminationRequested = false;
-	try {
-		await gracefullyTerminateProcess(pid);
-		gracefulTerminationRequested = true;
-	} catch (error) {
-		if (!processIsRunning(pid)) {
-			return { status: 'retired' };
-		}
-		appendObserverOutputLine(
-			`Could not request a graceful stop for Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port `
-			+ `${managedPort}: ${getErrorMessage(error)}. Proceeding to the verified forced-stop fallback.`,
-		);
-	}
-
-	if (gracefulTerminationRequested) {
-		if (await waitForProcessExit(
-			pid,
-			outdatedManagedObserverShutdownTimeoutMs,
-		)) {
-			appendObserverOutputLine(
-				`Stopped Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port ${managedPort}.`,
-			);
-			return { status: 'retired' };
-		}
-		appendObserverOutputLine(
-			`Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} did not stop after `
-			+ `${outdatedManagedObserverShutdownTimeoutMs}ms; forcing it to stop.`,
-		);
-	}
-	const forceStopInspection = await inspectListeningProcess(managedPort);
-	if (
-		forceStopInspection.status === 'ambiguous'
-		|| forceStopInspection.status === 'unavailable'
-	) {
-		appendObserverOutputLine(
-			`Could not determine the owner of managed port ${managedPort}; refusing to force-stop Splunk Observability Studio PID ${pid}.`,
-		);
-		return restartRequired();
-	}
-	if (
-		forceStopInspection.status === 'unique'
-		&& (
-			forceStopInspection.process.pid !== pid
-			|| (forceStopInspection.process.executablePath !== undefined
-				&& (!isObserverExecutablePath(forceStopInspection.process.executablePath)
-					|| !processExecutablePathsEqual(
-						forceStopInspection.process.executablePath,
-						processExecutablePath,
-					)))
-		)
-	) {
-		appendObserverOutputLine(
-			`A different process now owns managed port ${managedPort}; refusing to force-stop Splunk Observability Studio PID ${pid}.`,
-		);
-		return restartRequired();
-	}
-	const currentProcessExecutablePath = await readProcessExecutablePath(pid);
-	if (
-		currentProcessExecutablePath === undefined
-		|| !isObserverExecutablePath(currentProcessExecutablePath)
-		|| !processExecutablePathsEqual(currentProcessExecutablePath, processExecutablePath)
-	) {
-		if (!processIsRunning(pid)) {
-			return { status: 'retired' };
-		}
-		appendObserverOutputLine(
-			`Could not reverify Splunk Observability Studio ${observerVersion ?? '(unversioned)'} PID ${pid}; refusing a forced stop.`,
-		);
-		return restartRequired();
-	}
-	try {
-		await forceTerminateProcess(pid);
-	} catch (error) {
-		if (!processIsRunning(pid)) {
-			return { status: 'retired' };
-		}
-		appendObserverOutputLine(
-			`Could not force-stop Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port `
-			+ `${managedPort}: ${getErrorMessage(error)}`,
-		);
-		return restartRequired();
-	}
-	if (await waitForProcessExit(
-		pid,
-		outdatedManagedObserverForceShutdownTimeoutMs,
-	)) {
-		appendObserverOutputLine(
-			`Force-stopped Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port ${managedPort}.`,
-		);
-		return { status: 'retired' };
-	}
-	appendObserverOutputLine(
-		`Splunk Observability Studio ${observerVersion ?? '(unversioned)'} on managed port ${managedPort} is still running after a forced stop.`,
-	);
-	return restartRequired();
-}
-
-async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
-	const deadline = Date.now() + timeoutMs;
-	while (Date.now() < deadline) {
-		if (!processIsRunning(pid)) {
-			return true;
-		}
-		await delay(50);
-	}
-	return !processIsRunning(pid);
 }
 
 async function stopObserver(): Promise<void> {
@@ -3190,10 +2767,6 @@ function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
-function buildManagedObserverBaseUrl(port: number): string {
-	return `http://${managedObserverHost}:${port}`;
-}
-
 function parseInternalTestPort(value: unknown, fallback: number): number {
 	if (value === undefined) {
 		return fallback;
@@ -3202,21 +2775,6 @@ function parseInternalTestPort(value: unknown, fallback: number): number {
 		throw new Error('Splunk Observability Studio test OTLP ports must be integers between 1 and 65535.');
 	}
 	return value;
-}
-
-function getConfiguredManagedObserverPort(): number {
-	const configured = vscode.workspace.getConfiguration('observability-studio').get<number>(managedObserverPortSetting);
-	if (typeof configured === 'number' && Number.isInteger(configured) && configured > 0 && configured <= 65_535) {
-		if (configured === observerOtlpHttpPort || configured === observerOtlpGrpcPort) {
-			const signal = configured === observerOtlpHttpPort ? 'OTLP/HTTP' : 'OTLP/gRPC';
-			throw new Error(
-				`observability-studio.${managedObserverPortSetting} cannot use port ${configured}; ` +
-				`${signal} already uses that port.`,
-			);
-		}
-		return configured;
-	}
-	return defaultManagedObserverPort;
 }
 
 function appendObserverOutput(text: string): void {
