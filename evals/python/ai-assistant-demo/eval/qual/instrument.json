@@ -23,7 +23,7 @@
     "Writes bound canonical .observe/otel-selection.json and .observe/otel-instrumentation.json for the selected audit scope without rewriting the audit baseline.",
     "Records OTEL-002 and AO-002 as the explicit requests and automatically includes their executable OTEL-001 and AO-001 prerequisites in canonical audit order; preserves finding_group only for the Splunk Agent Observability findings and does not add an opentelemetry group to ordinary findings; implements and reports every dependency-closed finding exactly once while leaving unselected work untouched.",
     "Represents the project and Agent Stream work as configuration changes, not invented telemetry, and leaves durable direct application/deployment routing with operator-owned secret references so Obstudio is not required at runtime.",
-    "Renders compatibility Markdown and the separate self-contained instrumentation HTML without rewriting the audit HTML; the preexisting audit reader keeps ordinary OTel finding cards directly under Findings while nesting its tagged AO findings under the Splunk Agent Observability subsection.",
+    "Renders compatibility Markdown and the separate self-contained instrumentation HTML without rewriting the audit HTML; the preexisting audit reader keeps ordinary OTel finding cards directly under Findings while nesting its tagged AO findings under the Splunk Agent Observability subsection, and its priority order still places required cards ahead of recommended cards regardless of finding group.",
     "Runs otel-verify and produces reader-first What Changed, Tested And Working, Not Working Or Not Proven, and Proof results, or records an exact blocker and keeps the instrumentation result Partial."
   ]
 }

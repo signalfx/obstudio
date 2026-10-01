@@ -176,6 +176,14 @@ def test_splunk_ao_skills_explain_span_creation_and_export_paths():
     ]
     assert not [term for term in audit_outcome_terms if term not in audit]
 
+    instrument_lifecycle_terms = [
+        "splunk_ao_context.get_logger_instance()",
+        "flush alone does not terminate",
+        "both independent entrypoints",
+        "capture both SDK-created and app-owned spans",
+    ]
+    assert not [term for term in instrument_lifecycle_terms if term not in instrument]
+
     compatibility_terms = [
         "span creation",
         "export-only",
@@ -249,6 +257,20 @@ def test_splunk_ao_integration_eval_is_local_and_outcome_based():
         "without live Splunk or model credentials",
     ):
         assert term in combined
+
+
+def test_audit_keeps_configurable_ao_prerequisites_selectable():
+    audit = " ".join(_read(SKILLS_DIR / "otel-audit" / "SKILL.md").split())
+    for term in (
+        "missing audit-time credentials alone do not make an AO finding external",
+        "selectable project configuration",
+        "selectable Agent Stream configuration",
+        "reserve `external follow-up` for a source-proven outside owner",
+        "separate selectable AO findings for project, Agent Stream, and direct routing",
+        "Agent Stream depends on project",
+        "direct routing depends on project, Agent Stream, and OTel export",
+    ):
+        assert term in audit
 
 
 def test_splunk_ao_langchain_demo_is_local_runnable_and_outcome_based():

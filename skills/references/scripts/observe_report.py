@@ -4698,13 +4698,21 @@ function renderFindingCard(f) {{
 
 function renderCards() {{
   const rendered = DISPLAY_FINDINGS.map(f => ({{finding: f, html: renderFindingCard(f)}}));
-  const agentObservability = rendered.filter(row => row.finding.finding_group === "splunk-agent-observability");
-  const openTelemetry = rendered.filter(row => row.finding.finding_group !== "splunk-agent-observability");
+  const bands = [];
+  for (const row of rendered) {{
+    const last = bands[bands.length - 1];
+    if (last && last.priority === row.finding.priority) last.rows.push(row);
+    else bands.push({{priority: row.finding.priority, rows: [row]}});
+  }}
   const subsection = (id, label, rows) => rows.length
     ? `<section class="finding-subsection" aria-labelledby="${{esc(id)}}"><h3 id="${{esc(id)}}">${{esc(label)}} <span class="findings-total">· ${{rows.length}}</span></h3>${{rows.map(row => row.html).join("")}}</section>`
     : "";
-  document.getElementById("cards").innerHTML = openTelemetry.map(row => row.html).join("")
-    + subsection("splunk-agent-observability-findings-heading", "Splunk Agent Observability findings", agentObservability);
+  document.getElementById("cards").innerHTML = bands.map(band => {{
+    const openTelemetry = band.rows.filter(row => row.finding.finding_group !== "splunk-agent-observability");
+    const agentObservability = band.rows.filter(row => row.finding.finding_group === "splunk-agent-observability");
+    return openTelemetry.map(row => row.html).join("")
+      + subsection(`splunk-agent-observability-${{band.priority}}-findings-heading`, "Splunk Agent Observability findings", agentObservability);
+  }}).join("");
   syncFindingSelectionState();
 }}
 

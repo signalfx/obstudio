@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261001T171120090826Z |
+| Run ID | 20261001T175940987323Z |
 | Agent model | - |
 | Judge model | - |
 | Rubric enabled | True |
@@ -18,26 +18,23 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/splunk-ao-integration-demo/qual/instrument | python/splunk-ao-integration-demo | 1 | 67% (4/6), avg score 76 | 5.2M | 9.7m | - | - | - |
+| with_skill | python/splunk-ao-integration-demo/qual/instrument | python/splunk-ao-integration-demo | 1 | 100% (6/6), avg score 91 | 5.1M | 9.4m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/splunk-ao-integration-demo/qual/instrument | python/splunk-ao-integration-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 5138629 | 5027200 | 0 | 20255 | 4828 | unknown | 5158884 |
+| with_skill | python/splunk-ao-integration-demo/qual/instrument | python/splunk-ao-integration-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 5079329 | 4962048 | 0 | 19820 | 3793 | unknown | 5099149 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/splunk-ao-integration-demo/qual/instrument | python/splunk-ao-integration-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 174283 | 125824 | 0 | 1863 | 499 | unknown | 176146 |
+| with_skill | python/splunk-ao-integration-demo/qual/instrument | python/splunk-ao-integration-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 153452 | 114944 | 0 | 2186 | 635 | unknown | 155638 |
 
 ## Rubric Failures
 
-| Mode | Service | Side | Prompt | Result | Evidence |
-|---|---|---|---|---|---|
-| with_skill | python/splunk-ao-integration-demo | with_skill | integration-paths | rubric:rubric-4 FAIL | service/decorator_app.py:80-89; service/tests/test_integration_paths.py:22-63 |
-| with_skill | python/splunk-ao-integration-demo | with_skill | integration-paths | rubric:rubric-5 FAIL | service/tests/test_integration_paths.py:54-57,119-126; .observe/otel-verify.json |
+No rubric failures.
 
 ## Result JSON
 

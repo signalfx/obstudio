@@ -1547,7 +1547,7 @@ class ObserveReportTest(unittest.TestCase):
             html,
         )
         self.assertIn(
-            '"splunk-agent-observability-findings-heading", "Splunk Agent Observability findings"',
+            '"Splunk Agent Observability findings", agentObservability',
             html,
         )
         self.assertNotIn('"opentelemetry-findings-heading", "OpenTelemetry findings"', html)
@@ -1559,6 +1559,61 @@ class ObserveReportTest(unittest.TestCase):
         self.assertIn('id="plan-${esc(f.id)}"', html)
         self.assertIn("Agent Observability change", html)
         self.assertIn('"type":"configuration"', html)
+
+    def test_grouped_cards_keep_global_priority_in_executed_renderer(self) -> None:
+        script = r"""
+const fs = require('node:fs');
+const vm = require('node:vm');
+const payload = JSON.parse(fs.readFileSync(0, 'utf8'));
+const cards = { innerHTML: '' };
+const context = {
+  DISPLAY_FINDINGS: payload.findings,
+  renderFindingCard: finding => `<article data-finding-id="${finding.id}"></article>`,
+  document: { getElementById: id => id === 'cards' ? cards : null },
+  syncFindingSelectionState: () => {},
+  esc: value => String(value),
+};
+vm.runInNewContext(payload.source + '\nrenderCards();', context);
+process.stdout.write(cards.innerHTML);
+"""
+        for recommended_agent_stream in (False, True):
+            with self.subTest(recommended_agent_stream=recommended_agent_stream):
+                data = sample_splunk_agent_observability_report()
+                if recommended_agent_stream:
+                    data["findings"][-1]["priority"] = "recommended"  # type: ignore[index]
+                report = MODULE.normalize_audit_report(data)
+                html = MODULE.render_html(report, MODULE.empty_selection(report))
+                start = html.index("function renderCards() {")
+                end = html.index("function orderedSelection()", start)
+                payload = {
+                    "source": html[start:end],
+                    "findings": [
+                        next(f for f in report["findings"] if f["id"] == finding_id)
+                        for finding_id in MODULE.display_finding_ids(report)
+                    ],
+                }
+                result = subprocess.run(
+                    ["node", "-e", script],
+                    input=json.dumps(payload),
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                )
+                rendered = result.stdout
+                expected = ["OTEL-001", "AO-001", "AO-002", "OTEL-002"]
+                if recommended_agent_stream:
+                    expected = ["OTEL-001", "AO-001", "OTEL-002", "AO-002"]
+                self.assertEqual(
+                    re.findall(r'data-finding-id="([^"]+)"', rendered), expected
+                )
+                labels = re.findall(
+                    r'<section class="finding-subsection" aria-labelledby="([^"]+)">'
+                    r'<h3 id="\1">Splunk Agent Observability findings',
+                    rendered,
+                )
+                self.assertEqual(len(labels), 2 if recommended_agent_stream else 1)
+                self.assertEqual(len(labels), len(set(labels)))
+                self.assertNotIn("OpenTelemetry findings", rendered)
 
     def test_splunk_agent_observability_selection_auto_includes_prerequisites(self) -> None:
         report = MODULE.normalize_audit_report(

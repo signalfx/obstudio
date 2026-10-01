@@ -892,6 +892,17 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     Splunk AO sink and application provider coexist, inspect both outputs.
     Live delivery is separate proof;
     do not require live credentials for the compatibility tests.
+  - For a finite `@log` application, finish each SDK-created operation and
+    prove the logger's supported teardown path. Where the installed SDK exposes
+    `splunk_ao_context.get_logger_instance()`, terminate that logger once after
+    work concludes (or prove the SDK's registered process-teardown callback).
+    `splunk_ao_context.flush()` can drain completed spans, but flush alone does not terminate
+    the logger or close an unfinished operation. Keep `provider.shutdown()` for
+    any separate app-owned provider. In tests, capture both SDK-created and app-owned spans
+    from both independent entrypoints, assert the expected logical operation
+    count in each path, and inspect the combined output when both paths are
+    active. A fake sink can prove lifecycle calls and duplicate prevention;
+    it cannot prove live Splunk delivery.
 - Preserve existing application stable business workflow identity when setting
   `gen_ai.workflow.name` and workflow span names. Prefer constants, function or
   handler names, workflow registrations, telemetry event names, docs, or prior

@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "otel-instrument",
-    "run_id": "20261001T171233158848Z",
+    "run_id": "20261001T184921522296Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -22,10 +22,10 @@
     "with_skill": {
       "prompt_count": 2,
       "command_count": 2,
-      "duration_seconds": 22.063,
-      "agent_duration_seconds": 22.016,
-      "tokens": 151812,
-      "agent_tokens": 151812,
+      "duration_seconds": 25.689,
+      "agent_duration_seconds": 25.638,
+      "tokens": 152962,
+      "agent_tokens": 152962,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 2,
         "selected_record_count": 2,
-        "input_tokens": 151371,
-        "cached_input_tokens": 72192,
+        "input_tokens": 152281,
+        "cached_input_tokens": 77312,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 441,
-        "reasoning_output_tokens": 325,
+        "output_tokens": 681,
+        "reasoning_output_tokens": 568,
         "provider_total_tokens": null,
-        "derived_total_tokens": 151812,
-        "effective_total_tokens": 151812,
+        "derived_total_tokens": 152962,
+        "effective_total_tokens": 152962,
         "coverage": {
           "record_count": 2,
           "modeled_count": 2,
@@ -80,10 +80,10 @@
       "with_skill": {
         "prompt_count": 2,
         "command_count": 2,
-        "duration_seconds": 22.063,
-        "agent_duration_seconds": 22.016,
-        "tokens": 151812,
-        "agent_tokens": 151812,
+        "duration_seconds": 25.689,
+        "agent_duration_seconds": 25.638,
+        "tokens": 152962,
+        "agent_tokens": 152962,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -91,14 +91,14 @@
           "observed": true,
           "usage_record_count": 2,
           "selected_record_count": 2,
-          "input_tokens": 151371,
-          "cached_input_tokens": 72192,
+          "input_tokens": 152281,
+          "cached_input_tokens": 77312,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 441,
-          "reasoning_output_tokens": 325,
+          "output_tokens": 681,
+          "reasoning_output_tokens": 568,
           "provider_total_tokens": null,
-          "derived_total_tokens": 151812,
-          "effective_total_tokens": 151812,
+          "derived_total_tokens": 152962,
+          "effective_total_tokens": 152962,
           "coverage": {
             "record_count": 2,
             "modeled_count": 2,
@@ -125,16 +125,16 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20261001T171233158848Z/results/sanity/skill-smoke/sanity-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20261001T171233158848Z/results/sanity/skill-smoke/sanity-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20261001T171233158848Z/results/sanity/skill-smoke/sanity-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20261001T184921522296Z/results/sanity/skill-smoke/sanity-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20261001T184921522296Z/results/sanity/skill-smoke/sanity-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20261001T184921522296Z/results/sanity/skill-smoke/sanity-instrument/with_baseline.json"
       }
     }
   ],
   "failures": [],
   "source": {
     "digest_version": 4,
-    "digest": "e120e86ace4eb62c98e912213d39b087c62ff95b50f824e156ea4399db5a0f60",
+    "digest": "7e398a36fedc2ae8d7275372d611ceea22dd28a23c79ee66587928d394b8cd72",
     "eval_kinds": [
       "sanity"
     ],
@@ -143,7 +143,7 @@
       "evals/codex-evals.toml": "c0b019453c76a5b6d8692346f984ea91af04ca91331aa333b56d7a717b7b07c7",
       "evals/sanity/skill-smoke/eval/sanity/instrument.json": "79b5c1da09ad32b8f941a0445a79a528ce2de76ff4c81738263b4fa04cd2d1c9",
       "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9",
-      "skills/otel-instrument/SKILL.md": "9d9eb6c0d8fbffd3f8aca5582b906a9b55a387c7c6227ae868bbc6f2821280a3",
+      "skills/otel-instrument/SKILL.md": "c4d5ade715a6564373c71cb57d6a1b7d6febbf67d4d385c7878e9df251bc45c4",
       "skills/otel-instrument/references/json-approval-handoff.md": "e924372284ea1e55d78528ef002b34840f34a912f40cb931ae8b18adcac1d95c",
       "skills/otel-instrument/references/languages/go.md": "55d76bc4cc23adf86f4a95dc52c5da486b37540363d071df7f17419bbf6e2662",
       "skills/otel-instrument/references/languages/java.md": "17679fe3627c6116b4480e00917a1e7252a8cd6af9d6081f3af43bf7db519db0",
@@ -162,12 +162,12 @@
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
-      "skills/references/scripts/observe_report.py": "e95a5d47e54822f5a1179a76475b6d7a737a04200e9f5a7b5c8d4b428ba18a65",
+      "skills/references/scripts/observe_report.py": "27e3327a9223fa6c4f7a061efe32c27f0bfcd26cebd78ca9de19aa0e19bd3054",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-agent-observability.md": "9fde934642870af48bb3fd86e7f35b5e5e17d51efeaf32cac57551f0a2f1c67a",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "7361fbc814b2b615e7dfcf7140ac6a6e35c91b9c5446d2d4e0a0b6b983219ed7"
+      "skills/references/tests/test_observe_report.py": "c9f3ee14e6b23c56fe3b9fe555162f8c9cc9bfc88b3f85c25edac61e5f2cb652"
     },
     "skill_path": "skills/otel-instrument",
     "shared_reference_consumers": [

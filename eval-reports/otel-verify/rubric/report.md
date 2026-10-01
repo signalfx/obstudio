@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-verify |
-| Run ID | 20261001T171547264645Z |
+| Run ID | 20261001T175940988475Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,25 +18,25 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/verify | go/chi-basic | 1 | 80% (4/5), avg score 86 | 2.3M | 10.2m | - | - | - |
+| with_skill | go/chi-basic/qual/verify | go/chi-basic | 1 | 80% (4/5), avg score 88 | 2.9M | 12.1m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2243606 | 2114048 | 0 | 19705 | 4881 | unknown | 2263311 |
+| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2838414 | 2643072 | 0 | 23930 | 7303 | unknown | 2862344 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 617505 | 508032 | 0 | 10493 | 4808 | unknown | 627998 |
+| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 566027 | 498560 | 0 | 11366 | 7349 | unknown | 577393 |
 
 ## Rubric Failures
 
 | Mode | Service | Side | Prompt | Result | Evidence |
 |---|---|---|---|---|---|
-| with_skill | go/chi-basic | with_skill | canonical-proof-packet | rubric:rubric-5 FAIL | `stat` shows `service/.observe/otel.html` written on Oct 1 10:19; the report command says `Generated .observe/otel-instrumentation.html and .observe/otel.html`. In `otel.html`, `DATA.selection` has `requested_ids: []` and `approved_ids: []` despite `.observe/otel-selection.json` approving `OTEL-001`. |
+| with_skill | go/chi-basic | with_skill | canonical-proof-packet | rubric:rubric-5 FAIL | `otel-verify.md` lists `render-html .observe/otel-audit.json -o .observe/otel.html` as a Pass command, and `.observe/otel.html` has a fresh timestamp. The refreshed instrumentation HTML is present and the canonical proof JSON is preserved. |
 
 ## Result JSON
 

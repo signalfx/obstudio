@@ -594,6 +594,25 @@ Splunk Agent Observability is in scope, follow
 product or routing gaps in the same `findings` array with
 `finding_group: splunk-agent-observability`. Never add a top-level
 `splunk_agent_observability` object or a peer report section.
+For a source-backed project/Agent Stream/routing gap that can be closed by
+application or deployment configuration, author selectable project configuration
+and selectable Agent Stream configuration findings with executable modes and
+their dependency edges. A target ID or credential may be supplied at the
+selected instrumentation/deployment step; missing audit-time credentials alone do not make an AO finding external.
+When all three gaps exist, create separate selectable AO findings for project, Agent Stream, and direct routing
+rather than collapsing them into one card. The Agent Stream depends on project;
+direct routing depends on project, Agent Stream, and OTel export. Keep a
+project finding scoped to resolving or creating the product resource, a stream
+finding scoped to its own resource, and a routing finding scoped to durable
+application/deployment configuration. A user can then select a downstream
+finding and see its distinct prerequisites auto-included. Do not split a
+single already-working resource just to increase the finding count.
+Do not claim a product resource or routed trace is Working until it is
+resolved and verified. In contrast, reserve `external follow-up` for a source-proven outside owner
+who must perform a prerequisite action outside the selected application's
+configuration or supported product API path. Do not make an executable Agent
+Stream or routing finding depend on a non-executable external item merely
+because the read-only audit cannot call Lab0.
 
 Populate canonical `findings` so the shared renderer can project the single
 priority-ordered finding list; do not hand-author its layout. Use only `required`,
