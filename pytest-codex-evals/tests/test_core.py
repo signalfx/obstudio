@@ -1958,14 +1958,14 @@ def _write_validation_manifest_fixture(
     )
 
 
-def test_source_manifest_v3_binds_validation_selection_scope(tmp_path: Path):
+def test_source_manifest_v4_binds_validation_selection_scope(tmp_path: Path):
     benchmark_path = _write_validation_manifest_fixture(
         tmp_path,
         selected_prompt_ids=("direct", "sibling"),
         selection_scope="full",
     )
     benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
-    assert benchmark["source"]["digest_version"] == 3
+    assert benchmark["source"]["digest_version"] == 4
     assert benchmark["source"]["evaluator_semantics_version"] == 1
     assert verify_published_report_sources(tmp_path) == [benchmark_path]
 
@@ -2069,6 +2069,31 @@ def test_report_freshness_ignores_shared_reference_changes_for_other_consumers(
     unrelated.write_text("# Unrelated changed\n", encoding="utf-8")
     late_unrelated = references / "late-unrelated.md"
     late_unrelated.write_text("# Late unrelated\n", encoding="utf-8")
+    consumers.write_text(
+        json.dumps(
+            {
+                "consumed.md": ["sample-skill"],
+                "unrelated.md": ["other-skill"],
+                "late-unrelated.md": ["other-skill"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert verify_published_report_sources(tmp_path) == [benchmark_path]
+
+    consumers.write_text(
+        json.dumps(
+            {
+                "consumed.md": ["other-skill"],
+                "unrelated.md": ["other-skill"],
+                "late-unrelated.md": ["other-skill"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="inputs are stale"):
+        verify_published_report_sources(tmp_path)
+
     consumers.write_text(
         json.dumps(
             {

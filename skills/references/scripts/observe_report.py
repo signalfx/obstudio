@@ -76,7 +76,7 @@ PROOF_LEVEL_ALIASES = {
     "either": "either",
 }
 SIGNAL_TYPES = {"span", "metric", "log", "resource", "configuration"}
-FINDING_GROUPS = {"opentelemetry", "splunk-agent-observability"}
+FINDING_GROUPS = {"splunk-agent-observability"}
 INCIDENT_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 GENAI_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 SCAN_BLOCKER_CHECKS = {

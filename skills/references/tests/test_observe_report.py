@@ -1527,10 +1527,12 @@ class ObserveReportTest(unittest.TestCase):
             grouped_report["findings"][2]["finding_group"],
             "splunk-agent-observability",
         )
-        invalid = sample_splunk_agent_observability_report()
-        invalid["findings"][2]["finding_group"] = "separate-section"  # type: ignore[index]
-        with self.assertRaisesRegex(MODULE.ReportError, "finding_group"):
-            MODULE.normalize_audit_report(invalid)
+        for invalid_group in ("opentelemetry", "separate-section"):
+            with self.subTest(invalid_group=invalid_group):
+                invalid = sample_splunk_agent_observability_report()
+                invalid["findings"][2]["finding_group"] = invalid_group  # type: ignore[index]
+                with self.assertRaisesRegex(MODULE.ReportError, "finding_group"):
+                    MODULE.normalize_audit_report(invalid)
 
     def test_renders_splunk_agent_observability_as_nested_findings_subsection(self) -> None:
         report = MODULE.normalize_audit_report(

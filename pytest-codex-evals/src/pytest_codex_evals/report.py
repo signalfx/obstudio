@@ -44,7 +44,8 @@ TOKEN_USAGE_FIELDS = (
     "provider_total_tokens",
     "derived_total_tokens",
 )
-SOURCE_MANIFEST_DIGEST_VERSION = 3
+SOURCE_MANIFEST_DIGEST_VERSION = 4
+EVALUATOR_SEMANTICS_DIGEST_VERSIONS = {3, SOURCE_MANIFEST_DIGEST_VERSION}
 EVALUATOR_SEMANTICS_PATH = Path("evals/evaluator-semantics.toml")
 DEFAULT_EVALUATOR_SEMANTICS_VERSION = 1
 SHARED_REFERENCE_PREFIX = "skills/references/"
@@ -561,6 +562,9 @@ def source_provenance(
     }
     if len(skill_paths) != 1:
         raise ValueError("eval run contains inconsistent skill source paths")
+    skills = {result.skill for result in manifest_results}
+    if len(skills) != 1:
+        raise ValueError("eval run contains inconsistent skills")
     config_paths = {
         Path(result.config_path)
         .resolve()
@@ -611,6 +615,8 @@ def source_provenance(
     skill_path = skill_paths.pop()
     source_config_path = config_paths.pop() if config_paths else None
     semantics_version = evaluator_semantics_version(repo_root)
+    consumer_paths = shared_reference_consumer_paths(repo_root, skills.pop())
+    consumed_shared_references = sorted(consumer_paths[1]) if consumer_paths else []
     provenance: dict[str, Any] = {
         "digest_version": SOURCE_MANIFEST_DIGEST_VERSION,
         "digest": source_manifest_digest(
@@ -621,11 +627,13 @@ def source_provenance(
             config_path=source_config_path,
             selections=selections,
             selection_scope=selection_scope,
+            shared_reference_consumers=consumed_shared_references,
         ),
         "eval_kinds": eval_kinds,
         "evaluator_semantics_version": semantics_version,
         "files": files,
         "skill_path": skill_path,
+        "shared_reference_consumers": consumed_shared_references,
     }
     if selections is not None:
         provenance["selections"] = selections
@@ -646,6 +654,7 @@ def source_manifest_digest(
     config_path: str | None = None,
     selections: list[dict[str, Any]] | None = None,
     selection_scope: str | None = None,
+    shared_reference_consumers: list[str] | None = None,
 ) -> str:
     digest = hashlib.sha256()
     if digest_version == 1:
@@ -655,7 +664,7 @@ def source_manifest_digest(
             digest.update(file_digest.encode("ascii"))
             digest.update(b"\n")
         return digest.hexdigest()
-    if digest_version not in {2, SOURCE_MANIFEST_DIGEST_VERSION}:
+    if digest_version not in {2, 3, SOURCE_MANIFEST_DIGEST_VERSION}:
         raise ValueError(f"unsupported source manifest digest version: {digest_version}")
     if eval_kinds is None or skill_path is None:
         raise ValueError(f"source manifest v{digest_version} requires eval kinds and a skill path")
@@ -665,10 +674,23 @@ def source_manifest_digest(
         "files": {path: files[path] for path in sorted(files)},
         "skill_path": skill_path,
     }
-    if digest_version == SOURCE_MANIFEST_DIGEST_VERSION:
+    if digest_version in EVALUATOR_SEMANTICS_DIGEST_VERSIONS:
         if type(evaluator_semantics_version) is not int or evaluator_semantics_version <= 0:
             raise ValueError("source manifest evaluator semantics version must be a positive integer")
         identity["evaluator_semantics_version"] = evaluator_semantics_version
+    if digest_version == SOURCE_MANIFEST_DIGEST_VERSION:
+        if shared_reference_consumers is None or any(
+            not isinstance(path, str)
+            or not path.startswith(SHARED_REFERENCE_PREFIX)
+            or path == SHARED_REFERENCE_CONSUMERS
+            for path in shared_reference_consumers
+        ):
+            raise ValueError(
+                "source manifest shared reference consumers must be a path list"
+            )
+        identity["shared_reference_consumers"] = sorted(
+            set(shared_reference_consumers)
+        )
     if config_path is not None:
         identity["config_path"] = config_path
     if selections is not None:
@@ -738,11 +760,13 @@ def source_inputs_match_for_skill(
     skill: str,
     current: dict[str, str],
     recorded: dict[str, str],
+    recorded_consumed: set[str] | None = None,
 ) -> bool:
     consumer_paths = shared_reference_consumer_paths(repo_root, skill)
     if consumer_paths is None:
         return current == recorded
     declared, consumed = consumer_paths
+    relevant_consumed = consumed | (recorded_consumed or set())
 
     def relevant(path: str) -> bool:
         if not path.startswith(SHARED_REFERENCE_PREFIX):
@@ -751,8 +775,8 @@ def source_inputs_match_for_skill(
             SHARED_REFERENCE_TEST_PREFIX
         ):
             return False
-        if path in declared:
-            return path in consumed
+        if path in declared or path in (recorded_consumed or set()):
+            return path in relevant_consumed
         return True
 
     return all(
@@ -902,7 +926,7 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
             digest_version = 1
         elif (
             type(raw_digest_version) is int
-            and raw_digest_version in {2, SOURCE_MANIFEST_DIGEST_VERSION}
+            and raw_digest_version in {2, 3, SOURCE_MANIFEST_DIGEST_VERSION}
         ):
             digest_version = raw_digest_version
         else:
@@ -911,7 +935,7 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
             )
         raw_semantics_version = None
         current_semantics_version = None
-        if digest_version == SOURCE_MANIFEST_DIGEST_VERSION:
+        if digest_version in EVALUATOR_SEMANTICS_DIGEST_VERSIONS:
             raw_semantics_version = source.get("evaluator_semantics_version")
             if type(raw_semantics_version) is not int or raw_semantics_version <= 0:
                 raise ValueError(
@@ -926,6 +950,23 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
         skill_path = source.get("skill_path")
         if not isinstance(skill, str) or not isinstance(kind, str) or not isinstance(skill_path, str):
             raise ValueError(f"{benchmark_path}: source identity is malformed")
+        recorded_consumed: set[str] | None = None
+        if digest_version == SOURCE_MANIFEST_DIGEST_VERSION:
+            raw_recorded_consumed = source.get("shared_reference_consumers")
+            if (
+                not isinstance(raw_recorded_consumed, list)
+                or any(
+                    not isinstance(path, str)
+                    or not path.startswith(SHARED_REFERENCE_PREFIX)
+                    or path == SHARED_REFERENCE_CONSUMERS
+                    for path in raw_recorded_consumed
+                )
+                or len(raw_recorded_consumed) != len(set(raw_recorded_consumed))
+            ):
+                raise ValueError(
+                    f"{benchmark_path}: shared reference consumer identity is malformed"
+                )
+            recorded_consumed = set(raw_recorded_consumed)
         eval_kinds = source.get("eval_kinds")
         if eval_kinds is None and digest_version == 1:
             eval_kinds = [kind]
@@ -1027,6 +1068,13 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
                 f"{benchmark_path}: eval report inputs are stale; rerun the owning eval"
             ) from exc
         declared_shared_paths, consumed_shared_paths = consumer_paths or (set(), set())
+        if (
+            recorded_consumed is not None
+            and recorded_consumed != consumed_shared_paths
+        ):
+            raise ValueError(
+                f"{benchmark_path}: eval report inputs are stale; rerun the owning eval"
+            )
 
         def recorded_path_is_relevant(relative: str) -> bool:
             if consumer_paths is None or not relative.startswith(SHARED_REFERENCE_PREFIX):
@@ -1035,8 +1083,8 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
                 SHARED_REFERENCE_TEST_PREFIX
             ):
                 return False
-            if relative in declared_shared_paths:
-                return relative in consumed_shared_paths
+            if relative in declared_shared_paths or relative in (recorded_consumed or set()):
+                return relative in consumed_shared_paths | (recorded_consumed or set())
             return True
 
         for relative, expected in files.items():
@@ -1059,9 +1107,14 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
             config_path=source_config_path,
             selections=selections,
             selection_scope=selection_scope,
+            shared_reference_consumers=(
+                sorted(recorded_consumed)
+                if recorded_consumed is not None
+                else None
+            ),
         )
         if (
-            digest_version == SOURCE_MANIFEST_DIGEST_VERSION
+            digest_version in EVALUATOR_SEMANTICS_DIGEST_VERSIONS
             and raw_semantics_version != current_semantics_version
         ):
             raise ValueError(f"{benchmark_path}: evaluator semantics version mismatch; rerun the owning eval")
@@ -1069,7 +1122,13 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
             raise ValueError(
                 f"{benchmark_path}: eval report inputs are stale; rerun the owning eval"
             )
-        if not source_inputs_match_for_skill(root, skill, current, files):
+        if not source_inputs_match_for_skill(
+            root,
+            skill,
+            current,
+            files,
+            recorded_consumed,
+        ):
             raise ValueError(f"{benchmark_path}: eval report inputs are stale; rerun the owning eval")
         verified.append(benchmark_path)
     return verified
