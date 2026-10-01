@@ -1615,6 +1615,58 @@ process.stdout.write(cards.innerHTML);
                 self.assertEqual(len(labels), len(set(labels)))
                 self.assertNotIn("OpenTelemetry findings", rendered)
 
+    def test_grouped_card_detail_headings_are_below_subsection_heading(self) -> None:
+        report = MODULE.normalize_audit_report(
+            sample_splunk_agent_observability_report()
+        )
+        html = MODULE.render_html(report, MODULE.empty_selection(report))
+        start = html.index("function renderFindingCard(f) {")
+        end = html.index("function renderCards()", start)
+        payload = {
+            "source": html[start:end],
+            "ordinary": next(f for f in report["findings"] if f["id"] == "OTEL-001"),
+            "agentObservability": next(
+                f for f in report["findings"] if f["id"] == "AO-001"
+            ),
+        }
+        script = r"""
+const fs = require('node:fs');
+const vm = require('node:vm');
+const payload = JSON.parse(fs.readFileSync(0, 'utf8'));
+const context = {
+  lifecycleStatus: () => 'proposed',
+  modeGuidance: { default: { guidance: '', selection: 'Select' } },
+  esc: value => String(value ?? ''),
+  sourceHtml: value => String(value),
+  telemetryShapeFor: () => 'configuration',
+  findingPrimaryActionLabel: () => 'Change',
+  decisionSelectionControl: () => '',
+  findingSelectionPresentation: () => ({
+    explicitlySelected: false, autoIncluded: false, ariaLabel: 'Select', label: 'Select'
+  }),
+  selectionEligibility: {
+    'OTEL-001': { selectable: true }, 'AO-001': { selectable: true }
+  },
+  findingNextStep: () => 'Select this finding',
+};
+vm.runInNewContext(payload.source + '\nthis.card = renderFindingCard;', context);
+process.stdout.write(JSON.stringify({
+  ordinary: context.card(payload.ordinary),
+  agentObservability: context.card(payload.agentObservability)
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        cards = json.loads(result.stdout)
+        self.assertIn("<section><h3>Gap</h3>", cards["ordinary"])
+        self.assertIn("<section><h4>Gap</h4>", cards["agentObservability"])
+        self.assertNotIn("<h3>", cards["agentObservability"])
+
     def test_splunk_agent_observability_selection_auto_includes_prerequisites(self) -> None:
         report = MODULE.normalize_audit_report(
             sample_splunk_agent_observability_report()
@@ -2298,7 +2350,7 @@ process.stdout.write(cards.innerHTML);
             self.assertNotIn("Technical audit (Markdown)", html)
             self.assertIn('href="otel-audit.json">Canonical audit data (JSON)</a>', html)
             self.assertLess(
-                html.index("<section><h3>${esc(primaryActionLabel)}</h3>"),
+                html.index("<section><${detailHeading}>${esc(primaryActionLabel)}</${detailHeading}>"),
                 html.index('<details class="finding-technical-details">'),
             )
             for technical_heading in (
@@ -2308,7 +2360,10 @@ process.stdout.write(cards.innerHTML);
                 "Evidence",
             ):
                 self.assertGreater(
-                    html.index(f"<section><h3>{technical_heading}</h3>"),
+                    html.index(
+                        f"<section><${{detailHeading}}>{technical_heading}"
+                        "</${detailHeading}>"
+                    ),
                     html.index('<details class="finding-technical-details">'),
                 )
             self.assertNotIn("Small quick wins", html)
@@ -2656,15 +2711,18 @@ for (const [serviceRoot, input, expected] of cases) {
         self.assertIn('Telemetry: <strong>${esc(telemetryShape)}</strong>', concise_details)
         self.assertIn("dependencyCue", concise_details)
         for label in ("Gap", "Why it matters", "Next step"):
-            self.assertIn(f"<h3>{label}</h3>", concise_details)
-        self.assertIn("<h3>${esc(primaryActionLabel)}</h3>", concise_details)
+            self.assertIn(f"<${{detailHeading}}>{label}</${{detailHeading}}>", concise_details)
+        self.assertIn(
+            "<${detailHeading}>${esc(primaryActionLabel)}</${detailHeading}>",
+            concise_details,
+        )
         for label in (
             "Expected telemetry",
             "Acceptance criteria",
             "Implementation guardrails",
             "Evidence",
         ):
-            heading = f"<h3>{label}</h3>"
+            heading = f"<${{detailHeading}}>{label}</${{detailHeading}}>"
             self.assertEqual(card.count(heading), 1)
             self.assertIn(heading, technical_details)
             self.assertNotIn(heading, concise_details)

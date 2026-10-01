@@ -2112,6 +2112,19 @@ def test_report_freshness_ignores_shared_reference_changes_for_other_consumers(
     consumed.write_text("# Consumed changed\n", encoding="utf-8")
     with pytest.raises(ValueError, match="inputs are stale"):
         verify_published_report_sources(tmp_path)
+    consumed.write_text("# Consumed\n", encoding="utf-8")
+
+    unrelated.unlink()
+    late_unrelated.unlink()
+    consumers.write_text(
+        json.dumps({"consumed.md": ["sample-skill"]}), encoding="utf-8"
+    )
+    assert verify_published_report_sources(tmp_path) == [benchmark_path]
+
+    undeclared = references / "undeclared.md"
+    undeclared.write_text("# Undeclared\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="inputs are stale"):
+        verify_published_report_sources(tmp_path)
 
 
 @pytest.mark.parametrize("digest_version", [2, 3])

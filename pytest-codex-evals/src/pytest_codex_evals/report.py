@@ -815,7 +815,7 @@ def source_inputs_match_for_skill(
             return True
         if path in declared or path in (recorded_consumed or set()):
             return path in relevant_consumed
-        return True
+        return recorded_consumed is None or path in current
 
     return all(
         current.get(path) == recorded.get(path)
@@ -1127,7 +1127,7 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
                 return True
             if relative in declared_shared_paths or relative in (recorded_consumed or set()):
                 return relative in consumed_shared_paths | (recorded_consumed or set())
-            return True
+            return recorded_consumed is None or relative in current
 
         for relative, expected in files.items():
             if not isinstance(relative, str) or not isinstance(expected, str):

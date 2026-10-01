@@ -4327,7 +4327,7 @@ h1 {{ margin: 8px 0 4px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; }}
 .technical-details-body {{ margin-top: 14px; }}
 .technical-details-body > section, .technical-details-body > .cols + section {{ margin-top: 14px; }}
 @media (max-width: 760px) {{ .impact-stats, .decision-context {{ grid-template-columns: 1fr; }} .card-head {{ grid-template-columns: 1fr; }} .row {{ grid-template-columns: 5px auto 1fr auto; }} .plan-select, .plan-unavailable {{ justify-self: end; margin: 0 14px 12px; width: max-content; }} .decision-select {{ grid-column: 1; }} .cols {{ grid-template-columns: 1fr; }} }}
-h3 {{ margin: 0 0 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }}
+h3, .card h4 {{ margin: 0 0 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }}
 p {{ margin: 0 0 12px; }}
 ul {{ margin: 0; padding-left: 18px; }}
 code, pre {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
@@ -4633,6 +4633,7 @@ function findingNextStep(finding) {{
 
 function renderFindingCard(f) {{
     const lifecycle = lifecycleStatus(f);
+    const detailHeading = f.finding_group === "splunk-agent-observability" ? "h4" : "h3";
     const mode = modeGuidance[f.instrument_mode];
     const telemetry = (f.expected_telemetry || []).map(item => `<li><b>${{esc(item.type)}} ${{esc(item.name)}}</b> — ${{esc(item.product_view)}}${{item.attributes?.length ? ` <code>${{esc(item.attributes.join(", "))}}</code>` : ""}}</li>`).join("");
     const evidence = (f.evidence || []).map(item => `<li>${{sourceHtml(item)}}</li>`).join("");
@@ -4678,18 +4679,18 @@ function renderFindingCard(f) {{
       </div>
       <div class="body" id="finding-body-${{esc(f.id)}}" aria-labelledby="finding-toggle-${{esc(f.id)}}" hidden>
         <div class="cols">
-          <section><h3>Gap</h3><p>${{esc(f.gap)}}</p></section>
-          <section><h3>Why it matters</h3><p>${{esc(f.impact)}}</p></section>
-          <section><h3>${{esc(primaryActionLabel)}}</h3><p>${{esc(requiredAction)}}</p></section>
-          <section><h3>Next step</h3><p data-finding-next-step="${{esc(f.id)}}">${{esc(findingNextStep(f))}}</p></section>
+          <section><${{detailHeading}}>Gap</${{detailHeading}}><p>${{esc(f.gap)}}</p></section>
+          <section><${{detailHeading}}>Why it matters</${{detailHeading}}><p>${{esc(f.impact)}}</p></section>
+          <section><${{detailHeading}}>${{esc(primaryActionLabel)}}</${{detailHeading}}><p>${{esc(requiredAction)}}</p></section>
+          <section><${{detailHeading}}>Next step</${{detailHeading}}><p data-finding-next-step="${{esc(f.id)}}">${{esc(findingNextStep(f))}}</p></section>
         </div>
         <details class="finding-technical-details">
           <summary><span>Technical details</span> <span class="detail-counts">${{esc(contractCounts)}}</span></summary>
           <div class="technical-details-body">
-            <section><h3>Expected telemetry</h3>${{telemetry ? `<ul>${{telemetry}}</ul>` : `<p class="muted">None recorded.</p>`}}</section>
-            <section><h3>Acceptance criteria</h3><ul>${{acceptance}}</ul></section>
-            ${{constraints ? `<section><h3>Implementation guardrails</h3><ul>${{constraints}}</ul></section>` : ""}}
-            <section><h3>Evidence</h3>${{evidence ? `<ul>${{evidence}}</ul>` : `<p class="muted">None recorded.</p>`}}</section>
+            <section><${{detailHeading}}>Expected telemetry</${{detailHeading}}>${{telemetry ? `<ul>${{telemetry}}</ul>` : `<p class="muted">None recorded.</p>`}}</section>
+            <section><${{detailHeading}}>Acceptance criteria</${{detailHeading}}><ul>${{acceptance}}</ul></section>
+            ${{constraints ? `<section><${{detailHeading}}>Implementation guardrails</${{detailHeading}}><ul>${{constraints}}</ul></section>` : ""}}
+            <section><${{detailHeading}}>Evidence</${{detailHeading}}>${{evidence ? `<ul>${{evidence}}</ul>` : `<p class="muted">None recorded.</p>`}}</section>
           </div>
         </details>
       </div>
