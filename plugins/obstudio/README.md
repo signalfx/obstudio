@@ -14,6 +14,10 @@ Python 3 is required for the SessionStart bootstrap. It must be available on
 is available, the hook exits with code 2 and the managed Splunk Observability
 Studio runtime cannot be bootstrapped automatically.
 
+Installing from the published Claude marketplace requires Claude Code v2.1.224
+or later because the marketplace uses the `archive` plugin source. This minimum
+does not apply to Codex.
+
 ## How to get started
 
 1. Install the **Splunk Observability Studio** plugin.
@@ -51,6 +55,11 @@ Splunk publish skills, plus `observer-open`, `observer-status`,
 The shared [`hooks/bootstrap_obstudio.py`](./hooks/bootstrap_obstudio.py)
 downloads the release when needed, validates its published checksum, and
 starts or reuses Splunk Observability Studio when the host permits managed startup.
+Claude prefers the Observer release matching its plugin version. If that
+release's assets are unavailable, Claude falls back to the latest Observer
+with a warning. When a healthy shared Observer is already running at another
+version, Claude reports the mismatch and reuses it rather than interrupting
+another host. Codex continues to use the latest Observer release.
 
 ## Maintainer workflow
 
@@ -59,6 +68,25 @@ directory. Their copies under `plugins/obstudio/skills/` are materialized so a
 repo-local marketplace install works from a fresh checkout without
 cross-directory symlinks. Plugin-only observer-control skills are authoritative
 under `plugins/obstudio/skills/observer-control/`.
+
+The published Claude marketplace entry uses a SHA-256-pinned release archive.
+The release workflow publishes the Claude and Codex plugin archive hashes in a
+separate plugin checksum file, then updates the Claude archive URL and checksum
+alongside the Claude and Codex plugin manifest versions. Codex's repo-local
+marketplace remains a path source.
+
+For Claude development, choose one of these local workflows:
+
+- For marketplace-flow testing, temporarily change the source in
+  `.claude-plugin/marketplace.json` to `./plugins/obstudio`. Do not commit that
+  source change. This exercises local marketplace installation and live edits.
+- To load the checkout directly without marketplace registration, run Claude
+  Code with `--plugin-dir ./plugins/obstudio`. This is useful for testing plugin
+  contents, but does not test archive installation or marketplace updates.
+
+A sibling file named `marketplace.local.json` is not discovered automatically
+by Claude Code as a second marketplace. Claude expects the marketplace manifest
+at `.claude-plugin/marketplace.json` within a registered marketplace directory.
 Refresh the materialized shared copies after editing canonical skills:
 
 ```bash

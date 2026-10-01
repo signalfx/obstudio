@@ -658,6 +658,39 @@ class ValidateZipEntriesTest(unittest.TestCase):
 
 
 class FetchExpectedChecksumTest(unittest.TestCase):
+    def test_pinned_version_reads_checksums_from_the_exact_release_tag(self):
+        class FakeResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        checksum_text = (
+            b"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef "
+            b"*obstudio_0.0.14_linux_amd64.zip\n"
+        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            checksums_path = Path(tempdir) / "checksums.txt"
+            with mock.patch.object(
+                BOOTSTRAP.urllib.request,
+                "urlopen",
+                return_value=FakeResponse(checksum_text),
+            ) as urlopen:
+                got = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path, "0.0.14")
+
+        self.assertEqual(
+            got,
+            (
+                "obstudio_0.0.14_linux_amd64.zip",
+                "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+            ),
+        )
+        self.assertEqual(
+            urlopen.call_args.args[0],
+            "https://github.com/signalfx/obstudio/releases/download/v0.0.14/checksums.txt",
+        )
+
     def test_falls_back_to_versioned_checksum_manifest(self):
         class FakeResponse(io.BytesIO):
             def __enter__(self):
@@ -866,6 +899,104 @@ class FetchExpectedChecksumTest(unittest.TestCase):
 
             self.assertEqual(path.read_text(encoding="utf-8"), "new\n")
             self.assertFalse(list(Path(tempdir).glob(".*.tmp-*")))
+
+
+class ResolveRuntimeReleaseTest(unittest.TestCase):
+    def test_claude_prefers_plugin_version_archive(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            binary = Path(tempdir) / "obstudio"
+            with (
+                mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "claude"}, clear=True),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "fetch_expected_checksum",
+                    return_value=("obstudio_1.2.3_linux_amd64.zip", "checksum"),
+                ) as fetch_checksum,
+                mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary) as download,
+            ):
+                got = BOOTSTRAP.resolve_runtime_release(
+                    Path(tempdir), "linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3"
+                )
+
+        self.assertEqual(got, (binary, "obstudio_1.2.3_linux_amd64.zip", "checksum", "1.2.3", False))
+        fetch_checksum.assert_called_once_with("linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3")
+        download.assert_called_once_with(
+            Path(tempdir), "linux_amd64.zip", "obstudio_1.2.3_linux_amd64.zip", "checksum", "1.2.3"
+        )
+
+    def test_claude_falls_back_to_latest_when_pinned_archive_is_missing(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            binary = Path(tempdir) / "obstudio"
+            not_found = BOOTSTRAP.urllib.error.HTTPError("url", 404, "Not Found", {}, None)
+            with (
+                mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "claude"}, clear=True),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "fetch_expected_checksum",
+                    side_effect=[
+                        ("obstudio_1.2.3_linux_amd64.zip", "pinned"),
+                        ("obstudio_1.2.4_linux_amd64.zip", "latest"),
+                    ],
+                ) as fetch_checksum,
+                mock.patch.object(BOOTSTRAP, "download_obstudio", side_effect=[not_found, binary]) as download,
+            ):
+                got = BOOTSTRAP.resolve_runtime_release(
+                    Path(tempdir), "linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3"
+                )
+
+        self.assertEqual(got, (binary, "obstudio_1.2.4_linux_amd64.zip", "latest", "1.2.4", True))
+        self.assertEqual(fetch_checksum.call_count, 2)
+        self.assertEqual(download.call_count, 2)
+
+    def test_codex_keeps_latest_runtime_selection(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            binary = Path(tempdir) / "obstudio"
+            with (
+                mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "codex"}, clear=True),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "fetch_expected_checksum",
+                    return_value=("obstudio_1.2.4_linux_amd64.zip", "latest"),
+                ) as fetch_checksum,
+                mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary) as download,
+            ):
+                got = BOOTSTRAP.resolve_runtime_release(
+                    Path(tempdir), "linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3"
+                )
+
+        self.assertEqual(got, (binary, "obstudio_1.2.4_linux_amd64.zip", "latest", "1.2.4", False))
+        fetch_checksum.assert_called_once_with("linux_amd64.zip", Path(tempdir) / "checksums.txt")
+        download.assert_called_once_with(
+            Path(tempdir), "linux_amd64.zip", "obstudio_1.2.4_linux_amd64.zip", "latest"
+        )
+
+
+class RuntimeVersionWarningTest(unittest.TestCase):
+    def test_warns_when_claude_reuses_shared_mismatched_runtime(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            state_path = Path(tempdir) / "bootstrap-state.json"
+            state_path.write_text(json.dumps({"mode": "shared"}), encoding="utf-8")
+            with (
+                mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", return_value={"version": "1.2.4"}),
+                mock.patch.object(BOOTSTRAP, "emit_context") as emit_context,
+            ):
+                BOOTSTRAP.warn_if_shared_runtime_version_mismatch(state_path, "1.2.3")
+
+        emit_context.assert_called_once_with(
+            "Claude plugin version 1.2.3 is using an already-running Observer version 1.2.4; "
+            "the shared runtime was left running."
+        )
+
+    def test_does_not_probe_owned_runtime_when_pin_is_not_in_fallback(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            state_path = Path(tempdir) / "bootstrap-state.json"
+            state_path.write_text(
+                json.dumps({"mode": "managed", "runtimePinFallback": False}), encoding="utf-8"
+            )
+            with mock.patch.object(BOOTSTRAP, "fetch_obstudio_health") as fetch_health:
+                BOOTSTRAP.warn_if_shared_runtime_version_mismatch(state_path, "1.2.3")
+
+        fetch_health.assert_not_called()
 
 
 class ObserverStateFieldsTest(unittest.TestCase):

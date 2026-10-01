@@ -105,6 +105,16 @@ def main() -> int:
             "with each other (and with --release-tag, when given) and exit"
         ),
     )
+    parser.add_argument(
+        "--sync-claude-marketplace",
+        action="store_true",
+        help="update the Claude marketplace archive URL and SHA-256 for --release-tag",
+    )
+    parser.add_argument(
+        "--checksums-file",
+        type=Path,
+        help="release checksum manifest used by checksum update commands",
+    )
     args = parser.parse_args()
 
     if args.sync_plugin_skills:
@@ -121,7 +131,11 @@ def main() -> int:
     if args.check_manifest_versions:
         check_committed_manifest_versions(args.release_tag)
         return 0
-
+    if args.sync_claude_marketplace:
+        if not args.release_tag or args.checksums_file is None:
+            raise RuntimeError("--release-tag and --checksums-file are required with --sync-claude-marketplace")
+        sync_claude_marketplace(args.release_tag, args.checksums_file)
+        return 0
     output = args.output.expanduser().resolve()
     release_version = release_version_from_tag(args.release_tag) if args.release_tag else ""
     if args.check:
@@ -221,6 +235,44 @@ def _write_manifest_version(manifest_path: Path, version: str) -> None:
         raise RuntimeError(f"could not locate the top-level version field: {manifest_path}")
     if updated_text != manifest_text:
         manifest_path.write_text(updated_text, encoding="utf-8")
+
+
+def sync_claude_marketplace(
+    release_tag: str,
+    checksums_file: Path,
+    marketplace_path: Path | None = None,
+) -> None:
+    version = release_version_from_tag(release_tag)
+    archive_name = f"obstudio_claude_{version}.zip"
+    checksum = checksum_for_archive(checksums_file, archive_name)
+    target = marketplace_path or ROOT / ".claude-plugin" / "marketplace.json"
+    marketplace = json.loads(target.read_text(encoding="utf-8"))
+    plugins = marketplace.get("plugins")
+    if not isinstance(plugins, list):
+        raise RuntimeError(f"marketplace plugins must be an array: {target}")
+    entries = [
+        entry for entry in plugins if isinstance(entry, dict) and entry.get("name") == "obstudio"
+    ]
+    if len(entries) != 1:
+        raise RuntimeError(f"expected exactly one obstudio plugin entry in {target}")
+    entries[0]["source"] = {
+        "source": "archive",
+        "url": f"https://github.com/signalfx/obstudio/releases/download/{release_tag}/{archive_name}",
+        "sha256": checksum,
+    }
+    target.write_text(json.dumps(marketplace, indent=2) + "\n", encoding="utf-8")
+
+
+def checksum_for_archive(checksums_file: Path, archive_name: str) -> str:
+    pattern = re.compile(r"^(?P<hash>[0-9a-fA-F]{64})\s+\*?(?P<name>.+)$")
+    found: list[str] = []
+    for line in checksums_file.read_text(encoding="utf-8").splitlines():
+        match = pattern.fullmatch(line.strip())
+        if match and Path(match.group("name")).name == archive_name:
+            found.append(match.group("hash").lower())
+    if len(found) != 1:
+        raise RuntimeError(f"expected exactly one checksum for {archive_name} in {checksums_file}")
+    return found[0]
 
 
 def plugin_paths(host: str) -> tuple[str, ...]:
