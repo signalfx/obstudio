@@ -2,6 +2,8 @@
 
 import json
 from pathlib import Path
+import subprocess
+import sys
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -631,7 +633,7 @@ def test_ai_assistant_instrument_case_requires_nested_retrieval_closure():
         assert term in scenario
 
     prompt = instrument_eval["prompts"][0]["task"]
-    assert "OTEL-002 and AO-002" in prompt
+    assert "OTEL-002 and AO-003" in prompt
     rubric = " ".join(instrument_eval["rubric"]).lower()
     for term in (
         "exactly one execute_tool search_docs",
@@ -654,6 +656,57 @@ def test_ai_assistant_instrument_case_requires_nested_retrieval_closure():
         "parent span ID",
     ):
         assert term in instrument_skill
+
+
+def test_ai_assistant_instrument_case_selects_distinct_ao_routing(tmp_path):
+    audit_path = REPO_ROOT / "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json"
+    audit_input = json.loads(_read(audit_path))
+    instrument_eval = json.loads(
+        _read(REPO_ROOT / "evals/python/ai-assistant-demo/eval/qual/instrument.json")
+    )
+    findings = {finding["id"]: finding for finding in audit_input["findings"]}
+    ao_findings = [
+        finding
+        for finding in findings.values()
+        if finding.get("finding_group") == "splunk-agent-observability"
+    ]
+    assert len(ao_findings) == 3
+    assert findings["AO-001"]["dependencies"] == []
+    assert findings["AO-002"]["dependencies"] == ["AO-001"]
+    assert findings["AO-003"]["dependencies"] == [
+        "OTEL-001",
+        "AO-001",
+        "AO-002",
+    ]
+    selection_path = tmp_path / "otel-selection.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SKILLS_DIR / "references/scripts/observe_report.py"),
+            "select",
+            str(audit_path),
+            "--ids",
+            "OTEL-002,AO-003",
+            "-o",
+            str(selection_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    selection = json.loads(_read(selection_path))
+    assert selection["requested_ids"] == ["OTEL-002", "AO-003"]
+    assert selection["approved_ids"] == [
+        "OTEL-001",
+        "OTEL-002",
+        "AO-001",
+        "AO-002",
+        "AO-003",
+    ]
+    assert "OTEL-002 and AO-003" in instrument_eval["prompts"][0]["task"]
+    rubric = " ".join(instrument_eval["rubric"]).lower()
+    for term in ("project resource", "agent stream resource", "direct routing"):
+        assert term in rubric
 
 
 def test_genai_reference_covers_evaluation_quality_contract():

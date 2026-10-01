@@ -51,7 +51,7 @@
     {"method": "POST", "path": "/v1/feedback/export"}
   ],
   "signal_flow": {
-    "component_flow_map": "Assistant lifecycle\nFastAPI routes [SOURCE-COVERED] -> build_turn [GAP: Assistant GenAI lifecycle] -> run_tool search_docs [GAP: Document retrieval inside search_docs] -> call_provider [SOURCE-COVERED]\n\nAgent Observability deployment\ndeployment config [GAP: Agent Observability project routing] -> dedicated stream [GAP: Dedicated Agent Stream routing]"
+    "component_flow_map": "Assistant lifecycle\nFastAPI routes [SOURCE-COVERED] -> build_turn [GAP: Assistant GenAI lifecycle] -> run_tool search_docs [GAP: Document retrieval inside search_docs] -> call_provider [SOURCE-COVERED]\n\nAgent Observability deployment\nproject resource [GAP: Agent Observability project resource] -> Agent Stream resource [GAP: Dedicated Agent Stream resource] -> deployment exporter [GAP: Direct trace routing]"
   },
   "current_instrumentation": {
     "spans": [],
@@ -201,84 +201,115 @@
     {
       "id": "AO-001",
       "finding_group": "splunk-agent-observability",
-      "title": "Persist direct Agent Observability project routing",
+      "title": "Resolve the Agent Observability project",
       "severity": "high",
       "priority": "required",
       "effort": "small",
       "status": "proposed",
-      "area": "Agent Observability project routing",
-      "gap": "The application has no durable source-backed project routing configuration for Splunk Agent Observability.",
-      "impact": "Agent traces can land unassigned or in the wrong project after the demo process exits.",
-      "product_outcome": "The deployed application targets its intended Agent Observability project without Obstudio in the runtime path.",
-      "required_fix": "Persist the project identifier in the application deployment configuration and pass it through the supported direct trace-export routing header.",
+      "area": "Agent Observability project resource",
+      "gap": "The deployment has no resolved Agent Observability project resource or project identifier.",
+      "impact": "Agent traces have no verified project destination.",
+      "product_outcome": "An existing or authorized newly created project resource is available as the trace destination.",
+      "required_fix": "Resolve an existing project resource and its identifier, or create one through an authorized Agent Observability client or API; never invent an identifier.",
       "instrument_mode": "default",
       "verification_scenarios": [
         "genai.turn.lifecycle"
       ],
-      "dependencies": [
-        "OTEL-001"
-      ],
+      "dependencies": [],
       "evidence": [
         "pyproject.toml"
       ],
       "acceptance_criteria": [
-        "A deployed process can resolve the configured project identifier and export without an Obstudio process in the data path."
+        "The selected project identifier resolves to a real Agent Observability project; if access is unavailable, record the exact authorization blocker."
       ],
       "constraints": [
-        "Keep the access token in operator-owned secret storage and commit only placeholders or secret references."
+        "Do not fabricate a project or identifier, and keep access tokens in operator-owned secret storage."
       ],
       "expected_telemetry": [
         {
           "type": "configuration",
-          "name": "agent-observability.project-routing",
+          "name": "agent-observability.project-resource",
           "attributes": [],
-          "product_view": "Agent Observability project routing"
+          "product_view": "Agent Observability project resource"
         }
       ],
       "follow_up_actions": [
-        "Confirm a fresh application trace resolves to the intended Agent Observability project."
+        "Confirm the resolved project exists before configuring direct export."
       ]
     },
     {
       "id": "AO-002",
       "finding_group": "splunk-agent-observability",
-      "title": "Route traces to a dedicated Agent Stream",
+      "title": "Resolve a dedicated Agent Stream",
       "severity": "high",
       "priority": "required",
       "effort": "small",
       "status": "proposed",
-      "area": "Dedicated Agent Stream routing",
-      "gap": "The deployment does not persist a dedicated Agent Stream identifier for direct trace export.",
-      "impact": "The demo application's traces can remain unassigned or mix with unrelated agents.",
-      "product_outcome": "Fresh demo traces appear only in the application's dedicated Agent Stream.",
-      "required_fix": "Persist the Agent Stream identifier in deployment configuration and pass it through the supported direct trace-export routing header.",
+      "area": "Dedicated Agent Stream resource",
+      "gap": "The target project has no resolved dedicated Agent Stream resource or identifier for this application.",
+      "impact": "The application has no verified stream destination and its traces can mix with unrelated agents.",
+      "product_outcome": "A dedicated Agent Stream exists in the resolved project and can be selected as the trace destination.",
+      "required_fix": "Resolve an existing dedicated Agent Stream resource in the selected project, or create one through an authorized Agent Observability client or API; never invent an identifier.",
       "instrument_mode": "default",
       "verification_scenarios": [
         "genai.turn.lifecycle"
       ],
-      "dependencies": [
-        "OTEL-001",
-        "AO-001"
-      ],
+      "dependencies": ["AO-001"],
       "evidence": [
         "pyproject.toml"
       ],
       "acceptance_criteria": [
-        "A fresh application trace appears in the configured dedicated Agent Stream without Obstudio in the runtime data path."
+        "The selected Agent Stream identifier resolves to a real stream in the selected project; if access is unavailable, record the exact authorization blocker."
       ],
       "constraints": [
-        "Keep project and stream identifiers operator-overridable and keep access tokens out of tracked files."
+        "Do not fabricate a stream or identifier, and keep access tokens out of tracked files."
       ],
       "expected_telemetry": [
         {
           "type": "configuration",
-          "name": "agent-observability.agent-stream-routing",
+          "name": "agent-observability.agent-stream-resource",
           "attributes": [],
-          "product_view": "Dedicated Agent Stream routing"
+          "product_view": "Dedicated Agent Stream resource"
         }
       ],
       "follow_up_actions": [
-        "Confirm the generated trace is visible in the configured dedicated Agent Stream."
+        "Confirm the resolved stream belongs to the selected project before configuring direct export."
+      ]
+    },
+    {
+      "id": "AO-003",
+      "finding_group": "splunk-agent-observability",
+      "title": "Persist direct Agent Observability trace routing",
+      "severity": "high",
+      "priority": "required",
+      "effort": "small",
+      "status": "proposed",
+      "area": "Direct trace routing",
+      "gap": "The application deployment has no durable direct OTLP export configuration for the resolved project and Agent Stream.",
+      "impact": "Traces can remain unassigned or depend on an Obstudio forwarding process.",
+      "product_outcome": "The deployed application exports directly to its selected project and dedicated Agent Stream.",
+      "required_fix": "Persist the supported OTLP endpoint, authentication secret reference, and project/Agent Stream routing headers in application deployment configuration.",
+      "instrument_mode": "default",
+      "verification_scenarios": ["genai.turn.lifecycle"],
+      "dependencies": ["OTEL-001", "AO-001", "AO-002"],
+      "evidence": ["pyproject.toml"],
+      "acceptance_criteria": [
+        "A fresh application trace reaches the selected Agent Stream without Obstudio in the runtime data path.",
+        "The configured project and Agent Stream identifiers remain operator-overridable and the access token is not committed."
+      ],
+      "constraints": [
+        "Use only documented routing headers or attributes and operator-owned secret storage."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "agent-observability.direct-routing",
+          "attributes": [],
+          "product_view": "Direct Agent Observability trace export"
+        }
+      ],
+      "follow_up_actions": [
+        "Send a fresh trace directly from the deployed application and confirm its project, stream, and trace fields in Agent Observability."
       ]
     }
   ],

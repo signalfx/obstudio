@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261001T191036539522Z |
+| Run ID | 20261001T204443469104Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,26 +18,27 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | 83% (10/12), avg score 78 | 6.5M | 20.4m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | 75% (9/12), avg score 78 | 9.4M | 21.1m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 6438106 | 6233472 | 0 | 52279 | 22553 | unknown | 6490385 |
+| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 9365421 | 9078528 | 0 | 46552 | 20511 | unknown | 9411973 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 592284 | 513536 | 0 | 10017 | 5297 | unknown | 602301 |
+| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1542613 | 1417216 | 0 | 13801 | 6831 | unknown | 1556414 |
 
 ## Rubric Failures
 
 | Mode | Service | Side | Prompt | Result | Evidence |
 |---|---|---|---|---|---|
-| with_skill | python/ai-assistant-demo | with_skill | direct | rubric:rubric-2 FAIL | service/app.py has FastAPIInstrumentor, chat/tool/retrieval spans, and assistant.stream.active; /v1/feedback/export has no custom span/metric; build_turn has no enclosing turn span. |
-| with_skill | python/ai-assistant-demo | with_skill | direct | rubric:rubric-6 FAIL | last_message.md says 'Remaining GenAI signals: none at source level'; service/.observe/otel-instrumentation.md lists remaining proof gaps, not remaining token-pressure signal gaps. |
+| with_skill | python/ai-assistant-demo | with_skill | direct | rubric:rubric-2 FAIL | service/app.py:93, service/app.py:125, service/app.py:165, service/app.py:179, service/app.py:224, service/app.py:265 |
+| with_skill | python/ai-assistant-demo | with_skill | direct | rubric:rubric-5 FAIL | service/tests/test_genai_telemetry.py:76, service/tests/test_genai_telemetry.py:90, last_message.md:9 |
+| with_skill | python/ai-assistant-demo | with_skill | direct | rubric:rubric-6 FAIL | service/app.py:138, service/app.py:159, service/.observe/otel-instrumentation.md:114 |
 
 ## Result JSON
 

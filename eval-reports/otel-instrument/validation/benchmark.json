@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261001T192338005817Z",
+    "run_id": "20261001T201318709073Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -525,7 +525,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "cd0608c4e2d8fc03e3386fdcd635ab2175cbacc07753bbf77543b10baed6053d",
+    "digest": "f648131f851bda1e483070136b740af5a6a4fa235e0316216c89d9c791eaeffc",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -879,8 +879,8 @@
       "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
       "evals/python/ai-assistant-demo/README.md": "fef16be3948e26460b7de715b05d2c14387c1fa974529b6c24a77a6666f52a4e",
       "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
-      "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json": "2ae490c4a610e3136f795ec8e9bf313ad28e1cbeff5b9b2b36821d44e3f40efe",
-      "evals/python/ai-assistant-demo/eval/qual/instrument.json": "117face370cee2457f2c6a1db3de49a63f287f113ebafa435da84c5c73a0e8c3",
+      "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json": "2e31c7015fbcc40fc405337e00012957c2cc2a18dd5b2050abc579e8cc407eb0",
+      "evals/python/ai-assistant-demo/eval/qual/instrument.json": "b017f726cf46c07e004154436e77c5fdbf179148cd0ebc999942e26ebfc3c6c4",
       "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
       "evals/python/ai-assistant-demo/pyproject.toml": "8afdfbe2ebc5a067e4fdcba6874cb7c2d5bf39331bf9972a76a25da06a67cf6d",
       "evals/python/assistant-v3-framework-bridge-demo/Makefile": "8b7c714132b889fa15ae8ae47455eeb3656a43a8718235f90c785245f9c62552",
