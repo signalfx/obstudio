@@ -24,7 +24,7 @@
     {
       "check": "Entry point",
       "finding": "GalileoSpanProcessor plus app-owned workflow, chat, and tool spans",
-      "source": "app.py:25-80"
+      "source": "app.py:21-90"
     },
     {
       "check": "Route source",
@@ -34,7 +34,7 @@
     {
       "check": "Runtime/startup",
       "finding": "Galileo project and log stream are configured before uvicorn starts",
-      "source": "Makefile:6"
+      "source": "Makefile:7"
     },
     {
       "check": "GenAI ownership",
@@ -44,7 +44,7 @@
     {
       "check": "Target-product evidence",
       "finding": "A later validated compatibility check established two mutually exclusive supported export paths for the requested dedicated Agent Stream",
-      "source": "README.md:3-11"
+      "source": "README.md:9-15"
     }
   ],
   "routes": [
@@ -64,17 +64,17 @@
     "spans": [
       {
         "name": "invoke_workflow support_turn",
-        "source": "app.py:55",
+        "source": "app.py:61-65",
         "type": "custom"
       },
       {
         "name": "execute_tool search_docs",
-        "source": "app.py:68",
+        "source": "app.py:72-76",
         "type": "custom"
       },
       {
         "name": "chat gpt-4o-mini",
-        "source": "app.py:77",
+        "source": "app.py:80-84",
         "type": "custom"
       }
     ],

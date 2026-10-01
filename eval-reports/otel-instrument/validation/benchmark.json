@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261001T185018161038Z",
+    "run_id": "20261001T185928429256Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -525,7 +525,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "41451f5ff9741eb21974593c5b6a7c2c1747a873529359ae76af1ec58ab38467",
+    "digest": "93be28960034e68a357f75666c49e8cd4a9acdf63ec1bd7c12dc24ca940188e3",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -917,7 +917,7 @@
       "evals/python/galileo-agent-demo/Makefile": "d73ee26d7e47fcf4fbfb25a6352c62aa50378c3f32ee7604860a4ac0c96dbe08",
       "evals/python/galileo-agent-demo/README.md": "e3f792e57e9083fc7c33ae7dacfc4d06d913f49e21c0436b32ecd6f35135e83c",
       "evals/python/galileo-agent-demo/app.py": "cf37aa733e6cd6f51ed90a8b53956b2cb8fb4460a640837528b2a7f985c7d03b",
-      "evals/python/galileo-agent-demo/eval/inputs/otel-audit-integration-choice.json": "b13de6e297183bb8cacedc3ee92145a3ec768360325282cda0d2845549f59b52",
+      "evals/python/galileo-agent-demo/eval/inputs/otel-audit-integration-choice.json": "1fb77792de96c84820f01d2248ea59071c62ce71817cc734efc2ac09ba8fd432",
       "evals/python/galileo-agent-demo/eval/qual/instrument.json": "4304f0646b08639679de5d8a963ff42adb62fe118466b6f50cd6e15c2cf06bc3",
       "evals/python/galileo-agent-demo/pyproject.toml": "6a56adea68ca8b736049cd8562e9322b8caae0cbdc2e44c41212d29162be48c2",
       "evals/python/mcp-ai-tool-demo/Makefile": "87d12c2866f8dbd360a98ed53448c98ee805fa7f55a7b61e03862734fa4f63a2",

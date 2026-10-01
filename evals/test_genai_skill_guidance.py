@@ -300,6 +300,37 @@ def test_splunk_ao_langchain_demo_is_local_runnable_and_outcome_based():
         assert term in combined
 
 
+def test_galileo_choice_fixture_citations_cover_the_claimed_behavior():
+    fixture = REPO_ROOT / "evals" / "python" / "galileo-agent-demo"
+    audit = json.loads(
+        _read(fixture / "eval" / "inputs" / "otel-audit-integration-choice.json")
+    )
+
+    def cited_text(reference: str) -> str:
+        path, location = reference.split(":", 1)
+        first, _, last = location.partition("-")
+        lines = _read(fixture / path).splitlines()
+        return "\n".join(lines[int(first) - 1 : int(last or first)])
+
+    evidence = {
+        entry["check"]: cited_text(entry["source"])
+        for entry in audit["evidence"]
+        if ":" in entry["source"]
+    }
+    entry_point = evidence["Entry point"]
+    assert "GalileoSpanProcessor" in entry_point
+    assert '"gen_ai.operation.name": "invoke_workflow"' in entry_point
+    assert '"gen_ai.operation.name": "execute_tool"' in entry_point
+    assert '"gen_ai.operation.name": "chat"' in entry_point
+    assert "GALILEO_PROJECT" in evidence["Runtime/startup"]
+    assert "GALILEO_LOG_STREAM" in evidence["Runtime/startup"]
+    assert "splunk-ao" in evidence["Target-product evidence"]
+    assert "twice" in evidence["Target-product evidence"]
+
+    for span in audit["current_instrumentation"]["spans"]:
+        assert span["name"].split()[0] in cited_text(span["source"])
+
+
 def test_genai_skills_require_pre_bootstrap_suppression_for_app_owned_spans():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
     instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
