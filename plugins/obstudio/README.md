@@ -14,6 +14,10 @@ Python 3 is required for the SessionStart bootstrap. It must be available on
 is available, the hook exits with code 2 and the managed Splunk Observability
 Studio runtime cannot be bootstrapped automatically.
 
+Installing from the published Claude marketplace requires Claude Code v2.1.224
+or later because the marketplace uses the `archive` plugin source. This minimum
+does not apply to Codex.
+
 ## How to get started
 
 1. Install the **Splunk Observability Studio** plugin.
