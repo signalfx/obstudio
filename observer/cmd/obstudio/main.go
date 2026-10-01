@@ -212,6 +212,16 @@ func run(config runConfig) error {
 		otlp.WithTracesExporter(splunkTracesController),
 	)
 	if err != nil {
+		// OTLP ports (4317/4318) are intentionally fixed and shared across the
+		// single instance. When --port is NOT pinned (managed/extension launch)
+		// and the OTLP ports are already bound, an instance already owns the
+		// singleton — defer to it with an attach signal (exit 0), never crash.
+		// This also covers the upgrade case where an older observer holds the
+		// OTLP ports but never wrote a shared-observer.json the new code can read.
+		if pinnedPort == "" && isAddrInUseError(err) {
+			fmt.Fprintln(os.Stderr, "obstudio already running (OTLP ports already in use); deferring to the existing instance")
+			return nil
+		}
 		log.Fatalf("failed to start OTLP receiver: %v", err)
 	}
 
@@ -265,6 +275,18 @@ func run(config runConfig) error {
 	if err != nil {
 		if pinnedPort != "" {
 			log.Fatalf("port %s is already in use — choose a different port or omit --port to auto-scan", port)
+		}
+		// Unpinned: scanPort found this port free moments ago, so a bind failure
+		// here is a race with another instance claiming the singleton. Defer to
+		// it (attach signal, exit 0) rather than crashing.
+		if isAddrInUseError(err) {
+			webCleanup()
+			validatorManager.Shutdown(ctx)
+			rcv.Shutdown(ctx)
+			splunkExportController.Shutdown(ctx)
+			splunkTracesController.Shutdown(ctx)
+			fmt.Fprintln(os.Stderr, "obstudio already running (UI port claimed concurrently); deferring to the existing instance")
+			return nil
 		}
 		log.Fatalf("failed to start HTTP server: %v", err)
 	}
@@ -748,6 +770,26 @@ func scanPort(host, startPort string) (string, error) {
 	}
 }
 
+
+// isAddrInUseError reports whether err (or any error it wraps) indicates a TCP
+// listener could not bind because the address is already in use. It is
+// cross-OS: errors.Is matches the syscall errno on Unix and Windows
+// (EADDRINUSE / WSAEADDRINUSE), and the string fallbacks cover cases where an
+// upstream library (e.g. the OTel collector receiver) formats the bind failure
+// into an unwrapped error string rather than preserving the syscall error.
+func isAddrInUseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	// Unix: "address already in use"; Windows: "Only one usage of each socket
+	// address (protocol/network address/port) is normally permitted".
+	return strings.Contains(msg, "address already in use") ||
+		strings.Contains(msg, "only one usage of each socket address")
+}
 
 func splunkMetricsExporterConfigFromEnv() (otlp.SplunkMetricsExporterConfig, error) {
 	timeout, err := durationEnv("OBSTUDIO_SPLUNK_METRICS_TIMEOUT")

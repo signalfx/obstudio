@@ -246,17 +246,76 @@ func TestSingletonSmokeDetectsRunningInstance(t *testing.T) {
 		fmt.Sprintf("OTLP_HTTP_PORT=%d", pickSmokePort(t)),
 		fmt.Sprintf("OTLP_GRPC_PORT=%d", pickSmokePort(t)),
 	)
-	cmd := exec.Command(binary)
-	cmd.Env = env
-	output, err := cmd.CombinedOutput()
+	output, err := runSingletonWithDeadline(t, binary, nil, env, 20*time.Second)
 	if err != nil {
 		t.Fatalf("second launch should exit 0 when an instance is already running, got %v\n%s", err, output)
 	}
-	if !strings.Contains(string(output), "already running at") {
+	if !strings.Contains(output, "already running at") {
 		t.Fatalf("expected 'already running at' message, got:\n%s", output)
 	}
-	if !strings.Contains(string(output), state.BaseURL) {
+	if !strings.Contains(output, state.BaseURL) {
 		t.Fatalf("expected detection to report the running URL %q, got:\n%s", state.BaseURL, output)
+	}
+}
+
+// TestSingletonSmokeDefersWhenOTLPPortsHeldWithoutStateFile verifies Fix 2: an
+// instance already holding the fixed OTLP ports — but with NO readable
+// shared-observer.json (the upgrade case) — causes an unpinned launch to defer
+// (exit 0) rather than crash with a fatal port-in-use error. We simulate the
+// held OTLP ports with plain TCP listeners and point the launch at a fresh,
+// empty home so no state file exists to short-circuit via pre-flight detection.
+func TestSingletonSmokeDefersWhenOTLPPortsHeldWithoutStateFile(t *testing.T) {
+	binary := buildSingletonBinary(t)
+
+	otlpHTTPPort, releaseHTTP := occupyPort(t)
+	defer releaseHTTP()
+	otlpGRPCPort, releaseGRPC := occupyPort(t)
+	defer releaseGRPC()
+
+	home := t.TempDir() // empty: no shared-observer.json for pre-flight to find
+	env := singletonRunEnv(home, true,
+		fmt.Sprintf("OTLP_HTTP_PORT=%d", otlpHTTPPort),
+		fmt.Sprintf("OTLP_GRPC_PORT=%d", otlpGRPCPort),
+	)
+	output, err := runSingletonWithDeadline(t, binary, nil, env, 20*time.Second)
+	if err != nil {
+		t.Fatalf("launch should exit 0 (defer) when OTLP ports are already held, got %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "already running") {
+		t.Fatalf("expected a 'already running'/defer message when OTLP ports are held, got:\n%s", output)
+	}
+}
+
+// runSingletonWithDeadline runs the binary to completion with a hard deadline,
+// capturing combined output. If the process does not exit within timeout it is
+// force-killed and reaped so no child survives the test — this is the
+// guaranteed-kill path for launches expected to exit on their own (detection /
+// defer), replacing a bare cmd.CombinedOutput() that would hang (and leak the
+// process) if the exit-on-detect behavior regressed.
+func runSingletonWithDeadline(t *testing.T, binary string, args, env []string, timeout time.Duration) (string, error) {
+	t.Helper()
+
+	cmd := exec.Command(binary, args...)
+	cmd.Env = env
+	var logs bytes.Buffer
+	cmd.Stdout = &logs
+	cmd.Stderr = &logs
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start singleton binary: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	// Guaranteed reap even on panic/early-return: kill if still running.
+	t.Cleanup(func() { stopSmokeProcess(cmd, done) })
+
+	select {
+	case err := <-done:
+		return logs.String(), err
+	case <-time.After(timeout):
+		stopSmokeProcess(cmd, done)
+		t.Fatalf("singleton binary did not exit within %s (expected a quick detect/defer exit)\n%s", timeout, strings.TrimSpace(logs.String()))
+		return logs.String(), fmt.Errorf("timeout")
 	}
 }
 

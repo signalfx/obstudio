@@ -2343,9 +2343,18 @@ test('discovery-model startup never pins the UI port and discovers it after spaw
 		/delete managedObserverEnvironment\.PORT;/,
 		'an inherited PORT must be stripped so the binary always auto-scans',
 	);
-	// OTLP ports stay fixed and injected.
-	assert.match(startup, /OTLP_HTTP_PORT: String\(otlpHttpPort\)/);
-	assert.match(startup, /OTLP_GRPC_PORT: String\(otlpGrpcPort\)/);
+	// OTLP ports stay fixed and injected from the module-level fixed ports.
+	assert.match(startup, /OTLP_HTTP_PORT: String\(observerOtlpHttpPort\)/);
+	assert.match(startup, /OTLP_GRPC_PORT: String\(observerOtlpGrpcPort\)/);
+	// OTLP-in-use must never crash the spawn path: the extension must NOT
+	// pre-check the fixed OTLP ports with ensurePortAvailable before spawning.
+	// A busy OTLP port means an instance already owns the singleton — the binary
+	// owns binding and resolves it to attach-or-restart, not a fatal crash.
+	assert.doesNotMatch(
+		startup,
+		/ensurePortAvailable\(\{/,
+		'the spawn path must not pre-check OTLP ports — OTLP-in-use is an attach signal, never a crash',
+	);
 	// After spawn, the bound URL is discovered, not predicted.
 	assert.match(
 		startup,

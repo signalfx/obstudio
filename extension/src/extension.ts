@@ -3,7 +3,6 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as https from 'node:https';
-import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -62,11 +61,9 @@ import {
 	describeObserverStartupFailure,
 	formatObserverProbeMismatchMessage,
 	formatObserverProbeUnavailableMessage,
-	formatPortConflictMessage,
 	getObserverProbeMismatchHint,
 	getObserverProbeUnavailableHint,
 	getObserverStartupHint,
-	type ObserverPortRole,
 } from './startup-errors';
 import {
 	auditReportUrl,
@@ -106,9 +103,6 @@ import {
 	type ObserverHostResponseEnvelope,
 } from './observer-webview-host';
 import { ObserverWebviewTelemetry } from './observer-webview-telemetry';
-import {
-	readListeningProcess,
-} from './process-control';
 import {
 	authorizeWithSISCIMD,
 	computeSISCIMDSessionStatus,
@@ -329,12 +323,6 @@ function observerProbeMayRecover(result: ObserverProbeResult): boolean {
 	return result.status === 'unavailable'
 		|| (result.status === 'mismatch' && result.retryable === true);
 }
-
-type PortReservation = {
-	port: number;
-	role: ObserverPortRole;
-	settingName?: string;
-};
 
 type ManagedPortObserverRetirement =
 	| { status: 'ignored' }
@@ -1039,17 +1027,15 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 
 		const backend = resolveBackend(context.extensionPath);
 
-		const otlpHttpPort = await ensurePortAvailable({
-			port: observerOtlpHttpPort,
-			role: 'OTLP/HTTP',
-		});
+		// OTLP ports (4317/4318) are intentionally fixed and shared across the
+		// single instance. We deliberately do NOT pre-check them here: a busy OTLP
+		// port means an instance already owns the singleton, so the correct
+		// response is attach-or-restart, never a fatal "could not start / port in
+		// use" crash. Let the binary own binding — if it cannot bind the OTLP
+		// ports it exits 0 (attach signal, handled by the exit handler below) or
+		// surfaces Restart-required, both of which this start flow already handles.
 		assertObserverRunCurrent(observerLifecycleState, runId);
-		const otlpGrpcPort = await ensurePortAvailable({
-			port: observerOtlpGrpcPort,
-			role: 'OTLP/gRPC',
-		});
-		assertObserverRunCurrent(observerLifecycleState, runId);
-		logObserverLifecycle(`Run ${runId}: OTLP ports ready (HTTP ${otlpHttpPort}, gRPC ${otlpGrpcPort}).`);
+		logObserverLifecycle(`Run ${runId}: spawning binary; it owns OTLP binding (HTTP ${observerOtlpHttpPort}, gRPC ${observerOtlpGrpcPort}).`);
 		observerUsesSharedServer = false;
 
 		appendObserverOutputLine(`Starting ${backend.label}; it will select its own loopback UI port (auto-scanning from 17900).`);
@@ -1062,9 +1048,9 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			...backend.env,
 			HOST: managedObserverHost,
 			OTLP_HOST: managedObserverHost,
-			OTLP_PORT: String(otlpHttpPort),
-			OTLP_HTTP_PORT: String(otlpHttpPort),
-			OTLP_GRPC_PORT: String(otlpGrpcPort),
+			OTLP_PORT: String(observerOtlpHttpPort),
+			OTLP_HTTP_PORT: String(observerOtlpHttpPort),
+			OTLP_GRPC_PORT: String(observerOtlpGrpcPort),
 			OBSTUDIO_OWNER: extensionManagedObserverOwner,
 			OBSTUDIO_MODE: extensionManagedObserverMode,
 			// Pass the workspace root so the preview resolver locates
@@ -2462,47 +2448,6 @@ function buildObserverApiUrl(pathname: string): URL {
 // Port helpers
 // ---------------------------------------------------------------------------
 
-async function ensurePortAvailable(reservation: PortReservation): Promise<number> {
-	return new Promise((resolve, reject) => {
-		const server = net.createServer();
-		server.once('error', (error: NodeJS.ErrnoException) => {
-			if (error.code === 'EADDRINUSE') {
-				void identifyPortOwner(reservation.port).then((owner) => {
-					const detail = formatPortConflictMessage({
-						owner,
-						port: reservation.port,
-						role: reservation.role,
-						settingName: reservation.settingName,
-					});
-					logObserverLifecycle(detail);
-					const error = new Error(detail);
-					Object.assign(error, { startupHint: getObserverStartupHint('port-conflict') });
-					reject(error);
-				});
-				return;
-			}
-			logObserverLifecycle(`Port check failed for ${reservation.role} port ${reservation.port}: ${error.message}`);
-			reject(error);
-		});
-		server.listen(reservation.port, '127.0.0.1', () => {
-			server.close((error) => {
-				if (error) { reject(error); return; }
-				resolve(reservation.port);
-			});
-		});
-	});
-}
-
-async function identifyPortOwner(port: number): Promise<string | undefined> {
-	const listener = await readListeningProcess(port);
-	if (listener === undefined) {
-		return undefined;
-	}
-	const command = listener.executablePath === undefined
-		? 'process'
-		: path.basename(listener.executablePath);
-	return `${command} (PID ${listener.pid})`;
-}
 
 async function waitForObserverReady(
 	endpoints: ObserverEndpointRoles,
