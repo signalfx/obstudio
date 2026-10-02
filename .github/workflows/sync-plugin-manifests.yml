@@ -36,16 +36,15 @@ jobs:
         with:
           ref: ${{ inputs.base }}
 
-      - name: Download plugin checksum file
+      - name: Download release checksum manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          plugin_version="${RELEASE_TAG#v}"
           gh release download "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --pattern "obstudio-plugin-checksum-${plugin_version}.txt" \
+            --pattern "checksums.txt" \
             --dir "$RUNNER_TEMP"
 
       - name: Update Claude marketplace archive source
@@ -55,7 +54,7 @@ jobs:
           python3 plugins/obstudio/scripts/stage_obstudio_plugin.py \
             --sync-claude-marketplace \
             --release-tag "$RELEASE_TAG" \
-            --checksums-file "$RUNNER_TEMP/obstudio-plugin-checksum-${RELEASE_TAG#v}.txt"
+            --checksums-file "$RUNNER_TEMP/checksums.txt"
 
       - name: Bump committed plugin manifests to release version
         env:
@@ -80,6 +79,6 @@ jobs:
             - `plugins/obstudio/.claude-plugin/plugin.json`
             - `plugins/obstudio/.codex-plugin/plugin.json`
 
-            Updates `.claude-plugin/marketplace.json` to use the Claude plugin archive and its SHA-256 from the release plugin checksum file.
+            Updates `.claude-plugin/marketplace.json` to use the Claude plugin archive and its SHA-256 from the release `checksums.txt`.
 
             This keeps marketplace installs on ${{ inputs.base }} reporting the released version

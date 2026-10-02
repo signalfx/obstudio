@@ -132,7 +132,10 @@ class StageObstudioPluginTest(unittest.TestCase):
             )
             digest = "a" * 64
             checksums_path.write_text(
-                f"{digest} *obstudio_claude_1.2.3.zip\n{'b' * 64} *obstudio_codex_1.2.3.zip\n",
+                f"{'c' * 64}  obstudio_1.2.3_linux_amd64.zip\n"
+                f"{digest}  obstudio_claude_1.2.3.zip\n"
+                f"{'b' * 64}  obstudio_codex_1.2.3.zip\n"
+                f"{'d' * 64}  splunk.observability-studio-1.2.3-linux-x64.vsix\n",
                 encoding="utf-8",
             )
 

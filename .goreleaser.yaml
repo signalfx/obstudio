@@ -34,12 +34,20 @@ archives:
 checksum:
   name_template: checksums.txt
   algorithm: sha256
+  extra_files:
+    - glob: .release/plugins/obstudio_codex_{{ .Version }}.zip
+    - glob: .release/plugins/obstudio_claude_{{ .Version }}.zip
+    - glob: extension/*.vsix
 
 release:
   github:
     owner: signalfx
     name: obstudio
   replace_existing_artifacts: true
+  extra_files:
+    - glob: .release/plugins/obstudio_codex_{{ .Version }}.zip
+    - glob: .release/plugins/obstudio_claude_{{ .Version }}.zip
+    - glob: extension/*.vsix
 
 changelog:
   sort: asc

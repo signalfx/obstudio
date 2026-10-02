@@ -70,8 +70,9 @@ cross-directory symlinks. Plugin-only observer-control skills are authoritative
 under `plugins/obstudio/skills/observer-control/`.
 
 The published Claude marketplace entry uses a SHA-256-pinned release archive.
-The release workflow publishes the Claude and Codex plugin archive hashes in a
-separate plugin checksum file, then updates the Claude archive URL and checksum
+GoReleaser's release `checksums.txt` includes the runtime archives, Claude and
+Codex plugin archives, and VSIX packages. The release workflow uses the Claude
+plugin ZIP hash from this manifest when it updates the marketplace archive URL
 alongside the Claude and Codex plugin manifest versions. Codex's repo-local
 marketplace remains a path source.
 
