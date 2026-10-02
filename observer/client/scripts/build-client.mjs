@@ -1,6 +1,7 @@
 import { context, build } from "esbuild";
 import fs from "node:fs/promises";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,7 +19,52 @@ const defaultOutdir = goStaticDir;
 const outdir = outdirIndex === -1
   ? defaultOutdir
   : path.resolve(clientRoot, args[outdirIndex + 1]);
-const liveReloadPort = Number(process.env.PORT ?? 3000);
+// Resolve the shared-observer state file path with the SAME override
+// precedence the rest of the system uses (the Go binary and the extension both
+// honor OBSTUDIO_SHARED_OBSERVER_STATE_PATH, falling back to the homedir
+// default). Reading this file is how every consumer DISCOVERS the UI port the
+// binary auto-scanned to — the watcher is just another discovery consumer.
+const sharedObserverStatePath = () => {
+  const override = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH?.trim();
+  return override && override.length > 0
+    ? override
+    : path.join(os.homedir(), ".obstudio", "shared-observer.json");
+};
+
+// Extract the bound UI port by reading shared-observer.json fresh. Returns
+// undefined (never throws) if the file is missing/unparseable/has no usable
+// port — the binary may not be up yet, or we may be between restarts.
+const discoverLiveReloadPort = async () => {
+  try {
+    const raw = await fs.readFile(sharedObserverStatePath(), "utf8");
+    const state = JSON.parse(raw);
+    if (typeof state?.baseUrl !== "string" || state.baseUrl.length === 0) {
+      return undefined;
+    }
+    const parsed = new URL(state.baseUrl);
+    if (parsed.port.length > 0) {
+      return Number(parsed.port);
+    }
+    if (parsed.protocol === "http:") return 80;
+    if (parsed.protocol === "https:") return 443;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+// Resolve the trigger target port. Precedence: an explicit PORT override still
+// wins (pinning stays available for advanced cases); otherwise discover the
+// autoscanned port from shared-observer.json. Read FRESH each trigger so the
+// watcher follows the binary if it restarts on a different port mid-session.
+const resolveLiveReloadPort = async () => {
+  const pinned = process.env.PORT?.trim();
+  if (pinned && pinned.length > 0) {
+    const port = Number(pinned);
+    if (Number.isFinite(port)) return port;
+  }
+  return discoverLiveReloadPort();
+};
 
 const copyPublicAssets = async () => {
   const publicDir = path.resolve(clientRoot, "public");
@@ -31,6 +77,13 @@ const copyPublicAssets = async () => {
 };
 
 const triggerLiveReload = async () => {
+  const liveReloadPort = await resolveLiveReloadPort();
+  if (liveReloadPort === undefined) {
+    // Binary not up yet (or between restarts): skip quietly and let the next
+    // rebuild retry. Hot-reload is a convenience; a missing/stale state file
+    // must never crash or hang the watcher.
+    return;
+  }
   await new Promise((resolve) => {
     const request = http.request(
       {
