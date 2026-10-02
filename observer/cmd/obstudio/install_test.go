@@ -6537,3 +6537,41 @@ func doSmokeJSONRequest(t *testing.T, client *http.Client, method, url, body str
 	}
 	return resp.StatusCode
 }
+
+func TestSharedObserverStatePathHonorsEnvOverride(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	defaultPath := filepath.Join(home, sharedObserverStateDirName, sharedObserverStateFileName)
+
+	t.Run("unset falls back to HOME default", func(t *testing.T) {
+		t.Setenv(sharedObserverStatePathEnv, "")
+		if got := sharedObserverStatePath(); got != defaultPath {
+			t.Fatalf("sharedObserverStatePath() = %q, want HOME default %q", got, defaultPath)
+		}
+	})
+
+	t.Run("whitespace-only falls back to HOME default", func(t *testing.T) {
+		t.Setenv(sharedObserverStatePathEnv, "   ")
+		if got := sharedObserverStatePath(); got != defaultPath {
+			t.Fatalf("sharedObserverStatePath() = %q, want HOME default %q", got, defaultPath)
+		}
+	})
+
+	t.Run("non-empty override wins", func(t *testing.T) {
+		override := filepath.Join(t.TempDir(), "custom-shared-observer.json")
+		t.Setenv(sharedObserverStatePathEnv, override)
+		if got := sharedObserverStatePath(); got != override {
+			t.Fatalf("sharedObserverStatePath() = %q, want override %q", got, override)
+		}
+	})
+
+	t.Run("override is trimmed", func(t *testing.T) {
+		override := filepath.Join(t.TempDir(), "trimmed-shared-observer.json")
+		t.Setenv(sharedObserverStatePathEnv, "  "+override+"  ")
+		if got := sharedObserverStatePath(); got != override {
+			t.Fatalf("sharedObserverStatePath() = %q, want trimmed override %q", got, override)
+		}
+	})
+}
