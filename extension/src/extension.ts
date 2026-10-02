@@ -28,6 +28,7 @@ import {
 	normalizeSharedObserverHealthUrl,
 	normalizeSharedObserverMCPUrl,
 	observerPortFromUrl,
+	observerVersionIsCompatible,
 	readSharedObserverDiscovery,
 	resolveBackend,
 } from './backend';
@@ -337,16 +338,26 @@ function observerRestartRequiredError(
 	const urlLabel = retirement.port === undefined
 		? 'a running instance'
 		: `http://${managedObserverHost}:${retirement.port}`;
+	const pidLabel = retirement.pid === undefined
+		? ''
+		: `, PID ${retirement.pid}`;
+	// The extension does not take over or kill the process — it only starts
+	// obstudio (which self-records shared-observer.json) and then attaches. When
+	// an out-of-date obstudio server is already running, the fix is for the
+	// developer to kill that OS process and run Start (not Restart): the palette
+	// Restart command is a no-op when attached to a process it did not spawn, so
+	// Start is the reliable path. There is no auto-respawn in this case, so the
+	// message must not promise recovery.
 	const restartMessage = retirement.version === undefined
-		? `A Splunk Observability Studio instance already running at ${urlLabel} could not be verified as bundled version ${bundleVersion}. `
-			+ 'Restart VS Code to take over.'
-		: `A different Splunk Observability Studio version (${retirement.version}) is already running at ${urlLabel}. `
-			+ 'Restart VS Code to take over.';
+		? `An out-of-date Splunk Observability Studio obstudio server process (PID ${retirement.pid}) at ${urlLabel} could not be verified as version ${bundleVersion}. `
+			+ 'Kill that process, then run "Splunk Observability Studio: Start".'
+		: `An out-of-date Splunk Observability Studio obstudio server process (version ${retirement.version}${pidLabel}) is running at ${urlLabel}. `
+			+ 'Kill that process, then run "Splunk Observability Studio: Start" to launch the current version.';
 	const restartError = new Error(restartMessage);
 	Object.assign(restartError, {
-		startupHint: 'Restart VS Code, then run Splunk Observability Studio: Start. '
-			+ 'If it remains running, stop the other Splunk Observability Studio instance and retry.',
-		startupTitle: 'Restart required',
+		startupHint: 'Kill the out-of-date obstudio server process shown above, '
+			+ 'then run Splunk Observability Studio: Start to launch the current version.',
+		startupTitle: 'Out-of-date obstudio server running',
 	});
 	return restartError;
 }
@@ -994,7 +1005,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			if (sharedPort === undefined) {
 				throw new Error(`Splunk Observability Studio URL does not resolve to a usable port: ${sharedObserverUrl}`);
 			}
-			if (configuredProbe.health.version !== bundleVersion) {
+			if (!observerVersionIsCompatible(configuredProbe.health.version, bundleVersion)) {
 				throw observerRestartRequiredError({
 					pid: configuredDiscovery?.pid,
 					port: sharedPort,
@@ -1149,7 +1160,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		const discoveredEndpoints = await waitForSpawnedObserverDiscovery(runId);
 		setObserverEndpoints(discoveredEndpoints);
 		const startedProbe = await waitForObserverReady(discoveredEndpoints, { requireStableOtlp: true }, runId);
-		if (startedProbe.health.version !== bundleVersion) {
+		if (!observerVersionIsCompatible(startedProbe.health.version, bundleVersion)) {
 			throw observerRestartRequiredError({
 				port: observerPortFromUrl(discoveredEndpoints.restBaseUrl),
 				status: 'restart-required',
@@ -1276,7 +1287,7 @@ async function attachToDiscoveredObserver(
 		return false;
 	}
 
-	if (probe.health.version !== bundleVersion) {
+	if (!observerVersionIsCompatible(probe.health.version, bundleVersion)) {
 		throw observerRestartRequiredError({
 			pid: discovery.pid,
 			port: discoveredPort,

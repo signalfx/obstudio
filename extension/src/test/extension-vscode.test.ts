@@ -1928,13 +1928,18 @@ suite('VS Code Host', () => {
 					value
 					&& value.observerPort === undefined
 					&& value.observerUrl === undefined
-					&& value.panelHtml?.includes('<h2>Restart required</h2>')
-					// Discovery model: a version-mismatched (or non-obstudio)
-					// listener on the discovered URL resolves to Restart-required,
-					// naming the discovered URL rather than a predicted localhost
-					// port/PID. The extension never takes over the port.
-					&& value.panelHtml.includes(`is already running at ${baseUrl}`)
-					&& value.panelHtml.includes('Restart VS Code to take over.'),
+					&& value.panelHtml?.includes('<h2>Out-of-date obstudio server running</h2>')
+					// Discovery model: a version-mismatched listener on the
+					// discovered URL resolves to the out-of-date-server state,
+					// naming the discovered URL and the stale process's PID rather
+					// than a predicted localhost port. The extension never takes
+					// over or kills the process — it instructs the developer to
+					// kill the stale obstudio server and run Start.
+					&& value.panelHtml.includes(`version stale-fixture, PID ${legacyProcess?.pid}`)
+					&& value.panelHtml.includes(`is running at ${baseUrl}`)
+					// panelHtml is HTML-escaped, so the double quotes around the
+					// Start command render as &quot;.
+					&& value.panelHtml.includes('Kill that process, then run &quot;Splunk Observability Studio: Start&quot;'),
 				),
 				20_000,
 			);

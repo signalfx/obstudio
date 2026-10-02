@@ -26,6 +26,7 @@ import {
 	normalizeSharedObserverHealthUrl,
 	normalizeSharedObserverMCPUrl,
 	observerPortFromUrl,
+	observerVersionIsCompatible,
 	readSharedObserverDiscovery,
 	resolveBackend,
 } from '../backend';
@@ -2388,8 +2389,12 @@ test('all local Splunk Observability Studio reuse paths use the same bundled-ver
 	const startupEnd = source.indexOf('\nasync function attachToDiscoveredObserver(', startupStart);
 	const startup = source.slice(startupStart, startupEnd);
 	assert.match(startup, /const bundleVersion = getBundleVersion\(context\)/);
-	assert.match(startup, /configuredProbe\.health\.version !== bundleVersion/);
-	assert.match(startup, /startedProbe\.health\.version !== bundleVersion/);
+	// All reuse paths route through the shared observerVersionIsCompatible util
+	// (treats "dev" as compatible) rather than a bare !== comparison.
+	assert.match(startup, /!observerVersionIsCompatible\(configuredProbe\.health\.version, bundleVersion\)/);
+	assert.match(startup, /!observerVersionIsCompatible\(startedProbe\.health\.version, bundleVersion\)/);
+	assert.doesNotMatch(startup, /configuredProbe\.health\.version !== bundleVersion/);
+	assert.doesNotMatch(startup, /startedProbe\.health\.version !== bundleVersion/);
 	assert.doesNotMatch(startup, /0\.0\.18|0\.0\.20/);
 
 	// The shared reuse path applies the same rule inside attachToDiscoveredObserver.
@@ -2398,7 +2403,25 @@ test('all local Splunk Observability Studio reuse paths use the same bundled-ver
 	assert.notEqual(attachStart, -1);
 	assert.notEqual(attachEnd, -1);
 	const attach = source.slice(attachStart, attachEnd);
-	assert.match(attach, /probe\.health\.version !== bundleVersion[\s\S]*?observerRestartRequiredError/);
+	assert.match(attach, /!observerVersionIsCompatible\(probe\.health\.version, bundleVersion\)[\s\S]*?observerRestartRequiredError/);
+});
+
+test('observerVersionIsCompatible treats dev as compatible but catches stamped mismatches', () => {
+	// A dev-mode binary (version "dev") is compatible with any stamped bundle:
+	// same developer working both halves, no masked semver.
+	assert.equal(observerVersionIsCompatible('dev', '0.0.1'), true);
+	assert.equal(observerVersionIsCompatible('dev', '1.2.3'), true);
+	// Equal stamped versions are compatible.
+	assert.equal(observerVersionIsCompatible('0.0.1', '0.0.1'), true);
+	// Different stamped versions are a genuine mismatch.
+	assert.equal(observerVersionIsCompatible('0.0.1', '0.0.2'), false);
+	assert.equal(observerVersionIsCompatible('1.0.0', '0.9.0'), false);
+	// Only the exact literal "dev" is the escape hatch — nothing dev-adjacent.
+	assert.equal(observerVersionIsCompatible('', '0.0.1'), false);
+	assert.equal(observerVersionIsCompatible('dev-123', '0.0.1'), false);
+	assert.equal(observerVersionIsCompatible('DEV', '0.0.1'), false);
+	// A missing health version is never compatible.
+	assert.equal(observerVersionIsCompatible(undefined, '0.0.1'), false);
 });
 
 test('temporary port reservations destroy reconnecting exporter sockets before closing', async () => {

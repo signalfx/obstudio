@@ -72,6 +72,25 @@ automatically -- no manual browser reload.
 The `dev` build tag is local-only: release/embedded builds (`make build` /
 `make run`) never include it and do not expose the reload endpoint.
 
+#### Port selection
+
+The obstudio binary **auto-scans** for a free UI port, starting at **17900**
+(`scanPort(host, "17900")` in `observer/cmd/obstudio/main.go`), and records the
+chosen URL as `baseUrl` in `~/.obstudio/shared-observer.json`. Every normal flow
+-- the VS Code extension, the CLI, the hot-reload watcher, the agent tools --
+**discovers** that URL from the state file. Nothing predicts or configures the
+port.
+
+A `--port` flag (or `PORT` env var) pins a fixed UI port, but it is an advanced
+escape hatch with no normal development use -- not needed and not recommended.
+Pinning also changes failure semantics: a pinned port that is already in use
+**crashes** (`port … is already in use — choose a different port`), whereas an
+unpinned instance that finds the singleton already bound **defers and attaches**
+(exits 0). So pinning actively defeats the singleton attach behavior. The only
+real reasons to pin are a discovery-blind external integration that needs a
+constant URL (a fixed reverse-proxy upstream or firewall allowlist) or
+deterministic CI; otherwise rely on autoscan.
+
 ### VS Code-Compatible Editor Extension
 
 ```sh
