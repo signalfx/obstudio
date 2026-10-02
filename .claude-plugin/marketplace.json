@@ -10,8 +10,8 @@
       "displayName": "Splunk Observability Studio",
       "source": {
         "source": "archive",
-        "url": "https://github.com/signalfx/obstudio/releases/download/v0.1.0/obstudio_claude_0.1.0.zip",
-        "sha256": "bed974fb343e89336cc27360c20703f5170d48fd9be7e12e8275d5ef911ba9f3"
+        "url": "https://github.com/signalfx/obstudio/releases/download/v0.1.1/obstudio_claude_0.1.1.zip",
+        "sha256": "ebe08d9ee95a0d352272993bf9d0914aec46e1458fea8e349721f07057e0ccd4"
       },
       "description": "Splunk Observability Studio bundles local OpenTelemetry workflows and service controls for Claude Code."
     }
