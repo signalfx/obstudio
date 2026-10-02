@@ -49,6 +49,29 @@ make fmt            # go fmt
 make tidy           # go mod tidy
 ```
 
+#### Hot-reloading the Telemetry Explorer UI
+
+The `dev` build tag runs the binary so it serves the Telemetry Explorer client
+assets from disk instead of the embedded snapshot, and exposes a live-reload
+endpoint the client watcher pings after each rebuild. Use a two-terminal flow:
+
+```sh
+# Terminal 1: build the client once, then run the dev-tagged binary
+make build-client
+cd observer && go run -tags dev ./cmd/obstudio
+
+# Terminal 2: watch client sources and rebuild on save
+make dev
+```
+
+Open the Telemetry Explorer at the URL the binary prints on startup (also
+recorded as `baseUrl` in `~/.obstudio/shared-observer.json`). Each client
+rebuild pushes a reload over the telemetry WebSocket, so open tabs refresh
+automatically -- no manual browser reload.
+
+The `dev` build tag is local-only: release/embedded builds (`make build` /
+`make run`) never include it and do not expose the reload endpoint.
+
 ### VS Code-Compatible Editor Extension
 
 ```sh
