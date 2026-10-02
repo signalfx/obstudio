@@ -118,6 +118,22 @@ def test_genai_skills_require_model_call_lifecycle_spans():
         assert not missing
 
 
+def test_genai_instrumentation_keeps_token_metric_dimensions_when_known():
+    instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
+    rubric = " ".join(
+        json.loads(
+            _read(REPO_ROOT / "evals/python/ai-assistant-demo/eval/qual/instrument.json")
+        )["rubric"]
+    )
+    for text in (instrument, rubric):
+        assert "gen_ai.client.token.usage" in text
+        assert "gen_ai.token.type" in text
+        assert "gen_ai.operation.name" in text
+        assert "gen_ai.provider.name" in text
+        assert "gen_ai.request.model" in text
+        assert "on the token metric" in text
+
+
 def test_genai_skills_require_single_canonical_span_source():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
     instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
@@ -654,6 +670,7 @@ def test_ai_assistant_instrument_case_requires_nested_retrieval_closure():
         "`gen_ai.retrieval.query.text`",
         "`gen_ai.retrieval.documents`",
         "parent span ID",
+        "asserts `gen_ai.operation.name` and `gen_ai.data_source.id`",
     ):
         assert term in instrument_skill
 
@@ -707,6 +724,112 @@ def test_ai_assistant_instrument_case_selects_distinct_ao_routing(tmp_path):
     rubric = " ".join(instrument_eval["rubric"]).lower()
     for term in ("project resource", "agent stream resource", "direct routing"):
         assert term in rubric
+
+
+def test_ai_assistant_instrument_rubric_stays_within_selected_signal_contract():
+    audit_input = json.loads(
+        _read(REPO_ROOT / "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json")
+    )
+    instrument_eval = json.loads(
+        _read(REPO_ROOT / "evals/python/ai-assistant-demo/eval/qual/instrument.json")
+    )
+    selected = next(
+        finding for finding in audit_input["findings"] if finding["id"] == "OTEL-001"
+    )
+    expected_names = {item["name"] for item in selected["expected_telemetry"]}
+    assert "gen_ai.client.token.usage" in expected_names
+    assert "assistant.stream.active" in expected_names
+    assert "invoke_workflow build_turn" not in expected_names
+    coverage_rubric = instrument_eval["rubric"][1].lower()
+    pressure_rubric = instrument_eval["rubric"][5].lower()
+    assert "feedback export" not in coverage_rubric
+    assert "assistant-turn" not in coverage_rubric
+    assert "token-limit errors" not in pressure_rubric
+    assert "selected" in coverage_rubric
+    assert "selected" in pressure_rubric
+
+
+def test_instrument_selected_tools_keep_other_tool_behavior_without_new_spans():
+    instrument = " ".join(
+        _read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split()
+    )
+    rubric = json.loads(
+        _read(REPO_ROOT / "evals/python/ai-assistant-demo/eval/qual/instrument.json")
+    )["rubric"][1]
+    for term in (
+        "only selected tool operations",
+        "unselected tool names",
+        "same result or error",
+    ):
+        assert term in instrument
+    assert "unselected tool names" in rubric
+    assert "existing behavior" in rubric
+
+
+def test_instrument_retrieval_proof_compares_actual_span_ids():
+    instrument = " ".join(
+        _read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split()
+    )
+    rubric = json.loads(
+        _read(REPO_ROOT / "evals/python/ai-assistant-demo/eval/qual/instrument.json")
+    )["rubric"][4]
+    for term in (
+        "in-memory SDK exporter",
+        "retrieval parent span ID equals the tool span ID",
+        "object-parent equality",
+    ):
+        assert term in instrument
+    assert "actual parent span ID" in rubric
+    assert "tool span ID" in rubric
+
+
+def test_instrument_persists_direct_export_dependencies_separately_from_credentials():
+    instrument = " ".join(
+        _read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split()
+    )
+    rubric = json.loads(
+        _read(REPO_ROOT / "evals/python/ai-assistant-demo/eval/qual/instrument.json")
+    )["rubric"][9]
+    for term in (
+        "project lockfile",
+        "uv.lock",
+        "uv sync --locked",
+        "missing credentials",
+        "dependency resolution",
+    ):
+        assert term in instrument
+    assert "locked dependencies" in rubric
+    assert "credential" in rubric
+
+
+def test_instrument_runs_local_verify_when_remote_export_is_blocked():
+    instrument = " ".join(
+        _read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split()
+    )
+    rubric = json.loads(
+        _read(REPO_ROOT / "evals/python/ai-assistant-demo/eval/qual/instrument.json")
+    )["rubric"][11]
+    for term in (
+        "local `$otel-verify`",
+        "remote export credentials",
+        "## What Changed",
+        "## Tested And Working",
+        "## Not Working Or Not Proven",
+        "## Proof",
+    ):
+        assert term in instrument
+    assert "local otel-verify" in rubric
+    assert "remote export" in rubric
+
+
+def test_ai_assistant_rubric_distinguishes_selection_refresh_from_instrument_overwrite():
+    instrument_eval = json.loads(
+        _read(REPO_ROOT / "evals/python/ai-assistant-demo/eval/qual/instrument.json")
+    )
+    reader_rubric = instrument_eval["rubric"][10].lower()
+    assert "explicit selection-aware refresh" in reader_rubric
+    assert "instrumentation renderer" in reader_rubric
+    assert "must not overwrite" in reader_rubric
 
 
 def test_genai_reference_covers_evaluation_quality_contract():
@@ -927,6 +1050,54 @@ def test_audit_requires_single_deterministic_gap_section():
         "keep the HTML decision view focused on those findings",
     ]
     assert not [term for term in required_terms if term not in normalized]
+
+
+def test_audit_groups_sdk_specific_content_capture_with_agent_observability():
+    audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
+    gap_contract = audit.split("**Deterministic gap section contract**", 1)[1].split(
+        "**", 1
+    )[0]
+    assert "SplunkAOCallback" in gap_contract
+    assert "raw caller content" in gap_contract
+    assert "finding_group: splunk-agent-observability" in gap_contract
+
+
+def test_audit_requires_source_backed_overlap_inventory_for_sdk_callbacks():
+    audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
+    callback_guidance = " ".join(
+        audit.split("For Python with Splunk AO", 1)[1]
+        .split("Audit teardown", 1)[0]
+        .split()
+    )
+    assert "second callback" in callback_guidance
+    assert "framework auto" in callback_guidance
+    assert "source-backed negative evidence" in callback_guidance
+
+
+def test_audit_reports_sdk_teardown_as_current_state_even_when_covered():
+    audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
+    lifecycle_guidance = " ".join(
+        audit.split("Audit teardown for every detected Splunk AO span source", 1)[1]
+        .split("Audit workflow naming", 1)[0]
+        .split()
+    )
+    assert "current-state lifecycle assessment" in lifecycle_guidance
+    assert "source-covered" in lifecycle_guidance
+    assert "future verification scenario" in lifecycle_guidance
+
+
+def test_instrument_keeps_selected_scope_and_audit_group_ownership():
+    instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
+    closure = instrument.split("### Audit-Driven Gap Closure", 1)[1].split("###", 1)[0]
+    assert "unselected local log export" in closure
+    assert "audit finding_group" in closure
+
+    rubric = _read(
+        REPO_ROOT
+        / "evals/python/ai-assistant-demo/eval/qual/instrument.json"
+    )
+    assert "bound audit" in rubric
+    assert "instrumentation overlay" in rubric
 
 
 def test_assistant_v3_framework_bridge_eval_covers_duplicate_span_risk():

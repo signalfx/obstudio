@@ -1284,6 +1284,30 @@ def test_with_skill_guard_fails_when_agent_does_not_read_instructions(tmp_path: 
     assert "Did not successfully read all" in instruction_check.evidence
 
 
+def test_with_skill_guard_ignores_transport_error_before_skill_read(tmp_path: Path):
+    write_loaded_skill(tmp_path, "otel-audit")
+    events = [
+        {
+            "type": "item.completed",
+            "item": {
+                "id": "transport-1",
+                "type": "error",
+                "message": "Falling back from WebSockets to HTTPS transport",
+            },
+        },
+        codex_command_event(
+            "cat .agents/skills/otel-audit/SKILL.md",
+            "completed",
+            item_id="read-1",
+            output="name: otel-audit\n",
+        ),
+    ]
+
+    check = instruction_guard_check(tmp_path, events)
+
+    assert check.passed is True
+
+
 @pytest.mark.parametrize(
     ("command", "status"),
     [

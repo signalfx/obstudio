@@ -21,6 +21,14 @@ and tool operation. Do not add another OpenTelemetry span around the same
 logical operation. The app explicitly calls `logger.terminate()` so completed
 work is drained and shutdown behavior is testable.
 
+The pinned callback serializes chain, model, and tool inputs and outputs into
+raw trace fields; `tests/test_app.py` inspects those fields in the in-memory
+batch. The committed example values are synthetic, but `run_demo(question)`
+currently accepts arbitrary caller text. A production use of this pattern
+needs an application-owned content boundary or a source-supported suppression
+control before the callback sees unapproved data. Adding a separate redacted
+field does not remove the callback's raw input or output.
+
 Run it locally:
 
 ```bash

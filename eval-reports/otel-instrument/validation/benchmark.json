@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261001T201318709073Z",
+    "run_id": "20261002T060102223689Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -525,7 +525,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "f648131f851bda1e483070136b740af5a6a4fa235e0316216c89d9c791eaeffc",
+    "digest": "af30853497662f6d65ec38ee08a9387f8697163a612f1168ade8cb48b765ee4b",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -538,7 +538,7 @@
       "evals/go/chi-basic/eval/qual/benchmark-instrument.json": "ca365bb19d97128b41e3e89b17ed52d73e360a49e42cdb0ed5c87d68c90728e0",
       "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
-      "skills/otel-instrument/SKILL.md": "c4d5ade715a6564373c71cb57d6a1b7d6febbf67d4d385c7878e9df251bc45c4",
+      "skills/otel-instrument/SKILL.md": "3b63b1ed240b83b8aa7acccb9c1ef955631992d952a5601a67e27fcc57322f3d",
       "skills/otel-instrument/references/json-approval-handoff.md": "e924372284ea1e55d78528ef002b34840f34a912f40cb931ae8b18adcac1d95c",
       "skills/otel-instrument/references/languages/go.md": "55d76bc4cc23adf86f4a95dc52c5da486b37540363d071df7f17419bbf6e2662",
       "skills/otel-instrument/references/languages/java.md": "17679fe3627c6116b4480e00917a1e7252a8cd6af9d6081f3af43bf7db519db0",
@@ -557,12 +557,12 @@
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
-      "skills/references/scripts/observe_report.py": "2cdfef43ca8c1e8a67c75692398d92fb57c296c7b7a967aa7bdbf131178c5782",
+      "skills/references/scripts/observe_report.py": "0c0b3c358482bbbd66ef5036c4425c80a6955f89be1ca6a7106d7fca43294ee5",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-agent-observability.md": "9fde934642870af48bb3fd86e7f35b5e5e17d51efeaf32cac57551f0a2f1c67a",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "73934b24cd81f0a38c4ed7bb31cc5684b1c9121c0bd00bdf005bc79eb81e5dff",
+      "skills/references/tests/test_observe_report.py": "962986d7eed939d59a07f7d61aa737e49a84dc296a8da8cdc1d723429ff8ff21",
       "evals/go/chi-basic/eval/qual/instrument-decision-gated.json": "1604ebf6626a7ebc97406d3bc8299a7bf44003d6f2eb6f9bda6f89b408d934df",
       "evals/go/chi-basic/eval/qual/instrument.json": "69732371ba5e2c21a348d443b00070392c6f57f274c985d1c47f6ade30437792",
       "docs/examples.md": "894a8483b2099588d32bd389164df1d4aa528486b35205bd08120a122243e819",
@@ -767,7 +767,7 @@
       "skills/connect-splunk-observability-cloud/agents/openai.yaml": "206b920092a097ec7ab0f92b97d457a6e794bdddcc7f2def837955ff8a756407",
       "skills/create-splunk-free-account/SKILL.md": "1ea265ff983db6013c15f96e008b35d83c68eb8b7d041d0bf3660dfbb877d53b",
       "skills/create-splunk-free-account/agents/openai.yaml": "7767ebaee1f22c7cc76c22ff75676dcaf24e02821939b7229cc80a8b66e0a237",
-      "skills/otel-audit/SKILL.md": "932c4f41c24d34115440a03164df288843823a6ea61836068f0026984e8768c2",
+      "skills/otel-audit/SKILL.md": "3464d98d4d75638512ad32616a3162626df323bd15879b9d5d30b7e1e26af5e6",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
       "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
       "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
@@ -880,7 +880,8 @@
       "evals/python/ai-assistant-demo/README.md": "fef16be3948e26460b7de715b05d2c14387c1fa974529b6c24a77a6666f52a4e",
       "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
       "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json": "2e31c7015fbcc40fc405337e00012957c2cc2a18dd5b2050abc579e8cc407eb0",
-      "evals/python/ai-assistant-demo/eval/qual/instrument.json": "b017f726cf46c07e004154436e77c5fdbf179148cd0ebc999942e26ebfc3c6c4",
+      "evals/python/ai-assistant-demo/eval/inputs/python-preflight-requirements.txt": "3b161f808a1b29386d15f9735f6f26709643600edeabe887727ffcaa48a2baa2",
+      "evals/python/ai-assistant-demo/eval/qual/instrument.json": "c38d333c193bc8485ab01702af95601063d04e0897119ab45c2ac472a8106626",
       "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
       "evals/python/ai-assistant-demo/pyproject.toml": "8afdfbe2ebc5a067e4fdcba6874cb7c2d5bf39331bf9972a76a25da06a67cf6d",
       "evals/python/assistant-v3-framework-bridge-demo/Makefile": "8b7c714132b889fa15ae8ae47455eeb3656a43a8718235f90c785245f9c62552",
@@ -931,11 +932,12 @@
       "evals/python/splunk-ao-integration-demo/existing_otel_app.py": "11103e93e200d4f35bb2e3c230ca06da3cbc9180af105baa2a4caa9bec9c81d4",
       "evals/python/splunk-ao-integration-demo/pyproject.toml": "0799ce288f4f42331ab6eae1625a2a554266ea9d77b14d945e1dbcd7a8cfd89d",
       "evals/python/splunk-ao-langchain-demo/Makefile": "c9da5dd95276d141b0a32e21a2011ac263117a3e449121688573b882fe87fc0d",
-      "evals/python/splunk-ao-langchain-demo/README.md": "5ebd6db3a89a9edf998d0859be6fc761b23f195c0616c966ed070fb4c5a67b87",
+      "evals/python/splunk-ao-langchain-demo/README.md": "30a1e175482d6071a5a8746b1c61b208b2756aa157205c268466cdd336578b9b",
       "evals/python/splunk-ao-langchain-demo/app.py": "05d2a0a640aedc252b3b38626fe12099ef8ad805a842607a6e59bf666644fda5",
-      "evals/python/splunk-ao-langchain-demo/eval/qual/instrument.json": "24fb6c99f1f899eb0fac5b8fda57ebf3f98316a7ee0e460caabeb4f2295a0d17",
+      "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json": "b7cb3fa40477fef1fd9f906ab25daefefe3591f572a974d8db82b850c3ebe177",
+      "evals/python/splunk-ao-langchain-demo/eval/qual/instrument.json": "ae3a2181292e043a0bbc5e36a3628c633a4d771233d217d07bec4f1a4b9e937d",
       "evals/python/splunk-ao-langchain-demo/pyproject.toml": "4400a876430531a23291aa826f8eb266b77f0d5b393d3b0aba5a720f02d7b3a3",
-      "evals/python/splunk-ao-langchain-demo/tests/test_app.py": "4aa6a7c9ade7ce02a1790ad132d7f0e7ec67f3f9fc9f51986a86491cd013b9ca",
+      "evals/python/splunk-ao-langchain-demo/tests/test_app.py": "24dd383c44c353f7da002d31b2817519e2ff9edf825bf388474d267e414734ad",
       "evals/sanity/skill-smoke/eval/sanity/instrument.json": "79b5c1da09ad32b8f941a0445a79a528ce2de76ff4c81738263b4fa04cd2d1c9",
       "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9"
     },
@@ -1145,7 +1147,8 @@
         "prompt_id": "direct",
         "eval_kind": "rubric",
         "eval_inputs": [
-          "eval/inputs/otel-audit.json"
+          "eval/inputs/otel-audit.json",
+          "eval/inputs/python-preflight-requirements.txt"
         ]
       },
       {
@@ -1248,7 +1251,9 @@
         "fixture_dir": "evals/python/splunk-ao-langchain-demo",
         "prompt_id": "langchain-callback",
         "eval_kind": "rubric",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/otel-audit.json"
+        ]
       },
       {
         "definition_path": "evals/sanity/skill-smoke/eval/sanity/instrument.json",

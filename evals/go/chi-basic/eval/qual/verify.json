@@ -20,9 +20,9 @@
   ],
   "rubric": [
     "Runs the canonical bound-flow validator and preserves exact audit_sha256, selection_sha256, and instrumentation_sha256 bindings rather than treating the four JSON files independently.",
-    "Keeps omitted finding grouping backward-compatible: validation rejects an explicit finding_group=opentelemetry, does not inject a default field that changes the audit digest, and the audit reader displays ordinary cards directly under Findings in required-before-recommended order without either an OpenTelemetry findings heading or a Splunk Agent Observability subsection. Its ordinary card detail headings retain their direct-under-Findings hierarchy rather than adopting the deeper grouped-AO heading level.",
+    "Keeps the existing proof packet and audit reader backward-compatible when the findings omit grouping: does not inject a default field or change the audit digest, and displays ordinary cards directly under Findings in required-before-recommended order without either an OpenTelemetry findings heading or a Splunk Agent Observability subsection. Ordinary card detail headings retain their direct-under-Findings hierarchy rather than adopting the deeper grouped-AO heading level.",
     "Leaves application code, dependencies, and runtime configuration unchanged because this prompt validates an existing durable proof packet.",
     "Writes a reader-first .observe/otel-verify.md that says generated trace rather than exposing raw trace or span identifiers, and uses Splunk Observability Studio when naming any explorer evidence source.",
-    "Does not regenerate .observe/otel.html or alter its selection tray; reads the bound proof packet from the canonical JSON overlays (audit_sha256, selection_sha256, instrumentation_sha256) and writes verification state exclusively to .observe/otel-verify.json and the refreshed .observe/otel-instrumentation.html."
+    "Preserves existing .observe/otel.html bytes and its selected finding state while rendering the verification result; reads the bound proof packet from the canonical JSON overlays (audit_sha256, selection_sha256, instrumentation_sha256) and writes verification state exclusively to .observe/otel-verify.json and the refreshed .observe/otel-instrumentation.html."
   ]
 }

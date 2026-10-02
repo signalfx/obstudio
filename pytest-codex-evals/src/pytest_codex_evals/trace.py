@@ -151,7 +151,7 @@ def extract_actions(events: list[dict[str, Any]]) -> list[ActionEvent]:
         if not isinstance(item, dict):
             continue
         item_type = str(item.get("type") or "")
-        if not item_type or item_type in {"agent_message", "reasoning"}:
+        if not item_type or item_type in {"agent_message", "reasoning", "error"}:
             continue
         item_id = str(item.get("id") or "")
         status = action_status(event, item)

@@ -40,6 +40,31 @@ def test_demo_emits_one_local_langchain_trace_tree() -> None:
     ]
 
 
+def test_callback_captures_synthetic_inputs_and_outputs() -> None:
+    question = "Summarize the synthetic Seattle weather"
+    result = run_demo(question)
+    trace = result.trace_batches[0].model_dump(mode="json")["traces"][0]
+    workflow = trace["spans"][0]
+    tool, model = workflow["spans"]
+
+    assert trace["input"] == question
+    assert workflow["input"] == question
+    assert trace["output"] == result.answer
+    assert tool["input"] == '{"city": "Seattle"}'
+    assert "synthetic" in tool["output"]
+    assert question in model["input"][0]["content"]
+    assert "sunny" in model["output"]["content"]
+
+
+def test_unapproved_caller_text_reaches_raw_capture_in_baseline() -> None:
+    marker = "UNAPPROVED_INPUT_SENTINEL"
+    result = run_demo(marker)
+    trace = result.trace_batches[0].model_dump(mode="json")["traces"][0]
+
+    assert trace["input"] == marker
+    assert marker in trace["spans"][0]["spans"][1]["input"][0]["content"]
+
+
 def test_demo_requires_no_credentials_or_network(monkeypatch) -> None:
     for name in (
         "OPENAI_API_KEY",
@@ -53,6 +78,17 @@ def test_demo_requires_no_credentials_or_network(monkeypatch) -> None:
         raise AssertionError("the local demo attempted network access")
 
     monkeypatch.setattr(socket, "create_connection", reject_network)
+    for method in ("connect", "connect_ex", "send", "sendall", "sendto", "sendmsg"):
+        if hasattr(socket.socket, method):
+            monkeypatch.setattr(socket.socket, method, reject_network)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        with pytest.raises(AssertionError, match="attempted network access"):
+            probe.connect(("127.0.0.1", 9))
+        with pytest.raises(AssertionError, match="attempted network access"):
+            probe.connect_ex(("127.0.0.1", 9))
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        with pytest.raises(AssertionError, match="attempted network access"):
+            probe.sendto(b"probe", ("127.0.0.1", 9))
     result = run_demo("Use only local synthetic data")
 
     assert result.answer == "Seattle is sunny in the local demo."

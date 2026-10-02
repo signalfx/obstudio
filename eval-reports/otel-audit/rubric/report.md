@@ -7,30 +7,30 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-audit |
-| Run ID | 20261001T191036537815Z |
-| Agent model | gpt-5.5 |
-| Judge model | gpt-5.5 |
+| Run ID | 20261002T051601773792Z |
+| Agent model | - |
+| Judge model | - |
 | Rubric enabled | True |
 | Workers | 1 |
-| Config | evals/codex-evals.toml |
+| Config | - |
 
 ## Rubric Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 1 | 100% (9/9), avg score 96 | 1.8M | 12.2m | - | - | - |
+| with_skill | python/splunk-ao-langchain-demo/qual/audit | python/splunk-ao-langchain-demo | 1 | 100% (6/6), avg score 91 | 2.5M | 12.9m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1790495 | 1659392 | 0 | 29800 | 7432 | unknown | 1820295 |
+| with_skill | python/splunk-ao-langchain-demo/qual/audit | python/splunk-ao-langchain-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 2495332 | 2427904 | 0 | 8211 | 1371 | unknown | 2503543 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 482210 | 404224 | 0 | 7912 | 3629 | unknown | 490122 |
+| with_skill | python/splunk-ao-langchain-demo/qual/audit | python/splunk-ao-langchain-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 188845 | 159872 | 0 | 2165 | 737 | unknown | 191010 |
 
 ## Rubric Failures
 

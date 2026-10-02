@@ -6098,15 +6098,11 @@ def cmd_render_instrumentation_html(args: argparse.Namespace) -> int:
     write_text(args.output, html_text)
     html_path = args.output.resolve()
     audit_html_path = html_path.parent / "otel.html"
-    write_text(
-        audit_html_path,
-        render_html(
-            report,
-            load_selection(None, report),
-            source_root,
-            html_path.parent,
-        ),
-    )
+    if not audit_html_path.exists():
+        write_text(
+            audit_html_path,
+            render_html(report, selection, source_root, html_path.parent),
+        )
     report_server = start_or_reuse_report_server(
         html_path.parent,
         "otel-instrumentation.html",

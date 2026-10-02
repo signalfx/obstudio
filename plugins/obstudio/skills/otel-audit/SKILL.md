@@ -451,8 +451,22 @@ metric, or log coverage merely from `@log`. When decorators, handlers, or
 wrappers overlap app-owned OTel spans, mark coverage partial until one canonical
 producer, safe content behavior, lifecycle, parentage, and duplicate absence are
 proven.
+For each span-producing Splunk AO callback, inspect its registration and the
+owning workflow for a second callback, `@log` decorator, framework auto hook,
+or app-owned OTel span on the same logical operation. Record source-backed
+negative evidence when each overlap is absent, including the searched call
+sites; do not infer absence from one file or from a clean example trace.
+Where overlap exists, name the canonical producer and the duplicate-prevention
+change. A local scenario must verify one correctly parented span per logical
+workflow, model, and tool operation and no duplicate counts.
 Audit teardown for every detected Splunk AO span source as an independent
-outcome. When an SDK-owned logger or sink lacks source proof of
+outcome. Record a distinct current-state lifecycle assessment even when
+teardown is present: cite the source of logger or provider creation and its
+matching teardown, classify the path as source-covered when proven, and keep
+this assessment separate from trace-capture inventory and any future
+verification scenario. A separate Audit Evidence row or covered GenAI Readiness
+surface can carry that result; source coverage alone is not runtime flush
+proof. When an SDK-owned logger or sink lacks source proof of
 `logger.terminate()` or another supported process teardown, create a separate
 selectable lifecycle finding; do not hide it inside privacy, span-coverage, or
 export findings and do not omit it merely because the process is short-lived.
@@ -594,6 +608,12 @@ Splunk Agent Observability is in scope, follow
 product or routing gaps in the same `findings` array with
 `finding_group: splunk-agent-observability`. Never add a top-level
 `splunk_agent_observability` object or a peer report section.
+Treat a source-proven Splunk AO SDK content-capture boundary as AO-specific
+work too: if `SplunkAOCallback` captures raw caller content contrary to the
+application's documented metadata-only behavior, create a distinct selectable
+finding for the app-owned guard before callback construction and set
+`finding_group: splunk-agent-observability`. Keep general content policy and
+governance questions as context rather than default instrumentation findings.
 For a source-backed project/Agent Stream/routing gap that can be closed by
 application or deployment configuration, author selectable project configuration
 and selectable Agent Stream configuration findings with executable modes and
@@ -934,7 +954,7 @@ JSON requirements:
 - Use stable finding IDs such as `OTEL-001`, `OTEL-002`, or `AO-001`, in
   canonical order. Omit `finding_group` for ordinary OTel findings. Use only
   `finding_group: splunk-agent-observability` for source-backed Splunk Agent
-  Observability product or routing work; the renderer groups those cards under
+  Observability product, SDK-specific content-capture, or routing work; the renderer groups those cards under
   the existing Findings section without changing selection semantics.
 - Use finding `status: proposed` for newly audited gaps. Selection, implementation,
   and verification overlays update later artifacts; the audit baseline remains

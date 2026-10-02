@@ -7,13 +7,13 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "otel-audit",
-    "run_id": "20261001T191036537815Z",
-    "agent_model": "gpt-5.5",
-    "judge_model": "gpt-5.5",
+    "run_id": "20261002T051601773792Z",
+    "agent_model": "-",
+    "judge_model": "-",
     "rubric_enabled": true,
     "runtime_enabled": false,
     "workers": "1",
-    "config_path": "evals/codex-evals.toml"
+    "config_path": "-"
   },
   "summary": {
     "eval_count": 1,
@@ -21,11 +21,11 @@
     "failure_count": 0,
     "with_skill": {
       "prompt_count": 1,
-      "command_count": 42,
-      "duration_seconds": 734.266,
-      "agent_duration_seconds": 570.586,
-      "tokens": 2310417,
-      "agent_tokens": 1820295,
+      "command_count": 52,
+      "duration_seconds": 772.466,
+      "agent_duration_seconds": 711.168,
+      "tokens": 2694553,
+      "agent_tokens": 2503543,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 1,
         "selected_record_count": 1,
-        "input_tokens": 1790495,
-        "cached_input_tokens": 1659392,
+        "input_tokens": 2495332,
+        "cached_input_tokens": 2427904,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 29800,
-        "reasoning_output_tokens": 7432,
+        "output_tokens": 8211,
+        "reasoning_output_tokens": 1371,
         "provider_total_tokens": null,
-        "derived_total_tokens": 1820295,
-        "effective_total_tokens": 1820295,
+        "derived_total_tokens": 2503543,
+        "effective_total_tokens": 2503543,
         "coverage": {
           "record_count": 1,
           "modeled_count": 1,
@@ -59,26 +59,26 @@
         }
       },
       "rubric": {
-        "passed": 9,
-        "total": 9,
-        "average_score": 96.0
+        "passed": 6,
+        "total": 6,
+        "average_score": 91.0
       },
-      "rubric_tokens": 490122,
-      "rubric_duration_seconds": 163.646,
+      "rubric_tokens": 191010,
+      "rubric_duration_seconds": 57.317,
       "rubric_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
         "usage_record_count": 1,
         "selected_record_count": 1,
-        "input_tokens": 482210,
-        "cached_input_tokens": 404224,
+        "input_tokens": 188845,
+        "cached_input_tokens": 159872,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 7912,
-        "reasoning_output_tokens": 3629,
+        "output_tokens": 2165,
+        "reasoning_output_tokens": 737,
         "provider_total_tokens": null,
-        "derived_total_tokens": 490122,
-        "effective_total_tokens": 490122,
+        "derived_total_tokens": 191010,
+        "effective_total_tokens": 191010,
         "coverage": {
           "record_count": 1,
           "modeled_count": 1,
@@ -101,21 +101,21 @@
   },
   "evals": [
     {
-      "id": "python/ai-assistant-demo/qual/audit",
-      "case": "python/ai-assistant-demo",
+      "id": "python/splunk-ao-langchain-demo/qual/audit",
+      "case": "python/splunk-ao-langchain-demo",
       "language": "python",
-      "service": "ai-assistant-demo",
+      "service": "splunk-ao-langchain-demo",
       "prompt_count": 1,
       "prompts": [
-        "direct"
+        "langchain-callback"
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 42,
-        "duration_seconds": 734.266,
-        "agent_duration_seconds": 570.586,
-        "tokens": 2310417,
-        "agent_tokens": 1820295,
+        "command_count": 52,
+        "duration_seconds": 772.466,
+        "agent_duration_seconds": 711.168,
+        "tokens": 2694553,
+        "agent_tokens": 2503543,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -123,14 +123,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 1790495,
-          "cached_input_tokens": 1659392,
+          "input_tokens": 2495332,
+          "cached_input_tokens": 2427904,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 29800,
-          "reasoning_output_tokens": 7432,
+          "output_tokens": 8211,
+          "reasoning_output_tokens": 1371,
           "provider_total_tokens": null,
-          "derived_total_tokens": 1820295,
-          "effective_total_tokens": 1820295,
+          "derived_total_tokens": 2503543,
+          "effective_total_tokens": 2503543,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -149,26 +149,26 @@
           }
         },
         "rubric": {
-          "passed": 9,
-          "total": 9,
-          "average_score": 96.0
+          "passed": 6,
+          "total": 6,
+          "average_score": 91.0
         },
-        "rubric_tokens": 490122,
-        "rubric_duration_seconds": 163.646,
+        "rubric_tokens": 191010,
+        "rubric_duration_seconds": 57.317,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 482210,
-          "cached_input_tokens": 404224,
+          "input_tokens": 188845,
+          "cached_input_tokens": 159872,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 7912,
-          "reasoning_output_tokens": 3629,
+          "output_tokens": 2165,
+          "reasoning_output_tokens": 737,
           "provider_total_tokens": null,
-          "derived_total_tokens": 490122,
-          "effective_total_tokens": 490122,
+          "derived_total_tokens": 191010,
+          "effective_total_tokens": 191010,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -190,29 +190,32 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20261001T191036537815Z/results/python/ai-assistant-demo/qual-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20261001T191036537815Z/results/python/ai-assistant-demo/qual-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20261001T191036537815Z/results/python/ai-assistant-demo/qual-audit/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-audit/20261002T051601773792Z/results/python/splunk-ao-langchain-demo/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20261002T051601773792Z/results/python/splunk-ao-langchain-demo/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20261002T051601773792Z/results/python/splunk-ao-langchain-demo/qual-audit/with_baseline.json"
       }
     }
   ],
   "failures": [],
   "source": {
     "digest_version": 4,
-    "digest": "ea081d183bca515fdabd09f47783711738529de25f3f60ed72415872df3fd521",
+    "digest": "443b9860b62c16accd0a97b6af784cafcf49dd64799d1660fb835e7687373da1",
     "eval_kinds": [
       "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
+      "evals/codex-evals.ab.toml": "1e3d36c3006b4d35bf30e7ae245058b9676a99424309728a9a502af7da5006f5",
+      "evals/codex-evals.baseline.toml": "b3441149de20c4d8cbfe6f0c6df34845dffc9194ba7adbc3b581be0f63d7088c",
       "evals/codex-evals.toml": "c0b019453c76a5b6d8692346f984ea91af04ca91331aa333b56d7a717b7b07c7",
-      "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
-      "evals/python/ai-assistant-demo/README.md": "fef16be3948e26460b7de715b05d2c14387c1fa974529b6c24a77a6666f52a4e",
-      "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
-      "evals/python/ai-assistant-demo/eval/qual/audit.json": "f151976223b893bbd13fedb1517ab51803cb3458fe70ca916155bd720636ff4d",
-      "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
-      "evals/python/ai-assistant-demo/pyproject.toml": "8afdfbe2ebc5a067e4fdcba6874cb7c2d5bf39331bf9972a76a25da06a67cf6d",
-      "skills/otel-audit/SKILL.md": "932c4f41c24d34115440a03164df288843823a6ea61836068f0026984e8768c2",
+      "evals/codex-evals.validation.toml": "ce69f042257fdb4a4c8d196f2f0f515fdc371316c02ab7d86aecc36267f7e940",
+      "evals/python/splunk-ao-langchain-demo/Makefile": "c9da5dd95276d141b0a32e21a2011ac263117a3e449121688573b882fe87fc0d",
+      "evals/python/splunk-ao-langchain-demo/README.md": "30a1e175482d6071a5a8746b1c61b208b2756aa157205c268466cdd336578b9b",
+      "evals/python/splunk-ao-langchain-demo/app.py": "05d2a0a640aedc252b3b38626fe12099ef8ad805a842607a6e59bf666644fda5",
+      "evals/python/splunk-ao-langchain-demo/eval/qual/audit.json": "12dbf29728093a3a47ebaa40b16330e1ce372a1ef9b55820ada41ef89a5b0159",
+      "evals/python/splunk-ao-langchain-demo/pyproject.toml": "4400a876430531a23291aa826f8eb266b77f0d5b393d3b0aba5a720f02d7b3a3",
+      "evals/python/splunk-ao-langchain-demo/tests/test_app.py": "24dd383c44c353f7da002d31b2817519e2ff9edf825bf388474d267e414734ad",
+      "skills/otel-audit/SKILL.md": "3464d98d4d75638512ad32616a3162626df323bd15879b9d5d30b7e1e26af5e6",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
       "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
       "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
@@ -223,12 +226,12 @@
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
-      "skills/references/scripts/observe_report.py": "2cdfef43ca8c1e8a67c75692398d92fb57c296c7b7a967aa7bdbf131178c5782",
+      "skills/references/scripts/observe_report.py": "0c0b3c358482bbbd66ef5036c4425c80a6955f89be1ca6a7106d7fca43294ee5",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-agent-observability.md": "9fde934642870af48bb3fd86e7f35b5e5e17d51efeaf32cac57551f0a2f1c67a",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "e83544ecff589caf4b25d56581b608de51151dc877f661e7bb06106097a434f2"
+      "skills/references/tests/test_observe_report.py": "962986d7eed939d59a07f7d61aa737e49a84dc296a8da8cdc1d723429ff8ff21"
     },
     "skill_path": "skills/otel-audit",
     "shared_reference_consumers": [
@@ -240,13 +243,12 @@
     ],
     "selections": [
       {
-        "definition_path": "evals/python/ai-assistant-demo/eval/qual/audit.json",
-        "fixture_dir": "evals/python/ai-assistant-demo",
-        "prompt_id": "direct",
+        "definition_path": "evals/python/splunk-ao-langchain-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/splunk-ao-langchain-demo",
+        "prompt_id": "langchain-callback",
         "eval_kind": "rubric",
         "eval_inputs": []
       }
-    ],
-    "config_path": "evals/codex-evals.toml"
+    ]
   }
 }

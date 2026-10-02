@@ -387,6 +387,13 @@ report background:
   entries.
 - Keep unselected findings visible in the immutable audit and audit HTML. Omit
   them from instrumentation JSON, Markdown, and HTML.
+- In audit-driven runs, the selected scope overrides the general default-log
+  setup: do not add unselected local log export or attach it to a selected
+  finding's `telemetry_changes`. Leave existing logging intact unless a
+  selected finding explicitly requires log export.
+- Preserve the audit finding_group classification in the bound audit. The
+  instrumentation overlay references selected finding IDs and does not repeat
+  `finding_group`; do not invent a group for ordinary OTel findings.
 - A row may require only verification rather than code. Run the mapped
   scenarios and do not invent a source change.
 - Reconcile GenAI gap rows with `## GenAI Readiness`; the readiness row remains
@@ -398,6 +405,16 @@ report background:
   Agent Observability resource settings rather than inventing spans or metrics. Leave durable
   app/deployment configuration and secret references so runtime export does not
   depend on Obstudio. Keep unselected AO findings untouched.
+- For selected direct Agent Observability export, persist the required exporter
+  packages in both the dependency manifest and the project lockfile. If the
+  project's configured runner is `uv sync`, create or update `uv.lock`, run
+  `uv sync --locked`, and import or exercise the configured exporter without
+  live credentials. Treat missing credentials for remote project, Agent Stream,
+  or delivery proof separately from dependency resolution: credentials do not
+  block local lockfile, import, or configuration checks. If package resolution
+  itself is unavailable, record that exact blocker and keep direct export
+  `Not proven` or `Not configured` as appropriate; a manifest entry plus
+  placeholder environment variables is not durable deployed routing.
 
 Build an internal closure matrix before editing:
 `finding ID -> area -> priority -> required fix -> instrument mode -> planned action ->
@@ -812,6 +829,13 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   add low-cardinality `error.type`; and avoid raw prompt, completion, retrieved
   content, memory record, tool argument, evaluation explanation, user, tenant,
   session, task, request, trace, or raw URL values in metric dimensions.
+- When an audit selects only selected tool operations by exact stable name,
+  branch at the tool dispatch or execution boundary: emit `execute_tool`
+  spans and attributes for those names only. Let unselected tool names follow
+  the existing execution path with the same result or error and without a new
+  GenAI tool span. Test a selected success, a selected failure, and an
+  unselected or unknown tool name to prove both telemetry scope and unchanged
+  application behavior.
 - For **Retrieval inside a tool**, preserve exactly one `execute_tool {tool}` span
   and add exactly one nested `retrieval {source}` child span for the distinct
   code-owned retrieval operation. Set `gen_ai.operation.name=retrieval` and a
@@ -820,9 +844,12 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   default: do not set `gen_ai.retrieval.query.text` or
   `gen_ai.retrieval.documents` unless the selected finding explicitly requires
   governed content capture. Add focused telemetry proof that executes the path,
-  asserts exactly one span of each kind, compares the retrieval parent span ID
-  with the tool span ID, and proves the raw query and document attributes are
-  absent.
+  asserts exactly one span of each kind, and proves the retrieval parent span ID equals the tool span ID using completed spans from an in-memory SDK exporter.
+  Inspect the recorded retrieval `parent.span_id` and recorded tool
+  `context.span_id`; object-parent equality in a custom recording tracer is
+  insufficient ID proof. The test asserts `gen_ai.operation.name` and `gen_ai.data_source.id`
+  on the retrieval child, and proves the raw query and
+  document attributes are absent.
 - Prove every custom metric's exact name, unit, instrument type, and complete
   emitted dimension sets. Lifecycle-specific counters must retain their
   specific error class; generic terminal errors must not overwrite earlier
@@ -936,7 +963,13 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   `gen_ai.operation.name` such as `chat`, `generate_content`, or
   `text_completion`, `gen_ai.provider.name`, `gen_ai.request.model` when known,
   `gen_ai.response.model` when known, and token usage on that inference span
-  when provider usage is available.
+  when provider usage is available. When recording `gen_ai.client.token.usage`,
+  put `gen_ai.token.type` and the known stable `gen_ai.operation.name`,
+  `gen_ai.provider.name`, and `gen_ai.request.model` on the token metric as
+  attributes too; span attributes alone do not make token metrics filterable
+  by operation, provider, or model. Include `gen_ai.response.model` on the
+  token metric when known. Never use prompt, response, session, or user content
+  as metric attributes.
 - Preserve the owning workflow/agent context for event-derived GenAI spans. In
   callback, stream, LangChain, LangGraph, or DeepAgents integrations, capture
   the workflow/agent context and use it when starting chat/model and tool
@@ -1314,6 +1347,17 @@ After the implementation gate, invoke or apply the `$otel-verify` workflow
 unless the user explicitly opts out or a concrete prerequisite blocks it. The
 instrumentation goal is not done until code viability is known and verification
 has run, been explicitly skipped by the user, or is documented as blocked.
+
+Run local `$otel-verify` for every scenario that can execute without remote
+export credentials, even when Agent Observability project creation, Agent
+Stream setup, or live delivery is blocked. Keep remote export credentials and
+missing local packages as separate prerequisites: if dependency resolution
+blocks application import or the project runner, still invoke the read-only
+verification workflow to validate the bound handoff, attempt available local
+checks, and record exact blocked scenarios. Its `.observe/otel-verify.md`
+reader-first result uses `## What Changed`, `## Tested And Working`,
+`## Not Working Or Not Proven`, and `## Proof` before diagnostic detail;
+the instrumentation Markdown keeps its own report order above.
 
 Record the verification result and `.observe/otel-verify.md` path in
 `.observe/otel-instrumentation.md`. If verification cannot run, record the exact
