@@ -1,0 +1,22 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "langchain-callback",
+      "task": "Audit the local LangChain application in ./service. It uses SplunkAOCallback, a deterministic local model, and in-memory trace capture. Do not modify application source, dependencies, configuration, or tests. Produce and validate the normal audit artifacts without network access or credentials."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service/app.py, ./service/tests/test_app.py, ./service/README.md, ./service/pyproject.toml, and generated audit artifacts.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Explains that SplunkAOCallback already creates spans for the LangChain chain, model, and tool operations; it does not describe the callback as export-only or propose duplicate app-owned OTel spans around those operations.",
+    "Recognizes DemoLocalLLM/FakeListLLM and the synthetic tool as local deterministic application behavior, and recognizes ingestion_hook as in-memory interception rather than proof of live Splunk delivery.",
+    "Reports the callback's raw input/output capture behavior using the captured-batch test or pinned SDK source; distinguishes approved synthetic sample values from run_demo's unrestricted caller question, classifies this SplunkAOCallback-specific content boundary under the nested Splunk Agent Observability finding group, and does not claim production prompts, responses, tool inputs, or tool outputs are automatically safe.",
+    "Reports Splunk AO teardown as a distinct current-state lifecycle assessment with source citation for logger creation and the explicit logger.terminate() path; treats it as source-covered while keeping runtime flush verification future work, and does not invent a missing provider.shutdown() requirement.",
+    "Requires one chain/model/tool node per logical operation, correct parentage, and no overlapping framework callback, decorator, or app-owned OTel instrumentation.",
+    "Completes the audit without network access, an OpenAI API key, or a Splunk access token, while keeping live Agent Stream delivery Not proven."
+  ]
+}

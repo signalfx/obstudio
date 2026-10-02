@@ -1,0 +1,22 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "preserve-galileo",
+      "task": "Audit the FastAPI agent in ./service for OpenTelemetry, GenAI, and Splunk Agent Observability gaps. The service already uses Galileo. Preserve the working integration unless repository and target-product evidence establishes genuinely mutually exclusive supported paths. Do not modify service code, dependencies, configuration, or tests. Write and validate canonical audit JSON and render the audit HTML."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service/app.py, README.md, Makefile, pyproject.toml, and generated .observe output when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Distinguishes Galileo's OTel span processor/export path from application-owned workflow, model, tool, and streaming instrumentation; it does not treat the processor alone as automatic coverage for missing operations or metrics.",
+    "Preserves the source-backed Galileo export path and represents missing streaming lifecycle signals as ordinary exporter-independent OTel findings rather than requiring splunk-ao.",
+    "Does not propose editing Galileo package files, virtual environments, site-packages, generated clients, or dependency caches; unsupported SDK behavior is identified as an external prerequisite while app-owned closure stays in the application.",
+    "Does not invent a Galileo-versus-splunk-ao choice merely because both SDKs exist. If the report identifies real mutually exclusive routing paths, it requires source and target-product evidence and represents the choice as a manual decision with separate option-locked executable findings.",
+    "Requires representative verification of the selected runtime path, intended project/stream routing and required field population when applicable, and one canonical workflow, chat, and tool node without duplicate logical operations.",
+    "Keeps any source-backed Agent Observability resource or routing work in the canonical findings ledger as configuration, while keeping ordinary spans, metrics, resources, and lifecycle signals as OpenTelemetry findings."
+  ]
+}

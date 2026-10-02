@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20260929T044144845821Z |
+| Run ID | 20261002T051615244325Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -26,10 +26,13 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/kafka-streams/qual/audit | java/kafka-streams | 2 | evals/java/kafka-streams/eval/qual/audit.json | 0 | 7 | 0 |
 | java/springboot-basic/qual/audit | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/audit.json | 0 | 6 | 0 |
 | node/express-basic/qual/audit | node/express-basic | 2 | evals/node/express-basic/eval/qual/audit.json | 0 | 6 | 0 |
-| python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | evals/python/ai-assistant-demo/eval/qual/audit.json | 0 | 6 | 0 |
+| python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | evals/python/ai-assistant-demo/eval/qual/audit.json | 0 | 9 | 0 |
 | python/assistant-v3-framework-bridge-demo/qual/audit | python/assistant-v3-framework-bridge-demo | 1 | evals/python/assistant-v3-framework-bridge-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | python/checkout-red-demo/qual/audit | python/checkout-red-demo | 1 | evals/python/checkout-red-demo/eval/qual/audit.json | 0 | 5 | 0 |
 | python/fastapi-celery/qual/audit | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/audit.json | 0 | 5 | 0 |
 | python/flask-basic/qual/audit | python/flask-basic | 2 | evals/python/flask-basic/eval/qual/audit.json | 0 | 6 | 0 |
+| python/galileo-agent-demo/qual/audit | python/galileo-agent-demo | 1 | evals/python/galileo-agent-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | python/mcp-ai-tool-demo/qual/audit | python/mcp-ai-tool-demo | 2 | evals/python/mcp-ai-tool-demo/eval/qual/audit.json | 0 | 6 | 0 |
+| python/splunk-ao-integration-demo/qual/audit | python/splunk-ao-integration-demo | 1 | evals/python/splunk-ao-integration-demo/eval/qual/audit.json | 0 | 6 | 0 |
+| python/splunk-ao-langchain-demo/qual/audit | python/splunk-ao-langchain-demo | 1 | evals/python/splunk-ao-langchain-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | sanity/skill-smoke/sanity/audit | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/eval/sanity/audit.json | 0 | 0 | 0 |

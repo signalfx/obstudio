@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20260928T191806348987Z |
+| Run ID | 20261002T060202063713Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,25 +18,23 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/instrument | go/chi-basic | 1 | 88% (7/8), avg score 82 | 8.8M | 20.0m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | 100% (12/12), avg score 89 | 9.3M | 23.8m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/instrument | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 8727944 | 8526592 | 0 | 46491 | 17967 | unknown | 8774435 |
+| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 9234447 | 8986368 | 0 | 56307 | 18783 | unknown | 9290754 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/instrument | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 826321 | 729600 | 0 | 7922 | 3851 | unknown | 834243 |
+| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1541483 | 1410304 | 0 | 13052 | 6747 | unknown | 1554535 |
 
 ## Rubric Failures
 
-| Mode | Service | Side | Prompt | Result | Evidence |
-|---|---|---|---|---|---|
-| with_skill | go/chi-basic | with_skill | direct | rubric:rubric-4 FAIL | service/otel.go uses discardSpanExporter{} and sdkmetric.NewManualReader() when no test config is injected; rg found no OTEL_EXPORTER_OTLP_ENDPOINT, OTLP exporter, PeriodicReader, or 4318/4317 endpoint in service files. service/.env.example only contains OTEL_SERVICE_NAME, OTEL_RESOURCE_ATTRIBUTES, and OTEL_BSP_SCHE... |
+No rubric failures.
 
 ## Result JSON
 

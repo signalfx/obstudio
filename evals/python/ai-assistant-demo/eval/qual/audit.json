@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the AI assistant FastAPI service in ./service for OpenTelemetry and GenAI readiness gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json first, then render self-contained ./service/.observe/otel.html from that JSON."
+      "task": "Scan the AI assistant FastAPI service in ./service for OpenTelemetry, GenAI readiness, and Splunk Agent Observability deployment gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json first, then render self-contained ./service/.observe/otel.html from that JSON."
     },
     {
       "id": "genai-readiness",
@@ -19,8 +19,11 @@
     "Identifies app.py, load_demo.py, pyproject.toml, and FastAPI routes for chat, streaming chat, stream inventory, feedback, and feedback export.",
     "Reports that the baseline service has no custom OpenTelemetry SDK setup, no GenAI semantic-convention spans or metrics, and no exporter/resource configuration beyond demo environment variables.",
     "Maps GenAI readiness gaps for provider/model calls, tool fanout, token/context pressure, streaming lifecycle, prompt/response outcome, and offline AI data export.",
+    "Detects the document lookup inside search_docs from its code path; writes a retrieval-specific readiness row and a selectable OTel retrieval finding with its own ID, separate from the tool row and tool finding, plus a verification scenario for one nested gen_ai.operation.name=retrieval span. A combined tool-and-retrieval row or finding does not pass.",
     "Writes schema-v2 .observe/otel-audit.json with GenAI ownership detected as Yes, a matching audit-evidence entry, and GenAI readiness data with one entry per readiness surface and explicit required signals; validates it before rendering HTML.",
+    "Represents source-backed Splunk Agent Observability project, Agent Stream, and direct routing gaps as separate selectable configuration findings with finding_group=splunk-agent-observability in the canonical findings array. The stream depends on the project and direct routing depends on both plus the OTel export path, so selecting routing can auto-include the distinct prerequisites. Missing audit-time credentials alone do not make the project external follow-up. Ordinary OpenTelemetry findings have no finding_group and no fabricated span or metric represents control-plane work.",
+    "Renders Splunk Agent Observability findings as the only nested subsection under the one Findings section, with ordinary OTel cards directly under Findings rather than under a new OpenTelemetry findings heading. The rendered order keeps every required finding above every recommended finding even when both AO and ordinary OTel cards exist. AO subsection headings label their cards, grouped card detail headings are subordinate to those subsection headings, and ordinary OTel card details retain their direct-under-Findings hierarchy. Selecting a downstream AO finding auto-includes executable prerequisites while preserving explicit intent separately.",
     "Keeps privacy and cardinality safe by not recommending raw prompt, completion, session, user, request, or tool argument values as metric dimensions.",
-    "Renders self-contained .observe/otel.html from the validated JSON without making the reader view authoritative."
+    "Renders self-contained .observe/otel.html from the validated JSON without making the reader view authoritative, and leaves a selection-aware audit reader that downstream instrumentation or verification rendering can preserve without resetting its selected findings."
   ]
 }

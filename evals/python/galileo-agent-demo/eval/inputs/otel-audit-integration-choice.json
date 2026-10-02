@@ -1,0 +1,320 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "python-galileo-agent-integration-choice",
+    "service_name": "galileo-agent-demo",
+    "commit": "fixture",
+    "language": "python",
+    "framework": "fastapi",
+    "date": "2026-09-23",
+    "status": "Partial",
+    "genai_ownership_detected": true
+  },
+  "summary": [
+    "Galileo currently exports the application's OTel GenAI spans; validated target-product evidence now requires a choice between retaining that path and replacing it with splunk-ao for dedicated Agent Stream routing."
+  ],
+  "flow": "audit -> decide -> select -> instrument -> verify",
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "FastAPI, Galileo, and OpenTelemetry SDK dependencies",
+      "source": "pyproject.toml"
+    },
+    {
+      "check": "Entry point",
+      "finding": "GalileoSpanProcessor plus app-owned workflow, chat, and tool spans",
+      "source": "app.py:21-90"
+    },
+    {
+      "check": "Route source",
+      "finding": "Health and streaming assistant routes",
+      "source": "app.py:45-93"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Galileo project and log stream are configured before uvicorn starts",
+      "source": "Makefile:7"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "app.py:51-93"
+    },
+    {
+      "check": "Target-product evidence",
+      "finding": "A later validated compatibility check established two mutually exclusive supported export paths for the requested dedicated Agent Stream",
+      "source": "README.md:9-15"
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/health"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/stream"
+    }
+  ],
+  "signal_flow": {
+    "component_flow_map": "FastAPI stream [SOURCE-COVERED] -> Galileo processor [GAP: GenAI export path choice] -> support_turn [GAP: Streaming lifecycle telemetry]\nReplacement path -> splunk-ao [GAP: Splunk AO routing change]"
+  },
+  "current_instrumentation": {
+    "spans": [
+      {
+        "name": "invoke_workflow support_turn",
+        "source": "app.py:61-65",
+        "type": "custom"
+      },
+      {
+        "name": "execute_tool search_docs",
+        "source": "app.py:72-76",
+        "type": "custom"
+      },
+      {
+        "name": "chat gpt-4o-mini",
+        "source": "app.py:80-84",
+        "type": "custom"
+      }
+    ],
+    "metrics": [],
+    "logs": [],
+    "incident_readiness": []
+  },
+  "genai_readiness": [
+    {
+      "surface": "Streaming lifecycle telemetry",
+      "status": "partial",
+      "evidence": "app.py:51-93",
+      "required_signals": "gen_ai.client.operation.time_to_first_chunk, gen_ai.client.operation.time_per_output_chunk, bounded chunk count, finish/close reason, cancellation, timeout, disconnect, and send/write failure while preserving one workflow/chat/tool span source",
+      "owner": "App-owned: app.py:51-93",
+      "acceptance_criteria": "A completed, cancelled, timed-out, disconnected, and failed-write stream produces bounded lifecycle telemetry without duplicate invoke_workflow, chat, or execute_tool spans.",
+      "impact": "Operators cannot distinguish slow-first-token, partial, cancelled, timed-out, disconnected, or failed-write streams."
+    }
+  ],
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "title": "Choose the GenAI export path",
+      "severity": "high",
+      "priority": "required",
+      "effort": "decision",
+      "status": "proposed",
+      "area": "GenAI export path",
+      "gap": "Validated target-product evidence establishes two supported but mutually exclusive runtime export paths; enabling both would duplicate the same logical GenAI operations.",
+      "impact": "Without one selected path, the application can duplicate traces or silently route them through the wrong project and Agent Stream.",
+      "product_outcome": "The application uses one explicit GenAI export path before either option is applied.",
+      "required_fix": "The AI platform team must select whether Galileo remains in place or is replaced by splunk-ao.",
+      "instrument_mode": "manual decision",
+      "decision_owner": "AI platform owner",
+      "decision_question": "Which supported runtime path should handle GenAI span export and project/Agent Stream routing?",
+      "decision_options": [
+        {
+          "id": "keep-galileo",
+          "label": "Keep Galileo",
+          "outcome": "Retain Galileo and add only non-overlapping application-owned OTel lifecycle telemetry.",
+          "unlocks": [
+            "OTEL-002"
+          ]
+        },
+        {
+          "id": "use-splunk-ao",
+          "label": "Use splunk-ao",
+          "outcome": "Disable the overlapping Galileo export path and configure splunk-ao as the direct Agent Observability path.",
+          "unlocks": [
+            "AO-001"
+          ]
+        }
+      ],
+      "verification_scenarios": [
+        "telemetry.integration.selection"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "app.py:25-93",
+        "README.md:3-11"
+      ],
+      "acceptance_criteria": [
+        "Exactly one supported GenAI export path is recorded and only its executable option can enter selection."
+      ],
+      "constraints": [
+        "Do not enable Galileo and splunk-ao as overlapping export paths for the same logical operations."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "genai.export.path",
+          "attributes": [],
+          "product_view": "Selected GenAI export path"
+        }
+      ],
+      "follow_up_actions": [
+        "Record one export-path choice before selecting option-specific work."
+      ]
+    },
+    {
+      "id": "OTEL-002",
+      "title": "Keep Galileo and complete streaming lifecycle telemetry",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Streaming lifecycle telemetry",
+      "gap": "The Galileo-exported app spans lack detector-ready first-chunk, chunk-cadence, terminal outcome, cancellation, timeout, disconnect, and failed-write signals.",
+      "impact": "Slow and partial streams cannot be detected or localized while Galileo remains the exporter.",
+      "product_outcome": "The existing Galileo path carries complete bounded streaming lifecycle telemetry without duplicate GenAI nodes.",
+      "required_fix": "Preserve Galileo and add the missing official OTel streaming metrics and bounded lifecycle events at the application stream boundary.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "genai.stream.lifecycle"
+      ],
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "evidence": [
+        "app.py:51-93"
+      ],
+      "acceptance_criteria": [
+        "Completed, cancelled, timed-out, disconnected, and failed-write streams emit the required metrics and terminal attributes through Galileo.",
+        "A representative trace contains exactly one support_turn workflow, one gpt-4o-mini chat call, and one search_docs tool call."
+      ],
+      "constraints": [
+        "Do not install splunk-ao or edit installed Galileo package files.",
+        "Do not add duplicate workflow, chat, or tool spans."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "gen_ai.client.operation.time_to_first_chunk",
+          "attributes": [
+            "gen_ai.operation.name",
+            "gen_ai.provider.name",
+            "gen_ai.request.model"
+          ],
+          "product_view": "Streaming first-token latency"
+        },
+        {
+          "type": "metric",
+          "name": "gen_ai.client.operation.time_per_output_chunk",
+          "attributes": [
+            "gen_ai.operation.name",
+            "gen_ai.provider.name",
+            "gen_ai.request.model"
+          ],
+          "product_view": "Streaming chunk cadence"
+        },
+        {
+          "type": "span",
+          "name": "invoke_workflow support_turn",
+          "attributes": [
+            "assistant.stream.close_reason",
+            "error.type"
+          ],
+          "product_view": "Selected-trace streaming outcome"
+        }
+      ],
+      "follow_up_actions": [
+        "Verify the lifecycle metrics and selected-trace terminal fields through the retained Galileo path."
+      ]
+    },
+    {
+      "id": "AO-001",
+      "finding_group": "splunk-agent-observability",
+      "title": "Replace Galileo with splunk-ao for dedicated routing",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Splunk AO routing change",
+      "gap": "The selected replacement path requires splunk-ao to become the sole GenAI exporter and to persist direct project and Agent Stream routing.",
+      "impact": "Leaving Galileo active would duplicate logical operations, while incomplete routing would leave traces unassigned or in the wrong stream.",
+      "product_outcome": "A fresh application trace reaches the intended project and Agent Stream through splunk-ao with required fields and no duplicate nodes.",
+      "required_fix": "Disable the overlapping Galileo processor and startup configuration, add splunk-ao through supported application/deployment configuration, and persist operator-overridable project and Agent Stream routing.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "ao.routing.migration"
+      ],
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "evidence": [
+        "app.py:25-93",
+        "Makefile:6"
+      ],
+      "acceptance_criteria": [
+        "The Galileo processor is not active in the selected runtime.",
+        "A fresh application trace appears in the intended project and Agent Stream with workflow, model, tool, token, timing, and terminal lifecycle fields.",
+        "The representative trace contains one node per logical workflow, chat call, and tool call."
+      ],
+      "constraints": [
+        "Keep credentials in operator-owned secret storage and commit only placeholders or secret references.",
+        "Do not patch installed Galileo or splunk-ao packages."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "agent-observability.splunk-ao-routing",
+          "attributes": [],
+          "product_view": "Dedicated project and Agent Stream routing"
+        }
+      ],
+      "follow_up_actions": [
+        "Inspect a fresh routed trace and confirm required Agent Observability fields and duplicate-free topology."
+      ]
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "python.local",
+        "surface": "galileo-agent-demo service",
+        "config_evidence": "pyproject.toml",
+        "runner": "python -m pytest",
+        "scope": "service",
+        "prerequisites": "installed project dependencies and target-product credentials for live routing proof"
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "telemetry.integration.selection",
+        "trigger": "Resolve the export-path decision before making changes",
+        "entrypoint": "app.py:25",
+        "expected_signals": "one selected GenAI export path",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Only the executable option unlocked by the recorded export-path choice enters selection.",
+        "environments": [
+          "python.local"
+        ]
+      },
+      {
+        "id": "genai.stream.lifecycle",
+        "trigger": "Exercise completed, cancelled, timed-out, disconnected, and failed-write POST /v1/chat/stream requests",
+        "entrypoint": "app.py:51",
+        "expected_signals": "streaming timing metrics and bounded terminal events exported by the retained Galileo path",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "The required lifecycle signals appear and one canonical workflow/chat/tool topology remains.",
+        "environments": [
+          "python.local"
+        ]
+      },
+      {
+        "id": "ao.routing.migration",
+        "trigger": "Run a fresh POST /v1/chat/stream after selecting the splunk-ao replacement branch",
+        "entrypoint": "app.py:51",
+        "expected_signals": "fresh duplicate-free trace in the configured project and Agent Stream with required workflow/model/tool/timing/terminal fields",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "The trace is routed to the intended project and Agent Stream, required fields populate, and Galileo emits no overlapping nodes.",
+        "environments": [
+          "python.local"
+        ]
+      }
+    ]
+  },
+  "anti_patterns": [
+    "Running Galileo and splunk-ao as simultaneous export paths for the same logical GenAI operations would duplicate traces."
+  ],
+  "recommendation": [
+    "Record the export-path decision, select only its unlocked executable finding, and run $otel-instrument."
+  ]
+}

@@ -34,6 +34,10 @@
     "splunk-configure",
     "splunk-dashboard"
   ],
+  "splunk-agent-observability.md": [
+    "otel-audit",
+    "otel-instrument"
+  ],
   "splunk-api.md": [
     "splunk-dashboard-publish",
     "splunk-detector-publish"

@@ -144,6 +144,78 @@ def sample_report() -> dict[str, object]:
     }
 
 
+def sample_splunk_agent_observability_report() -> dict[str, object]:
+    data = sample_report()
+    data["findings"].extend(  # type: ignore[union-attr]
+        [
+            {
+                "id": "AO-001",
+                "finding_group": "splunk-agent-observability",
+                "title": "Agent Observability project is not configured",
+                "severity": "high",
+                "priority": "required",
+                "effort": "small",
+                "status": "proposed",
+                "area": "Agent Observability project",
+                "gap": "No source-backed project configuration is present.",
+                "impact": "Agent traces cannot be assigned to the intended project.",
+                "product_outcome": "The application has a durable Agent Observability project target.",
+                "required_fix": "Create or configure the Agent Observability project through a checked-in deployment path.",
+                "instrument_mode": "default",
+                "verification_scenarios": ["http.checkout.success"],
+                "dependencies": [],
+                "evidence": ["Makefile"],
+                "acceptance_criteria": ["The configured project can be resolved without Obstudio at runtime."],
+                "constraints": ["Do not put access tokens in tracked files."],
+                "expected_telemetry": [
+                    {
+                        "type": "configuration",
+                        "name": "agent-observability.project",
+                        "attributes": [],
+                        "product_view": "Agent Observability project routing",
+                    }
+                ],
+                "follow_up_actions": ["Confirm the project target before instrumentation."],
+            },
+            {
+                "id": "AO-002",
+                "finding_group": "splunk-agent-observability",
+                "title": "Dedicated Agent Stream is not configured",
+                "severity": "high",
+                "priority": "required",
+                "effort": "small",
+                "status": "proposed",
+                "area": "Dedicated Agent Stream",
+                "gap": "No source-backed Agent Stream configuration is present.",
+                "impact": "Agent traces remain unassigned or mix with unrelated applications.",
+                "product_outcome": "The application routes traces to its dedicated Agent Stream.",
+                "required_fix": "Create the Agent Stream and persist direct application export routing.",
+                "instrument_mode": "default",
+                "verification_scenarios": ["http.checkout.success"],
+                "dependencies": ["AO-001", "OTEL-001"],
+                "evidence": ["Makefile"],
+                "acceptance_criteria": ["A fresh application trace appears in the dedicated Agent Stream."],
+                "constraints": ["The deployed application must not require Obstudio in the data path."],
+                "expected_telemetry": [
+                    {
+                        "type": "configuration",
+                        "name": "agent-observability.agent-stream",
+                        "attributes": [],
+                        "product_view": "Dedicated Agent Stream",
+                    }
+                ],
+                "follow_up_actions": ["Confirm routing with a fresh application trace."],
+            },
+        ]
+    )
+    data["signal_flow"]["component_flow_map"] += (  # type: ignore[index]
+        "\n\nAgent Observability configuration\n"
+        "deployment [GAP: Agent Observability project] -> "
+        "Agent Stream [GAP: Dedicated Agent Stream]"
+    )
+    return data
+
+
 def make_manual_decision(finding: dict[str, object]) -> None:
     finding["instrument_mode"] = "manual decision"
     finding["decision_owner"] = "service telemetry owner"
@@ -1444,6 +1516,167 @@ class ObserveReportTest(unittest.TestCase):
             "Trace waterfall and route filtering",
         )
 
+    def test_normalizes_optional_splunk_agent_observability_finding_group(self) -> None:
+        legacy_report = MODULE.normalize_audit_report(sample_report())
+        grouped_report = MODULE.normalize_audit_report(
+            sample_splunk_agent_observability_report()
+        )
+
+        self.assertNotIn("finding_group", legacy_report["findings"][0])
+        self.assertEqual(
+            grouped_report["findings"][2]["finding_group"],
+            "splunk-agent-observability",
+        )
+        for invalid_group in ("opentelemetry", "separate-section"):
+            with self.subTest(invalid_group=invalid_group):
+                invalid = sample_splunk_agent_observability_report()
+                invalid["findings"][2]["finding_group"] = invalid_group  # type: ignore[index]
+                with self.assertRaisesRegex(MODULE.ReportError, "finding_group"):
+                    MODULE.normalize_audit_report(invalid)
+
+    def test_renders_splunk_agent_observability_as_nested_findings_subsection(self) -> None:
+        report = MODULE.normalize_audit_report(
+            sample_splunk_agent_observability_report()
+        )
+
+        html = MODULE.render_html(report, MODULE.empty_selection(report))
+
+        self.assertEqual(html.count('id="findings-heading"'), 1)
+        self.assertIn(
+            '<section class="finding-subsection" aria-labelledby="${esc(id)}"><h3 id="${esc(id)}">',
+            html,
+        )
+        self.assertIn(
+            '"Splunk Agent Observability findings", agentObservability',
+            html,
+        )
+        self.assertNotIn('"opentelemetry-findings-heading", "OpenTelemetry findings"', html)
+        self.assertIn('openTelemetry.map(row => row.html).join("")', html)
+        self.assertNotIn("<h2>Splunk Agent Observability", html)
+        self.assertNotIn('aria-labelledby="splunk-agent-observability-heading"', html)
+        self.assertIn('"id":"AO-001"', html)
+        self.assertIn('"id":"AO-002"', html)
+        self.assertIn('id="plan-${esc(f.id)}"', html)
+        self.assertIn("Agent Observability change", html)
+        self.assertIn('"type":"configuration"', html)
+
+    def test_grouped_cards_keep_global_priority_in_executed_renderer(self) -> None:
+        script = r"""
+const fs = require('node:fs');
+const vm = require('node:vm');
+const payload = JSON.parse(fs.readFileSync(0, 'utf8'));
+const cards = { innerHTML: '' };
+const context = {
+  DISPLAY_FINDINGS: payload.findings,
+  renderFindingCard: finding => `<article data-finding-id="${finding.id}"></article>`,
+  document: { getElementById: id => id === 'cards' ? cards : null },
+  syncFindingSelectionState: () => {},
+  esc: value => String(value),
+};
+vm.runInNewContext(payload.source + '\nrenderCards();', context);
+process.stdout.write(cards.innerHTML);
+"""
+        for recommended_agent_stream in (False, True):
+            with self.subTest(recommended_agent_stream=recommended_agent_stream):
+                data = sample_splunk_agent_observability_report()
+                if recommended_agent_stream:
+                    data["findings"][-1]["priority"] = "recommended"  # type: ignore[index]
+                report = MODULE.normalize_audit_report(data)
+                html = MODULE.render_html(report, MODULE.empty_selection(report))
+                start = html.index("function renderCards() {")
+                end = html.index("function orderedSelection()", start)
+                payload = {
+                    "source": html[start:end],
+                    "findings": [
+                        next(f for f in report["findings"] if f["id"] == finding_id)
+                        for finding_id in MODULE.display_finding_ids(report)
+                    ],
+                }
+                result = subprocess.run(
+                    ["node", "-e", script],
+                    input=json.dumps(payload),
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                )
+                rendered = result.stdout
+                expected = ["OTEL-001", "AO-001", "AO-002", "OTEL-002"]
+                if recommended_agent_stream:
+                    expected = ["OTEL-001", "AO-001", "OTEL-002", "AO-002"]
+                self.assertEqual(
+                    re.findall(r'data-finding-id="([^"]+)"', rendered), expected
+                )
+                labels = re.findall(
+                    r'<section class="finding-subsection" aria-labelledby="([^"]+)">'
+                    r'<h3 id="\1">Splunk Agent Observability findings',
+                    rendered,
+                )
+                self.assertEqual(len(labels), 2 if recommended_agent_stream else 1)
+                self.assertEqual(len(labels), len(set(labels)))
+                self.assertNotIn("OpenTelemetry findings", rendered)
+
+    def test_grouped_card_detail_headings_are_below_subsection_heading(self) -> None:
+        report = MODULE.normalize_audit_report(
+            sample_splunk_agent_observability_report()
+        )
+        html = MODULE.render_html(report, MODULE.empty_selection(report))
+        start = html.index("function renderFindingCard(f) {")
+        end = html.index("function renderCards()", start)
+        payload = {
+            "source": html[start:end],
+            "ordinary": next(f for f in report["findings"] if f["id"] == "OTEL-001"),
+            "agentObservability": next(
+                f for f in report["findings"] if f["id"] == "AO-001"
+            ),
+        }
+        script = r"""
+const fs = require('node:fs');
+const vm = require('node:vm');
+const payload = JSON.parse(fs.readFileSync(0, 'utf8'));
+const context = {
+  lifecycleStatus: () => 'proposed',
+  modeGuidance: { default: { guidance: '', selection: 'Select' } },
+  esc: value => String(value ?? ''),
+  sourceHtml: value => String(value),
+  telemetryShapeFor: () => 'configuration',
+  findingPrimaryActionLabel: () => 'Change',
+  decisionSelectionControl: () => '',
+  findingSelectionPresentation: () => ({
+    explicitlySelected: false, autoIncluded: false, ariaLabel: 'Select', label: 'Select'
+  }),
+  selectionEligibility: {
+    'OTEL-001': { selectable: true }, 'AO-001': { selectable: true }
+  },
+  findingNextStep: () => 'Select this finding',
+};
+vm.runInNewContext(payload.source + '\nthis.card = renderFindingCard;', context);
+process.stdout.write(JSON.stringify({
+  ordinary: context.card(payload.ordinary),
+  agentObservability: context.card(payload.agentObservability)
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        cards = json.loads(result.stdout)
+        self.assertIn("<section><h3>Gap</h3>", cards["ordinary"])
+        self.assertIn("<section><h4>Gap</h4>", cards["agentObservability"])
+        self.assertNotIn("<h3>", cards["agentObservability"])
+
+    def test_splunk_agent_observability_selection_auto_includes_prerequisites(self) -> None:
+        report = MODULE.normalize_audit_report(
+            sample_splunk_agent_observability_report()
+        )
+
+        self.assertEqual(
+            MODULE.dependency_closure(report, ["AO-002"]),
+            ["OTEL-001", "AO-001", "AO-002"],
+        )
+
     def test_schema_v1_audit_digest_remains_backward_compatible(self) -> None:
         schema_v1 = sample_report()
         schema_v1["schema_version"] = 1
@@ -2117,7 +2350,7 @@ class ObserveReportTest(unittest.TestCase):
             self.assertNotIn("Technical audit (Markdown)", html)
             self.assertIn('href="otel-audit.json">Canonical audit data (JSON)</a>', html)
             self.assertLess(
-                html.index("<section><h3>${esc(primaryActionLabel)}</h3>"),
+                html.index("<section><${detailHeading}>${esc(primaryActionLabel)}</${detailHeading}>"),
                 html.index('<details class="finding-technical-details">'),
             )
             for technical_heading in (
@@ -2127,7 +2360,10 @@ class ObserveReportTest(unittest.TestCase):
                 "Evidence",
             ):
                 self.assertGreater(
-                    html.index(f"<section><h3>{technical_heading}</h3>"),
+                    html.index(
+                        f"<section><${{detailHeading}}>{technical_heading}"
+                        "</${detailHeading}>"
+                    ),
                     html.index('<details class="finding-technical-details">'),
                 )
             self.assertNotIn("Small quick wins", html)
@@ -2455,12 +2691,12 @@ for (const [serviceRoot, input, expected] of cases) {
     def test_html_progressively_discloses_verbose_finding_details(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
         html = MODULE.render_html(report, MODULE.empty_selection(report))
-        render_cards = html.split("function renderCards()", 1)[1].split(
-            "function orderedSelection()", 1
+        render_finding_card = html.split("function renderFindingCard(f)", 1)[1].split(
+            "function renderCards()", 1
         )[0]
-        card_start = render_cards.index("return `<article")
-        card_end = render_cards.index("</article>`;", card_start)
-        card = render_cards[card_start:card_end]
+        card_start = render_finding_card.index("return `<article")
+        card_end = render_finding_card.index("</article>`;", card_start)
+        card = render_finding_card[card_start:card_end]
         details_start = card.index('<details class="finding-technical-details"')
         details_open_end = card.index(">", details_start) + 1
         details_end = card.index("</details>", details_open_end) + len("</details>")
@@ -2475,15 +2711,18 @@ for (const [serviceRoot, input, expected] of cases) {
         self.assertIn('Telemetry: <strong>${esc(telemetryShape)}</strong>', concise_details)
         self.assertIn("dependencyCue", concise_details)
         for label in ("Gap", "Why it matters", "Next step"):
-            self.assertIn(f"<h3>{label}</h3>", concise_details)
-        self.assertIn("<h3>${esc(primaryActionLabel)}</h3>", concise_details)
+            self.assertIn(f"<${{detailHeading}}>{label}</${{detailHeading}}>", concise_details)
+        self.assertIn(
+            "<${detailHeading}>${esc(primaryActionLabel)}</${detailHeading}>",
+            concise_details,
+        )
         for label in (
             "Expected telemetry",
             "Acceptance criteria",
             "Implementation guardrails",
             "Evidence",
         ):
-            heading = f"<h3>{label}</h3>"
+            heading = f"<${{detailHeading}}>{label}</${{detailHeading}}>"
             self.assertEqual(card.count(heading), 1)
             self.assertIn(heading, technical_details)
             self.assertNotIn(heading, concise_details)
@@ -3960,7 +4199,6 @@ for (const [serviceRoot, input, expected] of cases) {
             self.assertEqual(mixed_render.returncode, 1)
             self.assertIn("use render-instrumentation-html", mixed_render.stderr)
             self.assertEqual(html_path.read_text(encoding="utf-8"), audit_html)
-            html_path.write_text("stale audit report", encoding="utf-8")
 
             instrumentation_rendered = subprocess.run(
                 [
@@ -3982,6 +4220,7 @@ for (const [serviceRoot, input, expected] of cases) {
                 text=True,
             )
             self.assertEqual(instrumentation_rendered.returncode, 0, instrumentation_rendered.stderr)
+            self.assertEqual(html_path.read_text(encoding="utf-8"), audit_html)
             instrumentation_result = json.loads(instrumentation_rendered.stdout)
             server = instrumentation_result["server"]
             self.assertTrue(server["requested"])
@@ -4073,12 +4312,36 @@ for (const [serviceRoot, input, expected] of cases) {
             self.assertIn('href="otel.html"', html)
             self.assertNotIn("<script", html.lower())
             self.assertNotIn("<link ", html.lower())
-            regenerated_audit_html = html_path.read_text(encoding="utf-8")
-            self.assertIn("OpenTelemetry audit report", regenerated_audit_html)
-            self.assertNotIn("stale audit report", regenerated_audit_html)
-            self.assertNotIn("OTEL-001.http-server-span", regenerated_audit_html)
+            preserved_audit_html = html_path.read_text(encoding="utf-8")
+            self.assertEqual(preserved_audit_html, audit_html)
+            self.assertNotIn("OTEL-001.http-server-span", preserved_audit_html)
             self.assertNotIn("OTEL-001.http-server-span", audit_html)
             self.assertNotIn("Route trace waterfall", audit_html)
+
+            html_path.unlink()
+            fallback_render = subprocess.run(
+                instrumentation_rendered.args,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(fallback_render.returncode, 0, fallback_render.stderr)
+            fallback_server = json.loads(fallback_render.stdout)["server"]
+            try:
+                self.assertEqual(html_path.read_text(encoding="utf-8"), audit_html)
+            finally:
+                if os.name == "nt":
+                    subprocess.run(
+                        ["taskkill", "/PID", str(fallback_server["pid"]), "/T", "/F"],
+                        check=False,
+                        capture_output=True,
+                    )
+                else:
+                    try:
+                        os.kill(fallback_server["pid"], signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+                state_path.unlink(missing_ok=True)
 
     def test_instrumentation_html_lists_every_selected_issue_without_truncation(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())

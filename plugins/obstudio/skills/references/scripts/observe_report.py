@@ -76,6 +76,7 @@ PROOF_LEVEL_ALIASES = {
     "either": "either",
 }
 SIGNAL_TYPES = {"span", "metric", "log", "resource", "configuration"}
+FINDING_GROUPS = {"splunk-agent-observability"}
 INCIDENT_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 GENAI_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 SCAN_BLOCKER_CHECKS = {
@@ -483,6 +484,9 @@ def normalize_finding(
     effort = text(row.get("effort"), f"{path}.effort")
     if effort not in EFFORTS:
         fail(f"{path}.effort must be one of {sorted(EFFORTS)}")
+    finding_group = optional_text(row.get("finding_group"), f"{path}.finding_group")
+    if finding_group is not None and finding_group not in FINDING_GROUPS:
+        fail(f"{path}.finding_group must be one of {sorted(FINDING_GROUPS)}")
     telemetry = []
     for index, item in enumerate(object_list(row.get("expected_telemetry", []), f"{path}.expected_telemetry")):
         item_path = f"{path}.expected_telemetry[{index}]"
@@ -631,6 +635,8 @@ def normalize_finding(
                 f"{path}.required_fix must contain the exact external_requirement "
                 "and no hidden service implementation handoff"
             )
+    if finding_group is not None:
+        report["finding_group"] = finding_group
     if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
         for index, value in enumerate(report["follow_up_actions"]):
             validate_audit_review_next_step(
@@ -4281,6 +4287,8 @@ h1 {{ margin: 8px 0 4px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; }}
 .findings-section {{ margin: 18px 0; }}
 .findings-section > h2 {{ color: var(--ink); font-size: 18px; margin: 0 0 12px; }}
 .findings-total {{ color: var(--muted); font-size: 13px; font-weight: 600; }}
+.finding-subsection + .finding-subsection {{ margin-top: 22px; }}
+.finding-subsection > h3 {{ color: var(--ink); font-size: 15px; letter-spacing: normal; margin: 0 0 10px; text-transform: none; }}
 .card {{ background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }}
 .card.done {{ border-color: #9bd5b7; }}
 .card.done .spine {{ background: var(--ok); }}
@@ -4319,7 +4327,7 @@ h1 {{ margin: 8px 0 4px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; }}
 .technical-details-body {{ margin-top: 14px; }}
 .technical-details-body > section, .technical-details-body > .cols + section {{ margin-top: 14px; }}
 @media (max-width: 760px) {{ .impact-stats, .decision-context {{ grid-template-columns: 1fr; }} .card-head {{ grid-template-columns: 1fr; }} .row {{ grid-template-columns: 5px auto 1fr auto; }} .plan-select, .plan-unavailable {{ justify-self: end; margin: 0 14px 12px; width: max-content; }} .decision-select {{ grid-column: 1; }} .cols {{ grid-template-columns: 1fr; }} }}
-h3 {{ margin: 0 0 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }}
+h3, .card h4 {{ margin: 0 0 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }}
 p {{ margin: 0 0 12px; }}
 ul {{ margin: 0; padding-left: 18px; }}
 code, pre {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
@@ -4579,6 +4587,7 @@ function syncFindingSelectionControl(input, finding) {{
 function findingPrimaryActionLabel(finding) {{
   if (finding.instrument_mode === "manual decision") return "Decision needed";
   if (finding.instrument_mode === "external follow-up") return "External requirement";
+  if (finding.finding_group === "splunk-agent-observability") return "Agent Observability change";
   return "Instrumentation change";
 }}
 
@@ -4622,9 +4631,9 @@ function findingNextStep(finding) {{
   return "Select this finding, then copy the generated prompt and paste into AI chat.";
 }}
 
-function renderCards() {{
-  document.getElementById("cards").innerHTML = DISPLAY_FINDINGS.map(f => {{
+function renderFindingCard(f) {{
     const lifecycle = lifecycleStatus(f);
+    const detailHeading = f.finding_group === "splunk-agent-observability" ? "h4" : "h3";
     const mode = modeGuidance[f.instrument_mode];
     const telemetry = (f.expected_telemetry || []).map(item => `<li><b>${{esc(item.type)}} ${{esc(item.name)}}</b> — ${{esc(item.product_view)}}${{item.attributes?.length ? ` <code>${{esc(item.attributes.join(", "))}}</code>` : ""}}</li>`).join("");
     const evidence = (f.evidence || []).map(item => `<li>${{sourceHtml(item)}}</li>`).join("");
@@ -4670,22 +4679,40 @@ function renderCards() {{
       </div>
       <div class="body" id="finding-body-${{esc(f.id)}}" aria-labelledby="finding-toggle-${{esc(f.id)}}" hidden>
         <div class="cols">
-          <section><h3>Gap</h3><p>${{esc(f.gap)}}</p></section>
-          <section><h3>Why it matters</h3><p>${{esc(f.impact)}}</p></section>
-          <section><h3>${{esc(primaryActionLabel)}}</h3><p>${{esc(requiredAction)}}</p></section>
-          <section><h3>Next step</h3><p data-finding-next-step="${{esc(f.id)}}">${{esc(findingNextStep(f))}}</p></section>
+          <section><${{detailHeading}}>Gap</${{detailHeading}}><p>${{esc(f.gap)}}</p></section>
+          <section><${{detailHeading}}>Why it matters</${{detailHeading}}><p>${{esc(f.impact)}}</p></section>
+          <section><${{detailHeading}}>${{esc(primaryActionLabel)}}</${{detailHeading}}><p>${{esc(requiredAction)}}</p></section>
+          <section><${{detailHeading}}>Next step</${{detailHeading}}><p data-finding-next-step="${{esc(f.id)}}">${{esc(findingNextStep(f))}}</p></section>
         </div>
         <details class="finding-technical-details">
           <summary><span>Technical details</span> <span class="detail-counts">${{esc(contractCounts)}}</span></summary>
           <div class="technical-details-body">
-            <section><h3>Expected telemetry</h3>${{telemetry ? `<ul>${{telemetry}}</ul>` : `<p class="muted">None recorded.</p>`}}</section>
-            <section><h3>Acceptance criteria</h3><ul>${{acceptance}}</ul></section>
-            ${{constraints ? `<section><h3>Implementation guardrails</h3><ul>${{constraints}}</ul></section>` : ""}}
-            <section><h3>Evidence</h3>${{evidence ? `<ul>${{evidence}}</ul>` : `<p class="muted">None recorded.</p>`}}</section>
+            <section><${{detailHeading}}>Expected telemetry</${{detailHeading}}>${{telemetry ? `<ul>${{telemetry}}</ul>` : `<p class="muted">None recorded.</p>`}}</section>
+            <section><${{detailHeading}}>Acceptance criteria</${{detailHeading}}><ul>${{acceptance}}</ul></section>
+            ${{constraints ? `<section><${{detailHeading}}>Implementation guardrails</${{detailHeading}}><ul>${{constraints}}</ul></section>` : ""}}
+            <section><${{detailHeading}}>Evidence</${{detailHeading}}>${{evidence ? `<ul>${{evidence}}</ul>` : `<p class="muted">None recorded.</p>`}}</section>
           </div>
         </details>
       </div>
     </article>`;
+}}
+
+function renderCards() {{
+  const rendered = DISPLAY_FINDINGS.map(f => ({{finding: f, html: renderFindingCard(f)}}));
+  const bands = [];
+  for (const row of rendered) {{
+    const last = bands[bands.length - 1];
+    if (last && last.priority === row.finding.priority) last.rows.push(row);
+    else bands.push({{priority: row.finding.priority, rows: [row]}});
+  }}
+  const subsection = (id, label, rows) => rows.length
+    ? `<section class="finding-subsection" aria-labelledby="${{esc(id)}}"><h3 id="${{esc(id)}}">${{esc(label)}} <span class="findings-total">· ${{rows.length}}</span></h3>${{rows.map(row => row.html).join("")}}</section>`
+    : "";
+  document.getElementById("cards").innerHTML = bands.map(band => {{
+    const openTelemetry = band.rows.filter(row => row.finding.finding_group !== "splunk-agent-observability");
+    const agentObservability = band.rows.filter(row => row.finding.finding_group === "splunk-agent-observability");
+    return openTelemetry.map(row => row.html).join("")
+      + subsection(`splunk-agent-observability-${{band.priority}}-findings-heading`, "Splunk Agent Observability findings", agentObservability);
   }}).join("");
   syncFindingSelectionState();
 }}
@@ -6071,15 +6098,11 @@ def cmd_render_instrumentation_html(args: argparse.Namespace) -> int:
     write_text(args.output, html_text)
     html_path = args.output.resolve()
     audit_html_path = html_path.parent / "otel.html"
-    write_text(
-        audit_html_path,
-        render_html(
-            report,
-            load_selection(None, report),
-            source_root,
-            html_path.parent,
-        ),
-    )
+    if not audit_html_path.exists():
+        write_text(
+            audit_html_path,
+            render_html(report, selection, source_root, html_path.parent),
+        )
     report_server = start_or_reuse_report_server(
         html_path.parent,
         "otel-instrumentation.html",

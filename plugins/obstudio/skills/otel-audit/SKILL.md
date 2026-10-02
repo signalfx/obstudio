@@ -79,6 +79,11 @@ Scan the repository to determine language, framework, and existing instrumentati
   AI-owned session/stream including MCP when present, retrieval/RAG, streaming,
   token/context, prompt/response parser, safety/policy, AI-derived data,
   model/config rollout, or AI-owned cache/session evidence.
+  When the user asks about Splunk Agent Observability coverage, routing, or
+  product resources, or the repository contains Agent Observability project,
+  Agent Stream, dataset, prompt, annotation, evaluator, integration, routing
+  configuration, or any `splunk_ao` dependency/import, also read
+  `../references/splunk-agent-observability.md`.
 7. Record exact evidence paths that should appear in the report:
   - Dependency manifest: `go.mod`, `package.json`, `pyproject.toml`, `pom.xml`, etc.
   - Process entry point: `main.go`, `cmd/.../main.go`, `app.py`, `app.js`, `TasksApplication.java`, etc.
@@ -91,7 +96,7 @@ Scan the repository to determine language, framework, and existing instrumentati
   exact existing in-repository files; do not shorten citations to basenames,
   use globs, or guess paths when the owning file can be named precisely.
 8. Inventory project runtime and verification evidence without installing or
-   changing anything:
+  changing anything:
   - wrappers and task runners such as `mvnw`, `gradlew`, Make, package scripts,
     tox/nox, Cargo, or solution test projects
   - toolchain/version files and manifest runtime requirements
@@ -402,6 +407,23 @@ other workflow-level token accounting, but no `chat`, `generate_content`,
 when known, mark trace and semconv coverage `partial`; do not mark LLM coverage
 as `covered`. Keep the missing model-call lifecycle span and attributes in
 `remaining_signals`.
+Apply **Retrieval detection inside tools** independently of tool-call coverage.
+Inspect each code-owned tool body and its reachable helpers for semantic,
+vector, corpus, document, index, knowledge-base, or embedding search whose
+results become model context. A name such as `search_docs` is useful evidence
+but is not sufficient by itself; corroborate it with the implementation,
+dependency calls, returned matches/documents/scores, or the caller's use of the
+results. When a tool performs such a retrieval-like operation, a generic tool
+span is not complete retrieval coverage. Before finalizing the audit, compare
+each confirmed retrieval call site against its tool span and check the JSON for
+two distinct items: a retrieval-specific readiness row and a selectable
+retrieval finding with its own ID. A combined "tool and retrieval" row or
+finding does not satisfy this check. Preserve the `execute_tool` operation,
+then require the nested retrieval span with
+`gen_ai.operation.name=retrieval` and a stable low-cardinality data-source
+identifier. Add an explicit retrieval verification scenario that proves its
+parentage under the tool span and does not capture document contents, query
+text, embeddings, or other sensitive/high-cardinality values by default.
 Apply the `Single-Source GenAI Span Contract` from the GenAI readiness
 reference before deciding trace coverage. Inventory framework/vendor bridges,
 provider SDK hooks, callbacks, middleware, and auto-instrumentors that can emit
@@ -416,6 +438,41 @@ evidence is one canonical GenAI span source per logical operation. A
 representative trace must show one GenAI node per logical operation, expected
 LLM and tool counts, stable model/tool names, correct workflow/agent parent
 shape, and no wrapper-only spans counted as GenAI work.
+For Python with Splunk AO, make that inventory explicit. Search for
+`from splunk_ao import log`, `@log`, `span_type="tool"`,
+`span_type="retriever"`, `SplunkAOLogger`, `SplunkAOCallback`, supported model
+or framework wrappers, `add_splunk_ao_span_processor`,
+`configure_distributed_tracing`, and `instrument_distributed_tracing`. Classify
+each path using the shared Splunk AO compatibility guidance as span creation,
+export-only, transport-only, combined setup, or resource management. Record
+the actual provider/export lifecycle and content-capture mode. Never infer workflow, model, tool, or
+retrieval coverage from an export-only processor, and never infer generic HTTP,
+metric, or log coverage merely from `@log`. When decorators, handlers, or
+wrappers overlap app-owned OTel spans, mark coverage partial until one canonical
+producer, safe content behavior, lifecycle, parentage, and duplicate absence are
+proven.
+For each span-producing Splunk AO callback, inspect its registration and the
+owning workflow for a second callback, `@log` decorator, framework auto hook,
+or app-owned OTel span on the same logical operation. Record source-backed
+negative evidence when each overlap is absent, including the searched call
+sites; do not infer absence from one file or from a clean example trace.
+Where overlap exists, name the canonical producer and the duplicate-prevention
+change. A local scenario must verify one correctly parented span per logical
+workflow, model, and tool operation and no duplicate counts.
+Audit teardown for every detected Splunk AO span source as an independent
+outcome. Record a distinct current-state lifecycle assessment even when
+teardown is present: cite the source of logger or provider creation and its
+matching teardown, classify the path as source-covered when proven, and keep
+this assessment separate from trace-capture inventory and any future
+verification scenario. A separate Audit Evidence row or covered GenAI Readiness
+surface can carry that result; source coverage alone is not runtime flush
+proof. When an SDK-owned logger or sink lacks source proof of
+`logger.terminate()` or another supported process teardown, create a separate
+selectable lifecycle finding; do not hide it inside privacy, span-coverage, or
+export findings and do not omit it merely because the process is short-lived.
+For a caller-owned provider, require source proof of `provider.shutdown()` in
+the same way. Keep each lifecycle row unresolved until the matching teardown is
+proved by source and a focused local scenario.
 Audit workflow naming as part of this proof. GenAI workflow names must preserve
 the application's stable business workflow identity from constants, handlers,
 workflow registrations, telemetry event names, docs, or prior trace names. Mark
@@ -544,8 +601,38 @@ exists, even if unrelated OTel metrics are source-active.
 
 **Deterministic gap section contract** -- the canonical audit has exactly one
 actionable gap source: `findings`. Record GenAI detail in canonical
-`genai_readiness` rows, promote only service-owned OTel telemetry closure rows
-into `findings`, and keep the HTML decision view focused on those findings.
+`genai_readiness` rows, promote service-owned OTel telemetry closure rows into
+`findings`, and keep the HTML decision view focused on those findings. When
+Splunk Agent Observability is in scope, follow
+`../references/splunk-agent-observability.md` and put source-backed actionable
+product or routing gaps in the same `findings` array with
+`finding_group: splunk-agent-observability`. Never add a top-level
+`splunk_agent_observability` object or a peer report section.
+Treat a source-proven Splunk AO SDK content-capture boundary as AO-specific
+work too: if `SplunkAOCallback` captures raw caller content contrary to the
+application's documented metadata-only behavior, create a distinct selectable
+finding for the app-owned guard before callback construction and set
+`finding_group: splunk-agent-observability`. Keep general content policy and
+governance questions as context rather than default instrumentation findings.
+For a source-backed project/Agent Stream/routing gap that can be closed by
+application or deployment configuration, author selectable project configuration
+and selectable Agent Stream configuration findings with executable modes and
+their dependency edges. A target ID or credential may be supplied at the
+selected instrumentation/deployment step; missing audit-time credentials alone do not make an AO finding external.
+When all three gaps exist, create separate selectable AO findings for project, Agent Stream, and direct routing
+rather than collapsing them into one card. The Agent Stream depends on project;
+direct routing depends on project, Agent Stream, and OTel export. Keep a
+project finding scoped to resolving or creating the product resource, a stream
+finding scoped to its own resource, and a routing finding scoped to durable
+application/deployment configuration. A user can then select a downstream
+finding and see its distinct prerequisites auto-included. Do not split a
+single already-working resource just to increase the finding count.
+Do not claim a product resource or routed trace is Working until it is
+resolved and verified. In contrast, reserve `external follow-up` for a source-proven outside owner
+who must perform a prerequisite action outside the selected application's
+configuration or supported product API path. Do not make an executable Agent
+Stream or routing finding depend on a non-executable external item merely
+because the read-only audit cannot call Lab0.
 
 Populate canonical `findings` so the shared renderer can project the single
 priority-ordered finding list; do not hand-author its layout. Use only `required`,
@@ -647,7 +734,11 @@ instrumentation, change-impact and proof status move to
 `.observe/otel.html`, not edit generated HTML or JSON by hand.
 
 In HTML, put selectable findings immediately after the concise decision
-summary. Do not render the component map, connection lanes, component-coverage
+summary. When AO findings exist, render them as a nested
+`Splunk Agent Observability findings` subsection inside the one top-level
+`Findings` section. Ordinary OTel findings remain in the same canonical list
+and selection flow. Do not render a separate top-level Agent Observability
+section. Do not render the component map, connection lanes, component-coverage
 groups, raw flow map, full current-state inventory, or a duplicate all-findings
 decision table. Keep `signal_flow` in canonical JSON for machine use. Reserve
 one collapsed technical appendix at the
@@ -667,7 +758,7 @@ present authored verification or dashboard work as
 the reviewer's immediate action.
 Keep that copy synchronized with selection state: selected work proceeds to
 the generated prompt, an auto-added dependency explains why it is included, and
-blocked work names the blocking `OTEL-###` IDs and directs the reviewer to
+blocked work names the blocking stable finding IDs and directs the reviewer to
 resolve them first. Show a compact telemetry shape on the card from exact
 `expected_telemetry[*].type` counts, including configuration and resource
 items. When a finding has dependencies, show their stable IDs as a selection effect.
@@ -720,7 +811,7 @@ severity, priority, and execution-state metadata machine-readable in canonical
 JSON.
 
 Each card has one title, one expected monitoring outcome, one neutral selection
-control when executable, and the stable `OTEL-###` ID as a secondary
+control when executable, and the stable finding ID as a secondary
 cross-report reference. IDs must remain deterministic across selection,
 instrumentation, verification, and configuration handoffs. Priority is expressed
 only by list order; lifecycle is reflected by the checkbox, next-step copy, and
@@ -860,7 +951,11 @@ JSON requirements:
 
 - Write new audits as schema v2. Every saved selection and downstream overlay binds
   the exact normalized audit by its digest.
-- Use stable finding IDs such as `OTEL-001`, `OTEL-002`, in priority order.
+- Use stable finding IDs such as `OTEL-001`, `OTEL-002`, or `AO-001`, in
+  canonical order. Omit `finding_group` for ordinary OTel findings. Use only
+  `finding_group: splunk-agent-observability` for source-backed Splunk Agent
+  Observability product, SDK-specific content-capture, or routing work; the renderer groups those cards under
+  the existing Findings section without changing selection semantics.
 - Use finding `status: proposed` for newly audited gaps. Selection, implementation,
   and verification overlays update later artifacts; the audit baseline remains
   source-derived.

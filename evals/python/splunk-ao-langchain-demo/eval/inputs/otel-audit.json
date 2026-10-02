@@ -1,0 +1,146 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "python-splunk-ao-langchain-callback-privacy",
+    "service_name": "splunk-ao-langchain-demo",
+    "commit": "fixture",
+    "language": "python",
+    "framework": "langchain",
+    "date": "2026-10-01",
+    "status": "Partial",
+    "genai_ownership_detected": true
+  },
+  "summary": [
+    "SplunkAOCallback already produces one workflow, tool, and model operation per demo turn; preserve it as the sole producer.",
+    "The callback serializes raw inputs and outputs. The synthetic examples are approved for this local fixture, but run_demo accepts an arbitrary caller-supplied question; that content boundary is not enforced before callback capture.",
+    "ingestion_hook captures completed traces in memory and does not establish live Splunk delivery."
+  ],
+  "flow": "audit -> select -> instrument -> verify",
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "Pinned Splunk AO LangChain integration with a local deterministic model",
+      "source": "pyproject.toml:1-9"
+    },
+    {
+      "check": "Entry point",
+      "finding": "run_demo passes an arbitrary question into the callback-covered chain and terminates the logger in finally",
+      "source": "app.py:40-65"
+    },
+    {
+      "check": "Route source",
+      "finding": "This fixture is a CLI runnable, not an HTTP service",
+      "source": "app.py:68-70"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Makefile runs the local Python application and focused tests",
+      "source": "Makefile:1-11"
+    },
+    {
+      "check": "Callback capture",
+      "finding": "The local captured batch includes synthetic content and arbitrary caller text in raw callback input/output fields",
+      "source": "tests/test_app.py:43-65"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "app.py:45-54"
+    }
+  ],
+  "routes": [],
+  "signal_flow": {
+    "component_flow_map": "run_demo question [GAP: Splunk AO callback content boundary] -> SplunkAOCallback [SOURCE-COVERED] -> ingestion_hook [SOURCE-COVERED]"
+  },
+  "current_instrumentation": {
+    "spans": [
+      {"name": "support_agent", "source": "app.py:52-54", "type": "Splunk AO callback workflow"},
+      {"name": "lookup_weather", "source": "app.py:20-24", "type": "Splunk AO callback tool"},
+      {"name": "DemoLocalLLM", "source": "app.py:16-18", "type": "Splunk AO callback model"}
+    ],
+    "metrics": [],
+    "logs": [],
+    "incident_readiness": []
+  },
+  "genai_readiness": [
+    {
+      "surface": "Splunk AO callback content boundary",
+      "status": "partial",
+      "evidence": "app.py:40-54; tests/test_app.py:43-65",
+      "required_signals": "Preserve one workflow, tool, and model node while allowing only approved synthetic question content to enter callback raw input/output fields.",
+      "owner": "Application-owned run_demo input boundary in app.py",
+      "acceptance_criteria": "A synthetic demo question still creates one nested callback trace; an unapproved arbitrary question is rejected before any callback-covered operation starts.",
+      "impact": "Without an enforced boundary, production-like caller text can be captured as raw trace content."
+    }
+  ],
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "finding_group": "splunk-agent-observability",
+      "title": "Enforce the callback content boundary",
+      "severity": "high",
+      "priority": "required",
+      "effort": "small",
+      "status": "proposed",
+      "area": "Splunk AO callback content boundary",
+      "gap": "run_demo accepts arbitrary caller questions even though SplunkAOCallback records raw chain and model input content.",
+      "impact": "Unapproved question text can enter the captured trace batch and, with a production exporter, leave the process.",
+      "product_outcome": "Only explicitly approved synthetic demo questions enter callback-captured raw fields while the existing trace tree remains intact.",
+      "required_fix": "Use an explicit allowlist of approved synthetic demo questions or a source-verified raw-capture suppression control before invoking the callback-covered chain; preserve SplunkAOCallback as the only chain, model, and tool span producer.",
+      "instrument_mode": "default",
+      "verification_scenarios": ["callback.content.boundary"],
+      "dependencies": [],
+      "evidence": ["app.py:40-54", "tests/test_app.py:43-65"],
+      "acceptance_criteria": [
+        "An approved synthetic question produces exactly one support_agent workflow with one lookup_weather tool and one DemoLocalLLM model child.",
+        "An arbitrary unapproved question is rejected before callback capture; no raw prompt, tool argument, or model output escapes through a second instrumentation path."
+      ],
+      "constraints": [
+        "Do not patch splunk-ao or install a second LangChain callback, decorator, or application-owned OTel span around the same operations.",
+        "Do not mistake companion redacted fields for removal of the raw callback input/output fields."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "splunk-ao.callback.content-boundary",
+          "attributes": [],
+          "product_view": "Safe callback-owned Agent Observability trace content"
+        }
+      ],
+      "follow_up_actions": [
+        "Inspect the in-memory callback batch and verify both the synthetic content boundary and duplicate-free tree."
+      ]
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "python.local",
+        "surface": "Local LangChain CLI and callback",
+        "config_evidence": "pyproject.toml:1-15; Makefile:1-11",
+        "runner": "make test",
+        "scope": "service",
+        "prerequisites": "Install pinned dependencies before isolated offline execution; the application itself uses FakeListLLM and ingestion_hook and needs no provider, Splunk credential, or network."
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "callback.content.boundary",
+        "trigger": "Call run_demo with an approved synthetic question, then with an unapproved arbitrary question",
+        "entrypoint": "app.py:40-65",
+        "expected_signals": "One callback-owned workflow/tool/model tree for synthetic content; no callback-captured trace for unapproved content",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "The local captured batch contains exactly one support_agent workflow with one lookup_weather and one DemoLocalLLM child, and unapproved content is rejected before chain.invoke.",
+        "environments": ["python.local"]
+      }
+    ]
+  },
+  "anti_patterns": [
+    "Do not add duplicate @log decorators or OTel spans around callback-owned operations.",
+    "Do not claim ingestion_hook proves live Splunk delivery."
+  ],
+  "recommendation": [
+    "Select OTEL-001 and run $otel-instrument to enforce the callback content boundary, then verify the local captured tree."
+  ]
+}

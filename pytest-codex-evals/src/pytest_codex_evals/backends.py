@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import threading
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -156,6 +158,134 @@ def _codex_subprocess_env(exec_dir: Path | None = None) -> dict[str, str]:
     return env
 
 
+def _prepare_eval_python_dependencies(exec_dir: Path) -> None:
+    """Optionally install fixture dependencies before the offline agent run."""
+
+    enabled = os.environ.get("CODEX_EVAL_PREPARE_PYTHON", "").strip().lower()
+    if enabled not in {"1", "true", "yes", "on"}:
+        return
+    service_dir = exec_dir / "service"
+    pyproject = service_dir / "pyproject.toml"
+    if not pyproject.is_file():
+        return
+    requirements_file = service_dir / "eval" / "inputs" / "python-preflight-requirements.txt"
+    requirements = []
+    if requirements_file.is_file():
+        for line in requirements_file.read_text(encoding="utf-8").splitlines():
+            requirement = line.strip()
+            if not requirement or requirement.startswith("#"):
+                continue
+            if not re.fullmatch(
+                r"[A-Za-z][A-Za-z0-9._-]*(?:(?:==|!=|~=|>=|<=|>|<)[A-Za-z0-9.*+!_-]+(?:,(?:==|!=|~=|>=|<=|>|<)[A-Za-z0-9.*+!_-]+)*)?",
+                requirement,
+            ):
+                raise ValueError(f"unsupported Python preflight requirement: {requirement}")
+            requirements.append(requirement)
+        if not requirements:
+            raise ValueError("Python preflight requirements file is empty")
+
+    public_index = "https://pypi.org/simple"
+    setup_env = {
+        "PATH": os.environ.get("PATH", os.defpath),
+        "UV_CACHE_DIR": str(exec_dir / ".uv-cache"),
+        "UV_NO_CONFIG": "1",
+        "UV_DEFAULT_INDEX": public_index,
+        "PIP_CONFIG_FILE": os.devnull,
+        "PIP_INDEX_URL": public_index,
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_TERMINAL_PROMPT": "0",
+    }
+    if "SYSTEMROOT" in os.environ:
+        setup_env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
+    sync_command = [
+        "uv",
+        "sync",
+        "--no-config",
+        "--default-index",
+        public_index,
+    ]
+    project = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    if "dev" in project.get("dependency-groups", {}):
+        sync_command.extend(["--group", "dev"])
+    commands = [sync_command]
+    python_executable = service_dir / ".venv" / (
+        "Scripts/python.exe" if os.name == "nt" else "bin/python"
+    )
+    if "dev" not in project.get("dependency-groups", {}):
+        commands.append(
+            [
+                "uv",
+                "pip",
+                "install",
+                "--python",
+                str(python_executable),
+                "--no-config",
+                "--default-index",
+                public_index,
+                "pytest>=9.0.3,<10",
+            ]
+        )
+    if requirements:
+        commands.append(
+            [
+                "uv",
+                "pip",
+                "install",
+                "--python",
+                str(python_executable),
+                "--no-config",
+                "--default-index",
+                public_index,
+                *requirements,
+            ]
+        )
+        commands.append(
+            [
+                "uv",
+                "pip",
+                "compile",
+                "--universal",
+                "--no-config",
+                "--default-index",
+                public_index,
+                str(requirements_file),
+            ]
+        )
+    stdout = []
+    stderr = []
+    for command in commands:
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=service_dir,
+                env=setup_env,
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("Python dependency preparation timed out") from exc
+        stdout.append(completed.stdout)
+        stderr.append(completed.stderr)
+        if completed.returncode != 0:
+            (exec_dir / "dependency-setup.stdout.txt").write_text(
+                "".join(stdout), encoding="utf-8"
+            )
+            (exec_dir / "dependency-setup.stderr.txt").write_text(
+                "".join(stderr), encoding="utf-8"
+            )
+            raise RuntimeError(
+                "Python dependency preparation failed: " + completed.stderr[-2000:]
+            )
+    (exec_dir / "dependency-setup.stdout.txt").write_text(
+        "".join(stdout), encoding="utf-8"
+    )
+    (exec_dir / "dependency-setup.stderr.txt").write_text(
+        "".join(stderr), encoding="utf-8"
+    )
+
+
 def _judge_subprocess_env(
     env: dict[str, str], *, claude: bool = False
 ) -> dict[str, str]:
@@ -190,6 +320,8 @@ class CodexBackend:
         trace_path = exec_dir / "trace.jsonl"
         final_path = exec_dir / "last_message.md"
         stderr_path = exec_dir / "stderr.txt"
+
+        _prepare_eval_python_dependencies(exec_dir)
 
         cmd = [
             self.command,

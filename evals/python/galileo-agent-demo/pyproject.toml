@@ -1,0 +1,13 @@
+[project]
+name = "python-galileo-agent-demo"
+version = "0.1.0"
+description = "Galileo-owned OpenTelemetry GenAI fixture"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "galileo",
+    "opentelemetry-api>=1.30",
+    "opentelemetry-sdk>=1.30",
+    "pydantic>=2.10",
+    "uvicorn[standard]>=0.34",
+]
