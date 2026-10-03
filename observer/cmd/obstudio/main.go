@@ -97,13 +97,25 @@ func newRootCmd(config *runConfig) *cobra.Command {
 			if err := validateRunConfig(resolved); err != nil {
 				return err
 			}
+			if os.Getenv(disableSharedObserverDetectionEnv) == "" {
+				if detectedURL, ok := detectAnyRunningObserver(http.DefaultClient); ok {
+					fmt.Fprintf(os.Stderr, "obstudio already running at %s\n", detectedURL)
+					return nil
+				}
+				// Stale shared-observer.json (health probe failed) — delete and proceed.
+				if _, err := os.Stat(sharedObserverStatePath()); err == nil {
+					_ = os.Remove(sharedObserverStatePath())
+				}
+			}
 			return run(resolved)
 		},
 		SilenceUsage: true,
 	}
 
 	root.Flags().StringVar(&config.host, "host", "", "Bind address for Splunk Observability Studio UI, MCP HTTP endpoint, and OTLP/HTTP; also the OTLP/gRPC default")
+	root.Flags().StringVar(&config.observerHTTPPort, "port", "", "Splunk Observability Studio web UI, REST API, and MCP HTTP port")
 	root.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Splunk Observability Studio web UI, REST API, and MCP HTTP port")
+	_ = root.Flags().MarkDeprecated("observer-http-port", "use --port instead")
 	root.Flags().StringVar(&config.envFile, "env-file", "", "Load KEY=VALUE settings from an env file before startup")
 
 	root.AddCommand(newInstallCmd())
@@ -124,10 +136,22 @@ func run(config runConfig) error {
 	startedAt := time.Now().UTC()
 
 	host := config.host
-	port := config.observerHTTPPort
 	otlpHTTPPort := config.otlpHTTPPort
 	otlpGRPCHost := config.otlpGRPCHost
 	otlpGRPCPort := config.otlpGRPCPort
+
+	// Resolve HTTP port: scan upward from 17900 when not pinned.
+	pinnedPort := config.observerHTTPPort
+	var port string
+	if pinnedPort != "" {
+		port = pinnedPort
+	} else {
+		var err error
+		port, err = scanPort(host, "17900")
+		if err != nil {
+			log.Fatalf("failed to find a free port: %v", err)
+		}
+	}
 
 	mainAddr := net.JoinHostPort(host, port)
 	otlpHTTPAddr := net.JoinHostPort(host, otlpHTTPPort)
@@ -188,6 +212,16 @@ func run(config runConfig) error {
 		otlp.WithTracesExporter(splunkTracesController),
 	)
 	if err != nil {
+		// OTLP ports (4317/4318) are intentionally fixed and shared across the
+		// single instance. When --port is NOT pinned (managed/extension launch)
+		// and the OTLP ports are already bound, an instance already owns the
+		// singleton — defer to it with an attach signal (exit 0), never crash.
+		// This also covers the upgrade case where an older observer holds the
+		// OTLP ports but never wrote a shared-observer.json the new code can read.
+		if pinnedPort == "" && isAddrInUseError(err) {
+			fmt.Fprintln(os.Stderr, "obstudio already running (OTLP ports already in use); deferring to the existing instance")
+			return nil
+		}
 		log.Fatalf("failed to start OTLP receiver: %v", err)
 	}
 
@@ -239,6 +273,21 @@ func run(config runConfig) error {
 	srv := &http.Server{Addr: mainAddr, Handler: mux}
 	mainListener, err := listenObserverHTTP("tcp", mainAddr)
 	if err != nil {
+		if pinnedPort != "" {
+			log.Fatalf("port %s is already in use — choose a different port or omit --port to auto-scan", port)
+		}
+		// Unpinned: scanPort found this port free moments ago, so a bind failure
+		// here is a race with another instance claiming the singleton. Defer to
+		// it (attach signal, exit 0) rather than crashing.
+		if isAddrInUseError(err) {
+			webCleanup()
+			validatorManager.Shutdown(ctx)
+			rcv.Shutdown(ctx)
+			splunkExportController.Shutdown(ctx)
+			splunkTracesController.Shutdown(ctx)
+			fmt.Fprintln(os.Stderr, "obstudio already running (UI port claimed concurrently); deferring to the existing instance")
+			return nil
+		}
 		log.Fatalf("failed to start HTTP server: %v", err)
 	}
 
@@ -467,7 +516,7 @@ func resolveRunConfig(config runConfig) runConfig {
 	host := valueOrEnv(config.host, "HOST", "127.0.0.1")
 	return runConfig{
 		host:             host,
-		observerHTTPPort: valueOrEnv(config.observerHTTPPort, "PORT", "3000"),
+		observerHTTPPort: valueOrEnv(config.observerHTTPPort, "PORT", ""),
 		otlpHTTPPort:     valueOrEnv(config.otlpHTTPPort, "OTLP_HTTP_PORT", envOr("OTLP_PORT", "4318")),
 		otlpGRPCHost:     valueOrEnv(config.otlpGRPCHost, "OTLP_GRPC_HOST", host),
 		otlpGRPCPort:     valueOrEnv(config.otlpGRPCPort, "OTLP_GRPC_PORT", "4317"),
@@ -703,6 +752,45 @@ func hasEnvMapKey(values map[string]string, keys ...string) bool {
 	return false
 }
 
+// scanPort finds a free TCP port on host starting at startPort, incrementing
+// until a free port is found. Returns the port as a string.
+func scanPort(host, startPort string) (string, error) {
+	port, err := strconv.Atoi(startPort)
+	if err != nil {
+		return "", fmt.Errorf("invalid start port %q: %w", startPort, err)
+	}
+	for {
+		addr := net.JoinHostPort(host, strconv.Itoa(port))
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			ln.Close()
+			return strconv.Itoa(port), nil
+		}
+		port++
+	}
+}
+
+
+// isAddrInUseError reports whether err (or any error it wraps) indicates a TCP
+// listener could not bind because the address is already in use. It is
+// cross-OS: errors.Is matches the syscall errno on Unix and Windows
+// (EADDRINUSE / WSAEADDRINUSE), and the string fallbacks cover cases where an
+// upstream library (e.g. the OTel collector receiver) formats the bind failure
+// into an unwrapped error string rather than preserving the syscall error.
+func isAddrInUseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	// Unix: "address already in use"; Windows: "Only one usage of each socket
+	// address (protocol/network address/port) is normally permitted".
+	return strings.Contains(msg, "address already in use") ||
+		strings.Contains(msg, "only one usage of each socket address")
+}
+
 func splunkMetricsExporterConfigFromEnv() (otlp.SplunkMetricsExporterConfig, error) {
 	timeout, err := durationEnv("OBSTUDIO_SPLUNK_METRICS_TIMEOUT")
 	if err != nil {
@@ -806,7 +894,7 @@ func validateRunConfig(config runConfig) error {
 		label    string
 		value    string
 	}{
-		{flagName: "--observer-http-port", label: "Splunk Observability Studio UI, REST API, and MCP HTTP", value: config.observerHTTPPort},
+		{flagName: "--port", label: "Splunk Observability Studio UI, REST API, and MCP HTTP", value: config.observerHTTPPort},
 		{flagName: "--otlp-http-port", label: "OTLP/HTTP", value: config.otlpHTTPPort},
 		{flagName: "--otlp-grpc-port", label: "OTLP/gRPC", value: config.otlpGRPCPort},
 	}
@@ -814,6 +902,9 @@ func validateRunConfig(config runConfig) error {
 	seen := map[int]string{}
 	seenFlags := map[int]string{}
 	for _, port := range ports {
+		if port.value == "" {
+			continue
+		}
 		parsed, err := strconv.Atoi(port.value)
 		if err != nil || parsed < 1 || parsed > 65_535 {
 			return fmt.Errorf("%s must be a valid TCP port between 1 and 65535, got %q", port.flagName, port.value)
