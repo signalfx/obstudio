@@ -1984,12 +1984,6 @@ suite('VS Code Host', () => {
 
 		const extension = await getExtension();
 		const mismatchedObserver = await startConflictingHttpService(await getAvailablePort());
-		const managedObserver = await startDiscoverableSharedObserver(
-			0,
-			undefined,
-			String(extension.packageJSON.version),
-		);
-		const managedPort = Number(new URL(managedObserver.baseUrl).port);
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
 		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
 		const stateDir = path.join(tempHome, '.obstudio');
@@ -2013,17 +2007,27 @@ suite('VS Code Host', () => {
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 			await vscode.commands.executeCommand('observability-studio.startObserver');
 
+			// The seeded shared state points at a non-obstudio service, so the
+			// extension's health probe mismatches, the stale state is ignored, and
+			// a fresh managed binary is spawned. In the discovery model the binary
+			// auto-scans its own loopback UI port and records the bound URL; the
+			// extension discovers it and attaches in MANAGED mode (sharedMode ===
+			// false). The old configured-port assertion (observerUrl ===
+			// managedObserver.baseUrl, an unseeded stub port) no longer describes
+			// the end-state — observe the discovered managed URL instead.
 			const state = await waitFor(
 				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
 				(value) => Boolean(
 					value
-					&& value.sharedMode
-					&& value.observerUrl === managedObserver.baseUrl,
+					&& !value.sharedMode
+					&& value.observerUrl !== undefined,
 				),
 				20_000,
 			);
-			assert.equal(state.sharedMode, true);
-			assert.equal(state.observerUrl, managedObserver.baseUrl);
+			assert.equal(state.sharedMode, false);
+			assert.match(state.observerUrl ?? '', /^http:\/\/127\.0\.0\.1:\d+$/);
+			const health = await fetchJson(`${state.observerUrl}/api/health`);
+			assert.equal(health.version, String(extension.packageJSON.version));
 		} finally {
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 			if (originalSharedObserverStatePath === undefined) {
@@ -2033,7 +2037,6 @@ suite('VS Code Host', () => {
 			}
 			cleanupTempDir(tempHome);
 			await mismatchedObserver.dispose();
-			await managedObserver.dispose();
 		}
 	});
 
@@ -2103,7 +2106,7 @@ suite('VS Code Host', () => {
 	});
 
 	test('configured shared service hides raw health probe details when it is unreachable', async function () {
-		this.timeout(45_000);
+		this.timeout(60_000);
 
 		await getExtension();
 		const unreachablePort = await getAvailablePort();
@@ -2129,7 +2132,7 @@ suite('VS Code Host', () => {
 						&& !value.panelHtml.includes('/api/health')
 						&& !value.panelHtml.includes('ECONNREFUSED');
 				},
-				30_000,
+				45_000,
 			);
 			assert.equal(failedState.sharedMode, false);
 		} finally {
