@@ -1156,8 +1156,10 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 
 		// The binary selects its own UI port and records it in shared-observer.json.
 		// Poll for that file to appear, then probe the DISCOVERED endpoints — the
-		// extension no longer predicts the port.
-		const discoveredEndpoints = await waitForSpawnedObserverDiscovery(runId);
+		// extension no longer predicts the port. Pass the spawned child's pid so the
+		// poll waits for the child to publish ITS OWN state rather than attaching to
+		// a stale pre-existing entry the child has not yet overwritten.
+		const discoveredEndpoints = await waitForSpawnedObserverDiscovery(runId, startedProcess.pid);
 		setObserverEndpoints(discoveredEndpoints);
 		const startedProbe = await waitForObserverReady(discoveredEndpoints, { requireStableOtlp: true }, runId);
 		if (!observerVersionIsCompatible(startedProbe.health.version, bundleVersion)) {
@@ -1312,6 +1314,7 @@ async function attachToDiscoveredObserver(
 // means the instance is reachable at the recorded URL.
 async function waitForSpawnedObserverDiscovery(
 	runId: number,
+	spawnedPid: number | undefined,
 ): Promise<ObserverEndpointRoles> {
 	const deadline = performance.now() + sharedObserverStartupWindowMs;
 	let lastError: string | undefined;
@@ -1321,7 +1324,23 @@ async function waitForSpawnedObserverDiscovery(
 			os.homedir(),
 			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
 		);
-		if (discovery !== undefined && observerPortFromUrl(discovery.baseUrl) !== undefined) {
+		// Only accept the discovery once it is the freshly-spawned child's own
+		// state. A seeded state file left by a dead or prior instance can carry a
+		// usable port while the child is still binding; attaching to it probes the
+		// wrong endpoint and times out. Match on pid so we wait for the child to
+		// overwrite the file. Two exceptions preserve the old accept-any behavior:
+		//   - the child deferred to an existing instance (exit 0): the state points
+		//     at that other instance's pid, which is the correct attach target; and
+		//   - the spawn did not report a pid (undefined): we cannot match, so fall
+		//     back to the first usable entry.
+		const pidMatches = spawnedPid === undefined
+			|| observerDeferredToExistingInstance
+			|| discovery?.pid === spawnedPid;
+		if (
+			discovery !== undefined
+			&& observerPortFromUrl(discovery.baseUrl) !== undefined
+			&& pidMatches
+		) {
 			return observerEndpointRolesForDiscovery(discovery);
 		}
 		// The spawned process may have exited before writing discovery. If it

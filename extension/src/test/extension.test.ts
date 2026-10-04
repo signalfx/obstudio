@@ -2359,8 +2359,8 @@ test('discovery-model startup never pins the UI port and discovers it after spaw
 	// After spawn, the bound URL is discovered, not predicted.
 	assert.match(
 		startup,
-		/const discoveredEndpoints = await waitForSpawnedObserverDiscovery\(runId\)/,
-		'the spawn path must discover the bound URL from shared-observer.json',
+		/const discoveredEndpoints = await waitForSpawnedObserverDiscovery\(runId, startedProcess\.pid\)/,
+		'the spawn path must discover the bound URL from shared-observer.json, keyed to the spawned child pid',
 	);
 	assert.match(
 		startup,
