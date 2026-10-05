@@ -2356,10 +2356,12 @@ test('discovery-model startup never pins the UI port and discovers it after spaw
 		/ensurePortAvailable\(\{/,
 		'the spawn path must not pre-check OTLP ports — OTLP-in-use is an attach signal, never a crash',
 	);
-	// After spawn, the bound URL is discovered, not predicted.
+	// After spawn, the bound URL is discovered, not predicted. (The binding is a
+	// `let` reassigned by the spurious-defer recovery respawn, so match the
+	// discovery call itself rather than a specific `const`/`let` prefix.)
 	assert.match(
 		startup,
-		/const discoveredEndpoints = await waitForSpawnedObserverDiscovery\(runId, startedProcess\.pid\)/,
+		/discoveredEndpoints = await waitForSpawnedObserverDiscovery\(runId, startedProcess\.pid\)/,
 		'the spawn path must discover the bound URL from shared-observer.json, keyed to the spawned child pid',
 	);
 	assert.match(

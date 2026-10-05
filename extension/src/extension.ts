@@ -1079,87 +1079,127 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		// An inherited PORT would pin the binary and defeat auto-scan — strip it so
 		// the binary always selects (or reuses) its own loopback UI port.
 		delete managedObserverEnvironment.PORT;
-		try {
-			startedProcess = cp.spawn(backend.command, backend.args, {
-				cwd: backend.cwd,
-				env: managedObserverEnvironment,
-				stdio: ['ignore', 'pipe', 'pipe'],
+		// Spawn the managed binary and wire its lifecycle handlers. Factored into a
+		// closure so the spurious-defer recovery below can respawn once without
+		// duplicating the spawn/handler wiring. Assigns the module-level
+		// observerProcess and returns the child; callers also keep it in the outer
+		// startedProcess so the IIFE's catch/finally can terminate the latest child.
+		const spawnManagedObserverProcess = (): cp.ChildProcess => {
+			let spawned: cp.ChildProcess;
+			try {
+				spawned = cp.spawn(backend.command, backend.args, {
+					cwd: backend.cwd,
+					env: managedObserverEnvironment,
+					stdio: ['ignore', 'pipe', 'pipe'],
+				});
+			} catch (error) {
+				const startupFailure = describeObserverStartupFailure(error as NodeJS.ErrnoException, {
+					arch: process.arch,
+					binaryPath: backend.command,
+					platform: process.platform,
+				});
+				const wrappedError = new Error(startupFailure.message);
+				Object.assign(wrappedError, { startupHint: startupFailure.hint });
+				throw wrappedError;
+			}
+			assertObserverRunCurrent(observerLifecycleState, runId);
+			logObserverLifecycle(`Run ${runId}: spawned Splunk Observability Studio PID ${spawned.pid ?? 'unknown'}.`);
+
+			observerProcess = spawned;
+
+			spawned.stdout?.on('data', (chunk: Buffer | string) => {
+				appendObserverOutput(chunk.toString());
 			});
-		} catch (error) {
-			const startupFailure = describeObserverStartupFailure(error as NodeJS.ErrnoException, {
-				arch: process.arch,
-				binaryPath: backend.command,
-				platform: process.platform,
+
+			spawned.stderr?.on('data', (chunk: Buffer | string) => {
+				appendObserverOutput(chunk.toString());
 			});
-			const wrappedError = new Error(startupFailure.message);
-			Object.assign(wrappedError, { startupHint: startupFailure.hint });
-			throw wrappedError;
-		}
-		assertObserverRunCurrent(observerLifecycleState, runId);
-		logObserverLifecycle(`Run ${runId}: spawned Splunk Observability Studio PID ${startedProcess.pid ?? 'unknown'}.`);
 
-		observerProcess = startedProcess;
-
-		startedProcess.stdout?.on('data', (chunk: Buffer | string) => {
-			appendObserverOutput(chunk.toString());
-		});
-
-		startedProcess.stderr?.on('data', (chunk: Buffer | string) => {
-			appendObserverOutput(chunk.toString());
-		});
-
-		startedProcess.on('exit', (code, signal) => {
-			appendObserverOutputLine(`Splunk Observability Studio exited with code=${code ?? 'null'} signal=${signal ?? 'null'}`);
-			logObserverLifecycle(`Run ${runId}: Splunk Observability Studio process exited with code=${code ?? 'null'} signal=${signal ?? 'null'}.`);
-			if (observerProcess === startedProcess) {
-				observerProcess = undefined;
-			}
-			// Exit 0 during startup means the binary's pre-flight detected an
-			// already-running instance and deferred to it (writing/leaving the
-			// shared-observer.json that points at it). That is an attach, not a
-			// teardown — leave the run active so the discovery poll below attaches
-			// to the existing instance instead of failing the start.
-			if (code === 0 && isObserverRunCurrent(observerLifecycleState, runId)) {
-				observerDeferredToExistingInstance = true;
-				observerUsesSharedServer = true;
-				logObserverLifecycle(
-					`Run ${runId}: binary deferred to an already-running Splunk Observability Studio instance; discovering it.`,
-				);
-				return;
-			}
-			if (finishObserverRun(observerLifecycleState, runId)) {
-				setObserverEndpoints(undefined);
-				observerUsesSharedServer = false;
-				syncObserverUi();
-			}
-		});
-
-		startedProcess.on('error', (error) => {
-			const startupFailure = describeObserverStartupFailure(error, {
-				arch: process.arch,
-				binaryPath: backend.command,
-				platform: process.platform,
+			spawned.on('exit', (code, signal) => {
+				appendObserverOutputLine(`Splunk Observability Studio exited with code=${code ?? 'null'} signal=${signal ?? 'null'}`);
+				logObserverLifecycle(`Run ${runId}: Splunk Observability Studio process exited with code=${code ?? 'null'} signal=${signal ?? 'null'}.`);
+				if (observerProcess === spawned) {
+					observerProcess = undefined;
+				}
+				// Exit 0 during startup means the binary's pre-flight detected an
+				// already-running instance and deferred to it (writing/leaving the
+				// shared-observer.json that points at it). That is an attach, not a
+				// teardown — leave the run active so the discovery poll below attaches
+				// to the existing instance instead of failing the start.
+				if (code === 0 && isObserverRunCurrent(observerLifecycleState, runId)) {
+					observerDeferredToExistingInstance = true;
+					observerUsesSharedServer = true;
+					logObserverLifecycle(
+						`Run ${runId}: binary deferred to an already-running Splunk Observability Studio instance; discovering it.`,
+					);
+					return;
+				}
+				if (finishObserverRun(observerLifecycleState, runId)) {
+					setObserverEndpoints(undefined);
+					observerUsesSharedServer = false;
+					syncObserverUi();
+				}
 			});
-			const startupMessage = startupFailure.message;
-			appendObserverOutputLine(`Failed to start Splunk Observability Studio: ${startupMessage}`);
-			logObserverLifecycle(`Run ${runId}: Splunk Observability Studio process error: ${startupMessage}`);
-			if (observerProcess === startedProcess) {
-				observerProcess = undefined;
-			}
-			if (failObserverStart(observerLifecycleState, runId, startupMessage, startupFailure.hint)) {
-				setObserverEndpoints(undefined);
-				observerUsesSharedServer = false;
-				syncObserverUi();
-				void vscode.window.showErrorMessage(`Splunk Observability Studio could not start: ${startupMessage}`);
-			}
-		});
+
+			spawned.on('error', (error) => {
+				const startupFailure = describeObserverStartupFailure(error, {
+					arch: process.arch,
+					binaryPath: backend.command,
+					platform: process.platform,
+				});
+				const startupMessage = startupFailure.message;
+				appendObserverOutputLine(`Failed to start Splunk Observability Studio: ${startupMessage}`);
+				logObserverLifecycle(`Run ${runId}: Splunk Observability Studio process error: ${startupMessage}`);
+				if (observerProcess === spawned) {
+					observerProcess = undefined;
+				}
+				if (failObserverStart(observerLifecycleState, runId, startupMessage, startupFailure.hint)) {
+					setObserverEndpoints(undefined);
+					observerUsesSharedServer = false;
+					syncObserverUi();
+					void vscode.window.showErrorMessage(`Splunk Observability Studio could not start: ${startupMessage}`);
+				}
+			});
+
+			return spawned;
+		};
+
+		startedProcess = spawnManagedObserverProcess();
 
 		// The binary selects its own UI port and records it in shared-observer.json.
 		// Poll for that file to appear, then probe the DISCOVERED endpoints — the
 		// extension no longer predicts the port. Pass the spawned child's pid so the
 		// poll waits for the child to publish ITS OWN state rather than attaching to
 		// a stale pre-existing entry the child has not yet overwritten.
-		const discoveredEndpoints = await waitForSpawnedObserverDiscovery(runId, startedProcess.pid);
+		//
+		// Spurious-defer recovery: the binary can exit 0 (defer) because it detected
+		// a DYING prior instance whose UI port is already down but whose OTLP ports
+		// still linger (post-shutdown linger window). That is not a live owner to
+		// attach to — the dying instance deleted its discovery state and will never
+		// republish one. waitForSpawnedObserverDiscovery detects this (defer flag set,
+		// child exited, OTLP ports have since freed) and throws a spuriousDefer error.
+		// Recover with exactly ONE respawn once the ports are free, mirroring the
+		// bounded single-respawn idiom in the host-handoff monitor. Do not loop: a
+		// second spurious defer re-throws and fails the start honestly.
+		let discoveredEndpoints: ObserverEndpointRoles;
+		try {
+			discoveredEndpoints = await waitForSpawnedObserverDiscovery(runId, startedProcess.pid);
+		} catch (error) {
+			if (!isSpuriousDeferError(error)) {
+				throw error;
+			}
+			assertObserverRunCurrent(observerLifecycleState, runId);
+			logObserverLifecycle(
+				`Run ${runId}: binary deferred to a shutting-down instance; its ports have freed — respawning once.`,
+			);
+			appendObserverOutputLine(
+				'The previous Splunk Observability Studio instance was shutting down; restarting now that its ports are free.',
+			);
+			observerDeferredToExistingInstance = false;
+			observerUsesSharedServer = false;
+			startedProcess = spawnManagedObserverProcess();
+			discoveredEndpoints = await waitForSpawnedObserverDiscovery(runId, startedProcess.pid);
+		}
 		setObserverEndpoints(discoveredEndpoints);
 		const startedProbe = await waitForObserverReady(discoveredEndpoints, { requireStableOtlp: true }, runId);
 		if (!observerVersionIsCompatible(startedProbe.health.version, bundleVersion)) {
@@ -1347,6 +1387,36 @@ async function waitForSpawnedObserverDiscovery(
 		// deferred to an existing instance (exit 0), keep polling — that instance's
 		// state file is what we are waiting for. Otherwise, the exit handler has
 		// already failed the run and assertObserverRunCurrent will cancel us.
+		// Spurious-defer detection. When the child exited 0 (defer) we keep
+		// polling for the deferred-to instance's state. But the defer may have
+		// been to a DYING prior: its UI port is already down and it deleted its
+		// discovery state, yet its OTLP ports still linger for a few seconds
+		// (post-shutdown linger window). No live owner exists and no state will
+		// ever materialize. The positive signal that the prior has fully exited
+		// is that the OTLP ports -- the only ports a dying prior still holds --
+		// have become free. Once they are, this is a spurious defer: throw a
+		// tagged error so startObserver can respawn exactly once.
+		if (observerDeferredToExistingInstance) {
+			const lingeringOtlpPorts = uniqueLoopbackPorts([
+				observerOtlpGrpcPort,
+				observerOtlpHttpPort,
+			]);
+			if (await loopbackPortsAreSimultaneouslyAvailable(
+				lingeringOtlpPorts,
+				performance.now() + observerExtensionHandoffPortCheckMs,
+			)) {
+				assertObserverRunCurrent(observerLifecycleState, runId);
+				const spuriousError = new Error(
+					'Could not discover the Splunk Observability Studio port: '
+					+ 'the instance it deferred to has shut down and released its ports.',
+				);
+				Object.assign(spuriousError, {
+					startupHint: getObserverStartupHint('generic'),
+					spuriousDefer: true,
+				});
+				throw spuriousError;
+			}
+		}
 		if (observerProcess === undefined && !observerDeferredToExistingInstance) {
 			lastError = 'the Splunk Observability Studio process exited before recording its bound port';
 			break;
@@ -1359,6 +1429,17 @@ async function waitForSpawnedObserverDiscovery(
 	const error = new Error(`Could not discover the Splunk Observability Studio port: ${message}.`);
 	Object.assign(error, { startupHint: getObserverStartupHint('generic') });
 	throw error;
+}
+
+// A spurious-defer error marks the case where the binary exited 0 (deferring to
+// an existing instance) but that instance was shutting down -- it left no live
+// owner and no discovery state, only lingering OTLP ports that have since freed.
+// startObserver catches this to respawn exactly once.
+function isSpuriousDeferError(error: unknown): boolean {
+	return typeof error === 'object'
+		&& error !== null
+		&& 'spuriousDefer' in error
+		&& (error as { spuriousDefer?: unknown }).spuriousDefer === true;
 }
 
 function monitorExtensionObserverHandoff(
