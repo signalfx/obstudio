@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261006T175410984112Z",
+    "run_id": "20261006T184322659220Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -525,7 +525,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "187ea44964833a1122ad4e970cbd069c256cc68ed6a48caf620ff12924b26a49",
+    "digest": "3d8ea2a8017b49da92df74d9d749f69783aedde64e25bdfa0f7d4a67978d20a1",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -579,7 +579,7 @@
       "observer/README.md": "40c99a837d75630d74f9065012d561751ff7738153ca0dac9df20f3800ae67a6",
       "observer/builder-config.yaml": "fd548daa8471ee815dce6e114bb1183950f1520e820048318816a29c8ee8c9ca",
       "observer/client/AGENTS.md": "72f28bf28e878ccae4bf2864de1cd3e2460832a5321234528c467fd90dcec134",
-      "observer/client/package-lock.json": "ebe2ee9824c3a465df07262ca9f195f8466164c596e8cf00eb9692b8ecb20cfc",
+      "observer/client/package-lock.json": "5bf06431e6b7ef0b9ffe26732c94366566389fdbc7a33acd39fe6cd3ca419940",
       "observer/client/package.json": "7b5f0f8bbecc9f7cddbecdd70e8537e6d3c91f47fd900a1c82f0f8e55300fd0f",
       "observer/client/public/index.html": "8e0c344286daa4f01f372908c4088a5e38371d11d81cb1d778bfc8bf9ef58f45",
       "observer/client/public/observer-icon.svg": "f041a8775f16acc2b16da6346cfafecae2af40e5d335ac9b1cdc87525cfdbcb4",
