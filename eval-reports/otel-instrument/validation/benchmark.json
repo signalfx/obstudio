@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261006T172412512730Z",
+    "run_id": "20261006T174338235835Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -525,7 +525,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "cbd5b72f19fac23dbb609facf841f042022ac6bedc7c9dcc11a87a67ddc18dd3",
+    "digest": "da1514242a1f584ac0f0a319f451c9992e8ecefb4e91d7e3fdfad005b0d47c06",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -850,7 +850,7 @@
       "evals/java/kafka-producer-consumer/src/test/java/com/example/kafka/OrderMessageHandlerTest.java": "152745d96f5d6bc8f1419dc78c1c625c2cd7fd2990b3d0104280d4e9207ad833",
       "evals/java/kafka-streams/README.md": "34c5c5004cefaa371f41affc2cfca31d4279a3312e81cbb43224111bb1d4be7d",
       "evals/java/kafka-streams/eval/qual/incident-readiness.json": "387cf30d9845061c88f1a713c30d11e50667580b531a3d366dff689a4d91e7f5",
-      "evals/java/kafka-streams/pom.xml": "81e1e2a7e4e230b5317028b57eedc189184252c4cfd4bc44c5cd876c994d3841",
+      "evals/java/kafka-streams/pom.xml": "6684a7d80d349249133ac780829c0ad8b96c56214e9c394c67d371afcfc3c13d",
       "evals/java/kafka-streams/src/main/java/com/example/streaming/EnrichedOrder.java": "33a71ed88c738a9e1583484636bc77b36895d98cfb8ec391d124cdc7712f63c9",
       "evals/java/kafka-streams/src/main/java/com/example/streaming/KafkaStreamsApplication.java": "046a463cc5e5d7af8ba2612425b8d127e788e3c0fc97ac19c3447776b19723f0",
       "evals/java/kafka-streams/src/main/java/com/example/streaming/OrderEvent.java": "8a7f60d0844d894d10eec292abb3943e4ed5e58114776b8ed6b9bc0adc25320b",
