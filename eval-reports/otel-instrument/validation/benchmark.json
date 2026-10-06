@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261002T060102223689Z",
+    "run_id": "20261006T172412512730Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -525,7 +525,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "af30853497662f6d65ec38ee08a9387f8697163a612f1168ade8cb48b765ee4b",
+    "digest": "cbd5b72f19fac23dbb609facf841f042022ac6bedc7c9dcc11a87a67ddc18dd3",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -819,7 +819,7 @@
       "evals/go/kvstore/eval/runtime/run-traffic.sh": "0ce27d46da8c0c21f7f79739bea2e567730fd522e3adb035a03cf18fe8a1578e",
       "evals/java/kafka-batch-consumer/README.md": "23a5dcf5ebdf24c356199041d54712966ba63a977523b352e559ae72994c3286",
       "evals/java/kafka-batch-consumer/eval/qual/instrument.json": "5b9e7f9c4988f66b8e31bb4a051962d3459112fc09d4b8468d2153434b8ecf43",
-      "evals/java/kafka-batch-consumer/pom.xml": "a1c182525e4083315b7e4b10b8a8e6d13b478e7c9564c71253ee2961dc3470d7",
+      "evals/java/kafka-batch-consumer/pom.xml": "9362547208f052306275f371523e8325f153472ca099d728d313acc2991adca6",
       "evals/java/kafka-batch-consumer/src/main/java/com/example/kafkabatch/BatchConsumerApplication.java": "99020ad58b471a1470525e1a295817c88a7a687ce3e9bd24bc19b7f1219a6b0a",
       "evals/java/kafka-batch-consumer/src/main/java/com/example/kafkabatch/BatchConsumerConfig.java": "82a32d72df7e6db654a5ab5f152e3b3842cd8d17cb7e8055560c9a77aa8540ff",
       "evals/java/kafka-batch-consumer/src/main/java/com/example/kafkabatch/BatchResult.java": "23f71d56d4be6c5d30159189eefdb8ec4dc9b5ff45f22578920a1b820d3b68ce",
