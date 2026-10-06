@@ -209,7 +209,7 @@ func TestSplunkExportLifecycleDoesNotExposeToken(t *testing.T) {
 	}
 }
 
-func TestSplunkExportStatusReflectsCIMDRegistrationEnvFlag(t *testing.T) {
+func TestSplunkExportStatusReflectsRegistrationAndAuthProtocolEnvVar(t *testing.T) {
 	newMux := func() *http.ServeMux {
 		metrics, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 		if err != nil {
@@ -236,18 +236,23 @@ func TestSplunkExportStatusReflectsCIMDRegistrationEnvFlag(t *testing.T) {
 		return status
 	}
 
-	if status := statusFor(newMux()); status.CIMDRegistrationEnabled {
-		t.Fatalf("expected the flag to default to false, got %+v", status)
+	if status := statusFor(newMux()); status.RegistrationAndAuthProtocol != "NONE" {
+		t.Fatalf("expected the protocol to default to NONE, got %+v", status)
 	}
 
-	t.Setenv("OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED", "true")
-	if status := statusFor(newMux()); !status.CIMDRegistrationEnabled {
-		t.Fatalf("expected the flag to be true when the env var is set, got %+v", status)
+	t.Setenv("OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL", "CIMD")
+	if status := statusFor(newMux()); status.RegistrationAndAuthProtocol != "CIMD" {
+		t.Fatalf("expected the protocol to be CIMD when the env var is set, got %+v", status)
 	}
 
-	t.Setenv("OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED", "0")
-	if status := statusFor(newMux()); status.CIMDRegistrationEnabled {
-		t.Fatalf("expected the flag to be false for a falsy value, got %+v", status)
+	t.Setenv("OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL", "o11y_oauth")
+	if status := statusFor(newMux()); status.RegistrationAndAuthProtocol != "O11Y_OAUTH" {
+		t.Fatalf("expected the protocol value to be case-insensitive, got %+v", status)
+	}
+
+	t.Setenv("OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL", "bogus")
+	if status := statusFor(newMux()); status.RegistrationAndAuthProtocol != "NONE" {
+		t.Fatalf("expected an unrecognized value to fall back to NONE, got %+v", status)
 	}
 }
 

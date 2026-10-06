@@ -5,12 +5,19 @@ import {
   fetchSISCIMDSession,
   fetchSplunkExportStatus,
   loginSISCIMD,
+  registerO11yOAuthClient,
   registerSISCIMDClient,
   resolveSplunkCloudRealm,
   runSplunkExportBrowserAction,
   submitSplunkFreeAccount,
 } from "../api/client";
-import type { SISCIMDSessionStatus, SplunkExportSignalStatus, SplunkExportStatus } from "../api/types";
+import type {
+  O11yOAuthRegistrationResult,
+  RegistrationAndAuthProtocol,
+  SISCIMDSessionStatus,
+  SplunkExportSignalStatus,
+  SplunkExportStatus,
+} from "../api/types";
 import {
   isObserverHostCloudTimeoutError,
   isSplunkExportStatus,
@@ -19,6 +26,7 @@ import {
   type CloudBridgeResponse,
 } from "./bridge";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
+import { CopyTextButton } from "../layout/DetailPanel";
 
 const maxSplunkDestinationBytes = 2048;
 const sisCIMDSessionPollIntervalMs = 1_500;
@@ -62,7 +70,15 @@ class FreeAccountOutcomeUnknownError extends Error {
   }
 }
 
-type CloudFieldError = "email" | "firstName" | "lastName" | "region" | "terms" | "token";
+type CloudFieldError =
+  | "email"
+  | "firstName"
+  | "lastName"
+  | "o11yOAuthAdminToken"
+  | "o11yOAuthRealm"
+  | "region"
+  | "terms"
+  | "token";
 type FreeAccountMutationState = "idle" | "pending" | "uncertain";
 
 interface SignalRow {
@@ -82,6 +98,9 @@ interface CloudActionResponse {
   cimdRegistrationVerified?: boolean;
   cimdSession?: SISCIMDSessionStatus;
   message?: string;
+  o11yOAuthClientCreated?: boolean;
+  o11yOAuthClientId?: string;
+  o11yOAuthClientSecret?: string;
   realm?: string;
   status?: SplunkExportStatus;
 }
@@ -104,10 +123,13 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const [freeAccountMutationState, setFreeAccountMutationState] = useState<FreeAccountMutationState>("idle");
   const [cloudInitializationFinished, setCloudInitializationFinished] = useState(false);
   const [fieldError, setFieldError] = useState<CloudFieldError | null>(null);
-  const [cimdRegistrationEnabled, setCIMDRegistrationEnabled] = useState(false);
+  const [registrationAndAuthProtocol, setRegistrationAndAuthProtocol] = useState<RegistrationAndAuthProtocol>("NONE");
   const [cimdRegistrationVerified, setCIMDRegistrationVerified] = useState(false);
   const [cimdSession, setCIMDSession] = useState<SISCIMDSessionStatus | null>(null);
   const [cimdLoginBusy, setCIMDLoginBusy] = useState(false);
+  const [o11yOAuthRealm, setO11yOAuthRealm] = useState("");
+  const [o11yOAuthAdminToken, setO11yOAuthAdminToken] = useState("");
+  const [o11yOAuthRegistration, setO11yOAuthRegistration] = useState<O11yOAuthRegistrationResult | null>(null);
   const [busyAction, setBusyAction] = useState<CloudBridgeAction | null>("initialize");
   const [controlError, setControlError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +154,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const regionValueRef = useRef("");
   const regionInputRef = useRef<HTMLInputElement>(null);
   const tokenInputRef = useRef<HTMLInputElement>(null);
+  const o11yOAuthRealmInputRef = useRef<HTMLInputElement>(null);
+  const o11yOAuthAdminTokenInputRef = useRef<HTMLInputElement>(null);
   const freeAccountFirstNameRef = useRef<HTMLInputElement>(null);
   const freeAccountLastNameRef = useRef<HTMLInputElement>(null);
   const freeAccountEmailRef = useRef<HTMLInputElement>(null);
@@ -174,11 +198,10 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       try {
         let nextStatus: unknown;
         let controlInitializationError: unknown;
-        // The IDE's cimdRegistrationEnabled setting, when the bridge reports it, is the
-        // source of truth and overrides Splunk Observability Studio's own env-var-driven flag below. That
-        // env var only matters when there is no IDE bridge to ask (e.g. standalone
-        // `go run ./cmd/obstudio` + browser dev).
-        let cimdRegistrationEnabledFromBridge: boolean | undefined;
+        // Both the bridge (VS Code extension) and the standalone status endpoint
+        // read the same OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL env var -- there is
+        // no separate IDE setting to reconcile here, unlike the old CIMD-only flag.
+        let registrationAndAuthProtocolFromBridge: RegistrationAndAuthProtocol | undefined;
         if (bridge) {
           try {
             const response = await callBridge("initialize");
@@ -186,7 +209,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             if (response.warning?.trim()) {
               controlInitializationError = new Error(response.warning);
             }
-            cimdRegistrationEnabledFromBridge = response.cimdRegistrationEnabled;
+            registrationAndAuthProtocolFromBridge = response.registrationAndAuthProtocol;
             if (response.cimdSession) {
               setCIMDSession(response.cimdSession);
               if (response.cimdSession.phase === "connected") {
@@ -208,8 +231,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         if (!nextStatus || !isSplunkExportStatus(nextStatus)) {
           throw new Error("Splunk Observability Studio returned an invalid cloud status.");
         }
-        setCIMDRegistrationEnabled(
-          cimdRegistrationEnabledFromBridge ?? nextStatus.cimdRegistrationEnabled ?? false,
+        setRegistrationAndAuthProtocol(
+          registrationAndAuthProtocolFromBridge ?? nextStatus.registrationAndAuthProtocol ?? "NONE",
         );
         setStatus(nextStatus);
         setControlError(null);
@@ -446,7 +469,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
 
   const runAction = async (
     action: CloudBridgeAction,
-    payload?: { accessToken?: string; destination?: string; enabled?: boolean; realm?: string },
+    payload?: { accessToken?: string; adminToken?: string; destination?: string; enabled?: boolean; realm?: string },
   ): Promise<CloudActionResponse | null> => {
     if (busyAction || actionInFlightRef.current || !controlAvailable) return null;
     const expectedVersion = statusRef.current?.version;
@@ -578,6 +601,62 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     ) return;
     event.preventDefault();
     event.currentTarget.form?.requestSubmit();
+  };
+
+  const registerO11yOAuth = async () => {
+    const realm = o11yOAuthRealm.trim();
+    const adminToken = o11yOAuthAdminToken.trim();
+    if (realm === "") {
+      setFieldError("o11yOAuthRealm");
+      setError("Enter a valid Splunk Observability Cloud realm.");
+      o11yOAuthRealmInputRef.current?.focus();
+      return;
+    }
+    if (adminToken === "") {
+      setFieldError("o11yOAuthAdminToken");
+      setError("Paste the admin X-SF-TOKEN.");
+      o11yOAuthAdminTokenInputRef.current?.focus();
+      return;
+    }
+
+    if (bridge) {
+      const response = await runAction("register-o11y-oauth", { adminToken, realm });
+      if (!response) return;
+      if (typeof response.o11yOAuthClientId !== "string" || typeof response.o11yOAuthClientCreated !== "boolean") {
+        setError("Splunk Observability Studio returned an invalid registration response.");
+        return;
+      }
+      setO11yOAuthRegistration({
+        clientId: response.o11yOAuthClientId,
+        clientSecret: response.o11yOAuthClientSecret,
+        created: response.o11yOAuthClientCreated,
+      });
+      setO11yOAuthAdminToken("");
+      setNotice(response.o11yOAuthClientCreated
+        ? "Registered a new MCP OAuth client."
+        : "Reused the existing MCP OAuth client for this organization.");
+      return;
+    }
+
+    // No IDE bridge (e.g. standalone `go run ./cmd/obstudio` + browser dev): register
+    // directly through Splunk Observability Studio's own backend instead of the bridge.
+    if (busyAction) return;
+    setFieldError(null);
+    setBusyAction("register-o11y-oauth");
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await registerO11yOAuthClient(realm, adminToken);
+      setO11yOAuthRegistration(result);
+      setO11yOAuthAdminToken("");
+      setNotice(result.created
+        ? "Registered a new MCP OAuth client."
+        : "Reused the existing MCP OAuth client for this organization.");
+    } catch (registrationError) {
+      setError(errorMessage(registrationError, "O11y OAuth client registration failed."));
+    } finally {
+      setBusyAction(null);
+    }
   };
 
   const setupCIMD = async () => {
@@ -932,7 +1011,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             ) : null}
           </header>
 
-          {!cloudConfigured && cimdRegistrationEnabled ? (
+          {!cloudConfigured && registrationAndAuthProtocol === "CIMD" ? (
             <section aria-labelledby="cloud-cimd-title" className="cloud-cimd-setup">
               <div>
                 <h3 id="cloud-cimd-title">Unified sign-in</h3>
@@ -954,6 +1033,109 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   {busyAction === "setup-cimd" ? "Registering..." : "Register OAuth client with CIMD"}
                 </button>
               )}
+            </section>
+          ) : null}
+
+          {!cloudConfigured && registrationAndAuthProtocol === "O11Y_OAUTH" ? (
+            <section aria-labelledby="cloud-o11y-oauth-title" className="cloud-cimd-setup">
+              <div>
+                <h3 id="cloud-o11y-oauth-title">MCP client registration</h3>
+                <p>
+                  {o11yOAuthRegistration
+                    ? "Registered as an MCP OAuth client for this organization."
+                    : "Register obstudio as an MCP OAuth client for this organization. This step is "
+                      + "intended for an organization administrator, pasting their own admin X-SF-TOKEN "
+                      + "below -- it is used once and never stored."}
+                </p>
+              </div>
+              {o11yOAuthRegistration ? (
+                <span className="cloud-cimd-setup__status" role="status">Registration verified</span>
+              ) : (
+                <div className="cloud-field cloud-field--o11y-oauth">
+                  <div className="cloud-field cloud-field--region">
+                    <div
+                      className={o11yOAuthRealm
+                        ? "cloud-field__control cloud-field__control--filled"
+                        : "cloud-field__control"}
+                    >
+                      <label className="cloud-field__floating-label" htmlFor="cloud-o11y-oauth-realm">Realm</label>
+                      <input
+                        aria-invalid={fieldError === "o11yOAuthRealm"}
+                        aria-label="Realm"
+                        autoCapitalize="none"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        id="cloud-o11y-oauth-realm"
+                        onChange={(event) => {
+                          setO11yOAuthRealm(event.target.value);
+                          if (fieldError === "o11yOAuthRealm") setFieldError(null);
+                          setError(null);
+                        }}
+                        placeholder="Realm, e.g. us0"
+                        ref={o11yOAuthRealmInputRef}
+                        spellCheck={false}
+                        value={o11yOAuthRealm}
+                      />
+                    </div>
+                    {fieldError === "o11yOAuthRealm" ? (
+                      <p className="cloud-field__error">Enter a valid Splunk Observability Cloud realm.</p>
+                    ) : null}
+                  </div>
+                  <div className="cloud-field cloud-field--token">
+                    <div
+                      className={o11yOAuthAdminToken
+                        ? "cloud-field__control cloud-field__control--filled"
+                        : "cloud-field__control"}
+                    >
+                      <label className="cloud-field__floating-label" htmlFor="cloud-o11y-oauth-admin-token">Admin X-SF-TOKEN</label>
+                      <input
+                        aria-invalid={fieldError === "o11yOAuthAdminToken"}
+                        autoCapitalize="none"
+                        autoComplete="new-password"
+                        autoCorrect="off"
+                        id="cloud-o11y-oauth-admin-token"
+                        onChange={(event) => {
+                          setO11yOAuthAdminToken(event.target.value);
+                          if (fieldError === "o11yOAuthAdminToken") setFieldError(null);
+                          setError(null);
+                        }}
+                        placeholder="Admin X-SF-TOKEN"
+                        ref={o11yOAuthAdminTokenInputRef}
+                        spellCheck={false}
+                        type="password"
+                        value={o11yOAuthAdminToken}
+                      />
+                    </div>
+                    {fieldError === "o11yOAuthAdminToken" ? (
+                      <p className="cloud-field__error">Paste the admin X-SF-TOKEN.</p>
+                    ) : null}
+                  </div>
+                  <button
+                    className="cloud-button"
+                    disabled={busyAction !== null}
+                    onClick={() => void registerO11yOAuth()}
+                    type="button"
+                  >
+                    {busyAction === "register-o11y-oauth" ? "Registering..." : "Register MCP client"}
+                  </button>
+                </div>
+              )}
+              {o11yOAuthRegistration ? (
+                <div className="cloud-o11y-oauth-fields">
+                  <MaskedValueField
+                    id="cloud-o11y-oauth-client-id"
+                    label="Client ID"
+                    value={o11yOAuthRegistration.clientId}
+                  />
+                  {o11yOAuthRegistration.clientSecret ? (
+                    <MaskedValueField
+                      id="cloud-o11y-oauth-client-secret"
+                      label="Client secret"
+                      value={o11yOAuthRegistration.clientSecret}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
             </section>
           ) : null}
 
@@ -992,7 +1174,50 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             </section>
           ) : null}
 
-          {!cloudConfigured ? (
+          {cloudConfigured ? (
+            <section aria-labelledby="cloud-export-title" className="cloud-export">
+              <div className="cloud-export__header">
+                <div>
+                  <h3 id="cloud-export-title">Remote export</h3>
+                  <p>Send metrics and traces to {destinationLabel}.</p>
+                </div>
+                <button
+                  aria-checked={exportEnabled}
+                  aria-label={`Remote telemetry export is ${exportStateLabel}`}
+                  className={exportEnabled ? "cloud-switch cloud-switch--on" : "cloud-switch"}
+                  disabled={mutationsDisabled}
+                  onClick={() => void toggleExport()}
+                  role="switch"
+                  type="button"
+                >
+                  <span aria-hidden="true" className="cloud-switch__track"><span /></span>
+                  <span>
+                    {busyAction === "set-enabled"
+                      ? "Updating"
+                      : exportEnabled
+                        ? "On"
+                        : exportPartiallyEnabled
+                          ? "Partial"
+                          : "Off"}
+                  </span>
+                </button>
+              </div>
+
+              {exportActive ? (
+                <div aria-label="Telemetry export activity" className="cloud-signal-list" role="list">
+                  {signals.map((signal) => (
+                    <div className={`cloud-signal-row cloud-signal-row--${signal.tone}`} key={signal.label} role="listitem">
+                      <div>
+                        <p><span aria-hidden="true" />{signal.label}</p>
+                        <small>{signal.status}</small>
+                      </div>
+                      <span>{signal.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : registrationAndAuthProtocol === "NONE" ? (
             <form aria-label="Cloud connection" className="cloud-connect-form" noValidate onSubmit={connect}>
               <div className="cloud-field cloud-field--region">
                 <div
@@ -1106,50 +1331,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                 </button>
               </div>
             </form>
-          ) : (
-            <section aria-labelledby="cloud-export-title" className="cloud-export">
-              <div className="cloud-export__header">
-                <div>
-                  <h3 id="cloud-export-title">Remote export</h3>
-                  <p>Send metrics and traces to {destinationLabel}.</p>
-                </div>
-                <button
-                  aria-checked={exportEnabled}
-                  aria-label={`Remote telemetry export is ${exportStateLabel}`}
-                  className={exportEnabled ? "cloud-switch cloud-switch--on" : "cloud-switch"}
-                  disabled={mutationsDisabled}
-                  onClick={() => void toggleExport()}
-                  role="switch"
-                  type="button"
-                >
-                  <span aria-hidden="true" className="cloud-switch__track"><span /></span>
-                  <span>
-                    {busyAction === "set-enabled"
-                      ? "Updating"
-                      : exportEnabled
-                        ? "On"
-                        : exportPartiallyEnabled
-                          ? "Partial"
-                          : "Off"}
-                  </span>
-                </button>
-              </div>
-
-              {exportActive ? (
-                <div aria-label="Telemetry export activity" className="cloud-signal-list" role="list">
-                  {signals.map((signal) => (
-                    <div className={`cloud-signal-row cloud-signal-row--${signal.tone}`} key={signal.label} role="listitem">
-                      <div>
-                        <p><span aria-hidden="true" />{signal.label}</p>
-                        <small>{signal.status}</small>
-                      </div>
-                      <span>{signal.detail}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </section>
-          )}
+          ) : null}
           </section>
           {!cloudConfigured ? (
             <section
@@ -1430,6 +1612,68 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         </div>
       ) : null}
     </section>
+  );
+}
+
+interface MaskedValueFieldProps {
+  id: string;
+  label: string;
+  value: string;
+}
+
+/** A labeled, copyable value that defaults to masked ("*") and can be toggled visible. */
+function MaskedValueField({ id, label, value }: MaskedValueFieldProps): React.ReactElement {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div className="cloud-masked-field">
+      <div className="cloud-field cloud-field--masked">
+        <div className="cloud-field__control cloud-field__control--filled">
+          <label className="cloud-field__floating-label" htmlFor={id}>{label}</label>
+          <input
+            id={id}
+            readOnly
+            spellCheck={false}
+            type="text"
+            value={visible ? value : "*".repeat(value.length)}
+          />
+        </div>
+      </div>
+      <div className="cloud-masked-field__actions">
+        <CopyTextButton label={label} text={value} />
+        <button
+          aria-label={visible ? `Hide ${label}` : `Show ${label}`}
+          aria-pressed={visible}
+          className="reveal-button"
+          onClick={() => setVisible((current) => !current)}
+          title={visible ? `Hide ${label}` : `Show ${label}`}
+          type="button"
+        >
+          {visible ? (
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16">
+              <path
+                d="M1.4 8c1.3-2.9 3.9-5.3 6.6-5.3S13.3 5.1 14.6 8c-1.3 2.9-3.9 5.3-6.6 5.3S2.7 10.9 1.4 8Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+              />
+              <circle cx="8" cy="8" fill="currentColor" r="2" />
+              <path d="M2 2l12 12" stroke="currentColor" strokeWidth="1.3" />
+            </svg>
+          ) : (
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16">
+              <path
+                d="M1.4 8c1.3-2.9 3.9-5.3 6.6-5.3S13.3 5.1 14.6 8c-1.3 2.9-3.9 5.3-6.6 5.3S2.7 10.9 1.4 8Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+              />
+              <circle cx="8" cy="8" fill="currentColor" r="2" />
+            </svg>
+          )}
+        </button>
+      </div>
+    </div>
   );
 }
 

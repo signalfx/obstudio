@@ -15,6 +15,7 @@ import { isLoopbackObserverHost } from './backend';
 
 export type ObserverHostCloudPayload = {
 	accessToken?: string;
+	adminToken?: string;
 	destination?: string;
 	email?: string;
 	enabled?: boolean;
@@ -252,6 +253,16 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 				&& typeof value.destination === 'string'
 				&& value.destination.trim().length > 0
 				&& Buffer.byteLength(value.destination, 'utf8') <= maxCloudDestinationBytes;
+		case 'register-o11y-oauth':
+			// expectedVersion is carried opportunistically by runAction's generic
+			// versioning wrapper, same as setup-cimd/login-cimd/disconnect-cimd below --
+			// registration itself does not use it.
+			return isObserverHostCloudPayload(value)
+				&& hasOnlyCloudPayloadKeys(value, ['adminToken', 'expectedVersion', 'realm'])
+				&& typeof value.adminToken === 'string'
+				&& value.adminToken.trim().length > 0
+				&& typeof value.realm === 'string'
+				&& value.realm.trim().length > 0;
 		case 'create-free-account':
 			return isObserverHostCloudPayload(value)
 				&& hasOnlyCloudPayloadKeys(value, [
@@ -315,6 +326,7 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 	const payload = value as Record<string, unknown>;
 	return Object.keys(payload).every((key) => [
 		'accessToken',
+		'adminToken',
 		'destination',
 		'email',
 		'enabled',
@@ -329,6 +341,9 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 		&& (payload.accessToken === undefined
 			|| (typeof payload.accessToken === 'string'
 				&& Buffer.byteLength(payload.accessToken, 'utf8') <= maxCloudAccessTokenBytes))
+		&& (payload.adminToken === undefined
+			|| (typeof payload.adminToken === 'string'
+				&& Buffer.byteLength(payload.adminToken, 'utf8') <= maxCloudAccessTokenBytes))
 		&& (payload.destination === undefined
 			|| (typeof payload.destination === 'string'
 				&& Buffer.byteLength(payload.destination, 'utf8') <= maxCloudDestinationBytes))

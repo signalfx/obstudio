@@ -62,6 +62,31 @@ type splunkConnectionVerifier func(context.Context, string, string) error
 // the effective cloud configuration remains managed by that local source.
 type SplunkExportConfigurationRefresher func() (bool, error)
 
+// registrationAndAuthProtocol selects which MCP client registration/auth
+// strategy the Cloud tab exposes. Exactly one of these -- or none -- is
+// active at a time; see docs/o11y-oauth-mcp-gateway-impact.md §5.
+type registrationAndAuthProtocol string
+
+const (
+	registrationAndAuthProtocolNone      registrationAndAuthProtocol = "NONE"
+	registrationAndAuthProtocolCIMD      registrationAndAuthProtocol = "CIMD"
+	registrationAndAuthProtocolO11yOAuth registrationAndAuthProtocol = "O11Y_OAUTH"
+)
+
+// parseRegistrationAndAuthProtocol defaults an empty or unrecognized value to
+// "NONE" rather than erroring -- this flag only ever reveals a PoC control,
+// so a typo'd env var should disable it, not crash startup.
+func parseRegistrationAndAuthProtocol(raw string) registrationAndAuthProtocol {
+	switch registrationAndAuthProtocol(strings.ToUpper(strings.TrimSpace(raw))) {
+	case registrationAndAuthProtocolCIMD:
+		return registrationAndAuthProtocolCIMD
+	case registrationAndAuthProtocolO11yOAuth:
+		return registrationAndAuthProtocolO11yOAuth
+	default:
+		return registrationAndAuthProtocolNone
+	}
+}
+
 type splunkExportService struct {
 	metrics                       *otlp.SplunkMetricsExportController
 	traces                        *otlp.SplunkTracesExportController
@@ -75,7 +100,7 @@ type splunkExportService struct {
 	rollbackTraces                otlp.SplunkTracesExporterConfig
 	rollbackSource                string
 	source                        string
-	cimdRegistrationEnabled       bool
+	registrationAndAuthProtocol   registrationAndAuthProtocol
 	configurationChanged          bool
 	stateVersionKey               [32]byte
 	mutationMu                    sync.Mutex
@@ -93,14 +118,14 @@ type splunkExportSignalStatus struct {
 }
 
 type splunkExportStatusResponse struct {
-	Connected               bool                     `json:"connected"`
-	Enabled                 bool                     `json:"enabled"`
-	Realm                   string                   `json:"realm,omitempty"`
-	RollbackToken           string                   `json:"rollbackToken,omitempty"`
-	Version                 string                   `json:"version"`
-	Metrics                 splunkExportSignalStatus `json:"metrics"`
-	Traces                  splunkExportSignalStatus `json:"traces"`
-	CIMDRegistrationEnabled bool                     `json:"cimdRegistrationEnabled"`
+	Connected                   bool                     `json:"connected"`
+	Enabled                     bool                     `json:"enabled"`
+	Realm                       string                   `json:"realm,omitempty"`
+	RollbackToken               string                   `json:"rollbackToken,omitempty"`
+	Version                     string                   `json:"version"`
+	Metrics                     splunkExportSignalStatus `json:"metrics"`
+	Traces                      splunkExportSignalStatus `json:"traces"`
+	RegistrationAndAuthProtocol string                   `json:"registrationAndAuthProtocol"`
 }
 
 type configureSplunkExportRequest struct {
@@ -145,12 +170,10 @@ func newSplunkExportService(
 		},
 		resolveRealmClient:            splunkRealmHTTPClient,
 		agentObservabilityProxyClient: newAgentObservabilityProxyHTTPClient(),
-		// TODO(CIMD PoC): standalone-binary source of truth for the CIMD registration
-		// feature flag, independent of the VS Code "sisCimdRegistrationEnabled" setting
-		// used when Splunk Observability Studio runs inside the extension. The IDE setting is the source of
-		// truth whenever it is present; this env var only matters for direct-browser dev
-		// (`go run ./cmd/obstudio` + `make dev`), where no VS Code settings exist.
-		cimdRegistrationEnabled: envFlagEnabled("OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED"),
+		// Single source of truth for both launch paths (standalone `go run
+		// ./cmd/obstudio` + browser dev, and the VS Code extension): the extension
+		// reads this same env var directly rather than keeping an independent VS
+		registrationAndAuthProtocol: parseRegistrationAndAuthProtocol(os.Getenv("OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL")),
 	}
 	if _, err := rand.Read(service.stateVersionKey[:]); err != nil {
 		service.stateVersionKey = sha256.Sum256([]byte(fmt.Sprintf(
@@ -160,11 +183,6 @@ func newSplunkExportService(
 		)))
 	}
 	return service
-}
-
-func envFlagEnabled(name string) bool {
-	value := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
-	return value == "1" || value == "true"
 }
 
 func (s *splunkExportService) register(mux *http.ServeMux) {
@@ -630,11 +648,11 @@ func (s *splunkExportService) snapshotLocked() splunkExportStatusResponse {
 	}
 
 	return splunkExportStatusResponse{
-		Connected:               connected,
-		Enabled:                 connected && metrics.Enabled && traces.Enabled,
-		Realm:                   realm,
-		Version:                 s.stateVersionLocked(metricsConfig, tracesConfig),
-		CIMDRegistrationEnabled: s.cimdRegistrationEnabled,
+		Connected:                   connected,
+		Enabled:                     connected && metrics.Enabled && traces.Enabled,
+		Realm:                       realm,
+		Version:                     s.stateVersionLocked(metricsConfig, tracesConfig),
+		RegistrationAndAuthProtocol: string(s.registrationAndAuthProtocol),
 		Metrics: splunkExportSignalStatus{
 			Configured:      splunkSignalConfigured(metricsConfig.Realm, metrics.AccessTokenConfigured, metricsConfig.Endpoint),
 			Enabled:         metrics.Enabled,

@@ -1,6 +1,7 @@
 import type {
   LogRecord,
   MetricGroup,
+  O11yOAuthRegistrationResult,
   SISCIMDLoginStartResult,
   SISCIMDRegistrationResult,
   SISCIMDSessionStatus,
@@ -351,6 +352,26 @@ export async function fetchSISCIMDSession(signal?: AbortSignal): Promise<SISCIMD
 /** Clear the in-memory SIS CIMD session held by Splunk Observability Studio's own backend. */
 export async function disconnectSISCIMDSession(): Promise<SISCIMDSessionStatus> {
   return fetchSISCIMDLocal<SISCIMDSessionStatus>("/api/splunk/cimd/session/disconnect", { method: "POST" });
+}
+
+/**
+ * Register obstudio as an O11y OAuth MCP client directly through Splunk Observability
+ * Studio's own backend, for use when there is no IDE bridge. The admin token is sent
+ * once and never stored by Splunk Observability Studio; see
+ * docs/o11y-oauth-mcp-gateway-impact.md §6. Reuses fetchSISCIMDLocal -- that helper is
+ * generic despite its name, just currently only called for CIMD elsewhere.
+ */
+export async function registerO11yOAuthClient(
+  realm: string,
+  adminToken: string,
+  signal?: AbortSignal,
+): Promise<O11yOAuthRegistrationResult> {
+  return fetchSISCIMDLocal<O11yOAuthRegistrationResult>("/api/splunk/o11y-oauth/register", {
+    body: JSON.stringify({ adminToken, realm }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    signal,
+  });
 }
 
 /** Fetch per-service aggregates computed from the full span store. */

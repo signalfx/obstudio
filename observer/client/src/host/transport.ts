@@ -1,4 +1,4 @@
-import type { SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
+import type { RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 
 export const observerHostCloudActions = [
   "connect",
@@ -17,6 +17,7 @@ export const observerHostCloudActions = [
   "open-observability-data-course",
   "open-observability-docs",
   "open-skill-docs",
+  "register-o11y-oauth",
   "resolve-realm",
   "set-enabled",
   "setup-cimd",
@@ -42,6 +43,7 @@ export type ObserverHostSkillId = typeof observerHostSkillIds[number];
 
 export interface ObserverHostCloudPayload {
   accessToken?: string;
+  adminToken?: string;
   destination?: string;
   email?: string;
   enabled?: boolean;
@@ -55,13 +57,16 @@ export interface ObserverHostCloudPayload {
 }
 
 export interface ObserverHostCloudResponse {
-  cimdRegistrationEnabled?: boolean;
   cimdRegistrationVerified?: boolean;
   cimdSession?: SISCIMDSessionStatus;
   freeAccount?: unknown;
   message?: string;
+  o11yOAuthClientCreated?: boolean;
+  o11yOAuthClientId?: string;
+  o11yOAuthClientSecret?: string;
   realm?: string;
   region?: string;
+  registrationAndAuthProtocol?: RegistrationAndAuthProtocol;
   status?: SplunkExportStatus;
   warning?: string;
 }
@@ -373,9 +378,12 @@ function isObserverHostCloudResponse(value: unknown): value is ObserverHostCloud
     && (response.status === undefined || isSplunkExportStatus(response.status))
     && (response.warning === undefined || typeof response.warning === "string")
     && (response.message === undefined || typeof response.message === "string")
-    && (response.cimdRegistrationEnabled === undefined || typeof response.cimdRegistrationEnabled === "boolean")
+    && (response.registrationAndAuthProtocol === undefined || isRegistrationAndAuthProtocol(response.registrationAndAuthProtocol))
     && (response.cimdRegistrationVerified === undefined || typeof response.cimdRegistrationVerified === "boolean")
-    && (response.cimdSession === undefined || isSISCIMDSessionStatus(response.cimdSession));
+    && (response.cimdSession === undefined || isSISCIMDSessionStatus(response.cimdSession))
+    && (response.o11yOAuthClientId === undefined || typeof response.o11yOAuthClientId === "string")
+    && (response.o11yOAuthClientCreated === undefined || typeof response.o11yOAuthClientCreated === "boolean")
+    && (response.o11yOAuthClientSecret === undefined || typeof response.o11yOAuthClientSecret === "string");
 }
 
 function isSISCIMDSessionStatus(value: unknown): value is SISCIMDSessionStatus {
@@ -400,8 +408,12 @@ function isSplunkExportStatus(value: unknown): value is SplunkExportStatus {
     && /^[A-Za-z0-9_-]{43}$/.test(status.version)
     && isSplunkExportSignalStatus(status.metrics)
     && isSplunkExportSignalStatus(status.traces)
-    && (status.cimdRegistrationEnabled === undefined
-      || typeof status.cimdRegistrationEnabled === "boolean");
+    && (status.registrationAndAuthProtocol === undefined
+      || isRegistrationAndAuthProtocol(status.registrationAndAuthProtocol));
+}
+
+function isRegistrationAndAuthProtocol(value: unknown): value is RegistrationAndAuthProtocol {
+  return value === "NONE" || value === "CIMD" || value === "O11Y_OAUTH";
 }
 
 function isSplunkExportSignalStatus(value: unknown): boolean {

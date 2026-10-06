@@ -34,6 +34,7 @@ export const cloudBridgeActions = [
 	'open-observability-data-course',
 	'open-observability-docs',
 	'open-skill-docs',
+	'register-o11y-oauth',
 	'resolve-realm',
 	'set-enabled',
 	'setup-cimd',
@@ -621,28 +622,33 @@ export function initializeSplunkCloudStatus(options: {
 		: options.readStatus();
 }
 
+export type RegistrationAndAuthProtocol = 'NONE' | 'CIMD' | 'O11Y_OAUTH';
+
 export type CloudBridgeInitializationResult<TSession> = {
-	cimdRegistrationEnabled: boolean;
 	cimdSession?: TSession;
+	registrationAndAuthProtocol: RegistrationAndAuthProtocol;
 	status: unknown;
 	warning?: string;
 };
 
 export async function initializeCloudBridgeState<TSession>(options: {
-	cimdRegistrationEnabled: boolean;
 	readCimdSession: () => Promise<TSession>;
 	readStatus: () => Promise<unknown>;
 	refreshStatus: () => Promise<unknown>;
+	registrationAndAuthProtocol: RegistrationAndAuthProtocol;
 }): Promise<CloudBridgeInitializationResult<TSession>> {
-	if (!options.cimdRegistrationEnabled) {
+	// Only CIMD has a session to restore on init; O11Y_OAUTH's Step 1 (registration)
+	// is a stateless probe like CIMD's own registerClientWithSIS, and NONE shows no
+	// control at all, so both skip the readCimdSession() round trip entirely.
+	if (options.registrationAndAuthProtocol !== 'CIMD') {
 		try {
 			return {
-				cimdRegistrationEnabled: false,
+				registrationAndAuthProtocol: options.registrationAndAuthProtocol,
 				status: await options.refreshStatus(),
 			};
 		} catch (error) {
 			return {
-				cimdRegistrationEnabled: false,
+				registrationAndAuthProtocol: options.registrationAndAuthProtocol,
 				warning: cloudErrorMessage(error),
 				status: await options.readStatus(),
 			};
@@ -655,8 +661,8 @@ export async function initializeCloudBridgeState<TSession>(options: {
 	]);
 	if (refreshedStatus.status === 'fulfilled' && initialCimdSession.status === 'fulfilled') {
 		return {
-			cimdRegistrationEnabled: true,
 			cimdSession: initialCimdSession.value,
+			registrationAndAuthProtocol: 'CIMD',
 			status: refreshedStatus.value,
 		};
 	}
@@ -683,8 +689,8 @@ export async function initializeCloudBridgeState<TSession>(options: {
 		throw fallbackCimdSession.reason;
 	}
 	return {
-		cimdRegistrationEnabled: true,
 		cimdSession: fallbackCimdSession.value,
+		registrationAndAuthProtocol: 'CIMD',
 		status: fallbackStatus.value,
 		warning,
 	};

@@ -898,12 +898,14 @@ func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 			"  MCP endpoint:        http://%s/mcp\n"+
 			"  Agent setup:         obstudio install --target=<agent>[,<agent>...]\n"+
 			"\nEnvironment Variables\n"+
-			"  OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED: %s\n\n",
+			"  OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL: %s\n"+
+			"  OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL: %s\n\n",
 		observerBrowserURL(mainAddr),
 		otlpHTTPAddr,
 		otlpGRPCAddr,
 		mainAddr,
-		strings.TrimSpace(os.Getenv("OBSTUDIO_SIS_CIMD_REGISTRATION_ENABLED")),
+		strings.TrimSpace(os.Getenv("OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL")),
+		strings.TrimSpace(os.Getenv("OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL")),
 	)
 }
 
