@@ -47,6 +47,7 @@ const (
 
 	sharedObserverStateDirName  = ".obstudio"
 	sharedObserverStateFileName = "shared-observer.json"
+	sharedObserverStatePathEnv  = "OBSTUDIO_SHARED_OBSERVER_STATE_PATH"
 	skillBackupDirName          = ".obstudio-skill-backups"
 )
 
@@ -421,6 +422,10 @@ func detectConfiguredSharedObserverURL(client *http.Client) (string, bool) {
 	return detectSharedObserverURL(defaultSharedObserverHealth, client)
 }
 
+func detectAnyRunningObserver(client *http.Client) (string, bool) {
+	return detectSharedObserverURLFromStateFile(sharedObserverStatePath(), client)
+}
+
 func ensureInstallWeaverRuntime(exePath, destDir string, requireLocalRuntime bool) (bool, string, error) {
 	installed, err := copySiblingWeaverRuntime(exePath, destDir)
 	if err != nil {
@@ -574,6 +579,9 @@ func detectSharedObserverURLFromStateFile(statePath string, client *http.Client)
 }
 
 func sharedObserverStatePath() string {
+	if override := strings.TrimSpace(os.Getenv(sharedObserverStatePathEnv)); override != "" {
+		return override
+	}
 	return filepath.Join(userHome(), sharedObserverStateDirName, sharedObserverStateFileName)
 }
 
