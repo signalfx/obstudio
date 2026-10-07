@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"go.opentelemetry.io/collector/pdata/ptrace"
@@ -329,6 +330,63 @@ func TestAgentObservabilityProxyRevokesDeletedStreamAndProjectRoutes(t *testing.
 	request(http.MethodDelete, firstPath, http.StatusNoContent)
 	if bound(firstProject, secondStream) || !bound(secondProject, firstStream) {
 		t.Fatal("project deletion did not revoke only its stream routes")
+	}
+}
+
+func TestAgentObservabilityProxyOrdersSlowResolutionBeforeDeletion(t *testing.T) {
+	const projectID = "3c90ff2e-f907-42a8-ac30-52e2b67f21a9"
+	const streamID = "02ea43cc-dd21-4081-b6c9-4aa4b843e163"
+	streamPath := "/ao/api/projects/" + projectID + "/log_streams/" + streamID
+	for _, deletePath := range []string{streamPath, "/ao/api/projects/" + projectID} {
+		t.Run(deletePath, func(t *testing.T) {
+			service, mux := newTestAgentObservabilityProxy(t)
+			lookupStarted := make(chan struct{})
+			releaseLookup := make(chan struct{})
+			deleteReachedCloud := make(chan struct{})
+			service.agentObservabilityProxyClient.Transport = agentObservabilityProxyRoundTripper(func(request *http.Request) (*http.Response, error) {
+				if request.Method == http.MethodGet {
+					close(lookupStarted)
+					<-releaseLookup
+					return agentObservabilityProxyResponse(http.StatusOK, `{"id":"`+streamID+`","project_id":"`+projectID+`"}`), nil
+				}
+				close(deleteReachedCloud)
+				return agentObservabilityProxyResponse(http.StatusNoContent, ""), nil
+			})
+			call := func(method, path string) <-chan int {
+				result := make(chan int, 1)
+				go func() {
+					response := httptest.NewRecorder()
+					mux.ServeHTTP(response, agentObservabilityProxyRequest(method, path, ""))
+					result <- response.Code
+				}()
+				return result
+			}
+			lookupResult := call(http.MethodGet, streamPath)
+			<-lookupStarted
+			deleteResult := call(http.MethodDelete, deletePath)
+			overtook := false
+			select {
+			case <-deleteReachedCloud:
+				overtook = true
+			case <-time.After(100 * time.Millisecond):
+			}
+			close(releaseLookup)
+			if overtook {
+				t.Fatal("deletion overtook an earlier in-flight stream resolution")
+			}
+			if status := <-lookupResult; status != http.StatusOK {
+				t.Fatalf("stream resolution status=%d", status)
+			}
+			if status := <-deleteResult; status != http.StatusNoContent {
+				t.Fatalf("deletion status=%d", status)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			_, err := service.traces.ExportAgentTraces(ctx, ptrace.NewTraces(), otlp.AgentTraceRoute{ProjectID: projectID, AgentStreamID: streamID})
+			if err == nil || !strings.Contains(err.Error(), "unresolved for the active cloud connection") {
+				t.Fatalf("older lookup revived a deleted route: %v", err)
+			}
+		})
 	}
 }
 

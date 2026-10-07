@@ -131,6 +131,14 @@ func (s *splunkExportService) updateAgentStreamRoutes(path, method string, body 
 	visit(payload)
 }
 
+func agentObservabilityRouteAffecting(path, method string) bool {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) < 4 || parts[0] != "ao" || parts[1] != "api" || parts[2] != "projects" {
+		return false
+	}
+	return method == http.MethodDelete && len(parts) == 4 || len(parts) >= 5 && parts[4] == "log_streams"
+}
+
 func agentObservabilityProxyPath(requestURL *url.URL) (string, bool) {
 	path := requestURL.Path
 	if path == "/projects" || strings.HasPrefix(path, "/projects/") {
@@ -189,6 +197,13 @@ func (s *splunkExportService) agentObservabilityProxy(w http.ResponseWriter, r *
 	if !valid || len(r.URL.RawQuery) > maxAgentObservabilityProxyQueryBytes {
 		writeSplunkExportError(w, http.StatusBadRequest, "invalid Agent Observability resource URL")
 		return
+	}
+	// A slow lookup must finish binding before a later deletion revokes its route.
+	// Keep this lock through the cloud response and route update, while unrelated
+	// project reads and writes remain concurrent.
+	if agentObservabilityRouteAffecting(path, r.Method) {
+		s.agentResourceMu.Lock()
+		defer s.agentResourceMu.Unlock()
 	}
 	realm, accessToken, generation, ready := s.agentObservabilityProxyDestination()
 	if !ready {

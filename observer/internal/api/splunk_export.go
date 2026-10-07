@@ -79,6 +79,7 @@ type splunkExportService struct {
 	configurationChanged          bool
 	stateVersionKey               [32]byte
 	mutationMu                    sync.Mutex
+	agentResourceMu               sync.Mutex
 	mu                            sync.Mutex
 }
 
