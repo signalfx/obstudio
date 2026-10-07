@@ -441,7 +441,7 @@ func (ct *ConnTracker) handleAgentTraceGRPC(stream grpc.ServerStream, route Agen
 		return status.Error(codes.InvalidArgument, "invalid agent trace payload")
 	}
 	td := request.Traces()
-	ct.store.AddAgentSpansForConnection(grpcConnIDFromContext(stream.Context()), ConvertTraces(td))
+	ct.store.AddAgentSpansForConnection(grpcConnIDFromContext(stream.Context()), store.AgentSpanRoute{ProjectID: route.ProjectID, StreamID: route.AgentStreamID}, ConvertTraces(td))
 	exporter, ok := ct.tracesExporter.(AgentTracesExporter)
 	if !ok {
 		return status.Error(codes.Unavailable, "agent trace forwarding is unavailable or failed")

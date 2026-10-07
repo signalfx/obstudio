@@ -148,6 +148,24 @@ func TestAgentIngestAcceptsAuthCompatibleLoopbackHosts(t *testing.T) {
 	}
 }
 
+func TestAgentIngestRetainsSameSpanOnDistinctRoutes(t *testing.T) {
+	s := store.New()
+	e := &captureAgentExporter{}
+	h := &otlpHTTPHandler{store: s, tracesExporter: e}
+	for _, streamID := range []string{testAgentRoute.AgentStreamID, "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"} {
+		r := agentIngestRequest(t, "/otel/v1/traces", true)
+		r.Header.Set("logstreamid", streamID)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != http.StatusOK {
+			t.Fatalf("stream %s status=%d body=%s", streamID, w.Code, w.Body.String())
+		}
+	}
+	if s.Stats().SpanCount != 2 || len(e.routes) != 2 || e.routes[0].AgentStreamID == e.routes[1].AgentStreamID {
+		t.Fatalf("distinct routes collapsed a local AO span: spans=%d routes=%+v", s.Stats().SpanCount, e.routes)
+	}
+}
+
 func TestAgentHTTPRetriesRetainOneCopyButRetryUpstream(t *testing.T) {
 	for _, path := range []string{"/v1/traces", "/v2/trace/otlp", "/otel/v1/traces"} {
 		for _, proto := range []bool{false, true} {

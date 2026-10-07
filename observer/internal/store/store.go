@@ -88,14 +88,15 @@ type Span struct {
 	Resource     Resource       `json:"resource"`
 	Scope        Scope          `json:"scope"`
 
-	ownerConnID                         string `json:"-"`
-	agentReceipt                        bool   `json:"-"`
-	providerTaskRetentionTruncated      bool   `json:"-"`
-	providerTraceRetentionTruncated     bool   `json:"-"`
-	providerTraceObservedSpanCount      int    `json:"-"`
-	providerTraceObservationOverflow    bool   `json:"-"`
-	providerTraceObservationUnavailable bool   `json:"-"`
-	ingestRevision                      uint64 `json:"-"`
+	ownerConnID                         string         `json:"-"`
+	agentReceipt                        bool           `json:"-"`
+	agentRoute                          AgentSpanRoute `json:"-"`
+	providerTaskRetentionTruncated      bool           `json:"-"`
+	providerTraceRetentionTruncated     bool           `json:"-"`
+	providerTraceObservedSpanCount      int            `json:"-"`
+	providerTraceObservationOverflow    bool           `json:"-"`
+	providerTraceObservationUnavailable bool           `json:"-"`
+	ingestRevision                      uint64         `json:"-"`
 }
 
 // QuantileValue represents a quantile value in summary metrics.

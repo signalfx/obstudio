@@ -90,7 +90,7 @@ func (h *otlpHTTPHandler) handleTraces(ctx context.Context, w http.ResponseWrite
 		return
 	}
 	if route.ProjectID != "" {
-		h.store.AddAgentSpansForConnection(connID, ConvertTraces(td))
+		h.store.AddAgentSpansForConnection(connID, store.AgentSpanRoute{ProjectID: route.ProjectID, StreamID: route.AgentStreamID}, ConvertTraces(td))
 		exporter, ok := h.tracesExporter.(AgentTracesExporter)
 		if !ok {
 			http.Error(w, "agent trace forwarding is unavailable or failed", http.StatusServiceUnavailable)
