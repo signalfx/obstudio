@@ -220,8 +220,8 @@ def test_language_guides_inherit_compatible_generic_nondefault_receiver() -> Non
     assert 'generic_endpoint="${OTEL_EXPORTER_OTLP_ENDPOINT:-}"' in python
     assert '*/v1/traces) generic_http_base=' in python
     assert 'logs_endpoint="${generic_http_base%/}/v1/logs"' in python
-    assert "localLogsEndpointFromGeneric" in node
-    assert "parsed.pathname = `${basePath}/v1/logs`" in node
+    assert "If a generic receiver supplied the local URL during\npreflight" in node
+    assert "localLogsEndpointFromGeneric" not in node
     assert 'elif [ -n "$generic_endpoint" ]; then' in java
     assert 'local_logs_endpoint=$local_http_endpoint/v1/logs' in java
 
@@ -238,7 +238,11 @@ def test_go_logs_match_preflight_receiver_without_stopping_traces_or_metrics() -
 
     assert "preflightApprovedLocalOTLPLogsEndpoint" in setup
     assert "if endpoint != preflightApprovedLocalOTLPLogsEndpoint" in exporter
+    assert "the same host with a different port or path is a boundary conflict" in " ".join(go.split())
     assert "url.Parse(genericEndpoint)" not in exporter
+    assert 'os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")' in exporter
+    assert 'os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS")' in exporter
+    assert "otlploghttp.WithHeaders(map[string]string{})" in exporter
     assert "return nil, err" not in log_setup
     assert "tp.Shutdown" not in log_setup
     assert "mp.Shutdown" not in log_setup
@@ -718,8 +722,11 @@ def test_node_local_logs_require_preflight_match_and_fail_closed() -> None:
         "const { logRecordProcessors, logInstrumentations }", 1
     )[0]
 
-    assert "endpoint !== PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" in helper
-    assert "const exporter = new OTLPLogExporter({ url: endpoint });" in helper
+    assert "explicitLogsEndpoint !== PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" in helper
+    assert "url: PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" in helper
+    assert "OTEL_EXPORTER_OTLP_ENDPOINT?.trim()" not in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_HEADERS !== undefined" in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS !== undefined" in helper
     assert "new BatchLogRecordProcessor({ exporter })" in helper
     assert "logInstrumentations: [new ConsoleInstrumentation()]" in helper
     assert "} catch {" in helper

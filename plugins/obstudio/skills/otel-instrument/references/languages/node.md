@@ -105,31 +105,9 @@ import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
 import { ConsoleInstrumentation } from '@opentelemetry/instrumentation-console';
 // ... add other detected framework/client instrumentations here
 
-// Replace this with the exact local logs URL resolved during instrumentation
-// preflight. The literal below applies only when preflight approved that fallback.
+// Embed the exact local logs URL resolved during instrumentation preflight.
+// Use this literal only when preflight approved the conventional fallback.
 const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT = 'http://127.0.0.1:4318/v1/logs';
-
-function localLogsEndpointFromGeneric(endpoint: string | undefined) {
-  if (!endpoint) return undefined;
-
-  const parsed = new URL(endpoint);
-  // Instrumentation preflight must classify this generic endpoint as the
-  // intended local/collector-owned receiver before this pattern is installed.
-  // Accept any checked-in service hostname, but fail closed for HTTPS/cloud.
-  if (parsed.protocol !== 'http:' || !parsed.hostname) {
-    throw new Error(
-      'move a non-local generic OTLP endpoint to trace/metric signal variables',
-    );
-  }
-
-  const pathWithoutTrailingSlash = parsed.pathname.replace(/\/+$/, '');
-  const basePath = pathWithoutTrailingSlash.replace(
-    /\/v1\/(?:traces|metrics|logs)$/,
-    '',
-  );
-  parsed.pathname = `${basePath}/v1/logs`;
-  return parsed.toString();
-}
 
 function defaultLocalLogConfiguration() {
   const configured = process.env.OTEL_LOGS_EXPORTER?.trim().toLowerCase();
@@ -152,23 +130,23 @@ function defaultLocalLogConfiguration() {
       throw new Error('unsupported local logs protocol');
     }
 
-    const endpoint =
-      process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT?.trim() ||
-      localLogsEndpointFromGeneric(
-        process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim(),
-      ) ||
-      PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT;
-    if (endpoint !== PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT) {
+    const explicitLogsEndpoint = process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT?.trim();
+    if (explicitLogsEndpoint &&
+        explicitLogsEndpoint !== PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT) {
       throw new Error('logs endpoint differs from preflight-approved receiver');
     }
 
-    if (process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim()) {
-      throw new Error('generic OTLP headers conflict with local logs');
+    // The OTLP exporter can read both environment header sources even when
+    // given an explicit URL. Keep credentials out of the local log path.
+    if (process.env.OTEL_EXPORTER_OTLP_HEADERS !== undefined ||
+        process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS !== undefined) {
+      throw new Error('OTLP headers conflict with local logs');
     }
 
-    // The exporter may read OTEL_EXPORTER_OTLP_LOGS_HEADERS. Generic headers
-    // are rejected above because the SDK merges rather than replaces them.
-    const exporter = new OTLPLogExporter({ url: endpoint });
+    // Never derive this destination from OTEL_EXPORTER_OTLP_ENDPOINT at runtime.
+    const exporter = new OTLPLogExporter({
+      url: PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT,
+    });
     const processor = new BatchLogRecordProcessor({ exporter });
     return {
       logRecordProcessors: [processor],
@@ -298,14 +276,18 @@ replace `PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT` with that exact value,
 including any non-default port, service name, or base path. Classify an explicit
 signal-specific logs endpoint as local/collector-owned only if it equals that
 approved value; report a source-proven non-local value as an operator-owned
-boundary conflict. When the signal-specific endpoint is absent, a generic
-HTTP receiver may supply the logs URL only if the resulting URL equals the
-approved value. Do not add an Obstudio endpoint lookup to application startup.
+boundary conflict. If a generic receiver supplied the local URL during
+preflight, embed the resolved value above; do not derive it from
+`OTEL_EXPORTER_OTLP_ENDPOINT` at application startup or add an Obstudio
+endpoint lookup. The exporter always uses the embedded value, including when
+an explicit signal-specific endpoint matches it.
 If log-only configuration conflicts or construction of the log exporter,
 processor, or bridge fails, the example emits one value-free diagnostic and
 starts tracing and metrics without the added log pipeline. The original
-console/file sink stays active. To clear a header conflict, move generic OTLP
-headers to trace/metric signal variables. For a different logs protocol, select the
+console/file sink stays active. Both generic and signal-specific OTLP log
+headers must be absent from this local path; move generic OTLP headers to
+trace/metric signal variables and remove signal-specific log headers. For a
+different logs protocol, select the
 official exporter matching that protocol during instrumentation preflight.
 
 With `OTEL_LOGS_EXPORTER=none`, both the added processor and bridge are omitted.
@@ -504,7 +486,7 @@ not fixed-port equality checks.
 | `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or preflight-classified local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
-| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Any explicit log headers disable this added local log pipeline so the exporter cannot inherit credentials |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
@@ -540,10 +522,10 @@ access token, generic cloud header, cloud exporter, or forwarding flag into log
 configuration. Classify an explicit signal-specific endpoint during
 instrumentation preflight; if approved, preserve it as operator configuration
 and let it win at runtime. Report a source-proven non-local value as the
-cloud-boundary conflict before applying this pattern. Also reject any generic
-OTLP header on the local branch even when
-signal-specific logs headers exist; move the generic credentials to
-trace/metric variables and remove the generic setting. Splunk Observability Studio cloud
+cloud-boundary conflict before applying this pattern. Reject both generic and
+signal-specific log headers on the added local branch; the exporter may read
+either source from the environment. Move cloud credentials to trace/metric
+signal variables and remove the log header setting. Splunk Observability Studio cloud
 forwarding remains traces and metrics only.
 
 Verify one sanitized record at each required severity both outside and inside

@@ -148,6 +148,12 @@ bridge with another hook or exporter that sends the same record.
 
 Create a dedicated file for OTel setup that returns a shutdown function.
 Call it early in `main()`.
+Resolve the approved local logs URL during preflight, then embed that exact
+host, port, base path, and `/v1/logs` leaf in the generated setup. Do not use
+`localhost`, loopback IP, or `/v1/logs` shape as a runtime proxy for approval:
+the same host with a different port or path is a boundary conflict. Generic or
+logs-specific OTLP headers also prevent the added local log pipeline from
+starting; keep the trace/metric providers and original logger sink active.
 
 **File**: `otel.go`
 
@@ -323,11 +329,13 @@ func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, erro
 		)
 	}
 
-	logsHeaders := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS"))
 	if strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")) != "" {
 		return nil, errors.New(
 			"move generic OTLP headers to trace/metric signal variables and remove OTEL_EXPORTER_OTLP_HEADERS",
 		)
+	}
+	if strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS")) != "" {
+		return nil, errors.New("remove logs-specific OTLP headers from the local log path")
 	}
 
 	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"))
@@ -337,12 +345,10 @@ func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, erro
 	if endpoint != preflightApprovedLocalOTLPLogsEndpoint {
 		return nil, errors.New("logs endpoint differs from the preflight-approved local receiver")
 	}
-	opts := []otlploghttp.Option{otlploghttp.WithEndpointURL(endpoint)}
-	if logsHeaders == "" {
-		// Prevent a future generic header from becoming the log credential.
-		opts = append(opts, otlploghttp.WithHeaders(map[string]string{}))
-	}
-	return otlploghttp.New(ctx, opts...)
+	return otlploghttp.New(ctx,
+		otlploghttp.WithEndpointURL(endpoint),
+		otlploghttp.WithHeaders(map[string]string{}),
+	)
 }
 
 // fanoutHandler preserves every existing slog sink while adding one OTel
@@ -520,7 +526,7 @@ preflight resolves the local receiver for the selected runtime. Replace
 including any non-default port or Docker service address; use the literal
 fallback only when no receiver was discovered. At runtime an explicit logs
 endpoint must equal that approved URL. A different endpoint, unsupported log
-protocol, generic OTLP headers, or log exporter setup failure skips only the
+protocol, generic or logs-specific OTLP headers, or log exporter setup failure skips only the
 added log provider and bridge, with a fixed diagnostic that contains no
 configuration values. Trace and metric providers still start, and the original
 logger sink remains active. Report a source-proven non-local endpoint as an
@@ -722,7 +728,7 @@ configuration automatically.
 | `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or preflight-classified local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
-| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific headers prevent the added local log path; preserve operator configuration without copying credentials into logs |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
@@ -771,9 +777,9 @@ flag into log configuration. Classify an explicit signal-specific endpoint
 during instrumentation preflight; if approved, preserve it as operator
 configuration and require exact equality with the approved local URL at
 runtime. Report a source-proven non-local value as the boundary conflict
-before applying this pattern. Also reject any generic OTLP header on the local branch
-even when signal-specific logs headers exist; move the generic credentials to
-trace/metric variables and remove the generic setting. Splunk Observability Studio cloud
+before applying this pattern. Reject generic and signal-specific OTLP headers
+on the local log branch; move generic credentials to trace/metric variables and
+leave signal-specific log credentials operator-owned. Splunk Observability Studio cloud
 forwarding remains traces and metrics only.
 
 Add an in-memory SDK log test and a full local Splunk Observability Studio runtime check. Emit one
