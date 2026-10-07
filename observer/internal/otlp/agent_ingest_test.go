@@ -131,6 +131,23 @@ func TestAgentIngestAliasesStoreAndForwardExactlyOnce(t *testing.T) {
 	}
 }
 
+func TestAgentIngestAcceptsAuthCompatibleLoopbackHosts(t *testing.T) {
+	for _, host := range []string{"localhost:3000", "localhost.:3000", "localhost.", "[::1]:3000", "[::1]", "127.0.0.2:3000"} {
+		t.Run(host, func(t *testing.T) {
+			s := store.New()
+			e := &captureAgentExporter{}
+			h := &otlpHTTPHandler{store: s, tracesExporter: e}
+			r := agentIngestRequest(t, "/otel/v1/traces", true)
+			r.Host = host
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			if w.Code != http.StatusOK || s.Stats().SpanCount != 1 || len(e.routes) != 1 {
+				t.Fatalf("loopback Host %q rejected: status=%d spans=%d routes=%d", host, w.Code, s.Stats().SpanCount, len(e.routes))
+			}
+		})
+	}
+}
+
 func TestAgentHTTPRetriesRetainOneCopyButRetryUpstream(t *testing.T) {
 	for _, path := range []string{"/v1/traces", "/v2/trace/otlp", "/otel/v1/traces"} {
 		for _, proto := range []bool{false, true} {
@@ -171,6 +188,7 @@ func TestAgentIngestRejectsInvalidDestinationAndRemoteBrowserRequests(t *testing
 		"browser fetch":     func(r *http.Request) { r.Header.Set("Sec-Fetch-Site", "same-origin") },
 		"fetch mode":        func(r *http.Request) { r.Header.Set("Sec-Fetch-Mode", "navigate") },
 		"DNS rebind host":   func(r *http.Request) { r.Host = "attacker.example:3000" },
+		"host userinfo":    func(r *http.Request) { r.Host = "attacker.example@localhost:3000" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {

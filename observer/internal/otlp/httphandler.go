@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/signalfx/obstudio/observer/internal/store"
@@ -200,10 +201,11 @@ func localAgentIngestRequest(r *http.Request) bool {
 		return false
 	}
 	ip := net.ParseIP(host)
-	requestHost := r.Host
-	if parsed, _, err := net.SplitHostPort(requestHost); err == nil {
-		requestHost = parsed
+	hostURL, err := url.Parse("//" + r.Host)
+	if err != nil || hostURL.User != nil || hostURL.Path != "" || hostURL.RawQuery != "" || hostURL.Fragment != "" {
+		return false
 	}
+	requestHost := strings.TrimSuffix(hostURL.Hostname(), ".")
 	hostIP := net.ParseIP(requestHost)
 	localHost := strings.EqualFold(requestHost, "localhost") || (hostIP != nil && hostIP.IsLoopback())
 	for name := range r.Header {
