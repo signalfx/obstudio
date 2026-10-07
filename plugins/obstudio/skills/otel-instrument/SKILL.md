@@ -392,6 +392,13 @@ report background:
 - Implement exactly the selected IDs plus executable dependencies added by
   `select`; never add unselected work. Priority orders the audit only and never
   authorizes instrumentation scope.
+- For every proposed GenAI metric, match its exact name, unit, instrument type,
+  and attributes to a selected finding's `expected_telemetry` or required
+  signals before creating it. A selected token-usage histogram does not also
+  select input-token and output-token counters merely because those counters
+  are current semantic-convention alternatives or can be derived from the
+  same provider response. Do not implement, test as selected, or claim those
+  additional counters unless a selected finding explicitly requires them.
 - Resolve broad instrumentation to exact audit IDs in `.observe/otel-selection.json` before editing.
 - Reject a selection containing `manual decision` or `external follow-up` IDs,
   an unanswered manual dependency, an unknown answer, executable work outside
@@ -852,7 +859,8 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   `invoke_agent`, `invoke_workflow`, `plan`, `execute_tool`, `retrieval`, and
   memory operations where code evidence exists; emit
   `gen_ai.client.operation.duration` and
-  `gen_ai.client.token.usage` when the data is available; use stable tool names;
+  `gen_ai.client.token.usage` when the data is available and selected by the
+  audit or requested signal scope; use stable tool names;
   add low-cardinality `error.type`; and avoid raw prompt, completion, retrieved
   content, memory record, tool argument, evaluation explanation, user, tenant,
   session, task, request, trace, or raw URL values in metric dimensions.

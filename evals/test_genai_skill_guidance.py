@@ -1549,6 +1549,8 @@ def test_instrument_keeps_selected_scope_and_audit_group_ownership():
     closure = instrument.split("### Audit-Driven Gap Closure", 1)[1].split("###", 1)[0]
     assert "unselected local log export" in closure
     assert "audit finding_group" in closure
+    assert "A selected token-usage histogram does not also" in closure
+    assert "Do not implement, test as selected, or claim those" in closure
 
     rubric = _read(
         REPO_ROOT
