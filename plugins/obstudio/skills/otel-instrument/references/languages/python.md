@@ -249,6 +249,7 @@ rather than copying it when provider ownership already exists.
 ```python
 import os
 import threading
+import warnings
 from urllib.parse import urlsplit, urlunsplit
 
 from opentelemetry import metrics, trace
@@ -267,6 +268,19 @@ from opentelemetry.sdk.resources import Resource
 
 
 FALLBACK_LOCAL_OTLP_LOGS_ENDPOINT = "http://127.0.0.1:4318/v1/logs"
+# Adapt this host set to the receiver resolved during instrumentation for
+# Docker/Compose or other deployment-local names; never infer a cloud host.
+LOCAL_OTLP_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _local_http_endpoint(endpoint):
+    parsed = urlsplit(endpoint)
+    return parsed.scheme == "http" and parsed.hostname in LOCAL_OTLP_HOSTS
+
+
+def _skip_local_logs(reason):
+    warnings.warn(f"local OTLP logs disabled: {reason}", RuntimeWarning)
+    return None
 
 
 def _http_logs_endpoint_from_base(endpoint):
@@ -299,27 +313,29 @@ def _local_log_exporter():
         "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", generic_protocol
     ).strip().lower()
     if protocol != "http/protobuf":
-        raise RuntimeError(
-            "select the official exporter matching "
-            f"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL={protocol!r}"
+        return _skip_local_logs(
+            "select the official exporter matching the configured logs protocol"
         )
 
     # Reject generic headers even when logs headers are present: SDKs may merge
     # both sources and leak a cloud credential into the local log request.
     if os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip():
-        raise RuntimeError(
-            "move generic OTLP headers to trace/metric signal variables and "
-            "remove OTEL_EXPORTER_OTLP_HEADERS"
+        return _skip_local_logs(
+            "move generic OTLP headers to trace/metric signal variables"
         )
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
+    if endpoint and not _local_http_endpoint(endpoint):
+        return _skip_local_logs("explicit logs endpoint is not the local receiver")
     if not endpoint:
         generic_endpoint = os.environ.get(
             "OTEL_EXPORTER_OTLP_ENDPOINT", ""
         ).strip()
-        # Preserve an explicit compatible local OTLP/HTTP receiver, including
-        # its non-default port. Preflight writes a signal-specific endpoint for
-        # HTTPS/cloud or otherwise ambiguous generic destinations.
-        if generic_protocol == protocol and generic_endpoint.startswith("http://"):
+        # Preserve a compatible local OTLP/HTTP receiver, including its
+        # non-default port. A cloud generic endpoint may still serve traces
+        # and metrics, but must never become the application-log endpoint.
+        if generic_endpoint and not _local_http_endpoint(generic_endpoint):
+            return _skip_local_logs("generic endpoint is not the local receiver")
+        if generic_protocol == protocol and generic_endpoint:
             endpoint = _http_logs_endpoint_from_base(generic_endpoint)
         else:
             endpoint = FALLBACK_LOCAL_OTLP_LOGS_ENDPOINT
@@ -327,9 +343,9 @@ def _local_log_exporter():
 
 
 def configure_opentelemetry():
-    # Resolve every fail-closed log policy check before registering any global
-    # provider. A rejected endpoint/header must leave the process retryable and
-    # must not strand span/metric worker threads.
+    # Resolve log policy before registering globals. A conflicting log route
+    # disables only this local log branch; traces, metrics, and the application
+    # keep their operator-owned configuration.
     use_local_log_export = _use_default_local_log_export()
     log_exporter = _local_log_exporter() if use_local_log_export else None
 
@@ -415,9 +431,12 @@ This new-process example defaults only an absent or explicit `otlp` log
 exporter with an absent or detected-local endpoint to Splunk Observability Studio. Adapt
 the standard `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` launch setting to the receiver
 address resolved during instrumentation, including any non-default port and
-Docker/Compose service name. The in-code literal remains only the host fallback;
+Docker/Compose service name; add that service host to `LOCAL_OTLP_HOSTS` in
+the checked-in setup. The in-code literal remains only the host fallback;
 do not add a runtime Obstudio lookup. Report a source-proven non-local endpoint
-as an operator-owned boundary conflict before copying this pattern. If
+as an operator-owned boundary conflict before copying this pattern. A
+conflict disables only local log export and emits a value-free warning; it
+must not abort application startup or operator-owned trace/metric export. If
 `OTEL_LOGS_EXPORTER=none`, or another explicit exporter is selected, the helper
 leaves logging untouched without validating that operator-owned endpoint. Do
 not broaden the condition to install local OTLP alongside another exporter.

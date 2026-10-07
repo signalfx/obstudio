@@ -65,6 +65,22 @@ done
     }
 
 
+def test_python_log_boundary_conflict_never_aborts_application_startup() -> None:
+    guide = LANGUAGES / "python.md"
+    setup = _fenced_code_after(guide, "**File**: `otel_setup.py`", "python")
+    log_helper = setup.split("def _local_log_exporter():", 1)[1].split(
+        "def configure_opentelemetry():", 1
+    )[0]
+    assert "_skip_local_logs" in log_helper
+    assert "raise RuntimeError" not in log_helper
+    assert "_local_http_endpoint(endpoint)" in log_helper
+    assert "_local_http_endpoint(generic_endpoint)" in log_helper
+    assert "log_exporter = _local_log_exporter() if use_local_log_export else None" in setup
+    assert "tracer_provider = TracerProvider" in setup
+    assert "meter_provider = MeterProvider" in setup
+    assert "must not abort application startup" in _normalized(guide)
+
+
 def test_audit_selects_missing_supported_local_logs_by_default() -> None:
     audit = _normalized(SKILLS / "otel-audit" / "SKILL.md")
     instrument = _normalized(SKILLS / "otel-instrument" / "SKILL.md")

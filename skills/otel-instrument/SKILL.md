@@ -1111,8 +1111,11 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   service address when applicable.
   Default an absent exporter to `otlp` and an absent endpoint to that detected
   local receiver. If the explicit endpoint is non-local or direct-cloud, do not
-  construct or enable the Splunk Observability Studio provider/exporter/bridge; fail closed and
-  report the operator-owned boundary conflict. Do not validate the logs
+  construct or enable the Splunk Observability Studio provider/exporter/bridge; fail closed for
+  the local log branch and report the operator-owned boundary conflict. Never
+  turn that log-only conflict into an application startup exception or disable
+  the operator-owned trace/metric route. Keep the original logging sink active.
+  Do not validate the logs
   endpoint on the `none` or other non-OTLP exporter branches, because those
   branches remain wholly operator-owned.
 - Preserve existing stdout, stderr, file, and platform logging sinks. Add the
@@ -1135,6 +1138,9 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   generic value before enabling the local log path, even when an explicit
   signal-specific log header is present. Preserve the operator-owned
   `OTEL_EXPORTER_OTLP_LOGS_HEADERS` value after the generic value is removed.
+  Until that migration is complete, skip only the local log exporter/bridge and
+  report the conflict; do not reject startup or discard the existing
+  trace/metric provider configuration.
 - Before adding a bridge, search for auto-instrumentation, handlers, appenders,
   transports, hooks, and worker-thread exporters that already send the same
   record to OTel. Choose one owner and disable or omit the overlap. Preserve
