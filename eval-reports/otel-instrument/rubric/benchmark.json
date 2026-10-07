@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "otel-instrument",
-    "run_id": "20261007T164241196275Z",
+    "run_id": "20261007T182853866125Z",
     "agent_model": "gpt-6-sol",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
@@ -18,14 +18,14 @@
   "summary": {
     "eval_count": 1,
     "prompt_count": 1,
-    "failure_count": 0,
+    "failure_count": 2,
     "with_skill": {
       "prompt_count": 1,
-      "command_count": 121,
-      "duration_seconds": 1857.779,
-      "agent_duration_seconds": 1536.012,
-      "tokens": 13011101,
-      "agent_tokens": 11581604,
+      "command_count": 106,
+      "duration_seconds": 1237.251,
+      "agent_duration_seconds": 1010.204,
+      "tokens": 4667926,
+      "agent_tokens": 4333021,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 1,
         "selected_record_count": 1,
-        "input_tokens": 11527661,
-        "cached_input_tokens": 11338752,
+        "input_tokens": 4290806,
+        "cached_input_tokens": 4165760,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 53943,
-        "reasoning_output_tokens": 24668,
+        "output_tokens": 42215,
+        "reasoning_output_tokens": 25307,
         "provider_total_tokens": null,
-        "derived_total_tokens": 11581604,
-        "effective_total_tokens": 11581604,
+        "derived_total_tokens": 4333021,
+        "effective_total_tokens": 4333021,
         "coverage": {
           "record_count": 1,
           "modeled_count": 1,
@@ -59,26 +59,26 @@
         }
       },
       "rubric": {
-        "passed": 12,
-        "total": 12,
-        "average_score": 94.0
+        "passed": 8,
+        "total": 10,
+        "average_score": 82.0
       },
-      "rubric_tokens": 1429497,
-      "rubric_duration_seconds": 317.958,
+      "rubric_tokens": 334905,
+      "rubric_duration_seconds": 227.0,
       "rubric_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
         "usage_record_count": 1,
         "selected_record_count": 1,
-        "input_tokens": 1414372,
-        "cached_input_tokens": 1271936,
+        "input_tokens": 323773,
+        "cached_input_tokens": 278912,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 15125,
-        "reasoning_output_tokens": 7355,
+        "output_tokens": 11132,
+        "reasoning_output_tokens": 8274,
         "provider_total_tokens": null,
-        "derived_total_tokens": 1429497,
-        "effective_total_tokens": 1429497,
+        "derived_total_tokens": 334905,
+        "effective_total_tokens": 334905,
         "coverage": {
           "record_count": 1,
           "modeled_count": 1,
@@ -101,21 +101,21 @@
   },
   "evals": [
     {
-      "id": "python/ai-assistant-demo/qual/instrument",
-      "case": "python/ai-assistant-demo",
-      "language": "python",
-      "service": "ai-assistant-demo",
+      "id": "node/express-basic/qual/instrument",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
       "prompt_count": 1,
       "prompts": [
         "direct"
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 121,
-        "duration_seconds": 1857.779,
-        "agent_duration_seconds": 1536.012,
-        "tokens": 13011101,
-        "agent_tokens": 11581604,
+        "command_count": 106,
+        "duration_seconds": 1237.251,
+        "agent_duration_seconds": 1010.204,
+        "tokens": 4667926,
+        "agent_tokens": 4333021,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -123,14 +123,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 11527661,
-          "cached_input_tokens": 11338752,
+          "input_tokens": 4290806,
+          "cached_input_tokens": 4165760,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 53943,
-          "reasoning_output_tokens": 24668,
+          "output_tokens": 42215,
+          "reasoning_output_tokens": 25307,
           "provider_total_tokens": null,
-          "derived_total_tokens": 11581604,
-          "effective_total_tokens": 11581604,
+          "derived_total_tokens": 4333021,
+          "effective_total_tokens": 4333021,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -149,26 +149,26 @@
           }
         },
         "rubric": {
-          "passed": 12,
-          "total": 12,
-          "average_score": 94.0
+          "passed": 8,
+          "total": 10,
+          "average_score": 82.0
         },
-        "rubric_tokens": 1429497,
-        "rubric_duration_seconds": 317.958,
+        "rubric_tokens": 334905,
+        "rubric_duration_seconds": 227.0,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 1414372,
-          "cached_input_tokens": 1271936,
+          "input_tokens": 323773,
+          "cached_input_tokens": 278912,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 15125,
-          "reasoning_output_tokens": 7355,
+          "output_tokens": 11132,
+          "reasoning_output_tokens": 8274,
           "provider_total_tokens": null,
-          "derived_total_tokens": 1429497,
-          "effective_total_tokens": 1429497,
+          "derived_total_tokens": 334905,
+          "effective_total_tokens": 334905,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -190,36 +190,49 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20261007T164241196275Z/results/python/ai-assistant-demo/qual-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20261007T164241196275Z/results/python/ai-assistant-demo/qual-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20261007T164241196275Z/results/python/ai-assistant-demo/qual-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20261007T182853866125Z/results/node/express-basic/qual-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20261007T182853866125Z/results/node/express-basic/qual-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20261007T182853866125Z/results/node/express-basic/qual-instrument/with_baseline.json"
       }
     }
   ],
-  "failures": [],
+  "failures": [
+    {
+      "service": "node/express-basic",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-5 FAIL",
+      "evidence": "service/instrumentation.js returns empty processors/instrumentations for any non-otlp `OTEL_LOGS_EXPORTER`, then always passes `logRecordProcessors: logs.processors` to NodeSDK.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "node/express-basic",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-9 FAIL",
+      "evidence": "service/app.js calls `server.close()`, emits `runtime shutdown completed`, then calls memoized `shutdownTelemetry()`, but there is no timeout guard or `process.exit` fallback for stalled drain/export work.",
+      "mode": "with_skill"
+    }
+  ],
   "source": {
     "digest_version": 4,
-    "digest": "e92135690cac0b7a0fa6e9f94bb624d66f419f1d2c3a10cc10673b0e4b4c9547",
+    "digest": "6e07cb1a6ce890a640c6a77365b8d08fc852f19ba2221d2f15f5b72a84221395",
     "eval_kinds": [
       "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
       "evals/codex-evals.toml": "c0b019453c76a5b6d8692346f984ea91af04ca91331aa333b56d7a717b7b07c7",
-      "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
-      "evals/python/ai-assistant-demo/README.md": "8312e74bf04492f908946110b4632d4c593618a1ddb53b0736f0e5099a13e213",
-      "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
-      "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json": "0aa217a1410c384a8afda2ab7608e19c93bb9e5ae5483a87e5bec66e8bf5ea1d",
-      "evals/python/ai-assistant-demo/eval/inputs/python-preflight-requirements.txt": "3b161f808a1b29386d15f9735f6f26709643600edeabe887727ffcaa48a2baa2",
-      "evals/python/ai-assistant-demo/eval/qual/instrument.json": "434b19f7d8fed65ff4c13552b85401fa71929758d962410f66fbbf307682a20c",
-      "evals/python/ai-assistant-demo/eval_runner.py": "6b685cf5472871a9b227e652e47fd23a68b5ffe38021d4b6f3802236be65e2c8",
-      "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
-      "evals/python/ai-assistant-demo/pyproject.toml": "e0d71e93865575f5ee55190cdc1a88ad8b57e365a02d29f71770be23a07e5b66",
+      "evals/node/express-basic/app.js": "e21a658ea62dd0aba6890cb8514a37eb08d10282ae078165473371db042934b5",
+      "evals/node/express-basic/eval/qual/instrument.json": "33cbf65299b676d2254932c1c91a9bd5530b728c529940928fd83108e9cd546b",
+      "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
       "skills/otel-instrument/SKILL.md": "1ac9b168ca4c6b557720c320c28e8ec7ce37c89ff6230dcd6a16bb2fda82c066",
       "skills/otel-instrument/references/json-approval-handoff.md": "e924372284ea1e55d78528ef002b34840f34a912f40cb931ae8b18adcac1d95c",
-      "skills/otel-instrument/references/languages/go.md": "9fdbe42878431fa6cd02188e876a863c862caad60b9c5545f5b113975c681e62",
+      "skills/otel-instrument/references/languages/go.md": "3a79fd16c0a7aa5f2fd25e78a111ae19dbd22f0ca6b47eb12d25067942b8974a",
       "skills/otel-instrument/references/languages/java.md": "1f24f81386f3ac39b2f20386489b676760ad898d7b5d767a0f332ada29976eee",
-      "skills/otel-instrument/references/languages/node.md": "7a53a06031b50af57b4a4451f5ecf66486f98a5112ce0aba432406123ec1058d",
+      "skills/otel-instrument/references/languages/node.md": "1ffccb412eede7cda7c78217a63ac5d482f95936b83017d70271a15d5bb4fb60",
       "skills/otel-instrument/references/languages/python.md": "51eec9acd195586beed2ddf480482dd994fac5d8f833d94bda55cb64fda5535c",
       "skills/otel-instrument/references/project-runtime-validation.md": "cdbac8880d21bf8b47c7865c8ef21648e7701ca3c6dceb512d666281815ccc38",
       "skills/otel-instrument/references/signal-mapping-guide.md": "83a5e52a01a1c5b98530a3f7b320b410d364e2799a400b25a155ee1db780efed",
@@ -254,14 +267,11 @@
     ],
     "selections": [
       {
-        "definition_path": "evals/python/ai-assistant-demo/eval/qual/instrument.json",
-        "fixture_dir": "evals/python/ai-assistant-demo",
+        "definition_path": "evals/node/express-basic/eval/qual/instrument.json",
+        "fixture_dir": "evals/node/express-basic",
         "prompt_id": "direct",
         "eval_kind": "rubric",
-        "eval_inputs": [
-          "eval/inputs/otel-audit.json",
-          "eval/inputs/python-preflight-requirements.txt"
-        ]
+        "eval_inputs": []
       }
     ],
     "config_path": "evals/codex-evals.toml"
