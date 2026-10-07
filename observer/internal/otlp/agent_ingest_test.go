@@ -485,6 +485,63 @@ func TestAgentGRPCIngestPreservesRequestRouting(t *testing.T) {
 	}
 }
 
+func TestAgentRevokedRouteRejectsSubsequentHTTPAndGRPCIngest(t *testing.T) {
+	var forwarded atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		forwarded.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	controller := testAgentController(t, "lab0", "cloud-token", server.URL)
+	defer controller.Shutdown(context.Background())
+	s := store.New()
+	h := &otlpHTTPHandler{store: s, tracesExporter: controller}
+	receiver, err := StartReceiver(context.Background(), s, "127.0.0.1:0", "127.0.0.1:0", WithTracesExporter(controller))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer receiver.Shutdown(context.Background())
+	conn, err := grpc.NewClient(receiver.connTracker.grpcLn.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.AppendToOutgoingContext(ctx, "projectid", testAgentRoute.ProjectID, "logstreamid", testAgentRoute.AgentStreamID)
+	client := ptraceotlp.NewGRPCClient(conn)
+	request := ptraceotlp.NewExportRequestFromTraces(createTestSpan())
+	httpExport := func(want int) {
+		t.Helper()
+		response := httptest.NewRecorder()
+		h.ServeHTTP(response, agentIngestRequest(t, "/otel/v1/traces", true))
+		if response.Code != want {
+			t.Fatalf("HTTP ingest status=%d, want %d: %s", response.Code, want, response.Body.String())
+		}
+	}
+	httpExport(http.StatusOK)
+	if _, err := client.Export(ctx, request); err != nil {
+		t.Fatalf("bound gRPC ingest failed: %v", err)
+	}
+	if got := forwarded.Load(); got != 2 {
+		t.Fatalf("bound exports forwarded %d times, want 2", got)
+	}
+	_, generation, _ := controller.AgentConnectionSnapshot()
+	if !controller.UnbindAgentTraceRoute(testAgentRoute, generation) {
+		t.Fatal("could not revoke resolved stream")
+	}
+	httpExport(http.StatusServiceUnavailable)
+	if _, err := client.Export(ctx, request); status.Code(err) != codes.Unavailable {
+		t.Fatalf("revoked gRPC ingest result=%v, want unavailable", err)
+	}
+	if got := forwarded.Load(); got != 2 {
+		t.Fatalf("revoked route reached cloud %d times, want 2", got)
+	}
+	if _, err := controller.ExportAgentTraces(context.Background(), createTestSpan(), testAgentRoute); err == nil || !strings.Contains(err.Error(), "unresolved for the active cloud connection") {
+		t.Fatalf("revoked route was not unresolved: %v", err)
+	}
+}
+
 func TestAgentGRPCRetriesRetainOneCopyButRetryUpstream(t *testing.T) {
 	s := store.New()
 	e := &captureAgentExporter{err: errors.New("upstream rejected")}

@@ -278,6 +278,60 @@ func TestAgentObservabilityProxyBindsStreamsOnlyToResolvingConnection(t *testing
 	}
 }
 
+func TestAgentObservabilityProxyRevokesDeletedStreamAndProjectRoutes(t *testing.T) {
+	const firstProject = "3c90ff2e-f907-42a8-ac30-52e2b67f21a9"
+	const secondProject = "a64a888f-7836-4c1d-b343-56df558d42f6"
+	const firstStream = "02ea43cc-dd21-4081-b6c9-4aa4b843e163"
+	const secondStream = "b40f5613-e45e-4657-8a06-f2d6855bb10e"
+	service, mux := newTestAgentObservabilityProxy(t)
+	service.agentObservabilityProxyClient.Transport = agentObservabilityProxyRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.Method == http.MethodDelete {
+			if request.URL.Query().Get("fail") == "1" {
+				return agentObservabilityProxyResponse(http.StatusNotFound, `{}`), nil
+			}
+			return agentObservabilityProxyResponse(http.StatusNoContent, ""), nil
+		}
+		parts := strings.Split(strings.Trim(request.URL.Path, "/"), "/")
+		return agentObservabilityProxyResponse(http.StatusOK, `{"id":"`+parts[5]+`","project_id":"`+parts[3]+`"}`), nil
+	})
+	request := func(method, path string, expected int) {
+		t.Helper()
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, agentObservabilityProxyRequest(method, path, ""))
+		if response.Code != expected {
+			t.Fatalf("%s %s: status=%d body=%s", method, path, response.Code, response.Body.String())
+		}
+	}
+	bound := func(projectID, streamID string) bool {
+		t.Helper()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := service.traces.ExportAgentTraces(ctx, ptrace.NewTraces(), otlp.AgentTraceRoute{ProjectID: projectID, AgentStreamID: streamID})
+		return err != nil && !strings.Contains(err.Error(), "unresolved for the active cloud connection")
+	}
+	firstPath := "/ao/api/projects/" + firstProject
+	secondPath := "/ao/api/projects/" + secondProject
+	request(http.MethodGet, firstPath+"/log_streams/"+firstStream, http.StatusOK)
+	request(http.MethodGet, firstPath+"/log_streams/"+secondStream, http.StatusOK)
+	request(http.MethodGet, secondPath+"/log_streams/"+firstStream, http.StatusOK)
+	request(http.MethodDelete, firstPath+"/log_streams/"+firstStream+"?fail=1", http.StatusNotFound)
+	if !bound(firstProject, firstStream) {
+		t.Fatal("failed stream deletion revoked an active route")
+	}
+	request(http.MethodDelete, firstPath+"/log_streams/"+firstStream, http.StatusNoContent)
+	if bound(firstProject, firstStream) || !bound(firstProject, secondStream) || !bound(secondProject, firstStream) {
+		t.Fatal("stream deletion did not revoke only the deleted route")
+	}
+	request(http.MethodDelete, firstPath+"?fail=1", http.StatusNotFound)
+	if !bound(firstProject, secondStream) {
+		t.Fatal("failed project deletion revoked an active route")
+	}
+	request(http.MethodDelete, firstPath, http.StatusNoContent)
+	if bound(firstProject, secondStream) || !bound(secondProject, firstStream) {
+		t.Fatal("project deletion did not revoke only its stream routes")
+	}
+}
+
 func TestAgentObservabilityProxyRejectsInFlightStreamAfterRoundTripConnectionChange(t *testing.T) {
 	service, mux := newTestAgentObservabilityProxy(t)
 	service.agentObservabilityProxyClient.Transport = agentObservabilityProxyRoundTripper(func(*http.Request) (*http.Response, error) {

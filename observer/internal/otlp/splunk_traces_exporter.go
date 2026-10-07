@@ -236,6 +236,46 @@ func (c *SplunkTracesExportController) BindAgentTraceRoute(route AgentTraceRoute
 	return true
 }
 
+// UnbindAgentTraceRoute revokes a stream only for the connection that resolved it.
+func (c *SplunkTracesExportController) UnbindAgentTraceRoute(route AgentTraceRoute, generation uint64) bool {
+	if c == nil {
+		return false
+	}
+	if _, err := agentTraceRoute([]string{route.ProjectID}, []string{route.AgentStreamID}); err != nil {
+		return false
+	}
+	c.exportMu.RLock()
+	defer c.exportMu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.config.Enabled || c.exporter == nil || generation != c.connectionGeneration {
+		return false
+	}
+	delete(c.agentRoutes, normalizedAgentTraceRoute(route))
+	return true
+}
+
+// UnbindAgentProjectRoutes revokes all streams in a deleted project without
+// affecting routes resolved for other projects or cloud connections.
+func (c *SplunkTracesExportController) UnbindAgentProjectRoutes(projectID string, generation uint64) bool {
+	if c == nil || !agentTraceIDPattern.MatchString(projectID) {
+		return false
+	}
+	c.exportMu.RLock()
+	defer c.exportMu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.config.Enabled || c.exporter == nil || generation != c.connectionGeneration {
+		return false
+	}
+	for route := range c.agentRoutes {
+		if route.ProjectID == strings.ToLower(projectID) {
+			delete(c.agentRoutes, route)
+		}
+	}
+	return true
+}
+
 func normalizedAgentTraceRoute(route AgentTraceRoute) AgentTraceRoute {
 	return AgentTraceRoute{ProjectID: strings.ToLower(route.ProjectID), AgentStreamID: strings.ToLower(route.AgentStreamID)}
 }

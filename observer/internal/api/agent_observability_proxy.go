@@ -75,13 +75,20 @@ func (s *splunkExportService) agentObservabilityProxyDestination() (realm, acces
 	return traces.Realm, traces.AccessToken, generation, true
 }
 
-// A successful cloud stream-resource response is the only source of routes
-// accepted by the trace data plane. Project IDs alone do not authorize a route.
-func (s *splunkExportService) bindAgentStreamResource(path, method string, body []byte, generation uint64) {
+// Successful cloud stream-resource responses bind or revoke routes accepted
+// by the trace data plane. Project IDs alone do not authorize a route.
+func (s *splunkExportService) updateAgentStreamRoutes(path, method string, body []byte, generation uint64) {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if method == http.MethodDelete {
+		if len(parts) >= 4 && parts[0] == "ao" && parts[1] == "api" && parts[2] == "projects" {
+			if len(parts) == 4 {
+				s.traces.UnbindAgentProjectRoutes(parts[3], generation)
+			} else if len(parts) == 6 && parts[4] == "log_streams" {
+				s.traces.UnbindAgentTraceRoute(otlp.AgentTraceRoute{ProjectID: parts[3], AgentStreamID: parts[5]}, generation)
+			}
+		}
 		return
 	}
-	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) < 5 || parts[0] != "ao" || parts[1] != "api" || parts[2] != "projects" || parts[4] != "log_streams" {
 		return
 	}
@@ -242,7 +249,7 @@ func (s *splunkExportService) agentObservabilityProxy(w http.ResponseWriter, r *
 		return
 	}
 	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
-		s.bindAgentStreamResource(path, r.Method, responseBody, generation)
+		s.updateAgentStreamRoutes(path, r.Method, responseBody, generation)
 	}
 	// Cloud responses are otherwise opaque, including validation errors. Never
 	// reflect Studio's credential if an upstream error happens to echo it.
