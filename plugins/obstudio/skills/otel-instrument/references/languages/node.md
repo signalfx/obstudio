@@ -90,6 +90,20 @@ transport for log sending.
 Create a separate file for OTel setup. This file must be loaded before any
 application code runs.
 
+Treat the local log path as optional. A logs-only endpoint, header, or protocol
+conflict must not make trace/metric startup throw: preserve the application's
+existing trace/metric exporter configuration and skip only the added local log
+pipeline. In particular, do not reject a generic OTLP protocol solely because
+it is incompatible with the local logs exporter; choose the trace/metric
+exporters appropriate to the operator's protocol independently. Keep the
+log-enabled `new NodeSDK(...)` inside the guarded branch below, including in
+JavaScript translations; a single unguarded SDK constructor loses the
+log-option-construction fallback. Do not change `OTEL_LOGS_EXPORTER`, the logs
+endpoint, or the logs protocol while building the optional exporter, processor,
+or bridge. A late constructor failure must leave the operator's original
+environment untouched. The explicit local exporter URL needs no environment
+mutation.
+
 **File**: `instrumentation.ts` (or `instrumentation.js`)
 
 ```typescript
@@ -124,6 +138,7 @@ function defaultLocalLogConfiguration() {
     return {
       logRecordProcessors: undefined,
       logInstrumentations: [],
+      suppressAutoLogs: false,
     };
   }
 
@@ -158,17 +173,22 @@ function defaultLocalLogConfiguration() {
     return {
       logRecordProcessors: [processor],
       logInstrumentations: [new ConsoleInstrumentation()],
+      suppressAutoLogs: false,
     };
   } catch {
     reportLocalLogSkip();
     return {
       logRecordProcessors: undefined,
       logInstrumentations: [],
+      suppressAutoLogs: true,
     };
   }
 }
 
-const { logRecordProcessors, logInstrumentations } =
+// Capture this before any optional log construction. The helper must not
+// mutate it, and a late constructor failure must restore this exact value.
+const originalLogsExporter = process.env.OTEL_LOGS_EXPORTER;
+const { logRecordProcessors, logInstrumentations, suppressAutoLogs: skipLocalLogs } =
   defaultLocalLogConfiguration();
 
 function baseSdkOptions() {
@@ -192,7 +212,10 @@ function baseSdkOptions() {
 
 const base = baseSdkOptions();
 let sdk: NodeSDK;
-if (logRecordProcessors) {
+let suppressAutoLogs = skipLocalLogs;
+// Empty or absent processors mean no local log owner: omit the NodeSDK option.
+// Passing logRecordProcessors: [] still changes ownership for explicit exporters.
+if (logRecordProcessors?.length) {
   try {
     sdk = new NodeSDK({
       ...base,
@@ -204,12 +227,24 @@ if (logRecordProcessors) {
     // The optional log integration must not stop trace and metric startup.
     reportLocalLogSkip();
     sdk = new NodeSDK(base);
+    suppressAutoLogs = true;
   }
 } else {
   sdk = new NodeSDK(base);
 }
 
-sdk.start();
+// Without log options, NodeSDK 0.221.x defaults to OTLP logs when the exporter
+// is absent. Suppress that default only for a skipped local path, then restore
+// the operator's value after synchronous startup.
+if (suppressAutoLogs) process.env.OTEL_LOGS_EXPORTER = 'none';
+try {
+  sdk.start();
+} finally {
+  if (suppressAutoLogs) {
+    if (originalLogsExporter === undefined) delete process.env.OTEL_LOGS_EXPORTER;
+    else process.env.OTEL_LOGS_EXPORTER = originalLogsExporter;
+  }
+}
 
 let shutdownPromise: Promise<void> | undefined;
 
@@ -271,9 +306,12 @@ stack on an older Node runtime, do not change the toolchain or invent a bridge;
 report `unsupported-stack` with the required Node version. Integrate
 `shutdownOnce()` into the app's existing graceful shutdown sequence after it
 stops accepting work and emits final application logs, then let that owner
-terminate the process. Do not install another signal owner in that case. When
-the application has no graceful owner, call the exported handler installer
-with its actual stop-and-drain primitive after creating the server or worker:
+terminate the process. That existing owner must also arm a bounded timeout
+before draining and force a nonzero exit on timeout or a second signal;
+`process.exitCode` alone cannot stop a hung drain or exporter. Do not install
+another signal owner in that case. When the application has no graceful owner,
+use the complete `installGracefulSignalHandlers` implementation above with its
+actual stop-and-drain primitive after creating the server or worker:
 
 ```typescript
 import { installGracefulSignalHandlers } from './instrumentation';
@@ -292,6 +330,9 @@ settles, even when draining reports an error. Its bounded timeout prevents a
 stalled drain or exporter from leaving the process alive indefinitely; a
 successful drain and flush exits `0`, a drain/export failure exits `1`, and a
 timeout or second signal uses the conventional nonzero signal exit code.
+Do not replace this handler with a bare `server.close` callback: it must arm
+the timer before drain, attempt `shutdownOnce()` after final logs, and force
+process exit when the timer expires or a second signal arrives.
 
 During instrumentation preflight, resolve the complete local `/v1/logs` URL and
 replace `PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT` with that exact value,
@@ -307,17 +348,28 @@ If log-only configuration conflicts or construction of the log exporter,
 processor, bridge, or NodeSDK log options fails before startup, the example
 emits one value-free diagnostic and starts tracing and metrics without the
 added log pipeline. Keep all three constructors inside the guarded log helper
-and the optional NodeSDK integration inside its guarded branch. The original
-console/file sink stays active. Both generic and signal-specific OTLP log
-headers must have no non-empty value on this local path; move generic OTLP headers to
-trace/metric signal variables and remove signal-specific log headers. For a
-different logs protocol, select the
-official exporter matching that protocol during instrumentation preflight.
+and the optional NodeSDK integration inside its guarded branch. On a skipped
+local path, temporarily set `OTEL_LOGS_EXPORTER=none` during `NodeSDK.start()`;
+without log options, NodeSDK 0.221.x otherwise creates its default OTLP log
+exporter. Restore the original value afterward. Preserve an explicit non-OTLP
+operator exporter, and do not retry `start()` after partial global registration.
+Never turn a log-only protocol conflict into a process-wide exception or move
+the optional log-enabled `new NodeSDK(...)` outside its pre-start `try`/`catch`.
+Do not set log exporter, endpoint, or protocol environment variables during
+optional log construction: if a later constructor throws, those writes would
+survive the skip path and could re-enable NodeSDK's default OTLP logs.
+The original console/file sink stays active. Both generic and signal-specific
+OTLP log headers must have no non-empty value on this local path; move generic
+OTLP headers to trace/metric signal variables and remove signal-specific log
+headers. For a different logs protocol, select the official exporter matching
+that protocol during instrumentation preflight.
 
 With `OTEL_LOGS_EXPORTER=none`, both the added processor and bridge are omitted.
 For another explicit exporter such as `console`, leave provider, exporter, and
 bridge ownership entirely to the proven operator-owned setup; this helper adds
-none of them. Verify that setup already owns exactly one detected application
+none of them. In both cases, omit the `logRecordProcessors` property from
+`new NodeSDK(...)` entirely; an empty array is not an equivalent opt-out.
+Verify that setup already owns exactly one detected application
 bridge. If ownership cannot be proven, report `Not configured`; an environment
 value alone is not evidence of a working pipeline. Adding
 `ConsoleInstrumentation` here would duplicate console output when NodeSDK owns

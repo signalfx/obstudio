@@ -652,6 +652,9 @@ def test_node_shutdown_drains_before_flushing_telemetry(tmp_path: Path) -> None:
     assert "process.exit(failed ? 1 : 0)" in handler
     assert "server.close" in node
     assert "drain every detected queue/worker" in node
+    assert "`process.exitCode` alone cannot stop a hung drain or exporter" in _normalized(
+        LANGUAGES / "node.md"
+    )
 
     lifecycle = "let shutdownPromise" + node.split("let shutdownPromise", 1)[1].split(
         "\n```",
@@ -673,12 +676,15 @@ def test_node_shutdown_drains_before_flushing_telemetry(tmp_path: Path) -> None:
         assert typed in lifecycle
         lifecycle = lifecycle.replace(typed, javascript)
 
-    def run_signal_case(name: str, stop_and_drain: str) -> subprocess.CompletedProcess[str]:
+    def run_signal_case(
+        name: str, stop_and_drain: str, *, fast_timeout: bool = False
+    ) -> subprocess.CompletedProcess[str]:
         script = tmp_path / f"{name}.js"
+        case_lifecycle = lifecycle.replace("10_000", "50") if fast_timeout else lifecycle
         script.write_text(
             "const fs = require('node:fs');\n"
             "const sdk = { shutdown: async () => fs.writeSync(1, 'FLUSHED\\n') };\n"
-            f"{lifecycle}\n"
+            f"{case_lifecycle}\n"
             f"installGracefulSignalHandlers({stop_and_drain});\n"
             "setInterval(() => {}, 1_000);\n"
             "setImmediate(() => process.kill(process.pid, 'SIGTERM'));\n",
@@ -706,6 +712,12 @@ def test_node_shutdown_drains_before_flushing_telemetry(tmp_path: Path) -> None:
     assert failure.stdout == "FLUSHED\n"
     assert "Application drain failed" in failure.stderr
 
+    stalled = run_signal_case(
+        "stalled", "() => new Promise(() => {})", fast_timeout=True
+    )
+    assert stalled.returncode == 143
+    assert stalled.stdout == ""
+
 
 def test_node_non_otlp_exporters_never_add_obstudio_console_bridge() -> None:
     node = _read(LANGUAGES / "node.md")
@@ -716,6 +728,7 @@ def test_node_non_otlp_exporters_never_add_obstudio_console_bridge() -> None:
 
     assert "logRecordProcessors: undefined" in operator_owned_branch
     assert "logInstrumentations: []" in operator_owned_branch
+    assert "suppressAutoLogs: false" in operator_owned_branch
     assert "configured !== 'none'" not in operator_owned_branch
     assert "...logInstrumentations" in node
     assert "logInstrumentations: [new ConsoleInstrumentation()]" in node
@@ -723,8 +736,13 @@ def test_node_non_otlp_exporters_never_add_obstudio_console_bridge() -> None:
 
 def test_node_local_logs_require_preflight_match_and_fail_closed() -> None:
     node = _read(LANGUAGES / "node.md")
+    normalized = _normalized(LANGUAGES / "node.md")
+    assert "A logs-only endpoint, header, or protocol" in normalized
+    assert "including in JavaScript translations" in normalized
+    assert "Never turn a log-only protocol conflict into a process-wide exception" in normalized
+    assert "Do not change `OTEL_LOGS_EXPORTER`, the logs endpoint, or the logs protocol" in normalized
     helper = node.split("function defaultLocalLogConfiguration() {", 1)[1].split(
-        "const { logRecordProcessors, logInstrumentations }", 1
+        "const originalLogsExporter = process.env.OTEL_LOGS_EXPORTER;", 1
     )[0]
 
     assert "explicitLogsEndpoint !== PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" in helper
@@ -737,18 +755,29 @@ def test_node_local_logs_require_preflight_match_and_fail_closed() -> None:
     assert "} catch {" in helper
     assert "logRecordProcessors: undefined" in helper.split("} catch {", 1)[1]
     assert "logInstrumentations: []" in helper.split("} catch {", 1)[1]
+    assert "suppressAutoLogs: true" in helper.split("} catch {", 1)[1]
     assert "reportLocalLogSkip();" in helper.split("} catch {", 1)[1]
     assert "process.stderr.write(" in node.split("function reportLocalLogSkip()", 1)[1]
     assert "error.message" not in helper
+    assert "process.env.OTEL_LOGS_EXPORTER =" not in helper
+    assert "process.env.OTEL_LOGS_EXPORTER ||=" not in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT =" not in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT ||=" not in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL =" not in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL ||=" not in helper
+    assert "const originalLogsExporter = process.env.OTEL_LOGS_EXPORTER;" in node
 
     sdk_integration = node.split("let sdk: NodeSDK;", 1)[1].split("sdk.start();", 1)[0]
-    assert "if (logRecordProcessors) {\n  try {" in sdk_integration
+    assert "if (logRecordProcessors?.length) {\n  try {" in sdk_integration
     assert "sdk = new NodeSDK({" in sdk_integration
     assert "...base.instrumentations, ...logInstrumentations" in sdk_integration
     assert "} catch {" in sdk_integration
     assert "reportLocalLogSkip();" in sdk_integration.split("} catch {", 1)[1]
     assert "const base = baseSdkOptions();" in node
     assert sdk_integration.count("sdk = new NodeSDK(base);") == 2
+    assert "suppressAutoLogs = true;" in sdk_integration
+    assert "if (suppressAutoLogs) process.env.OTEL_LOGS_EXPORTER = 'none';" in node
+    assert "delete process.env.OTEL_LOGS_EXPORTER" in node
 
 
 def test_node_log_only_failures_keep_trace_metric_startup() -> None:
@@ -784,11 +813,14 @@ class NodeSDK {
     this.options = options;
   }
   start() {
-    console.log(JSON.stringify({
-      logs: !!this.options.logRecordProcessors,
+    globalThis.startResult = {
+      localLogs: !!this.options.logRecordProcessors,
+      logOption: Object.hasOwn(this.options, 'logRecordProcessors'),
+      autoExporter: this.options.logRecordProcessors
+        ? null : (process.env.OTEL_LOGS_EXPORTER || 'otlp'),
       trace: counts.trace,
       metric: counts.metric,
-    }));
+    };
   }
 }
 """
@@ -803,28 +835,41 @@ class NodeSDK {
     ):
         env.pop(name, None)
 
-    cases = (
-        ({"OTEL_EXPORTER_OTLP_HEADERS": "", "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "  "}, True),
-        ({"OTEL_EXPORTER_OTLP_HEADERS": "token=secret"}, False),
-        ({"OTEL_EXPORTER_OTLP_LOGS_HEADERS": "token=secret"}, False),
-        *(({"FAIL_LOG_CONSTRUCTOR": name}, False) for name in ("exporter", "processor", "bridge", "sdk")),
+    cases = [
+        ({"OTEL_EXPORTER_OTLP_HEADERS": "", "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "  "}, True, None, False),
+        ({"OTEL_LOGS_EXPORTER": "none"}, False, "none", False),
+        ({"OTEL_LOGS_EXPORTER": "console"}, False, "console", False),
+        ({"OTEL_EXPORTER_OTLP_HEADERS": "token=secret"}, False, "none", True),
+        ({"OTEL_EXPORTER_OTLP_LOGS_HEADERS": "token=secret"}, False, "none", True),
+        ({"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"}, False, "none", True),
+        ({"OTEL_LOGS_EXPORTER": "otlp", "OTEL_EXPORTER_OTLP_HEADERS": "token=secret"}, False, "none", True),
+    ]
+    cases.extend(
+        ({"FAIL_LOG_CONSTRUCTOR": name}, False, "none", True)
+        for name in ("exporter", "processor", "bridge", "sdk")
     )
-    for overrides, logs_enabled in cases:
+    cases.append(
+        ({"FAIL_LOG_CONSTRUCTOR": "exporter", "OTEL_LOGS_EXPORTER": "otlp"}, False, "none", True)
+    )
+    for overrides, logs_enabled, auto_exporter, diagnostic in cases:
         result = subprocess.run(
-            ["node", "-e", stubs + source],
+            ["node", "-e", stubs + source + "console.log(JSON.stringify({ ...globalThis.startResult, restored: process.env.OTEL_LOGS_EXPORTER ?? null }));"],
             env={**env, **overrides},
             text=True,
             capture_output=True,
             check=True,
         )
         assert json.loads(result.stdout) == {
-            "logs": logs_enabled,
+            "localLogs": logs_enabled,
+            "logOption": logs_enabled,
+            "autoExporter": auto_exporter,
             "trace": 1,
             "metric": 1,
+            "restored": overrides.get("OTEL_LOGS_EXPORTER"),
         }
         assert result.stderr == (
-            "" if logs_enabled else
             "OTel local log pipeline skipped; trace and metric startup continues.\n"
+            if diagnostic else ""
         )
 
 

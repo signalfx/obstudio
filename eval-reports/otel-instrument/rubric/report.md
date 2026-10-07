@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261007T182853866125Z |
+| Run ID | 20261007T212452448050Z |
 | Agent model | gpt-6-sol |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,26 +18,23 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | node/express-basic/qual/instrument | node/express-basic | 1 | 80% (8/10), avg score 82 | 4.3M | 20.6m | - | - | - |
+| with_skill | node/express-basic/qual/instrument | node/express-basic | 1 | 100% (11/11), avg score 92 | 8.0M | 15.7m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | node/express-basic/qual/instrument | node/express-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 4290806 | 4165760 | 0 | 42215 | 25307 | unknown | 4333021 |
+| with_skill | node/express-basic/qual/instrument | node/express-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 7961578 | 7819008 | 0 | 31672 | 15777 | unknown | 7993250 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | node/express-basic/qual/instrument | node/express-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 323773 | 278912 | 0 | 11132 | 8274 | unknown | 334905 |
+| with_skill | node/express-basic/qual/instrument | node/express-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 567218 | 455424 | 0 | 11123 | 6179 | unknown | 578341 |
 
 ## Rubric Failures
 
-| Mode | Service | Side | Prompt | Result | Evidence |
-|---|---|---|---|---|---|
-| with_skill | node/express-basic | with_skill | direct | rubric:rubric-5 FAIL | service/instrumentation.js returns empty processors/instrumentations for any non-otlp `OTEL_LOGS_EXPORTER`, then always passes `logRecordProcessors: logs.processors` to NodeSDK. |
-| with_skill | node/express-basic | with_skill | direct | rubric:rubric-9 FAIL | service/app.js calls `server.close()`, emits `runtime shutdown completed`, then calls memoized `shutdownTelemetry()`, but there is no timeout guard or `process.exit` fallback for stalled drain/export work. |
+No rubric failures.
 
 ## Result JSON
 
