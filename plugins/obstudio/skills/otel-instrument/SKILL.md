@@ -31,6 +31,12 @@ When any selected finding uses
 `finding_group: splunk-agent-observability`, or the repository contains a
 `splunk_ao` dependency/import, also read
 `../references/splunk-agent-observability.md` before editing.
+Always read `../references/local-otlp-receiver.md` before choosing exporter
+endpoints. Resolve the active local receiver once during instrumentation and
+persist standard OTel receiver configuration and supported AO SDK endpoint/auth
+configuration in the application/deployment environment; generated
+application startup must not query Studio-specific discovery APIs. Normal AO
+SDK calls to a configured cloud-compatible endpoint are allowed.
 
 ## Workflow
 
@@ -86,6 +92,11 @@ Markdown reports.
   select another one.
 - Confirm the target process from the repo's real start surface: `docker-compose.yml`, Kubernetes manifests, `package.json` scripts, `Makefile`, `Procfile`, PM2 configs, Supervisor configs, systemd units, launchd plists, PowerShell scripts, or a plain shell command
 - Confirm existing telemetry indicators or record `none found`
+- Resolve each local OTLP receiver endpoint with the shared precedence:
+  signal-specific OTel config, compatible generic OTel config, advertised
+  Obstudio status when available, checked-in receiver ports and runtime
+  topology, then the conventional local fallback. Record the selected source,
+  protocol, path, and port. Preserve configured non-default ports exactly.
 - Inventory existing telemetry consumer contracts before editing: metric names
   and dimensions, span names and attributes, resource attributes, log
   correlation fields, exporter settings, checked-in dashboards/detectors,
@@ -130,7 +141,11 @@ Markdown reports.
 - Keep selected Splunk Agent Observability configuration work in the same
   dependency-closed selected-work queue as OTel work. Do not infer scope from
   a separate AO section or create a second selection ledger. The implemented
-  application or deployment must work without Obstudio in the runtime path.
+  application or deployment uses the selected destination mode. Default local
+  work to an available cloud-compatible Studio gateway, preserving explicit
+  operator destinations and direct-cloud requests. Use normal AO SDK resource
+  calls and per-request routing, not a Studio-specific application adapter or
+  global destination registration. Local receiver receipt is not cloud proof.
 - Detect incident-readiness surfaces. Search source and configuration for
   user-visible workflows, dependency clients, background jobs, queues/streams,
   data freshness, input complexity, synthetic/canary checks, auth/edge paths,
@@ -403,16 +418,19 @@ report background:
   source-backed product or routing configuration described by the finding and
   its executable dependencies. Use `configuration` telemetry changes for
   Agent Observability resource settings rather than inventing spans or metrics. Leave durable
-  app/deployment configuration and secret references so runtime export does not
-  depend on Obstudio. Keep unselected AO findings untouched.
-- For selected direct Agent Observability export, persist the required exporter
+  app/deployment configuration for the selected API and ingest endpoints. In
+  gateway mode Studio owns cloud realm/credentials; the application uses only
+  supported generic SDK configuration and local credentials when required.
+  Preserve project/stream headers on each export, never a global Studio route
+  registration. Keep unselected AO findings untouched.
+- For selected Agent Observability export, persist the required exporter
   packages in both the dependency manifest and the project lockfile. If the
   project's configured runner is `uv sync`, create or update `uv.lock`, run
   `uv sync --locked`, and import or exercise the configured exporter without
   live credentials. Treat missing credentials for remote project, Agent Stream,
   or delivery proof separately from dependency resolution: credentials do not
   block local lockfile, import, or configuration checks. If package resolution
-  itself is unavailable, record that exact blocker and keep direct export
+  itself is unavailable, record that exact blocker and keep export
   `Not proven` or `Not configured` as appropriate; a manifest entry plus
   placeholder environment variables is not durable deployed routing.
 
@@ -693,10 +711,13 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - For custom spans wrapping business logic, explicitly set error status on exceptions
 - Reuse the app's current startup entrypoint instead of replacing it with a new Docker-only path
 - For Python, Node.js, and Java, prefer preload or agent wrappers plus env vars over large code refactors when auto-instrumentation already covers the framework
-- For host/native runtimes, default OTLP endpoints to loopback (`http://localhost:4318`) unless the existing platform already provides a collector address
+- For host/native runtimes, default OTLP export to the resolved current
+  Obstudio receiver. Use `http://127.0.0.1:4318` only as the conventional
+  fallback when no endpoint is configured or discoverable; never replace a
+  detected non-default port.
 - For a supported application logging stack, default logs to the local Splunk Observability Studio
-  receiver with a signal-specific endpoint such as
-  `http://localhost:4318/v1/logs`. Do not let a generic direct-cloud OTLP
+  receiver with its resolved signal-specific endpoint, conventionally
+  `http://127.0.0.1:4318/v1/logs` only as the final fallback. Do not let a generic direct-cloud OTLP
   endpoint become the implicit log destination.
 - For Python web services, do not satisfy implementation by only changing a Makefile, Docker command, or shell wrapper. Add an explicit setup module such as `otel_setup.py` and wire the app entry point to call it before framework instrumentation is activated.
 - For Java/Spring Boot, prefer the OpenTelemetry Java agent. The final response must state the service-name setting (`OTEL_SERVICE_NAME` or `otel.service.name`), OTLP endpoint setting (`OTEL_EXPORTER_OTLP_ENDPOINT` or `otel.exporter.otlp.endpoint`), and that the agent provides HTTP server spans plus request duration metrics.
@@ -729,6 +750,12 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   configures every exporter. A successful trace export does not prove metrics
   or logs; exercise each configured signal and repair protocol errors before
   reporting it as working.
+- Treat all literal `4317` and `4318` values in language examples as
+  conventional fallbacks, not equality gates. Use the receiver endpoint
+  resolved during preflight in generated code, launch configuration, and
+  tests. Generated application startup must not call `observer_status`, MCP,
+  Studio-specific discovery, or a route-registration API. Normal AO SDK
+  resource calls use their configured standard API endpoint.
 - Keep local application-log export separate from cloud export. When a generic
   `OTEL_EXPORTER_OTLP_ENDPOINT` is a direct-cloud endpoint, configure traces and
   metrics with their signal-specific endpoints and give logs a local Splunk Observability Studio
@@ -1078,8 +1105,10 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   an environment value by itself is not evidence of export. When the exporter
   is absent or explicitly `otlp`, an explicit signal endpoint may be used by
   the Splunk Observability Studio-owned pipeline only when it exactly matches the detected local
-  Splunk Observability Studio receiver for the selected runtime and protocol. Adapt the local
-  endpoint to the checked-in Docker/Compose service address when applicable.
+  Splunk Observability Studio receiver for the selected runtime and protocol. The detected
+  receiver may use any valid port. Resolve it during instrumentation from the
+  shared local-receiver contract and adapt it to the checked-in Docker/Compose
+  service address when applicable.
   Default an absent exporter to `otlp` and an absent endpoint to that detected
   local receiver. If the explicit endpoint is non-local or direct-cloud, do not
   construct or enable the Splunk Observability Studio provider/exporter/bridge; fail closed and
@@ -1394,11 +1423,13 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 
 1. Check whether `.vscode/launch.json` exists.
 2. If it exists, update at least one debug configuration for this service to include:
-   - `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+   - `OTEL_EXPORTER_OTLP_ENDPOINT=<resolved-local-otlp-http-endpoint>`; use
+     `http://127.0.0.1:4318` only when resolution reaches the conventional fallback
    - `OTEL_LOGS_EXPORTER=otlp` when no explicit exporter exists and the logs
      endpoint is absent or is the detected local Splunk Observability Studio endpoint
-   - `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs` when the
-     exporter is absent/`otlp` and no explicit logs endpoint exists
+   - `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=<resolved-local-otlp-http-endpoint>/v1/logs`
+     when the exporter is absent/`otlp` and no explicit logs endpoint exists;
+     preserve an existing signal path and never double-append `/v1/logs`
    - `OTEL_METRIC_EXPORT_INTERVAL=1000`
    - `OTEL_BSP_SCHEDULE_DELAY=100`
    If an absent/`otlp` exporter is paired with an explicit non-local logs

@@ -41,7 +41,7 @@ claim that spans create Agent Observability resources.
 Appropriate AO findings include source-backed work for an existing or intended:
 
 - project and dedicated Agent Stream;
-- direct application routing to those resources;
+- application routing to those resources through the configured destination;
 - dataset, prompt, annotation queue, annotation fields, or queue records;
 - evaluator definition, provider integration, or Agent Stream attachment; and
 - other supported product configuration required by a selected application.
@@ -60,7 +60,7 @@ executable finding automatically includes executable prerequisites in
 earlier in canonical order. Typical edges are:
 
 - Agent Stream depends on project;
-- direct stream routing depends on project, Agent Stream, and the required OTel
+- stream routing depends on project, Agent Stream, and the required OTel
   exporter/GenAI trace finding;
 - annotation fields depend on annotation queue;
 - queue records depend on annotation queue and the source trace or dataset;
@@ -73,26 +73,67 @@ closure, stale-selection rejection, manual-decision unlocks, and external
 blockers. A `manual decision` or `external follow-up` remains a blocker and is
 never auto-selected.
 
-## Direct Runtime Result
+## Configured Runtime Destination
 
-Selected AO work must leave durable application or deployment configuration
-that works without Splunk Observability Studio in the runtime data path. Use a
-Splunk-supported SDK or product API only when source and target-product
-evidence support it. Keep credentials in operator-owned secret storage, use
-checked-in placeholders or secret references, and never write access tokens to
-tracked files.
+For local development, default to the available Splunk Observability Studio
+cloud-compatible gateway. Preserve an explicit operator destination or a user
+request for direct cloud export. These are alternative routing modes, not two
+mandatory exporters. Do not require application cloud credentials for the
+gateway mode: Studio derives upstream API and ingest endpoints from its active
+cloud connection and realm and supplies its own credentials server-side.
 
-Obstudio may help audit, select, and verify the work, but the deployed
-application must export directly through its configured OpenTelemetry or
-supported Splunk Agent Observability path. Verification must distinguish:
+Keep the application destination-agnostic. Use supported AO SDK resource calls
+and standard OTLP export with durable endpoint configuration. Do not add an
+Obstudio library, special route-registration call, startup endpoint discovery,
+or hardcoded port to application code. Normal SDK project/stream calls to a
+configured cloud-compatible endpoint are allowed; they are not discovery calls.
+If the installed SDK cannot target that endpoint through supported
+configuration, record the exact compatibility gap instead of patching a vendor
+package or silently switching to direct cloud export.
 
-- a resource that was created or resolved;
-- direct application routing that was exercised; and
-- a fresh application trace or configured object that was observed in the
-  intended Agent Observability project and Agent Stream.
+Resolve or create the real project and dedicated Agent Stream through the
+configured supported API. Carry their routing IDs on each trace export using
+the supported exporter contract. Never replace per-application routing with a
+global Studio destination binding, fabricate resource IDs, or assume that
+ordinary OTLP forwarding automatically chooses an Agent Stream. Metrics follow
+their configured OTLP path; local application logs remain local.
 
-Do not call a resource-configuration finding `working` from a successful API response
-alone when its acceptance criteria require application data in the product.
+Verification must distinguish:
+
+- the real project and Agent Stream resolved or created;
+- the configured application route exercised, including local gateway receipt
+  and upstream forwarding when that mode is selected; and
+- a fresh application trace observed in the intended cloud project and stream.
+
+A local receipt, resource API response, or upstream ingest acknowledgement is
+not proof of cloud Agent Observability visibility. Verify the exact fresh trace
+in the target product. In gateway mode, gateway availability is a normal export
+dependency; do not claim delivery continues while the gateway is stopped.
+On a cloud connection change, upstream addresses and credentials must follow
+that connection and old organization resource bindings must not be silently
+reused. Re-resolve named resources or report the stale binding.
+
+### Python SDK Gateway Configuration
+
+For the inspected `splunk-ao` 0.4.0, O11y mode derives cloud hosts from
+`SPLUNK_AO_REALM`; `SPLUNK_AO_API_URL` is not an O11y override. Its supported
+configurable endpoint mode uses `SPLUNK_AO_API_URL`,
+`SPLUNK_AO_CONSOLE_URL`, and `SPLUNK_AO_API_KEY`. A compatible local Studio
+gateway implements that standard SDK API/authentication contract and
+`<api-base>/otel/v1/traces`, while delegating resource calls to cloud `/ao/api`
+and ingest to the realm-derived trace endpoint. Use the gateway's documented
+local-only credential, never its cloud token; do not mix these variables with
+O11y realm/token variables. Prove compatibility with the installed SDK before
+using this configuration, and record its version and effective endpoints.
+
+Discover the API address separately from the OTLP address during configuration
+using advertised service endpoints or checked-in runtime topology. Preserve
+non-default ports and the address reachable by the application. Only an
+unresolved host/native endpoint may use the conventional REST port 3000 or
+OTLP ports 4318/4317. Do not publish unsupported example environment variables
+or make application startup call a Studio-specific API. A missing/disconnected
+gateway or insufficient Studio-held resource permission is an explicit
+prerequisite, not a reason to request a cloud token for the application.
 
 ## Splunk AO Python Compatibility
 

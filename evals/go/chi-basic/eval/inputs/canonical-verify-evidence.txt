@@ -1,2 +1,6 @@
 The bounded fixture capture contains one GET /health SERVER span with
 http.route=/health and no manual HttpRequest span.
+The capture was accepted through OTLP/HTTP at
+http://127.0.0.1:55318/v1/traces. No receiver listened on 4317 or 4318. This is
+local receiver evidence only; it is not Splunk Agent Observability project,
+Agent Stream, or direct-routing proof.

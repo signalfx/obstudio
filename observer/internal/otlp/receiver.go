@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"go.opentelemetry.io/collector/component"
@@ -201,6 +202,15 @@ func StartReceiver(ctx context.Context, s *store.Store, grpcAddr, httpAddr strin
 		logs:        rcvLogs,
 		connTracker: ct,
 	}, nil
+}
+
+// HTTPHandler exposes the same ingestion pipeline on a co-located API listener
+// for SDKs whose API base URL also determines their OTLP trace endpoint.
+func (r *Receiver) HTTPHandler() http.Handler {
+	ct := r.connTracker
+	return &otlpHTTPHandler{
+		store: ct.store, ct: ct, exporter: ct.exporter, tracesExporter: ct.tracesExporter,
+	}
 }
 
 // Shutdown gracefully stops the connection tracker and all receivers.

@@ -160,6 +160,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -180,7 +181,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
-const localObserverLogsEndpoint = "http://localhost:4318/v1/logs"
+const fallbackLocalOTLPLogsEndpoint = "http://127.0.0.1:4318/v1/logs"
 
 func initOTel(
 	ctx context.Context,
@@ -313,13 +314,6 @@ func useDefaultLocalLogExport() (bool, error) {
 		return false, nil
 	}
 
-	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"))
-	if endpoint != "" && endpoint != localObserverLogsEndpoint {
-		return false, errors.New(
-			"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local " +
-				"Splunk Observability Studio; refusing to create a Splunk Observability Studio log provider or bridge",
-		)
-	}
 	return true, nil
 }
 
@@ -327,6 +321,11 @@ func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, erro
 	protocol := strings.ToLower(strings.TrimSpace(
 		os.Getenv("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"),
 	))
+	if protocol == "" {
+		protocol = strings.ToLower(strings.TrimSpace(
+			os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL"),
+		))
+	}
 	if protocol != "" && protocol != "http/protobuf" {
 		return nil, fmt.Errorf(
 			"select the official exporter matching OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=%q",
@@ -343,7 +342,33 @@ func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, erro
 
 	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"))
 	if endpoint == "" {
-		endpoint = localObserverLogsEndpoint
+		genericEndpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+		if genericEndpoint != "" {
+			parsed, err := url.Parse(genericEndpoint)
+			if err != nil {
+				return nil, fmt.Errorf("parse generic OTLP endpoint: %w", err)
+			}
+			// Instrumentation preflight has already classified this generic
+			// endpoint as the intended local/collector-owned receiver. Accept any
+			// checked-in service hostname, but fail closed for HTTPS/cloud.
+			if parsed.Scheme != "http" || parsed.Hostname() == "" {
+				return nil, errors.New(
+					"move a non-local generic OTLP endpoint to trace/metric signal variables",
+				)
+			}
+			basePath := strings.TrimRight(parsed.Path, "/")
+			for _, suffix := range []string{"/v1/traces", "/v1/metrics", "/v1/logs"} {
+				if strings.HasSuffix(basePath, suffix) {
+					basePath = strings.TrimSuffix(basePath, suffix)
+					break
+				}
+			}
+			parsed.Path = strings.TrimRight(basePath, "/") + "/v1/logs"
+			parsed.RawPath = ""
+			endpoint = parsed.String()
+		} else {
+			endpoint = fallbackLocalOTLPLogsEndpoint
+		}
 	}
 	opts := []otlploghttp.Option{otlploghttp.WithEndpointURL(endpoint)}
 	if logsHeaders == "" {
@@ -522,12 +547,14 @@ record:
 slog.InfoContext(ctx, "order accepted", "order.type", "standard")
 ```
 
-An unset `OTEL_LOGS_EXPORTER` is treated as `otlp` only when the logs endpoint
-is absent or matches `localObserverLogsEndpoint`. Adapt that constant to the
-detected Splunk Observability Studio service address for Docker/Compose. A non-local explicit
-endpoint on the absent/`otlp` branch returns an error before the provider or
-bridge is constructed; report the operator-owned boundary conflict instead of
-converting it to local or cloud export. Exact `none` and every other explicit
+An unset `OTEL_LOGS_EXPORTER` is treated as `otlp` only after instrumentation
+preflight classifies a signal-specific endpoint or compatible generic HTTP
+receiver as local/collector-owned. At runtime the signal-specific endpoint
+remains operator configuration and wins unchanged; a compatible generic
+receiver preserves its host, base path, and non-default port. Report a
+source-proven non-local endpoint as an operator-owned boundary conflict before
+applying this pattern. The literal remains only the final fallback. Exact
+`none` and every other explicit
 exporter skip the app-owned provider and bridge without validating the
 operator-owned endpoint: `none` is the opt-out, while another value belongs to
 an existing or operator-configured exporter and must not be supplemented by
@@ -710,19 +737,19 @@ The `otelhttp` handler auto-sets ERROR on 5xx responses.
 
 ## OTLP Export Configuration
 
-Use environment variables for operator-owned configuration. The only endpoint
-literal in the SDK example is the signal-specific local Splunk Observability Studio logs fallback,
-which prevents a generic direct-cloud endpoint from becoming the implicit log
-destination. The `otlptracehttp` and `otlpmetrichttp` exporters read their
+Use environment variables for operator-owned configuration. Resolve the local
+receiver before launch and write its actual endpoints into the standard OTel
+variables. Endpoint literals below are conventional no-discovery fallbacks,
+not fixed-port equality checks. The `otlptracehttp` and `otlpmetrichttp` exporters read their
 configuration automatically.
 
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Common OTLP HTTP endpoint |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318` | Common OTLP HTTP endpoint; preserve a configured non-default port |
 | `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the Splunk Observability Studio-owned local log path, even when logs headers are set |
-| `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or detected-local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
-| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for host/native Splunk Observability Studio runs | Signal-specific local application-log destination |
+| `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or preflight-classified local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
 | `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
@@ -731,7 +758,8 @@ configuration automatically.
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
 
 
-For local development with Splunk Observability Studio:
+For local development with Splunk Observability Studio, replace the conventional
+fallback port below with the resolved receiver port when it differs:
 
 ```
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
@@ -751,26 +779,26 @@ metrics from `otelhttp`, including `http.server.request.duration` or the older
 `http.server.duration` name, export promptly to Splunk Observability Studio.
 
 For Docker or Compose, use the checked-in local Splunk Observability Studio service address (for
-example `http://observer:4318/v1/logs`) instead of loopback and adapt
-`localObserverLogsEndpoint` to that same detected value. On the absent/`otlp`
-branch, accept an explicit endpoint only when it matches that local value; do
-not derive the log destination from `OTEL_EXPORTER_OTLP_ENDPOINT` when that
-generic value might point directly to cloud ingest.
+example `http://observer:4318/v1/logs`) instead of loopback by setting the
+standard signal-specific endpoint. Do not add a runtime Obstudio lookup. Do not
+derive the log destination from `OTEL_EXPORTER_OTLP_ENDPOINT` until preflight
+has classified that generic HTTP endpoint as local/collector-owned; use
+signal-specific trace and metric settings for direct-cloud export.
 
 ### Local Splunk Observability Studio application logs and cloud boundary
 
 Local OTLP application logs are the default for a detected supported Go
 logging stack only when the exporter is absent/`otlp` and the logs endpoint is
-absent or matches the detected local Splunk Observability Studio receiver. `none` omits the added
+absent or preflight-classified as the local Splunk Observability Studio receiver. `none` omits the added
 provider, processor, exporter, and bridge while the original stdout/file sink
 continues; another non-OTLP exporter remains operator-owned and its endpoint is
 not interpreted. When traces or metrics use direct-cloud signal endpoints,
 keep the default logs endpoint on local Splunk Observability Studio. Never copy a Splunk ingest
 URL, realm, access token, generic cloud header, cloud exporter, or forwarding
-flag into log configuration. For the absent/`otlp` branch, reject a non-local
-explicit logs endpoint before constructing the provider or bridge, preserve it
-as operator configuration, report the boundary conflict, and require the
-operator to resolve it. Also reject any generic OTLP header on the local branch
+flag into log configuration. Classify an explicit signal-specific endpoint
+during instrumentation preflight; if approved, preserve it as operator
+configuration and let it win at runtime. Report a source-proven non-local value
+as the boundary conflict before applying this pattern. Also reject any generic OTLP header on the local branch
 even when signal-specific logs headers exist; move the generic credentials to
 trace/metric variables and remove the generic setting. Splunk Observability Studio cloud
 forwarding remains traces and metrics only.

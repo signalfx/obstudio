@@ -115,20 +115,21 @@ which existing appenders remain active before editing.
 
   | Existing log configuration | Required action |
   |---|---|
-  | exporter unset/empty and endpoint absent or detected-local | Default the exporter to `otlp` for the local Splunk Observability Studio baseline |
-  | exporter `otlp` and endpoint absent or detected-local | Preserve `otlp` and use the detected local Splunk Observability Studio endpoint |
-  | exporter unset/`otlp` and endpoint non-local | Fail closed before the agent starts its log path; report the operator-owned boundary conflict |
+  | exporter unset/empty and endpoint absent or preflight-classified local | Default the exporter to `otlp` for the local Splunk Observability Studio baseline |
+  | exporter `otlp` and endpoint absent or preflight-classified local | Preserve `otlp` and use the classified local Splunk Observability Studio endpoint |
+  | exporter unset/`otlp` and endpoint source-proven non-local during preflight | Report the operator-owned boundary conflict before applying this pattern |
   | `none` | Keep it disabled; do not add another provider, exporter, or bridge |
   | any other explicit value | Preserve it as operator-owned; do not supplement it with a local pipeline |
 
 - When the logs exporter is absent/`otlp`, set the signal-specific OTLP/HTTP
-  endpoint to `http://localhost:4318/v1/logs` for a host JVM or the equivalent
-  detected Splunk Observability Studio service address in Docker. Accept an explicit endpoint on
-  that branch only when it matches the detected local receiver and its
-  protocol/path tuple. If it is non-local or direct-cloud, do not enable the
-  agent-owned log provider/bridge; fail closed and report the boundary conflict
-  rather than silently replacing it or adding a second local pipeline. Do not
-  validate the endpoint on `none` or another non-OTLP exporter branch.
+  endpoint to the receiver resolved during instrumentation, using
+  `http://127.0.0.1:4318/v1/logs` only as the no-discovery host fallback. Accept
+  an explicit endpoint on that branch when preflight classifies it as the
+  resolved local receiver, including a non-default port or Docker service
+  address. At runtime, preserve that signal-specific operator setting and let
+  it win unchanged. If it is source-proven non-local or direct-cloud, report
+  the boundary conflict before applying this pattern. Do not validate the
+  endpoint on `none` or another non-OTLP exporter branch.
 - Never let logs inherit a generic direct-cloud endpoint or header. Move a
   direct-cloud `OTEL_EXPORTER_OTLP_ENDPOINT` and
   `OTEL_EXPORTER_OTLP_HEADERS` to trace- and metric-specific endpoint/header
@@ -182,6 +183,7 @@ fail() { printf '%s\n' "$*" >&2; exit 1; }
 logs_exporter=${OTEL_LOGS_EXPORTER:-}
 logs_protocol=${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL:-}
 logs_endpoint=${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}
+generic_protocol=${OTEL_EXPORTER_OTLP_PROTOCOL:-}
 generic_endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 generic_headers=${OTEL_EXPORTER_OTLP_HEADERS:-}
 logs_exporter_d=0
@@ -211,6 +213,8 @@ read_otel_property() {
       logs_protocol=$otel_property_value; logs_protocol_d=1 ;;
     -Dotel.exporter.otlp.logs.endpoint)
       logs_endpoint=$otel_property_value; logs_endpoint_d=1 ;;
+    -Dotel.exporter.otlp.protocol)
+      generic_protocol=$otel_property_value ;;
     -Dotel.exporter.otlp.endpoint)
       generic_endpoint=$otel_property_value ;;
     -Dotel.exporter.otlp.headers)
@@ -306,55 +310,62 @@ fi
 
 if [ -z "$logs_protocol" ]; then
   [ "$logs_protocol_d" -eq 0 ] || fail "remove the empty OTLP logs protocol property"
-  logs_protocol=http/protobuf
+  logs_protocol=${generic_protocol:-http/protobuf}
   add_logs_protocol=1
 fi
-case "${OBSTUDIO_OBSERVER_TARGET:-host}" in
-  host)
-    local_http_endpoint=http://localhost:4318
-    local_grpc_endpoint=http://localhost:4317 ;;
-  docker)
-    local_http_endpoint=http://observer:4318
-    local_grpc_endpoint=http://observer:4317 ;;
-  *) fail "unsupported Splunk Observability Studio target" ;;
-esac
+fallback_local_http_endpoint=http://127.0.0.1:4318
+fallback_local_grpc_endpoint=http://127.0.0.1:4317
 case "$logs_protocol" in
   http/protobuf)
-    local_logs_endpoint=$local_http_endpoint/v1/logs ;;
+    if [ -n "$logs_endpoint" ]; then
+      local_logs_endpoint=$logs_endpoint
+    elif [ -n "$generic_endpoint" ]; then
+      # Preflight has classified this as the intended local/collector-owned
+      # receiver. Accept an arbitrary checked-in HTTP service hostname, but
+      # fail closed for HTTPS/direct-cloud endpoints.
+      case "$generic_endpoint" in
+        http://?*) ;;
+        *) fail "move a non-local generic OTLP endpoint to trace/metric signal variables" ;;
+      esac
+      local_http_endpoint=$generic_endpoint
+      while [ "${local_http_endpoint%/}" != "$local_http_endpoint" ]; do
+        local_http_endpoint=${local_http_endpoint%/}
+      done
+      case "$local_http_endpoint" in
+        */v1/traces) local_http_endpoint=${local_http_endpoint%/v1/traces} ;;
+        */v1/metrics) local_http_endpoint=${local_http_endpoint%/v1/metrics} ;;
+        */v1/logs) local_http_endpoint=${local_http_endpoint%/v1/logs} ;;
+      esac
+      local_logs_endpoint=$local_http_endpoint/v1/logs
+    else
+      local_logs_endpoint=$fallback_local_http_endpoint/v1/logs
+    fi ;;
   grpc)
-    local_logs_endpoint=$local_grpc_endpoint ;;
+    if [ -n "$logs_endpoint" ]; then
+      local_logs_endpoint=$logs_endpoint
+    elif [ -n "$generic_endpoint" ]; then
+      case "$generic_endpoint" in
+        http://?*) ;;
+        *) fail "move a non-local generic OTLP endpoint to trace/metric signal variables" ;;
+      esac
+      local_logs_endpoint=$generic_endpoint
+    else
+      local_logs_endpoint=$fallback_local_grpc_endpoint
+    fi ;;
   *) fail "unsupported OTLP logs protocol" ;;
 esac
 if [ -z "$logs_endpoint" ]; then
   [ "$logs_endpoint_d" -eq 0 ] || fail "remove the empty OTLP logs endpoint property"
   logs_endpoint=$local_logs_endpoint
   add_logs_endpoint=1
-elif [ "$logs_endpoint" != "$local_logs_endpoint" ]; then
-  fail "OTLP logs endpoint is not the detected local Splunk Observability Studio"
-fi
-if [ -n "$generic_endpoint" ] && \
-   [ "$generic_endpoint" != "$local_http_endpoint" ] && \
-   [ "$generic_endpoint" != "$local_grpc_endpoint" ]; then
-  fail "move a non-local generic OTLP endpoint to trace/metric signal variables"
 fi
 if [ -n "$generic_headers" ]; then
   fail "move generic OTLP headers to trace/metric signal variables and remove the generic value"
 fi
 
-case "${OBSTUDIO_JAVA_LOG_DEFAULTS:-environment}" in
-  environment)
-    [ "$add_logs_exporter" -eq 0 ] || export OTEL_LOGS_EXPORTER=$logs_exporter
-    [ "$add_logs_protocol" -eq 0 ] || export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=$logs_protocol
-    [ "$add_logs_endpoint" -eq 0 ] || export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=$logs_endpoint
-    ;;
-  system-properties)
-    # A key is added only when neither environment nor an existing -D supplied it.
-    [ "$add_logs_endpoint" -eq 0 ] || set -- "-Dotel.exporter.otlp.logs.endpoint=$logs_endpoint" "$@"
-    [ "$add_logs_protocol" -eq 0 ] || set -- "-Dotel.exporter.otlp.logs.protocol=$logs_protocol" "$@"
-    [ "$add_logs_exporter" -eq 0 ] || set -- "-Dotel.logs.exporter=$logs_exporter" "$@"
-    ;;
-  *) fail "OBSTUDIO_JAVA_LOG_DEFAULTS must be environment or system-properties" ;;
-esac
+[ "$add_logs_exporter" -eq 0 ] || export OTEL_LOGS_EXPORTER=$logs_exporter
+[ "$add_logs_protocol" -eq 0 ] || export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=$logs_protocol
+[ "$add_logs_endpoint" -eq 0 ] || export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=$logs_endpoint
 
 exec java "$@"
 ```
@@ -373,10 +384,14 @@ Invoke the checked-in launcher with the project's existing Java arguments:
 
 The launcher resolves each effective setting from the environment and standard
 JVM option sources, including `JAVA_TOOL_OPTIONS` and explicit launcher `-D`
-arguments. It never adds a property key already present on a JVM property
-surface. `none` and every other explicit exporter run unchanged; only the
-absent/`otlp` branch receives local defaults and rejects a non-local signal or
-generic endpoint and an effective generic header. An empty
+arguments. It never exports a missing environment default for a setting already
+present on a JVM property surface. `none` and every other explicit exporter run unchanged; only the
+absent/`otlp` branch receives local defaults through standard OTel environment
+variables. A signal-specific endpoint wins without comparison to a differing
+generic trace/metric endpoint. When the signal-specific endpoint is absent,
+the launcher accepts only a preflight-approved generic HTTP collector endpoint
+and rejects HTTPS/direct-cloud values. It always rejects an effective generic
+header. An empty
 `-Dotel.logs.exporter=` keeps its one existing key and follows the current
 agent's default OTLP behavior. Launcher scanning stops at the main class,
 source file, JAR, or module so application arguments cannot alter ownership.
@@ -399,10 +414,12 @@ COPY otel-entrypoint.sh /usr/local/bin/otel-entrypoint
 COPY my-app.jar /opt/app.jar
 RUN chmod 0755 /usr/local/bin/otel-entrypoint
 
-ENV OBSTUDIO_OBSERVER_TARGET=docker
 ENV OTEL_SERVICE_NAME=my-service
 ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318
 ENV OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+ENV OTEL_LOGS_EXPORTER=otlp
+ENV OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/protobuf
+ENV OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://observer:4318/v1/logs
 ENV OTEL_METRIC_EXPORT_INTERVAL=1000
 ENV OTEL_METRIC_EXPORT_TIMEOUT=500
 
@@ -412,28 +429,32 @@ CMD ["-javaagent:/opt/agent.jar", "-jar", "/opt/app.jar"]
 
 Docker environment, `JAVA_TOOL_OPTIONS`, and command overrides all pass through
 the same guard. `docker run -e OTEL_LOGS_EXPORTER=none ...` disables OTLP logs
-without removing existing appenders; a non-OTLP exporter remains operator-owned,
-while a non-local OTLP logs endpoint or generic header fails before Java starts.
+without removing existing appenders; a non-OTLP exporter remains operator-owned.
+Preflight classifies signal-specific endpoints, while a generic cloud header
+still fails before Java starts.
 
-### JVM system-property equivalent
+### JVM system-property precedence
 
-When the existing launcher owns JVM arguments, ask the same entrypoint to add
-missing local defaults as system properties:
+When the existing launcher owns JVM arguments, pass explicit standard OTel JVM
+properties through the same entrypoint. They retain normal Java precedence over
+environment defaults:
 
 ```bash
-OBSTUDIO_JAVA_LOG_DEFAULTS=system-properties \
 ./otel-entrypoint.sh \
   -javaagent:./opentelemetry-javaagent.jar \
   -Dotel.service.name=my-service \
   -Dotel.exporter.otlp.endpoint=http://localhost:4318 \
   -Dotel.exporter.otlp.protocol=http/protobuf \
+  -Dotel.logs.exporter=otlp \
+  -Dotel.exporter.otlp.logs.protocol=http/protobuf \
+  -Dotel.exporter.otlp.logs.endpoint=http://localhost:4318/v1/logs \
   -jar my-app.jar
 ```
 
-The entrypoint does not append a log property when the same key already appears
-in `JAVA_TOOL_OPTIONS` or the launcher arguments, and it does not synthesize any
-log properties when the effective exporter is `none` or non-OTLP. This prevents
-the example from overriding an operator's higher-precedence JVM configuration.
+The entrypoint does not export a missing log default when the same key already
+appears in `JAVA_TOOL_OPTIONS` or the launcher arguments, and it exports no
+defaults when the effective exporter is `none` or non-OTLP. This prevents the
+example from overriding an operator's higher-precedence JVM configuration.
 For a reviewed MDC allowlist, add only the property matching the detected stack,
 for example
 `-Dotel.instrumentation.logback-appender.experimental.capture-mdc-attributes=operation,outcome`
@@ -607,16 +628,18 @@ Spring MVC auto-instrumentation sets ERROR on unhandled exceptions and 5xx respo
 ## OTLP Export Configuration
 
 Use Java agent environment variables or their dotted JVM-property equivalents.
-Keep an HTTP/protobuf logs endpoint paired with the complete `/v1/logs` path.
+Resolve the local receiver before launch, preserve any non-default port, and
+keep an HTTP/protobuf logs endpoint paired with the complete `/v1/logs` path.
+The literal ports below are conventional fallbacks, not equality gates.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Common OTLP endpoint only when it is local or collector-owned; never leave a direct-cloud value for logs to inherit |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318` | Common OTLP endpoint only when it is local or collector-owned; preserve a configured non-default port and never leave a direct-cloud value for logs to inherit |
 | `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the agent-owned local log path, even when logs headers are set |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` for Java agent 2.x | Common protocol when using port 4318 |
-| `OTEL_LOGS_EXPORTER` | `otlp` only when absent and the logs endpoint is absent or detected-local | `none` disables agent log export; any other explicit value is preserved |
+| `OTEL_LOGS_EXPORTER` | `otlp` only when absent and the logs endpoint is absent or preflight-classified local | `none` disables agent log export; any other explicit value is preserved |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the local baseline | Signal-specific log transport |
-| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for a host JVM | Signal-specific local Splunk Observability Studio application-log destination |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local Splunk Observability Studio application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Only signal-specific operator-owned log headers; never inherit a generic cloud credential |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | unset | Use these instead of a generic endpoint for direct-cloud trace/metric export |
 | `OTEL_EXPORTER_OTLP_TRACES_HEADERS` / `OTEL_EXPORTER_OTLP_METRICS_HEADERS` | unset | Keep cloud credentials signal-specific; never copy them to logs |
@@ -625,7 +648,8 @@ Keep an HTTP/protobuf logs endpoint paired with the complete `/v1/logs` path.
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
 
-For local development with Splunk Observability Studio:
+For local development with Splunk Observability Studio, replace the conventional
+fallback port below with the resolved receiver port when it differs:
 
 Use this explicit HTTP baseline only when preflight found no operator-owned
 logs exporter, protocol, or endpoint. If any of those is configured -- including
@@ -651,11 +675,11 @@ generic cloud variables from the launch environment. A signal-specific local
 logs endpoint alone does not prevent a generic cloud header from being
 inherited or merged, even when a signal-specific logs header is also present.
 Do not configure a logs cloud header or a cloud log-forwarding pipeline;
-Splunk Observability Studio forwards only traces and metrics. On the absent/`otlp` branch, accept
-an explicit logs endpoint only when it matches the detected local Splunk Observability Studio;
-otherwise fail before the agent starts and report the operator-owned boundary
-conflict. Preserve `none` and non-OTLP exporter branches without interpreting
-their endpoint.
+Splunk Observability Studio forwards only traces and metrics. Classify an
+explicit logs endpoint during instrumentation preflight; once approved, leave
+it as operator configuration and let it win at runtime. Report a source-proven
+non-local value as the boundary conflict before applying this pattern. Preserve
+`none` and non-OTLP exporter branches without interpreting their endpoint.
 
 ---
 

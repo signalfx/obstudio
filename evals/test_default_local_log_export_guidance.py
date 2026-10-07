@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -50,6 +51,7 @@ def _java_launcher(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         """#!/bin/sh
 printf 'JAVA_CALLED=1\\n'
 printf 'OTEL_LOGS_EXPORTER=%s\\n' "${OTEL_LOGS_EXPORTER-<unset>}"
+printf 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=%s\\n' "${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT-<unset>}"
 for arg in "$@"; do
   printf 'ARG=%s\\n' "$arg"
 done
@@ -83,6 +85,55 @@ def test_audit_selects_missing_supported_local_logs_by_default() -> None:
         "Splunk Observability Studio cloud forwarding to Splunk is traces and metrics only",
     ):
         assert term in instrument
+
+
+def test_skills_separate_local_receipt_from_configured_cloud_delivery() -> None:
+    receiver = _normalized(SKILLS / "references" / "local-otlp-receiver.md")
+    ao = _normalized(SKILLS / "references" / "splunk-agent-observability.md")
+    consumers = json.loads(_read(SKILLS / "references" / "consumers.json"))
+
+    for term in (
+        "Receiver Receipt Is Not Product Delivery",
+        "cloud-compatible gateway may delegate AO",
+        "Receipt alone does not create or select",
+        "endpoints.otlpHttp",
+        "OTLP_HTTP_PORT",
+        "configured non-default port",
+        "generated application startup must not query Studio-specific discovery",
+        "normal AO SDK calls",
+    ):
+        assert term.lower() in receiver.lower()
+
+    for term in (
+        "Configured Runtime Destination",
+        "special route-registration call",
+        "alternative routing modes, not two mandatory exporters",
+        "Studio derives upstream API and ingest endpoints from its active cloud connection and realm",
+        "not proof of cloud Agent Observability visibility",
+    ):
+        assert term in ao
+
+    assert consumers["local-otlp-receiver.md"] == [
+        "otel-audit",
+        "otel-instrument",
+        "otel-verify",
+    ]
+    assert consumers["splunk-agent-observability.md"] == [
+        "otel-audit",
+        "otel-instrument",
+        "otel-verify",
+    ]
+
+    for skill_name in ("otel-audit", "otel-instrument", "otel-verify"):
+        skill = _read(SKILLS / skill_name / "SKILL.md")
+        assert "../references/local-otlp-receiver.md" in skill
+
+    for filename in ("python.md", "node.md", "java.md", "go.md"):
+        guide = _read(LANGUAGES / filename)
+        assert "fixed-port equality" in guide or "equality gates" in guide
+        assert "OBSTUDIO_OBSERVER_RUNTIME" not in guide
+        assert "OBSTUDIO_OBSERVER_TARGET" not in guide
+        assert "OBSTUDIO_" not in guide
 
 
 def test_all_language_guides_define_local_logs_and_cloud_boundary() -> None:
@@ -144,6 +195,24 @@ def test_language_guides_reject_generic_cloud_header_inheritance() -> None:
     assert "trace- and metric-specific endpoint/header settings" in java
 
 
+def test_language_guides_inherit_compatible_generic_nondefault_receiver() -> None:
+    python = _read(LANGUAGES / "python.md")
+    node = _read(LANGUAGES / "node.md")
+    go = _read(LANGUAGES / "go.md")
+    java = _read(LANGUAGES / "java.md")
+
+    assert 'logs_endpoint="${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}"' in python
+    assert 'generic_endpoint="${OTEL_EXPORTER_OTLP_ENDPOINT:-}"' in python
+    assert '*/v1/traces) generic_http_base=' in python
+    assert 'logs_endpoint="${generic_http_base%/}/v1/logs"' in python
+    assert "localLogsEndpointFromGeneric" in node
+    assert "parsed.pathname = `${basePath}/v1/logs`" in node
+    assert "url.Parse(genericEndpoint)" in go
+    assert 'parsed.Path = strings.TrimRight(basePath, "/") + "/v1/logs"' in go
+    assert 'elif [ -n "$generic_endpoint" ]; then' in java
+    assert 'local_logs_endpoint=$local_http_endpoint/v1/logs' in java
+
+
 def test_shell_wrappers_only_add_local_log_configuration_for_otlp() -> None:
     python = _read(LANGUAGES / "python.md")
     java = _read(LANGUAGES / "java.md")
@@ -160,12 +229,11 @@ def test_shell_wrappers_only_add_local_log_configuration_for_otlp() -> None:
     assert 'scan_otel_options "${JAVA_TOOL_OPTIONS:-}"' in java
     assert 'for otel_jvm_arg in "$@"; do' in java
     assert '-Dotel.exporter.otlp.endpoint)' in java
-    assert '[ "$generic_endpoint" != "$local_http_endpoint" ]' in java
-    assert '[ "$generic_endpoint" != "$local_grpc_endpoint" ]' in java
     assert java.index('if [ "$logs_exporter" != otlp ]; then') < java.index(
         'if [ -n "$generic_endpoint" ]'
     )
-    assert "OBSTUDIO_JAVA_LOG_DEFAULTS=system-properties" in java
+    assert '[ "$add_logs_endpoint" -eq 0 ] || export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=' in java
+    assert "OBSTUDIO_JAVA_LOG_DEFAULTS" not in java
     assert 'ENTRYPOINT ["/usr/local/bin/otel-entrypoint"]' in java
     assert 'CMD ["java", "-jar", "/opt/app.jar"]' not in java
     assert '"${otel_log_args[@]}"' not in java
@@ -220,6 +288,79 @@ printf 'AUTO=%s\\n' "${OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION-<unset>}"
         check=True,
     )
     assert opted_out.stdout == "AUTO=false\n"
+
+
+def test_python_cli_preserves_resolved_nondefault_receiver_ports(
+    tmp_path: Path,
+) -> None:
+    launcher = tmp_path / "otel-entrypoint.sh"
+    _write_executable(
+        launcher,
+        _fenced_code_after(
+            LANGUAGES / "python.md",
+            "## Auto-Instrumentation (CLI Wrapper)",
+            "bash",
+        ),
+    )
+    subprocess.run(["/bin/sh", "-n", launcher], check=True)
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "opentelemetry-instrument",
+        """#!/bin/sh
+printf 'COMMON=%s\n' "${OTEL_EXPORTER_OTLP_ENDPOINT-<unset>}"
+printf 'LOGS=%s\n' "${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT-<unset>}"
+""",
+    )
+
+    for port in (55318, 55319):
+        result = subprocess.run(
+            [launcher, "python", "app.py"],
+            env={
+                "PATH": str(fake_bin),
+                "OTEL_EXPORTER_OTLP_ENDPOINT": f"http://127.0.0.1:{port}",
+            },
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        assert result.stdout == (
+            f"COMMON=http://127.0.0.1:{port}\n"
+            f"LOGS=http://127.0.0.1:{port}/v1/logs\n"
+        )
+
+    signal_specific = subprocess.run(
+        [launcher, "python", "app.py"],
+        env={
+            "PATH": str(fake_bin),
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55318",
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": (
+                "http://127.0.0.1:55444/v1/logs"
+            ),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "LOGS=http://127.0.0.1:55444/v1/logs\n" in signal_specific.stdout
+
+    signal_path = subprocess.run(
+        [launcher, "python", "app.py"],
+        env={
+            "PATH": str(fake_bin),
+            "OTEL_EXPORTER_OTLP_ENDPOINT": (
+                "http://127.0.0.1:55318/collector/v1/traces"
+            ),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert (
+        "LOGS=http://127.0.0.1:55318/collector/v1/logs\n"
+        in signal_path.stdout
+    )
 
 
 def test_python_logging_trace_injection_is_version_conditional() -> None:
@@ -305,13 +446,57 @@ def test_java_launcher_accepts_local_generic_endpoint_and_empty_exporter(
         check=True,
     )
     assert "JAVA_CALLED=1" in mixed_protocol.stdout
+    assert (
+        "ARG=-Dotel.exporter.otlp.logs.endpoint=http://localhost:4317\n"
+        in mixed_protocol.stdout
+    )
+
+    nondefault_http = subprocess.run(
+        [
+            launcher,
+            "-Dotel.logs.exporter=otlp",
+            "-Dotel.exporter.otlp.logs.protocol=http/protobuf",
+            "-version",
+        ],
+        env={
+            **base_env,
+            "OTEL_EXPORTER_OTLP_ENDPOINT": (
+                "http://telemetry-collector:55318/collector/v1/traces"
+            ),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "JAVA_CALLED=1" in nondefault_http.stdout
+    assert (
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="
+        "http://telemetry-collector:55318/collector/v1/logs\n"
+        in nondefault_http.stdout
+    )
+
+    signal_specific = subprocess.run(
+        [launcher, "-version"],
+        env={
+            **base_env,
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "https://cloud.invalid",
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": (
+                "http://arbitrary-observer:55444/v1/logs"
+            ),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert (
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="
+        "http://arbitrary-observer:55444/v1/logs\n"
+        in signal_specific.stdout
+    )
 
     empty_exporter = subprocess.run(
         [launcher, "-Dotel.logs.exporter=", "-jar", "app.jar"],
-        env={
-            **base_env,
-            "OBSTUDIO_JAVA_LOG_DEFAULTS": "system-properties",
-        },
+        env=base_env,
         text=True,
         capture_output=True,
         check=True,
@@ -319,9 +504,10 @@ def test_java_launcher_accepts_local_generic_endpoint_and_empty_exporter(
     assert empty_exporter.stdout.count("ARG=-Dotel.logs.exporter=\n") == 1
     assert "ARG=-Dotel.logs.exporter=otlp\n" not in empty_exporter.stdout
     assert (
-        "ARG=-Dotel.exporter.otlp.logs.endpoint=http://localhost:4318/v1/logs\n"
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://127.0.0.1:4318/v1/logs\n"
         in empty_exporter.stdout
     )
+    assert "ARG=-Dotel.exporter.otlp.logs.endpoint=" not in empty_exporter.stdout
 
 
 def test_java_launcher_rejects_argfiles_and_ambiguous_option_environments(
@@ -589,8 +775,14 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
 
     for path, (service_name, record_count) in runtime_cases.items():
         definition = json.loads(_read(path))
+        compose = _read(path.with_name("docker-compose.yml"))
+        http_port = re.search(r"OTLP_HTTP_PORT=(\d+)", compose)
+        assert http_port is not None
+        expected_logs_endpoint = (
+            f"http://observer:{http_port.group(1)}/v1/logs"
+        )
         assert "runs the app in Docker Compose" in definition["prompts"][0]["task"]
-        assert "http://observer:4318/v1/logs" in definition["prompts"][0]["task"]
+        assert expected_logs_endpoint in definition["prompts"][0]["task"]
         default_check, opt_out_check = definition["checks"]
 
         assert default_check["environment"]["CODEX_EVAL_OTEL_LOGS_EXPORTER"] == ""
@@ -778,19 +970,47 @@ def test_runtime_observer_keeps_grpc_loopback_when_http_is_container_visible() -
         ROOT / "evals/python/flask-basic/eval/runtime/docker-compose.yml",
     )
 
+    nondefault_http_ports = []
     for path in compose_paths:
         compose = _read(path)
+        http_port_match = re.search(r"OTLP_HTTP_PORT=(\d+)", compose)
+        grpc_port_match = re.search(r"OTLP_GRPC_PORT=(\d+)", compose)
+        assert http_port_match is not None
+        assert grpc_port_match is not None
+        http_port = http_port_match.group(1)
+        grpc_port = grpc_port_match.group(1)
         assert "HOST=0.0.0.0" in compose
         assert "OTLP_GRPC_HOST=127.0.0.1" in compose
-        assert "OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318" in compose
+        assert f"OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:{http_port}" in compose
+        if http_port != "4318" or grpc_port != "4317":
+            nondefault_http_ports.append(http_port)
+
+    assert nondefault_http_ports, "at least one runtime must exercise changed OTLP ports"
 
     for path in (
         ROOT / "evals/go/kvstore/eval/runtime/docker-compose.yml",
         ROOT / "evals/node/express-basic/eval/runtime/docker-compose.yml",
-        ROOT / "evals/python/flask-basic/eval/runtime/docker-compose.yml",
     ):
         compose = _read(path)
-        assert "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://observer:4318/v1/logs" in compose
+        http_port_match = re.search(r"OTLP_HTTP_PORT=(\d+)", compose)
+        assert http_port_match is not None
+        assert (
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="
+            f"http://observer:{http_port_match.group(1)}/v1/logs"
+        ) in compose
+
+    flask_compose = _read(
+        ROOT / "evals/python/flask-basic/eval/runtime/docker-compose.yml"
+    )
+    assert "OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:55318" in flask_compose
+    assert "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=" not in flask_compose
+    assert "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=" not in flask_compose
+    flask_runtime = json.loads(
+        _read(ROOT / "evals/python/flask-basic/eval/runtime/instrument.json")
+    )
+    flask_task = flask_runtime["prompts"][0]["task"]
+    assert "configures only the generic standard OTel HTTP endpoint" in flask_task
+    assert "deriving exactly one http://observer:55318/v1/logs endpoint" in flask_task
 
     node_compose = _read(ROOT / "evals/node/express-basic/eval/runtime/docker-compose.yml")
     assert "instrumentation.cjs" not in node_compose

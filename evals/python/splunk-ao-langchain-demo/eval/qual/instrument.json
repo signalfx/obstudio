@@ -4,7 +4,7 @@
     {
       "id": "langchain-callback",
       "eval_inputs": ["eval/inputs/otel-audit.json"],
-      "task": "Copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json, validate it, and request OTEL-001 through the bundled selection flow. Implement only that selected callback content-boundary finding in the local LangChain application. Preserve SplunkAOCallback as the sole producer of chain, model, and tool spans. Add focused tests for approved synthetic content, rejection of unapproved input before callback capture, logger lifecycle, and duplicate-free parentage. Run the application tests without model-provider or Splunk credentials and without network access at application runtime, then produce and validate the normal bound instrumentation and verification artifacts. If the pinned dependencies cannot be made available, report the precise proof blocker rather than claiming tests ran."
+      "task": "Copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json, validate it, and request OTEL-001 through the bundled selection flow. Implement only that selected callback content-boundary finding in the local LangChain application. Preserve SplunkAOCallback as the sole producer of chain, model, and tool spans. Add focused tests for approved synthetic content, rejection of unapproved input before callback capture, logger lifecycle, duplicate-free parentage, and initialization with every Obstudio environment/control surface absent. Run the application tests without model-provider or Splunk credentials and without network access at application runtime, then produce and validate the normal bound instrumentation and verification artifacts. If the pinned dependencies cannot be made available, report the precise proof blocker rather than claiming tests ran."
     }
   ],
   "judge_inputs": [
@@ -14,7 +14,7 @@
   ],
   "rubric": [
     "Preserves the single SplunkAOCallback span for each existing LangChain chain, DemoLocalLLM model, and lookup_weather tool operation; it does not add duplicate @log decorators or app-owned OTel spans around them.",
-    "Keeps the app runnable without an OpenAI API key, Splunk access token, or network call by retaining FakeListLLM and the supported ingestion_hook path; it does not claim that local capture proves live Splunk delivery.",
+    "Keeps the app runnable without an OpenAI API key, Splunk access token, network call, Obstudio environment variable, listener, route-registration API, or process-order dependency by retaining FakeListLLM and the supported ingestion_hook path; it does not claim that local capture proves live Splunk delivery.",
     "Implements selected OTEL-001 by rejecting unapproved caller content before the callback-covered chain starts, or by using a source-verified SDK control that prevents raw capture; it does not treat companion redacted fields as removal of raw content.",
     "Preserves explicit logger.terminate() shutdown behavior and verifies termination without adding an unrelated application TracerProvider or provider.shutdown() path.",
     "Adds or preserves focused executed tests that inspect the captured trace batch, prove exactly one support_agent chain, one DemoLocalLLM model operation, one lookup_weather tool operation with correct parentage, and prove unapproved input creates no captured trace without external services.",

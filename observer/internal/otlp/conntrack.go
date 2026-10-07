@@ -12,11 +12,14 @@ import (
 	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/store"
+	"go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/stats"
+	"google.golang.org/grpc/status"
 )
 
 // ConnTracker wraps the OTLP receiver with proxies that provide disconnect
@@ -293,7 +296,7 @@ func (ct *ConnTracker) startGRPCProxy(listenAddr, backendAddr string) error {
 	// Plaintext is safe here because validateLoopbackAddress rejects network-facing listeners.
 	ct.grpcServer = grpc.NewServer( // nosemgrep: tools.semgrep.rules.CCF.grpc-server-insecure-connection
 		grpc.StatsHandler(&grpcConnHandler{ct: ct}),
-		grpc.UnknownServiceHandler(newStreamForwarder(backendConn)),
+		grpc.UnknownServiceHandler(newStreamForwarder(backendConn, ct)),
 	)
 
 	go ct.grpcServer.Serve(ln)
@@ -345,7 +348,7 @@ func (h *grpcConnHandler) HandleConn(ctx context.Context, s stats.ConnStats) {
 
 // newStreamForwarder returns a [grpc.StreamHandler] that transparently
 // proxies all RPCs to the backend connection without deserialization.
-func newStreamForwarder(backend *grpc.ClientConn) grpc.StreamHandler {
+func newStreamForwarder(backend *grpc.ClientConn, ct *ConnTracker) grpc.StreamHandler {
 	return func(_ any, serverStream grpc.ServerStream) error {
 		method, ok := grpc.Method(serverStream.Context())
 		if !ok {
@@ -353,6 +356,16 @@ func newStreamForwarder(backend *grpc.ClientConn) grpc.StreamHandler {
 		}
 
 		ctx := serverStream.Context()
+		if method == "/opentelemetry.proto.collector.trace.v1.TraceService/Export" {
+			md, _ := metadata.FromIncomingContext(ctx)
+			route, err := agentTraceRoute(md.Get("projectid"), md.Get("logstreamid"))
+			if err != nil {
+				return status.Error(codes.InvalidArgument, "valid projectid and logstreamid metadata are required together")
+			}
+			if route.ProjectID != "" {
+				return ct.handleAgentTraceGRPC(serverStream, route)
+			}
+		}
 		if connID := grpcConnIDFromContext(ctx); connID != "" {
 			ctx = metadata.AppendToOutgoingContext(ctx, grpcConnIDMetadataKey, connID)
 		}
@@ -416,6 +429,32 @@ func newStreamForwarder(backend *grpc.ClientConn) grpc.StreamHandler {
 		}
 		return firstErr
 	}
+}
+
+func (ct *ConnTracker) handleAgentTraceGRPC(stream grpc.ServerStream, route AgentTraceRoute) error {
+	frame := &rawFrame{}
+	if err := stream.RecvMsg(frame); err != nil {
+		return err
+	}
+	request := ptraceotlp.NewExportRequest()
+	if err := request.UnmarshalProto(frame.data); err != nil {
+		return status.Error(codes.InvalidArgument, "invalid agent trace payload")
+	}
+	td := request.Traces()
+	ct.store.AddAgentSpansForConnection(grpcConnIDFromContext(stream.Context()), ConvertTraces(td))
+	exporter, ok := ct.tracesExporter.(AgentTracesExporter)
+	if !ok {
+		return status.Error(codes.Unavailable, "agent trace forwarding is unavailable or failed")
+	}
+	response, err := exporter.ExportAgentTraces(stream.Context(), td, route)
+	if err != nil {
+		return status.Error(codes.Unavailable, "agent trace forwarding is unavailable or failed")
+	}
+	body, err := response.MarshalProto()
+	if err != nil {
+		return status.Error(codes.Internal, "could not encode agent trace response")
+	}
+	return stream.SendMsg(&rawFrame{data: body})
 }
 
 func grpcConnIDFromContext(ctx context.Context) string {

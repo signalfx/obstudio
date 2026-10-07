@@ -51,7 +51,7 @@
     {"method": "POST", "path": "/v1/feedback/export"}
   ],
   "signal_flow": {
-    "component_flow_map": "Assistant lifecycle\nFastAPI routes [SOURCE-COVERED] -> build_turn [GAP: Assistant GenAI lifecycle] -> run_tool search_docs [GAP: Document retrieval inside search_docs] -> call_provider [SOURCE-COVERED]\n\nAgent Observability deployment\nproject resource [GAP: Agent Observability project resource] -> Agent Stream resource [GAP: Dedicated Agent Stream resource] -> deployment exporter [GAP: Direct trace routing]"
+    "component_flow_map": "Assistant lifecycle\nFastAPI routes [SOURCE-COVERED] -> build_turn [GAP: Assistant GenAI lifecycle] -> run_tool search_docs [GAP: Document retrieval inside search_docs] -> call_provider [SOURCE-COVERED]\n\nAgent Observability deployment\nproject resource [GAP: Agent Observability project resource] -> Agent Stream resource [GAP: Dedicated Agent Stream resource] -> configured API/ingest endpoint [GAP: Agent Observability runtime routing]"
   },
   "current_instrumentation": {
     "spans": [],
@@ -210,7 +210,7 @@
       "gap": "The deployment has no resolved Agent Observability project resource or project identifier.",
       "impact": "Agent traces have no verified project destination.",
       "product_outcome": "An existing or authorized newly created project resource is available as the trace destination.",
-      "required_fix": "Resolve an existing project resource and its identifier, or create one through an authorized Agent Observability client or API; never invent an identifier.",
+      "required_fix": "Resolve an existing project resource and its identifier, or create one through the configured supported Agent Observability SDK/API endpoint when authorized; never invent an identifier. A compatible local gateway delegates the normal resource request using its active Studio cloud connection, without an application cloud token.",
       "instrument_mode": "default",
       "verification_scenarios": [
         "genai.turn.lifecycle"
@@ -234,7 +234,7 @@
         }
       ],
       "follow_up_actions": [
-        "Confirm the resolved project exists before configuring direct export."
+        "Confirm the resolved project exists through the selected API endpoint before configuring its runtime export."
       ]
     },
     {
@@ -249,7 +249,7 @@
       "gap": "The target project has no resolved dedicated Agent Stream resource or identifier for this application.",
       "impact": "The application has no verified stream destination and its traces can mix with unrelated agents.",
       "product_outcome": "A dedicated Agent Stream exists in the resolved project and can be selected as the trace destination.",
-      "required_fix": "Resolve an existing dedicated Agent Stream resource in the selected project, or create one through an authorized Agent Observability client or API; never invent an identifier.",
+      "required_fix": "Resolve an existing dedicated Agent Stream resource in the selected project, or create one through the configured supported Agent Observability SDK/API endpoint when authorized; never invent an identifier or configure a global Studio stream destination.",
       "instrument_mode": "default",
       "verification_scenarios": [
         "genai.turn.lifecycle"
@@ -273,43 +273,46 @@
         }
       ],
       "follow_up_actions": [
-        "Confirm the resolved stream belongs to the selected project before configuring direct export."
+        "Confirm the resolved stream belongs to the selected project before configuring per-request runtime routing."
       ]
     },
     {
       "id": "AO-003",
       "finding_group": "splunk-agent-observability",
-      "title": "Persist direct Agent Observability trace routing",
+      "title": "Persist supported Agent Observability runtime routing",
       "severity": "high",
       "priority": "required",
       "effort": "small",
       "status": "proposed",
-      "area": "Direct trace routing",
-      "gap": "The application deployment has no durable direct OTLP export configuration for the resolved project and Agent Stream.",
-      "impact": "Traces can remain unassigned or depend on an Obstudio forwarding process.",
-      "product_outcome": "The deployed application exports directly to its selected project and dedicated Agent Stream.",
-      "required_fix": "Persist the supported OTLP endpoint, authentication secret reference, and project/Agent Stream routing headers in application deployment configuration.",
+      "area": "Agent Observability runtime routing",
+      "gap": "The application deployment has no durable supported API/ingest endpoint configuration and per-request binding for its resolved project and Agent Stream.",
+      "impact": "Traces can remain unassigned, mix with other applications, or be mistaken for cloud Agent Observability delivery after only local or APM receipt.",
+      "product_outcome": "The deployed application uses ordinary supported SDK/API calls and OTLP export to its selected project and dedicated Agent Stream through the selected gateway or explicit direct-cloud endpoint.",
+      "required_fix": "Persist supported SDK API/console/auth configuration and the matching ingest endpoint for the installed version. Default local work to an available cloud-compatible Studio gateway, preserving explicit operator destinations and direct-cloud mode. Keep cloud realm/token server-side in gateway mode and bind the project/Agent Stream on each request/export, without a Studio-specific application adapter, startup discovery, or global destination registration.",
       "instrument_mode": "default",
-      "verification_scenarios": ["genai.turn.lifecycle"],
+      "verification_scenarios": ["genai.turn.lifecycle", "ao.runtime.routing"],
       "dependencies": ["OTEL-001", "AO-001", "AO-002"],
       "evidence": ["pyproject.toml"],
       "acceptance_criteria": [
-        "A fresh application trace reaches the selected Agent Stream without Obstudio in the runtime data path.",
-        "The configured project and Agent Stream identifiers remain operator-overridable and the access token is not committed."
+        "Normal SDK/API resource calls and the exporter exercise the selected endpoint mode. Gateway mode derives upstream realm/auth from the active Studio connection with no application cloud token; explicit direct-cloud mode remains valid.",
+        "Two application streams preserve distinct project/stream bindings per request without cross-application leakage or changing a global AO destination. Unavailable or changed gateway connections are reported without silent destination switches or reuse of old-organization IDs.",
+        "A fresh application trace is visible in the selected cloud Agent Stream. Local receipt, resource API success, upstream ingest acknowledgement, or ordinary APM visibility alone leaves cloud AO delivery Not proven.",
+        "Configured endpoints and project/Agent Stream identifiers remain operator-overridable; cloud secrets are not committed and gateway local credentials are not represented as cloud credentials."
       ],
       "constraints": [
-        "Use only documented routing headers or attributes and operator-owned secret storage."
+        "Use only supported normal SDK configuration and documented routing headers or attributes; preserve selected operator endpoints and managed dependencies/lockfiles.",
+        "Do not patch SDK vendors, mix incompatible endpoint and realm modes, discover Studio endpoints at app startup, or introduce an application-specific gateway API. A selected gateway is an honest runtime availability dependency."
       ],
       "expected_telemetry": [
         {
           "type": "configuration",
-          "name": "agent-observability.direct-routing",
+          "name": "agent-observability.runtime-routing",
           "attributes": [],
-          "product_view": "Direct Agent Observability trace export"
+          "product_view": "Configured Agent Observability trace export"
         }
       ],
       "follow_up_actions": [
-        "Send a fresh trace directly from the deployed application and confirm its project, stream, and trace fields in Agent Observability."
+        "Exercise ordinary resource calls and fresh trace export using the configured endpoint mode, then confirm the exact fresh interaction in its intended cloud project and Agent Stream. Keep configuration, gateway receipt/forwarding, and cloud visibility evidence separate."
       ]
     }
   ],
@@ -343,6 +346,17 @@
         "expected_signals": "Exactly one execute_tool search_docs span and exactly one nested retrieval demo-knowledge-base span with gen_ai.operation.name=retrieval and gen_ai.data_source.id=demo-knowledge-base",
         "proof_level": "full runtime",
         "acceptance_criteria": "The retrieval span parent span ID equals the execute_tool search_docs span ID, and neither span contains gen_ai.retrieval.query.text, gen_ai.retrieval.documents, raw query text, or document content.",
+        "environments": [
+          "python.local"
+        ]
+      },
+      {
+        "id": "ao.runtime.routing",
+        "trigger": "Use normal SDK calls to resolve the authorized project and two distinct dedicated Agent Streams, then export a fresh bounded application interaction to each through the selected gateway or explicit direct-cloud endpoint",
+        "entrypoint": "app.py:93",
+        "expected_signals": "Supported project/stream API calls, completed bounded app-owned spans, per-request project/stream headers, and the exact fresh interactions in their intended cloud Agent Streams",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "The ordinary installed SDK and exporter target the persisted non-default API/ingest endpoints without an app-specific adapter or startup discovery. Gateway mode uses active Studio realm/auth with no app cloud token and no global AO binding; two streams remain isolated. Report unavailable or changed connection behavior honestly and do not reuse old-organization IDs silently. Resource resolution, local receipt, and upstream forwarding are separate outcomes; local ACK is not cloud visibility. Without exact fresh interactions in the intended cloud streams, cloud delivery remains Not proven while credential-free configuration/lifecycle proof can still pass.",
         "environments": [
           "python.local"
         ]

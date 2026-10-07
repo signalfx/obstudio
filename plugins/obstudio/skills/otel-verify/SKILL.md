@@ -26,6 +26,11 @@ Before writing verification artifacts, read
 Contract plus Reader-First Report Order. When `.observe/otel-audit.json` exists,
 also read `./references/json-approval-handoff.md`; it owns canonical scope,
 schema, digest binding, status rollup, and the HTML refresh.
+Always read `../references/local-otlp-receiver.md` before choosing a local
+export target. When selected or bound findings use
+`finding_group: splunk-agent-observability`, or the repository contains a
+`splunk_ao` dependency/import, also read
+`../references/splunk-agent-observability.md`.
 
 ## Contract
 
@@ -86,6 +91,12 @@ schema, digest binding, status rollup, and the HTML refresh.
   because a concrete prerequisite is missing.
 - Do not require live provider credentials, production tokens, VPN, or manual
   curl commands when deterministic tests or fakes can exercise the same signal.
+- Treat local Studio OTLP acceptance as receiver evidence only, not cloud Agent
+  Observability visibility. Verify the selected destination mode: normal SDK
+  project/stream calls, per-request routing through the configured gateway or
+  explicit direct-cloud endpoint, and a fresh trace in the intended cloud
+  stream. Prove no Studio-specific application adapter, global route
+  registration, or runtime endpoint discovery is required.
 - Do not install missing app dependencies globally. Use the project-managed
   runtime, a temporary project-local cache, or mark import/startup rows
   `Blocked`.
@@ -409,8 +420,13 @@ not an instrumentation failure.
 - Prefer one trace per path scenario. Use stable attributes such as
   `verification.scenario`, `verification.path`,
   `verification.audit_source`, and `verification.coverage_kind`.
-- Use local/test-only endpoints such as HTTP `127.0.0.1:4318` or gRPC
-  `127.0.0.1:4317`. Never export verification telemetry to production.
+- Resolve the current local endpoint with the shared receiver precedence and
+  preserve its exact port. HTTP `127.0.0.1:4318` and gRPC `127.0.0.1:4317` are
+  conventional fallbacks only. Never export verification telemetry to production.
+- Run at least one deterministic OTLP check on a non-default local port, or use
+  existing evidence that did so, so hardcoded `4317`/`4318` behavior cannot
+  pass. Do not probe the conventional ports after a configured or advertised
+  endpoint has been resolved.
 - Verify the effective endpoint, protocol, and path separately for traces,
   metrics, and logs. If one signal fails, test the configured exporter against
   the matching receiver: gRPC commonly uses `4317`; HTTP/protobuf commonly
@@ -428,6 +444,27 @@ not an instrumentation failure.
 - Mark `Verified: unit+OTLP` only when assertions and collector or Splunk Observability Studio
   evidence both pass. If assertions pass but export is unavailable, use
   `Verified: unit`.
+- Keep application startup independent of receiver discovery. It may consume
+  persisted standard `OTEL_EXPORTER_OTLP_*` and supported AO SDK endpoint/auth
+  settings, but it must not query `observer_status`, MCP, or Studio-specific
+  discovery/route-registration APIs. Normal SDK authentication and resource
+  calls to the configured cloud-compatible endpoint are allowed.
+
+For selected Splunk Agent Observability work, verify four outcomes separately:
+
+- the project is resolved or created through a supported product path;
+- the dedicated Agent Stream is resolved or created;
+- the selected application routing mode is configured and exercised; and
+- a fresh application trace is observed in the intended project and stream.
+
+Local Studio visibility proves receiver delivery only. In gateway mode also
+prove that Studio uses its active connection/realm, supplies upstream auth,
+preserves per-request resource bindings without cross-application leakage, and
+handles unavailable or changed connections honestly. Application cloud
+credentials are not a prerequisite for this mode. A missing Studio connection
+or required resource permission may block live product proof without blocking
+credential-free configuration, provider-reuse, lifecycle, content-safety, and
+duplicate-span tests.
 
 Run Splunk Observability Studio validation when the user requests it, but classify each finding
 before using it as an application result:
