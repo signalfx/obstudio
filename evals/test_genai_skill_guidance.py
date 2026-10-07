@@ -330,6 +330,11 @@ def test_audit_requires_process_relative_ao_runtime_coverage():
         "Exercise `force_flush` and `shutdown`",
         "completed pending spans drain",
         "evaluation logger's teardown does not prove a new live sink's lifecycle",
+        "apply this AO acceptance gate to each live-routing",
+        "do not invent a host or port",
+        "Generic \"cloud-compatible\" wording is not a",
+        "inspect both outputs",
+        "A separate generic provider",
     ):
         assert term in contract
 

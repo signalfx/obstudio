@@ -678,6 +678,29 @@ evaluation logger's teardown does not prove a new live sink's lifecycle.
 Keep ordinary producer/lifecycle findings untagged rather than duplicating
 them as AO findings.
 
+Before `finalize-audit`, apply this AO acceptance gate to each live-routing
+finding, not only to a generic provider finding:
+
+1. Name the selected destination. The available Splunk Observability Studio
+   cloud-compatible gateway is the default local candidate; preserve any
+   explicit operator or direct-cloud endpoint. Cite the actual endpoint and
+   availability evidence only when discovered. If no gateway or live target
+   was inspected, say `unverified` and do not invent a host or port.
+2. State the installed AO SDK's project/Agent Stream API endpoint and
+   per-request trace-route compatibility as `supported`, `unsupported` with
+   the exact missing contract, or `unverified` with the exact unavailable
+   package/runtime evidence. Generic "cloud-compatible" wording is not a
+   compatibility assessment.
+3. Attach a dedicated credential-free scenario to the AO routing finding or
+   its selected lifecycle prerequisite. It must invoke the live entry point
+   with fake or in-memory application and AO sinks, call the actual
+   `force_flush`/`shutdown` or supported logger termination path, inspect
+   both outputs, prove pending completed spans drained and resources closed,
+   assert one canonical workflow/model/tool operation tree, and rule out
+   duplicate export to the same AO destination. A separate generic provider
+   shutdown scenario or a vague "no duplicates" sentence is insufficient.
+   Keep fresh cloud receipt as a distinct optional proof.
+
 Before `finalize-audit`, reconcile every enumerated runtime with its readiness
 row and source evidence. Every missing or partial app-owned AO configuration
 row must map to an unresolved AO-group finding with the same `area`; a covered
