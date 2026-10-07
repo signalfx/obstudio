@@ -3,6 +3,7 @@ package otlp
 import (
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -19,6 +20,8 @@ import (
 )
 
 const maxOTLPHTTPBodyBytes = 16 << 20
+
+var errAgentTraceBodyTooLarge = errors.New("agent trace body exceeds size limit")
 
 // otlpHTTPHandler handles OTLP/HTTP requests directly (without proxying),
 // so we can associate incoming data with the connection ID resolved by
@@ -57,6 +60,10 @@ func (h *otlpHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	body, err := readBody(r, route.ProjectID != "")
 	if err != nil {
+		if errors.Is(err, errAgentTraceBodyTooLarge) {
+			http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, fmt.Sprintf("read body: %v", err), http.StatusBadRequest)
 		return
 	}
@@ -190,7 +197,7 @@ func readBody(r *http.Request, agentRouted bool) ([]byte, error) {
 		return nil, err
 	}
 	if len(body) > maxOTLPHTTPBodyBytes {
-		return nil, fmt.Errorf("body exceeds %d bytes", maxOTLPHTTPBodyBytes)
+		return nil, errAgentTraceBodyTooLarge
 	}
 	return body, nil
 }

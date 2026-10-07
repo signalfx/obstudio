@@ -206,7 +206,7 @@ func TestAgentIngestRejectsInvalidDestinationAndRemoteBrowserRequests(t *testing
 		"browser fetch":     func(r *http.Request) { r.Header.Set("Sec-Fetch-Site", "same-origin") },
 		"fetch mode":        func(r *http.Request) { r.Header.Set("Sec-Fetch-Mode", "navigate") },
 		"DNS rebind host":   func(r *http.Request) { r.Host = "attacker.example:3000" },
-		"host userinfo":    func(r *http.Request) { r.Host = "attacker.example@localhost:3000" },
+		"host userinfo":     func(r *http.Request) { r.Host = "attacker.example@localhost:3000" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -780,8 +780,60 @@ func TestReadBodyLimitsDecompressedOTLPRequests(t *testing.T) {
 	}
 	r := httptest.NewRequest(http.MethodPost, "/v1/traces", &compressed)
 	r.Header.Set("Content-Encoding", "gzip")
-	if _, err := readBody(r, true); err == nil {
-		t.Fatal("oversized decompressed body accepted")
+	if _, err := readBody(r, true); !errors.Is(err, errAgentTraceBodyTooLarge) {
+		t.Fatalf("oversized decompressed body error = %v, want size limit", err)
+	}
+}
+
+func TestAgentHTTPBodyLimitReturns413WithoutForwarding(t *testing.T) {
+	payload := bytes.Repeat([]byte("x"), maxOTLPHTTPBodyBytes+1)
+	for _, compressed := range []bool{false, true} {
+		name := "plain"
+		body := payload
+		if compressed {
+			name = "gzip"
+			var buffer bytes.Buffer
+			writer := gzip.NewWriter(&buffer)
+			if _, err := writer.Write(payload); err != nil {
+				t.Fatal(err)
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatal(err)
+			}
+			body = buffer.Bytes()
+		}
+		t.Run(name, func(t *testing.T) {
+			s := store.New()
+			exporter := &captureAgentExporter{}
+			h := &otlpHTTPHandler{store: s, tracesExporter: exporter}
+			r := agentIngestRequest(t, "/otel/v1/traces", true)
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			r.ContentLength = int64(len(body))
+			if compressed {
+				r.Header.Set("Content-Encoding", "gzip")
+			}
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			if w.Code != http.StatusRequestEntityTooLarge {
+				t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+			}
+			if s.Stats().SpanCount != 0 || len(exporter.routes) != 0 || exporter.apmBatches != 0 {
+				t.Fatal("oversized agent trace was stored or forwarded")
+			}
+		})
+	}
+}
+
+func TestAgentHTTPMalformedGzipRemains400(t *testing.T) {
+	h := &otlpHTTPHandler{store: store.New(), tracesExporter: &captureAgentExporter{}}
+	r := agentIngestRequest(t, "/otel/v1/traces", true)
+	r.Body = io.NopCloser(strings.NewReader("not gzip"))
+	r.ContentLength = int64(len("not gzip"))
+	r.Header.Set("Content-Encoding", "gzip")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 
