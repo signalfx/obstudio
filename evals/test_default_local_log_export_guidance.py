@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -239,6 +240,10 @@ def test_go_logs_match_preflight_receiver_without_stopping_traces_or_metrics() -
     assert "preflightApprovedLocalOTLPLogsEndpoint" in setup
     assert "if endpoint != preflightApprovedLocalOTLPLogsEndpoint" in exporter
     assert "the same host with a different port or path is a boundary conflict" in " ".join(go.split())
+    assert "checked-in launch or Compose configuration for the selected runtime" in " ".join(go.split())
+    assert "only when none of those sources supplies a receiver" in " ".join(go.split())
+    rubric = " ".join(json.loads(_read(ROOT / "evals/go/kvstore/eval/qual/instrument.json"))["rubric"])
+    assert "fallback only when no such receiver evidence exists" in rubric
     assert "url.Parse(genericEndpoint)" not in exporter
     assert 'os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")' in exporter
     assert 'os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS")' in exporter
@@ -725,15 +730,102 @@ def test_node_local_logs_require_preflight_match_and_fail_closed() -> None:
     assert "explicitLogsEndpoint !== PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" in helper
     assert "url: PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" in helper
     assert "OTEL_EXPORTER_OTLP_ENDPOINT?.trim()" not in helper
-    assert "process.env.OTEL_EXPORTER_OTLP_HEADERS !== undefined" in helper
-    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS !== undefined" in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim()" in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS?.trim()" in helper
     assert "new BatchLogRecordProcessor({ exporter })" in helper
     assert "logInstrumentations: [new ConsoleInstrumentation()]" in helper
     assert "} catch {" in helper
     assert "logRecordProcessors: undefined" in helper.split("} catch {", 1)[1]
     assert "logInstrumentations: []" in helper.split("} catch {", 1)[1]
-    assert "process.stderr.write(" in helper.split("} catch {", 1)[1]
+    assert "reportLocalLogSkip();" in helper.split("} catch {", 1)[1]
+    assert "process.stderr.write(" in node.split("function reportLocalLogSkip()", 1)[1]
     assert "error.message" not in helper
+
+    sdk_integration = node.split("let sdk: NodeSDK;", 1)[1].split("sdk.start();", 1)[0]
+    assert "if (logRecordProcessors) {\n  try {" in sdk_integration
+    assert "sdk = new NodeSDK({" in sdk_integration
+    assert "...base.instrumentations, ...logInstrumentations" in sdk_integration
+    assert "} catch {" in sdk_integration
+    assert "reportLocalLogSkip();" in sdk_integration.split("} catch {", 1)[1]
+    assert "const base = baseSdkOptions();" in node
+    assert sdk_integration.count("sdk = new NodeSDK(base);") == 2
+
+
+def test_node_log_only_failures_keep_trace_metric_startup() -> None:
+    setup = _fenced_code_after(
+        LANGUAGES / "node.md", "**File**: `instrumentation.ts`", "typescript"
+    )
+    source = "const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" + setup.split(
+        "const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT", 1
+    )[1].split("let shutdownPromise", 1)[0]
+    source = source.replace("let sdk: NodeSDK;", "let sdk;")
+    stubs = """
+const counts = { trace: 0, metric: 0 };
+function resourceFromAttributes(attributes) { return attributes; }
+class OTLPTraceExporter { constructor() { counts.trace++; } }
+class OTLPMetricExporter { constructor() { counts.metric++; } }
+class PeriodicExportingMetricReader { constructor() {} }
+class HttpInstrumentation {}
+class ExpressInstrumentation {}
+class OTLPLogExporter {
+  constructor() { if (process.env.FAIL_LOG_CONSTRUCTOR === 'exporter') throw Error('secret'); }
+}
+class BatchLogRecordProcessor {
+  constructor() { if (process.env.FAIL_LOG_CONSTRUCTOR === 'processor') throw Error('secret'); }
+}
+class ConsoleInstrumentation {
+  constructor() { if (process.env.FAIL_LOG_CONSTRUCTOR === 'bridge') throw Error('secret'); }
+}
+class NodeSDK {
+  constructor(options) {
+    if (options.logRecordProcessors && process.env.FAIL_LOG_CONSTRUCTOR === 'sdk') {
+      throw Error('secret');
+    }
+    this.options = options;
+  }
+  start() {
+    console.log(JSON.stringify({
+      logs: !!this.options.logRecordProcessors,
+      trace: counts.trace,
+      metric: counts.metric,
+    }));
+  }
+}
+"""
+    env = os.environ.copy()
+    for name in (
+        "OTEL_LOGS_EXPORTER",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_HEADERS",
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
+        "FAIL_LOG_CONSTRUCTOR",
+    ):
+        env.pop(name, None)
+
+    cases = (
+        ({"OTEL_EXPORTER_OTLP_HEADERS": "", "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "  "}, True),
+        ({"OTEL_EXPORTER_OTLP_HEADERS": "token=secret"}, False),
+        ({"OTEL_EXPORTER_OTLP_LOGS_HEADERS": "token=secret"}, False),
+        *(({"FAIL_LOG_CONSTRUCTOR": name}, False) for name in ("exporter", "processor", "bridge", "sdk")),
+    )
+    for overrides, logs_enabled in cases:
+        result = subprocess.run(
+            ["node", "-e", stubs + source],
+            env={**env, **overrides},
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        assert json.loads(result.stdout) == {
+            "logs": logs_enabled,
+            "trace": 1,
+            "metric": 1,
+        }
+        assert result.stderr == (
+            "" if logs_enabled else
+            "OTel local log pipeline skipped; trace and metric startup continues.\n"
+        )
 
 
 def test_audit_nonlocal_log_conflict_is_a_locked_external_dependency() -> None:

@@ -109,6 +109,13 @@ import { ConsoleInstrumentation } from '@opentelemetry/instrumentation-console';
 // Use this literal only when preflight approved the conventional fallback.
 const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT = 'http://127.0.0.1:4318/v1/logs';
 
+function reportLocalLogSkip() {
+  // Never include endpoint, headers, credentials, or exception details here.
+  process.stderr.write(
+    'OTel local log pipeline skipped; trace and metric startup continues.\n',
+  );
+}
+
 function defaultLocalLogConfiguration() {
   const configured = process.env.OTEL_LOGS_EXPORTER?.trim().toLowerCase();
   if (configured && configured !== 'otlp') {
@@ -138,8 +145,8 @@ function defaultLocalLogConfiguration() {
 
     // The OTLP exporter can read both environment header sources even when
     // given an explicit URL. Keep credentials out of the local log path.
-    if (process.env.OTEL_EXPORTER_OTLP_HEADERS !== undefined ||
-        process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS !== undefined) {
+    if (process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim() ||
+        process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS?.trim()) {
       throw new Error('OTLP headers conflict with local logs');
     }
 
@@ -153,10 +160,7 @@ function defaultLocalLogConfiguration() {
       logInstrumentations: [new ConsoleInstrumentation()],
     };
   } catch {
-    // Never include endpoint, headers, credentials, or exception details here.
-    process.stderr.write(
-      'OTel local log pipeline skipped; trace and metric startup continues.\n',
-    );
+    reportLocalLogSkip();
     return {
       logRecordProcessors: undefined,
       logInstrumentations: [],
@@ -167,25 +171,43 @@ function defaultLocalLogConfiguration() {
 const { logRecordProcessors, logInstrumentations } =
   defaultLocalLogConfiguration();
 
-const sdk = new NodeSDK({
-  resource: resourceFromAttributes({
-    'service.name': process.env.OTEL_SERVICE_NAME || 'my-service',
-  }),
-  traceExporter: new OTLPTraceExporter(),
-  metricReader: new PeriodicExportingMetricReader({
-    exporter: new OTLPMetricExporter(),
-    exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000),
-    exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500),
-  }),
-  ...(logRecordProcessors ? { logRecordProcessors } : {}),
-  instrumentations: [
-    new HttpInstrumentation(),
-    new ExpressInstrumentation(),
-    // Preflight must prove the runtime supports this bridge and no other owns it.
-    ...logInstrumentations,
-    // ... add other detected instrumentations here
-  ],
-});
+function baseSdkOptions() {
+  return {
+    resource: resourceFromAttributes({
+      'service.name': process.env.OTEL_SERVICE_NAME || 'my-service',
+    }),
+    traceExporter: new OTLPTraceExporter(),
+    metricReader: new PeriodicExportingMetricReader({
+      exporter: new OTLPMetricExporter(),
+      exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000),
+      exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500),
+    }),
+    instrumentations: [
+      new HttpInstrumentation(),
+      new ExpressInstrumentation(),
+      // ... add other detected instrumentations here
+    ],
+  };
+}
+
+const base = baseSdkOptions();
+let sdk: NodeSDK;
+if (logRecordProcessors) {
+  try {
+    sdk = new NodeSDK({
+      ...base,
+      logRecordProcessors,
+      // Preflight must prove this bridge is supported and no other owns it.
+      instrumentations: [...base.instrumentations, ...logInstrumentations],
+    });
+  } catch {
+    // The optional log integration must not stop trace and metric startup.
+    reportLocalLogSkip();
+    sdk = new NodeSDK(base);
+  }
+} else {
+  sdk = new NodeSDK(base);
+}
 
 sdk.start();
 
@@ -282,10 +304,12 @@ preflight, embed the resolved value above; do not derive it from
 endpoint lookup. The exporter always uses the embedded value, including when
 an explicit signal-specific endpoint matches it.
 If log-only configuration conflicts or construction of the log exporter,
-processor, or bridge fails, the example emits one value-free diagnostic and
-starts tracing and metrics without the added log pipeline. The original
+processor, bridge, or NodeSDK log options fails before startup, the example
+emits one value-free diagnostic and starts tracing and metrics without the
+added log pipeline. Keep all three constructors inside the guarded log helper
+and the optional NodeSDK integration inside its guarded branch. The original
 console/file sink stays active. Both generic and signal-specific OTLP log
-headers must be absent from this local path; move generic OTLP headers to
+headers must have no non-empty value on this local path; move generic OTLP headers to
 trace/metric signal variables and remove signal-specific log headers. For a
 different logs protocol, select the
 official exporter matching that protocol during instrumentation preflight.
@@ -486,7 +510,7 @@ not fixed-port equality checks.
 | `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or preflight-classified local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
-| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Any explicit log headers disable this added local log pipeline so the exporter cannot inherit credentials |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset or empty | Non-empty log headers disable this added local log pipeline so the exporter cannot inherit credentials |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
@@ -522,8 +546,8 @@ access token, generic cloud header, cloud exporter, or forwarding flag into log
 configuration. Classify an explicit signal-specific endpoint during
 instrumentation preflight; if approved, preserve it as operator configuration
 and let it win at runtime. Report a source-proven non-local value as the
-cloud-boundary conflict before applying this pattern. Reject both generic and
-signal-specific log headers on the added local branch; the exporter may read
+cloud-boundary conflict before applying this pattern. Reject non-empty generic
+and signal-specific log headers on the added local branch; the exporter may read
 either source from the environment. Move cloud credentials to trace/metric
 signal variables and remove the log header setting. Splunk Observability Studio cloud
 forwarding remains traces and metrics only.

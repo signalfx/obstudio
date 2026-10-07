@@ -154,6 +154,13 @@ host, port, base path, and `/v1/logs` leaf in the generated setup. Do not use
 the same host with a different port or path is a boundary conflict. Generic or
 logs-specific OTLP headers also prevent the added local log pipeline from
 starting; keep the trace/metric providers and original logger sink active.
+Inspect signal-specific and compatible generic OTel endpoints, receiver status,
+and checked-in launch or Compose configuration for the selected runtime before
+choosing the conventional fallback. For a Compose app with an approved
+`http://observer:4318/v1/logs` receiver, that service URL is the approved value
+for the Compose runtime, even though it is not loopback. Use
+`http://127.0.0.1:4318/v1/logs` only when none of those sources supplies a
+receiver for the selected runtime.
 
 **File**: `otel.go`
 
@@ -186,7 +193,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
-// Replace this fallback during preflight with the receiver approved for this runtime.
+// Replace during preflight when this runtime has a configured or discovered receiver.
+// Keep the fallback only when no receiver evidence exists for this runtime.
 const preflightApprovedLocalOTLPLogsEndpoint = "http://127.0.0.1:4318/v1/logs"
 
 func initOTel(
