@@ -1612,7 +1612,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('reload survives half-closed, transient-health, and undiscoverable outgoing extension observers', async function () {
+	test('reload during a prior observer\'s half-shutdown yields one discovered observer', async function () {
 		this.timeout(45_000);
 		if (process.platform === 'win32') {
 			this.skip();
@@ -1622,11 +1622,9 @@ suite('VS Code Host', () => {
 		const config = vscode.workspace.getConfiguration('observability-studio');
 		await vscode.commands.executeCommand('observability-studio.stopObserver');
 
-		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-reload-handoff-home-'));
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-reload-halfshutdown-home-'));
 		const stateDir = path.join(tempHome, '.obstudio');
 		const statePath = path.join(stateDir, 'shared-observer.json');
-		const readyHealthFailureGatePath = path.join(tempHome, 'fail-ready-observer-health');
-		const readyShutdownGatePath = path.join(tempHome, 'allow-ready-observer-shutdown');
 		const observerPorts = await resolveSharedObserverPorts({});
 		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
 		const priorBackendPath = path.join(tempHome, 'prior-extension', 'dist', 'observer', 'obstudio');
@@ -1736,8 +1734,74 @@ suite('VS Code Host', () => {
 				7_000,
 			);
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
+		} finally {
+			if (
+				priorProcess !== undefined
+				&& priorProcess.exitCode === null
+				&& priorProcess.signalCode === null
+			) {
+				const priorExit = new Promise<void>((resolve) => priorProcess?.once('exit', () => resolve()));
+				priorProcess.kill('SIGKILL');
+				await Promise.race([
+					priorExit,
+					new Promise<void>((resolve) => setTimeout(resolve, 2_000)),
+				]);
+			}
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			cleanupTempDir(tempHome);
+		}
+	});
 
-			const readyPriorBackendPath = path.join(tempHome, 'ready-prior-extension', 'dist', 'observer', 'obstudio');
+	test('handoff recovers after the prior fully shuts down, and a transient health blip does not thrash it', async function () {
+		this.timeout(45_000);
+		if (process.platform === 'win32') {
+			this.skip();
+		}
+
+		const extension = await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-reload-handoff-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const readyHealthFailureGatePath = path.join(tempHome, 'fail-ready-observer-health');
+		const readyShutdownGatePath = path.join(tempHome, 'allow-ready-observer-shutdown');
+		const observerPorts = await resolveSharedObserverPorts({});
+		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
+		const readyPriorBackendPath = path.join(tempHome, 'ready-prior-extension', 'dist', 'observer', 'obstudio');
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		let priorProcess: cp.ChildProcess | undefined;
+
+		try {
+			process.env.HOME = tempHome;
+			process.env.USERPROFILE = tempHome;
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+			await vscode.commands.executeCommand(
+				'observability-studio.internal.setObserverOtlpPortsForTest',
+				{ grpc: observerPorts.grpc, http: observerPorts.http },
+			);
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			// Configuration updates restart the observer. Settle and stop that work before
+			// constructing the handoff scenario under test.
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+
+			// A healthy, extension-owned prior that is discoverable: it holds its pinned
+			// UI + OTLP ports and we publish its shared-observer.json. shutdownDelayMs
+			// gates its actual teardown on a file so the test controls exactly when it
+			// releases its ports; healthFailureGatePath lets the test inject a transient
+			// 503 while the process stays up.
 			writeNativeLegacyObserverProcessFixture(
 				readyPriorBackendPath,
 				String(extension.packageJSON.version),
@@ -1760,52 +1824,60 @@ suite('VS Code Host', () => {
 				stdio: 'pipe',
 			});
 			await waitForHttpOrExit(`${baseUrl}/api/health`, priorProcess, 10_000);
-			// Shared-state publication is intentionally non-fatal in the Observer.
-			// The incoming host must still recognize a live extension-owned service,
-			// survive transient health failures, and recover after it shuts down.
-			fs.rmSync(statePath, { force: true });
-			assert.equal(priorProcess.kill('SIGTERM'), true);
-			fs.writeFileSync(readyHealthFailureGatePath, '', { mode: 0o600 });
-			const restoreReadyHealth = setTimeout(
-				() => fs.rmSync(readyHealthFailureGatePath, { force: true }),
-				1_200,
-			);
-			try {
-				await vscode.commands.executeCommand('observability-studio.startObserver');
-			} finally {
-				clearTimeout(restoreReadyHealth);
-				fs.rmSync(readyHealthFailureGatePath, { force: true });
-			}
-			const provisionalState = await vscode.commands.executeCommand<RuntimeState>(
-				'observability-studio.internal.getRuntimeState',
-			);
-			assert.equal(provisionalState.sharedMode, true, 'the first ready probe should reuse the outgoing process provisionally');
-			assert.equal(priorProcess.exitCode, null);
-			assert.equal(priorProcess.signalCode, null);
 
+			// The incoming window discovers the live extension-owned prior and ATTACHES
+			// to it (shared mode) rather than spawning a competing managed binary. This
+			// is the real-world reload: a second window reuses the port the first window
+			// already owns.
+			fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+			fs.writeFileSync(statePath, JSON.stringify({
+				baseUrl,
+				healthUrl: `${baseUrl}/api/health`,
+				mcpUrl: `${baseUrl}/mcp`,
+				pid: priorProcess.pid,
+				updatedAt: new Date().toISOString(),
+			}), { mode: 0o600 });
+
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+			const attachedState = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
+					'observability-studio.internal.getRuntimeState',
+				)),
+				(value) => Boolean(value?.sharedMode && value.observerUrl === baseUrl),
+				20_000,
+			);
+			assert.equal(attachedState.sharedMode, true, JSON.stringify(attachedState));
+			assert.equal(attachedState.observerUrl, baseUrl, JSON.stringify(attachedState));
+			assert.doesNotMatch(attachedState.statusBarText ?? '', /^\$\(error\)/);
+
+			// A transient health failure alone must NOT trigger a replacement: the prior
+			// is still up and still holds its ports, so the handoff monitor must keep the
+			// SAME discovered observer rather than thrashing to a managed respawn.
 			fs.writeFileSync(readyHealthFailureGatePath, '', { mode: 0o600 });
 			await new Promise<void>((resolve) => setTimeout(resolve, 1_200));
 			const transientFailureState = await vscode.commands.executeCommand<RuntimeState>(
 				'observability-studio.internal.getRuntimeState',
 			);
 			assert.equal(transientFailureState.sharedMode, true, 'health failures alone must not trigger replacement');
+			assert.equal(transientFailureState.observerUrl, baseUrl, 'the attached observer must not be replaced by a transient blip');
 			assert.doesNotMatch(transientFailureState.statusBarText ?? '', /^\$\(error\)/);
 			assert.equal(priorProcess.exitCode, null);
 			assert.equal(priorProcess.signalCode, null);
 			fs.rmSync(readyHealthFailureGatePath, { force: true });
 			await waitForHttpOrExit(`${baseUrl}/api/health`, priorProcess, 2_000);
+
+			// Now the prior fully shuts down. The handoff monitor recovers by respawning
+			// a managed binary once the prior's ports free; the respawn auto-scans its
+			// own UI port, so the recovered end-state is a freshly discovered managed URL,
+			// not the prior's pinned baseUrl. Recovery still waits for the queued Cloud
+			// operation beyond the original handoff deadline.
 			await vscode.commands.executeCommand(
 				'observability-studio.internal.holdCloudLifecycleForHandoffTest',
 			);
 			const shutdownReleasedAt = Date.now();
+			assert.equal(priorProcess.kill('SIGTERM'), true);
 			fs.writeFileSync(readyShutdownGatePath, '', { mode: 0o600 });
 
-			// Discovery end-state. When the reused prior shuts down, the handoff
-			// monitor recovers by respawning a managed binary once its ports free.
-			// That respawn auto-scans its own UI port, so the recovered end-state is
-			// a freshly discovered managed URL, not the prior's pinned baseUrl.
-			// Preserve this phase's intent: recovery still happens, and still waits
-			// for the queued Cloud operation beyond the original handoff deadline.
 			const recoveredState = await waitFor(
 				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
 					'observability-studio.internal.getRuntimeState',
@@ -1824,6 +1896,7 @@ suite('VS Code Host', () => {
 			);
 			assert.notEqual(recoveredState.observerPort, undefined);
 			assert.match(recoveredState.observerUrl ?? '', /^http:\/\/127\.0\.0\.1:\d+$/);
+			assert.doesNotMatch(recoveredState.statusBarText ?? '', /^\$\(error\)/);
 			const recoveredHealth = await fetchJson(`${recoveredState.observerUrl}/api/health`);
 			assert.equal(recoveredHealth.version, String(extension.packageJSON.version));
 			assert.equal(recoveredHealth.owner, 'vscode-extension');
