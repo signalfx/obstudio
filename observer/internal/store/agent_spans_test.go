@@ -163,6 +163,64 @@ func TestAddAgentSpansClearSessionResetAndCapacityHaveNoStaleCache(t *testing.T)
 	}
 }
 
+func TestAgentSpanIndexTracksOrdinaryOverwriteEvictionAndReset(t *testing.T) {
+	s := New()
+	s.spans = newRingBuffer[Span](3)
+	a, b, c := testAgentStoredSpan(1, 1), testAgentStoredSpan(2, 1), testAgentStoredSpan(3, 1)
+	s.AddAgentSpansForConnection("agent", testAgentStoreRoute, []Span{a, b, c})
+	assertAgentSpanIndex(t, s)
+
+	// Ordinary OTLP insertion may overwrite an AO receipt, but must not itself
+	// enter the AO retry index or change ordinary insertion semantics.
+	s.AddSpansForConnection("ordinary", []Span{testAgentStoredSpan(4, 1)})
+	assertAgentSpanIndex(t, s)
+	if _, ok := s.agentSpanIndex[agentSpanIdentity{testAgentStoreRoute, a.TraceID, a.SpanID}]; ok {
+		t.Fatal("ordinary overwrite left an evicted AO identity in the index")
+	}
+	s.AddAgentSpansForConnection("agent", testAgentStoreRoute, []Span{a})
+	assertAgentSpanIndex(t, s)
+	if s.Trace(a.TraceID, 10) == nil {
+		t.Fatal("evicted AO identity was suppressed instead of retained again")
+	}
+
+	s.EvictConnection("agent")
+	assertAgentSpanIndex(t, s)
+	if len(s.agentSpanIndex) != 0 {
+		t.Fatal("connection eviction left an AO identity in the index")
+	}
+	s.AddAgentSpansForConnection("agent", testAgentStoreRoute, []Span{a})
+	s.Clear()
+	assertAgentSpanIndex(t, s)
+	s.AddAgentSpansForConnection("agent", testAgentStoreRoute, []Span{a})
+	s.lastIngest = time.Now().Add(-time.Minute)
+	s.AddAgentSpansForConnection("agent", testAgentStoreRoute, []Span{b})
+	assertAgentSpanIndex(t, s)
+	if len(s.agentSpanIndex) != 1 {
+		t.Fatal("session reset did not clear the prior AO identity")
+	}
+}
+
+func assertAgentSpanIndex(t *testing.T, s *Store) {
+	t.Helper()
+	expected := make(map[agentSpanIdentity]int)
+	start := 0
+	if s.spans.count == s.spans.cap {
+		start = s.spans.head
+	}
+	for i := 0; i < s.spans.count; i++ {
+		index := (start + i) % s.spans.cap
+		span := s.spans.items[index]
+		if span.agentReceipt {
+			if key, valid := agentSpanKey(span); valid {
+				expected[key] = index
+			}
+		}
+	}
+	if !reflect.DeepEqual(s.agentSpanIndex, expected) {
+		t.Fatalf("AO index = %v, want %v", s.agentSpanIndex, expected)
+	}
+}
+
 func TestAddAgentSpansDoesNotChangeOrdinaryStoreInsertion(t *testing.T) {
 	s := New()
 	span := testAgentStoredSpan(1, 1)

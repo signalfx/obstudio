@@ -31,20 +31,6 @@ func (s *Store) AddAgentSpansForConnection(connID string, route AgentSpanRoute, 
 	reset := s.checkSessionReset()
 	route.ProjectID = strings.ToLower(route.ProjectID)
 	route.StreamID = strings.ToLower(route.StreamID)
-	indexes := make(map[agentSpanIdentity]int, s.spans.size())
-	start := 0
-	if s.spans.count == s.spans.cap {
-		start = s.spans.head
-	}
-	for i := 0; i < s.spans.count; i++ {
-		index := (start + i) % s.spans.cap
-		if s.spans.items[index].agentReceipt {
-			key, valid := agentSpanKey(s.spans.items[index])
-			if valid {
-				indexes[key] = index
-			}
-		}
-	}
 	for i := range spans {
 		s.spanIngestRevision++
 		spans[i].ingestRevision = s.spanIngestRevision
@@ -53,22 +39,11 @@ func (s *Store) AddAgentSpansForConnection(connID string, route AgentSpanRoute, 
 		// Empty means the latest receipt is unowned, not owned by a stale peer.
 		spans[i].ownerConnID = connID
 		key, valid := agentSpanKey(spans[i])
-		if index, exists := indexes[key]; valid && exists {
+		if index, exists := s.agentSpanIndex[key]; valid && exists {
 			s.spans.items[index] = spans[i]
 			continue
 		}
-		index := s.spans.head
-		if s.spans.count == s.spans.cap {
-			if s.spans.items[index].agentReceipt {
-				if evicted, ok := agentSpanKey(s.spans.items[index]); ok && indexes[evicted] == index {
-					delete(indexes, evicted)
-				}
-			}
-		}
-		s.spans.push(spans[i : i+1])
-		if valid {
-			indexes[key] = index
-		}
+		s.pushSpanWithAgentIndex(spans[i])
 	}
 	s.captureProviderTraceSpans(spans)
 	s.captureCompletedProviderTasks(spans)
@@ -86,6 +61,47 @@ func (s *Store) AddAgentSpansForConnection(connID string, route AgentSpanRoute, 
 		return
 	}
 	s.notify(SignalTraces)
+}
+
+// pushSpanWithAgentIndex keeps AO retry identity aligned with physical ring
+// overwrites. Callers hold s.mu; ordinary OTLP spans are never deduplicated.
+func (s *Store) pushSpanWithAgentIndex(span Span) {
+	index := s.spans.head
+	if s.spans.count == s.spans.cap {
+		if evicted := s.spans.items[index]; evicted.agentReceipt {
+			if key, valid := agentSpanKey(evicted); valid && s.agentSpanIndex[key] == index {
+				delete(s.agentSpanIndex, key)
+			}
+		}
+	}
+	s.spans.items[index] = span
+	s.spans.head = (index + 1) % s.spans.cap
+	if s.spans.count < s.spans.cap {
+		s.spans.count++
+	}
+	if span.agentReceipt {
+		if key, valid := agentSpanKey(span); valid {
+			s.agentSpanIndex[key] = index
+		}
+	}
+}
+
+// rebuildAgentSpanIndex is only needed when connection eviction compacts the
+// ring. It is not on the per-request ingest path.
+func (s *Store) rebuildAgentSpanIndex() {
+	clear(s.agentSpanIndex)
+	start := 0
+	if s.spans.count == s.spans.cap {
+		start = s.spans.head
+	}
+	for i := 0; i < s.spans.count; i++ {
+		index := (start + i) % s.spans.cap
+		if span := s.spans.items[index]; span.agentReceipt {
+			if key, valid := agentSpanKey(span); valid {
+				s.agentSpanIndex[key] = index
+			}
+		}
+	}
 }
 
 func agentSpanKey(span Span) (agentSpanIdentity, bool) {

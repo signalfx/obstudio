@@ -335,6 +335,7 @@ type TelemetrySnapshot struct {
 type Store struct {
 	mu                             sync.RWMutex
 	spans                          ringBuffer[Span]
+	agentSpanIndex                 map[agentSpanIdentity]int
 	metrics                        ringBuffer[MetricDataPoint]
 	logs                           ringBuffer[LogRecord]
 	providerTraceSpans             ringBuffer[Span]
@@ -491,6 +492,7 @@ func New() *Store {
 	unavailableThrough := time.Now()
 	return &Store{
 		spans:                                 newRingBuffer[Span](DefaultSpanCap),
+		agentSpanIndex:                        make(map[agentSpanIdentity]int),
 		metrics:                               newRingBuffer[MetricDataPoint](DefaultMetricCap),
 		logs:                                  newRingBuffer[LogRecord](DefaultLogCap),
 		providerTraceSpans:                    newRingBuffer[Span](DefaultProviderTraceSpanCap),
@@ -524,7 +526,9 @@ func (s *Store) AddSpansForConnection(connID string, spans []Span) {
 			spans[i].ownerConnID = connID
 		}
 	}
-	s.spans.push(spans)
+	for _, span := range spans {
+		s.pushSpanWithAgentIndex(span)
+	}
 	s.captureProviderTraceSpans(spans)
 	s.captureCompletedProviderTasks(spans)
 	changedAt := time.Now()
@@ -645,6 +649,7 @@ func (s *Store) AddLogsForConnection(connID string, logs []LogRecord) {
 func (s *Store) Clear() {
 	s.mu.Lock()
 	s.spans.clear()
+	clear(s.agentSpanIndex)
 	s.metrics.clear()
 	s.logs.clear()
 	s.providerTraceSpans.clear()
@@ -726,6 +731,7 @@ func (s *Store) rebuildSpansWithoutConnection(connID string) bool {
 	if len(kept) > 0 {
 		s.spans.push(kept)
 	}
+	s.rebuildAgentSpanIndex()
 	return true
 }
 
@@ -826,6 +832,7 @@ func (s *Store) checkSessionReset() bool {
 	}
 	if time.Since(s.lastIngest) > s.sessionGap {
 		s.spans.clear()
+		clear(s.agentSpanIndex)
 		s.metrics.clear()
 		s.logs.clear()
 		s.providerTraceSpans.clear()
