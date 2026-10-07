@@ -645,7 +645,13 @@ routing prerequisite chain described below. Existing evaluation
 resources may be reused only when source proves their intended live binding;
 do not claim they are absent globally or force duplicate resources. When
 adoption has no explicitly selected product target, use `fix all` and describe
-it as opt-in live AO configuration, not a broken existing route. Missing secret
+it as opt-in live AO configuration, not a broken existing route.
+When the user explicitly requests Agent Observability coverage, deployment,
+or routing, use `instrument_mode: default` for safe, source-backed AO project,
+Agent Stream, and live-routing gaps in that requested scope. Do not leave
+those requested gaps in `fix all` merely because no cloud credentials are
+present during a read-only audit. Keep incidental AO adoption in `fix all`.
+Missing secret
 values alone are not code defects or external blockers. Do not impose AO
 adoption on repositories with neither AO evidence nor a user AO request.
 Keep missing ordinary workflow/model/tool OTel signals untagged and separate;
@@ -660,13 +666,17 @@ operations; do not silently promise unselected instrumentation work.
 
 For a new live AO sink, include any unresolved ordinary provider-lifecycle
 finding needed by that route. Author a local proof scenario for the exact
-live entry point: reuse the intended provider, attach one AO sink/processor,
-emit no duplicate logical spans, and flush/shut down the owned sink/provider
-(or terminate the owned AO logger) on completion or shutdown. Use a fake
-exporter when live credentials are unavailable and keep cloud receipt proof
-separate. An evaluation logger's teardown does not prove a new live sink's
-lifecycle. Keep ordinary producer/lifecycle findings untagged rather than
-duplicating them as AO findings.
+live entry point and attach it to the AO routing finding or its selected
+provider-lifecycle prerequisite. Use fake or in-memory application and AO
+sinks without cloud credentials: reuse the intended provider, attach exactly
+one AO sink/processor, emit one canonical workflow/model/tool span per logical
+operation, inspect every active sink, and prove at most one export to the same
+AO destination. Exercise `force_flush` and `shutdown` on owned providers or
+supported AO logger termination; assert completed pending spans drain and
+owned resources close. Keep fresh cloud receipt as a separate scenario. An
+evaluation logger's teardown does not prove a new live sink's lifecycle.
+Keep ordinary producer/lifecycle findings untagged rather than duplicating
+them as AO findings.
 
 Before `finalize-audit`, reconcile every enumerated runtime with its readiness
 row and source evidence. Every missing or partial app-owned AO configuration

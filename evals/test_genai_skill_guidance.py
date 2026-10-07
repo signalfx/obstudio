@@ -313,6 +313,8 @@ def test_audit_requires_process_relative_ao_runtime_coverage():
         "separate readiness surfaces with distinct `surface` names",
         "selectable `finding_group: splunk-agent-observability` findings",
         "no explicitly selected product target, use `fix all`",
+        "explicitly requests Agent Observability coverage, deployment",
+        "use `instrument_mode: default` for safe, source-backed AO project",
         "Every missing or partial app-owned AO configuration row",
         "unresolved AO-group finding with the same `area`",
         "covered row must cite reachable setup for that exact runtime",
@@ -322,9 +324,11 @@ def test_audit_requires_process_relative_ao_runtime_coverage():
         "include the unresolved producer and semantic-continuity findings",
         "include any unresolved ordinary provider-lifecycle finding needed by that route",
         "local proof scenario for the exact live entry point",
-        "attach one AO sink/processor",
-        "emit no duplicate logical spans",
-        "flush/shut down the owned sink/provider",
+        "attach exactly one AO sink/processor",
+        "inspect every active sink",
+        "at most one export to the same AO destination",
+        "Exercise `force_flush` and `shutdown`",
+        "completed pending spans drain",
         "evaluation logger's teardown does not prove a new live sink's lifecycle",
     ):
         assert term in contract

@@ -274,7 +274,9 @@ credentials and no provider/model network calls. Prove all applicable outcomes:
 - error and generator/stream completion behavior;
 - `provider.shutdown()` for an application provider and `logger.terminate()`
   for a Splunk AO logger; and
-- no duplicate workflow, model, tool, or retrieval spans.
+- completed pending spans drain and owned sink resources close;
+- no duplicate workflow, model, tool, or retrieval spans; and
+- at most one export of each canonical operation to the same AO destination.
 
 When the Splunk AO sink and application provider coexist, capture and inspect
 both outputs. Static import matching proves classification, not runtime telemetry. Optional
