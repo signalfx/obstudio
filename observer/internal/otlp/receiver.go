@@ -213,6 +213,12 @@ func (r *Receiver) HTTPHandler() http.Handler {
 	}
 }
 
+// HTTPConnContext gives co-located API-port ingest the same socket ownership
+// context as the dedicated OTLP/HTTP listener, so PID eviction covers both.
+func (r *Receiver) HTTPConnContext(ctx context.Context, conn net.Conn) context.Context {
+	return r.connTracker.httpConnContext(ctx, conn)
+}
+
 // Shutdown gracefully stops the connection tracker and all receivers.
 // Returns the first error encountered during shutdown, if any.
 func (r *Receiver) Shutdown(ctx context.Context) error {

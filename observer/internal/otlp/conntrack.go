@@ -492,14 +492,16 @@ func (ct *ConnTracker) startHTTPHandler(listenAddr string) error {
 	ct.httpLn = ln
 
 	ct.httpServer = &http.Server{
-		Handler: handler,
-		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
-			return context.WithValue(ctx, ctxKeyRawConn{}, c)
-		},
+		Handler:     handler,
+		ConnContext: ct.httpConnContext,
 	}
 
 	go ct.httpServer.Serve(ln)
 	return nil
+}
+
+func (ct *ConnTracker) httpConnContext(ctx context.Context, conn net.Conn) context.Context {
+	return context.WithValue(ctx, ctxKeyRawConn{}, conn)
 }
 
 // resolveHTTPConnectionFromRequest extracts the underlying net.Conn from the

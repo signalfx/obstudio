@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -212,6 +213,52 @@ func TestAgentIngestBridgeUsesReceiverPipeline(t *testing.T) {
 	r.HTTPHandler().ServeHTTP(w, agentIngestRequest(t, "/otel/v1/traces", true))
 	if w.Code != http.StatusOK || s.Stats().SpanCount != 1 || len(e.routes) != 1 {
 		t.Fatalf("bridge mismatch: status=%d exporter=%+v", w.Code, e)
+	}
+}
+
+func TestCoLocatedAgentIngestKeepsConnectionOwnership(t *testing.T) {
+	for _, path := range []string{"/otel/v1/traces", "/v2/trace/otlp"} {
+		t.Run(path, func(t *testing.T) {
+			s := store.New()
+			exporter := &captureAgentExporter{}
+			tracker := &ConnTracker{
+				store: s, tracesExporter: exporter,
+				httpConnsByAddr: make(map[string]*httpConn),
+			}
+			receiver := &Receiver{connTracker: tracker}
+			mux := http.NewServeMux()
+			mux.Handle("POST "+path, receiver.HTTPHandler())
+			server := httptest.NewUnstartedServer(mux)
+			server.Config.ConnContext = func(ctx context.Context, conn net.Conn) context.Context {
+				tuple := socketTupleFromConn(conn)
+				if tuple == nil {
+					t.Error("API listener did not expose a TCP connection")
+				} else {
+					tracker.mu.Lock()
+					tracker.httpConnsByAddr[tuple.addressKey()] = &httpConn{connID: "api-port"}
+					tracker.mu.Unlock()
+				}
+				return receiver.HTTPConnContext(ctx, conn)
+			}
+			server.Start()
+			defer server.Close()
+			request := agentIngestRequest(t, path, true)
+			request.URL, _ = url.Parse(server.URL + path)
+			request.Host = request.URL.Host
+			request.RequestURI = ""
+			response, err := server.Client().Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response.Body.Close()
+			if response.StatusCode != http.StatusOK || s.Stats().SpanCount != 1 || len(exporter.routes) != 1 {
+				t.Fatalf("co-located ingest failed: status=%d spans=%d routes=%d", response.StatusCode, s.Stats().SpanCount, len(exporter.routes))
+			}
+			s.EvictConnection("api-port")
+			if s.Stats().SpanCount != 0 {
+				t.Fatal("API-port AO span survived its originating connection's eviction")
+			}
+		})
 	}
 }
 

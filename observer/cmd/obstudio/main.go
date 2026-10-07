@@ -238,7 +238,7 @@ func run(config runConfig) error {
 	)
 	webCleanup := web.Register(mux, s, v)
 
-	srv := &http.Server{Addr: mainAddr, Handler: mux}
+	srv := &http.Server{Addr: mainAddr, Handler: mux, ConnContext: rcv.HTTPConnContext}
 	mainListener, err := listenObserverHTTP("tcp", mainAddr)
 	if err != nil {
 		log.Fatalf("failed to start HTTP server: %v", err)
