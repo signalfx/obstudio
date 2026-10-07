@@ -82,6 +82,15 @@ mandatory exporters. Do not require application cloud credentials for the
 gateway mode: Studio derives upstream API and ingest endpoints from its active
 cloud connection and realm and supplies its own credentials server-side.
 
+The current gateway's SDK resource API and routed trace ingest accept only
+native loopback requests from the same network namespace as Studio. Its
+`local-gateway` marker is public and is not a network authentication secret.
+Do not recommend a Docker/Compose/Kubernetes bridge or service address for AO
+gateway calls, even if that address is valid for ordinary OTLP. If the
+application cannot reach Studio through same-namespace loopback, record that
+exact compatibility blocker and preserve an explicit operator destination;
+do not weaken the gateway trust boundary or silently switch to direct cloud.
+
 Keep the application destination-agnostic. Use supported AO SDK resource calls
 and standard OTLP export with durable endpoint configuration. Do not add an
 Obstudio library, special route-registration call, startup endpoint discovery,
@@ -127,8 +136,10 @@ O11y realm/token variables. Prove compatibility with the installed SDK before
 using this configuration, and record its version and effective endpoints.
 
 Discover the API address separately from the OTLP address during configuration
-using advertised service endpoints or checked-in runtime topology. Preserve
-non-default ports and the address reachable by the application. Only an
+using advertised service endpoints or checked-in runtime topology. For this
+gateway, use only a loopback API and routed-trace address reachable from the
+application's same network namespace; a container bridge address is not a
+supported substitute. Preserve non-default ports. Only an
 unresolved host/native endpoint may use the conventional REST port 3000 or
 OTLP ports 4318/4317. Do not publish unsupported example environment variables
 or make application startup call a Studio-specific API. A missing/disconnected

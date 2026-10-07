@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "splunk-configure",
-    "run_id": "20260923T184509016662Z",
+    "run_id": "20261007T155857281538Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -18,7 +18,7 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "filtered"
+    "validation_scope": "full"
   },
   "evals": [
     {
@@ -36,46 +36,72 @@
       "sanity_check_count": 0,
       "rubric_check_count": 10,
       "runtime_check_count": 0
+    },
+    {
+      "id": "sanity/skill-smoke/sanity/configure",
+      "case": "sanity/skill-smoke",
+      "language": "sanity",
+      "service": "skill-smoke",
+      "prompt_count": 2,
+      "prompts": [
+        "configure",
+        "direct"
+      ],
+      "definition_path": "evals/sanity/skill-smoke/eval/sanity/configure.json",
+      "eval_dir": "evals/sanity/skill-smoke",
+      "skill_path": "skills/splunk-configure",
+      "sanity_check_count": 0,
+      "rubric_check_count": 0,
+      "runtime_check_count": 0
     }
   ],
   "summary": {
-    "eval_count": 1,
-    "case_count": 1,
-    "prompt_count": 1,
+    "eval_count": 2,
+    "case_count": 3,
+    "prompt_count": 3,
     "sanity_check_count": 0,
     "rubric_check_count": 10,
     "runtime_check_count": 0
   },
   "source": {
-    "digest_version": 3,
-    "digest": "4fd8eb791a6d0f64d3ea36b1afc90537e3d6c1a2766707e87e052c2da205a808",
+    "digest_version": 4,
+    "digest": "5fd147325dc9c9383511f7a70aa95c0da2bcfc3d8b8cc9fb98efd56dc0af2279",
     "eval_kinds": [
-      "rubric"
+      "rubric",
+      "sanity"
     ],
     "evaluator_semantics_version": 1,
     "files": {
       "evals/codex-evals.validation.toml": "ce69f042257fdb4a4c8d196f2f0f515fdc371316c02ab7d86aecc36267f7e940",
       "evals/dashboards/checkout-configure/eval/qual/configure.json": "c75759c1cbd7745595f689eb8ca1d0387e1ebb907855aeafd4612f1376c24a23",
       "evals/dashboards/checkout-configure/otel-audit.json": "ba1843457773445a06e59522e1572316d95075f2c007576fd4becd75da33ce7d",
-      "skills/references/consumers.json": "cd8084854d7042b7ecc306ef1efca5f1866f1616c4c0ea0f6522e4bce4efd852",
+      "skills/references/consumers.json": "2d187974a8cf7b95ac5b809ebdaa036e58a79fd33172bf700f91edd97353b0e1",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
-      "skills/references/genai-readiness.md": "73e8af6407a4074ea7942df9e26be95b807e0bc69dd58e403819bc108db12209",
+      "skills/references/genai-readiness.md": "a4658859ca2e15e12dd90e5f97e73a95a8e7a0654523bd5314ae62d84144cc80",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
+      "skills/references/local-otlp-receiver.md": "a7832f9525978a1f5c4cc8b64d76748bbbd65692f66f97bf492d2a7243500a3c",
       "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
-      "skills/references/scripts/observe_report.py": "8505513574a485f39b4197ee4995449dfe1ba4cf8730a6ee34c4215e90b2711e",
+      "skills/references/scripts/observe_report.py": "0c0b3c358482bbbd66ef5036c4425c80a6955f89be1ca6a7106d7fca43294ee5",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
+      "skills/references/splunk-agent-observability.md": "e3e303dc78f6223d90d78b36bca4c6c18e73b711b750dad1ef08c42603ebff90",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
+      "skills/references/tests/test_observe_report.py": "962986d7eed939d59a07f7d61aa737e49a84dc296a8da8cdc1d723429ff8ff21",
       "skills/splunk-configure/SKILL.md": "af20f028de3d6d9f0265511094583a8e5274ffca23fa2d4b8ac63eeef5076d99",
       "skills/splunk-configure/references/detector-classification.md": "c389dc47e64719b46fe0ee8674231e6dc8f61c27d59d828c2bc10b5032971295",
       "skills/splunk-configure/references/terraform-templates.md": "68dabdd5c40321baf57522de55cfa9c182557ed7791475998d814f004da835fc",
       "skills/splunk-configure/scripts/validate_configure_output.py": "21e9f845308434499c6ae19d7d9043e5fcca01ae8840d6a68cc782e82c9fc09e",
-      "skills/splunk-configure/tests/test_validate_configure_output.py": "fdc01a7ef27c712df29a53b5ab5c21ad4de6ab5816301d337235226c113b8953"
+      "skills/splunk-configure/tests/test_validate_configure_output.py": "fdc01a7ef27c712df29a53b5ab5c21ad4de6ab5816301d337235226c113b8953",
+      "evals/sanity/skill-smoke/eval/sanity/configure.json": "4bcf81ab14664c2959d686bafe5dd567da44255e148ae0ec41a1ec6561113037",
+      "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9"
     },
     "skill_path": "skills/splunk-configure",
+    "shared_reference_consumers": [
+      "skills/references/report-flow-contract.md",
+      "skills/references/signalflow-patterns.md"
+    ],
     "selections": [
       {
         "definition_path": "evals/dashboards/checkout-configure/eval/qual/configure.json",
@@ -83,9 +109,23 @@
         "prompt_id": "generate",
         "eval_kind": "rubric",
         "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/sanity/skill-smoke/eval/sanity/configure.json",
+        "fixture_dir": "evals/sanity/skill-smoke",
+        "prompt_id": "configure",
+        "eval_kind": "sanity",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/sanity/skill-smoke/eval/sanity/configure.json",
+        "fixture_dir": "evals/sanity/skill-smoke",
+        "prompt_id": "direct",
+        "eval_kind": "sanity",
+        "eval_inputs": []
       }
     ],
     "config_path": "evals/codex-evals.validation.toml",
-    "selection_scope": "filtered"
+    "selection_scope": "full"
   }
 }

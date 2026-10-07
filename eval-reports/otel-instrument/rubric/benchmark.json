@@ -7,13 +7,13 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "otel-instrument",
-    "run_id": "20261007T061324795036Z",
-    "agent_model": "gpt-5.5",
-    "judge_model": "gpt-5.5",
+    "run_id": "20261007T153815034615Z",
+    "agent_model": "gpt-6.1-sol",
+    "judge_model": "-",
     "rubric_enabled": true,
     "runtime_enabled": false,
     "workers": "1",
-    "config_path": "evals/codex-evals.toml"
+    "config_path": "-"
   },
   "summary": {
     "eval_count": 1,
@@ -21,11 +21,11 @@
     "failure_count": 0,
     "with_skill": {
       "prompt_count": 1,
-      "command_count": 54,
-      "duration_seconds": 596.967,
-      "agent_duration_seconds": 461.363,
-      "tokens": 2286143,
-      "agent_tokens": 1931398,
+      "command_count": 64,
+      "duration_seconds": 1040.887,
+      "agent_duration_seconds": 960.812,
+      "tokens": 3347711,
+      "agent_tokens": 3110158,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 1,
         "selected_record_count": 1,
-        "input_tokens": 1908893,
-        "cached_input_tokens": 1805312,
+        "input_tokens": 3089736,
+        "cached_input_tokens": 2945024,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 22505,
-        "reasoning_output_tokens": 9694,
+        "output_tokens": 20422,
+        "reasoning_output_tokens": 3811,
         "provider_total_tokens": null,
-        "derived_total_tokens": 1931398,
-        "effective_total_tokens": 1931398,
+        "derived_total_tokens": 3110158,
+        "effective_total_tokens": 3110158,
         "coverage": {
           "record_count": 1,
           "modeled_count": 1,
@@ -59,26 +59,26 @@
         }
       },
       "rubric": {
-        "passed": 10,
-        "total": 10,
-        "average_score": 90.0
+        "passed": 6,
+        "total": 6,
+        "average_score": 100.0
       },
-      "rubric_tokens": 354745,
-      "rubric_duration_seconds": 135.565,
+      "rubric_tokens": 237553,
+      "rubric_duration_seconds": 73.848,
       "rubric_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
         "usage_record_count": 1,
         "selected_record_count": 1,
-        "input_tokens": 341886,
-        "cached_input_tokens": 272128,
+        "input_tokens": 235851,
+        "cached_input_tokens": 199296,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 12859,
-        "reasoning_output_tokens": 9113,
+        "output_tokens": 1702,
+        "reasoning_output_tokens": 116,
         "provider_total_tokens": null,
-        "derived_total_tokens": 354745,
-        "effective_total_tokens": 354745,
+        "derived_total_tokens": 237553,
+        "effective_total_tokens": 237553,
         "coverage": {
           "record_count": 1,
           "modeled_count": 1,
@@ -101,21 +101,21 @@
   },
   "evals": [
     {
-      "id": "python/flask-basic/qual/instrument",
-      "case": "python/flask-basic",
+      "id": "python/splunk-ao-langchain-demo/qual/instrument",
+      "case": "python/splunk-ao-langchain-demo",
       "language": "python",
-      "service": "flask-basic",
+      "service": "splunk-ao-langchain-demo",
       "prompt_count": 1,
       "prompts": [
-        "direct"
+        "langchain-callback"
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 54,
-        "duration_seconds": 596.967,
-        "agent_duration_seconds": 461.363,
-        "tokens": 2286143,
-        "agent_tokens": 1931398,
+        "command_count": 64,
+        "duration_seconds": 1040.887,
+        "agent_duration_seconds": 960.812,
+        "tokens": 3347711,
+        "agent_tokens": 3110158,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -123,14 +123,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 1908893,
-          "cached_input_tokens": 1805312,
+          "input_tokens": 3089736,
+          "cached_input_tokens": 2945024,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 22505,
-          "reasoning_output_tokens": 9694,
+          "output_tokens": 20422,
+          "reasoning_output_tokens": 3811,
           "provider_total_tokens": null,
-          "derived_total_tokens": 1931398,
-          "effective_total_tokens": 1931398,
+          "derived_total_tokens": 3110158,
+          "effective_total_tokens": 3110158,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -149,26 +149,26 @@
           }
         },
         "rubric": {
-          "passed": 10,
-          "total": 10,
-          "average_score": 90.0
+          "passed": 6,
+          "total": 6,
+          "average_score": 100.0
         },
-        "rubric_tokens": 354745,
-        "rubric_duration_seconds": 135.565,
+        "rubric_tokens": 237553,
+        "rubric_duration_seconds": 73.848,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 341886,
-          "cached_input_tokens": 272128,
+          "input_tokens": 235851,
+          "cached_input_tokens": 199296,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 12859,
-          "reasoning_output_tokens": 9113,
+          "output_tokens": 1702,
+          "reasoning_output_tokens": 116,
           "provider_total_tokens": null,
-          "derived_total_tokens": 354745,
-          "effective_total_tokens": 354745,
+          "derived_total_tokens": 237553,
+          "effective_total_tokens": 237553,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -190,26 +190,32 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20261007T061324795036Z/results/python/flask-basic/qual-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20261007T061324795036Z/results/python/flask-basic/qual-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20261007T061324795036Z/results/python/flask-basic/qual-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20261007T153815034615Z/results/python/splunk-ao-langchain-demo/qual-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20261007T153815034615Z/results/python/splunk-ao-langchain-demo/qual-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20261007T153815034615Z/results/python/splunk-ao-langchain-demo/qual-instrument/with_baseline.json"
       }
     }
   ],
   "failures": [],
   "source": {
     "digest_version": 4,
-    "digest": "37f2a5a362bd2d75f0d163ba1a5ac27892349d881a630bb5284af94aa29496ce",
+    "digest": "466f72746bc7c07e72189c697822c36b224e710a4a2ebc72cf14bbafec41bcc6",
     "eval_kinds": [
       "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
+      "evals/codex-evals.ab.toml": "1e3d36c3006b4d35bf30e7ae245058b9676a99424309728a9a502af7da5006f5",
+      "evals/codex-evals.baseline.toml": "b3441149de20c4d8cbfe6f0c6df34845dffc9194ba7adbc3b581be0f63d7088c",
       "evals/codex-evals.toml": "c0b019453c76a5b6d8692346f984ea91af04ca91331aa333b56d7a717b7b07c7",
-      "evals/python/flask-basic/Makefile": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe",
-      "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
-      "evals/python/flask-basic/eval/qual/instrument.json": "cb1aefbfb23fd5f890f6f027e77b008b152d5842682ae2faf79aad98ddc4e49d",
-      "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f",
+      "evals/codex-evals.validation.toml": "ce69f042257fdb4a4c8d196f2f0f515fdc371316c02ab7d86aecc36267f7e940",
+      "evals/python/splunk-ao-langchain-demo/Makefile": "c9da5dd95276d141b0a32e21a2011ac263117a3e449121688573b882fe87fc0d",
+      "evals/python/splunk-ao-langchain-demo/README.md": "30a1e175482d6071a5a8746b1c61b208b2756aa157205c268466cdd336578b9b",
+      "evals/python/splunk-ao-langchain-demo/app.py": "05d2a0a640aedc252b3b38626fe12099ef8ad805a842607a6e59bf666644fda5",
+      "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json": "b7cb3fa40477fef1fd9f906ab25daefefe3591f572a974d8db82b850c3ebe177",
+      "evals/python/splunk-ao-langchain-demo/eval/qual/instrument.json": "d01f3061795956899f9a9cf961b73ef38fb0c57c12c931288635b10a9303faff",
+      "evals/python/splunk-ao-langchain-demo/pyproject.toml": "4400a876430531a23291aa826f8eb266b77f0d5b393d3b0aba5a720f02d7b3a3",
+      "evals/python/splunk-ao-langchain-demo/tests/test_app.py": "843b89e1f95650214876c4ca61d4cce82b7038664e893a4f87cea90278b1c40e",
       "skills/otel-instrument/SKILL.md": "7ee98da3d34e5bb8451c7c31024b31fdca4918a26b4885501f5d52f7369c2202",
       "skills/otel-instrument/references/json-approval-handoff.md": "e924372284ea1e55d78528ef002b34840f34a912f40cb931ae8b18adcac1d95c",
       "skills/otel-instrument/references/languages/go.md": "9fdbe42878431fa6cd02188e876a863c862caad60b9c5545f5b113975c681e62",
@@ -228,11 +234,11 @@
       "skills/references/genai-readiness.md": "a4658859ca2e15e12dd90e5f97e73a95a8e7a0654523bd5314ae62d84144cc80",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
-      "skills/references/local-otlp-receiver.md": "48a482830bd2d3ff29d1f22843565e00469872c101fb0ecbc588f9f428380c03",
+      "skills/references/local-otlp-receiver.md": "a7832f9525978a1f5c4cc8b64d76748bbbd65692f66f97bf492d2a7243500a3c",
       "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
       "skills/references/scripts/observe_report.py": "0c0b3c358482bbbd66ef5036c4425c80a6955f89be1ca6a7106d7fca43294ee5",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
-      "skills/references/splunk-agent-observability.md": "94bd96bb59eef9348525b99dedd60e8f103e300da7504ba1fe287e5e039f2e1c",
+      "skills/references/splunk-agent-observability.md": "e3e303dc78f6223d90d78b36bca4c6c18e73b711b750dad1ef08c42603ebff90",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "962986d7eed939d59a07f7d61aa737e49a84dc296a8da8cdc1d723429ff8ff21"
@@ -249,13 +255,14 @@
     ],
     "selections": [
       {
-        "definition_path": "evals/python/flask-basic/eval/qual/instrument.json",
-        "fixture_dir": "evals/python/flask-basic",
-        "prompt_id": "direct",
+        "definition_path": "evals/python/splunk-ao-langchain-demo/eval/qual/instrument.json",
+        "fixture_dir": "evals/python/splunk-ao-langchain-demo",
+        "prompt_id": "langchain-callback",
         "eval_kind": "rubric",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/otel-audit.json"
+        ]
       }
-    ],
-    "config_path": "evals/codex-evals.toml"
+    ]
   }
 }

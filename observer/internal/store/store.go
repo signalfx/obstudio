@@ -89,6 +89,7 @@ type Span struct {
 	Scope        Scope          `json:"scope"`
 
 	ownerConnID                         string `json:"-"`
+	agentReceipt                        bool   `json:"-"`
 	providerTaskRetentionTruncated      bool   `json:"-"`
 	providerTraceRetentionTruncated     bool   `json:"-"`
 	providerTraceObservedSpanCount      int    `json:"-"`
@@ -517,6 +518,7 @@ func (s *Store) AddSpansForConnection(connID string, spans []Span) {
 	for i := range spans {
 		s.spanIngestRevision++
 		spans[i].ingestRevision = s.spanIngestRevision
+		spans[i].agentReceipt = false
 		if connID != "" {
 			spans[i].ownerConnID = connID
 		}

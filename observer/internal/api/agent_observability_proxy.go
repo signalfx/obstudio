@@ -57,12 +57,17 @@ func (s *splunkExportService) registerAgentObservabilityProxy(mux *http.ServeMux
 func (s *splunkExportService) agentObservabilityProxyDestination() (realm, accessToken string, ready bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	metrics := s.metrics.Config()
 	traces := s.traces.Config()
-	if !sameSplunkCloudRealm(metrics.Realm, metrics.AccessToken, metrics.Endpoint != "",
-		traces.Realm, traces.AccessToken, traces.Endpoint != "") ||
-		!s.metrics.ExportEnabled() || !s.traces.ExportEnabled() || !splunkRealmPattern.MatchString(traces.Realm) {
+	if !s.traces.ExportEnabled() || traces.Endpoint != "" ||
+		!splunkRealmPattern.MatchString(traces.Realm) || strings.TrimSpace(traces.AccessToken) == "" {
 		return "", "", false
+	}
+	if s.metrics.ExportEnabled() {
+		metrics := s.metrics.Config()
+		if !sameSplunkCloudRealm(metrics.Realm, metrics.AccessToken, metrics.Endpoint != "",
+			traces.Realm, traces.AccessToken, false) {
+			return "", "", false
+		}
 	}
 	return traces.Realm, traces.AccessToken, true
 }

@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "kind": "otel-instrumentation",
+  "audit_id": "python-ai-assistant-genai-fixture",
+  "audit_sha256": "sha256:8e4f2f8e73924129662906491008e961e4ad341815dcbea5304631b9d2230479",
+  "selection_sha256": "sha256:1c60ac7253eefeadc541c832286424220a08711165264b9f9fd9c8fd19f807eb",
+  "meta": {
+    "service_name": "python-ai-assistant-demo",
+    "date": "2026-10-07",
+    "result": "Partial"
+  },
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "status": "not_proven",
+      "changes": ["Proof-only fixture: no interactive app.py GenAI span producer has been changed."],
+      "telemetry_changes": [],
+      "tests": [],
+      "evidence": ["eval/inputs/ao-gateway-verify-evidence.txt"],
+      "follow_up_actions": ["Instrument and execute the bounded interactive assistant lifecycle before claiming application telemetry."],
+      "resolved_commit": null
+    },
+    {
+      "id": "AO-001",
+      "status": "not_proven",
+      "changes": ["Proof-only fixture: route-test UUIDs are not resolved cloud project resources."],
+      "telemetry_changes": [],
+      "tests": [],
+      "evidence": ["eval/inputs/ao-gateway-verify-evidence.txt"],
+      "follow_up_actions": ["Resolve an authorized real Agent Observability project through the selected endpoint."],
+      "resolved_commit": null
+    },
+    {
+      "id": "AO-002",
+      "status": "not_proven",
+      "changes": ["Proof-only fixture: route-test UUIDs are not resolved cloud Agent Streams."],
+      "telemetry_changes": [],
+      "tests": [],
+      "evidence": ["eval/inputs/ao-gateway-verify-evidence.txt"],
+      "follow_up_actions": ["Resolve dedicated streams under the authorized project before cloud-delivery claims."],
+      "resolved_commit": null
+    },
+    {
+      "id": "AO-003",
+      "status": "not_proven",
+      "changes": ["Proof-only fixture: two synthetic route envelopes were acknowledged by an isolated loopback receiver, but app.py has no verified live AO route."],
+      "telemetry_changes": [],
+      "tests": ["Inspect the two distinct synthetic projectid/logstreamid route envelopes and local HTTP 202 responses."],
+      "evidence": ["eval/inputs/ao-gateway-verify-evidence.txt"],
+      "follow_up_actions": ["Execute a bounded app interaction through a selected gateway or direct-cloud endpoint and query the exact fresh cloud Agent Stream trace."],
+      "resolved_commit": null
+    }
+  ],
+  "next_steps": ["Keep local route-contract receipt separate from actual app execution, cloud forwarding, and cloud Agent Stream visibility."]
+}

@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "splunk-detector-publish",
-    "run_id": "20260921T233751464735Z",
+    "run_id": "20261007T155857281538Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -64,8 +64,8 @@
     "runtime_check_count": 0
   },
   "source": {
-    "digest_version": 3,
-    "digest": "6a5dd9ad7b354a79dcb4a49790ea4bece1100b18a78f3d1717eeb89ba23c624c",
+    "digest_version": 4,
+    "digest": "c3f83bfdcfdd82110f703d54904f790ba07de561a2b427c8e1901d518b2fb283",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -77,24 +77,32 @@
       "evals/dashboards/checkout-detectors/eval/qual/detector-publish.json": "e5107985ae2829eee4b821d39e32a4efa17c219a59e0c69cd9f562e74112014c",
       "evals/dashboards/checkout-detectors/terraform.tfvars.seed": "e644aa22c17a5306df07022b361b2f2cb0474b3fd7ccaf5cd40989850ea258ce",
       "evals/dashboards/checkout-detectors/variables.tf.seed": "ba2a5e208ea99d30a32d2b9f8317a8519828f5e43c17fa76357f0a135a3275d3",
-      "skills/references/consumers.json": "cd8084854d7042b7ecc306ef1efca5f1866f1616c4c0ea0f6522e4bce4efd852",
+      "skills/references/consumers.json": "2d187974a8cf7b95ac5b809ebdaa036e58a79fd33172bf700f91edd97353b0e1",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
-      "skills/references/genai-readiness.md": "73e8af6407a4074ea7942df9e26be95b807e0bc69dd58e403819bc108db12209",
+      "skills/references/genai-readiness.md": "a4658859ca2e15e12dd90e5f97e73a95a8e7a0654523bd5314ae62d84144cc80",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
+      "skills/references/local-otlp-receiver.md": "a7832f9525978a1f5c4cc8b64d76748bbbd65692f66f97bf492d2a7243500a3c",
       "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
-      "skills/references/scripts/observe_report.py": "8505513574a485f39b4197ee4995449dfe1ba4cf8730a6ee34c4215e90b2711e",
+      "skills/references/scripts/observe_report.py": "0c0b3c358482bbbd66ef5036c4425c80a6955f89be1ca6a7106d7fca43294ee5",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
+      "skills/references/splunk-agent-observability.md": "e3e303dc78f6223d90d78b36bca4c6c18e73b711b750dad1ef08c42603ebff90",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
+      "skills/references/tests/test_observe_report.py": "962986d7eed939d59a07f7d61aa737e49a84dc296a8da8cdc1d723429ff8ff21",
       "skills/splunk-detector-publish/SKILL.md": "2a168cdea73b81e46ed39cb8bded81f83f5647bb0d65afd740b19b4fd5dec1ea",
       "skills/splunk-detector-publish/references/coverage-model.md": "9bca7ef0a57794f8d2f87173a51a4d9315dd4b4c311906ab90ba8014b43ccc92",
       "evals/sanity/skill-smoke/eval/sanity/detector-publish.json": "1774a7e5ab89bb505033f7f83b788741e6f8925f6de9034fcd5431e944384020",
       "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9"
     },
     "skill_path": "skills/splunk-detector-publish",
+    "shared_reference_consumers": [
+      "skills/references/coverage-decision-tree.md",
+      "skills/references/ledger-template.md",
+      "skills/references/splunk-api.md",
+      "skills/references/terraform-normalization.md"
+    ],
     "selections": [
       {
         "definition_path": "evals/dashboards/checkout-detectors/eval/qual/detector-publish.json",

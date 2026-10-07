@@ -12,13 +12,13 @@
     "genai_ownership_detected": true
   },
   "summary": [
-    "The app-owned assistant lifecycle has no OpenTelemetry GenAI spans or bounded token, tool, retrieval, and stream telemetry."
+    "The interactive FastAPI assistant has no OpenTelemetry GenAI spans or bounded token, tool, retrieval, and stream telemetry. The optional offline eval_runner.py has its own Splunk AO SDK project, stream, trace, and teardown path; that path is not imported or invoked by app.py and does not cover live chat."
   ],
   "flow": "audit -> select -> instrument -> verify",
   "evidence": [
     {
       "check": "Manifest",
-      "finding": "FastAPI service without OpenTelemetry dependencies",
+      "finding": "The base FastAPI service has no OpenTelemetry dependency; the optional evaluation extra installs splunk-ao for an offline runner",
       "source": "pyproject.toml"
     },
     {
@@ -40,6 +40,11 @@
       "check": "GenAI ownership",
       "finding": "Yes",
       "source": "app.py:58-187"
+    },
+    {
+      "check": "Offline AO evaluation boundary",
+      "finding": "eval_runner.py resolves an existing evaluation project, resolves or creates an offline Agent Stream, emits a synthetic trace, then concludes, flushes, and terminates its own logger; app.py does not import or call this runner",
+      "source": "eval_runner.py:1-42; app.py:1-187"
     }
   ],
   "routes": [
@@ -51,10 +56,13 @@
     {"method": "POST", "path": "/v1/feedback/export"}
   ],
   "signal_flow": {
-    "component_flow_map": "Assistant lifecycle\nFastAPI routes [SOURCE-COVERED] -> build_turn [GAP: Assistant GenAI lifecycle] -> run_tool search_docs [GAP: Document retrieval inside search_docs] -> call_provider [SOURCE-COVERED]\n\nAgent Observability deployment\nproject resource [GAP: Agent Observability project resource] -> Agent Stream resource [GAP: Dedicated Agent Stream resource] -> configured API/ingest endpoint [GAP: Agent Observability runtime routing]"
+    "component_flow_map": "Interactive assistant lifecycle\nFastAPI routes [SOURCE-COVERED] -> build_turn [GAP: Assistant GenAI lifecycle] -> run_tool search_docs [GAP: Document retrieval inside search_docs] -> call_provider [SOURCE-COVERED]\n\nOffline evaluation (separate process)\neval_runner.py [SOURCE-COVERED] -> synthetic Splunk AO project, stream, trace, and logger teardown [SOURCE-COVERED]; not reachable from app.py\n\nInteractive Agent Observability deployment\nproject binding [GAP: Agent Observability project resource] -> dedicated Agent Stream binding [GAP: Dedicated Agent Stream resource] -> configured API/ingest endpoint [GAP: Agent Observability runtime routing]"
   },
   "current_instrumentation": {
-    "spans": [],
+    "spans": [
+      {"name": "offline_assistant_evaluation", "source": "eval_runner.py:23-25", "type": "Splunk AO SDK synthetic offline evaluation trace; not reachable from interactive app.py"},
+      {"name": "evaluation_answer", "source": "eval_runner.py:26-33", "type": "Splunk AO SDK synthetic offline model span; not reachable from interactive app.py"}
+    ],
     "metrics": [],
     "logs": [],
     "incident_readiness": []
@@ -207,7 +215,7 @@
       "effort": "small",
       "status": "proposed",
       "area": "Agent Observability project resource",
-      "gap": "The deployment has no resolved Agent Observability project resource or project identifier.",
+      "gap": "The interactive FastAPI deployment has no resolved Agent Observability project binding or project identifier; eval_runner.py resolves a separate optional evaluation project only.",
       "impact": "Agent traces have no verified project destination.",
       "product_outcome": "An existing or authorized newly created project resource is available as the trace destination.",
       "required_fix": "Resolve an existing project resource and its identifier, or create one through the configured supported Agent Observability SDK/API endpoint when authorized; never invent an identifier. A compatible local gateway delegates the normal resource request using its active Studio cloud connection, without an application cloud token.",
@@ -217,7 +225,7 @@
       ],
       "dependencies": [],
       "evidence": [
-        "pyproject.toml"
+        "pyproject.toml:1-16; app.py:1-187; eval_runner.py:7-21"
       ],
       "acceptance_criteria": [
         "The selected project identifier resolves to a real Agent Observability project; if access is unavailable, record the exact authorization blocker."
@@ -246,7 +254,7 @@
       "effort": "small",
       "status": "proposed",
       "area": "Dedicated Agent Stream resource",
-      "gap": "The target project has no resolved dedicated Agent Stream resource or identifier for this application.",
+      "gap": "The interactive FastAPI deployment has no resolved dedicated Agent Stream binding or identifier; eval_runner.py resolves or creates an offline evaluation stream only.",
       "impact": "The application has no verified stream destination and its traces can mix with unrelated agents.",
       "product_outcome": "A dedicated Agent Stream exists in the resolved project and can be selected as the trace destination.",
       "required_fix": "Resolve an existing dedicated Agent Stream resource in the selected project, or create one through the configured supported Agent Observability SDK/API endpoint when authorized; never invent an identifier or configure a global Studio stream destination.",
@@ -256,7 +264,7 @@
       ],
       "dependencies": ["AO-001"],
       "evidence": [
-        "pyproject.toml"
+        "pyproject.toml:1-16; app.py:1-187; eval_runner.py:14-21"
       ],
       "acceptance_criteria": [
         "The selected Agent Stream identifier resolves to a real stream in the selected project; if access is unavailable, record the exact authorization blocker."
@@ -285,14 +293,14 @@
       "effort": "small",
       "status": "proposed",
       "area": "Agent Observability runtime routing",
-      "gap": "The application deployment has no durable supported API/ingest endpoint configuration and per-request binding for its resolved project and Agent Stream.",
+      "gap": "The interactive FastAPI deployment has no durable supported API/ingest endpoint configuration or per-request binding for a live project and Agent Stream. The optional eval_runner.py publishes a synthetic evaluation trace through its own logger and does not instrument app.py chat.",
       "impact": "Traces can remain unassigned, mix with other applications, or be mistaken for cloud Agent Observability delivery after only local or APM receipt.",
       "product_outcome": "The deployed application uses ordinary supported SDK/API calls and OTLP export to its selected project and dedicated Agent Stream through the selected gateway or explicit direct-cloud endpoint.",
       "required_fix": "Persist supported SDK API/console/auth configuration and the matching ingest endpoint for the installed version. Default local work to an available cloud-compatible Studio gateway, preserving explicit operator destinations and direct-cloud mode. Keep cloud realm/token server-side in gateway mode and bind the project/Agent Stream on each request/export, without a Studio-specific application adapter, startup discovery, or global destination registration.",
       "instrument_mode": "default",
       "verification_scenarios": ["genai.turn.lifecycle", "ao.runtime.routing"],
       "dependencies": ["OTEL-001", "AO-001", "AO-002"],
-      "evidence": ["pyproject.toml"],
+      "evidence": ["pyproject.toml:1-16", "app.py:1-187", "eval_runner.py:7-42"],
       "acceptance_criteria": [
         "Normal SDK/API resource calls and the exporter exercise the selected endpoint mode. Gateway mode derives upstream realm/auth from the active Studio connection with no application cloud token; explicit direct-cloud mode remains valid.",
         "Two application streams preserve distinct project/stream bindings per request without cross-application leakage or changing a global AO destination. Unavailable or changed gateway connections are reported without silent destination switches or reuse of old-organization IDs.",

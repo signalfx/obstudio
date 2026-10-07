@@ -320,8 +320,9 @@ def test_audit_requires_process_relative_ao_runtime_coverage():
         "covered row must cite reachable setup for that exact runtime",
         "Never patch HTML or add empty AO cards",
         "transitive dependency closure must support its own acceptance criteria",
-        "canonical workflow, agent, model, or tool spans",
-        "include the unresolved producer and semantic-continuity findings",
+        "canonical workflow, agent, model, tool, or nested retrieval spans",
+        "include every unresolved producer and semantic-continuity finding",
+        "its retrieval finding must be included separately from the tool finding",
         "include any unresolved ordinary provider-lifecycle finding needed by that route",
         "local proof scenario for the exact live entry point",
         "attach exactly one AO sink/processor",
@@ -1024,6 +1025,39 @@ def test_ao_endpoint_rubrics_require_mode_specific_delivery_evidence():
         "do not claim delivery continues while the gateway is stopped",
     ):
         assert term in reference
+
+
+def test_ao_gateway_docs_keep_container_routing_outside_loopback_trust_boundary():
+    reference = " ".join(_read(SPLUNK_AO_REF).split())
+    receiver = " ".join(_read(
+        SKILLS_DIR / "references" / "local-otlp-receiver.md"
+    ).split())
+    for term in (
+        "native loopback requests from the same network namespace as Studio",
+        "marker is public and is not a network authentication secret",
+        "Do not recommend a Docker/Compose/Kubernetes bridge or service address",
+        "record that exact compatibility blocker",
+    ):
+        assert term in reference
+    assert "container/service addresses apply to ordinary OTLP receipt only" in receiver
+
+
+def test_ao_fixture_separates_offline_evaluation_from_interactive_chat():
+    audit = json.loads(_read(
+        REPO_ROOT / "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json"
+    ))
+    evidence = " ".join(json.dumps(audit["evidence"]).split())
+    assert "eval_runner.py" in evidence
+    assert "app.py does not import or call this runner" in evidence
+    assert "Offline evaluation (separate process)" in audit["signal_flow"]["component_flow_map"]
+    offline_spans = {row["name"]: row for row in audit["current_instrumentation"]["spans"]}
+    assert set(offline_spans) == {"offline_assistant_evaluation", "evaluation_answer"}
+    assert all("not reachable from interactive app.py" in row["type"] for row in offline_spans.values())
+    findings = {row["id"]: row for row in audit["findings"]}
+    for finding_id in ("AO-001", "AO-002", "AO-003"):
+        finding = findings[finding_id]
+        assert "interactive FastAPI deployment" in finding["gap"]
+        assert any("eval_runner.py:" in source for source in finding["evidence"])
 
 
 def test_live_ao_route_selection_closes_promised_producers_and_live_teardown(tmp_path):

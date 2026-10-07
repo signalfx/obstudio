@@ -92,6 +92,18 @@ Scan the repository to determine language, framework, and existing instrumentati
   Apply the Splunk AO Runtime Coverage Contract below to every in-scope agent
   runtime, not only to files that import the SDK. An evaluation-only import
   must not hide an interactive runtime from this assessment.
+  Before scoring AO routing, record a source-backed compatibility decision in
+  canonical Audit Evidence and the affected runtime readiness/finding rows:
+  classify the installed SDK's project/Agent Stream API endpoint, SDK auth
+  configuration, and per-request trace routing separately as `supported`,
+  `unsupported` (name the missing contract), or `unverified` (name the exact
+  package/runtime evidence unavailable after inspection). Do not defer this
+  classification to a future acceptance test. Separately classify fresh cloud
+  Agent Stream receipt; source capability, local receipt, and an upstream
+  acknowledgement do not prove it. If no local gateway was inspected, name
+  Splunk Observability Studio as the preferred local AO gateway candidate and
+  mark both its availability and concrete endpoint `unverified`; never invent
+  an address. Preserve an explicit operator or direct-cloud destination.
 7. Record exact evidence paths that should appear in the report:
   - Dependency manifest: `go.mod`, `package.json`, `pyproject.toml`, `pom.xml`, etc.
   - Process entry point: `main.go`, `cmd/.../main.go`, `app.py`, `app.js`, `TasksApplication.java`, etc.
@@ -659,8 +671,12 @@ content capture and lifecycle findings require their own source-backed gaps.
 
 An AO routing finding's transitive dependency closure must support its own
 acceptance criteria. If those criteria require canonical workflow, agent,
-model, or tool spans, include the unresolved producer and semantic-continuity
-findings needed for those operations, not only exporter and workflow setup.
+model, tool, or nested retrieval spans, include every unresolved producer and
+semantic-continuity finding needed for those operations, not only exporter and
+workflow setup. Cross-check each required live GenAI readiness surface and
+its verification scenario against the routing finding's dependency closure:
+when a tool such as `search_docs` performs a distinct retrieval operation,
+its retrieval finding must be included separately from the tool finding.
 Alternatively, explicitly narrow routing proof to the already covered
 operations; do not silently promise unselected instrumentation work.
 
@@ -687,10 +703,11 @@ finding, not only to a generic provider finding:
    availability evidence only when discovered. If no gateway or live target
    was inspected, say `unverified` and do not invent a host or port.
 2. State the installed AO SDK's project/Agent Stream API endpoint and
-   per-request trace-route compatibility as `supported`, `unsupported` with
-   the exact missing contract, or `unverified` with the exact unavailable
-   package/runtime evidence. Generic "cloud-compatible" wording is not a
-   compatibility assessment.
+   auth configuration and per-request trace-route compatibility as separate
+   `supported`, `unsupported` with the exact missing contract, or `unverified`
+   with the exact unavailable package/runtime evidence decisions in canonical
+   evidence and AO runtime rows; do not defer them to the acceptance scenario.
+   Generic "cloud-compatible" wording is not a compatibility assessment.
 3. Attach a dedicated credential-free scenario to the AO routing finding or
    its selected lifecycle prerequisite. It must invoke the live entry point
    with fake or in-memory application and AO sinks, call the actual

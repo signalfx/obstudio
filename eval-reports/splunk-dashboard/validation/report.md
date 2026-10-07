@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | splunk-dashboard |
-| Run ID | 20260923T185032115811Z |
+| Run ID | 20261007T155857281538Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -19,3 +19,5 @@ This report validates eval JSON, eval directory availability, and skill source a
 |---|---|---:|---|---:|---:|---:|
 | dashboards/checkout-red/qual/dashboard | dashboards/checkout-red | 1 | evals/dashboards/checkout-red/eval/qual/dashboard.json | 0 | 8 | 0 |
 | dashboards/checkout-red/sanity/dashboard | dashboards/checkout-red | 1 | evals/dashboards/checkout-red/eval/sanity/dashboard.json | 8 | 0 | 0 |
+| sanity/skill-smoke/sanity/dashboard | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/eval/sanity/dashboard.json | 0 | 0 | 0 |
+| sanity/skill-smoke/sanity/dashboard-no-audit | sanity/skill-smoke | 1 | evals/sanity/skill-smoke/eval/sanity/dashboard-no-audit.json | 2 | 0 | 0 |

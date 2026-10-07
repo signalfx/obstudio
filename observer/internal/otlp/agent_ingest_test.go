@@ -159,6 +159,8 @@ func TestAgentIngestRejectsInvalidDestinationAndRemoteBrowserRequests(t *testing
 		"invalid UUID":      func(r *http.Request) { r.Header.Set("projectid", "project\r\nX-SF-Token: bad") },
 		"no destination":    func(r *http.Request) { r.Header.Del("projectid"); r.Header.Del("logstreamid") },
 		"network peer":      func(r *http.Request) { r.RemoteAddr = "192.0.2.1:1234" },
+		"container bridge":  func(r *http.Request) { r.RemoteAddr = "172.18.0.2:1234" },
+		"container service": func(r *http.Request) { r.Host = "obstudio:4318" },
 		"browser origin":    func(r *http.Request) { r.Header.Set("Origin", "https://attacker.example") },
 		"empty origin":      func(r *http.Request) { r.Header.Set("Origin", "") },
 		"browser fetch":     func(r *http.Request) { r.Header.Set("Sec-Fetch-Site", "same-origin") },
@@ -680,7 +682,16 @@ func TestReadBodyLimitsDecompressedOTLPRequests(t *testing.T) {
 	}
 	r := httptest.NewRequest(http.MethodPost, "/v1/traces", &compressed)
 	r.Header.Set("Content-Encoding", "gzip")
-	if _, err := readBody(r); err == nil {
+	if _, err := readBody(r, true); err == nil {
 		t.Fatal("oversized decompressed body accepted")
+	}
+}
+
+func TestReadBodyPreservesOrdinaryOTLPPayloadSize(t *testing.T) {
+	payload := bytes.Repeat([]byte("x"), maxOTLPHTTPBodyBytes+1)
+	r := httptest.NewRequest(http.MethodPost, "/v1/traces", bytes.NewReader(payload))
+	body, err := readBody(r, false)
+	if err != nil || !bytes.Equal(body, payload) {
+		t.Fatalf("ordinary OTLP payload was capped: length=%d error=%v", len(body), err)
 	}
 }

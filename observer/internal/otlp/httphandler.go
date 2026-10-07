@@ -54,7 +54,7 @@ func (h *otlpHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		connID = h.ct.resolveHTTPConnectionFromRequest(r)
 	}
 
-	body, err := readBody(r)
+	body, err := readBody(r, route.ProjectID != "")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("read body: %v", err), http.StatusBadRequest)
 		return
@@ -169,8 +169,9 @@ func (h *otlpHTTPHandler) handleLogs(w http.ResponseWriter, body []byte, isProto
 	_, _ = w.Write([]byte("{}"))
 }
 
-// readBody reads the request body, handling gzip decompression if needed.
-func readBody(r *http.Request) ([]byte, error) {
+// readBody preserves the existing ordinary OTLP limit behavior while bounding
+// decompressed payloads sent through the Agent Observability cloud gateway.
+func readBody(r *http.Request, agentRouted bool) ([]byte, error) {
 	var reader io.Reader = r.Body
 	if r.Header.Get("Content-Encoding") == "gzip" {
 		gz, err := gzip.NewReader(r.Body)
@@ -179,6 +180,9 @@ func readBody(r *http.Request) ([]byte, error) {
 		}
 		defer gz.Close()
 		reader = gz
+	}
+	if !agentRouted {
+		return io.ReadAll(reader)
 	}
 	body, err := io.ReadAll(io.LimitReader(reader, maxOTLPHTTPBodyBytes+1))
 	if err != nil {

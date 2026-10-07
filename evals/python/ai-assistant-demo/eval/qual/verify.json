@@ -1,0 +1,28 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "ao-gateway-ack-not-cloud-proof",
+      "eval_inputs": [
+        "eval/inputs/otel-audit.json",
+        "eval/inputs/otel-selection-ao.json",
+        "eval/inputs/otel-instrumentation-ao.json",
+        "eval/inputs/otel-verify-ao.json",
+        "eval/inputs/ao-gateway-verify-evidence.txt"
+      ],
+      "task": "Create ./service/.observe and copy the four canonical JSON inputs from ./service/eval/inputs into their standard .observe names. Render .observe/otel.html once, record its SHA-256, and run $otel-verify read-only against the bound AO-003 dependency closure. Reconcile ao-gateway-verify-evidence.txt with source and the supplied proof packet, then validate the complete audit -> selection -> instrumentation -> verify flow. Keep the two synthetic projectid/logstreamid pairs isolated, but do not represent their UUIDs as real cloud resources. The recorded loopback HTTP 202 acknowledgments prove only the local route contract; they do not prove app.py ran, cloud forwarding, or fresh cloud Agent Stream visibility. Preserve the audit HTML bytes while refreshing verification JSON, reader-first Markdown, and instrumentation HTML. If a live cloud query or application execution is unavailable, keep those outcomes Not proven and report the exact missing proof rather than inventing cloud results. Do not edit app.py or add instrumentation."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service/.observe/otel-audit.json, otel-selection.json, otel-instrumentation.json, otel-verify.json, otel.html, otel-verify.md, and otel-instrumentation.html.",
+    "Read ./service/eval/inputs/ao-gateway-verify-evidence.txt and ./last_message.md.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Uses the existing canonical AI-assistant AO audit without modifying its bytes or digest, validates the exact AO-003 selection closure in audit order, and binds verification to the normalized instrumentation overlay rather than matching IDs alone.",
+    "Checks both synthetic local requests retain their distinct projectid/logstreamid pairs, with no cross-stream leakage or invented global AO destination. Treats those UUIDs only as route-test values, not as proof that real cloud project and Agent Stream resources exist.",
+    "Reports HTTP 202 as local gateway or receiver acknowledgment only. Does not equate local receipt, SDK resource response, upstream ingest acknowledgment, or ordinary APM visibility with a fresh trace visible in the intended cloud Agent Stream. AO project, dedicated stream, live app routing, and cloud Agent Stream delivery remain Not proven absent direct evidence; the overall result cannot be Pass on this evidence alone.",
+    "Keeps application code and dependencies unchanged in this read-only verification task. Any source/config or synthetic-contract checks retain their honest proof mode and durable evidence rather than being promoted to full application runtime proof.",
+    "Writes bound canonical verification JSON and reader-first .observe/otel-verify.md with precise What Changed, Tested And Working, Not Working Or Not Proven, and Proof outcomes; refreshes .observe/otel-instrumentation.html while preserving .observe/otel.html byte-for-byte and retaining its selected AO subsection state."
+  ]
+}

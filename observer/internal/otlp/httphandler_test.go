@@ -631,7 +631,7 @@ func TestReadBodyInvalidGzip(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/traces", bytes.NewReader([]byte{0x1f, 0x8b, 0xFF}))
 	req.Header.Set("Content-Encoding", "gzip")
 
-	_, err := readBody(req)
+	_, err := readBody(req, false)
 	if err == nil {
 		t.Error("expected error for invalid gzip data")
 	}

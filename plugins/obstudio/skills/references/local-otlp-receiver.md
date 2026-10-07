@@ -38,7 +38,10 @@ Use this precedence and stop at the first compatible source:
    `OTLP_HOST`, `OTLP_HTTP_PORT` (or legacy `OTLP_PORT`),
    `OTLP_GRPC_HOST`, `OTLP_GRPC_PORT`, Compose/Kubernetes service addresses,
    and editor launch settings. Use the address reachable from the application
-   runtime, not necessarily the receiver bind address.
+   runtime, not necessarily the receiver bind address. These container/service
+   addresses apply to ordinary OTLP receipt only: the current AO gateway's
+   resource API and project/stream-routed trace ingest require native loopback
+   from Studio's network namespace (see `splunk-agent-observability.md`).
 5. Only when no endpoint is configured or discoverable, use the conventional
    host/native fallbacks `http://127.0.0.1:4318` for OTLP/HTTP and
    `127.0.0.1:4317` for OTLP/gRPC.

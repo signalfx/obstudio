@@ -140,6 +140,30 @@ func TestAddAgentSpansDoesNotChangeOrdinaryStoreInsertion(t *testing.T) {
 	}
 }
 
+func TestAgentRetryDoesNotTransferOrdinarySpanOwnership(t *testing.T) {
+	s := New()
+	span := testAgentStoredSpan(1, 1)
+	s.AddSpansForConnection("ordinary", []Span{span})
+	s.AddAgentSpansForConnection("agent", []Span{span, span})
+	if s.Stats().SpanCount != 2 {
+		t.Fatalf("ordinary and AO receipts were not retained independently: %d", s.Stats().SpanCount)
+	}
+	s.EvictConnection("agent")
+	retained := s.SnapshotSpans()
+	if len(retained) != 1 || retained[0].ownerConnID != "ordinary" || retained[0].agentReceipt {
+		t.Fatalf("AO disconnect removed the ordinary receipt: %+v", retained)
+	}
+	s.AddAgentSpansForConnection("reconnected", []Span{span, span})
+	if s.Stats().SpanCount != 2 {
+		t.Fatal("AO reconnect did not retain its route without replacing ordinary data")
+	}
+	s.EvictConnection("ordinary")
+	retained = s.SnapshotSpans()
+	if len(retained) != 1 || retained[0].ownerConnID != "reconnected" || !retained[0].agentReceipt {
+		t.Fatalf("ordinary disconnect removed the AO receipt: %+v", retained)
+	}
+}
+
 func TestAddAgentSpansConcurrentRetries(t *testing.T) {
 	s := New()
 	span := testAgentStoredSpan(1, 1)

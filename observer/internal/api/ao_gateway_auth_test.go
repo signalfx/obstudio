@@ -133,6 +133,8 @@ func TestAgentObservabilitySDKAuthRejectsNonProcessRequests(t *testing.T) {
 		change func(*http.Request)
 	}{
 		{"remote peer", func(r *http.Request) { r.RemoteAddr = "192.0.2.1:1234" }},
+		{"container bridge peer", func(r *http.Request) { r.RemoteAddr = "172.18.0.2:1234" }},
+		{"container service Host", func(r *http.Request) { r.Host = "obstudio:3000" }},
 		{"malformed peer", func(r *http.Request) { r.RemoteAddr = "127.0.0.1" }},
 		{"DNS rebinding Host", func(r *http.Request) { r.Host = "attacker.example:3000" }},
 		{"missing Host", func(r *http.Request) { r.Host = "" }},
@@ -194,6 +196,24 @@ func TestAgentObservabilitySDKAuthRequiresAnEnabledConnection(t *testing.T) {
 			t.Fatalf("%s claimed readiness: %d %s", endpoint.path, response.Code, response.Body.String())
 		}
 	}
+}
+
+func TestAgentObservabilitySDKAuthAllowsTraceOnlyConnection(t *testing.T) {
+	service, mux := newTestAgentObservabilitySDKAuth(t)
+	config := service.metrics.Config()
+	config.Enabled = false
+	if err := service.metrics.Configure(config); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ready := service.agentObservabilityProxyDestination(); !ready {
+		t.Fatal("trace-only realm destination was rejected")
+	}
+	health := httptest.NewRecorder()
+	mux.ServeHTTP(health, agentObservabilitySDKRequest(http.MethodGet, "/healthcheck", ""))
+	if health.Code != http.StatusOK {
+		t.Fatalf("trace-only gateway healthcheck failed: %d %s", health.Code, health.Body.String())
+	}
+	agentObservabilitySDKLogin(t, mux)
 }
 
 func TestAgentObservabilitySDKJWTValidatesSignatureScopeAndExpiry(t *testing.T) {

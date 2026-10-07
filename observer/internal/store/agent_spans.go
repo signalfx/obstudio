@@ -29,13 +29,17 @@ func (s *Store) AddAgentSpansForConnection(connID string, spans []Span) {
 	}
 	for i := 0; i < s.spans.count; i++ {
 		index := (start + i) % s.spans.cap
-		if key, valid := agentSpanKey(s.spans.items[index]); valid {
-			indexes[key] = index
+		if s.spans.items[index].agentReceipt {
+			key, valid := agentSpanKey(s.spans.items[index])
+			if valid {
+				indexes[key] = index
+			}
 		}
 	}
 	for i := range spans {
 		s.spanIngestRevision++
 		spans[i].ingestRevision = s.spanIngestRevision
+		spans[i].agentReceipt = true
 		// Empty means the latest receipt is unowned, not owned by a stale peer.
 		spans[i].ownerConnID = connID
 		key, valid := agentSpanKey(spans[i])
@@ -45,8 +49,10 @@ func (s *Store) AddAgentSpansForConnection(connID string, spans []Span) {
 		}
 		index := s.spans.head
 		if s.spans.count == s.spans.cap {
-			if evicted, ok := agentSpanKey(s.spans.items[index]); ok && indexes[evicted] == index {
-				delete(indexes, evicted)
+			if s.spans.items[index].agentReceipt {
+				if evicted, ok := agentSpanKey(s.spans.items[index]); ok && indexes[evicted] == index {
+					delete(indexes, evicted)
+				}
 			}
 		}
 		s.spans.push(spans[i : i+1])
