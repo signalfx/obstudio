@@ -7,8 +7,10 @@
     {
       "name": "obstudio",
       "source": {
-        "source": "local",
-        "path": "./plugins/obstudio"
+        "source": "git-subdir",
+        "url": "https://github.com/signalfx/obstudio.git",
+        "path": "./plugins/obstudio",
+        "ref": "v0.1.1"
       },
       "policy": {
         "installation": "AVAILABLE",

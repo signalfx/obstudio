@@ -55,11 +55,11 @@ Splunk publish skills, plus `observer-open`, `observer-status`,
 The shared [`hooks/bootstrap_obstudio.py`](./hooks/bootstrap_obstudio.py)
 downloads the release when needed, validates its published checksum, and
 starts or reuses Splunk Observability Studio when the host permits managed startup.
-Claude prefers the Observer release matching its plugin version. If that
-release's assets are unavailable, Claude falls back to the latest Observer
-with a warning. When a healthy shared Observer is already running at another
-version, Claude reports the mismatch and reuses it rather than interrupting
-another host. Codex continues to use the latest Observer release.
+Claude and Codex prefer the Observer release matching their plugin version. If
+the matching Observer runtime assets return 404, the host falls back to the
+latest Observer with a warning. When a healthy shared Observer is already
+running at another version, the host reports the mismatch and reuses it rather
+than interrupting another host.
 
 ## Maintainer workflow
 
@@ -73,8 +73,11 @@ The published Claude marketplace entry uses a SHA-256-pinned release archive.
 GoReleaser's release `checksums.txt` includes the runtime archives, Claude and
 Codex plugin archives, and VSIX packages. The release workflow uses the Claude
 plugin ZIP hash from this manifest when it updates the marketplace archive URL
-alongside the Claude and Codex plugin manifest versions. Codex's repo-local
-marketplace remains a path source.
+alongside the Claude and Codex plugin manifest versions. The Codex marketplace
+uses a Git-backed `git-subdir` source pinned to the same release tag. The
+release sync workflow updates that tag along with both plugin manifest versions.
+This relies on release tags remaining stable; moving a tag changes the Codex
+marketplace source for that version.
 
 For Claude development, choose one of these local workflows:
 

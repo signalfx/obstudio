@@ -437,8 +437,7 @@ def bootstrap_locked(
         return 0
 
     if is_bootstrapped(state_path, plugin_version, codex_config_path, codex_skills_path, plugin_mcp_path):
-        if plugin_host() == "claude":
-            warn_if_shared_runtime_version_mismatch(state_path, plugin_version)
+        warn_if_shared_runtime_version_mismatch(state_path, plugin_version)
         emit_context(
             f"{plugin_display_name()} is already bootstrapped for {host_name()}. "
             f"Use {skill_command('otel-audit')}, "
@@ -544,17 +543,20 @@ def bootstrap_locked(
                 f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills "
                 "and the MCP config points at a shared Splunk Observability Studio service."
             )
-        if plugin_host() == "claude":
-            if pin_fallback:
-                message += (
-                    f" Runtime version {plugin_version} was unavailable; using Observer {release_version} instead."
-                )
-            running_version = normalize_obstudio_version((live_health or {}).get("version"))
-            if running_version and running_version != normalize_obstudio_version(plugin_version):
-                message += (
-                    f" The running shared Observer is version {running_version}, while the Claude plugin is "
-                    f"version {plugin_version}; it was left running."
-                )
+        if pin_fallback:
+            message += (
+                f" Runtime version {plugin_version} was unavailable; using Observer {release_version} instead."
+            )
+        running_version = normalize_obstudio_version((live_health or {}).get("version"))
+        if (
+            not process_started
+            and running_version
+            and running_version != normalize_obstudio_version(plugin_version)
+        ):
+            message += (
+                f" The running Observer is version {running_version}, while the {host_name()} plugin is "
+                f"version {plugin_version}; it was left running."
+            )
         emit_context(message)
         return 0
     except Exception as exc:  # pragma: no cover - defensive hook boundary
@@ -764,7 +766,7 @@ def is_bootstrapped(
     if state.get("owner") == plugin_owner() and state.get("mode") == "managed":
         live_pid = find_pid_listening_on_url(health_url)
         expected_version = string_state_value(state, "releaseVersion")
-        if plugin_host() == "claude" and state.get("runtimePinFallback") is not True:
+        if state.get("runtimePinFallback") is not True:
             expected_version = plugin_version
         return bootstrap_state_proves_managed_owner(state_path, live_pid, health_payload, expected_version)
     return True
@@ -920,10 +922,11 @@ def resolve_runtime_release(
     checksums_path: Path,
     plugin_version: str,
 ) -> tuple[Path, str, str, str, bool]:
-    """Download the preferred runtime, soft-pinning Claude to its plugin version."""
-    if plugin_host() == "claude" and re.fullmatch(
+    """Download the runtime matching the plugin version, with a latest-release fallback."""
+    plugin_version_is_valid = re.fullmatch(
         r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", plugin_version
-    ):
+    ) is not None
+    if plugin_version_is_valid:
         try:
             artifact, checksum = fetch_expected_checksum(artifact_suffix, checksums_path, plugin_version)
             binary = download_obstudio(plugin_data, artifact_suffix, artifact, checksum, plugin_version)
@@ -935,7 +938,7 @@ def resolve_runtime_release(
     artifact, checksum = fetch_expected_checksum(artifact_suffix, checksums_path)
     release_version = resolve_release_version(artifact, artifact_suffix)
     binary = download_obstudio(plugin_data, artifact_suffix, artifact, checksum)
-    return binary, artifact, checksum, release_version, plugin_host() == "claude"
+    return binary, artifact, checksum, release_version, plugin_version_is_valid
 
 
 def warn_if_shared_runtime_version_mismatch(state_path: Path, plugin_version: str) -> None:
@@ -951,8 +954,8 @@ def warn_if_shared_runtime_version_mismatch(state_path: Path, plugin_version: st
     expected_version = normalize_obstudio_version(plugin_version)
     if running_version and expected_version and running_version != expected_version:
         emit_context(
-            f"Claude plugin version {plugin_version} is using an already-running Observer version "
-            f"{running_version}; the shared runtime was left running."
+            f"{host_name()} plugin version {plugin_version} is using an already-running Observer version "
+            f"{running_version}; the existing runtime was left running."
         )
 
 

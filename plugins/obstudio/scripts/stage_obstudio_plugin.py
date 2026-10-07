@@ -102,13 +102,18 @@ def main() -> int:
         action="store_true",
         help=(
             "verify the committed Claude and Codex plugin manifest versions agree "
-            "with each other (and with --release-tag, when given) and exit"
+            "with each other and the Codex marketplace ref (and with --release-tag, when given) and exit"
         ),
     )
     parser.add_argument(
         "--sync-claude-marketplace",
         action="store_true",
         help="update the Claude marketplace archive URL and SHA-256 for --release-tag",
+    )
+    parser.add_argument(
+        "--sync-codex-marketplace",
+        action="store_true",
+        help="update the Codex marketplace git source ref for --release-tag",
     )
     parser.add_argument(
         "--checksums-file",
@@ -135,6 +140,11 @@ def main() -> int:
         if not args.release_tag or args.checksums_file is None:
             raise RuntimeError("--release-tag and --checksums-file are required with --sync-claude-marketplace")
         sync_claude_marketplace(args.release_tag, args.checksums_file)
+        return 0
+    if args.sync_codex_marketplace:
+        if not args.release_tag:
+            raise RuntimeError("--release-tag is required with --sync-codex-marketplace")
+        sync_codex_marketplace(args.release_tag)
         return 0
     output = args.output.expanduser().resolve()
     release_version = release_version_from_tag(args.release_tag) if args.release_tag else ""
@@ -189,8 +199,12 @@ def bump_committed_manifest_versions(version: str, plugin_root: Path = PLUGIN_RO
     return updated
 
 
-def check_committed_manifest_versions(release_tag: str = "", plugin_root: Path = PLUGIN_ROOT) -> None:
-    """Verify the committed Claude/Codex plugin manifest versions agree with each other.
+def check_committed_manifest_versions(
+    release_tag: str = "",
+    plugin_root: Path = PLUGIN_ROOT,
+    codex_marketplace_path: Path | None = None,
+) -> None:
+    """Verify committed plugin versions agree with each other and the Codex marketplace ref.
 
     When ``release_tag`` is given, also verify both manifests already match it.
     """
@@ -216,6 +230,9 @@ def check_committed_manifest_versions(release_tag: str = "", plugin_root: Path =
                 f"plugin manifest version {versions['claude']!r} does not match "
                 f"release tag {release_tag!r} (expected {expected!r})"
             )
+
+    if plugin_root == PLUGIN_ROOT:
+        check_codex_marketplace_ref(versions["codex"], codex_marketplace_path)
 
     print(f"plugin manifest versions agree: {versions['claude']}")
 
@@ -261,6 +278,58 @@ def sync_claude_marketplace(
         "sha256": checksum,
     }
     target.write_text(json.dumps(marketplace, indent=2) + "\n", encoding="utf-8")
+
+
+def sync_codex_marketplace(
+    release_tag: str,
+    marketplace_path: Path | None = None,
+) -> None:
+    release_version_from_tag(release_tag)
+    target = marketplace_path or ROOT / ".agents" / "plugins" / "marketplace.json"
+    marketplace = json.loads(target.read_text(encoding="utf-8"))
+    plugins = marketplace.get("plugins")
+    if not isinstance(plugins, list):
+        raise RuntimeError(f"marketplace plugins must be an array: {target}")
+    entries = [
+        entry for entry in plugins if isinstance(entry, dict) and entry.get("name") == "obstudio"
+    ]
+    if len(entries) != 1:
+        raise RuntimeError(f"expected exactly one obstudio plugin entry in {target}")
+    entries[0]["source"] = {
+        "source": "git-subdir",
+        "url": "https://github.com/signalfx/obstudio.git",
+        "path": "./plugins/obstudio",
+        "ref": release_tag,
+    }
+    target.write_text(json.dumps(marketplace, indent=2) + "\n", encoding="utf-8")
+
+
+def check_codex_marketplace_ref(
+    plugin_version: str,
+    marketplace_path: Path | None = None,
+) -> None:
+    target = marketplace_path or ROOT / ".agents" / "plugins" / "marketplace.json"
+    marketplace = json.loads(target.read_text(encoding="utf-8"))
+    plugins = marketplace.get("plugins")
+    if not isinstance(plugins, list):
+        raise RuntimeError(f"marketplace plugins must be an array: {target}")
+    entries = [
+        entry for entry in plugins if isinstance(entry, dict) and entry.get("name") == "obstudio"
+    ]
+    if len(entries) != 1:
+        raise RuntimeError(f"expected exactly one obstudio plugin entry in {target}")
+    source = entries[0].get("source")
+    expected = {
+        "source": "git-subdir",
+        "url": "https://github.com/signalfx/obstudio.git",
+        "path": "./plugins/obstudio",
+        "ref": f"v{plugin_version}",
+    }
+    if source != expected:
+        raise RuntimeError(
+            f"Codex marketplace source must match the plugin release in {target}: "
+            f"expected {expected!r}, got {source!r}"
+        )
 
 
 def checksum_for_archive(checksums_file: Path, archive_name: str) -> str:

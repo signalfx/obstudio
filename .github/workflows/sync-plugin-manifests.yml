@@ -56,6 +56,14 @@ jobs:
             --release-tag "$RELEASE_TAG" \
             --checksums-file "$RUNNER_TEMP/checksums.txt"
 
+      - name: Update Codex marketplace git source
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          python3 plugins/obstudio/scripts/stage_obstudio_plugin.py \
+            --sync-codex-marketplace \
+            --release-tag "$RELEASE_TAG"
+
       - name: Bump committed plugin manifests to release version
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
@@ -73,12 +81,15 @@ jobs:
           commit-message: "chore: sync plugin manifest versions to ${{ inputs.release_tag }}"
           title: "Sync plugin manifests to ${{ inputs.release_tag }}"
           body: |
-            Automated version sync after release [${{ inputs.release_tag }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ inputs.release_tag }}).
+            Automated sync after release [${{ inputs.release_tag }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ inputs.release_tag }}).
 
-            Updates the `version` field in:
+            This keeps the plugin metadata and marketplace sources aligned with the release:
+            - Update both plugin manifests' `version` fields so Claude and Codex identify the plugin as the released version.
+            - Point the Claude marketplace entry at the released plugin ZIP and its SHA-256 from `checksums.txt`.
+            - Pin the Codex marketplace entry to the `plugins/obstudio` subdirectory at the release tag, so installs use that tagged source.
+
+            Files updated:
             - `plugins/obstudio/.claude-plugin/plugin.json`
             - `plugins/obstudio/.codex-plugin/plugin.json`
-
-            Updates `.claude-plugin/marketplace.json` to use the Claude plugin archive and its SHA-256 from the release `checksums.txt`.
-
-            This keeps marketplace installs on ${{ inputs.base }} reporting the released version
+            - `.claude-plugin/marketplace.json`
+            - `.agents/plugins/marketplace.json`
