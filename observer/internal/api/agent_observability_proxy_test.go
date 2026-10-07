@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/signalfx/obstudio/observer/internal/otlp"
+	"go.opentelemetry.io/collector/pdata/ptrace"
 )
 
 type agentObservabilityProxyRoundTripper func(*http.Request) (*http.Response, error)
@@ -209,6 +210,111 @@ func TestAgentObservabilityProxyRejectsSuccessAfterConnectionChange(t *testing.T
 				t.Fatalf("stale cloud response was not safely rejected: status=%d calls=%d", response.Code, calls)
 			}
 		})
+	}
+}
+
+func TestAgentObservabilityProxyBindsStreamsOnlyToResolvingConnection(t *testing.T) {
+	const projectID = "3c90ff2e-f907-42a8-ac30-52e2b67f21a9"
+	const firstStreamID = "02ea43cc-dd21-4081-b6c9-4aa4b843e163"
+	const secondStreamID = "b40f5613-e45e-4657-8a06-f2d6855bb10e"
+	service, mux := newTestAgentObservabilityProxy(t)
+	service.agentObservabilityProxyClient.Transport = agentObservabilityProxyRoundTripper(func(request *http.Request) (*http.Response, error) {
+		streamID := firstStreamID
+		if request.URL.Host == "app.us1.observability.splunkcloud.com" {
+			streamID = secondStreamID
+		}
+		return agentObservabilityProxyResponse(http.StatusOK, `{"id":"`+streamID+`","project_id":"`+projectID+`"}`), nil
+	})
+	resolve := func(method, path string) {
+		t.Helper()
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, agentObservabilityProxyRequest(method, path, `{}`))
+		if response.Code != http.StatusOK {
+			t.Fatalf("resource resolution failed: %d %s", response.Code, response.Body.String())
+		}
+	}
+	isBound := func(streamID string) bool {
+		t.Helper()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // A bound route reaches the canceled transport; an unbound one does not.
+		_, err := service.traces.ExportAgentTraces(ctx, ptrace.NewTraces(), otlp.AgentTraceRoute{ProjectID: projectID, AgentStreamID: streamID})
+		return err != nil && !strings.Contains(err.Error(), "unresolved for the active cloud connection")
+	}
+	streamPath := "/ao/api/projects/" + projectID + "/log_streams"
+	resolve(http.MethodPost, streamPath)
+	if !isBound(firstStreamID) || isBound(secondStreamID) {
+		t.Fatal("cloud response did not bind only its resolved stream")
+	}
+	if err := service.apply(
+		otlp.SplunkMetricsExporterConfig{Enabled: true, Realm: "lab0", AccessToken: testSplunkAccessToken},
+		otlp.SplunkTracesExporterConfig{Enabled: true, Realm: "lab0", AccessToken: testSplunkAccessToken},
+	); err != nil || !isBound(firstStreamID) {
+		t.Fatalf("unchanged cloud destination invalidated its resolved stream: %v", err)
+	}
+	configure := func(realm string) {
+		t.Helper()
+		if err := service.apply(
+			otlp.SplunkMetricsExporterConfig{Enabled: true, Realm: realm, AccessToken: testSplunkAccessToken},
+			otlp.SplunkTracesExporterConfig{Enabled: true, Realm: realm, AccessToken: testSplunkAccessToken},
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	configure("us1")
+	if isBound(firstStreamID) {
+		t.Fatal("old realm stream remained bound after connection switch")
+	}
+	resolve(http.MethodPost, streamPath)
+	if !isBound(secondStreamID) || isBound(firstStreamID) {
+		t.Fatal("new realm did not require and accept its own resolved stream")
+	}
+	configure("lab0")
+	if isBound(firstStreamID) || isBound(secondStreamID) {
+		t.Fatal("A-to-B-to-A switch revived a stale stream")
+	}
+	resolve(http.MethodGet, streamPath+"/"+firstStreamID)
+	if !isBound(firstStreamID) {
+		t.Fatal("exact stream lookup did not rebind the current cloud route")
+	}
+}
+
+func TestAgentObservabilityProxyRejectsInFlightStreamAfterRoundTripConnectionChange(t *testing.T) {
+	service, mux := newTestAgentObservabilityProxy(t)
+	service.agentObservabilityProxyClient.Transport = agentObservabilityProxyRoundTripper(func(*http.Request) (*http.Response, error) {
+		for _, realm := range []string{"us1", "lab0"} {
+			if err := service.apply(
+				otlp.SplunkMetricsExporterConfig{Enabled: true, Realm: realm, AccessToken: testSplunkAccessToken},
+				otlp.SplunkTracesExporterConfig{Enabled: true, Realm: realm, AccessToken: testSplunkAccessToken},
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return agentObservabilityProxyResponse(http.StatusOK, `{"id":"02ea43cc-dd21-4081-b6c9-4aa4b843e163","project_id":"3c90ff2e-f907-42a8-ac30-52e2b67f21a9"}`), nil
+	})
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, agentObservabilityProxyRequest(http.MethodPost, "/ao/api/projects/3c90ff2e-f907-42a8-ac30-52e2b67f21a9/log_streams", `{}`))
+	if response.Code != http.StatusConflict || strings.Contains(response.Body.String(), "02ea43cc") {
+		t.Fatalf("round-trip destination change exposed stale stream: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestAgentObservabilityProxyDoesNotBindStreamFromDifferentProject(t *testing.T) {
+	const projectID = "3c90ff2e-f907-42a8-ac30-52e2b67f21a9"
+	const streamID = "02ea43cc-dd21-4081-b6c9-4aa4b843e163"
+	service, mux := newTestAgentObservabilityProxy(t)
+	service.agentObservabilityProxyClient.Transport = agentObservabilityProxyRoundTripper(func(*http.Request) (*http.Response, error) {
+		return agentObservabilityProxyResponse(http.StatusOK, `{"id":"`+streamID+`","project_id":"b40f5613-e45e-4657-8a06-f2d6855bb10e"}`), nil
+	})
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, agentObservabilityProxyRequest(http.MethodGet, "/ao/api/projects/"+projectID+"/log_streams/"+streamID, ""))
+	if response.Code != http.StatusOK {
+		t.Fatalf("cloud response status changed: %d", response.Code)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := service.traces.ExportAgentTraces(ctx, ptrace.NewTraces(), otlp.AgentTraceRoute{ProjectID: projectID, AgentStreamID: streamID})
+	if err == nil || !strings.Contains(err.Error(), "unresolved for the active cloud connection") {
+		t.Fatalf("foreign project stream was bound: %v", err)
 	}
 }
 

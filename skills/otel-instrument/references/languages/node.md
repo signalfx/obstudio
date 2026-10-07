@@ -105,7 +105,9 @@ import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
 import { ConsoleInstrumentation } from '@opentelemetry/instrumentation-console';
 // ... add other detected framework/client instrumentations here
 
-const FALLBACK_LOCAL_OTLP_LOGS_ENDPOINT = 'http://127.0.0.1:4318/v1/logs';
+// Replace this with the exact local logs URL resolved during instrumentation
+// preflight. The literal below applies only when preflight approved that fallback.
+const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT = 'http://127.0.0.1:4318/v1/logs';
 
 function localLogsEndpointFromGeneric(endpoint: string | undefined) {
   if (!endpoint) return undefined;
@@ -136,49 +138,55 @@ function defaultLocalLogConfiguration() {
     // entirely to a proven operator-owned setup; do not add a Splunk Observability Studio bridge.
     return {
       logRecordProcessors: undefined,
-      addDefaultLocalLogBridge: false,
+      logInstrumentations: [],
     };
   }
 
-  const protocol = (
-    process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL ||
-    process.env.OTEL_EXPORTER_OTLP_PROTOCOL ||
-    'http/protobuf'
-  ).trim().toLowerCase();
-  if (protocol !== 'http/protobuf') {
-    throw new Error(
-      `select the official exporter matching OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=${protocol}`,
+  try {
+    const protocol = (
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL ||
+      process.env.OTEL_EXPORTER_OTLP_PROTOCOL ||
+      'http/protobuf'
+    ).trim().toLowerCase();
+    if (protocol !== 'http/protobuf') {
+      throw new Error('unsupported local logs protocol');
+    }
+
+    const endpoint =
+      process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT?.trim() ||
+      localLogsEndpointFromGeneric(
+        process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim(),
+      ) ||
+      PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT;
+    if (endpoint !== PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT) {
+      throw new Error('logs endpoint differs from preflight-approved receiver');
+    }
+
+    if (process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim()) {
+      throw new Error('generic OTLP headers conflict with local logs');
+    }
+
+    // The exporter may read OTEL_EXPORTER_OTLP_LOGS_HEADERS. Generic headers
+    // are rejected above because the SDK merges rather than replaces them.
+    const exporter = new OTLPLogExporter({ url: endpoint });
+    const processor = new BatchLogRecordProcessor({ exporter });
+    return {
+      logRecordProcessors: [processor],
+      logInstrumentations: [new ConsoleInstrumentation()],
+    };
+  } catch {
+    // Never include endpoint, headers, credentials, or exception details here.
+    process.stderr.write(
+      'OTel local log pipeline skipped; trace and metric startup continues.\n',
     );
+    return {
+      logRecordProcessors: undefined,
+      logInstrumentations: [],
+    };
   }
-
-  const endpoint =
-    process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT?.trim() ||
-    localLogsEndpointFromGeneric(
-      process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim(),
-    ) ||
-    FALLBACK_LOCAL_OTLP_LOGS_ENDPOINT;
-
-  if (process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim()) {
-    throw new Error(
-      'move generic OTLP headers to trace/metric signal variables and remove ' +
-      'OTEL_EXPORTER_OTLP_HEADERS',
-    );
-  }
-
-  // The exporter may read OTEL_EXPORTER_OTLP_LOGS_HEADERS. The generic header
-  // source was rejected above because the SDK merges rather than replaces it.
-  const exporter = new OTLPLogExporter({
-    // A signal-specific endpoint wins. Otherwise a compatible generic local
-    // endpoint preserves its host and port and gains exactly one /v1/logs path.
-    url: endpoint,
-  });
-  return {
-    logRecordProcessors: [new BatchLogRecordProcessor({ exporter })],
-    addDefaultLocalLogBridge: true,
-  };
 }
 
-const { logRecordProcessors, addDefaultLocalLogBridge } =
+const { logRecordProcessors, logInstrumentations } =
   defaultLocalLogConfiguration();
 
 const sdk = new NodeSDK({
@@ -195,9 +203,8 @@ const sdk = new NodeSDK({
   instrumentations: [
     new HttpInstrumentation(),
     new ExpressInstrumentation(),
-    // Add this only for the Splunk Observability Studio-owned absent/`otlp` branch, after proving
-    // the selected Node runtime is supported and no bridge already owns it.
-    ...(addDefaultLocalLogBridge ? [new ConsoleInstrumentation()] : []),
+    // Preflight must prove the runtime supports this bridge and no other owns it.
+    ...logInstrumentations,
     // ... add other detected instrumentations here
   ],
 });
@@ -286,13 +293,20 @@ stalled drain or exporter from leaving the process alive indefinitely; a
 successful drain and flush exits `0`, a drain/export failure exits `1`, and a
 timeout or second signal uses the conventional nonzero signal exit code.
 
-During instrumentation preflight, classify a signal-specific logs endpoint as
-local/collector-owned or report a source-proven non-local value as an
-operator-owned boundary conflict before applying this pattern. At runtime the
-signal-specific endpoint remains operator configuration and wins unchanged,
-including a non-default port or Docker/Compose service name. When it is absent,
-a preflight-approved generic HTTP receiver supplies the same host and port.
-Do not add an Obstudio endpoint lookup to application startup.
+During instrumentation preflight, resolve the complete local `/v1/logs` URL and
+replace `PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT` with that exact value,
+including any non-default port, service name, or base path. Classify an explicit
+signal-specific logs endpoint as local/collector-owned only if it equals that
+approved value; report a source-proven non-local value as an operator-owned
+boundary conflict. When the signal-specific endpoint is absent, a generic
+HTTP receiver may supply the logs URL only if the resulting URL equals the
+approved value. Do not add an Obstudio endpoint lookup to application startup.
+If log-only configuration conflicts or construction of the log exporter,
+processor, or bridge fails, the example emits one value-free diagnostic and
+starts tracing and metrics without the added log pipeline. The original
+console/file sink stays active. To clear a header conflict, move generic OTLP
+headers to trace/metric signal variables. For a different logs protocol, select the
+official exporter matching that protocol during instrumentation preflight.
 
 With `OTEL_LOGS_EXPORTER=none`, both the added processor and bridge are omitted.
 For another explicit exporter such as `console`, leave provider, exporter, and

@@ -214,7 +214,6 @@ def test_language_guides_reject_generic_cloud_header_inheritance() -> None:
 def test_language_guides_inherit_compatible_generic_nondefault_receiver() -> None:
     python = _read(LANGUAGES / "python.md")
     node = _read(LANGUAGES / "node.md")
-    go = _read(LANGUAGES / "go.md")
     java = _read(LANGUAGES / "java.md")
 
     assert 'logs_endpoint="${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}"' in python
@@ -223,10 +222,31 @@ def test_language_guides_inherit_compatible_generic_nondefault_receiver() -> Non
     assert 'logs_endpoint="${generic_http_base%/}/v1/logs"' in python
     assert "localLogsEndpointFromGeneric" in node
     assert "parsed.pathname = `${basePath}/v1/logs`" in node
-    assert "url.Parse(genericEndpoint)" in go
-    assert 'parsed.Path = strings.TrimRight(basePath, "/") + "/v1/logs"' in go
     assert 'elif [ -n "$generic_endpoint" ]; then' in java
     assert 'local_logs_endpoint=$local_http_endpoint/v1/logs' in java
+
+
+def test_go_logs_match_preflight_receiver_without_stopping_traces_or_metrics() -> None:
+    go = _read(LANGUAGES / "go.md")
+    setup = _fenced_code_after(LANGUAGES / "go.md", "**File**: `otel.go`", "go")
+    log_setup = setup.split("useLocalLogExport :=", 1)[1].split(
+        "otel.SetTracerProvider(tp)", 1
+    )[0]
+    exporter = setup.split("func newApplicationLogExporter", 1)[1].split(
+        "// fanoutHandler", 1
+    )[0]
+
+    assert "preflightApprovedLocalOTLPLogsEndpoint" in setup
+    assert "if endpoint != preflightApprovedLocalOTLPLogsEndpoint" in exporter
+    assert "url.Parse(genericEndpoint)" not in exporter
+    assert "return nil, err" not in log_setup
+    assert "tp.Shutdown" not in log_setup
+    assert "mp.Shutdown" not in log_setup
+    assert log_setup.count(
+        'log.Print("local OTLP log export skipped; check receiver and exporter configuration")'
+    ) == 2
+    assert "slog.SetDefault(slog.New(fanoutHandler{" in setup
+    assert "the original\nlogger sink remains active" in go
 
 
 def test_shell_wrappers_only_add_local_log_configuration_for_otlp() -> None:
@@ -686,9 +706,27 @@ def test_node_non_otlp_exporters_never_add_obstudio_console_bridge() -> None:
     )[1].split("const protocol", 1)[0]
 
     assert "logRecordProcessors: undefined" in operator_owned_branch
-    assert "addDefaultLocalLogBridge: false" in operator_owned_branch
+    assert "logInstrumentations: []" in operator_owned_branch
     assert "configured !== 'none'" not in operator_owned_branch
-    assert "...(addDefaultLocalLogBridge ? [new ConsoleInstrumentation()] : [])" in node
+    assert "...logInstrumentations" in node
+    assert "logInstrumentations: [new ConsoleInstrumentation()]" in node
+
+
+def test_node_local_logs_require_preflight_match_and_fail_closed() -> None:
+    node = _read(LANGUAGES / "node.md")
+    helper = node.split("function defaultLocalLogConfiguration() {", 1)[1].split(
+        "const { logRecordProcessors, logInstrumentations }", 1
+    )[0]
+
+    assert "endpoint !== PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" in helper
+    assert "const exporter = new OTLPLogExporter({ url: endpoint });" in helper
+    assert "new BatchLogRecordProcessor({ exporter })" in helper
+    assert "logInstrumentations: [new ConsoleInstrumentation()]" in helper
+    assert "} catch {" in helper
+    assert "logRecordProcessors: undefined" in helper.split("} catch {", 1)[1]
+    assert "logInstrumentations: []" in helper.split("} catch {", 1)[1]
+    assert "process.stderr.write(" in helper.split("} catch {", 1)[1]
+    assert "error.message" not in helper
 
 
 def test_audit_nonlocal_log_conflict_is_a_locked_external_dependency() -> None:

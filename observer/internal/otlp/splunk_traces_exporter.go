@@ -124,6 +124,8 @@ type SplunkTracesExportController struct {
 	exportedSpans        uint64
 	failedBatches        uint64
 	agentTracesTransport http.RoundTripper
+	connectionGeneration uint64
+	agentRoutes          map[AgentTraceRoute]struct{}
 }
 
 // NewSplunkTracesExportController creates a runtime controller. Disabled
@@ -145,8 +147,16 @@ func (c *SplunkTracesExportController) Configure(config SplunkTracesExporterConf
 	c.exportMu.Lock()
 	c.mu.Lock()
 	old := c.exporter
-	c.config = normalizeSplunkTracesExporterConfig(config)
+	normalized := normalizeSplunkTracesExporterConfig(config)
+	connectionChanged := c.exporter == nil || c.config.Enabled != normalized.Enabled ||
+		c.config.Realm != normalized.Realm || c.config.Endpoint != normalized.Endpoint ||
+		c.config.AccessToken != normalized.AccessToken
+	c.config = normalized
 	c.exporter = exporter
+	if connectionChanged {
+		c.connectionGeneration++
+		c.agentRoutes = nil
+	}
 	c.lastExport = SplunkTracesExportAttempt{}
 	c.hasLastExport = false
 	c.exportedBatches = 0
@@ -172,6 +182,8 @@ func (c *SplunkTracesExportController) Shutdown(ctx context.Context) {
 	c.mu.Lock()
 	exp := c.exporter
 	c.exporter = nil
+	c.connectionGeneration++
+	c.agentRoutes = nil
 	c.mu.Unlock()
 	unlock()
 	if exp != nil {
@@ -188,6 +200,44 @@ func (c *SplunkTracesExportController) Config() SplunkTracesExporterConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.config
+}
+
+// AgentConnectionSnapshot lets the resource proxy bind a resolved stream to
+// the exact connection that produced it, including A-to-B-to-A transitions.
+func (c *SplunkTracesExportController) AgentConnectionSnapshot() (SplunkTracesExporterConfig, uint64, bool) {
+	if c == nil {
+		return SplunkTracesExporterConfig{}, 0, false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.config, c.connectionGeneration, c.config.Enabled && c.exporter != nil
+}
+
+// BindAgentTraceRoute records only stream IDs confirmed by a successful
+// resource request against the same active cloud connection.
+func (c *SplunkTracesExportController) BindAgentTraceRoute(route AgentTraceRoute, generation uint64) bool {
+	if c == nil {
+		return false
+	}
+	if _, err := agentTraceRoute([]string{route.ProjectID}, []string{route.AgentStreamID}); err != nil {
+		return false
+	}
+	c.exportMu.RLock()
+	defer c.exportMu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.config.Enabled || c.exporter == nil || generation != c.connectionGeneration {
+		return false
+	}
+	if c.agentRoutes == nil {
+		c.agentRoutes = make(map[AgentTraceRoute]struct{})
+	}
+	c.agentRoutes[normalizedAgentTraceRoute(route)] = struct{}{}
+	return true
+}
+
+func normalizedAgentTraceRoute(route AgentTraceRoute) AgentTraceRoute {
+	return AgentTraceRoute{ProjectID: strings.ToLower(route.ProjectID), AgentStreamID: strings.ToLower(route.AgentStreamID)}
 }
 
 // ExportEnabled reports whether exports can currently be forwarded without
@@ -266,9 +316,15 @@ func (c *SplunkTracesExportController) ExportAgentTraces(ctx context.Context, td
 	config := c.config
 	configured := config.Enabled && c.exporter != nil
 	transport := c.agentTracesTransport
+	_, routeBound := c.agentRoutes[normalizedAgentTraceRoute(route)]
 	c.mu.RUnlock()
 	if !configured {
 		return ptraceotlp.NewExportResponse(), fmt.Errorf("Splunk traces export is disabled or not configured")
+	}
+	if !routeBound {
+		err := fmt.Errorf("AO project/stream route is unresolved for the active cloud connection")
+		c.recordExport(err, td.SpanCount())
+		return ptraceotlp.NewExportResponse(), err
 	}
 	response, err := exportAgentTraces(ctx, config, td, route, transport)
 	rejected := response.PartialSuccess().RejectedSpans()

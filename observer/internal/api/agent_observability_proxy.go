@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -10,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/signalfx/obstudio/observer/internal/otlp"
 )
 
 const (
@@ -54,22 +57,71 @@ func (s *splunkExportService) registerAgentObservabilityProxy(mux *http.ServeMux
 
 // agentObservabilityProxyDestination uses only the active Studio connection;
 // callers must not expose the access token or accept an upstream from a request.
-func (s *splunkExportService) agentObservabilityProxyDestination() (realm, accessToken string, ready bool) {
+func (s *splunkExportService) agentObservabilityProxyDestination() (realm, accessToken string, generation uint64, ready bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	traces := s.traces.Config()
-	if !s.traces.ExportEnabled() || traces.Endpoint != "" ||
+	traces, generation, enabled := s.traces.AgentConnectionSnapshot()
+	if !enabled || traces.Endpoint != "" ||
 		!splunkRealmPattern.MatchString(traces.Realm) || strings.TrimSpace(traces.AccessToken) == "" {
-		return "", "", false
+		return "", "", 0, false
 	}
 	if s.metrics.ExportEnabled() {
 		metrics := s.metrics.Config()
 		if !sameSplunkCloudRealm(metrics.Realm, metrics.AccessToken, metrics.Endpoint != "",
 			traces.Realm, traces.AccessToken, false) {
-			return "", "", false
+			return "", "", 0, false
 		}
 	}
-	return traces.Realm, traces.AccessToken, true
+	return traces.Realm, traces.AccessToken, generation, true
+}
+
+// A successful cloud stream-resource response is the only source of routes
+// accepted by the trace data plane. Project IDs alone do not authorize a route.
+func (s *splunkExportService) bindAgentStreamResource(path, method string, body []byte, generation uint64) {
+	if method == http.MethodDelete {
+		return
+	}
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) < 5 || parts[0] != "ao" || parts[1] != "api" || parts[2] != "projects" || parts[4] != "log_streams" {
+		return
+	}
+	projectID := parts[3]
+	var payload any
+	if len(body) > 0 && json.Unmarshal(body, &payload) != nil {
+		return
+	}
+	if len(parts) == 6 && parts[5] != "paginated" {
+		if object, ok := payload.(map[string]any); ok {
+			if responseProject, hasProject := object["project_id"].(string); hasProject && !strings.EqualFold(responseProject, projectID) {
+				return
+			}
+			if responseID, hasID := object["id"].(string); hasID && !strings.EqualFold(responseID, parts[5]) {
+				return
+			}
+		} else if len(body) > 0 {
+			return
+		}
+		s.traces.BindAgentTraceRoute(otlp.AgentTraceRoute{ProjectID: projectID, AgentStreamID: parts[5]}, generation)
+	}
+	var visit func(any)
+	visit = func(value any) {
+		switch entry := value.(type) {
+		case map[string]any:
+			if streamID, ok := entry["id"].(string); ok {
+				if responseProject, hasProject := entry["project_id"].(string); !hasProject || strings.EqualFold(responseProject, projectID) {
+					s.traces.BindAgentTraceRoute(otlp.AgentTraceRoute{ProjectID: projectID, AgentStreamID: streamID}, generation)
+				}
+			}
+			for _, field := range []string{"data", "items", "results", "log_streams"} {
+				visit(entry[field])
+			}
+		case []any:
+			for _, item := range entry {
+				visit(item)
+			}
+		}
+	}
+	visit(payload)
 }
 
 func agentObservabilityProxyPath(requestURL *url.URL) (string, bool) {
@@ -131,7 +183,7 @@ func (s *splunkExportService) agentObservabilityProxy(w http.ResponseWriter, r *
 		writeSplunkExportError(w, http.StatusBadRequest, "invalid Agent Observability resource URL")
 		return
 	}
-	realm, accessToken, ready := s.agentObservabilityProxyDestination()
+	realm, accessToken, generation, ready := s.agentObservabilityProxyDestination()
 	if !ready {
 		writeSplunkExportError(w, http.StatusServiceUnavailable, "connect and enable a realm-based Splunk Observability Cloud destination before using Agent Observability resources")
 		return
@@ -184,10 +236,13 @@ func (s *splunkExportService) agentObservabilityProxy(w http.ResponseWriter, r *
 		writeSplunkExportError(w, http.StatusBadGateway, "invalid or oversized Agent Observability cloud response")
 		return
 	}
-	currentRealm, currentToken, currentReady := s.agentObservabilityProxyDestination()
-	if !currentReady || currentRealm != realm || currentToken != accessToken {
+	currentRealm, currentToken, currentGeneration, currentReady := s.agentObservabilityProxyDestination()
+	if !currentReady || currentRealm != realm || currentToken != accessToken || currentGeneration != generation {
 		writeSplunkExportError(w, http.StatusConflict, "cloud destination changed during the resource request; it may already have completed in the previous destination. Reconcile before retrying")
 		return
+	}
+	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+		s.bindAgentStreamResource(path, r.Method, responseBody, generation)
 	}
 	// Cloud responses are otherwise opaque, including validation errors. Never
 	// reflect Studio's credential if an upstream error happens to echo it.

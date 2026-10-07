@@ -205,7 +205,7 @@ func TestAgentObservabilitySDKAuthAllowsTraceOnlyConnection(t *testing.T) {
 	if err := service.metrics.Configure(config); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, ready := service.agentObservabilityProxyDestination(); !ready {
+	if _, _, _, ready := service.agentObservabilityProxyDestination(); !ready {
 		t.Fatal("trace-only realm destination was rejected")
 	}
 	health := httptest.NewRecorder()

@@ -62,7 +62,7 @@ func (s *splunkExportService) agentObservabilitySDKReady(w http.ResponseWriter, 
 		writeSplunkExportError(w, http.StatusForbidden, "Agent Observability SDK requests must come from a local process")
 		return false
 	}
-	if _, _, ready := s.agentObservabilityProxyDestination(); !ready {
+	if _, _, _, ready := s.agentObservabilityProxyDestination(); !ready {
 		writeSplunkExportError(w, http.StatusServiceUnavailable, "connect and enable a realm-based Splunk Observability Cloud destination before using the local Agent Observability gateway")
 		return false
 	}

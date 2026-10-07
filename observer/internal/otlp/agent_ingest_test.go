@@ -39,6 +39,10 @@ func testAgentController(t *testing.T, realm, token, mockURL string) *SplunkTrac
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, generation, _ := c.AgentConnectionSnapshot()
+	if !c.BindAgentTraceRoute(testAgentRoute, generation) {
+		t.Fatal("could not bind test stream to cloud connection")
+	}
 	mock, err := url.Parse(mockURL)
 	if err != nil {
 		t.Fatal(err)
@@ -232,6 +236,10 @@ func TestAgentControllerForwardsPerRequestRoutingWithoutCallerCredentials(t *tes
 	c := testAgentController(t, "lab0", "studio-cloud-token", server.URL)
 	defer c.Shutdown(context.Background())
 	second := AgentTraceRoute{ProjectID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", AgentStreamID: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}
+	_, generation, _ := c.AgentConnectionSnapshot()
+	if !c.BindAgentTraceRoute(second, generation) {
+		t.Fatal("could not bind second test stream")
+	}
 	var wg sync.WaitGroup
 	for _, route := range []AgentTraceRoute{testAgentRoute, second} {
 		wg.Add(1)
@@ -324,6 +332,13 @@ func TestAgentControllerConnectionReplacementWaitsForInflightBatch(t *testing.T)
 	}
 	if err := <-reconfigured; err != nil {
 		t.Fatal(err)
+	}
+	if _, err := c.ExportAgentTraces(context.Background(), createTestSpan(), testAgentRoute); err == nil {
+		t.Fatal("previous connection's stream was forwarded after switching realms")
+	}
+	_, generation, _ := c.AgentConnectionSnapshot()
+	if !c.BindAgentTraceRoute(testAgentRoute, generation) {
+		t.Fatal("new cloud connection could not resolve stream")
 	}
 	if _, err := c.ExportAgentTraces(context.Background(), createTestSpan(), testAgentRoute); err != nil {
 		t.Fatal(err)
