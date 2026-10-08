@@ -11,8 +11,8 @@
     "Read ./last_message.md and ./grade.json."
   ],
   "rubric": [
-    "The existing provider/model finding includes applicable gen_ai.input.messages and gen_ai.output.messages in its required signals and expected span telemetry, with a source-backed verification scenario; it does not create separate content-only findings or omit these attributes solely because the values are sensitive.",
-    "The owning tool finding includes source-backed gen_ai.tool.call.arguments and gen_ai.tool.call.result when their values are available. It does not invent system instructions, retrieved document bodies, or tool definitions absent from this fixture.",
+    "The audit checks all eight shared content attributes against the actual owning model, retrieval, and tool boundaries. The existing provider/model finding includes literal gen_ai.input.messages and gen_ai.output.messages in expected span telemetry, with a source-backed scenario asserting both on the completed model span. A metadata-only or token-only span is still partial; privacy prose is not field coverage.",
+    "The owning tool finding includes literal gen_ai.tool.call.arguments and gen_ai.tool.call.result in expected span telemetry and asserts both on the completed tool span using the available run_tool input and result. It does not invent gen_ai.system_instructions, gen_ai.retrieval.documents, gen_ai.retrieval.query.text, or gen_ai.tool.definitions: this fixture has no observable system instruction, retrieved document bodies, actual retrieval query, or tool definition. Missing applicable attributes are not omitted solely because they are sensitive, and the audit creates no separate content-only finding.",
     "The audit keeps safe capture requirements in acceptance criteria: schema-conforming, redacted and truncated content, no raw values in metric dimensions, and an exact source boundary. It does not demand a second content-capture approval after the ordinary finding is selected.",
     "Every proposed content attribute remains part of an independently selectable existing model, tool, or retrieval finding, so an unselected operation does not enter the instrumentation scope."
   ]

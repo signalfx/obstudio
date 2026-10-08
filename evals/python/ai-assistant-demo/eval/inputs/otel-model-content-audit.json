@@ -11,7 +11,7 @@
     "status": "Partial",
     "genai_ownership_detected": true
   },
-  "summary": ["The app owns model input and output but emits no GenAI inference telemetry."],
+  "summary": ["The app owns model input/output and tool arguments/results but emits no GenAI inference or tool content telemetry."],
   "flow": "audit -> select -> instrument -> verify",
   "evidence": [
     {"check": "Manifest", "finding": "FastAPI app without OTel SDK", "source": "pyproject.toml"},
@@ -19,10 +19,10 @@
     {"check": "Route source", "finding": "Interactive chat and stream routes", "source": "app.py:126-146"},
     {"check": "Runtime/startup", "finding": "Python FastAPI application", "source": "pyproject.toml"},
     {"check": "GenAI ownership", "finding": "Yes", "source": "app.py:73-91"},
-    {"check": "Content capture", "finding": "disabled; destination and retention owner not configured", "source": "app.py:73-91"}
+    {"check": "Content capture", "finding": "disabled; destination and retention owner not configured", "source": "app.py:54-91"}
   ],
   "routes": [{"method": "POST", "path": "/v1/chat"}, {"method": "POST", "path": "/v1/chat/stream"}],
-  "signal_flow": {"component_flow_map": "chat route [SOURCE-COVERED] -> call_provider [GAP: Model inference lifecycle]"},
+  "signal_flow": {"component_flow_map": "chat route [SOURCE-COVERED] -> run_tool [GAP: Tool execution] -> call_provider [GAP: Model inference lifecycle]"},
   "current_instrumentation": {"spans": [], "metrics": [], "logs": [], "incident_readiness": []},
   "genai_readiness": [
     {
@@ -31,6 +31,13 @@
       "owner": "App-owned + patchable: app.py:73-91",
       "acceptance_criteria": "A model call emits one inference span with ordered schema-conforming input messages and one output candidate, both redacted and truncated, without a second approval or runtime enablement flag.",
       "impact": "Model calls and their input/output cannot be isolated in a selected trace."
+    },
+    {
+      "surface": "Tool execution", "status": "missing", "evidence": "app.py:54-70",
+      "required_signals": "execute_tool span with gen_ai.tool.name, gen_ai.tool.call.arguments, and gen_ai.tool.call.result",
+      "owner": "App-owned + patchable: app.py:54-70",
+      "acceptance_criteria": "Each completed tool call emits one tool span with schema-conforming, redacted, truncated arguments and result without a second approval or runtime enablement flag.",
+      "impact": "Tool calls and their inputs/results cannot be inspected in the selected trace."
     }
   ],
   "findings": [
@@ -48,14 +55,30 @@
         {"type": "span", "name": "chat demo-gpt-4o-mini", "attributes": ["gen_ai.operation.name=chat", "gen_ai.provider.name=demo-provider", "gen_ai.request.model=demo-gpt-4o-mini", "gen_ai.input.messages", "gen_ai.output.messages"], "product_view": "Model trace waterfall and redacted content"}
       ],
       "follow_up_actions": ["Inspect the model span and its redacted messages in a selected trace."]
+    },
+    {
+      "id": "OTEL-002", "title": "Emit tool execution arguments and result", "severity": "high", "priority": "required", "effort": "medium", "status": "proposed", "area": "Tool execution",
+      "gap": "run_tool has no tool execution span or GenAI arguments/result attributes.",
+      "impact": "The selected trace cannot relate tool behavior to its inputs and result.",
+      "product_outcome": "The trace shows one tool span with redacted arguments and result.",
+      "required_fix": "Add an app-owned tool span carrying schema-conforming gen_ai.tool.call.arguments and gen_ai.tool.call.result after redaction and truncation.",
+      "instrument_mode": "default", "verification_scenarios": ["genai.tool.content"], "dependencies": [],
+      "evidence": ["app.py:54-70"],
+      "acceptance_criteria": ["A completed tool call emits exactly one execute_tool span with gen_ai.tool.call.arguments and gen_ai.tool.call.result; a sensitive sentinel is absent without a second runtime switch."],
+      "constraints": ["Do not emit unselected retrieval content attributes or raw content in metric dimensions.", "Preserve application behavior and avoid duplicate GenAI spans."],
+      "expected_telemetry": [
+        {"type": "span", "name": "execute_tool", "attributes": ["gen_ai.operation.name=execute_tool", "gen_ai.tool.name", "gen_ai.tool.call.arguments", "gen_ai.tool.call.result"], "product_view": "Tool trace waterfall and redacted content"}
+      ],
+      "follow_up_actions": ["Inspect the tool span and its redacted arguments/result in a selected trace."]
     }
   ],
   "verification": {
     "environments": [{"id": "python.local", "surface": "FastAPI assistant", "config_evidence": "pyproject.toml", "runner": "python -m pytest", "scope": "service", "prerequisites": "in-memory OTel exporter"}],
     "scenarios": [
-      {"id": "genai.model.messages", "trigger": "POST /v1/chat with a sensitive input sentinel", "entrypoint": "app.py:126", "expected_signals": "chat demo-gpt-4o-mini span with gen_ai.input.messages and gen_ai.output.messages", "proof_level": "focused call-site", "acceptance_criteria": "Input messages are ordered and schema-conforming, one output candidate is schema-conforming, the sentinel is redacted, and no unselected content field is emitted.", "environments": ["python.local"]}
+      {"id": "genai.model.messages", "trigger": "POST /v1/chat with a sensitive input sentinel", "entrypoint": "app.py:126", "expected_signals": "chat demo-gpt-4o-mini span with gen_ai.input.messages and gen_ai.output.messages", "proof_level": "focused call-site", "acceptance_criteria": "Input messages are ordered and schema-conforming, one output candidate is schema-conforming, and the sentinel is redacted.", "environments": ["python.local"]},
+      {"id": "genai.tool.content", "trigger": "POST /v1/chat with a sensitive input sentinel and search_docs tool", "entrypoint": "app.py:54", "expected_signals": "execute_tool span with gen_ai.tool.call.arguments and gen_ai.tool.call.result", "proof_level": "focused call-site", "acceptance_criteria": "Tool arguments and result are schema-conforming, redacted and truncated, the sentinel is absent, and no unselected retrieval content is emitted.", "environments": ["python.local"]}
     ]
   },
   "anti_patterns": [],
-  "recommendation": ["Select OTEL-001 and run $otel-instrument for the model and its listed message attributes."]
+  "recommendation": ["Select OTEL-001 and OTEL-002 and run $otel-instrument for their listed model and tool content attributes."]
 }

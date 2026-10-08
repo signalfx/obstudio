@@ -2,9 +2,9 @@
   "skill": "otel-instrument",
   "prompts": [
     {
-      "id": "selected-model-finding",
+      "id": "selected-model-and-tool-findings",
       "eval_inputs": ["eval/inputs/otel-model-content-audit.json"],
-      "task": "Copy ./service/eval/inputs/otel-model-content-audit.json to ./service/.observe/otel-audit.json, validate it, and select OTEL-001 with the bundled selection flow. Instrument exactly that selected model inference finding, including its listed gen_ai.input.messages and gen_ai.output.messages attributes. Do not ask for another content-capture approval or require an extra runtime switch. Preserve application behavior, redact and truncate before recording, prove the completed span attributes in focused in-memory tests even when the parent environment has OTEL_SDK_DISABLED=true, and produce bound instrumentation and verification artifacts without contacting cloud services."
+      "task": "Copy ./service/eval/inputs/otel-model-content-audit.json to ./service/.observe/otel-audit.json, validate it, and select OTEL-001 and OTEL-002 with the bundled selection flow. Instrument exactly those selected model and tool findings, including their listed gen_ai.input.messages, gen_ai.output.messages, gen_ai.tool.call.arguments, and gen_ai.tool.call.result attributes. Do not ask for another content-capture approval or require an extra runtime switch. Preserve application behavior, redact and truncate before recording, prove the completed owning span attributes in focused in-memory tests even when the parent environment has OTEL_SDK_DISABLED=true, and produce bound instrumentation and verification artifacts without contacting cloud services."
     }
   ],
   "judge_inputs": [
@@ -12,10 +12,11 @@
     "Read ./last_message.md and ./grade.json."
   ],
   "rubric": [
-    "Implements the selected OTEL-001 model finding, including both message attributes listed in its required signals and expected telemetry, rather than inventing separate content-only findings or omitting content because of its sensitivity.",
+    "Implements exactly the selected OTEL-001 model and OTEL-002 tool findings, including all four content attributes listed in their required signals and expected telemetry, rather than inventing separate content-only findings or omitting listed content because of its sensitivity.",
     "Records ordered schema-conforming gen_ai.input.messages and one schema-conforming gen_ai.output.messages candidate on the canonical model span using actual model-bound input and returned output, not the generic HTTP body or fabricated data.",
+    "Records schema-conforming gen_ai.tool.call.arguments and gen_ai.tool.call.result on the canonical tool span using the actual run_tool arguments and returned result, not a fabricated or generic HTTP value. A missing listed tool field leaves OTEL-002 partial or blocked.",
     "Redacts and truncates before recording; a unique sensitive sentinel and secrets are absent from exported span/event content and metric dimensions while safe message structure remains inspectable.",
-    "Does not request another approval or add a runtime enablement flag after OTEL-001 is selected, and does not add unselected tool, retrieval, or system-instruction content attributes.",
-    "Focused in-memory tests execute the model call, inspect completed span attributes and their structured or JSON message shape, and prove one model span without duplicate capture even when ambient OTEL_SDK_DISABLED=true; they do not override the operator setting in production code and report any unproven scenario honestly."
+    "Does not request another approval or add a runtime enablement flag after selection, and does not add unselected retrieval, system-instruction, or tool-definition content attributes. If a selected finding's audit omits another applicable source-backed field, it refreshes the audit and selection instead of silently expanding scope or claiming completion.",
+    "Focused in-memory tests execute model and tool calls, inspect every listed content attribute and its structured or JSON shape on the correct completed canonical span, and prove no duplicate capture even when ambient OTEL_SDK_DISABLED=true. A metadata-only span or span-existence assertion cannot close a listed field; if any listed field is absent or unsafe, its selected finding remains partial or blocked. They do not override the operator setting in production code and report any unproven scenario honestly."
   ]
 }

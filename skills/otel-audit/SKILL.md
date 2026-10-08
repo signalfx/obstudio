@@ -422,6 +422,29 @@ Classify these rows before creating findings:
   finding per attribute or omit an applicable attribute solely because its
   value is sensitive. Do not require a second content-capture approval after
   the finding is selected. Do not propose fields the application cannot observe.
+  Before `finalize-audit`, reconcile every app-owned model, retrieval, and tool
+  boundary with all eight attributes in that contract: `gen_ai.input.messages`,
+  `gen_ai.output.messages`, `gen_ai.system_instructions`,
+  `gen_ai.retrieval.documents`, `gen_ai.retrieval.query.text`,
+  `gen_ai.tool.definitions`, `gen_ai.tool.call.arguments`, and
+  `gen_ai.tool.call.result`. Inspect the actual provider-bound input and
+  returned output, observable instructions and tool definitions, retrieval
+  query and documents, and tool-call arguments and result. Put each applicable
+  missing attribute literally in the owning finding's `expected_telemetry`
+  and require an assertion on its completed model, retrieval, or tool span in
+  the verification scenario. Metadata-only spans or prose about privacy and
+  capture mode do not close source-backed content coverage. If safe emission
+  is not feasible, retain the unresolved finding and name the blocker instead
+  of marking it covered.
+  Require evidence of the actual value crossing its owning boundary before
+  classifying a content attribute as applicable: a tool name or handler source
+  is not a model-bound `gen_ai.tool.definitions` payload. A prompt passed to
+  a search-like tool is not `gen_ai.retrieval.query.text` unless the tool
+  consumes that value as its search or lookup input; a prompt used only to
+  simulate an error is not a retrieval query. Counts or scores without
+  returned document objects are not `gen_ai.retrieval.documents`. Keep
+  observable tool-call arguments and results in the tool finding rather than
+  promoting an unused parameter to retrieval content.
 - Evaluation telemetry can be a finding when the repository owns concrete OTel
   evaluation events or low-cardinality evaluator duration/error/no-data/
   freshness metrics. Do not bundle that with safety or content-governance work
@@ -450,8 +473,14 @@ vector, corpus, document, index, knowledge-base, or embedding search whose
 results become model context. A name such as `search_docs` is useful evidence
 but is not sufficient by itself; corroborate it with the implementation,
 dependency calls, returned matches/documents/scores, or the caller's use of the
-results. When a tool performs such a retrieval-like operation, a generic tool
-span is not complete retrieval coverage. Before finalizing the audit, compare
+results. Match counts or scores may justify a retrieval-like operation but do
+not prove query text or document bodies. Follow dataflow through the tool:
+require a value actually consumed by its search/lookup path before adding
+`gen_ai.retrieval.query.text`, and returned document objects before adding
+`gen_ai.retrieval.documents`. An unused prompt parameter, including one read
+only for a simulated error, is not query evidence. When a tool performs such a
+retrieval-like operation, a generic tool span is not complete retrieval
+coverage. Before finalizing the audit, compare
 each confirmed retrieval call site against its tool span and check the JSON for
 two distinct items: a retrieval-specific readiness row and a selectable
 retrieval finding with its own ID. A combined "tool and retrieval" row or
@@ -459,8 +488,9 @@ finding does not satisfy this check. Preserve the `execute_tool` operation,
 then require the nested retrieval span with
 `gen_ai.operation.name=retrieval` and a stable low-cardinality data-source
 identifier. Add an explicit retrieval verification scenario that proves its
-parentage under the tool span and does not capture document contents, query
-text, embeddings, or other sensitive/high-cardinality values by default.
+parentage under the tool span, proves any selected source-backed content fields
+only after redaction and truncation, and never records raw documents, query
+text, embeddings, or other sensitive/high-cardinality values.
 Apply the `Single-Source GenAI Span Contract` from the GenAI readiness
 reference before deciding trace coverage. Inventory framework/vendor bridges,
 provider SDK hooks, callbacks, middleware, and auto-instrumentors that can emit

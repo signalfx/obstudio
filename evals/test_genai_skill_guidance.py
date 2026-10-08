@@ -1492,6 +1492,20 @@ def test_audit_keeps_applicable_content_attributes_in_owning_findings():
         "owning model, retrieval, or tool",
         "Do not create one finding per attribute",
         "Do not require a second content-capture approval",
+        "gen_ai.input.messages",
+        "gen_ai.output.messages",
+        "gen_ai.system_instructions",
+        "gen_ai.retrieval.documents",
+        "gen_ai.retrieval.query.text",
+        "gen_ai.tool.definitions",
+        "gen_ai.tool.call.arguments",
+        "gen_ai.tool.call.result",
+        "completed model, retrieval, or tool span",
+        "tool name or handler source",
+        "consumes that value as its search or lookup input",
+        "Follow dataflow through the tool",
+        "prompt used only to simulate an error",
+        "returned document objects",
         "safety/refusal policy",
         "cost/billing ownership are not default service instrumentation findings",
         "Evaluation telemetry can be a finding",
@@ -1506,6 +1520,9 @@ def test_instrument_selected_genai_findings_include_listed_content_attributes():
     assert "selected GenAI finding lists content attributes" in instrument
     assert "without a second content-capture approval" in instrument
     assert "Do not add content attributes absent from selected findings" in instrument
+    assert "all eight attributes in the shared Content Capture Governance Contract" in instrument
+    assert "refresh the audit and selection first" in instrument
+    assert "focused completed-span tests prove each listed attribute" in instrument
     assert "gen_ai.tool.call.result" in instrument
     assert "set it to `false` before constructing the test provider" in instrument
     assert "rerun the focused test with ambient `OTEL_SDK_DISABLED=true`" in instrument

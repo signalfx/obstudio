@@ -395,6 +395,20 @@ report background:
   content attributes in `expected_telemetry` or `required_signals`, implement
   those exact attributes without a second content-capture approval or runtime
   enablement flag. Do not add content attributes absent from selected findings.
+  Before editing a selected model, retrieval, or tool finding, reconcile its
+  listed content attributes with the current source boundaries and all eight
+  attributes in the shared Content Capture Governance Contract. If a stale
+  audit omits an applicable source-backed attribute, do not silently expand
+  selected scope or call the finding complete: refresh the audit and selection
+  first. For every listed content attribute, record a redacted, truncated,
+  schema-conforming value from its actual owning boundary on the canonical
+  model, retrieval, or tool span before that span ends. This includes provider
+  input/output messages, observable system instructions and tool definitions,
+  retrieval query and documents, and tool-call arguments and result. A
+  metadata-only span, an HTTP-body substitute, or a test that checks only span
+  existence does not close any listed field. Keep the selected finding partial
+  or blocked until focused completed-span tests prove each listed attribute,
+  its structured shape, and the absence of raw content.
 - For every proposed GenAI metric, match its exact name, unit, instrument type,
   and attributes to a selected finding's `expected_telemetry` or required
   signals before creating it. A selected token-usage histogram does not also
