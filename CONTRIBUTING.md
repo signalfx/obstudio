@@ -49,6 +49,48 @@ make fmt            # go fmt
 make tidy           # go mod tidy
 ```
 
+#### Hot-reloading the Telemetry Explorer UI
+
+The `dev` build tag runs the binary so it serves the Telemetry Explorer client
+assets from disk instead of the embedded snapshot, and exposes a live-reload
+endpoint the client watcher pings after each rebuild. Use a two-terminal flow:
+
+```sh
+# Terminal 1: build the client once, then run the dev-tagged binary
+make build-client
+cd observer && go run -tags dev ./cmd/obstudio
+
+# Terminal 2: watch client sources and rebuild on save
+make dev
+```
+
+Open the Telemetry Explorer at the URL the binary prints on startup (also
+recorded as `baseUrl` in `~/.obstudio/shared-observer.json`). Each client
+rebuild pushes a reload over the telemetry WebSocket, so open tabs refresh
+automatically -- no manual browser reload.
+
+The `dev` build tag is local-only: release/embedded builds (`make build` /
+`make run`) never include it and do not expose the reload endpoint.
+
+#### Port selection
+
+The obstudio binary **auto-scans** for a free UI port, starting at **17900**
+(`scanPort(host, "17900")` in `observer/cmd/obstudio/main.go`), and records the
+chosen URL as `baseUrl` in `~/.obstudio/shared-observer.json`. Every normal flow
+-- the VS Code extension, the CLI, the hot-reload watcher, the agent tools --
+**discovers** that URL from the state file. Nothing predicts or configures the
+port.
+
+A `--port` flag (or `PORT` env var) pins a fixed UI port, but it is an advanced
+escape hatch with no normal development use -- not needed and not recommended.
+Pinning also changes failure semantics: a pinned port that is already in use
+**crashes** (`port … is already in use — choose a different port`), whereas an
+unpinned instance that finds the singleton already bound **defers and attaches**
+(exits 0). So pinning actively defeats the singleton attach behavior. The only
+real reasons to pin are a discovery-blind external integration that needs a
+constant URL (a fixed reverse-proxy upstream or firewall allowlist) or
+deterministic CI; otherwise rely on autoscan.
+
 ### VS Code-Compatible Editor Extension
 
 ```sh

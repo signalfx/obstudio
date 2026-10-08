@@ -4501,8 +4501,11 @@ func TestRootCommandOnlyExposesObserverHTTPPortOverride(t *testing.T) {
 	var config runConfig
 	root := newRootCmd(&config)
 
+	if root.Flags().Lookup("port") == nil {
+		t.Fatal("expected --port flag to be registered")
+	}
 	if root.Flags().Lookup("observer-http-port") == nil {
-		t.Fatal("expected --observer-http-port flag to be registered")
+		t.Fatal("expected --observer-http-port deprecated alias to be registered")
 	}
 	if root.Flags().Lookup("otlp-http-port") != nil {
 		t.Fatal("did not expect --otlp-http-port to be exposed")
@@ -6533,4 +6536,42 @@ func doSmokeJSONRequest(t *testing.T, client *http.Client, method, url, body str
 		t.Fatalf("decode %s %s response: %v", method, url, err)
 	}
 	return resp.StatusCode
+}
+
+func TestSharedObserverStatePathHonorsEnvOverride(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	defaultPath := filepath.Join(home, sharedObserverStateDirName, sharedObserverStateFileName)
+
+	t.Run("unset falls back to HOME default", func(t *testing.T) {
+		t.Setenv(sharedObserverStatePathEnv, "")
+		if got := sharedObserverStatePath(); got != defaultPath {
+			t.Fatalf("sharedObserverStatePath() = %q, want HOME default %q", got, defaultPath)
+		}
+	})
+
+	t.Run("whitespace-only falls back to HOME default", func(t *testing.T) {
+		t.Setenv(sharedObserverStatePathEnv, "   ")
+		if got := sharedObserverStatePath(); got != defaultPath {
+			t.Fatalf("sharedObserverStatePath() = %q, want HOME default %q", got, defaultPath)
+		}
+	})
+
+	t.Run("non-empty override wins", func(t *testing.T) {
+		override := filepath.Join(t.TempDir(), "custom-shared-observer.json")
+		t.Setenv(sharedObserverStatePathEnv, override)
+		if got := sharedObserverStatePath(); got != override {
+			t.Fatalf("sharedObserverStatePath() = %q, want override %q", got, override)
+		}
+	})
+
+	t.Run("override is trimmed", func(t *testing.T) {
+		override := filepath.Join(t.TempDir(), "trimmed-shared-observer.json")
+		t.Setenv(sharedObserverStatePathEnv, "  "+override+"  ")
+		if got := sharedObserverStatePath(); got != override {
+			t.Fatalf("sharedObserverStatePath() = %q, want trimmed override %q", got, override)
+		}
+	})
 }

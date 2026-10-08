@@ -31,6 +31,43 @@ type ExtensionPackage = {
 	};
 };
 
+/**
+ * Build a spawn env that isolates the observer binary from the host machine's
+ * real `~/.obstudio` state. Tests that launch the binary directly must bind an
+ * ephemeral HOME so they never read a developer's LIVE `shared-observer.json`
+ * (which would make the binary defer at startup — "obstudio already running"
+ * — and never serve). This mirrors the Go smoke harness (`smokeHomeEnv`),
+ * which uses a temp HOME plus `OBSTUDIO_DISABLE_SHARED_OBSERVER_DETECTION`.
+ * Returns the env and a cleanup that removes the temp HOME.
+ */
+function isolatedObserverSpawnEnv(
+	extra: NodeJS.ProcessEnv = {},
+): { env: NodeJS.ProcessEnv; cleanupHome: () => void } {
+	const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-test-home-'));
+	const env: NodeJS.ProcessEnv = {
+		...process.env,
+		HOME: tempHome,
+		USERPROFILE: tempHome,
+		OBSTUDIO_DISABLE_SHARED_OBSERVER_DETECTION: '1',
+		...extra,
+	};
+	if (process.platform === 'win32') {
+		const volume = path.parse(tempHome).root.replace(/\\$/, '');
+		if (volume) {
+			env.HOMEDRIVE = volume;
+			env.HOMEPATH = tempHome.slice(volume.length);
+		}
+	}
+	const cleanupHome = () => {
+		try {
+			fs.rmSync(tempHome, { force: true, recursive: true });
+		} catch {
+			// best-effort
+		}
+	};
+	return { env, cleanupHome };
+}
+
 function cleanup(context: TestContext): void {
 	if (context.ownsVsix === false) {
 		return;
@@ -310,7 +347,7 @@ it('integration: VSIX manifest version can be derived from release metadata', { 
 		const sourcePackageJson = JSON.parse(
 			fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf-8'),
 		) as { version: string };
-		assert.equal(sourcePackageJson.version, '0.0.1');
+		assert.equal(sourcePackageJson.version, '1.0.0');
 
 		const vsixFile = buildVsix({
 			...process.env,
@@ -331,7 +368,7 @@ it('integration: VSIX manifest version can be derived from release metadata', { 
 		) as { version: string };
 		assert.equal(
 			sourcePackageJsonAfterBuild.version,
-			'0.0.1',
+			'1.0.0',
 			'build-vsix.js should not mutate the checked-in package.json version',
 		);
 	} finally {
@@ -478,9 +515,14 @@ it('integration: extension.js exports activate and deactivate', { timeout: 120_0
 		'extension.js should contain the branded stopped webview message',
 	);
 
-	// Verify port conflict detection
-	assert.ok(source.includes('EADDRINUSE'), 'extension.js should handle EADDRINUSE port conflicts');
-	assert.ok(source.includes('lsof'), 'extension.js should use lsof to identify port owners');
+	// The binary owns all port binding (UI auto-scan + fixed OTLP ports). The
+	// extension must NOT pre-check or bind ports itself: OTLP-in-use is an
+	// attach signal, never a crash, so the retired EADDRINUSE/lsof port-conflict
+	// path must be gone from the bundle. Instead the extension discovers the
+	// bound instance and defers to an already-running one.
+	assert.equal(source.includes('EADDRINUSE'), false, 'extension.js must not pre-check ports — OTLP-in-use is an attach signal, not a crash');
+	assert.equal(source.includes('lsof'), false, 'extension.js must not shell out to lsof for port owners; the binary owns binding');
+	assert.ok(source.includes('shared-observer'), 'extension.js should discover the bound instance via shared-observer.json');
 
 	// Verify async stop with SIGTERM/SIGKILL
 	assert.ok(source.includes('SIGTERM'), 'extension.js should send SIGTERM on stop');
@@ -571,13 +613,13 @@ it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t
 	// Start the binary and verify it serves UI assets.
 	// Use unique ports for all listeners to avoid conflicts with other tests or processes.
 	const port = 13579;
+	const { env: spawnEnv, cleanupHome } = isolatedObserverSpawnEnv({
+		PORT: String(port),
+		OTLP_GRPC_PORT: '13580',
+		OTLP_HTTP_PORT: '13581',
+	});
 	const child = spawn(binaryPath, [], {
-		env: {
-			...process.env,
-			PORT: String(port),
-			OTLP_GRPC_PORT: '13580',
-			OTLP_HTTP_PORT: '13581',
-		},
+		env: spawnEnv,
 		stdio: 'pipe',
 	});
 
@@ -615,6 +657,7 @@ it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t
 		assert.equal(cssStatus, 200, '/assets/main.css should return 200 — client assets not embedded in binary');
 	} finally {
 		child.kill();
+		cleanupHome();
 	}
 });
 
@@ -642,13 +685,13 @@ it('integration: packaged binary enables validator when bundled weaver is presen
 	assert.ok(fs.existsSync(binaryPath), `Binary should exist at ${binaryPath}`);
 
 	const port = 13582;
+	const { env: spawnEnv, cleanupHome } = isolatedObserverSpawnEnv({
+		PORT: String(port),
+		OTLP_GRPC_PORT: '13583',
+		OTLP_HTTP_PORT: '13584',
+	});
 	const child = spawn(binaryPath, [], {
-		env: {
-			...process.env,
-			PORT: String(port),
-			OTLP_GRPC_PORT: '13583',
-			OTLP_HTTP_PORT: '13584',
-		},
+		env: spawnEnv,
 		stdio: 'pipe',
 	});
 
@@ -688,6 +731,7 @@ it('integration: packaged binary enables validator when bundled weaver is presen
 		assert.notEqual(summary.message, 'Validator unavailable', 'packaged binary should not report validator unavailable');
 	} finally {
 		child.kill();
+		cleanupHome();
 	}
 });
 
@@ -787,13 +831,30 @@ it('integration: installed VSIX smoke test starts the packaged observer and acce
 		const baseUrl = `http://127.0.0.1:${port}`;
 		const otlpHttpUrl = `http://127.0.0.1:${otlpHttpPort}`;
 
+		// Isolate the spawned observer from the host's real ~/.obstudio state:
+		// bind HOME to the test's temp root and disable shared-observer
+		// detection so a developer's LIVE instance can't make this launch defer
+		// ("obstudio already running") instead of serving.
+		const observerHome = path.join(tempRoot, 'observer-home');
+		fs.mkdirSync(observerHome, { recursive: true });
+		const spawnEnv: NodeJS.ProcessEnv = {
+			...process.env,
+			HOME: observerHome,
+			USERPROFILE: observerHome,
+			OBSTUDIO_DISABLE_SHARED_OBSERVER_DETECTION: '1',
+			PORT: String(port),
+			OTLP_GRPC_PORT: String(otlpGrpcPort),
+			OTLP_HTTP_PORT: String(otlpHttpPort),
+		};
+		if (process.platform === 'win32') {
+			const volume = path.parse(observerHome).root.replace(/\\$/, '');
+			if (volume) {
+				spawnEnv.HOMEDRIVE = volume;
+				spawnEnv.HOMEPATH = observerHome.slice(volume.length);
+			}
+		}
 		child = spawn(binaryPath, [], {
-			env: {
-				...process.env,
-				PORT: String(port),
-				OTLP_GRPC_PORT: String(otlpGrpcPort),
-				OTLP_HTTP_PORT: String(otlpHttpPort),
-			},
+			env: spawnEnv,
 			stdio: 'pipe',
 		});
 

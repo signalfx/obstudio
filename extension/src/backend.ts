@@ -114,6 +114,24 @@ export function observerPortFromUrl(baseUrl: string): number | undefined {
 	return undefined;
 }
 
+// A discovered/running obstudio server is compatible with this extension when
+// it reports the same stamped version as the bundle, OR when it reports "dev".
+// The Go binary defaults its version to "dev" (overridden only at release via
+// -ldflags -X main.version=), so a locally-built or `go run -tags dev` server
+// always reports "dev" against the extension's stamped bundle version. That is
+// the same developer working both halves, not an incompatibility — treat it as
+// compatible. "dev" carries no semver, so nothing is masked: genuine
+// stamped-vs-stamped mismatches (e.g. 0.0.1 vs 0.0.2) are still caught.
+export function observerVersionIsCompatible(
+	healthVersion: string | undefined,
+	bundleVersion: string,
+): boolean {
+	if (healthVersion === 'dev') {
+		return true;
+	}
+	return healthVersion === bundleVersion;
+}
+
 export function readSharedObserverDiscovery(
 	homeDir: string,
 	statePathOverride?: string,
