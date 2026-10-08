@@ -1027,6 +1027,31 @@ def test_ao_endpoint_rubrics_require_mode_specific_delivery_evidence():
         assert term in reference
 
 
+def test_ao_instrument_guidance_requires_real_sdk_route_and_metric_proof():
+    guidance = " ".join(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split())
+    for term in (
+        "metric measurement itself, not only on the owning chat span",
+        "one resolved destination",
+        "route-keyed exporters/processors with exclusive dispatch",
+        "do not copy a VCS pin from an unrelated optional/evaluation runtime",
+        "actual launch selection, not as a fallback port constant in app code",
+        "third request-selected route whose project or Agent Stream lookup fails",
+        "the unresolved third route creates no AO exporter and produces zero AO exports",
+        "Do not call selected AO routing working when this test is absent or blocked",
+        "client construction, project/stream API calls, and exporter/processor construction",
+        "must not stop application startup",
+        "a missing skill invocation or adjacent file is not itself a verification blocker",
+    ):
+        assert term in guidance
+    reference = " ".join(_read(SPLUNK_AO_REF).split())
+    for term in (
+        "neither the conventional REST port nor the ordinary OTLP receiver address",
+        "hardcode a Studio port fallback in application code",
+        "Merely writing `.env.studio.example` does not activate it",
+    ):
+        assert term in reference
+
+
 def test_ao_gateway_docs_keep_container_routing_outside_loopback_trust_boundary():
     reference = " ".join(_read(SPLUNK_AO_REF).split())
     receiver = " ".join(_read(

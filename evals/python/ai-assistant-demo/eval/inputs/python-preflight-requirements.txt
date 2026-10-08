@@ -3,3 +3,4 @@ opentelemetry-sdk>=1.45
 opentelemetry-exporter-otlp>=1.45
 opentelemetry-instrumentation-fastapi>=0.66b0
 opentelemetry-instrumentation-logging>=0.66b0
+splunk-ao==0.4.0

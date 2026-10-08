@@ -11,5 +11,5 @@ dependencies = [
 
 [project.optional-dependencies]
 evaluation = [
-    "splunk-ao @ git+https://github.com/splunk/splunk-ao-python.git@7a80c1df3a6f5728eec8a470fe7498a3dc76086a",
+    "splunk-ao==0.4.0",
 ]

@@ -103,7 +103,19 @@ Scan the repository to determine language, framework, and existing instrumentati
   acknowledgement do not prove it. If no local gateway was inspected, name
   Splunk Observability Studio as the preferred local AO gateway candidate and
   mark both its availability and concrete endpoint `unverified`; never invent
-  an address. Preserve an explicit operator or direct-cloud destination.
+  an address. Preserve an explicit operator or direct-cloud destination. When
+  AO settings are absent, keep the routing gap independent of an existing
+  ordinary OTLP endpoint and put the required exclusive Studio profile in the
+  AO routing finding's `required_fix` and acceptance criteria: a
+  `.env.studio.example` or repository-native named profile with the installed
+  SDK's supported API URL, console URL, and local gateway authentication,
+  filled from an actually discovered same-namespace loopback API origin during
+  instrumentation. Require removal of inherited direct-cloud realm/token
+  variables when selecting that profile, real project/stream resolution before
+  export, and a separate direct-cloud profile only when requested or already
+  maintained. Describe the missing profile even when the gateway is currently
+  unavailable; mark endpoint and delivery proof unverified instead of filling
+  a guessed port or claiming it works.
 7. Record exact evidence paths that should appear in the report:
   - Dependency manifest: `go.mod`, `package.json`, `pyproject.toml`, `pom.xml`, etc.
   - Process entry point: `main.go`, `cmd/.../main.go`, `app.py`, `app.js`, `TasksApplication.java`, etc.

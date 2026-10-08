@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261008T074642724859Z |
+| Run ID | 20261008T191519385538Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -35,7 +35,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | node/express-basic/qual/instrument | node/express-basic | 2 | evals/node/express-basic/eval/qual/instrument.json | 0 | 10 | 0 |
 | node/express-basic/runtime/instrument | node/express-basic | 1 | evals/node/express-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
 | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/content-coverage-instrument.json | 0 | 6 | 0 |
-| python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/instrument.json | 0 | 13 | 0 |
+| python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/instrument.json | 0 | 14 | 0 |
 | python/assistant-v3-framework-bridge-demo/qual/instrument | python/assistant-v3-framework-bridge-demo | 1 | evals/python/assistant-v3-framework-bridge-demo/eval/qual/instrument.json | 0 | 7 | 0 |
 | python/checkout-red-demo/qual/instrument | python/checkout-red-demo | 1 | evals/python/checkout-red-demo/eval/qual/instrument.json | 0 | 8 | 0 |
 | python/fastapi-celery/qual/incident-readiness | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/qual/incident-readiness.json | 0 | 7 | 0 |

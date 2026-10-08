@@ -148,9 +148,11 @@ Discover the API address separately from the OTLP address during configuration
 using advertised service endpoints or checked-in runtime topology. For this
 gateway, use only a loopback API and routed-trace address reachable from the
 application's same network namespace; a container bridge address is not a
-supported substitute. Preserve non-default ports. Only an
-unresolved host/native endpoint may use the conventional REST port 3000 or
-OTLP ports 4318/4317. Do not publish unsupported example environment variables
+supported substitute. Preserve non-default ports. If no reachable API origin
+can be discovered, leave the AO route unconfigured and report that exact
+blocker; neither the conventional REST port nor the ordinary OTLP receiver
+address is a substitute for discovery. Do not publish unsupported example
+environment variables, hardcode a Studio port fallback in application code,
 or make application startup call a Studio-specific API. A missing/disconnected
 gateway or insufficient Studio-held resource permission is an explicit
 prerequisite, not a reason to request a cloud token for the application.
@@ -170,6 +172,11 @@ settings only for the selected OTel work and preserve its explicit destination.
 Include project/stream names through configuration that the application
 actually consumes; do not invent SDK environment variables. A supplied
 topology or example is configuration evidence, not delivery proof.
+When AO settings are absent at instrumentation time, make this discovered
+Studio profile the selected local launch configuration through the
+repository's existing launch mechanism. Merely writing `.env.studio.example`
+does not activate it. If discovery is blocked, keep ordinary OTel working and
+report AO as blocked rather than manufacturing a source-level port default.
 
 The Studio profile contains no active `SPLUNK_AO_REALM`,
 `SPLUNK_AO_O11Y_TOKEN`, or other cloud credential. If a direct-cloud example is

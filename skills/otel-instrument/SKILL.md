@@ -887,6 +887,10 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   add low-cardinality `error.type`; and avoid raw prompt, completion, retrieved
   content, memory record, tool argument, evaluation explanation, user, tenant,
   session, task, request, trace, or raw URL values in metric dimensions.
+  For `gen_ai.client.token.usage`, include `gen_ai.token.type` and each known
+  stable `gen_ai.operation.name`, `gen_ai.provider.name`, and
+  `gen_ai.request.model` on the metric measurement itself, not only on the
+  owning chat span. Assert those exact attributes on collected metric points.
 - When an audit selects only selected tool operations by exact stable name,
   branch at the tool dispatch or execution boundary: emit `execute_tool`
   spans and attributes for those names only. Let unselected tool names follow
@@ -958,10 +962,69 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     metrics, logs, streaming, sessions, and uncovered GenAI operations as
     independent closure work.
   - With an **existing OpenTelemetry provider**, preserve that provider and
-    pass the exact instance once to
-    `add_splunk_ao_span_processor` when Splunk AO export is selected. Do not
-    create or install a second provider. Pass the same provider to supported
-    transport instrumentation only when selected and not already owned.
+    pass the exact instance to Splunk AO export when selected. A single
+    `add_splunk_ao_span_processor` registration is valid only when all AO
+    spans share one resolved destination. If the application chooses project
+    or Agent Stream per request, do not register a startup-wide singleton AO
+    processor: use route-keyed exporters/processors with exclusive dispatch
+    for each completed span. Do not create or install a second provider. Pass
+    the same provider to supported transport instrumentation only when
+    selected and not already owned.
+  - Before changing dependency declarations, inspect the actual installed
+    `splunk-ao` version and its supported Python API. Prefer a compatible
+    pinned released package already available to the application; do not copy
+    a VCS pin from an unrelated optional/evaluation runtime merely because
+    its import name matches. Persist the selected SDK in both the manifest
+    and lockfile and run its import/configuration check. If dependency
+    resolution is unavailable, retain the already installed SDK environment
+    for credential-free compatibility tests, record the lock as a distinct
+    blocker, and leave AO status partial; do not misreport this as missing
+    cloud credentials or a durable installed route.
+  - For the inspected `splunk-ao` 0.4.0 SDK, `SplunkAOOTLPExporter` captures
+    project and Agent Stream routing when constructed; the processor created
+    by `add_splunk_ao_span_processor(provider)` inherits that fixed route.
+    Calling it without routing arguments and later adding project/stream span
+    attributes does not route those spans. The SDK's `splunk_ao_context` is
+    imported from `splunk_ao`, not `splunk_ao.otel`, and a context entered
+    after processor creation cannot retarget its exporter. Resolve real
+    resource IDs before constructing an AO exporter. For two application
+    streams, use separate supported SDK exporters/processors keyed by the
+    resolved IDs and dispatch each completed span to exactly one destination
+    selected at span start; registering both processors unfiltered on one
+    provider broadcasts every span to both streams. Keep AO export disabled
+    for an unresolved route while ordinary OTel still works. Prove the two
+    effective SDK export destinations and their project/stream IDs from
+    completed batches or captured requests; two mocked lookups or span-name
+    attributes alone are insufficient. Keep the discovered Studio API origin
+    in the selected configuration profile and actual launch selection, not as
+    a fallback port constant in app code. For a credential-free proof,
+    configure the real SDK against two resolved route pairs, substitute only
+    its network exporter with a capture sink, exercise two request-selected
+    operations and a third request-selected route whose project or Agent
+    Stream lookup fails, then assert one export with the matching
+    project/stream headers for each resolved route. Explicitly assert that
+    the unresolved third route creates no AO exporter and produces zero AO
+    exports; merely leaving an operation unrouted does not prove failure
+    isolation. An in-memory ordinary OTel exporter should still receive all
+    three operations. Do not call selected AO routing working when this test
+    is absent or blocked.
+  - Ship a dedicated Studio-only profile, such as `.env.studio.example`, and
+    document how the repository's actual local launch selects it. A general
+    `.env.example` that mixes ordinary OTLP and AO placeholders is not that
+    profile. When a reachable Studio gateway was discovered, write its real
+    API and console origins with their actual port into the dedicated profile
+    and run an installed-SDK configuration/import check using that profile.
+    Blank URL values and an unselected example do not constitute a working
+    AO route. If discovery is unavailable, leave the route blocked; a
+    credential-free SDK configuration check may instead use a temporary
+    loopback test origin, but must not be reported as live Studio delivery.
+  - Keep the AO setup failure boundary around SDK import, client construction,
+    project/stream API calls, and exporter/processor construction. A missing,
+    disconnected, incompatible, or unauthorized Studio gateway disables only
+    AO export with a value-free diagnostic; it must not stop application
+    startup, suppress ordinary OTel spans or metrics, or switch to direct
+    cloud. Test an API compatibility error such as a failed SDK login and
+    assert the live application request plus ordinary OTel exporter still work.
   - Before adding `@log`, account for its documented capture of function
     arguments and return values. Use a boundary whose arguments and result
     are already safely transformed metadata or a
@@ -1391,7 +1454,10 @@ At minimum:
    `OTEL_SDK_DISABLED`: set it to `false` before constructing the test provider
    and importing the instrumented app, restore the prior environment afterward,
    and rerun the focused test with ambient `OTEL_SDK_DISABLED=true`. Do not
-   override the operator's setting in production application code.
+   override the operator's setting in production application code. Assert
+   exactly one completed canonical owning span per selected model or tool
+   operation before inspecting its content; choosing the first or latest
+   matching span can conceal duplicate capture.
    Build an exact signal closure matrix and execute every changed span name and
    metric call site that should still emit, plus explicit absence proof for
    every removed signal. Do not infer coverage for create, batch, update,
@@ -1420,6 +1486,20 @@ After the implementation gate, invoke or apply the `$otel-verify` workflow
 unless the user explicitly opts out or a concrete prerequisite blocks it. The
 instrumentation goal is not done until code viability is known and verification
 has run, been explicitly skipped by the user, or is documented as blocked.
+If `$otel-verify` is not exposed as a separate skill invocation in the current
+session, read the adjacent `../otel-verify/SKILL.md` and apply that bundled
+workflow directly. If an isolated skill environment does not expose that
+adjacent file either, apply the local verification contract here: execute the
+selected app-code scenarios with the project's runner, inspect completed
+spans and metric points, and write the bound `.observe/otel-verify.json` and
+reader-first `.observe/otel-verify.md` using the selected audit scenario IDs.
+Use `./references/json-approval-handoff.md` and the bundled
+`./scripts/observe_report.py` to validate the audit, selection,
+instrumentation, and verify overlays and refresh the instrumentation HTML.
+Only an individual scenario needing an unavailable listener, credential,
+package, or fixture is blocked; a missing skill invocation or adjacent file
+is not itself a verification blocker. Do not report verification as `Not run`
+when local app-code scenarios executed.
 
 Run local `$otel-verify` for every scenario that can execute without remote
 export credentials, even when Agent Observability project creation, Agent
