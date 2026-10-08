@@ -158,6 +158,68 @@ class StageObstudioPluginTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "checksum for obstudio_claude_1.2.3.zip"):
                 STAGE.checksum_for_archive(checksums_path, "obstudio_claude_1.2.3.zip")
 
+    def test_sync_codex_marketplace_pins_git_subdir_to_release_tag(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            marketplace_path = Path(tempdir) / "marketplace.json"
+            marketplace_path.write_text(
+                json.dumps(
+                    {
+                        "name": "obstudio",
+                        "plugins": [{"name": "obstudio", "source": {"source": "local"}}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            STAGE.sync_codex_marketplace("v1.2.3", marketplace_path)
+
+            marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+            source = marketplace["plugins"][0]["source"]
+            self.assertEqual(
+                source,
+                {
+                    "source": "git-subdir",
+                    "url": "https://github.com/signalfx/obstudio.git",
+                    "path": "./plugins/obstudio",
+                    "ref": "v1.2.3",
+                },
+            )
+
+    def test_sync_codex_marketplace_rejects_invalid_release_tag(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            marketplace_path = Path(tempdir) / "marketplace.json"
+            marketplace_path.write_text(
+                json.dumps({"plugins": [{"name": "obstudio"}]}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "release tag must be"):
+                STAGE.sync_codex_marketplace("latest", marketplace_path)
+
+    def test_check_codex_marketplace_ref_requires_release_tag_and_source(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            marketplace_path = Path(tempdir) / "marketplace.json"
+            marketplace_path.write_text(
+                json.dumps(
+                    {
+                        "plugins": [
+                            {
+                                "name": "obstudio",
+                                "source": {
+                                    "source": "git-subdir",
+                                    "url": "https://github.com/signalfx/obstudio.git",
+                                    "path": "./plugins/obstudio",
+                                    "ref": "v1.2.3",
+                                },
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            STAGE.check_codex_marketplace_ref("1.2.3", marketplace_path)
+            with self.assertRaisesRegex(RuntimeError, "Codex marketplace source must match"):
+                STAGE.check_codex_marketplace_ref("1.2.4", marketplace_path)
+
     def test_package_target_requires_tag_and_stamps_versioned_archives(self):
         root = Path(__file__).resolve().parents[4]
 
@@ -295,14 +357,23 @@ class StageObstudioPluginTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "must not contain symlinks"):
                 STAGE.verify_staged_plugin(output)
 
-    def test_marketplace_installs_from_committed_plugin_tree(self):
+    def test_codex_marketplace_pins_release_tag_and_plugin_subdirectory(self):
         marketplace_path = Path(__file__).resolve().parents[4] / ".agents" / "plugins" / "marketplace.json"
         marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
-
-        self.assertEqual(
-            marketplace["plugins"][0]["source"]["path"],
-            "./plugins/obstudio",
+        plugin_manifest_path = (
+            Path(__file__).resolve().parents[4]
+            / "plugins"
+            / "obstudio"
+            / ".codex-plugin"
+            / "plugin.json"
         )
+        plugin_manifest = json.loads(plugin_manifest_path.read_text(encoding="utf-8"))
+        source = marketplace["plugins"][0]["source"]
+
+        self.assertEqual(source["source"], "git-subdir")
+        self.assertEqual(source["url"], "https://github.com/signalfx/obstudio.git")
+        self.assertEqual(source["path"], "./plugins/obstudio")
+        self.assertEqual(source["ref"], f"v{plugin_manifest['version']}")
         self.assertEqual(marketplace["interface"]["displayName"], "Splunk Observability Studio")
         self.assertEqual(marketplace["plugins"][0]["name"], "obstudio")
 

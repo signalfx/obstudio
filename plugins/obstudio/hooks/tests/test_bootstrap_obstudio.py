@@ -948,7 +948,7 @@ class ResolveRuntimeReleaseTest(unittest.TestCase):
         self.assertEqual(fetch_checksum.call_count, 2)
         self.assertEqual(download.call_count, 2)
 
-    def test_codex_keeps_latest_runtime_selection(self):
+    def test_codex_prefers_plugin_version_archive(self):
         with tempfile.TemporaryDirectory() as tempdir:
             binary = Path(tempdir) / "obstudio"
             with (
@@ -956,7 +956,7 @@ class ResolveRuntimeReleaseTest(unittest.TestCase):
                 mock.patch.object(
                     BOOTSTRAP,
                     "fetch_expected_checksum",
-                    return_value=("obstudio_1.2.4_linux_amd64.zip", "latest"),
+                    return_value=("obstudio_1.2.3_linux_amd64.zip", "pinned"),
                 ) as fetch_checksum,
                 mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary) as download,
             ):
@@ -964,11 +964,35 @@ class ResolveRuntimeReleaseTest(unittest.TestCase):
                     Path(tempdir), "linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3"
                 )
 
-        self.assertEqual(got, (binary, "obstudio_1.2.4_linux_amd64.zip", "latest", "1.2.4", False))
-        fetch_checksum.assert_called_once_with("linux_amd64.zip", Path(tempdir) / "checksums.txt")
+        self.assertEqual(got, (binary, "obstudio_1.2.3_linux_amd64.zip", "pinned", "1.2.3", False))
+        fetch_checksum.assert_called_once_with("linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3")
         download.assert_called_once_with(
-            Path(tempdir), "linux_amd64.zip", "obstudio_1.2.4_linux_amd64.zip", "latest"
+            Path(tempdir), "linux_amd64.zip", "obstudio_1.2.3_linux_amd64.zip", "pinned", "1.2.3"
         )
+
+    def test_codex_falls_back_to_latest_when_pinned_archive_is_missing(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            binary = Path(tempdir) / "obstudio"
+            not_found = BOOTSTRAP.urllib.error.HTTPError("url", 404, "Not Found", {}, None)
+            with (
+                mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "codex"}, clear=True),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "fetch_expected_checksum",
+                    side_effect=[
+                        ("obstudio_1.2.3_linux_amd64.zip", "pinned"),
+                        ("obstudio_1.2.4_linux_amd64.zip", "latest"),
+                    ],
+                ) as fetch_checksum,
+                mock.patch.object(BOOTSTRAP, "download_obstudio", side_effect=[not_found, binary]) as download,
+            ):
+                got = BOOTSTRAP.resolve_runtime_release(
+                    Path(tempdir), "linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3"
+                )
+
+        self.assertEqual(got, (binary, "obstudio_1.2.4_linux_amd64.zip", "latest", "1.2.4", True))
+        self.assertEqual(fetch_checksum.call_count, 2)
+        self.assertEqual(download.call_count, 2)
 
 
 class RuntimeVersionWarningTest(unittest.TestCase):
@@ -977,14 +1001,31 @@ class RuntimeVersionWarningTest(unittest.TestCase):
             state_path = Path(tempdir) / "bootstrap-state.json"
             state_path.write_text(json.dumps({"mode": "shared"}), encoding="utf-8")
             with (
+                mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "claude"}, clear=True),
                 mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", return_value={"version": "1.2.4"}),
                 mock.patch.object(BOOTSTRAP, "emit_context") as emit_context,
             ):
                 BOOTSTRAP.warn_if_shared_runtime_version_mismatch(state_path, "1.2.3")
 
         emit_context.assert_called_once_with(
-            "Claude plugin version 1.2.3 is using an already-running Observer version 1.2.4; "
-            "the shared runtime was left running."
+            "Claude Code plugin version 1.2.3 is using an already-running Observer version 1.2.4; "
+            "the existing runtime was left running."
+        )
+
+    def test_warns_when_codex_reuses_shared_mismatched_runtime(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            state_path = Path(tempdir) / "bootstrap-state.json"
+            state_path.write_text(json.dumps({"mode": "shared"}), encoding="utf-8")
+            with (
+                mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "codex"}, clear=True),
+                mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", return_value={"version": "1.2.4"}),
+                mock.patch.object(BOOTSTRAP, "emit_context") as emit_context,
+            ):
+                BOOTSTRAP.warn_if_shared_runtime_version_mismatch(state_path, "1.2.3")
+
+        emit_context.assert_called_once_with(
+            "Codex plugin version 1.2.3 is using an already-running Observer version 1.2.4; "
+            "the existing runtime was left running."
         )
 
     def test_does_not_probe_owned_runtime_when_pin_is_not_in_fallback(self):
@@ -1146,6 +1187,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 "apiVersion": "v1",
                 "owner": "codex-plugin",
                 "mode": "managed",
+                "version": "0.1.0",
                 "startedAt": "2026-08-04T00:00:00Z",
             }
             state_path.write_text(
@@ -1187,7 +1229,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
                     )
                 )
 
-    def test_managed_state_requires_matching_release_version(self):
+    def test_managed_state_requires_pinned_plugin_version(self):
         with tempfile.TemporaryDirectory() as tempdir:
             tempdir_path = Path(tempdir)
             state_path = tempdir_path / "bootstrap-state.json"
@@ -1212,7 +1254,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 json.dumps(
                     {
                         "pluginVersion": "0.1.0",
-                        "releaseVersion": "0.1.0",
+                        "releaseVersion": "0.1.1",
                         "owner": "codex-plugin",
                         "mode": "managed",
                         "pid": "1234",
@@ -1225,7 +1267,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 "apiVersion": "v1",
                 "owner": "codex-plugin",
                 "mode": "managed",
-                "version": "0.0.9",
+                "version": "0.1.1",
             }
             current_health_payload = {
                 "kind": "obstudio",
@@ -1287,6 +1329,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 "apiVersion": "v1",
                 "owner": "codex-plugin",
                 "mode": "managed",
+                "version": "0.1.0",
                 "startedAt": "2026-08-04T00:00:00Z",
             }
             state_path.write_text(
@@ -1714,6 +1757,7 @@ class ReleaseBinarySelectionTest(unittest.TestCase):
                 "linux_amd64.zip",
                 "obstudio_0.1.0_linux_amd64.zip",
                 "checksum",
+                "0.1.0",
             )
             start_obstudio_background.assert_called_once_with(verified_binary, plugin_data)
             state = json.loads(state_path.read_text(encoding="utf-8"))
