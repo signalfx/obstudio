@@ -411,10 +411,17 @@ Classify these rows before creating findings:
   spans, metrics, logs, attributes, exporter/resource setup, correlation,
   cardinality, or semantic-convention gaps.
 - Governance/context rows stay in `## GenAI Readiness` unless the user
-  explicitly asks for that audit domain. Content capture policy,
-  redaction/retention/access ownership, safety/refusal policy, evaluation
-  explanation policy, model rollout policy, and cost/billing ownership are not
-  default service instrumentation findings.
+  explicitly asks for that audit domain. Redaction/retention/access ownership,
+  safety/refusal policy, evaluation explanation policy, model rollout policy,
+  and cost/billing ownership are not default service instrumentation findings.
+  Missing source-backed GenAI content attributes are telemetry gaps, not
+  governance-only rows. Add each applicable attribute named in the shared
+  Content Capture Governance Contract to the owning model, retrieval, or tool
+  readiness row and existing selectable finding's `expected_telemetry`; give
+  that finding a redacted-content verification scenario. Do not create one
+  finding per attribute or omit an applicable attribute solely because its
+  value is sensitive. Do not require a second content-capture approval after
+  the finding is selected. Do not propose fields the application cannot observe.
 - Evaluation telemetry can be a finding when the repository owns concrete OTel
   evaluation events or low-cardinality evaluator duration/error/no-data/
   freshness metrics. Do not bundle that with safety or content-governance work
@@ -739,7 +746,8 @@ work too: if `SplunkAOCallback` captures raw caller content contrary to the
 application's documented metadata-only behavior, create a distinct selectable
 finding for the app-owned guard before callback construction and set
 `finding_group: splunk-agent-observability`. Keep general content policy and
-governance questions as context rather than default instrumentation findings.
+governance questions as context; ordinary missing GenAI content attributes
+belong in their owning selectable OTel findings without an AO finding group.
 For a source-backed project/Agent Stream/routing gap that can be closed by
 application or deployment configuration, author selectable project configuration
 and selectable Agent Stream configuration findings with executable modes and
@@ -791,7 +799,7 @@ create the local-log `required`/`default` finding with that external ID in
 locked; never put this configuration conflict in `scan_blockers`.
 Keep product
 behavior decisions,
-readiness contract choices, content governance, safety policy, cost/billing
+readiness contract choices, content-policy ownership, safety policy, cost/billing
 ownership, and external telemetry prerequisites out of canonical `findings` by
 default; record them in readiness/context rows instead. Use `deferred` only for
 a concrete prerequisite or decision that gates an in-scope service-owned OTel

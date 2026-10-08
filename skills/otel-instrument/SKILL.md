@@ -391,7 +391,10 @@ report background:
 
 - Implement exactly the selected IDs plus executable dependencies added by
   `select`; never add unselected work. Priority orders the audit only and never
-  authorizes instrumentation scope.
+  authorizes instrumentation scope. When a selected GenAI finding lists
+  content attributes in `expected_telemetry` or `required_signals`, implement
+  those exact attributes without a second content-capture approval or runtime
+  enablement flag. Do not add content attributes absent from selected findings.
 - For every proposed GenAI metric, match its exact name, unit, instrument type,
   and attributes to a selected finding's `expected_telemetry` or required
   signals before creating it. A selected token-usage histogram does not also
@@ -635,12 +638,13 @@ Use OTel GenAI semconv names when possible: `gen_ai.evaluation.result`,
 `gen_ai.evaluation.name`, `gen_ai.evaluation.score.value`,
 `gen_ai.evaluation.score.label`, safe `gen_ai.evaluation.explanation`, memory
 operation names such as `search_memory`, `create_memory`, `update_memory`,
-`upsert_memory`, and `delete_memory`, and opt-in content attributes such as
+`upsert_memory`, and `delete_memory`, and source-backed content attributes such as
 `gen_ai.input.messages`, `gen_ai.output.messages`,
 `gen_ai.system_instructions`, `gen_ai.retrieval.documents`,
 `gen_ai.retrieval.query.text`, `gen_ai.tool.definitions`, and
-`gen_ai.tool.call.arguments`. Treat framework bridges as covered only when
-OTel-compatible GenAI semconv output and privacy settings are proven. Treat cost
+`gen_ai.tool.call.arguments`, and `gen_ai.tool.call.result`. Treat framework
+bridges as covered only when OTel-compatible GenAI semconv output and privacy
+settings are proven. Treat cost
 as custom app-owned instrumentation only when the app owns an accurate pricing map; otherwise owner-map the billing or provider source. Generic non-AI runtime,
 platform, or job surfaces are out of scope for this GenAI section unless source
 evidence shows they carry or block the AI pathway.
@@ -875,10 +879,11 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   and add exactly one nested `retrieval {source}` child span for the distinct
   code-owned retrieval operation. Set `gen_ai.operation.name=retrieval` and a
   stable low-cardinality `gen_ai.data_source.id`; do not replace the outer tool
-  span or count one operation as the other. Content capture remains off by
-  default: do not set `gen_ai.retrieval.query.text` or
-  `gen_ai.retrieval.documents` unless the selected finding explicitly requires
-  governed content capture. Add focused telemetry proof that executes the path,
+  span or count one operation as the other. Do not set
+  `gen_ai.retrieval.query.text` or `gen_ai.retrieval.documents` unless the
+  selected retrieval finding lists those attributes. For listed fields, redact
+  and truncate values before recording them. Add focused telemetry proof that
+  executes the path,
   asserts exactly one span of each kind, and proves the retrieval parent span ID equals the tool span ID using completed spans from an in-memory SDK exporter.
   Inspect the recorded retrieval `parent.span_id` and recorded tool
   `context.span_id`; object-parent equality in a custom recording tracer is
@@ -939,8 +944,8 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     create or install a second provider. Pass the same provider to supported
     transport instrumentation only when selected and not already owned.
   - Before adding `@log`, account for its documented capture of function
-    arguments and return values. Unless raw content capture is approved, use a
-    boundary whose arguments and result are already safe metadata or a
+    arguments and return values. Use a boundary whose arguments and result
+    are already safely transformed metadata or a
     source-verified integration control that prevents raw capture; otherwise
     keep an app-owned metadata-only OTel span or record the SDK privacy blocker.
     Companion `redacted_input` or `redacted_output` values alone are not proof
@@ -1362,6 +1367,12 @@ At minimum:
 4. Run the smallest existing focused tests that exercise changed code. For
    custom spans, metrics, or logs, add or update a focused repo-native test
    when the existing test framework provides a practical in-memory OTel seam.
+   For a selected GenAI content attribute, prove its redacted value on a
+   completed span. Keep the test's SDK provider independent of ambient
+   `OTEL_SDK_DISABLED`: set it to `false` before constructing the test provider
+   and importing the instrumented app, restore the prior environment afterward,
+   and rerun the focused test with ambient `OTEL_SDK_DISABLED=true`. Do not
+   override the operator's setting in production application code.
    Build an exact signal closure matrix and execute every changed span name and
    metric call site that should still emit, plus explicit absence proof for
    every removed signal. Do not infer coverage for create, batch, update,

@@ -459,16 +459,27 @@ Metrics-only coverage does not satisfy selected-trace eval visibility.
 ## Content Capture Governance Contract
 
 Semconv supports prompt, response, system instruction, retrieval document, and
-tool definition/argument content through opt-in attributes such as
+tool definition/argument content through attributes such as
 `gen_ai.input.messages`, `gen_ai.output.messages`, `gen_ai.system_instructions`,
 `gen_ai.retrieval.documents`, `gen_ai.retrieval.query.text`,
-`gen_ai.tool.definitions`, and `gen_ai.tool.call.arguments`. These fields are
-sensitive.
+`gen_ai.tool.definitions`, `gen_ai.tool.call.arguments`, and
+`gen_ai.tool.call.result`. These fields are sensitive.
 
-Audit content capture as `disabled`, `metadata-only`, `redacted`, or
-`full-content`. Instrumentation must default to no raw content. If content is
-explicitly required, require an opt-in config, redaction/truncation hook, storage
-destination, retention/access owner, and trace/log correlation evidence. Never
+For each model, retrieval, or tool surface that owns one of these values, audit
+whether the corresponding attribute is emitted. Include missing applicable
+attributes in that surface's existing `required_signals`, finding
+`expected_telemetry`, and verification scenario; do not create a separate
+finding for every attribute or hide them as governance-only context. Do not
+propose attributes for content the application cannot observe. Record capture
+mode as `disabled`, `metadata-only`, `redacted`, or `full-content` and name the
+storage destination and retention/access owner when known.
+
+When an existing GenAI finding containing these attributes is selected,
+implement the exact listed attributes without a second content-capture
+approval or runtime enablement step. Redact and truncate before recording,
+follow the official structured schema, and prove trace/log correlation. If a
+listed field cannot be emitted safely, keep the selected finding unresolved
+and name the exact blocker instead of exporting unfiltered content. Never
 put raw content, identifiers, retrieved documents, URLs, tool arguments, memory
 records, or evaluation explanations in metric names, metric dimensions, detector
 group-bys, or span names.
@@ -654,11 +665,13 @@ cost-degraded, and token-pressure impact.
 - Do not capture raw prompts, completions, tool arguments, retrieved documents,
   raw URLs, headers, tokens, secrets, user identifiers, or tenant identifiers by
   default.
-- If content capture is explicitly required, make it opt-in, redact it, and keep
-  it out of metric dimensions. Treat `gen_ai.input.messages`,
+- For selected GenAI findings requiring content attributes, redact and truncate captured values,
+  follow the official schema, and keep them out of metric dimensions. Treat
+  `gen_ai.input.messages`,
   `gen_ai.output.messages`, `gen_ai.system_instructions`,
   `gen_ai.retrieval.documents`, `gen_ai.retrieval.query.text`,
-  `gen_ai.tool.definitions`, `gen_ai.tool.call.arguments`, and
+  `gen_ai.tool.definitions`, `gen_ai.tool.call.arguments`,
+  `gen_ai.tool.call.result`, and
   `gen_ai.evaluation.explanation` as sensitive.
 - Span names and metric attributes must be stable. Replace IDs and path
   variables with templates such as `{id}` or `{resource}`.

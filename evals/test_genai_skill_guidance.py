@@ -1322,12 +1322,15 @@ def test_genai_reference_covers_content_governance_contract():
         "gen_ai.retrieval.query.text",
         "gen_ai.tool.definitions",
         "gen_ai.tool.call.arguments",
+        "gen_ai.tool.call.result",
         "disabled",
         "metadata-only",
         "redacted",
         "full-content",
-        "opt-in config",
-        "redaction/truncation hook",
+        "each model, retrieval, or tool surface",
+        "do not create a separate",
+        "without a second content-capture",
+        "Redact and truncate before recording",
         "retention/access owner",
         "Never",
         "metric dimensions",
@@ -1480,12 +1483,15 @@ def test_genai_readiness_contract_does_not_require_opaque_ids():
     assert "| Surface | Audit Status | Missing Signal |" in configure
 
 
-def test_audit_keeps_genai_governance_and_cost_context_out_of_default_findings():
+def test_audit_keeps_applicable_content_attributes_in_owning_findings():
     audit = " ".join(_read(SKILLS_DIR / "otel-audit" / "SKILL.md").split())
     required_terms = [
         "Telemetry closure rows may become findings",
         "Governance/context rows stay in `## GenAI Readiness`",
-        "Content capture policy",
+        "Missing source-backed GenAI content attributes are telemetry gaps",
+        "owning model, retrieval, or tool",
+        "Do not create one finding per attribute",
+        "Do not require a second content-capture approval",
         "safety/refusal policy",
         "cost/billing ownership are not default service instrumentation findings",
         "Evaluation telemetry can be a finding",
@@ -1493,6 +1499,16 @@ def test_audit_keeps_genai_governance_and_cost_context_out_of_default_findings()
         "Cost telemetry can be a finding only when the repository owns an authoritative pricing source",
     ]
     assert not [term for term in required_terms if term not in audit]
+
+
+def test_instrument_selected_genai_findings_include_listed_content_attributes():
+    instrument = " ".join(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split())
+    assert "selected GenAI finding lists content attributes" in instrument
+    assert "without a second content-capture approval" in instrument
+    assert "Do not add content attributes absent from selected findings" in instrument
+    assert "gen_ai.tool.call.result" in instrument
+    assert "set it to `false` before constructing the test provider" in instrument
+    assert "rerun the focused test with ambient `OTEL_SDK_DISABLED=true`" in instrument
 
 
 def test_audit_requires_single_deterministic_gap_section():

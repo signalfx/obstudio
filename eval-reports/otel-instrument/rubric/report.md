@@ -7,8 +7,8 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261007T212452448050Z |
-| Agent model | gpt-6-sol |
+| Run ID | 20261007T234711949150Z |
+| Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
 | Workers | 1 |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | node/express-basic/qual/instrument | node/express-basic | 1 | 100% (11/11), avg score 92 | 8.0M | 15.7m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | 1 | 100% (5/5), avg score 95 | 9.1M | 14.9m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | node/express-basic/qual/instrument | node/express-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 7961578 | 7819008 | 0 | 31672 | 15777 | unknown | 7993250 |
+| with_skill | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 9092705 | 8846976 | 0 | 33828 | 14217 | unknown | 9126533 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | node/express-basic/qual/instrument | node/express-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 567218 | 455424 | 0 | 11123 | 6179 | unknown | 578341 |
+| with_skill | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 498759 | 446592 | 0 | 6993 | 3664 | unknown | 505752 |
 
 ## Rubric Failures
 
