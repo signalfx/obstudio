@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20261008T022723837891Z |
+| Run ID | 20261008T074642724980Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -26,7 +26,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/kafka-streams/qual/audit | java/kafka-streams | 2 | evals/java/kafka-streams/eval/qual/audit.json | 0 | 7 | 0 |
 | java/springboot-basic/qual/audit | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/audit.json | 0 | 6 | 0 |
 | node/express-basic/qual/audit | node/express-basic | 2 | evals/node/express-basic/eval/qual/audit.json | 0 | 6 | 0 |
-| python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | evals/python/ai-assistant-demo/eval/qual/audit.json | 0 | 13 | 0 |
+| python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | evals/python/ai-assistant-demo/eval/qual/audit.json | 0 | 14 | 0 |
 | python/ai-assistant-demo/qual/content-coverage-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/content-coverage-audit.json | 0 | 4 | 0 |
 | python/assistant-v3-framework-bridge-demo/qual/audit | python/assistant-v3-framework-bridge-demo | 1 | evals/python/assistant-v3-framework-bridge-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | python/checkout-red-demo/qual/audit | python/checkout-red-demo | 1 | evals/python/checkout-red-demo/eval/qual/audit.json | 0 | 5 | 0 |

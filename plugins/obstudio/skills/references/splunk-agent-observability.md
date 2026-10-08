@@ -82,6 +82,15 @@ mandatory exporters. Do not require application cloud credentials for the
 gateway mode: Studio derives upstream API and ingest endpoints from its active
 cloud connection and realm and supplies its own credentials server-side.
 
+Resolve missing AO destination settings independently from ordinary OTel
+settings. An existing `OTEL_EXPORTER_OTLP_ENDPOINT` does not select the AO
+resource API or change an explicit AO destination. When AO has no explicit
+destination, configure the available local Studio gateway through the
+installed SDK's supported endpoint mode. Discover its API address during
+instrumentation from advertised endpoints or checked-in topology; keep an
+explicit ordinary OTLP destination intact. If the gateway is unavailable,
+record the unresolved prerequisite without silently enabling direct cloud.
+
 The current gateway's SDK resource API and routed trace ingest accept only
 native loopback requests from the same network namespace as Studio. Its
 `local-gateway` marker is public and is not a network authentication secret.
@@ -145,6 +154,41 @@ OTLP ports 4318/4317. Do not publish unsupported example environment variables
 or make application startup call a Studio-specific API. A missing/disconnected
 gateway or insufficient Studio-held resource permission is an explicit
 prerequisite, not a reason to request a cloud token for the application.
+
+### Configuration Profiles
+
+For selected AO configuration work, provide a Studio-only example profile:
+`.env.studio.example` for a dotenv application, or the equivalent named
+deployment/launch profile for the repository's configuration system. Put the
+supported local AO API, console, and authentication settings together in that
+profile. For `splunk-ao` 0.4.0 these are `SPLUNK_AO_API_URL`,
+`SPLUNK_AO_CONSOLE_URL`, and `SPLUNK_AO_API_KEY=local-gateway`. Render both URLs
+from the discovered same-namespace loopback API origin, including its actual
+port. The SDK appends its own resource and `/otel/v1/traces` paths; do not use
+the ordinary OTLP receiver origin as the AO API origin. Include ordinary OTLP
+settings only for the selected OTel work and preserve its explicit destination.
+Include project/stream names through configuration that the application
+actually consumes; do not invent SDK environment variables. A supplied
+topology or example is configuration evidence, not delivery proof.
+
+The Studio profile contains no active `SPLUNK_AO_REALM`,
+`SPLUNK_AO_O11Y_TOKEN`, or other cloud credential. If a direct-cloud example is
+requested or already maintained, keep it in a separate `.env.cloud.example`
+or equivalent profile using the installed SDK's supported cloud mode; do not
+mix the two modes in one file or activate both exporters. Document one-profile
+loading and removal of inherited variables from the other AO mode: loading a
+Studio dotenv file does not unset a realm/token already present in the parent
+environment. Preserve an explicit active AO destination; the Studio example
+does not authorize replacing it. Do not commit live credentials.
+
+Resolve or create the configured project and dedicated Agent Stream through
+normal SDK resource calls before the first AO trace export. Carry the resolved
+IDs in each export. Resource failure must leave AO export unconfigured or
+failed with the exact cause; it must not export with fabricated IDs, reuse an
+unrelated stream, or change modes. Keep the application's existing non-AO
+behavior according to its error-handling policy. Verify profile isolation,
+resource-before-export ordering, and the failure path with credential-free
+tests, then report live resource and delivery evidence separately.
 
 ## Splunk AO Python Compatibility
 

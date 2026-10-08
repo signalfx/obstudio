@@ -146,6 +146,11 @@ Markdown reports.
   operator destinations and direct-cloud requests. Use normal AO SDK resource
   calls and per-request routing, not a Studio-specific application adapter or
   global destination registration. Local receiver receipt is not cloud proof.
+  Resolve absent AO settings independently of any existing OTel endpoint and
+  provide the Studio-only example profile described in
+  `../references/splunk-agent-observability.md`. Preserve explicit active
+  destinations and prove mode isolation, resource-before-export ordering,
+  and resource-resolution failure without live cloud credentials.
 - Detect incident-readiness surfaces. Search source and configuration for
   user-visible workflows, dependency clients, background jobs, queues/streams,
   data freshness, input complexity, synthetic/canary checks, auth/edge paths,

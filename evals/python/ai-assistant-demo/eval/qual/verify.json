@@ -19,6 +19,7 @@
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
+    "Checks AO configuration independently of ordinary OTLP configuration and evaluates the selected mode without rewriting endpoints or adding profiles. Recognizes that no Studio-only profile, installed-SDK mode-isolation check, or resource-before-export/failure test is supplied by this proof packet; reports those missing configuration/runtime checks accurately rather than deriving AO compatibility from OTLP receipt or claiming the synthetic IDs were resolved resources.",
     "Uses the existing canonical AI-assistant AO audit without modifying its bytes or digest, validates the exact AO-003 selection closure in audit order, and binds verification to the normalized instrumentation overlay rather than matching IDs alone.",
     "Checks both synthetic local requests retain their distinct projectid/logstreamid pairs, with no cross-stream leakage or invented global AO destination. Treats those UUIDs only as route-test values, not as proof that real cloud project and Agent Stream resources exist.",
     "Reports HTTP 202 as local gateway or receiver acknowledgment only. Does not equate local receipt, SDK resource response, upstream ingest acknowledgment, or ordinary APM visibility with a fresh trace visible in the intended cloud Agent Stream. AO project, dedicated stream, live app routing, and cloud Agent Stream delivery remain Not proven absent direct evidence; the overall result cannot be Pass on this evidence alone.",
