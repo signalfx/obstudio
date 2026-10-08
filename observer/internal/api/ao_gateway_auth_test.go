@@ -398,6 +398,8 @@ print("Installed SDK resource creation, restart reauthentication and per-stream 
 		"PATH=" + os.Getenv("PATH"), "HOME=" + isolatedHome, "NETRC=" + isolatedHome + "/missing-netrc",
 		"XDG_CONFIG_HOME=" + isolatedHome, "UV_OFFLINE=true", "UV_PYTHON_DOWNLOADS=never", "UV_CACHE_DIR=" + isolatedHome + "/uv-cache",
 		"SPLUNK_AO_API_URL=" + server.URL, "SPLUNK_AO_CONSOLE_URL=" + server.URL, "SPLUNK_AO_API_KEY=" + agentObservabilityLocalSDKKey,
+		// An explicit ordinary OTel destination must not redirect the AO SDK.
+		"OTEL_EXPORTER_OTLP_ENDPOINT=http://unrelated-collector.invalid:5518",
 	}
 	output, err := command.CombinedOutput()
 	if err != nil {
