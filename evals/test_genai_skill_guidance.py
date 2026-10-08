@@ -1549,8 +1549,9 @@ def test_instrument_selected_genai_findings_include_listed_content_attributes():
     assert "refresh the audit and selection first" in instrument
     assert "focused completed-span tests prove each listed attribute" in instrument
     assert "gen_ai.tool.call.result" in instrument
-    assert "set it to `false` before constructing the test provider" in instrument
-    assert "rerun the focused test with ambient `OTEL_SDK_DISABLED=true`" in instrument
+    assert "Start the focused test command with ambient `OTEL_SDK_DISABLED=true`" in instrument
+    assert "temporarily set it to `false` only for construction of the in-memory SDK provider" in instrument
+    assert "exactly one candidate whose safe content matches the redacted/truncated actual provider return" in instrument
 
 
 def test_audit_requires_single_deterministic_gap_section():

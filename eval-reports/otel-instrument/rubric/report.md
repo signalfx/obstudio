@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261008T190813927270Z |
+| Run ID | 20261008T194926518826Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,31 +18,30 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | 1 | 83% (5/6), avg score 86 | 14.2M | 18.1m | - | - | - |
-| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | 79% (11/14), avg score 78 | 12.8M | 27.6m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | 1 | 100% (6/6), avg score 94 | 9.6M | 18.1m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | 79% (11/14), avg score 74 | 14.2M | 30.4m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 14203456 | 13923328 | 0 | 36870 | 15825 | unknown | 14240326 |
-| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 12724727 | 12446592 | 0 | 66618 | 21215 | unknown | 12791345 |
+| with_skill | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 9508708 | 9282432 | 0 | 41688 | 12477 | unknown | 9550396 |
+| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 14152470 | 13849600 | 0 | 62514 | 20631 | unknown | 14214984 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 455589 | 379008 | 0 | 10020 | 6055 | unknown | 465609 |
-| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1178639 | 1009536 | 0 | 13283 | 6636 | unknown | 1191922 |
+| with_skill | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 558431 | 469504 | 0 | 9341 | 5408 | unknown | 567772 |
+| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 2200708 | 1944576 | 0 | 19595 | 10668 | unknown | 2220303 |
 
 ## Rubric Failures
 
 | Mode | Service | Side | Prompt | Result | Evidence |
 |---|---|---|---|---|---|
-| with_skill | python/ai-assistant-demo | with_skill | selected-model-and-tool-findings | rubric:rubric-6 FAIL | service/tests/test_genai_content.py:102-109 parses gen_ai.output.messages but checks only role and finish_reason, not content or one-candidate length. service/tests/test_genai_content.py:55-56 changes OTEL_SDK_DISABLED to false; service/.observe/otel-verify.md:38-40 documents that override. |
-| with_skill | python/ai-assistant-demo | with_skill | direct | rubric:rubric-10 FAIL | service/ao_routing.py resolves Projects/AgentStreams lazily and constructs SplunkAOOTLPExporter per route; pyproject.toml/uv.lock include splunk-ao==0.4.0. Tests use fake project/stream clients and a fake CaptureExporter rather than real SDK endpoint/export config; service/.env.studio.example contains REPLACE_WITH_S... |
-| with_skill | python/ai-assistant-demo | with_skill | direct | rubric:rubric-13 FAIL | service/.env.studio.example contains SPLUNK_AO_API_URL/CONSOLE_URL with REPLACE_WITH_STUDIO_GATEWAY_PORT and SPLUNK_AO_API_KEY=local-gateway; no .env.cloud.example is present; tests rely on fake clients/exporter. |
-| with_skill | python/ai-assistant-demo | with_skill | direct | rubric:rubric-14 FAIL | service/ao_routing.py AORouteDispatchSpanProcessor constructs SplunkAOOTLPExporter(project_id=..., agent_stream_id=...) per route. tests/test_genai_telemetry.py only invokes the processor with synthetic FinishedSpan objects and fake CaptureExporter, plus mocked resource lookup failure. |
+| with_skill | python/ai-assistant-demo | with_skill | direct | rubric:rubric-10 FAIL | service/ao_routing.py has separate resolver and processor classes, but normalize_route_key() returns DEFAULT_ROUTE_KEY for unknown requested routes; .observe/otel-verify.md reports no real project/stream/exporter/cloud proof. |
+| with_skill | python/ai-assistant-demo | with_skill | direct | rubric:rubric-13 FAIL | service/.env.studio.example contains http://127.0.0.1:<studio-api-port> and <studio-console-port>; tests use FakeProjects/FakeStreams/FakeExporter rather than real splunk-ao config acceptance. |
+| with_skill | python/ai-assistant-demo | with_skill | direct | rubric:rubric-14 FAIL | service/ao_routing.py exporter_factory receives project_id and agent_stream_id after resolve(); tests/test_telemetry.py uses FakeExporter and fake resource lookups; no real SplunkAOOTLPExporter import/config/export proof was run. |
 
 ## Result JSON
 

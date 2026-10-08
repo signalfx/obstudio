@@ -1450,14 +1450,22 @@ At minimum:
    custom spans, metrics, or logs, add or update a focused repo-native test
    when the existing test framework provides a practical in-memory OTel seam.
    For a selected GenAI content attribute, prove its redacted value on a
-   completed span. Keep the test's SDK provider independent of ambient
-   `OTEL_SDK_DISABLED`: set it to `false` before constructing the test provider
-   and importing the instrumented app, restore the prior environment afterward,
-   and rerun the focused test with ambient `OTEL_SDK_DISABLED=true`. Do not
-   override the operator's setting in production application code. Assert
-   exactly one completed canonical owning span per selected model or tool
-   operation before inspecting its content; choosing the first or latest
-   matching span can conceal duplicate capture.
+   completed span. Start the focused test command with ambient
+   `OTEL_SDK_DISABLED=true`; inside the test, temporarily set it to `false`
+   only for construction of the in-memory SDK provider and import of the
+   instrumented app, then restore the inherited value when the test ends.
+   A permanent process-wide assignment to `false`, or a test run only without
+   the inherited disabled setting, is not this proof. Do not override the
+   operator's setting in production application code. Assert exactly one
+   completed canonical owning span per selected model or tool operation before
+   inspecting its content; choosing the first or latest matching span can
+   conceal duplicate capture. Parse `gen_ai.output.messages` and assert
+   exactly one candidate whose safe content matches the redacted/truncated
+   actual provider return, not merely its role or finish reason. Likewise
+   assert the recorded input-message content matches the safe model-bound
+   input and that tool arguments/results match their safe call boundaries;
+   check structure, redaction, and absence of duplicate content on those
+   same completed spans.
    Build an exact signal closure matrix and execute every changed span name and
    metric call site that should still emit, plus explicit absence proof for
    every removed signal. Do not infer coverage for create, batch, update,
