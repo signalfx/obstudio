@@ -1,0 +1,19 @@
+Bound AO verification evidence for the AI assistant fixture (synthetic local test only).
+
+The fixture's isolated loopback receiver accepted two OTLP/HTTP trace exports at
+/otel/v1/traces. Request A carried projectid=4dccc122-2f6d-44bb-9640-fdde5bca7b6e
+and logstreamid=2d834bd5-04f3-4fd1-bd85-9d66066344a2. Request B carried
+projectid=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa and
+logstreamid=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb. The captured destination
+pairs remained distinct. Both local requests received HTTP 202. This is a
+synthetic receiver/route-contract record, not evidence that app.py executed,
+that a real cloud project or Agent Stream was resolved, or that Studio forwarded
+the batches. No cloud Agent Stream query, fresh application trace, or cloud
+visibility evidence is supplied.
+
+Verification must retain local ACK as local receiver evidence only. The
+selected AO runtime-routing finding remains Not proven until an actual bounded
+application interaction is exported and the exact fresh trace is found in its
+intended cloud project and Agent Stream. Project and stream resource resolution
+also remain Not proven; the fixture UUIDs are route-test values, not claims of
+real cloud resources. Do not treat ordinary APM visibility as AO proof.

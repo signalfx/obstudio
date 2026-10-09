@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "create-splunk-free-account",
-    "run_id": "20260923T181742882061Z",
+    "run_id": "20261007T164255527124Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -191,8 +191,8 @@
     "runtime_check_count": 0
   },
   "source": {
-    "digest_version": 3,
-    "digest": "c409149770403e1f2bdeb0078700ab135e787e7364b09c8f2a7911d22dee333c",
+    "digest_version": 4,
+    "digest": "c6d557e5080741c009c00c135ecb7037c4153ce3301bb6a1a26bda4e36868a63",
     "eval_kinds": [
       "rubric"
     ],
@@ -202,18 +202,20 @@
       "evals/plugins/obstudio/eval/qual/free-account-accepted.json": "5dffedd7bf22d07f8f280cd3089eef8c506bf8d54c2d79e9da968989df77c2b6",
       "skills/create-splunk-free-account/SKILL.md": "1ea265ff983db6013c15f96e008b35d83c68eb8b7d041d0bf3660dfbb877d53b",
       "skills/create-splunk-free-account/agents/openai.yaml": "7767ebaee1f22c7cc76c22ff75676dcaf24e02821939b7229cc80a8b66e0a237",
-      "skills/references/consumers.json": "cd8084854d7042b7ecc306ef1efca5f1866f1616c4c0ea0f6522e4bce4efd852",
+      "skills/references/consumers.json": "2d187974a8cf7b95ac5b809ebdaa036e58a79fd33172bf700f91edd97353b0e1",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
-      "skills/references/genai-readiness.md": "73e8af6407a4074ea7942df9e26be95b807e0bc69dd58e403819bc108db12209",
+      "skills/references/genai-readiness.md": "a4658859ca2e15e12dd90e5f97e73a95a8e7a0654523bd5314ae62d84144cc80",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
+      "skills/references/local-otlp-receiver.md": "a7832f9525978a1f5c4cc8b64d76748bbbd65692f66f97bf492d2a7243500a3c",
       "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
-      "skills/references/scripts/observe_report.py": "8505513574a485f39b4197ee4995449dfe1ba4cf8730a6ee34c4215e90b2711e",
+      "skills/references/scripts/observe_report.py": "0c0b3c358482bbbd66ef5036c4425c80a6955f89be1ca6a7106d7fca43294ee5",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
+      "skills/references/splunk-agent-observability.md": "e3e303dc78f6223d90d78b36bca4c6c18e73b711b750dad1ef08c42603ebff90",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
+      "skills/references/tests/test_observe_report.py": "962986d7eed939d59a07f7d61aa737e49a84dc296a8da8cdc1d723429ff8ff21",
       "evals/plugins/obstudio/eval/qual/free-account-location-privacy.json": "01b0c3ed0e74502feb3547a1ff2ea9a6b0a411d4d0efeb71468d7bba0f3eb5d1",
       "evals/plugins/obstudio/eval/qual/free-account-native-form.json": "8a56fb23aa0d59f41aad45d291a608aa42711b5777990b542b03a4be6ae42599",
       "evals/plugins/obstudio/eval/qual/free-account-outcome-unknown.json": "f56ac4f3d5e49ac7641cd6a0ae3303dafbd6e583d4725c0508d5f28da40e88fc",
@@ -225,6 +227,7 @@
       "evals/plugins/obstudio/eval/qual/free-account.json": "96fe007856f6673a5f8b48b428820ee4fd13854db17c538ec84f767ef259a7a8"
     },
     "skill_path": "skills/create-splunk-free-account",
+    "shared_reference_consumers": [],
     "selections": [
       {
         "definition_path": "evals/plugins/obstudio/eval/qual/free-account-accepted.json",

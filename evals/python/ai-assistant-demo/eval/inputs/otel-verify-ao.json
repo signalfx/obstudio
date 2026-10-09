@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "kind": "otel-verify",
+  "audit_id": "python-ai-assistant-genai-fixture",
+  "audit_sha256": "sha256:8e4f2f8e73924129662906491008e961e4ad341815dcbea5304631b9d2230479",
+  "instrumentation_sha256": "sha256:08ac2d85062f83e5624ea1dc3251efc37b7822a39b7a0d8e577c0ca11c777680",
+  "meta": {
+    "service_name": "python-ai-assistant-demo",
+    "date": "2026-10-07",
+    "result": "Partial"
+  },
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "status": "not_proven",
+      "scenarios": [
+        {
+          "id": "genai.turn.lifecycle",
+          "status": "not_proven",
+          "commands": [],
+          "evidence": [],
+          "observed_telemetry": [],
+          "trace_ids": [],
+          "product_validation": [],
+          "proof_mode": "not_run",
+          "visibility": "not_proven"
+        }
+      ],
+      "item_results": [],
+      "remaining": ["Run the instrumented interactive app path and capture its bounded workflow, model, and tool spans."]
+    },
+    {
+      "id": "AO-001",
+      "status": "not_proven",
+      "scenarios": [
+        {
+          "id": "genai.turn.lifecycle",
+          "status": "not_proven",
+          "commands": [],
+          "evidence": [],
+          "observed_telemetry": [],
+          "trace_ids": [],
+          "product_validation": [],
+          "proof_mode": "not_run",
+          "visibility": "not_proven"
+        }
+      ],
+      "item_results": [],
+      "remaining": ["Resolve a real authorized cloud Agent Observability project; route-test UUIDs are not resource proof."]
+    },
+    {
+      "id": "AO-002",
+      "status": "not_proven",
+      "scenarios": [
+        {
+          "id": "genai.turn.lifecycle",
+          "status": "not_proven",
+          "commands": [],
+          "evidence": [],
+          "observed_telemetry": [],
+          "trace_ids": [],
+          "product_validation": [],
+          "proof_mode": "not_run",
+          "visibility": "not_proven"
+        }
+      ],
+      "item_results": [],
+      "remaining": ["Resolve dedicated real Agent Streams in the authorized project."]
+    },
+    {
+      "id": "AO-003",
+      "status": "not_proven",
+      "scenarios": [
+        {
+          "id": "genai.turn.lifecycle",
+          "status": "not_proven",
+          "commands": [],
+          "evidence": [],
+          "observed_telemetry": [],
+          "trace_ids": [],
+          "product_validation": [],
+          "proof_mode": "not_run",
+          "visibility": "not_proven"
+        },
+        {
+          "id": "ao.runtime.routing",
+          "status": "not_proven",
+          "commands": ["Inspect the synthetic two-route loopback receiver transcript in eval/inputs/ao-gateway-verify-evidence.txt"],
+          "evidence": ["eval/inputs/ao-gateway-verify-evidence.txt"],
+          "observed_telemetry": ["Two synthetic OTLP/HTTP envelopes kept distinct projectid/logstreamid pairs and each received local HTTP 202."],
+          "trace_ids": [],
+          "product_validation": ["The isolated loopback receiver accepted route-test envelopes only; no interactive app execution or cloud Agent Stream query is evidenced."],
+          "proof_mode": "contract_only",
+          "visibility": "otlp_accepted"
+        }
+      ],
+      "item_results": [],
+      "remaining": ["Execute a fresh bounded app interaction through the selected endpoint and verify its exact trace in each intended cloud Agent Stream; local ACK alone is insufficient."]
+    }
+  ],
+  "next_steps": ["Keep local receipt, upstream forwarding, project/stream resolution, and fresh cloud Agent Stream visibility as separate verification outcomes."]
+}

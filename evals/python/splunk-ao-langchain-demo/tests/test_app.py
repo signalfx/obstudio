@@ -1,3 +1,4 @@
+import os
 import socket
 import sys
 from pathlib import Path
@@ -65,7 +66,7 @@ def test_unapproved_caller_text_reaches_raw_capture_in_baseline() -> None:
     assert marker in trace["spans"][0]["spans"][1]["input"][0]["content"]
 
 
-def test_demo_requires_no_credentials_or_network(monkeypatch) -> None:
+def test_demo_requires_no_credentials_network_or_obstudio(monkeypatch) -> None:
     for name in (
         "OPENAI_API_KEY",
         "SPLUNK_ACCESS_TOKEN",
@@ -73,6 +74,9 @@ def test_demo_requires_no_credentials_or_network(monkeypatch) -> None:
         "SPLUNK_O11Y_ACCESS_TOKEN",
     ):
         monkeypatch.delenv(name, raising=False)
+    for name in tuple(os.environ):
+        if name.startswith("OBSTUDIO_"):
+            monkeypatch.delenv(name, raising=False)
 
     def reject_network(*args, **kwargs):
         raise AssertionError("the local demo attempted network access")
@@ -94,3 +98,4 @@ def test_demo_requires_no_credentials_or_network(monkeypatch) -> None:
     assert result.answer == "Seattle is sunny in the local demo."
     assert result.logger_terminated is True
     assert result.trace_batches
+    assert not any(name.startswith("OBSTUDIO_") for name in os.environ)

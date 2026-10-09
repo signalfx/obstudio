@@ -1,9 +1,17 @@
 package otlp
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
+	"mime"
+	"net"
+	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +25,7 @@ import (
 	"go.opentelemetry.io/collector/exporter/otlphttpexporter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	"go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/zap"
@@ -28,6 +37,33 @@ const splunkTracesOTLPPath = "/v2/trace/otlp"
 // TracesExporter forwards OTLP traces to an external traces backend.
 type TracesExporter interface {
 	ExportTraces(ctx context.Context, td ptrace.Traces) error
+}
+
+// AgentTraceRoute is the standard AO SDK's request-scoped project/stream
+// destination. It never changes the destination of another application's batch.
+type AgentTraceRoute struct {
+	ProjectID     string
+	AgentStreamID string
+}
+
+// AgentTracesExporter forwards a batch to its SDK-supplied AO destination.
+type AgentTracesExporter interface {
+	ExportAgentTraces(context.Context, ptrace.Traces, AgentTraceRoute) (ptraceotlp.ExportResponse, error)
+}
+
+var agentTraceIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+var agentTraceRealmPattern = regexp.MustCompile(`^[a-z]{2,12}[0-9]+$`)
+var agentTraceBearerPattern = regexp.MustCompile(`(?i)\bbearer[ \t]+[A-Za-z0-9._~+/-]+={0,2}`)
+
+func agentTraceRoute(projectIDs, streamIDs []string) (AgentTraceRoute, error) {
+	if len(projectIDs) == 0 && len(streamIDs) == 0 {
+		return AgentTraceRoute{}, nil
+	}
+	if len(projectIDs) != 1 || len(streamIDs) != 1 ||
+		!agentTraceIDPattern.MatchString(projectIDs[0]) || !agentTraceIDPattern.MatchString(streamIDs[0]) {
+		return AgentTraceRoute{}, fmt.Errorf("invalid AO project/stream destination")
+	}
+	return AgentTraceRoute{ProjectID: projectIDs[0], AgentStreamID: streamIDs[0]}, nil
 }
 
 type tracesExportState interface {
@@ -78,15 +114,18 @@ type splunkTracesExporterRuntime interface {
 // the control plane to inspect or replace it while the OTLP receivers keep
 // using the same TracesExporter reference.
 type SplunkTracesExportController struct {
-	exportMu        sync.RWMutex
-	mu              sync.RWMutex
-	config          SplunkTracesExporterConfig
-	exporter        splunkTracesExporterRuntime
-	lastExport      SplunkTracesExportAttempt
-	hasLastExport   bool
-	exportedBatches uint64
-	exportedSpans   uint64
-	failedBatches   uint64
+	exportMu             sync.RWMutex
+	mu                   sync.RWMutex
+	config               SplunkTracesExporterConfig
+	exporter             splunkTracesExporterRuntime
+	lastExport           SplunkTracesExportAttempt
+	hasLastExport        bool
+	exportedBatches      uint64
+	exportedSpans        uint64
+	failedBatches        uint64
+	agentTracesTransport http.RoundTripper
+	connectionGeneration uint64
+	agentRoutes          map[AgentTraceRoute]struct{}
 }
 
 // NewSplunkTracesExportController creates a runtime controller. Disabled
@@ -108,8 +147,16 @@ func (c *SplunkTracesExportController) Configure(config SplunkTracesExporterConf
 	c.exportMu.Lock()
 	c.mu.Lock()
 	old := c.exporter
-	c.config = normalizeSplunkTracesExporterConfig(config)
+	normalized := normalizeSplunkTracesExporterConfig(config)
+	connectionChanged := c.exporter == nil || c.config.Enabled != normalized.Enabled ||
+		c.config.Realm != normalized.Realm || c.config.Endpoint != normalized.Endpoint ||
+		c.config.AccessToken != normalized.AccessToken
+	c.config = normalized
 	c.exporter = exporter
+	if connectionChanged {
+		c.connectionGeneration++
+		c.agentRoutes = nil
+	}
 	c.lastExport = SplunkTracesExportAttempt{}
 	c.hasLastExport = false
 	c.exportedBatches = 0
@@ -135,6 +182,8 @@ func (c *SplunkTracesExportController) Shutdown(ctx context.Context) {
 	c.mu.Lock()
 	exp := c.exporter
 	c.exporter = nil
+	c.connectionGeneration++
+	c.agentRoutes = nil
 	c.mu.Unlock()
 	unlock()
 	if exp != nil {
@@ -151,6 +200,84 @@ func (c *SplunkTracesExportController) Config() SplunkTracesExporterConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.config
+}
+
+// AgentConnectionSnapshot lets the resource proxy bind a resolved stream to
+// the exact connection that produced it, including A-to-B-to-A transitions.
+func (c *SplunkTracesExportController) AgentConnectionSnapshot() (SplunkTracesExporterConfig, uint64, bool) {
+	if c == nil {
+		return SplunkTracesExporterConfig{}, 0, false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.config, c.connectionGeneration, c.config.Enabled && c.exporter != nil
+}
+
+// BindAgentTraceRoute records only stream IDs confirmed by a successful
+// resource request against the same active cloud connection.
+func (c *SplunkTracesExportController) BindAgentTraceRoute(route AgentTraceRoute, generation uint64) bool {
+	if c == nil {
+		return false
+	}
+	if _, err := agentTraceRoute([]string{route.ProjectID}, []string{route.AgentStreamID}); err != nil {
+		return false
+	}
+	c.exportMu.RLock()
+	defer c.exportMu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.config.Enabled || c.exporter == nil || generation != c.connectionGeneration {
+		return false
+	}
+	if c.agentRoutes == nil {
+		c.agentRoutes = make(map[AgentTraceRoute]struct{})
+	}
+	c.agentRoutes[normalizedAgentTraceRoute(route)] = struct{}{}
+	return true
+}
+
+// UnbindAgentTraceRoute revokes a stream only for the connection that resolved it.
+func (c *SplunkTracesExportController) UnbindAgentTraceRoute(route AgentTraceRoute, generation uint64) bool {
+	if c == nil {
+		return false
+	}
+	if _, err := agentTraceRoute([]string{route.ProjectID}, []string{route.AgentStreamID}); err != nil {
+		return false
+	}
+	c.exportMu.RLock()
+	defer c.exportMu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.config.Enabled || c.exporter == nil || generation != c.connectionGeneration {
+		return false
+	}
+	delete(c.agentRoutes, normalizedAgentTraceRoute(route))
+	return true
+}
+
+// UnbindAgentProjectRoutes revokes all streams in a deleted project without
+// affecting routes resolved for other projects or cloud connections.
+func (c *SplunkTracesExportController) UnbindAgentProjectRoutes(projectID string, generation uint64) bool {
+	if c == nil || !agentTraceIDPattern.MatchString(projectID) {
+		return false
+	}
+	c.exportMu.RLock()
+	defer c.exportMu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.config.Enabled || c.exporter == nil || generation != c.connectionGeneration {
+		return false
+	}
+	for route := range c.agentRoutes {
+		if route.ProjectID == strings.ToLower(projectID) {
+			delete(c.agentRoutes, route)
+		}
+	}
+	return true
+}
+
+func normalizedAgentTraceRoute(route AgentTraceRoute) AgentTraceRoute {
+	return AgentTraceRoute{ProjectID: strings.ToLower(route.ProjectID), AgentStreamID: strings.ToLower(route.AgentStreamID)}
 }
 
 // ExportEnabled reports whether exports can currently be forwarded without
@@ -211,6 +338,240 @@ func (c *SplunkTracesExportController) ExportTraces(ctx context.Context, td ptra
 	err := exporter.ExportTraces(ctx, td)
 	c.recordExport(err, td.SpanCount())
 	return err
+}
+
+// ExportAgentTraces uses the active cloud connection but preserves each SDK
+// request's routing headers. Holding the export lock keeps a connection change
+// from mixing credentials and endpoints while a batch is in flight.
+func (c *SplunkTracesExportController) ExportAgentTraces(ctx context.Context, td ptrace.Traces, route AgentTraceRoute) (ptraceotlp.ExportResponse, error) {
+	if _, err := agentTraceRoute([]string{route.ProjectID}, []string{route.AgentStreamID}); err != nil {
+		return ptraceotlp.NewExportResponse(), err
+	}
+	if c == nil {
+		return ptraceotlp.NewExportResponse(), fmt.Errorf("Splunk traces export is not configured")
+	}
+	c.exportMu.RLock()
+	defer c.exportMu.RUnlock()
+	c.mu.RLock()
+	config := c.config
+	configured := config.Enabled && c.exporter != nil
+	transport := c.agentTracesTransport
+	_, routeBound := c.agentRoutes[normalizedAgentTraceRoute(route)]
+	c.mu.RUnlock()
+	if !configured {
+		return ptraceotlp.NewExportResponse(), fmt.Errorf("Splunk traces export is disabled or not configured")
+	}
+	if !routeBound {
+		err := fmt.Errorf("AO project/stream route is unresolved for the active cloud connection")
+		c.recordExport(err, td.SpanCount())
+		return ptraceotlp.NewExportResponse(), err
+	}
+	response, err := exportAgentTraces(ctx, config, td, route, transport)
+	rejected := response.PartialSuccess().RejectedSpans()
+	if err == nil && rejected > 0 {
+		c.recordAgentPartialExport(td.SpanCount(), rejected)
+	} else {
+		c.recordExport(err, td.SpanCount())
+	}
+	return response, err
+}
+
+func exportAgentTraces(ctx context.Context, config SplunkTracesExporterConfig, td ptrace.Traces, route AgentTraceRoute, transport http.RoundTripper) (ptraceotlp.ExportResponse, error) {
+	response := ptraceotlp.NewExportResponse()
+	if config.Endpoint != "" || !agentTraceRealmPattern.MatchString(config.Realm) || config.AccessToken == "" {
+		return response, fmt.Errorf("agent trace forwarding requires a realm-based Studio cloud connection")
+	}
+	endpoint := fmt.Sprintf("https://ingest.%s.observability.splunkcloud.com%s", config.Realm, splunkTracesOTLPPath)
+	body, err := (&ptrace.ProtoMarshaler{}).MarshalTraces(td)
+	if err != nil {
+		return response, fmt.Errorf("marshal agent traces: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return response, fmt.Errorf("create agent trace request")
+	}
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("X-SF-Token", config.AccessToken)
+	req.Header.Set("projectid", route.ProjectID)
+	req.Header.Set("logstreamid", route.AgentStreamID)
+	client := &http.Client{
+		Transport:     transport,
+		Timeout:       effectiveSplunkTracesTimeout(config.Timeout),
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return response, fmt.Errorf("agent trace delivery timed out")
+		}
+		var dnsError *net.DNSError
+		if errors.As(err, &dnsError) {
+			return response, fmt.Errorf("agent trace delivery DNS lookup failed")
+		}
+		return response, fmt.Errorf("agent trace delivery failed")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return response, agentTraceCloudError(resp, config.AccessToken)
+	}
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
+	if err != nil || len(responseBody) > 1<<20 {
+		return response, fmt.Errorf("invalid or oversized agent trace delivery response")
+	}
+	if len(responseBody) != 0 {
+		contentType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+		switch contentType {
+		case "application/x-protobuf":
+			err = response.UnmarshalProto(responseBody)
+		case "application/json":
+			var fields map[string]json.RawMessage
+			err = json.Unmarshal(responseBody, &fields)
+			if err == nil && fields == nil {
+				err = fmt.Errorf("response must be an OTLP object")
+			}
+			_, hasValid := fields["valid"]
+			_, hasInvalid := fields["invalid"]
+			if err == nil && (hasValid || hasInvalid) {
+				response, err = splunkAgentTraceAcknowledgement(fields, td.SpanCount())
+				if err != nil {
+					return ptraceotlp.NewExportResponse(), fmt.Errorf("%w; %s", invalidAgentTraceResponse(resp, responseBody, config.AccessToken), err)
+				}
+			} else if err == nil {
+				for key := range fields {
+					if key != "partialSuccess" && key != "partial_success" {
+						err = fmt.Errorf("unexpected OTLP response field")
+					}
+				}
+				if err == nil {
+					err = response.UnmarshalJSON(responseBody)
+				}
+			}
+		default:
+			err = fmt.Errorf("unsupported response encoding")
+		}
+		if err != nil {
+			return ptraceotlp.NewExportResponse(), invalidAgentTraceResponse(resp, responseBody, config.AccessToken)
+		}
+	}
+	partial := response.PartialSuccess()
+	if partial.RejectedSpans() < 0 || partial.RejectedSpans() > int64(td.SpanCount()) {
+		return ptraceotlp.NewExportResponse(), fmt.Errorf("invalid agent trace rejection count")
+	}
+	partial.SetErrorMessage(sanitizeExportErrorString(partial.ErrorMessage(), config.AccessToken))
+	return response, nil
+}
+
+// Splunk AO's DiagnosticOTLPSpanExporter also recognizes the ingest JSON
+// acknowledgement {"valid": N, "invalid": {...}}, including an omitted
+// invalid field (official SDK test_exporter_diagnostics.py). Accept only an explicit,
+// complete acknowledgement here; never silently acknowledge a rejected or
+// ambiguous batch. The SDK exposes rejection categories, not a reliable OTLP
+// rejected-span count, so do not invent partialSuccess counts from that map.
+func splunkAgentTraceAcknowledgement(fields map[string]json.RawMessage, submitted int) (ptraceotlp.ExportResponse, error) {
+	response := ptraceotlp.NewExportResponse()
+	if fields["valid"] == nil {
+		return response, errors.New("invalid Splunk AO acknowledgement fields")
+	}
+	for key := range fields {
+		if key != "valid" && key != "invalid" {
+			return response, errors.New("invalid Splunk AO acknowledgement fields")
+		}
+	}
+	var valid int64
+	if json.Unmarshal(fields["valid"], &valid) != nil || bytes.Equal(bytes.TrimSpace(fields["valid"]), []byte("null")) || valid < 0 {
+		return response, errors.New("invalid Splunk AO valid count")
+	}
+	var invalid map[string]json.RawMessage
+	if fields["invalid"] != nil && json.Unmarshal(fields["invalid"], &invalid) != nil {
+		return response, errors.New("invalid Splunk AO rejection categories")
+	}
+	if len(invalid) != 0 || valid == 0 {
+		return response, fmt.Errorf("Splunk AO acknowledged rejection (valid=%d; rejection categories=%d)", valid, len(invalid))
+	}
+	if valid != int64(submitted) {
+		return response, fmt.Errorf("Splunk AO acknowledged a different span count (valid=%d; submitted=%d)", valid, submitted)
+	}
+	return response, nil
+}
+
+// Invalid-response diagnostics describe only the protocol shape and standard
+// status fields. Never reflect arbitrary response bodies or header values: an
+// intermediary can return HTML, credentials, or private payloads even on 2xx.
+func invalidAgentTraceResponse(response *http.Response, body []byte, token string) error {
+	contentType, _, _ := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	switch contentType {
+	case "application/json", "application/x-protobuf", "text/plain", "text/html", "application/octet-stream", "":
+	default:
+		contentType = "other"
+	}
+	shape := "unrecognized"
+	if bytes.Equal(bytes.TrimSpace(body), []byte("OK")) {
+		shape = "literal-OK"
+	} else if json.Valid(body) {
+		shape = "JSON"
+	}
+	base := fmt.Sprintf("invalid agent trace delivery response (HTTP %d; content-type %q; %d bytes; shape %s)", response.StatusCode, contentType, len(body), shape)
+	if contentType != "application/json" || len(body) > 4096 {
+		return errors.New(base)
+	}
+	// Reuse the bounded, redacted standard error-field extraction without
+	// exposing a nonstandard JSON payload or promoting it to an acknowledgement.
+	diagnostic := &http.Response{StatusCode: response.StatusCode, Header: response.Header, Body: io.NopCloser(bytes.NewReader(body))}
+	return fmt.Errorf("%s; %s", base, agentTraceCloudError(diagnostic, token))
+}
+
+func (c *SplunkTracesExportController) recordAgentPartialExport(spans int, rejected int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.hasLastExport = true
+	c.lastExport = SplunkTracesExportAttempt{Time: time.Now(), Success: false, Error: fmt.Sprintf("cloud rejected %d of %d agent spans", rejected, spans)}
+	c.failedBatches++
+	c.exportedSpans += uint64(int64(spans) - rejected)
+}
+
+func sanitizeExportErrorString(message, token string) string {
+	if token != "" {
+		message = strings.ReplaceAll(message, token, "[REDACTED]")
+	}
+	message = agentTraceBearerPattern.ReplaceAllString(message, "Bearer [REDACTED]")
+	if len(message) > 4096 {
+		message = message[:4096]
+	}
+	return strings.ToValidUTF8(message, "")
+}
+
+func agentTraceCloudError(response *http.Response, token string) error {
+	base := fmt.Sprintf("agent trace delivery returned HTTP %d", response.StatusCode)
+	body, err := io.ReadAll(io.LimitReader(response.Body, 4097))
+	if err != nil || len(body) > 4096 {
+		return fmt.Errorf("%s (error response unavailable or oversized)", base)
+	}
+	contentType, _, _ := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	if contentType != "application/json" {
+		return fmt.Errorf("%s (non-JSON error response, %d bytes)", base, len(body))
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(body, &fields) != nil {
+		return fmt.Errorf("%s (invalid JSON error response)", base)
+	}
+	var details []string
+	for _, name := range []string{"code", "message", "detail"} {
+		var value string
+		if field, ok := fields[name]; !ok || json.Unmarshal(field, &value) != nil {
+			continue
+		}
+		value = strings.Join(strings.Fields(sanitizeExportErrorString(value, token)), " ")
+		if len(value) > 512 {
+			value = strings.ToValidUTF8(value[:512], "")
+		}
+		if value != "" {
+			details = append(details, name+"="+value)
+		}
+	}
+	if len(details) == 0 {
+		return fmt.Errorf("%s (no standard JSON error detail)", base)
+	}
+	return fmt.Errorf("%s: %s", base, strings.Join(details, "; "))
 }
 
 // TestConnection sends a single canary span through the current exporter and

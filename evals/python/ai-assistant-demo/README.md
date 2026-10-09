@@ -4,9 +4,30 @@ Small FastAPI service that mimics the observability surfaces of an AI assistant:
 chat turns, streaming responses, provider calls, tool fanout, context pressure,
 and offline feedback export.
 
-The app is intentionally a baseline fixture. It has realistic code paths but no
-custom OpenTelemetry instrumentation. Use it to demonstrate the before/after
-effect of the OTel skills.
+The interactive `app.py` is intentionally a baseline fixture. It has realistic
+code paths but no custom OpenTelemetry instrumentation or Splunk Agent
+Observability runtime route. Use it to demonstrate the before/after effect of
+the OTel skills.
+
+`eval_runner.py` is a separate offline evaluation process. It resolves an
+evaluation project, resolves or creates its dedicated `offline-evaluations`
+Agent Stream, publishes a synthetic trace directly through the supported
+Splunk AO SDK, and terminates its logger. It never imports `app.py`, and the
+FastAPI app never imports it. Evaluation routing therefore does not provide a
+project binding, dedicated live stream, or direct export for interactive chat.
+No live application target is selected in this baseline; adoption configuration
+must be distinguished from already-covered evaluation configuration.
+
+The evaluation runner is optional and requires an authorized account with an
+existing project and SDK credentials supplied outside tracked files:
+
+```sh
+SPLUNK_AO_EVAL_PROJECT=your-evaluation-project uv run --extra evaluation python eval_runner.py
+```
+
+This command may create the dedicated evaluation stream and send synthetic
+data. It is not part of ordinary fixture validation, which uses fake SDK
+boundaries without credentials or network calls.
 
 ## Run
 

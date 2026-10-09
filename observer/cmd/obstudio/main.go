@@ -218,6 +218,8 @@ func run(config runConfig) error {
 	}, splunkExportController, splunkTracesController,
 		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController),
 		freeAccountSubmitter)
+	mux.Handle("POST /otel/v1/traces", rcv.HTTPHandler())
+	mux.Handle("POST /v2/trace/otlp", rcv.HTTPHandler())
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
 		registerManagedStop(mux, stopManaged)
 	}
@@ -236,7 +238,7 @@ func run(config runConfig) error {
 	)
 	webCleanup := web.Register(mux, s, v)
 
-	srv := &http.Server{Addr: mainAddr, Handler: mux}
+	srv := &http.Server{Addr: mainAddr, Handler: mux, ConnContext: rcv.HTTPConnContext}
 	mainListener, err := listenObserverHTTP("tcp", mainAddr)
 	if err != nil {
 		log.Fatalf("failed to start HTTP server: %v", err)

@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-verify |
-| Run ID | 20261002T051648535347Z |
+| Run ID | 20261008T180141679331Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -18,3 +18,4 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
 | go/chi-basic/qual/verify | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/verify.json | 0 | 5 | 0 |
+| python/ai-assistant-demo/qual/verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/verify.json | 0 | 6 | 0 |

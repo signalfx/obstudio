@@ -1,0 +1,19 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "content-in-existing-findings",
+      "task": "Audit the FastAPI assistant in ./service for GenAI observability. Inspect the model input prompt, provider output, tool arguments and results, and retrieval data at their real source boundaries. Write and validate the canonical audit JSON and render the audit HTML; do not edit application code."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service/app.py, ./service/.observe/otel-audit.json, and ./service/.observe/otel.html.",
+    "Read ./last_message.md and ./grade.json."
+  ],
+  "rubric": [
+    "The audit checks all eight shared content attributes against the actual owning model, retrieval, and tool boundaries. The existing provider/model finding includes literal gen_ai.input.messages and gen_ai.output.messages in expected span telemetry, with a source-backed scenario asserting both on the completed model span. A metadata-only or token-only span is still partial; privacy prose is not field coverage.",
+    "The owning tool finding includes literal gen_ai.tool.call.arguments and gen_ai.tool.call.result in expected span telemetry and asserts both on the completed tool span using the available run_tool input and result. It does not invent gen_ai.system_instructions, gen_ai.retrieval.documents, gen_ai.retrieval.query.text, or gen_ai.tool.definitions: this fixture has no observable system instruction, retrieved document bodies, actual retrieval query, or tool definition. Missing applicable attributes are not omitted solely because they are sensitive, and the audit creates no separate content-only finding.",
+    "The audit keeps safe capture requirements in acceptance criteria: schema-conforming, redacted and truncated content, no raw values in metric dimensions, and an exact source boundary. It does not demand a second content-capture approval after the ordinary finding is selected.",
+    "Every proposed content attribute remains part of an independently selectable existing model, tool, or retrieval finding, so an unselected operation does not enter the instrumentation scope."
+  ]
+}

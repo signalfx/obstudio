@@ -19,6 +19,11 @@
     "splunk-dashboard-publish",
     "splunk-detector-publish"
   ],
+  "local-otlp-receiver.md": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
   "report-flow-contract.md": [
     "otel-audit",
     "otel-instrument",
@@ -36,7 +41,8 @@
   ],
   "splunk-agent-observability.md": [
     "otel-audit",
-    "otel-instrument"
+    "otel-instrument",
+    "otel-verify"
   ],
   "splunk-api.md": [
     "splunk-dashboard-publish",

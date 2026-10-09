@@ -1,0 +1,17 @@
+{
+  "approved_at": null,
+  "approved_by": null,
+  "approved_ids": [
+    "OTEL-001",
+    "AO-001",
+    "AO-002",
+    "AO-003"
+  ],
+  "audit_id": "python-ai-assistant-genai-fixture",
+  "audit_sha256": "sha256:8e4f2f8e73924129662906491008e961e4ad341815dcbea5304631b9d2230479",
+  "kind": "otel-selection",
+  "requested_ids": [
+    "AO-003"
+  ],
+  "schema_version": 1
+}

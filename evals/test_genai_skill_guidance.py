@@ -1,9 +1,15 @@
 """Deterministic checks for GenAI readiness skill guidance."""
 
+import ast
+import copy
 import json
 from pathlib import Path
+import runpy
 import subprocess
 import sys
+from types import ModuleType, SimpleNamespace
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -284,11 +290,180 @@ def test_audit_keeps_configurable_ao_prerequisites_selectable():
         "selectable project configuration",
         "selectable Agent Stream configuration",
         "reserve `external follow-up` for a source-proven outside owner",
-        "separate selectable AO findings for project, Agent Stream, and direct routing",
+        "separate selectable AO findings for project, Agent Stream, and runtime routing",
         "Agent Stream depends on project",
-        "direct routing depends on project, Agent Stream, and OTel export",
+        "runtime routing depends on project, Agent Stream, and OTel export",
     ):
         assert term in audit
+
+
+def test_audit_requires_process_relative_ao_runtime_coverage():
+    audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
+    contract = " ".join(
+        audit.split("**Splunk AO Runtime Coverage Contract**", 1)[1]
+        .split("**Deterministic gap section contract**", 1)[0]
+        .split()
+    )
+    for term in (
+        "every in-scope GenAI runtime independently",
+        "entry point and reachable AO setup",
+        "searched registration/configuration call sites",
+        "does not cover a separate interactive runtime",
+        "missing project binding, dedicated runtime Agent Stream binding",
+        "separate readiness surfaces with distinct `surface` names",
+        "selectable `finding_group: splunk-agent-observability` findings",
+        "no explicitly selected product target, use `fix all`",
+        "explicitly requests Agent Observability coverage, deployment",
+        "use `instrument_mode: default` for safe, source-backed AO project",
+        "Every missing or partial app-owned AO configuration row",
+        "unresolved AO-group finding with the same `area`",
+        "covered row must cite reachable setup for that exact runtime",
+        "Never patch HTML or add empty AO cards",
+        "transitive dependency closure must support its own acceptance criteria",
+        "canonical workflow, agent, model, tool, or nested retrieval spans",
+        "include every unresolved producer and semantic-continuity finding",
+        "its retrieval finding must be included separately from the tool finding",
+        "include any unresolved ordinary provider-lifecycle finding needed by that route",
+        "local proof scenario for the exact live entry point",
+        "attach exactly one AO sink/processor",
+        "inspect every active sink",
+        "at most one export to the same AO destination",
+        "Exercise `force_flush` and `shutdown`",
+        "completed pending spans drain",
+        "evaluation logger's teardown does not prove a new live sink's lifecycle",
+        "apply this AO acceptance gate to each live-routing",
+        "do not invent a host or port",
+        "Generic \"cloud-compatible\" wording is not a",
+        "inspect both outputs",
+        "A separate generic provider",
+    ):
+        assert term in contract
+
+
+def test_ai_assistant_eval_fixture_is_independent_from_live_runtime():
+    fixture = REPO_ROOT / "evals/python/ai-assistant-demo"
+    for filename, forbidden in (
+        ("app.py", {"eval_runner", "splunk_ao"}),
+        ("eval_runner.py", {"app", "fastapi"}),
+    ):
+        tree = ast.parse(_read(fixture / filename))
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name.split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                imported.add((node.module or "").split(".")[0])
+        assert not imported & forbidden
+
+    audit_eval = json.loads(_read(fixture / "eval/qual/audit.json"))
+    normal_prompt = next(
+        row["task"] for row in audit_eval["prompts"] if row["id"] == "genai-readiness"
+    )
+    assert "Splunk" not in normal_prompt
+    assert " AO " not in normal_prompt
+    rubric = " ".join(audit_eval["rubric"])
+    for term in (
+        "including genai-readiness without explicit AO wording",
+        "evaluation-only configuration is not reachable from live app.py chat",
+        "never lets that covered evaluation row mask absent interactive project binding",
+        "separate independently selectable configuration findings",
+        "Uses fix all for optional live adoption",
+    ):
+        assert term in rubric
+
+
+def _independent_evaluation_with_fake_sdk(monkeypatch, *, stream_exists, fail_span=False):
+    """Exercise the runner without credentials, a model, or a product API."""
+
+    calls = []
+    monkeypatch.delenv("SPLUNK_AO_EVAL_PROJECT", raising=False)
+    monkeypatch.delenv("SPLUNK_AO_EVAL_STREAM", raising=False)
+
+    class Projects:
+        def get(self, **kwargs):
+            calls.append(("project", kwargs))
+            return SimpleNamespace(id="eval-project-id")
+
+    class AgentStreams:
+        def get(self, **kwargs):
+            calls.append(("stream.get", kwargs))
+            return SimpleNamespace(id="eval-stream-id") if stream_exists else None
+
+        def create(self, **kwargs):
+            calls.append(("stream.create", kwargs))
+            return SimpleNamespace(id="eval-stream-id")
+
+    class SplunkAOLogger:
+        def __init__(self, **kwargs):
+            calls.append(("logger", kwargs))
+
+        def start_trace(self, **kwargs):
+            calls.append(("trace", kwargs))
+
+        def add_llm_span(self, **kwargs):
+            calls.append(("model", kwargs))
+            if fail_span:
+                raise RuntimeError("synthetic SDK failure")
+
+        def conclude(self, **kwargs):
+            calls.append(("conclude", kwargs))
+
+        def flush(self):
+            calls.append(("flush", {}))
+
+        def terminate(self):
+            calls.append(("terminate", {}))
+
+    for name, member, implementation in (
+        ("splunk_ao", "SplunkAOLogger", SplunkAOLogger),
+        ("splunk_ao.projects", "Projects", Projects),
+        ("splunk_ao.agent_streams", "AgentStreams", AgentStreams),
+    ):
+        module = ModuleType(name)
+        setattr(module, member, implementation)
+        monkeypatch.setitem(sys.modules, name, module)
+    namespace = runpy.run_path(
+        str(REPO_ROOT / "evals/python/ai-assistant-demo/eval_runner.py"),
+        run_name="independent_evaluation_fixture",
+    )
+    assert calls == []
+    return namespace["run_evaluation"], calls
+
+
+def test_ai_assistant_eval_resolves_only_its_own_route_and_terminates(monkeypatch):
+    for stream_exists in (True, False):
+        run, calls = _independent_evaluation_with_fake_sdk(
+            monkeypatch, stream_exists=stream_exists
+        )
+        assert run() == "eval-stream-id"
+        assert calls[0] == ("project", {"name": "ai-assistant-demo-evaluation"})
+        assert calls[1] == (
+            "stream.get",
+            {"name": "offline-evaluations", "project_id": "eval-project-id"},
+        )
+        assert ("stream.create" in [name for name, _ in calls]) is not stream_exists
+        assert ("logger", {
+            "project": "ai-assistant-demo-evaluation",
+            "agent_stream_id": "eval-stream-id",
+        }) in calls
+        assert [name for name, _ in calls].count("trace") == 1
+        assert [name for name, _ in calls].count("model") == 1
+        assert calls[-3:] == [
+            ("conclude", {"output": "synthetic evaluation passed"}),
+            ("flush", {}),
+            ("terminate", {}),
+        ]
+
+
+def test_ai_assistant_eval_terminates_its_logger_on_failure(monkeypatch):
+    run, calls = _independent_evaluation_with_fake_sdk(
+        monkeypatch, stream_exists=True, fail_span=True
+    )
+    with pytest.raises(RuntimeError, match="synthetic SDK failure"):
+        run()
+    assert calls[-1] == ("terminate", {})
+    assert [name for name, _ in calls].count("terminate") == 1
+    assert "conclude" not in [name for name, _ in calls]
 
 
 def test_splunk_ao_langchain_demo_is_local_runnable_and_outcome_based():
@@ -314,8 +489,20 @@ def test_splunk_ao_langchain_demo_is_local_runnable_and_outcome_based():
         "no Splunk access token",
         "single SplunkAOCallback span",
         "without network access",
+        "create_connection",
+        'name.startswith("OBSTUDIO_")',
     ):
         assert term in combined
+    app_and_tests = " ".join(
+        _read(file)
+        for file in (fixture / "app.py", fixture / "tests" / "test_app.py")
+    )
+    for forbidden in (
+        "observer_status",
+        "route-registration",
+        "OBSTUDIO_OBSERVER_URL",
+    ):
+        assert forbidden not in app_and_tests
 
 
 def test_galileo_choice_fixture_citations_cover_the_claimed_behavior():
@@ -722,7 +909,310 @@ def test_ai_assistant_instrument_case_selects_distinct_ao_routing(tmp_path):
     ]
     assert "OTEL-002 and AO-003" in instrument_eval["prompts"][0]["task"]
     rubric = " ".join(instrument_eval["rubric"]).lower()
-    for term in ("project resource", "agent stream resource", "direct routing"):
+    for term in ("project resource", "agent stream resource", "runtime routing"):
+        assert term in rubric
+
+
+@pytest.mark.parametrize("mode,connection", [
+    ("gateway", "available"),
+    ("gateway", "disconnected"),
+    ("direct-cloud", "not required"),
+])
+def test_ao_endpoint_mode_preserves_executable_resource_selection(
+    tmp_path, mode, connection,
+):
+    """Use the real selector; transport/access gaps do not externalize resources."""
+
+    audit = json.loads(_read(
+        REPO_ROOT / "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json"
+    ))
+    original_findings = copy.deepcopy(audit["findings"])
+    route = next(row for row in audit["findings"] if row["id"] == "AO-003")
+    route["constraints"].append(
+        f"Selected endpoint mode: {mode}; connection: {connection}; no live cloud proof supplied."
+    )
+    audit_path = tmp_path / "configured-audit.json"
+    audit_path.write_text(json.dumps(audit))
+    selection_path = tmp_path / "otel-selection.json"
+    subprocess.run(
+        [sys.executable, str(SKILLS_DIR / "references/scripts/observe_report.py"),
+         "select", str(audit_path), "--ids", "AO-003", "-o", str(selection_path)],
+        check=True, capture_output=True, text=True,
+    )
+    selection = json.loads(_read(selection_path))
+    assert selection["requested_ids"] == ["AO-003"]
+    assert selection["approved_ids"] == ["OTEL-001", "AO-001", "AO-002", "AO-003"]
+    # Selection is authorization, not successful resource resolution or delivery.
+    assert json.loads(_read(audit_path)) == audit
+    for finding in audit["findings"]:
+        original = next(row for row in original_findings if row["id"] == finding["id"])
+        assert finding["dependencies"] == original["dependencies"]
+        assert finding["status"] == "proposed"
+        assert finding["instrument_mode"] != "external follow-up"
+        assert finding["expected_telemetry"] == original["expected_telemetry"]
+    assert "OTEL-002" not in selection["approved_ids"]
+
+    scenarios = {row["id"]: row for row in audit["verification"]["scenarios"]}
+    assert "ao.runtime.routing" in route["verification_scenarios"]
+    assert scenarios["ao.runtime.routing"]["proof_level"] == "full runtime"
+    assert "two distinct dedicated Agent Streams" in scenarios["ao.runtime.routing"]["trigger"]
+    assert "local ACK is not cloud visibility" in scenarios["ao.runtime.routing"]["acceptance_criteria"]
+
+
+def test_ao_gateway_and_direct_configuration_use_the_same_normal_app_calls(monkeypatch):
+    """Prove fixture destination-independence, not real SDK transport/cloud proof."""
+
+    observations = []
+    settings = (
+        {
+            "SPLUNK_AO_API_URL": "http://127.0.0.1:55300",
+            "SPLUNK_AO_CONSOLE_URL": "http://127.0.0.1:55300",
+            "SPLUNK_AO_API_KEY": "local-gateway",
+        },
+        {
+            "SPLUNK_AO_REALM": "lab0",
+            "SPLUNK_AO_O11Y_TOKEN": "synthetic-unit-test-token",
+        },
+    )
+    for environment in settings:
+        with monkeypatch.context() as isolated:
+            for name in {key for item in settings for key in item}:
+                isolated.delenv(name, raising=False)
+            for name, value in environment.items():
+                isolated.setenv(name, value)
+            run, calls = _independent_evaluation_with_fake_sdk(
+                isolated, stream_exists=False,
+            )
+            assert run() == "eval-stream-id"
+            observations.append(calls)
+    assert observations[0] == observations[1]
+    assert [name for name, _ in observations[0]] == [
+        "project", "stream.get", "stream.create", "logger", "trace", "model",
+        "conclude", "flush", "terminate",
+    ]
+    # The actual installed SDK/auth/proxy/export contract has a separate
+    # TestAgentObservabilitySDKInstalledCompatibility Go integration test.
+    # This fake does not make gateway compatibility or cloud visibility proven.
+
+
+def test_ao_endpoint_rubrics_require_mode_specific_delivery_evidence():
+    fixture = REPO_ROOT / "evals/python/ai-assistant-demo"
+    instrument = json.loads(_read(fixture / "eval/qual/instrument.json"))
+    audit = json.loads(_read(fixture / "eval/inputs/otel-audit.json"))
+    route = next(row for row in audit["findings"] if row["id"] == "AO-003")
+    contract = " ".join(route["acceptance_criteria"] + route["constraints"])
+    rubric = " ".join(instrument["rubric"])
+    for term in (
+        "normal SDK/API calls", "active connection/realm",
+        "no application cloud token", "per-request project/stream isolation",
+        "old-organization IDs", "explicit direct-cloud mode remains valid",
+        "upstream ingest acknowledgement", "ordinary APM receipt is not that proof",
+    ):
+        assert term in rubric
+    for term in (
+        "Two application streams", "without cross-application leakage",
+        "changing a global AO destination", "cloud AO delivery Not proven",
+        "local credentials are not represented as cloud credentials",
+        "honest runtime availability dependency",
+    ):
+        assert term in contract
+    reference = " ".join(_read(SPLUNK_AO_REF).split())
+    for term in (
+        "alternative routing modes, not two mandatory exporters",
+        "SPLUNK_AO_API_URL", "SPLUNK_AO_CONSOLE_URL", "SPLUNK_AO_API_KEY",
+        "not an O11y override", "do not mix these variables",
+        "not proof of cloud Agent Observability visibility",
+        "do not claim delivery continues while the gateway is stopped",
+    ):
+        assert term in reference
+
+
+def test_ao_instrument_guidance_requires_real_sdk_route_and_metric_proof():
+    guidance = " ".join(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split())
+    for term in (
+        "metric measurement itself, not only on the owning chat span",
+        "one resolved destination",
+        "route-keyed exporters/processors with exclusive dispatch",
+        "An optional extra that the normal launch never selects is not an installed AO route",
+        "an explicit unknown route key or a project/stream lookup failure must fail closed for AO",
+        "do not copy a VCS pin from an unrelated optional/evaluation runtime",
+        "actual launch selection, not as a fallback port constant in app code",
+        "test-only `_exporter_factory` argument of `SplunkAOOTLPExporter`",
+        "Replacing `SplunkAOOTLPExporter` itself with a fake proves only app dispatch",
+        "third request-selected route whose project or Agent Stream lookup fails",
+        "the unresolved third route creates no AO exporter and produces zero AO exports",
+        "do not put active fabricated endpoint values in the Studio profile",
+        "A test using `SPLUNK_AO_REALM` plus an O11y token proves direct mode, not the Studio profile",
+        "Assert the effective `/otel/v1/traces` endpoint",
+        "Do not call selected AO routing working when this test is absent or blocked",
+        "client construction, project/stream API calls, and exporter/processor construction",
+        "must not stop application startup",
+        "a missing skill invocation or adjacent file is not itself a verification blocker",
+    ):
+        assert term in guidance
+    reference = " ".join(_read(SPLUNK_AO_REF).split())
+    for term in (
+        "neither the conventional REST port nor the ordinary OTLP receiver address",
+        "hardcode a Studio port fallback in application code",
+        "Merely writing `.env.studio.example` does not activate it",
+    ):
+        assert term in reference
+
+
+def test_ao_gateway_docs_keep_container_routing_outside_loopback_trust_boundary():
+    reference = " ".join(_read(SPLUNK_AO_REF).split())
+    receiver = " ".join(_read(
+        SKILLS_DIR / "references" / "local-otlp-receiver.md"
+    ).split())
+    for term in (
+        "native loopback requests from the same network namespace as Studio",
+        "marker is public and is not a network authentication secret",
+        "Do not recommend a Docker/Compose/Kubernetes bridge or service address",
+        "record that exact compatibility blocker",
+    ):
+        assert term in reference
+    assert "container/service addresses apply to ordinary OTLP receipt only" in receiver
+
+
+def test_ao_fixture_separates_offline_evaluation_from_interactive_chat():
+    audit = json.loads(_read(
+        REPO_ROOT / "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json"
+    ))
+    evidence = " ".join(json.dumps(audit["evidence"]).split())
+    assert "eval_runner.py" in evidence
+    assert "app.py does not import or call this runner" in evidence
+    assert "Offline evaluation (separate process)" in audit["signal_flow"]["component_flow_map"]
+    offline_spans = {row["name"]: row for row in audit["current_instrumentation"]["spans"]}
+    assert set(offline_spans) == {"offline_assistant_evaluation", "evaluation_answer"}
+    assert all("not reachable from interactive app.py" in row["type"] for row in offline_spans.values())
+    findings = {row["id"]: row for row in audit["findings"]}
+    for finding_id in ("AO-001", "AO-002", "AO-003"):
+        finding = findings[finding_id]
+        assert "interactive FastAPI deployment" in finding["gap"]
+        assert any("eval_runner.py:" in source for source in finding["evidence"])
+
+
+def test_live_ao_route_selection_closes_promised_producers_and_live_teardown(tmp_path):
+    """Exercise the real selector on a test-local, acceptance-complete graph."""
+
+    audit = json.loads(_read(
+        REPO_ROOT / "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json"
+    ))
+    findings = {finding["id"]: finding for finding in audit["findings"]}
+
+    def prerequisite(identifier, area, expected, dependencies, scenario):
+        finding = copy.deepcopy(findings["OTEL-001"])
+        finding.update({
+            "id": identifier,
+            "title": area,
+            "area": area,
+            "dependencies": dependencies,
+            "expected_telemetry": expected,
+            "verification_scenarios": [scenario],
+            "acceptance_criteria": [f"The live route includes {area}."],
+        })
+        return finding
+
+    agent = prerequisite(
+        "OTEL-AGENT", "Live agent producer",
+        [{"type": "span", "name": "invoke_agent fixture-agent",
+          "attributes": ["gen_ai.operation.name=invoke_agent"],
+          "product_view": "Live agent trace"}],
+        ["OTEL-001"], "genai.turn.lifecycle",
+    )
+    workflow = prerequisite(
+        "OTEL-WORKFLOW", "Live workflow producer",
+        [{"type": "span", "name": "invoke_workflow build_turn",
+          "attributes": ["gen_ai.operation.name=invoke_workflow"],
+          "product_view": "Live workflow trace"}],
+        ["OTEL-AGENT"], "genai.turn.lifecycle",
+    )
+    lifecycle = prerequisite(
+        "OTEL-LIVE-LIFECYCLE", "Live provider lifecycle",
+        [{"type": "configuration", "name": "live.provider.shutdown",
+          "attributes": [], "product_view": "Live provider lifecycle"}],
+        [], "live.ao.shutdown",
+    )
+    evaluation_lifecycle = prerequisite(
+        "OTEL-EVAL-LIFECYCLE", "Independent evaluation logger lifecycle",
+        [{"type": "configuration", "name": "evaluation.logger.terminate",
+          "attributes": [], "product_view": "Evaluation logger lifecycle"}],
+        [], "evaluation.ao.shutdown",
+    )
+    routing = findings["AO-003"]
+    routing["dependencies"] = ["AO-002", "OTEL-WORKFLOW", "OTEL-LIVE-LIFECYCLE"]
+    routing["verification_scenarios"] = ["genai.turn.lifecycle", "live.ao.shutdown"]
+    routing["acceptance_criteria"].append(
+        "One live workflow -> agent -> model/tool tree is drained at provider shutdown."
+    )
+    audit["findings"] = [
+        findings["OTEL-001"], findings["OTEL-002"], agent, workflow,
+        lifecycle, evaluation_lifecycle, findings["AO-001"], findings["AO-002"], routing,
+    ]
+    audit["signal_flow"]["component_flow_map"] += (
+        "\nLive operation production\n"
+        "workflow [GAP: Live workflow producer] -> agent [GAP: Live agent producer]\n"
+        "live provider [GAP: Live provider lifecycle]\n"
+        "independent evaluation logger [GAP: Independent evaluation logger lifecycle]"
+    )
+    scenario = copy.deepcopy(audit["verification"]["scenarios"][0])
+    scenario.update({
+        "id": "live.ao.shutdown",
+        "trigger": "Close the live runtime after a completed assistant turn",
+        "expected_signals": "One AO sink/processor and completed live operation spans",
+        "acceptance_criteria": "Inspect active sink outputs; force_flush/shutdown drains completed spans, releases resources, and emits no duplicate operations or duplicate export to the AO destination.",
+    })
+    evaluation_scenario = copy.deepcopy(scenario)
+    evaluation_scenario.update({
+        "id": "evaluation.ao.shutdown",
+        "entrypoint": "eval_runner.py:run_evaluation",
+        "trigger": "Complete the independent offline evaluation",
+        "expected_signals": "Evaluation logger terminate",
+    })
+    audit["verification"]["scenarios"].extend([scenario, evaluation_scenario])
+    audit_path = tmp_path / "live-ao-audit.json"
+    audit_path.write_text(json.dumps(audit))
+    selection_path = tmp_path / "live-ao-selection.json"
+    subprocess.run(
+        [sys.executable, str(SKILLS_DIR / "references/scripts/observe_report.py"),
+         "select", str(audit_path), "--ids", "AO-003", "-o", str(selection_path)],
+        check=True, capture_output=True, text=True,
+    )
+    selection = json.loads(_read(selection_path))
+    assert selection["requested_ids"] == ["AO-003"]
+    assert selection["approved_ids"] == [
+        "OTEL-001", "OTEL-AGENT", "OTEL-WORKFLOW", "OTEL-LIVE-LIFECYCLE",
+        "AO-001", "AO-002", "AO-003",
+    ]
+    selected = [finding for finding in audit["findings"]
+                if finding["id"] in selection["approved_ids"]]
+    operations = {attribute for finding in selected
+                  for item in finding["expected_telemetry"]
+                  for attribute in item["attributes"]}
+    assert {
+        "gen_ai.operation.name=invoke_workflow", "gen_ai.operation.name=invoke_agent",
+        "gen_ai.operation.name=chat", "gen_ai.operation.name=execute_tool",
+    } <= operations
+    selected_scenarios = {identifier for finding in selected
+                          for identifier in finding["verification_scenarios"]}
+    assert "live.ao.shutdown" in selected_scenarios
+    assert "evaluation.ao.shutdown" not in selected_scenarios
+    assert "OTEL-002" not in selection["approved_ids"]
+
+    assert "OTEL-EVAL-LIFECYCLE" not in selection["approved_ids"]
+    assert all("finding_group" not in finding for finding in selected
+               if finding["id"].startswith("OTEL-"))
+
+    rubric = " ".join(json.loads(_read(
+        REPO_ROOT / "evals/python/ai-assistant-demo/eval/qual/audit.json"
+    ))["rubric"])
+    for term in (
+        "transitive dependency closure includes every missing workflow, agent, model, tool, or retrieval span producer",
+        "source-covered creation reachable from that exact runtime",
+        "eval_runner.py logger.terminate never closes interactive provider.shutdown",
+        "pending completed spans are drained and resources released",
+        "duplicate export to the same AO destination",
+    ):
         assert term in rubric
 
 
@@ -783,7 +1273,7 @@ def test_instrument_retrieval_proof_compares_actual_span_ids():
     assert "tool span ID" in rubric
 
 
-def test_instrument_persists_direct_export_dependencies_separately_from_credentials():
+def test_instrument_persists_selected_export_dependencies_separately_from_credentials():
     instrument = " ".join(
         _read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split()
     )
@@ -864,12 +1354,15 @@ def test_genai_reference_covers_content_governance_contract():
         "gen_ai.retrieval.query.text",
         "gen_ai.tool.definitions",
         "gen_ai.tool.call.arguments",
+        "gen_ai.tool.call.result",
         "disabled",
         "metadata-only",
         "redacted",
         "full-content",
-        "opt-in config",
-        "redaction/truncation hook",
+        "each model, retrieval, or tool surface",
+        "do not create a separate",
+        "without a second content-capture",
+        "Redact and truncate before recording",
         "retention/access owner",
         "Never",
         "metric dimensions",
@@ -1022,12 +1515,29 @@ def test_genai_readiness_contract_does_not_require_opaque_ids():
     assert "| Surface | Audit Status | Missing Signal |" in configure
 
 
-def test_audit_keeps_genai_governance_and_cost_context_out_of_default_findings():
+def test_audit_keeps_applicable_content_attributes_in_owning_findings():
     audit = " ".join(_read(SKILLS_DIR / "otel-audit" / "SKILL.md").split())
     required_terms = [
         "Telemetry closure rows may become findings",
         "Governance/context rows stay in `## GenAI Readiness`",
-        "Content capture policy",
+        "Missing source-backed GenAI content attributes are telemetry gaps",
+        "owning model, retrieval, or tool",
+        "Do not create one finding per attribute",
+        "Do not require a second content-capture approval",
+        "gen_ai.input.messages",
+        "gen_ai.output.messages",
+        "gen_ai.system_instructions",
+        "gen_ai.retrieval.documents",
+        "gen_ai.retrieval.query.text",
+        "gen_ai.tool.definitions",
+        "gen_ai.tool.call.arguments",
+        "gen_ai.tool.call.result",
+        "completed model, retrieval, or tool span",
+        "tool name or handler source",
+        "consumes that value as its search or lookup input",
+        "Follow dataflow through the tool",
+        "prompt used only to simulate an error",
+        "returned document objects",
         "safety/refusal policy",
         "cost/billing ownership are not default service instrumentation findings",
         "Evaluation telemetry can be a finding",
@@ -1035,6 +1545,20 @@ def test_audit_keeps_genai_governance_and_cost_context_out_of_default_findings()
         "Cost telemetry can be a finding only when the repository owns an authoritative pricing source",
     ]
     assert not [term for term in required_terms if term not in audit]
+
+
+def test_instrument_selected_genai_findings_include_listed_content_attributes():
+    instrument = " ".join(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split())
+    assert "selected GenAI finding lists content attributes" in instrument
+    assert "without a second content-capture approval" in instrument
+    assert "Do not add content attributes absent from selected findings" in instrument
+    assert "all eight attributes in the shared Content Capture Governance Contract" in instrument
+    assert "refresh the audit and selection first" in instrument
+    assert "focused completed-span tests prove each listed attribute" in instrument
+    assert "gen_ai.tool.call.result" in instrument
+    assert "Start the focused test command with ambient `OTEL_SDK_DISABLED=true`" in instrument
+    assert "temporarily set it to `false` only for construction of the in-memory SDK provider" in instrument
+    assert "exactly one candidate whose safe content matches the redacted/truncated actual provider return" in instrument
 
 
 def test_audit_requires_single_deterministic_gap_section():
@@ -1091,6 +1615,8 @@ def test_instrument_keeps_selected_scope_and_audit_group_ownership():
     closure = instrument.split("### Audit-Driven Gap Closure", 1)[1].split("###", 1)[0]
     assert "unselected local log export" in closure
     assert "audit finding_group" in closure
+    assert "A selected token-usage histogram does not also" in closure
+    assert "Do not implement, test as selected, or claim those" in closure
 
     rubric = _read(
         REPO_ROOT

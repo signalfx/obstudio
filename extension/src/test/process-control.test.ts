@@ -147,7 +147,8 @@ test('process executable path comparison follows platform path semantics', () =>
 	);
 });
 
-test('listener PID inspection resolves a real loopback listener', { timeout: 10_000 }, async () => {
+// Windows may need both 10-second PowerShell inspection budgets in sequence.
+test('listener PID inspection resolves a real loopback listener', { timeout: process.platform === 'win32' ? 25_000 : 10_000 }, async () => {
 	const server = net.createServer();
 	await new Promise<void>((resolve, reject) => {
 		server.once('error', reject);

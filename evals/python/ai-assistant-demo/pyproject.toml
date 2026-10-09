@@ -8,3 +8,8 @@ dependencies = [
     "httpx>=0.28",
     "uvicorn[standard]>=0.34",
 ]
+
+[project.optional-dependencies]
+evaluation = [
+    "splunk-ao==0.4.0",
+]

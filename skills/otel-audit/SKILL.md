@@ -35,6 +35,11 @@ Before writing the report artifacts, read
 `../references/report-flow-contract.md` and follow the Audit Contract plus the
 Reader-First Report Order.
 
+Before classifying any local OTLP endpoint, read
+`../references/local-otlp-receiver.md`. Treat Splunk Observability Studio as a
+configurable local receiver and optional cloud-compatible AO gateway. Receiver
+receipt alone is not project/stream configuration or cloud delivery evidence.
+
 ## Process
 
 ### Step 1 -- Repository Discovery
@@ -84,6 +89,33 @@ Scan the repository to determine language, framework, and existing instrumentati
   Agent Stream, dataset, prompt, annotation, evaluator, integration, routing
   configuration, or any `splunk_ao` dependency/import, also read
   `../references/splunk-agent-observability.md`.
+  Apply the Splunk AO Runtime Coverage Contract below to every in-scope agent
+  runtime, not only to files that import the SDK. An evaluation-only import
+  must not hide an interactive runtime from this assessment.
+  Before scoring AO routing, record a source-backed compatibility decision in
+  canonical Audit Evidence and the affected runtime readiness/finding rows:
+  classify the installed SDK's project/Agent Stream API endpoint, SDK auth
+  configuration, and per-request trace routing separately as `supported`,
+  `unsupported` (name the missing contract), or `unverified` (name the exact
+  package/runtime evidence unavailable after inspection). Do not defer this
+  classification to a future acceptance test. Separately classify fresh cloud
+  Agent Stream receipt; source capability, local receipt, and an upstream
+  acknowledgement do not prove it. If no local gateway was inspected, name
+  Splunk Observability Studio as the preferred local AO gateway candidate and
+  mark both its availability and concrete endpoint `unverified`; never invent
+  an address. Preserve an explicit operator or direct-cloud destination. When
+  AO settings are absent, keep the routing gap independent of an existing
+  ordinary OTLP endpoint and put the required exclusive Studio profile in the
+  AO routing finding's `required_fix` and acceptance criteria: a
+  `.env.studio.example` or repository-native named profile with the installed
+  SDK's supported API URL, console URL, and local gateway authentication,
+  filled from an actually discovered same-namespace loopback API origin during
+  instrumentation. Require removal of inherited direct-cloud realm/token
+  variables when selecting that profile, real project/stream resolution before
+  export, and a separate direct-cloud profile only when requested or already
+  maintained. Describe the missing profile even when the gateway is currently
+  unavailable; mark endpoint and delivery proof unverified instead of filling
+  a guessed port or claiming it works.
 7. Record exact evidence paths that should appear in the report:
   - Dependency manifest: `go.mod`, `package.json`, `pyproject.toml`, `pom.xml`, etc.
   - Process entry point: `main.go`, `cmd/.../main.go`, `app.py`, `app.js`, `TasksApplication.java`, etc.
@@ -127,6 +159,12 @@ signal by type so the report can list them explicitly.
   (`grpc` with the gRPC receiver, or `http/protobuf` with `/v1/<signal>`), not
   just a host or port. A configured endpoint with an incompatible protocol is
   a required exporter gap.
+- Resolve the effective local receiver with the shared local-receiver
+  precedence. Record the source of the resolved endpoint and preserve every
+  configured non-default port. Treat `4317` and `4318` only as conventional
+  fallbacks when no endpoint is configured or discoverable; flag startup code
+  that calls Obstudio, MCP, or its REST API to discover the endpoint at
+  application runtime.
 - Resolve whether the logs endpoint is the local Splunk Observability Studio receiver or a direct
   cloud ingest endpoint. An unset signal-specific logs endpoint must not inherit
   a generic direct-cloud endpoint: local application logs default to Splunk Observability Studio,
@@ -285,6 +323,10 @@ proof.
   `OTEL_LOGS_EXPORTER=none` producing no OTLP record. When cloud trace/metric
   export or forwarding exists, also prove the application record remains
   visible in local Splunk Observability Studio without any cloud log path.
+- For local OTLP export, include at least one scenario using a discovered or
+  fixture-provided non-default receiver port. Its acceptance criteria must
+  prove the exact endpoint/protocol/path tuple and that application startup
+  does not query Obstudio for routing or endpoint registration.
 - For every exact custom span name or operation entrypoint, create an explicit
   scenario row. Shared helper implementation is not proof that each operation
   emits its expected name and topology.
@@ -381,10 +423,40 @@ Classify these rows before creating findings:
   spans, metrics, logs, attributes, exporter/resource setup, correlation,
   cardinality, or semantic-convention gaps.
 - Governance/context rows stay in `## GenAI Readiness` unless the user
-  explicitly asks for that audit domain. Content capture policy,
-  redaction/retention/access ownership, safety/refusal policy, evaluation
-  explanation policy, model rollout policy, and cost/billing ownership are not
-  default service instrumentation findings.
+  explicitly asks for that audit domain. Redaction/retention/access ownership,
+  safety/refusal policy, evaluation explanation policy, model rollout policy,
+  and cost/billing ownership are not default service instrumentation findings.
+  Missing source-backed GenAI content attributes are telemetry gaps, not
+  governance-only rows. Add each applicable attribute named in the shared
+  Content Capture Governance Contract to the owning model, retrieval, or tool
+  readiness row and existing selectable finding's `expected_telemetry`; give
+  that finding a redacted-content verification scenario. Do not create one
+  finding per attribute or omit an applicable attribute solely because its
+  value is sensitive. Do not require a second content-capture approval after
+  the finding is selected. Do not propose fields the application cannot observe.
+  Before `finalize-audit`, reconcile every app-owned model, retrieval, and tool
+  boundary with all eight attributes in that contract: `gen_ai.input.messages`,
+  `gen_ai.output.messages`, `gen_ai.system_instructions`,
+  `gen_ai.retrieval.documents`, `gen_ai.retrieval.query.text`,
+  `gen_ai.tool.definitions`, `gen_ai.tool.call.arguments`, and
+  `gen_ai.tool.call.result`. Inspect the actual provider-bound input and
+  returned output, observable instructions and tool definitions, retrieval
+  query and documents, and tool-call arguments and result. Put each applicable
+  missing attribute literally in the owning finding's `expected_telemetry`
+  and require an assertion on its completed model, retrieval, or tool span in
+  the verification scenario. Metadata-only spans or prose about privacy and
+  capture mode do not close source-backed content coverage. If safe emission
+  is not feasible, retain the unresolved finding and name the blocker instead
+  of marking it covered.
+  Require evidence of the actual value crossing its owning boundary before
+  classifying a content attribute as applicable: a tool name or handler source
+  is not a model-bound `gen_ai.tool.definitions` payload. A prompt passed to
+  a search-like tool is not `gen_ai.retrieval.query.text` unless the tool
+  consumes that value as its search or lookup input; a prompt used only to
+  simulate an error is not a retrieval query. Counts or scores without
+  returned document objects are not `gen_ai.retrieval.documents`. Keep
+  observable tool-call arguments and results in the tool finding rather than
+  promoting an unused parameter to retrieval content.
 - Evaluation telemetry can be a finding when the repository owns concrete OTel
   evaluation events or low-cardinality evaluator duration/error/no-data/
   freshness metrics. Do not bundle that with safety or content-governance work
@@ -413,8 +485,14 @@ vector, corpus, document, index, knowledge-base, or embedding search whose
 results become model context. A name such as `search_docs` is useful evidence
 but is not sufficient by itself; corroborate it with the implementation,
 dependency calls, returned matches/documents/scores, or the caller's use of the
-results. When a tool performs such a retrieval-like operation, a generic tool
-span is not complete retrieval coverage. Before finalizing the audit, compare
+results. Match counts or scores may justify a retrieval-like operation but do
+not prove query text or document bodies. Follow dataflow through the tool:
+require a value actually consumed by its search/lookup path before adding
+`gen_ai.retrieval.query.text`, and returned document objects before adding
+`gen_ai.retrieval.documents`. An unused prompt parameter, including one read
+only for a simulated error, is not query evidence. When a tool performs such a
+retrieval-like operation, a generic tool span is not complete retrieval
+coverage. Before finalizing the audit, compare
 each confirmed retrieval call site against its tool span and check the JSON for
 two distinct items: a retrieval-specific readiness row and a selectable
 retrieval finding with its own ID. A combined "tool and retrieval" row or
@@ -422,8 +500,9 @@ finding does not satisfy this check. Preserve the `execute_tool` operation,
 then require the nested retrieval span with
 `gen_ai.operation.name=retrieval` and a stable low-cardinality data-source
 identifier. Add an explicit retrieval verification scenario that proves its
-parentage under the tool span and does not capture document contents, query
-text, embeddings, or other sensitive/high-cardinality values by default.
+parentage under the tool span, proves any selected source-backed content fields
+only after redaction and truncation, and never records raw documents, query
+text, embeddings, or other sensitive/high-cardinality values.
 Apply the `Single-Source GenAI Span Contract` from the GenAI readiness
 reference before deciding trace coverage. Inventory framework/vendor bridges,
 provider SDK hooks, callbacks, middleware, and auto-instrumentors that can emit
@@ -599,6 +678,102 @@ satisfy that row's required workflow, model, tool, token, memory, evaluation,
 or AI-path signals. Use `missing` when none of the required GenAI signals
 exists, even if unrelated OTel metrics are source-active.
 
+**Splunk AO Runtime Coverage Contract** -- when AO is detected or requested,
+assess every in-scope GenAI runtime independently before writing findings.
+Enumerate interactive/API, worker, and evaluation/test entry points from the
+source scan. For each, record runtime-specific canonical `genai_readiness`
+surfaces and an Audit Evidence row naming the entry point and reachable AO setup (or
+the searched registration/configuration call sites when no setup is reachable).
+Assess project binding, dedicated Agent Stream binding, configured runtime routing,
+span producer, content behavior, and matching teardown for that runtime.
+
+A logger, callback, project, Agent Stream, or `terminate()` path reachable only
+from an evaluation, test, experiment, or demo runner does not cover a separate
+interactive runtime. Likewise, a repository dependency, dormant helper,
+generic OTLP endpoint, or collector receipt is not runtime routing evidence.
+Preserve source-covered evaluation integration without inventing duplicate
+resource or lifecycle work, but never let it close or replace the live-runtime
+assessment. Search the actual live callback registration and startup/shutdown
+paths, not merely the files containing AO imports.
+
+For an in-scope live agent runtime without source-configured product bindings,
+record its missing project binding, dedicated runtime Agent Stream binding,
+and runtime route as separate readiness surfaces with distinct `surface` names.
+Promote source-backed application/deployment configuration gaps to distinct
+selectable `finding_group: splunk-agent-observability` findings, with the
+project -> Agent Stream ->
+routing prerequisite chain described below. Existing evaluation
+resources may be reused only when source proves their intended live binding;
+do not claim they are absent globally or force duplicate resources. When
+adoption has no explicitly selected product target, use `fix all` and describe
+it as opt-in live AO configuration, not a broken existing route.
+When the user explicitly requests Agent Observability coverage, deployment,
+or routing, use `instrument_mode: default` for safe, source-backed AO project,
+Agent Stream, and live-routing gaps in that requested scope. Do not leave
+those requested gaps in `fix all` merely because no cloud credentials are
+present during a read-only audit. Keep incidental AO adoption in `fix all`.
+Missing secret
+values alone are not code defects or external blockers. Do not impose AO
+adoption on repositories with neither AO evidence nor a user AO request.
+Keep missing ordinary workflow/model/tool OTel signals untagged and separate;
+content capture and lifecycle findings require their own source-backed gaps.
+
+An AO routing finding's transitive dependency closure must support its own
+acceptance criteria. If those criteria require canonical workflow, agent,
+model, tool, or nested retrieval spans, include every unresolved producer and
+semantic-continuity finding needed for those operations, not only exporter and
+workflow setup. Cross-check each required live GenAI readiness surface and
+its verification scenario against the routing finding's dependency closure:
+when a tool such as `search_docs` performs a distinct retrieval operation,
+its retrieval finding must be included separately from the tool finding.
+Alternatively, explicitly narrow routing proof to the already covered
+operations; do not silently promise unselected instrumentation work.
+
+For a new live AO sink, include any unresolved ordinary provider-lifecycle
+finding needed by that route. Author a local proof scenario for the exact
+live entry point and attach it to the AO routing finding or its selected
+provider-lifecycle prerequisite. Use fake or in-memory application and AO
+sinks without cloud credentials: reuse the intended provider, attach exactly
+one AO sink/processor, emit one canonical workflow/model/tool span per logical
+operation, inspect every active sink, and prove at most one export to the same
+AO destination. Exercise `force_flush` and `shutdown` on owned providers or
+supported AO logger termination; assert completed pending spans drain and
+owned resources close. Keep fresh cloud receipt as a separate scenario. An
+evaluation logger's teardown does not prove a new live sink's lifecycle.
+Keep ordinary producer/lifecycle findings untagged rather than duplicating
+them as AO findings.
+
+Before `finalize-audit`, apply this AO acceptance gate to each live-routing
+finding, not only to a generic provider finding:
+
+1. Name the selected destination. The available Splunk Observability Studio
+   cloud-compatible gateway is the default local candidate; preserve any
+   explicit operator or direct-cloud endpoint. Cite the actual endpoint and
+   availability evidence only when discovered. If no gateway or live target
+   was inspected, say `unverified` and do not invent a host or port.
+2. State the installed AO SDK's project/Agent Stream API endpoint and
+   auth configuration and per-request trace-route compatibility as separate
+   `supported`, `unsupported` with the exact missing contract, or `unverified`
+   with the exact unavailable package/runtime evidence decisions in canonical
+   evidence and AO runtime rows; do not defer them to the acceptance scenario.
+   Generic "cloud-compatible" wording is not a compatibility assessment.
+3. Attach a dedicated credential-free scenario to the AO routing finding or
+   its selected lifecycle prerequisite. It must invoke the live entry point
+   with fake or in-memory application and AO sinks, call the actual
+   `force_flush`/`shutdown` or supported logger termination path, inspect
+   both outputs, prove pending completed spans drained and resources closed,
+   assert one canonical workflow/model/tool operation tree, and rule out
+   duplicate export to the same AO destination. A separate generic provider
+   shutdown scenario or a vague "no duplicates" sentence is insufficient.
+   Keep fresh cloud receipt as a distinct optional proof.
+
+Before `finalize-audit`, reconcile every enumerated runtime with its readiness
+row and source evidence. Every missing or partial app-owned AO configuration
+row must map to an unresolved AO-group finding with the same `area`; a covered
+row must cite reachable setup for that exact runtime. If any runtime was
+omitted, repair the canonical JSON before rendering. Never patch HTML or add
+empty AO cards just to make the subsection appear.
+
 **Deterministic gap section contract** -- the canonical audit has exactly one
 actionable gap source: `findings`. Record GenAI detail in canonical
 `genai_readiness` rows, promote service-owned OTel telemetry closure rows into
@@ -613,20 +788,32 @@ work too: if `SplunkAOCallback` captures raw caller content contrary to the
 application's documented metadata-only behavior, create a distinct selectable
 finding for the app-owned guard before callback construction and set
 `finding_group: splunk-agent-observability`. Keep general content policy and
-governance questions as context rather than default instrumentation findings.
+governance questions as context; ordinary missing GenAI content attributes
+belong in their owning selectable OTel findings without an AO finding group.
 For a source-backed project/Agent Stream/routing gap that can be closed by
 application or deployment configuration, author selectable project configuration
 and selectable Agent Stream configuration findings with executable modes and
 their dependency edges. A target ID or credential may be supplied at the
 selected instrumentation/deployment step; missing audit-time credentials alone do not make an AO finding external.
-When all three gaps exist, create separate selectable AO findings for project, Agent Stream, and direct routing
+When all three gaps exist, create separate selectable AO findings for project, Agent Stream, and runtime routing
 rather than collapsing them into one card. The Agent Stream depends on project;
-direct routing depends on project, Agent Stream, and OTel export. Keep a
+runtime routing depends on project, Agent Stream, and OTel export. Keep a
 project finding scoped to resolving or creating the product resource, a stream
 finding scoped to its own resource, and a routing finding scoped to durable
 application/deployment configuration. A user can then select a downstream
 finding and see its distinct prerequisites auto-included. Do not split a
 single already-working resource just to increase the finding count.
+Distinguish ordinary local OTLP receipt from AO resource and delivery evidence.
+An available cloud-compatible Studio gateway is the default local destination,
+not an automatic direct-routing defect. Assess normal SDK resource calls,
+supported per-request project/stream binding, gateway compatibility, and cloud
+receipt separately. Preserve explicit operator/direct-cloud destinations.
+Do not propose a Studio-specific application adapter or global route
+registration. If the SDK or gateway cannot implement the standard API/ingest
+contract, record that exact compatibility gap rather than claiming that a
+connection alone provisions resources or proves delivery. Local OTel receiver
+configuration remains ordinary OTel work; AO project/stream/routing remains
+distinct configuration work under the same findings ledger.
 Do not claim a product resource or routed trace is Working until it is
 resolved and verified. In contrast, reserve `external follow-up` for a source-proven outside owner
 who must perform a prerequisite action outside the selected application's
@@ -654,7 +841,7 @@ create the local-log `required`/`default` finding with that external ID in
 locked; never put this configuration conflict in `scan_blockers`.
 Keep product
 behavior decisions,
-readiness contract choices, content governance, safety policy, cost/billing
+readiness contract choices, content-policy ownership, safety policy, cost/billing
 ownership, and external telemetry prerequisites out of canonical `findings` by
 default; record them in readiness/context rows instead. Use `deferred` only for
 a concrete prerequisite or decision that gates an in-scope service-owned OTel
@@ -691,8 +878,10 @@ markers to the prioritized gap table. Use only `[SOURCE-COVERED]` and
 **Anti-patterns** -- flag any of these:
 
 - Multiple SDK initializations in the same process
-- Hardcoded OTLP endpoints instead of env vars, except the required
-  signal-specific local Splunk Observability Studio logs fallback
+- Hardcoded OTLP endpoints instead of resolved standard OTel configuration.
+  The conventional local `4317`/`4318` values are fallbacks only after the
+  configured or advertised receiver endpoint has not been found; never replace
+  a discovered non-default port with them.
 - Tracer/Meter created in hot paths instead of at startup
 - High-cardinality attributes on metrics (user IDs, request IDs)
 - Missing `recordException` in error handling paths

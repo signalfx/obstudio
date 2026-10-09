@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-verify |
-| Run ID | 20261002T052119122343Z |
+| Run ID | 20261008T182025695767Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/verify | go/chi-basic | 1 | 100% (5/5), avg score 98 | 2.7M | 12.2m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/verify | python/ai-assistant-demo | 1 | 100% (6/6), avg score 90 | 4.7M | 13.9m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2700495 | 2564096 | 0 | 24898 | 9125 | unknown | 2725393 |
+| with_skill | python/ai-assistant-demo/qual/verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 4682302 | 4510464 | 0 | 30627 | 8866 | unknown | 4712929 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 689793 | 617728 | 0 | 10764 | 5370 | unknown | 700557 |
+| with_skill | python/ai-assistant-demo/qual/verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 834710 | 746112 | 0 | 10070 | 5223 | unknown | 844780 |
 
 ## Rubric Failures
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -50,6 +52,7 @@ def _java_launcher(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         """#!/bin/sh
 printf 'JAVA_CALLED=1\\n'
 printf 'OTEL_LOGS_EXPORTER=%s\\n' "${OTEL_LOGS_EXPORTER-<unset>}"
+printf 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=%s\\n' "${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT-<unset>}"
 for arg in "$@"; do
   printf 'ARG=%s\\n' "$arg"
 done
@@ -61,6 +64,22 @@ done
         "JDK_JAVA_OPTIONS": "",
         "_JAVA_OPTIONS": "",
     }
+
+
+def test_python_log_boundary_conflict_never_aborts_application_startup() -> None:
+    guide = LANGUAGES / "python.md"
+    setup = _fenced_code_after(guide, "**File**: `otel_setup.py`", "python")
+    log_helper = setup.split("def _local_log_exporter():", 1)[1].split(
+        "def configure_opentelemetry():", 1
+    )[0]
+    assert "_skip_local_logs" in log_helper
+    assert "raise RuntimeError" not in log_helper
+    assert "_local_http_endpoint(endpoint)" in log_helper
+    assert "_local_http_endpoint(generic_endpoint)" in log_helper
+    assert "log_exporter = _local_log_exporter() if use_local_log_export else None" in setup
+    assert "tracer_provider = TracerProvider" in setup
+    assert "meter_provider = MeterProvider" in setup
+    assert "must not abort application startup" in _normalized(guide)
 
 
 def test_audit_selects_missing_supported_local_logs_by_default() -> None:
@@ -83,6 +102,55 @@ def test_audit_selects_missing_supported_local_logs_by_default() -> None:
         "Splunk Observability Studio cloud forwarding to Splunk is traces and metrics only",
     ):
         assert term in instrument
+
+
+def test_skills_separate_local_receipt_from_configured_cloud_delivery() -> None:
+    receiver = _normalized(SKILLS / "references" / "local-otlp-receiver.md")
+    ao = _normalized(SKILLS / "references" / "splunk-agent-observability.md")
+    consumers = json.loads(_read(SKILLS / "references" / "consumers.json"))
+
+    for term in (
+        "Receiver Receipt Is Not Product Delivery",
+        "cloud-compatible gateway may delegate AO",
+        "Receipt alone does not create or select",
+        "endpoints.otlpHttp",
+        "OTLP_HTTP_PORT",
+        "configured non-default port",
+        "generated application startup must not query Studio-specific discovery",
+        "normal AO SDK calls",
+    ):
+        assert term.lower() in receiver.lower()
+
+    for term in (
+        "Configured Runtime Destination",
+        "special route-registration call",
+        "alternative routing modes, not two mandatory exporters",
+        "Studio derives upstream API and ingest endpoints from its active cloud connection and realm",
+        "not proof of cloud Agent Observability visibility",
+    ):
+        assert term in ao
+
+    assert consumers["local-otlp-receiver.md"] == [
+        "otel-audit",
+        "otel-instrument",
+        "otel-verify",
+    ]
+    assert consumers["splunk-agent-observability.md"] == [
+        "otel-audit",
+        "otel-instrument",
+        "otel-verify",
+    ]
+
+    for skill_name in ("otel-audit", "otel-instrument", "otel-verify"):
+        skill = _read(SKILLS / skill_name / "SKILL.md")
+        assert "../references/local-otlp-receiver.md" in skill
+
+    for filename in ("python.md", "node.md", "java.md", "go.md"):
+        guide = _read(LANGUAGES / filename)
+        assert "fixed-port equality" in guide or "equality gates" in guide
+        assert "OBSTUDIO_OBSERVER_RUNTIME" not in guide
+        assert "OBSTUDIO_OBSERVER_TARGET" not in guide
+        assert "OBSTUDIO_" not in guide
 
 
 def test_all_language_guides_define_local_logs_and_cloud_boundary() -> None:
@@ -144,6 +212,52 @@ def test_language_guides_reject_generic_cloud_header_inheritance() -> None:
     assert "trace- and metric-specific endpoint/header settings" in java
 
 
+def test_language_guides_inherit_compatible_generic_nondefault_receiver() -> None:
+    python = _read(LANGUAGES / "python.md")
+    node = _read(LANGUAGES / "node.md")
+    java = _read(LANGUAGES / "java.md")
+
+    assert 'logs_endpoint="${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}"' in python
+    assert 'generic_endpoint="${OTEL_EXPORTER_OTLP_ENDPOINT:-}"' in python
+    assert '*/v1/traces) generic_http_base=' in python
+    assert 'logs_endpoint="${generic_http_base%/}/v1/logs"' in python
+    assert "If a generic receiver supplied the local URL during\npreflight" in node
+    assert "localLogsEndpointFromGeneric" not in node
+    assert 'elif [ -n "$generic_endpoint" ]; then' in java
+    assert 'local_logs_endpoint=$local_http_endpoint/v1/logs' in java
+
+
+def test_go_logs_match_preflight_receiver_without_stopping_traces_or_metrics() -> None:
+    go = _read(LANGUAGES / "go.md")
+    setup = _fenced_code_after(LANGUAGES / "go.md", "**File**: `otel.go`", "go")
+    log_setup = setup.split("useLocalLogExport :=", 1)[1].split(
+        "otel.SetTracerProvider(tp)", 1
+    )[0]
+    exporter = setup.split("func newApplicationLogExporter", 1)[1].split(
+        "// fanoutHandler", 1
+    )[0]
+
+    assert "preflightApprovedLocalOTLPLogsEndpoint" in setup
+    assert "if endpoint != preflightApprovedLocalOTLPLogsEndpoint" in exporter
+    assert "the same host with a different port or path is a boundary conflict" in " ".join(go.split())
+    assert "checked-in launch or Compose configuration for the selected runtime" in " ".join(go.split())
+    assert "only when none of those sources supplies a receiver" in " ".join(go.split())
+    rubric = " ".join(json.loads(_read(ROOT / "evals/go/kvstore/eval/qual/instrument.json"))["rubric"])
+    assert "fallback only when no such receiver evidence exists" in rubric
+    assert "url.Parse(genericEndpoint)" not in exporter
+    assert 'os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")' in exporter
+    assert 'os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS")' in exporter
+    assert "otlploghttp.WithHeaders(map[string]string{})" in exporter
+    assert "return nil, err" not in log_setup
+    assert "tp.Shutdown" not in log_setup
+    assert "mp.Shutdown" not in log_setup
+    assert log_setup.count(
+        'log.Print("local OTLP log export skipped; check receiver and exporter configuration")'
+    ) == 2
+    assert "slog.SetDefault(slog.New(fanoutHandler{" in setup
+    assert "the original\nlogger sink remains active" in go
+
+
 def test_shell_wrappers_only_add_local_log_configuration_for_otlp() -> None:
     python = _read(LANGUAGES / "python.md")
     java = _read(LANGUAGES / "java.md")
@@ -160,12 +274,11 @@ def test_shell_wrappers_only_add_local_log_configuration_for_otlp() -> None:
     assert 'scan_otel_options "${JAVA_TOOL_OPTIONS:-}"' in java
     assert 'for otel_jvm_arg in "$@"; do' in java
     assert '-Dotel.exporter.otlp.endpoint)' in java
-    assert '[ "$generic_endpoint" != "$local_http_endpoint" ]' in java
-    assert '[ "$generic_endpoint" != "$local_grpc_endpoint" ]' in java
     assert java.index('if [ "$logs_exporter" != otlp ]; then') < java.index(
         'if [ -n "$generic_endpoint" ]'
     )
-    assert "OBSTUDIO_JAVA_LOG_DEFAULTS=system-properties" in java
+    assert '[ "$add_logs_endpoint" -eq 0 ] || export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=' in java
+    assert "OBSTUDIO_JAVA_LOG_DEFAULTS" not in java
     assert 'ENTRYPOINT ["/usr/local/bin/otel-entrypoint"]' in java
     assert 'CMD ["java", "-jar", "/opt/app.jar"]' not in java
     assert '"${otel_log_args[@]}"' not in java
@@ -220,6 +333,79 @@ printf 'AUTO=%s\\n' "${OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION-<unset>}"
         check=True,
     )
     assert opted_out.stdout == "AUTO=false\n"
+
+
+def test_python_cli_preserves_resolved_nondefault_receiver_ports(
+    tmp_path: Path,
+) -> None:
+    launcher = tmp_path / "otel-entrypoint.sh"
+    _write_executable(
+        launcher,
+        _fenced_code_after(
+            LANGUAGES / "python.md",
+            "## Auto-Instrumentation (CLI Wrapper)",
+            "bash",
+        ),
+    )
+    subprocess.run(["/bin/sh", "-n", launcher], check=True)
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "opentelemetry-instrument",
+        """#!/bin/sh
+printf 'COMMON=%s\n' "${OTEL_EXPORTER_OTLP_ENDPOINT-<unset>}"
+printf 'LOGS=%s\n' "${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT-<unset>}"
+""",
+    )
+
+    for port in (55318, 55319):
+        result = subprocess.run(
+            [launcher, "python", "app.py"],
+            env={
+                "PATH": str(fake_bin),
+                "OTEL_EXPORTER_OTLP_ENDPOINT": f"http://127.0.0.1:{port}",
+            },
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        assert result.stdout == (
+            f"COMMON=http://127.0.0.1:{port}\n"
+            f"LOGS=http://127.0.0.1:{port}/v1/logs\n"
+        )
+
+    signal_specific = subprocess.run(
+        [launcher, "python", "app.py"],
+        env={
+            "PATH": str(fake_bin),
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55318",
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": (
+                "http://127.0.0.1:55444/v1/logs"
+            ),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "LOGS=http://127.0.0.1:55444/v1/logs\n" in signal_specific.stdout
+
+    signal_path = subprocess.run(
+        [launcher, "python", "app.py"],
+        env={
+            "PATH": str(fake_bin),
+            "OTEL_EXPORTER_OTLP_ENDPOINT": (
+                "http://127.0.0.1:55318/collector/v1/traces"
+            ),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert (
+        "LOGS=http://127.0.0.1:55318/collector/v1/logs\n"
+        in signal_path.stdout
+    )
 
 
 def test_python_logging_trace_injection_is_version_conditional() -> None:
@@ -305,13 +491,57 @@ def test_java_launcher_accepts_local_generic_endpoint_and_empty_exporter(
         check=True,
     )
     assert "JAVA_CALLED=1" in mixed_protocol.stdout
+    assert (
+        "ARG=-Dotel.exporter.otlp.logs.endpoint=http://localhost:4317\n"
+        in mixed_protocol.stdout
+    )
+
+    nondefault_http = subprocess.run(
+        [
+            launcher,
+            "-Dotel.logs.exporter=otlp",
+            "-Dotel.exporter.otlp.logs.protocol=http/protobuf",
+            "-version",
+        ],
+        env={
+            **base_env,
+            "OTEL_EXPORTER_OTLP_ENDPOINT": (
+                "http://telemetry-collector:55318/collector/v1/traces"
+            ),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "JAVA_CALLED=1" in nondefault_http.stdout
+    assert (
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="
+        "http://telemetry-collector:55318/collector/v1/logs\n"
+        in nondefault_http.stdout
+    )
+
+    signal_specific = subprocess.run(
+        [launcher, "-version"],
+        env={
+            **base_env,
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "https://cloud.invalid",
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": (
+                "http://arbitrary-observer:55444/v1/logs"
+            ),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert (
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="
+        "http://arbitrary-observer:55444/v1/logs\n"
+        in signal_specific.stdout
+    )
 
     empty_exporter = subprocess.run(
         [launcher, "-Dotel.logs.exporter=", "-jar", "app.jar"],
-        env={
-            **base_env,
-            "OBSTUDIO_JAVA_LOG_DEFAULTS": "system-properties",
-        },
+        env=base_env,
         text=True,
         capture_output=True,
         check=True,
@@ -319,9 +549,10 @@ def test_java_launcher_accepts_local_generic_endpoint_and_empty_exporter(
     assert empty_exporter.stdout.count("ARG=-Dotel.logs.exporter=\n") == 1
     assert "ARG=-Dotel.logs.exporter=otlp\n" not in empty_exporter.stdout
     assert (
-        "ARG=-Dotel.exporter.otlp.logs.endpoint=http://localhost:4318/v1/logs\n"
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://127.0.0.1:4318/v1/logs\n"
         in empty_exporter.stdout
     )
+    assert "ARG=-Dotel.exporter.otlp.logs.endpoint=" not in empty_exporter.stdout
 
 
 def test_java_launcher_rejects_argfiles_and_ambiguous_option_environments(
@@ -421,6 +652,9 @@ def test_node_shutdown_drains_before_flushing_telemetry(tmp_path: Path) -> None:
     assert "process.exit(failed ? 1 : 0)" in handler
     assert "server.close" in node
     assert "drain every detected queue/worker" in node
+    assert "`process.exitCode` alone cannot stop a hung drain or exporter" in _normalized(
+        LANGUAGES / "node.md"
+    )
 
     lifecycle = "let shutdownPromise" + node.split("let shutdownPromise", 1)[1].split(
         "\n```",
@@ -442,12 +676,15 @@ def test_node_shutdown_drains_before_flushing_telemetry(tmp_path: Path) -> None:
         assert typed in lifecycle
         lifecycle = lifecycle.replace(typed, javascript)
 
-    def run_signal_case(name: str, stop_and_drain: str) -> subprocess.CompletedProcess[str]:
+    def run_signal_case(
+        name: str, stop_and_drain: str, *, fast_timeout: bool = False
+    ) -> subprocess.CompletedProcess[str]:
         script = tmp_path / f"{name}.js"
+        case_lifecycle = lifecycle.replace("10_000", "50") if fast_timeout else lifecycle
         script.write_text(
             "const fs = require('node:fs');\n"
             "const sdk = { shutdown: async () => fs.writeSync(1, 'FLUSHED\\n') };\n"
-            f"{lifecycle}\n"
+            f"{case_lifecycle}\n"
             f"installGracefulSignalHandlers({stop_and_drain});\n"
             "setInterval(() => {}, 1_000);\n"
             "setImmediate(() => process.kill(process.pid, 'SIGTERM'));\n",
@@ -475,6 +712,12 @@ def test_node_shutdown_drains_before_flushing_telemetry(tmp_path: Path) -> None:
     assert failure.stdout == "FLUSHED\n"
     assert "Application drain failed" in failure.stderr
 
+    stalled = run_signal_case(
+        "stalled", "() => new Promise(() => {})", fast_timeout=True
+    )
+    assert stalled.returncode == 143
+    assert stalled.stdout == ""
+
 
 def test_node_non_otlp_exporters_never_add_obstudio_console_bridge() -> None:
     node = _read(LANGUAGES / "node.md")
@@ -484,9 +727,150 @@ def test_node_non_otlp_exporters_never_add_obstudio_console_bridge() -> None:
     )[1].split("const protocol", 1)[0]
 
     assert "logRecordProcessors: undefined" in operator_owned_branch
-    assert "addDefaultLocalLogBridge: false" in operator_owned_branch
+    assert "logInstrumentations: []" in operator_owned_branch
+    assert "suppressAutoLogs: false" in operator_owned_branch
     assert "configured !== 'none'" not in operator_owned_branch
-    assert "...(addDefaultLocalLogBridge ? [new ConsoleInstrumentation()] : [])" in node
+    assert "...logInstrumentations" in node
+    assert "logInstrumentations: [new ConsoleInstrumentation()]" in node
+
+
+def test_node_local_logs_require_preflight_match_and_fail_closed() -> None:
+    node = _read(LANGUAGES / "node.md")
+    normalized = _normalized(LANGUAGES / "node.md")
+    assert "A logs-only endpoint, header, or protocol" in normalized
+    assert "including in JavaScript translations" in normalized
+    assert "Never turn a log-only protocol conflict into a process-wide exception" in normalized
+    assert "Do not change `OTEL_LOGS_EXPORTER`, the logs endpoint, or the logs protocol" in normalized
+    helper = node.split("function defaultLocalLogConfiguration() {", 1)[1].split(
+        "const originalLogsExporter = process.env.OTEL_LOGS_EXPORTER;", 1
+    )[0]
+
+    assert "explicitLogsEndpoint !== PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" in helper
+    assert "url: PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" in helper
+    assert "OTEL_EXPORTER_OTLP_ENDPOINT?.trim()" not in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim()" in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS?.trim()" in helper
+    assert "new BatchLogRecordProcessor({ exporter })" in helper
+    assert "logInstrumentations: [new ConsoleInstrumentation()]" in helper
+    assert "} catch {" in helper
+    assert "logRecordProcessors: undefined" in helper.split("} catch {", 1)[1]
+    assert "logInstrumentations: []" in helper.split("} catch {", 1)[1]
+    assert "suppressAutoLogs: true" in helper.split("} catch {", 1)[1]
+    assert "reportLocalLogSkip();" in helper.split("} catch {", 1)[1]
+    assert "process.stderr.write(" in node.split("function reportLocalLogSkip()", 1)[1]
+    assert "error.message" not in helper
+    assert "process.env.OTEL_LOGS_EXPORTER =" not in helper
+    assert "process.env.OTEL_LOGS_EXPORTER ||=" not in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT =" not in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT ||=" not in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL =" not in helper
+    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL ||=" not in helper
+    assert "const originalLogsExporter = process.env.OTEL_LOGS_EXPORTER;" in node
+
+    sdk_integration = node.split("let sdk: NodeSDK;", 1)[1].split("sdk.start();", 1)[0]
+    assert "if (logRecordProcessors?.length) {\n  try {" in sdk_integration
+    assert "sdk = new NodeSDK({" in sdk_integration
+    assert "...base.instrumentations, ...logInstrumentations" in sdk_integration
+    assert "} catch {" in sdk_integration
+    assert "reportLocalLogSkip();" in sdk_integration.split("} catch {", 1)[1]
+    assert "const base = baseSdkOptions();" in node
+    assert sdk_integration.count("sdk = new NodeSDK(base);") == 2
+    assert "suppressAutoLogs = true;" in sdk_integration
+    assert "if (suppressAutoLogs) process.env.OTEL_LOGS_EXPORTER = 'none';" in node
+    assert "delete process.env.OTEL_LOGS_EXPORTER" in node
+
+
+def test_node_log_only_failures_keep_trace_metric_startup() -> None:
+    setup = _fenced_code_after(
+        LANGUAGES / "node.md", "**File**: `instrumentation.ts`", "typescript"
+    )
+    source = "const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" + setup.split(
+        "const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT", 1
+    )[1].split("let shutdownPromise", 1)[0]
+    source = source.replace("let sdk: NodeSDK;", "let sdk;")
+    stubs = """
+const counts = { trace: 0, metric: 0 };
+function resourceFromAttributes(attributes) { return attributes; }
+class OTLPTraceExporter { constructor() { counts.trace++; } }
+class OTLPMetricExporter { constructor() { counts.metric++; } }
+class PeriodicExportingMetricReader { constructor() {} }
+class HttpInstrumentation {}
+class ExpressInstrumentation {}
+class OTLPLogExporter {
+  constructor() { if (process.env.FAIL_LOG_CONSTRUCTOR === 'exporter') throw Error('secret'); }
+}
+class BatchLogRecordProcessor {
+  constructor() { if (process.env.FAIL_LOG_CONSTRUCTOR === 'processor') throw Error('secret'); }
+}
+class ConsoleInstrumentation {
+  constructor() { if (process.env.FAIL_LOG_CONSTRUCTOR === 'bridge') throw Error('secret'); }
+}
+class NodeSDK {
+  constructor(options) {
+    if (options.logRecordProcessors && process.env.FAIL_LOG_CONSTRUCTOR === 'sdk') {
+      throw Error('secret');
+    }
+    this.options = options;
+  }
+  start() {
+    globalThis.startResult = {
+      localLogs: !!this.options.logRecordProcessors,
+      logOption: Object.hasOwn(this.options, 'logRecordProcessors'),
+      autoExporter: this.options.logRecordProcessors
+        ? null : (process.env.OTEL_LOGS_EXPORTER || 'otlp'),
+      trace: counts.trace,
+      metric: counts.metric,
+    };
+  }
+}
+"""
+    env = os.environ.copy()
+    for name in (
+        "OTEL_LOGS_EXPORTER",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_HEADERS",
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
+        "FAIL_LOG_CONSTRUCTOR",
+    ):
+        env.pop(name, None)
+
+    cases = [
+        ({"OTEL_EXPORTER_OTLP_HEADERS": "", "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "  "}, True, None, False),
+        ({"OTEL_LOGS_EXPORTER": "none"}, False, "none", False),
+        ({"OTEL_LOGS_EXPORTER": "console"}, False, "console", False),
+        ({"OTEL_EXPORTER_OTLP_HEADERS": "token=secret"}, False, "none", True),
+        ({"OTEL_EXPORTER_OTLP_LOGS_HEADERS": "token=secret"}, False, "none", True),
+        ({"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"}, False, "none", True),
+        ({"OTEL_LOGS_EXPORTER": "otlp", "OTEL_EXPORTER_OTLP_HEADERS": "token=secret"}, False, "none", True),
+    ]
+    cases.extend(
+        ({"FAIL_LOG_CONSTRUCTOR": name}, False, "none", True)
+        for name in ("exporter", "processor", "bridge", "sdk")
+    )
+    cases.append(
+        ({"FAIL_LOG_CONSTRUCTOR": "exporter", "OTEL_LOGS_EXPORTER": "otlp"}, False, "none", True)
+    )
+    for overrides, logs_enabled, auto_exporter, diagnostic in cases:
+        result = subprocess.run(
+            ["node", "-e", stubs + source + "console.log(JSON.stringify({ ...globalThis.startResult, restored: process.env.OTEL_LOGS_EXPORTER ?? null }));"],
+            env={**env, **overrides},
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        assert json.loads(result.stdout) == {
+            "localLogs": logs_enabled,
+            "logOption": logs_enabled,
+            "autoExporter": auto_exporter,
+            "trace": 1,
+            "metric": 1,
+            "restored": overrides.get("OTEL_LOGS_EXPORTER"),
+        }
+        assert result.stderr == (
+            "OTel local log pipeline skipped; trace and metric startup continues.\n"
+            if diagnostic else ""
+        )
 
 
 def test_audit_nonlocal_log_conflict_is_a_locked_external_dependency() -> None:
@@ -589,8 +973,14 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
 
     for path, (service_name, record_count) in runtime_cases.items():
         definition = json.loads(_read(path))
+        compose = _read(path.with_name("docker-compose.yml"))
+        http_port = re.search(r"OTLP_HTTP_PORT=(\d+)", compose)
+        assert http_port is not None
+        expected_logs_endpoint = (
+            f"http://observer:{http_port.group(1)}/v1/logs"
+        )
         assert "runs the app in Docker Compose" in definition["prompts"][0]["task"]
-        assert "http://observer:4318/v1/logs" in definition["prompts"][0]["task"]
+        assert expected_logs_endpoint in definition["prompts"][0]["task"]
         default_check, opt_out_check = definition["checks"]
 
         assert default_check["environment"]["CODEX_EVAL_OTEL_LOGS_EXPORTER"] == ""
@@ -778,19 +1168,47 @@ def test_runtime_observer_keeps_grpc_loopback_when_http_is_container_visible() -
         ROOT / "evals/python/flask-basic/eval/runtime/docker-compose.yml",
     )
 
+    nondefault_http_ports = []
     for path in compose_paths:
         compose = _read(path)
+        http_port_match = re.search(r"OTLP_HTTP_PORT=(\d+)", compose)
+        grpc_port_match = re.search(r"OTLP_GRPC_PORT=(\d+)", compose)
+        assert http_port_match is not None
+        assert grpc_port_match is not None
+        http_port = http_port_match.group(1)
+        grpc_port = grpc_port_match.group(1)
         assert "HOST=0.0.0.0" in compose
         assert "OTLP_GRPC_HOST=127.0.0.1" in compose
-        assert "OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318" in compose
+        assert f"OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:{http_port}" in compose
+        if http_port != "4318" or grpc_port != "4317":
+            nondefault_http_ports.append(http_port)
+
+    assert nondefault_http_ports, "at least one runtime must exercise changed OTLP ports"
 
     for path in (
         ROOT / "evals/go/kvstore/eval/runtime/docker-compose.yml",
         ROOT / "evals/node/express-basic/eval/runtime/docker-compose.yml",
-        ROOT / "evals/python/flask-basic/eval/runtime/docker-compose.yml",
     ):
         compose = _read(path)
-        assert "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://observer:4318/v1/logs" in compose
+        http_port_match = re.search(r"OTLP_HTTP_PORT=(\d+)", compose)
+        assert http_port_match is not None
+        assert (
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="
+            f"http://observer:{http_port_match.group(1)}/v1/logs"
+        ) in compose
+
+    flask_compose = _read(
+        ROOT / "evals/python/flask-basic/eval/runtime/docker-compose.yml"
+    )
+    assert "OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:55318" in flask_compose
+    assert "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=" not in flask_compose
+    assert "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=" not in flask_compose
+    flask_runtime = json.loads(
+        _read(ROOT / "evals/python/flask-basic/eval/runtime/instrument.json")
+    )
+    flask_task = flask_runtime["prompts"][0]["task"]
+    assert "configures only the generic standard OTel HTTP endpoint" in flask_task
+    assert "deriving exactly one http://observer:55318/v1/logs endpoint" in flask_task
 
     node_compose = _read(ROOT / "evals/node/express-basic/eval/runtime/docker-compose.yml")
     assert "instrumentation.cjs" not in node_compose

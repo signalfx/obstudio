@@ -63,22 +63,24 @@ type splunkConnectionVerifier func(context.Context, string, string) error
 type SplunkExportConfigurationRefresher func() (bool, error)
 
 type splunkExportService struct {
-	metrics                 *otlp.SplunkMetricsExportController
-	traces                  *otlp.SplunkTracesExportController
-	refresh                 SplunkExportConfigurationRefresher
-	verifyConnection        splunkConnectionVerifier
-	resolveRealmClient      *http.Client
-	rollbackToken           string
-	rollbackMetrics         otlp.SplunkMetricsExporterConfig
-	rollbackChanged         bool
-	rollbackTraces          otlp.SplunkTracesExporterConfig
-	rollbackSource          string
-	source                  string
-	cimdRegistrationEnabled bool
-	configurationChanged    bool
-	stateVersionKey         [32]byte
-	mutationMu              sync.Mutex
-	mu                      sync.Mutex
+	metrics                       *otlp.SplunkMetricsExportController
+	traces                        *otlp.SplunkTracesExportController
+	refresh                       SplunkExportConfigurationRefresher
+	verifyConnection              splunkConnectionVerifier
+	resolveRealmClient            *http.Client
+	agentObservabilityProxyClient *http.Client
+	rollbackToken                 string
+	rollbackMetrics               otlp.SplunkMetricsExporterConfig
+	rollbackChanged               bool
+	rollbackTraces                otlp.SplunkTracesExporterConfig
+	rollbackSource                string
+	source                        string
+	cimdRegistrationEnabled       bool
+	configurationChanged          bool
+	stateVersionKey               [32]byte
+	mutationMu                    sync.Mutex
+	agentResourceMu               sync.Mutex
+	mu                            sync.Mutex
 }
 
 type splunkExportSignalStatus struct {
@@ -141,7 +143,8 @@ func newSplunkExportService(
 		verifyConnection: func(ctx context.Context, realm, accessToken string) error {
 			return verifySplunkCloudConnection(ctx, splunkConnectionHTTPClient, realm, accessToken)
 		},
-		resolveRealmClient: splunkRealmHTTPClient,
+		resolveRealmClient:            splunkRealmHTTPClient,
+		agentObservabilityProxyClient: newAgentObservabilityProxyHTTPClient(),
 		// TODO(CIMD PoC): standalone-binary source of truth for the CIMD registration
 		// feature flag, independent of the VS Code "sisCimdRegistrationEnabled" setting
 		// used when Splunk Observability Studio runs inside the extension. The IDE setting is the source of
@@ -165,6 +168,8 @@ func envFlagEnabled(name string) bool {
 }
 
 func (s *splunkExportService) register(mux *http.ServeMux) {
+	s.registerAgentObservabilitySDKAuth(mux)
+	s.registerAgentObservabilityProxy(mux)
 	mux.HandleFunc("GET /api/splunk/export", s.status)
 	mux.HandleFunc("POST /api/splunk/export", s.authorizeMutation(s.serializeMutation(s.configure)))
 	mux.HandleFunc("POST /api/splunk/export/realm", s.authorizeMutation(s.resolveRealm))
