@@ -141,6 +141,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 		newFreeAccountAPI(freeAccountSubmitter).register(mux)
 	}
 	registerSISCIMDLoginRoutes(mux)
+	registerO11yOAuthRoutes(mux)
 }
 
 func queryTraces(s *store.Store) http.HandlerFunc {

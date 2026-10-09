@@ -129,12 +129,6 @@
           "maximum": 65535,
           "markdownDescription": "Local port used by the extension-managed Splunk Observability Studio UI and MCP HTTP endpoint when `sharedObserverUrl` is unset. If a verified but incompatible `obstudio` process already owns this port, the extension stops and replaces it."
         },
-        "observability-studio.sisCimdRegistrationEnabled": {
-          "type": "boolean",
-          "default": false,
-          "scope": "machine",
-          "markdownDescription": "Feature flag (PoC): show the CIMD OAuth client setup control in the Cloud tab. Off by default so it does not appear for developers not working on the CIMD registration flow."
-        },
         "observability-studio.sisCimdOAuthIssuer": {
           "type": "string",
           "default": "https://127.0.0.1:9090/test-tenant/sis/v1/rg/cimd-demo",

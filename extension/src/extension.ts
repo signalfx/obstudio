@@ -93,6 +93,7 @@ import {
 	verifyStoredSplunkCloudConnection,
 	writeSplunkCloudStatePair,
 	type CloudBridgeAction,
+	type RegistrationAndAuthProtocol,
 	type StoredSplunkCloudConnection,
 } from './cloud-bridge';
 import {
@@ -168,7 +169,6 @@ const observerPanelViewType = 'observabilityStudioObserver';
 const observerPanelTitle = 'Splunk Observability Studio – Telemetry Explorer';
 const sharedObserverUrlSetting = 'sharedObserverUrl';
 const managedObserverPortSetting = 'managedObserverPort';
-const sisCimdRegistrationEnabledSetting = 'sisCimdRegistrationEnabled';
 const sisCimdOAuthIssuerSetting = 'sisCimdOAuthIssuer';
 const sisCimdOAuthClientIdSetting = 'sisCimdOAuthClientId';
 const sisCimdOAuthRedirectUriSetting = 'sisCimdOAuthRedirectUri';
@@ -793,9 +793,13 @@ export async function deactivate(): Promise<void> {
 	await shutdownObserverForExtensionUnload('Extension deactivated');
 }
 
-function isSISCIMDRegistrationEnabled(): boolean {
-	return vscode.workspace.getConfiguration('observability-studio')
-		.get<boolean>(sisCimdRegistrationEnabledSetting) === true;
+// Single source of truth shared with the Go backend's own OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL
+// read (observer/internal/api/splunk_export.go) -- the extension reads the same process env var
+// directly rather than keeping an independent VS Code setting in sync with it. See
+// docs/o11y-oauth-mcp-gateway-impact.md §5.
+function getRegistrationAndAuthProtocol(): RegistrationAndAuthProtocol {
+	const raw = (process.env.OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL ?? '').trim().toUpperCase();
+	return raw === 'CIMD' || raw === 'O11Y_OAUTH' ? raw : 'NONE';
 }
 
 function getSISCIMDOAuthConfiguration(): SISCIMDOAuthConfiguration {
@@ -2106,13 +2110,16 @@ function refreshObserverPanel(): void {
 }
 
 type CloudActionResult = {
-	cimdRegistrationEnabled?: boolean;
 	cimdRegistrationVerified?: boolean;
 	cimdSession?: SISCIMDSessionStatus;
 	freeAccount?: unknown;
 	message?: string;
+	o11yOAuthClientCreated?: boolean;
+	o11yOAuthClientId?: string;
+	o11yOAuthClientSecret?: string;
 	realm?: string;
 	region?: string;
+	registrationAndAuthProtocol?: RegistrationAndAuthProtocol;
 	status?: unknown;
 	warning?: string;
 };
@@ -2269,10 +2276,10 @@ async function performCloudBridgeActionExclusive(
 			// within this webview session. The login session itself persists in
 			// context.secrets and is restored here whenever CIMD is enabled.
 			return initializeCloudBridgeState({
-				cimdRegistrationEnabled: isSISCIMDRegistrationEnabled(),
 				readCimdSession: () => currentSISCIMDSessionStatus(context),
 				readStatus: () => getObserverCloudJSON('/api/splunk/export'),
 				refreshStatus: () => refreshSplunkCloudConnection(context),
+				registrationAndAuthProtocol: getRegistrationAndAuthProtocol(),
 			});
 		}
 		case 'open-free-edition':
@@ -2379,6 +2386,24 @@ async function performCloudBridgeActionExclusive(
 				realm: splunkRealmFromResponse(
 					await postObserverCloudJSON('/api/splunk/export/realm', { destination }),
 				),
+			};
+		}
+		case 'register-o11y-oauth': {
+			const realm = request.payload?.realm?.trim() ?? '';
+			const adminToken = request.payload?.adminToken?.trim() ?? '';
+			if (realm === '') {
+				throw new Error('Enter a valid Splunk Observability Cloud realm.');
+			}
+			if (adminToken === '') {
+				throw new Error('Paste the admin X-SF-TOKEN.');
+			}
+			const result = o11yOAuthRegistrationResultFromResponse(
+				await postObserverCloudJSON('/api/splunk/o11y-oauth/register', { adminToken, realm }),
+			);
+			return {
+				o11yOAuthClientCreated: result.created,
+				o11yOAuthClientId: result.clientId,
+				o11yOAuthClientSecret: result.clientSecret,
 			};
 		}
 		case 'setup-cimd': {
@@ -2863,6 +2888,23 @@ function splunkRealmFromResponse(value: unknown): string {
 		throw new Error('Splunk Observability Studio returned an invalid Splunk Observability Cloud realm.');
 	}
 	return realm;
+}
+
+function o11yOAuthRegistrationResultFromResponse(
+	value: unknown,
+): { clientId: string; clientSecret?: string; created: boolean } {
+	const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : undefined;
+	const clientId = record?.clientId;
+	const created = record?.created;
+	const clientSecret = record?.clientSecret;
+	if (
+		typeof clientId !== 'string' || clientId === ''
+		|| typeof created !== 'boolean'
+		|| (clientSecret !== undefined && typeof clientSecret !== 'string')
+	) {
+		throw new Error('Splunk Observability Studio returned an invalid registration response.');
+	}
+	return { clientId, clientSecret, created };
 }
 
 function cloudBridgeErrorMetadata(error: unknown): { code?: string; retrySafe?: boolean } {

@@ -6,7 +6,7 @@ import { resolve } from "path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
+import type { RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 import { CloudTab } from "./CloudTab";
 
 const disconnectedVersion = "D".repeat(43);
@@ -2515,12 +2515,137 @@ describe("CloudTab", () => {
   it("shows the CIMD setup control from Splunk Observability Studio's own status when there is no IDE bridge", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
       ...disconnectedStatus(),
-      cimdRegistrationEnabled: true,
+      registrationAndAuthProtocol: "CIMD",
     })));
 
     render(<CloudTab />);
 
     expect(await screen.findByText("Unified sign-in")).toBeTruthy();
+  });
+
+  it("shows the MCP client registration control from Splunk Observability Studio's own status when there is no IDE bridge", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      ...disconnectedStatus(),
+      registrationAndAuthProtocol: "O11Y_OAUTH",
+    })));
+
+    render(<CloudTab />);
+
+    expect(await screen.findByText("MCP client registration")).toBeTruthy();
+    expect(screen.queryByText("Unified sign-in")).toBeNull();
+  });
+
+  it("hides the legacy realm/access-token connect form when the registration protocol is CIMD", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      ...disconnectedStatus(),
+      registrationAndAuthProtocol: "CIMD",
+    })));
+
+    render(<CloudTab />);
+
+    await screen.findByText("Unified sign-in");
+    expect(screen.queryByLabelText("Realm or Observability Cloud URL")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+  });
+
+  it("hides the legacy realm/access-token connect form when the registration protocol is O11Y_OAUTH", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      ...disconnectedStatus(),
+      registrationAndAuthProtocol: "O11Y_OAUTH",
+    })));
+
+    render(<CloudTab />);
+
+    await screen.findByText("MCP client registration");
+    expect(screen.queryByLabelText("Realm or Observability Cloud URL")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+  });
+
+  it("still shows Remote export status for an already-connected legacy connection regardless of registration protocol", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      ...connectedStatus(true, "us1"),
+      registrationAndAuthProtocol: "O11Y_OAUTH",
+    })));
+
+    render(<CloudTab />);
+
+    expect(await screen.findByRole("switch", { name: "Remote telemetry export is on" })).toBeTruthy();
+    expect(screen.queryByLabelText("Realm or Observability Cloud URL")).toBeNull();
+    expect(screen.queryByText("MCP client registration")).toBeNull();
+  });
+
+  it("validates realm and admin token before registering an MCP OAuth client", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      ...disconnectedStatus(),
+      registrationAndAuthProtocol: "O11Y_OAUTH",
+    })));
+
+    render(<CloudTab />);
+    const registerButton = await screen.findByRole("button", { name: "Register MCP client" });
+
+    fireEvent.click(registerButton);
+    expect((await screen.findByRole("alert")).textContent)
+      .toContain("Enter a valid Splunk Observability Cloud realm.");
+
+    fireEvent.change(screen.getByLabelText("Realm"), { target: { value: "us0" } });
+    fireEvent.click(registerButton);
+    expect((await screen.findByRole("alert")).textContent)
+      .toContain("Paste the admin X-SF-TOKEN.");
+  });
+
+  it("registers an MCP OAuth client through Splunk Observability Studio's own backend when there is no IDE bridge", async () => {
+    let registrationBody: unknown;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/splunk/o11y-oauth/register") && init?.method === "POST") {
+        registrationBody = JSON.parse(String(init.body));
+        return jsonResponse({ clientId: "new-client-id", clientSecret: "the-one-time-secret", created: true });
+      }
+      return jsonResponse({
+        ...disconnectedStatus(),
+        registrationAndAuthProtocol: "O11Y_OAUTH",
+      });
+    }));
+
+    render(<CloudTab />);
+    fireEvent.change(await screen.findByLabelText("Realm"), { target: { value: "us0" } });
+    fireEvent.change(screen.getByLabelText("Admin X-SF-TOKEN"), { target: { value: "admin-token" } });
+    fireEvent.click(screen.getByRole("button", { name: "Register MCP client" }));
+
+    const clientIdField = await screen.findByLabelText("Client ID") as HTMLInputElement;
+    expect(clientIdField.value).toBe("*".repeat("new-client-id".length));
+    fireEvent.click(screen.getByRole("button", { name: "Show Client ID" }));
+    expect(clientIdField.value).toBe("new-client-id");
+    fireEvent.click(screen.getByRole("button", { name: "Hide Client ID" }));
+    expect(clientIdField.value).toBe("*".repeat("new-client-id".length));
+
+    const clientSecretField = screen.getByLabelText("Client secret") as HTMLInputElement;
+    expect(clientSecretField.value).toBe("*".repeat("the-one-time-secret".length));
+    fireEvent.click(screen.getByRole("button", { name: "Show Client secret" }));
+    expect(clientSecretField.value).toBe("the-one-time-secret");
+
+    expect(screen.getByRole("button", { name: "Copy Client ID" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy Client secret" })).toBeTruthy();
+    expect(registrationBody).toEqual({ adminToken: "admin-token", realm: "us0" });
+  });
+
+  it("registers an MCP OAuth client through the IDE bridge and omits the secret field on reuse", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { registrationAndAuthProtocol: "O11Y_OAUTH", status: disconnectedStatus() });
+
+    fireEvent.change(await screen.findByLabelText("Realm"), { target: { value: "us0" } });
+    fireEvent.change(screen.getByLabelText("Admin X-SF-TOKEN"), { target: { value: "admin-token" } });
+    fireEvent.click(screen.getByRole("button", { name: "Register MCP client" }));
+
+    const register = await bridge.next("register-o11y-oauth");
+    expect(register.payload).toMatchObject({ adminToken: "admin-token", realm: "us0" });
+    bridge.respond(register, { o11yOAuthClientCreated: false, o11yOAuthClientId: "existing-client-id" });
+
+    const clientIdField = await screen.findByLabelText("Client ID") as HTMLInputElement;
+    expect(clientIdField.value).toBe("*".repeat("existing-client-id".length));
+    expect(screen.queryByLabelText("Client secret")).toBeNull();
   });
 
   it("keeps cloud controls available on a fresh install with current Splunk Observability Studio status", async () => {
@@ -2543,7 +2668,7 @@ describe("CloudTab", () => {
 
     const initialize = await bridge.next("initialize");
     bridge.respond(initialize, {
-      cimdRegistrationEnabled: false,
+      registrationAndAuthProtocol: "NONE",
       status: legacyDisconnectedStatus(),
     });
 
@@ -2558,7 +2683,7 @@ describe("CloudTab", () => {
     render(<CloudTab />);
 
     const initialize = await bridge.next("initialize");
-    bridge.respond(initialize, { cimdRegistrationEnabled: true, status: disconnectedStatus() });
+    bridge.respond(initialize, { registrationAndAuthProtocol: "CIMD", status: disconnectedStatus() });
 
     expect(await screen.findByText("Unified sign-in")).toBeTruthy();
     const setupButton = screen.getByRole("button", { name: "Register OAuth client with CIMD" });
@@ -2566,7 +2691,7 @@ describe("CloudTab", () => {
     fireEvent.click(setupButton);
     const setupCIMD = await bridge.next("setup-cimd");
     bridge.respond(setupCIMD, {
-      cimdRegistrationEnabled: true,
+      registrationAndAuthProtocol: "CIMD",
       cimdRegistrationVerified: true,
       message: "CIMD client registration verified with SIS. Splunk Observability Cloud export remains disconnected.",
     });
@@ -2581,7 +2706,7 @@ describe("CloudTab", () => {
     render(<CloudTab />);
 
     const initialize = await bridge.next("initialize");
-    bridge.respond(initialize, { cimdRegistrationEnabled: true, status: disconnectedStatus() });
+    bridge.respond(initialize, { registrationAndAuthProtocol: "CIMD", status: disconnectedStatus() });
     fireEvent.click(await screen.findByRole("button", { name: "Register OAuth client with CIMD" }));
     const setupCIMD = await bridge.next("setup-cimd");
     bridge.respond(setupCIMD, { cimdRegistrationVerified: true });
@@ -2619,7 +2744,7 @@ describe("CloudTab", () => {
 
     const initialize = await bridge.next("initialize");
     bridge.respond(initialize, {
-      cimdRegistrationEnabled: true,
+      registrationAndAuthProtocol: "CIMD",
       cimdSession: {
         phase: "connected",
         issuer: "https://127.0.0.1:9090/test-tenant/sis/v1/rg/cimd-demo",
@@ -2647,7 +2772,7 @@ describe("CloudTab", () => {
       }
       return jsonResponse({
         ...disconnectedStatus(),
-        cimdRegistrationEnabled: true,
+        registrationAndAuthProtocol: "CIMD",
       });
     }));
 
@@ -2669,7 +2794,7 @@ describe("CloudTab", () => {
       }
       return jsonResponse({
         ...disconnectedStatus(),
-        cimdRegistrationEnabled: true,
+        registrationAndAuthProtocol: "CIMD",
       });
     }));
 
@@ -2719,7 +2844,7 @@ describe("CloudTab", () => {
         const nextPhase = sessionPhases.length > 1 ? sessionPhases.shift() : sessionPhases[0];
         return jsonResponse(nextPhase);
       }
-      return jsonResponse({ ...disconnectedStatus(), cimdRegistrationEnabled: true });
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "CIMD" });
     }));
 
     render(<CloudTab />);
@@ -2773,7 +2898,7 @@ describe("CloudTab", () => {
           ? { phase: "connected", issuer: "https://127.0.0.1:9090/test-tenant/sis/v1/rg/cimd-demo" }
           : { phase: sessionPhase });
       }
-      return jsonResponse({ ...disconnectedStatus(), cimdRegistrationEnabled: true });
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "CIMD" });
     }));
 
     render(<CloudTab />);
@@ -2802,7 +2927,7 @@ describe("CloudTab", () => {
       if (url.includes("/api/splunk/cimd/login") && init?.method === "POST") {
         return jsonResponse({ error: "a SIS sign-in is already in progress" }, 409);
       }
-      return jsonResponse({ ...disconnectedStatus(), cimdRegistrationEnabled: true });
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "CIMD" });
     }));
 
     render(<CloudTab />);
@@ -2835,7 +2960,7 @@ describe("CloudTab", () => {
       if (url.includes("/api/splunk/cimd/session")) {
         return jsonResponse({ phase: "pending" });
       }
-      return jsonResponse({ ...disconnectedStatus(), cimdRegistrationEnabled: true });
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "CIMD" });
     }));
 
     vi.stubGlobal("open", vi.fn(() => null));
@@ -3012,11 +3137,13 @@ function installBridge(options: {
       return httpRequests;
     },
     respond(request: BridgeRequest, result: {
-      cimdRegistrationEnabled?: boolean;
+      registrationAndAuthProtocol?: RegistrationAndAuthProtocol;
       cimdRegistrationVerified?: boolean;
       cimdSession?: SISCIMDSessionStatus;
       freeAccount?: Record<string, unknown>;
       message?: string;
+      o11yOAuthClientCreated?: boolean;
+      o11yOAuthClientId?: string;
       realm?: string;
       region?: string;
       status?: SplunkExportStatus;
@@ -3060,7 +3187,7 @@ function disconnectedStatus(version = disconnectedVersion): SplunkExportStatus {
     connected: false,
     enabled: false,
     version,
-    cimdRegistrationEnabled: false,
+    registrationAndAuthProtocol: "NONE",
     metrics: signalStatus(false),
     traces: signalStatus(false),
   };
@@ -3068,7 +3195,7 @@ function disconnectedStatus(version = disconnectedVersion): SplunkExportStatus {
 
 function legacyDisconnectedStatus(): SplunkExportStatus {
   const status = disconnectedStatus();
-  delete status.cimdRegistrationEnabled;
+  delete status.registrationAndAuthProtocol;
   return status;
 }
 
@@ -3082,7 +3209,7 @@ function connectedStatus(
     enabled,
     realm,
     version,
-    cimdRegistrationEnabled: false,
+    registrationAndAuthProtocol: "NONE",
     metrics: {
       ...signalStatus(enabled, true),
       exportedBatches: 2,

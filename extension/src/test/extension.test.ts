@@ -1151,7 +1151,7 @@ test('a hot-installed CIMD manifest cannot make disabled Cloud initialization fa
 	);
 	assert.match(
 		initialize,
-		/return initializeCloudBridgeState\(\{[\s\S]*?cimdRegistrationEnabled: isSISCIMDRegistrationEnabled\(\),[\s\S]*?readCimdSession: \(\) => currentSISCIMDSessionStatus\(context\)/,
+		/return initializeCloudBridgeState\(\{[\s\S]*?readCimdSession: \(\) => currentSISCIMDSessionStatus\(context\)[\s\S]*?registrationAndAuthProtocol: getRegistrationAndAuthProtocol\(\),/,
 		'disabled optional CIMD state must not be read during core Cloud initialization',
 	);
 });
@@ -1160,7 +1160,7 @@ test('disabled CIMD initialization never reads optional session configuration', 
 	const calls: string[] = [];
 	const status = { connected: false };
 	const result = await initializeCloudBridgeState({
-		cimdRegistrationEnabled: false,
+		registrationAndAuthProtocol: 'NONE',
 		readCimdSession: async () => {
 			calls.push('cimd');
 			throw new Error('newly contributed setting is not registered yet');
@@ -1176,14 +1176,14 @@ test('disabled CIMD initialization never reads optional session configuration', 
 	});
 
 	assert.deepEqual(calls, ['refresh']);
-	assert.deepEqual(result, { cimdRegistrationEnabled: false, status });
+	assert.deepEqual(result, { registrationAndAuthProtocol: 'NONE', status });
 });
 
 test('disabled CIMD initialization falls back to stored status without reading a session', async () => {
 	const calls: string[] = [];
 	const status = { connected: false };
 	const result = await initializeCloudBridgeState({
-		cimdRegistrationEnabled: false,
+		registrationAndAuthProtocol: 'NONE',
 		readCimdSession: async () => {
 			calls.push('cimd');
 			throw new Error('must not be read');
@@ -1200,7 +1200,7 @@ test('disabled CIMD initialization falls back to stored status without reading a
 
 	assert.deepEqual(calls, ['refresh', 'read']);
 	assert.deepEqual(result, {
-		cimdRegistrationEnabled: false,
+		registrationAndAuthProtocol: 'NONE',
 		status,
 		warning: 'refresh failed',
 	});
@@ -1211,7 +1211,7 @@ test('disabled CIMD initialization propagates fallback status errors', async () 
 	let cimdReads = 0;
 	await assert.rejects(
 		initializeCloudBridgeState({
-			cimdRegistrationEnabled: false,
+			registrationAndAuthProtocol: 'NONE',
 			readCimdSession: async () => {
 				cimdReads += 1;
 				throw new Error('must not be read');
@@ -1231,7 +1231,7 @@ test('enabled CIMD initialization reads Cloud and session state concurrently', a
 	const refresh = new Promise<unknown>((resolve) => { resolveRefresh = resolve; });
 	const session = new Promise<{ subject: string }>((resolve) => { resolveSession = resolve; });
 	const initialization = initializeCloudBridgeState({
-		cimdRegistrationEnabled: true,
+		registrationAndAuthProtocol: 'CIMD',
 		readCimdSession: () => {
 			calls.push('cimd');
 			return session;
@@ -1250,7 +1250,7 @@ test('enabled CIMD initialization reads Cloud and session state concurrently', a
 	resolveSession({ subject: 'user-123' });
 	resolveRefresh({ connected: true });
 	assert.deepEqual(await initialization, {
-		cimdRegistrationEnabled: true,
+		registrationAndAuthProtocol: 'CIMD',
 		cimdSession: { subject: 'user-123' },
 		status: { connected: true },
 	});
@@ -1261,7 +1261,7 @@ test('enabled CIMD initialization retries only a failed session load', async () 
 	let fallbackReads = 0;
 	let sessionReads = 0;
 	const result = await initializeCloudBridgeState({
-		cimdRegistrationEnabled: true,
+		registrationAndAuthProtocol: 'CIMD',
 		readCimdSession: async () => {
 			sessionReads += 1;
 			if (sessionReads === 1) {
@@ -1279,7 +1279,7 @@ test('enabled CIMD initialization retries only a failed session load', async () 
 	assert.equal(fallbackReads, 0);
 	assert.equal(sessionReads, 2);
 	assert.deepEqual(result, {
-		cimdRegistrationEnabled: true,
+		registrationAndAuthProtocol: 'CIMD',
 		cimdSession: { subject: 'user-123' },
 		status,
 		warning: 'transient CIMD read failure',
@@ -1289,7 +1289,7 @@ test('enabled CIMD initialization retries only a failed session load', async () 
 test('enabled CIMD initialization preserves a session when Cloud refresh falls back', async () => {
 	let sessionReads = 0;
 	const result = await initializeCloudBridgeState({
-		cimdRegistrationEnabled: true,
+		registrationAndAuthProtocol: 'CIMD',
 		readCimdSession: async () => {
 			sessionReads += 1;
 			return { subject: 'user-123' };
@@ -1299,7 +1299,7 @@ test('enabled CIMD initialization preserves a session when Cloud refresh falls b
 	});
 
 	assert.deepEqual(result, {
-		cimdRegistrationEnabled: true,
+		registrationAndAuthProtocol: 'CIMD',
 		cimdSession: { subject: 'user-123' },
 		status: { connected: false },
 		warning: 'refresh failed',
@@ -1314,7 +1314,7 @@ test('enabled CIMD initialization waits for the original refresh before retrying
 	let sessionReads = 0;
 	let initializationSettled = false;
 	const initialization = initializeCloudBridgeState({
-		cimdRegistrationEnabled: true,
+		registrationAndAuthProtocol: 'CIMD',
 		readCimdSession: async () => {
 			sessionReads += 1;
 			if (sessionReads === 1) {
@@ -1339,7 +1339,7 @@ test('enabled CIMD initialization waits for the original refresh before retrying
 
 	resolveRefresh({ connected: true });
 	assert.deepEqual(await initialization, {
-		cimdRegistrationEnabled: true,
+		registrationAndAuthProtocol: 'CIMD',
 		cimdSession: { subject: 'user-123' },
 		status: { connected: true },
 		warning: 'transient CIMD read failure',
@@ -1352,7 +1352,7 @@ test('enabled CIMD initialization still rejects when fallback session loading fa
 	let sessionReads = 0;
 	await assert.rejects(
 		initializeCloudBridgeState({
-			cimdRegistrationEnabled: true,
+			registrationAndAuthProtocol: 'CIMD',
 			readCimdSession: async () => {
 				sessionReads += 1;
 				throw new Error('CIMD failed');
@@ -1369,7 +1369,7 @@ test('enabled CIMD initialization lets fallback status errors win over session w
 	const fallbackError = new Error('stored status failed');
 	await assert.rejects(
 		initializeCloudBridgeState({
-			cimdRegistrationEnabled: true,
+			registrationAndAuthProtocol: 'CIMD',
 			readCimdSession: async () => { throw new Error('CIMD failed'); },
 			readStatus: async () => { throw fallbackError; },
 			refreshStatus: async () => { throw new Error('refresh failed'); },

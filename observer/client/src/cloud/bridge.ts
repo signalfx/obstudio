@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import type { SplunkExportSignalStatus, SplunkExportStatus } from "../api/types";
+import type { RegistrationAndAuthProtocol, SplunkExportSignalStatus, SplunkExportStatus } from "../api/types";
 import {
   callObserverHostCloud,
   isObserverIDEHost,
@@ -60,8 +60,12 @@ export function isSplunkExportStatus(value: unknown): value is SplunkExportStatu
     && /^[A-Za-z0-9_-]{43}$/.test(status.version)
     && isSplunkExportSignalStatus(status.metrics)
     && isSplunkExportSignalStatus(status.traces)
-    && (status.cimdRegistrationEnabled === undefined
-      || typeof status.cimdRegistrationEnabled === "boolean");
+    && (status.registrationAndAuthProtocol === undefined
+      || isRegistrationAndAuthProtocol(status.registrationAndAuthProtocol));
+}
+
+function isRegistrationAndAuthProtocol(value: unknown): value is RegistrationAndAuthProtocol {
+  return value === "NONE" || value === "CIMD" || value === "O11Y_OAUTH";
 }
 
 function isSplunkExportSignalStatus(value: unknown): value is SplunkExportSignalStatus {

@@ -147,7 +147,7 @@ function stubCloudStatusFetch(status: SplunkExportStatus = {
   connected: false,
   enabled: false,
   version: "V".repeat(43),
-  cimdRegistrationEnabled: false,
+  registrationAndAuthProtocol: "NONE",
   metrics: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
   traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
 }): void {
@@ -470,7 +470,7 @@ describe("AppView cloud connection status chip", () => {
       connected: false,
       enabled: true,
       version: "V".repeat(43),
-      cimdRegistrationEnabled: false,
+      registrationAndAuthProtocol: "NONE",
       metrics: { configured: true, enabled: true, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
       traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
     });
@@ -487,7 +487,7 @@ describe("AppView cloud connection status chip", () => {
       connected: true,
       enabled: true,
       version: "V".repeat(43),
-      cimdRegistrationEnabled: false,
+      registrationAndAuthProtocol: "NONE",
       metrics: { configured: true, enabled: true, exportedBatches: 5, exportedItems: 100, failedBatches: 0 },
       traces: { configured: true, enabled: true, exportedBatches: 3, exportedItems: 50, failedBatches: 0 },
     });

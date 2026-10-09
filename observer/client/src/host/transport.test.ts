@@ -92,12 +92,12 @@ describe("Splunk Observability Studio host transport", () => {
     respond(posted.at(-1), true, { status: { connected: "yes" } });
     await expect(invalid).rejects.toThrow("invalid cloud response");
 
-    // A stringified boolean must not pass validation and end up truthy in the UI.
-    const invalidCIMDFlag = callObserverHostCloud("initialize");
+    // An unrecognized value must not pass validation and end up truthy in the UI.
+    const invalidProtocol = callObserverHostCloud("initialize");
     respond(posted.at(-1), true, {
-      status: { ...disconnectedStatus(), cimdRegistrationEnabled: "false" },
+      status: { ...disconnectedStatus(), registrationAndAuthProtocol: "cimd" },
     });
-    await expect(invalidCIMDFlag).rejects.toThrow("invalid cloud response");
+    await expect(invalidProtocol).rejects.toThrow("invalid cloud response");
   });
 
   it("preserves allowlisted cloud failure metadata for outcome handling", async () => {
@@ -217,7 +217,7 @@ function respond(request: PostedMessage | undefined, ok: boolean, result?: unkno
 
 function disconnectedStatus() {
   return {
-    cimdRegistrationEnabled: false,
+    registrationAndAuthProtocol: "NONE",
     connected: false,
     enabled: false,
     version: "V".repeat(43),
@@ -239,6 +239,6 @@ function disconnectedStatus() {
 }
 
 function legacyDisconnectedStatus() {
-  const { cimdRegistrationEnabled: _cimdRegistrationEnabled, ...status } = disconnectedStatus();
+  const { registrationAndAuthProtocol: _registrationAndAuthProtocol, ...status } = disconnectedStatus();
   return status;
 }

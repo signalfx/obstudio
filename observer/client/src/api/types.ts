@@ -303,6 +303,8 @@ export interface SplunkExportSignalStatus {
   lastExport?: SplunkExportAttempt;
 }
 
+export type RegistrationAndAuthProtocol = "NONE" | "CIMD" | "O11Y_OAUTH";
+
 export interface SplunkExportStatus {
   connected: boolean;
   enabled: boolean;
@@ -310,13 +312,19 @@ export interface SplunkExportStatus {
   version: string;
   metrics: SplunkExportSignalStatus;
   traces: SplunkExportSignalStatus;
-  cimdRegistrationEnabled?: boolean;
+  registrationAndAuthProtocol?: RegistrationAndAuthProtocol;
 }
 
 export interface SISCIMDRegistrationResult {
   authorizationUrl: string;
   location: string;
   cookieMaxAgeSeconds: number;
+}
+
+export interface O11yOAuthRegistrationResult {
+  clientId: string;
+  clientSecret?: string;
+  created: boolean;
 }
 
 export interface SISCIMDLoginStartResult {
