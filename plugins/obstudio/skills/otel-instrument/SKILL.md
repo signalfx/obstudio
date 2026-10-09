@@ -453,10 +453,15 @@ report background:
   Preserve project/stream headers on each export, never a global Studio route
   registration. Keep unselected AO findings untouched.
 - For selected Agent Observability export, persist the required exporter
-  packages in both the dependency manifest and the project lockfile. If the
-  project's configured runner is `uv sync`, create or update `uv.lock`, run
-  `uv sync --locked`, and import or exercise the configured exporter without
-  live credentials. Treat missing credentials for remote project, Agent Stream,
+  packages in both the dependency manifest and the project lockfile, in the
+  dependency set installed by the application's actual launch. An optional
+  extra that the normal launch never selects is not an installed AO route.
+  If the project's configured runner is `uv sync`, create or update `uv.lock`,
+  run `uv sync --locked` for the default launch (or the same locked extra/group
+  profile used by the actual launch), then import and
+  exercise the installed SDK exporter without live credentials. A preflight
+  environment containing the SDK does not prove that a later normal sync kept
+  it installed. Treat missing credentials for remote project, Agent Stream,
   or delivery proof separately from dependency resolution: credentials do not
   block local lockfile, import, or configuration checks. If package resolution
   itself is unavailable, record that exact blocker and keep export
@@ -991,8 +996,11 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     streams, use separate supported SDK exporters/processors keyed by the
     resolved IDs and dispatch each completed span to exactly one destination
     selected at span start; registering both processors unfiltered on one
-    provider broadcasts every span to both streams. Keep AO export disabled
-    for an unresolved route while ordinary OTel still works. Prove the two
+    provider broadcasts every span to both streams. An absent request selector
+    may use a configured default route, but an explicit unknown route key or a
+    project/stream lookup failure must fail closed for AO; never normalize it
+    to the default or reuse another stream. Keep AO export disabled for an
+    unresolved route while ordinary OTel still works. Prove the two
     effective SDK export destinations and their project/stream IDs from
     completed batches or captured requests; two mocked lookups or span-name
     attributes alone are insufficient. Keep the discovered Studio API origin
@@ -1002,22 +1010,40 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     its network exporter with a capture sink, exercise two request-selected
     operations and a third request-selected route whose project or Agent
     Stream lookup fails, then assert one export with the matching
-    project/stream headers for each resolved route. Explicitly assert that
+    project/stream headers for each resolved route. In `splunk-ao` 0.4.0, the
+    test-only `_exporter_factory` argument of `SplunkAOOTLPExporter` can capture
+    its effective endpoint and `projectid`/`logstreamid` headers; construct
+    the real SDK exporter for each route and replace only its network delegate.
+    Replacing `SplunkAOOTLPExporter` itself with a fake proves only app
+    dispatch, not the installed SDK contract. Explicitly assert that
     the unresolved third route creates no AO exporter and produces zero AO
-    exports; merely leaving an operation unrouted does not prove failure
+    exports; test an explicit unknown key as well as a configured key whose
+    lookup fails. Merely leaving an operation unrouted does not prove failure
     isolation. An in-memory ordinary OTel exporter should still receive all
-    three operations. Do not call selected AO routing working when this test
-    is absent or blocked.
+    operations. Do not call selected AO routing working when this test is
+    absent or blocked.
   - Ship a dedicated Studio-only profile, such as `.env.studio.example`, and
     document how the repository's actual local launch selects it. A general
     `.env.example` that mixes ordinary OTLP and AO placeholders is not that
     profile. When a reachable Studio gateway was discovered, write its real
     API and console origins with their actual port into the dedicated profile
     and run an installed-SDK configuration/import check using that profile.
-    Blank URL values and an unselected example do not constitute a working
-    AO route. If discovery is unavailable, leave the route blocked; a
-    credential-free SDK configuration check may instead use a temporary
-    loopback test origin, but must not be reported as live Studio delivery.
+    Blank URL values, angle-bracket port placeholders, and an unselected
+    example do not constitute a working AO route. If discovery is unavailable,
+    do not put active fabricated endpoint values in the Studio profile or
+    launch configuration: leave the route blocked with the exact discovery
+    failure. A credential-free installed-SDK configuration check may instead
+    use a temporary loopback test origin and captured transport, but must not
+    be reported as live Studio delivery. For that isolated Studio-mode check,
+    clear inherited `SPLUNK_AO_REALM` and O11y token variables; set the
+    temporary origin as both `SPLUNK_AO_API_URL` and
+    `SPLUNK_AO_CONSOLE_URL` with `SPLUNK_AO_API_KEY=local-gateway`.
+    Intercept only the SDK's health, login, and current-user network calls,
+    then construct the real `SplunkAOOTLPExporter` with its test-only captured
+    network delegate. Assert the effective `/otel/v1/traces` endpoint and
+    `Splunk-AO-API-Key`, `projectid`, and `logstreamid` headers. A test using
+    `SPLUNK_AO_REALM` plus an O11y token proves direct mode, not the Studio
+    profile, even if both tests produce project/stream headers.
   - Keep the AO setup failure boundary around SDK import, client construction,
     project/stream API calls, and exporter/processor construction. A missing,
     disconnected, incompatible, or unauthorized Studio gateway disables only
