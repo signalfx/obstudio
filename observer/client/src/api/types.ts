@@ -341,3 +341,25 @@ export interface SISCIMDSessionStatus {
   connectedAt?: string;
   expiresAt?: string;
 }
+
+export interface O11yOAuthLoginStartResult {
+  authorizationUrl: string;
+}
+
+export type O11yOAuthSessionPhase = "disconnected" | "pending" | "connected" | "error";
+
+export interface O11yOAuthSessionStatus {
+  phase: O11yOAuthSessionPhase;
+  error?: string;
+  issuer?: string;
+  realm?: string;
+  orgId?: string;
+  connectedAt?: string;
+  expiresAt?: string;
+  /**
+   * TEMPORARY, TEST-ONLY: the raw O11y access token, exposed to the browser so Step 2
+   * can be verified end-to-end during development. Remove before this flow ships to
+   * customers -- see the matching comment on the Go side (o11y_oauth_login.go).
+   */
+  accessToken?: string;
+}

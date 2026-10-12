@@ -1,7 +1,9 @@
 import type {
   LogRecord,
   MetricGroup,
+  O11yOAuthLoginStartResult,
   O11yOAuthRegistrationResult,
+  O11yOAuthSessionStatus,
   SISCIMDLoginStartResult,
   SISCIMDRegistrationResult,
   SISCIMDSessionStatus,
@@ -372,6 +374,38 @@ export async function registerO11yOAuthClient(
     method: "POST",
     signal,
   });
+}
+
+/**
+ * Start O11y OAuth user sign-in (Step 2) directly through Splunk Observability Studio's
+ * own backend, for use when there is no IDE bridge. Returns the authorization URL for the
+ * caller to open (e.g. window.open from the click handler, to avoid popup blockers) --
+ * the actual code exchange, and the second O11y-access-token exchange hop, happen in the
+ * background on Splunk Observability Studio; poll fetchO11yOAuthSession for the result.
+ */
+export async function loginO11yOAuth(
+  realm: string,
+  orgId: string,
+  clientId: string,
+  clientSecret: string,
+  signal?: AbortSignal,
+): Promise<O11yOAuthLoginStartResult> {
+  return fetchSISCIMDLocal<O11yOAuthLoginStartResult>("/api/splunk/o11y-oauth/login", {
+    body: JSON.stringify({ clientId, clientSecret, orgId, realm }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    signal,
+  });
+}
+
+/** Poll the redacted O11y OAuth session status. Never returns a raw access token. */
+export async function fetchO11yOAuthSession(signal?: AbortSignal): Promise<O11yOAuthSessionStatus> {
+  return fetchSISCIMDLocal<O11yOAuthSessionStatus>("/api/splunk/o11y-oauth/session", { signal });
+}
+
+/** Clear the in-memory O11y OAuth session held by Splunk Observability Studio's own backend. */
+export async function disconnectO11yOAuthSession(): Promise<O11yOAuthSessionStatus> {
+  return fetchSISCIMDLocal<O11yOAuthSessionStatus>("/api/splunk/o11y-oauth/session/disconnect", { method: "POST" });
 }
 
 /** Fetch per-service aggregates computed from the full span store. */
