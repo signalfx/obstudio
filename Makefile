@@ -155,6 +155,7 @@ release: release-prep ## Build and publish a release via GoReleaser (requires GI
 eval-codex-home eval-codex-login eval-codex-auth:
 	$(MAKE) -C $(EVALS_DIR) $@
 
+# `make eval-validation SKILL=skills/otel-instrument` for re-running a particular skill that might have failed.
 eval-validation: ## Validate eval JSONs, eval directories, and skill sources
 	$(MAKE) -C $(EVALS_DIR) $@
 
