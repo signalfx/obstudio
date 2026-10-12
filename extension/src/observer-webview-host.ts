@@ -16,12 +16,15 @@ import { isLoopbackObserverHost } from './backend';
 export type ObserverHostCloudPayload = {
 	accessToken?: string;
 	adminToken?: string;
+	clientId?: string;
+	clientSecret?: string;
 	destination?: string;
 	email?: string;
 	enabled?: boolean;
 	expectedVersion?: string;
 	firstName?: string;
 	lastName?: string;
+	orgId?: string;
 	realm?: string;
 	region?: string;
 	skill?: SkillDocsId;
@@ -263,6 +266,24 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 				&& value.adminToken.trim().length > 0
 				&& typeof value.realm === 'string'
 				&& value.realm.trim().length > 0;
+		case 'login-o11y-oauth':
+			// expectedVersion is carried opportunistically, same rationale as
+			// register-o11y-oauth above.
+			return isObserverHostCloudPayload(value)
+				&& hasOnlyCloudPayloadKeys(value, ['clientId', 'clientSecret', 'expectedVersion', 'orgId', 'realm'])
+				&& typeof value.clientId === 'string'
+				&& value.clientId.trim().length > 0
+				&& typeof value.clientSecret === 'string'
+				&& value.clientSecret.trim().length > 0
+				&& typeof value.orgId === 'string'
+				&& value.orgId.trim().length > 0
+				&& typeof value.realm === 'string'
+				&& value.realm.trim().length > 0;
+		case 'disconnect-o11y-oauth':
+			// Carries no payload, same as disconnect-cimd below.
+			return value === undefined
+				|| (isObserverHostCloudPayload(value)
+					&& hasOnlyCloudPayloadKeys(value, ['expectedVersion']));
 		case 'create-free-account':
 			return isObserverHostCloudPayload(value)
 				&& hasOnlyCloudPayloadKeys(value, [
@@ -327,12 +348,15 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 	return Object.keys(payload).every((key) => [
 		'accessToken',
 		'adminToken',
+		'clientId',
+		'clientSecret',
 		'destination',
 		'email',
 		'enabled',
 		'expectedVersion',
 		'firstName',
 		'lastName',
+		'orgId',
 		'realm',
 		'region',
 		'skill',
@@ -344,6 +368,14 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 		&& (payload.adminToken === undefined
 			|| (typeof payload.adminToken === 'string'
 				&& Buffer.byteLength(payload.adminToken, 'utf8') <= maxCloudAccessTokenBytes))
+		&& (payload.clientId === undefined
+			|| (typeof payload.clientId === 'string'
+				&& Buffer.byteLength(payload.clientId, 'utf8') <= maxCloudAccessTokenBytes))
+		&& (payload.clientSecret === undefined
+			|| (typeof payload.clientSecret === 'string'
+				&& Buffer.byteLength(payload.clientSecret, 'utf8') <= maxCloudAccessTokenBytes))
+		&& (payload.orgId === undefined
+			|| (typeof payload.orgId === 'string' && payload.orgId.length <= 64))
 		&& (payload.destination === undefined
 			|| (typeof payload.destination === 'string'
 				&& Buffer.byteLength(payload.destination, 'utf8') <= maxCloudDestinationBytes))

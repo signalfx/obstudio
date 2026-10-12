@@ -22,9 +22,11 @@ export const cloudBridgeActions = [
 	'create-free-account',
 	'detect-free-account-region',
 	'disconnect-cimd',
+	'disconnect-o11y-oauth',
 	'forget',
 	'initialize',
 	'login-cimd',
+	'login-o11y-oauth',
 	'open-audit-report',
 	'open-free-edition',
 	'open-free-edition-terms',
@@ -624,76 +626,150 @@ export function initializeSplunkCloudStatus(options: {
 
 export type RegistrationAndAuthProtocol = 'NONE' | 'CIMD' | 'O11Y_OAUTH';
 
-export type CloudBridgeInitializationResult<TSession> = {
+export type CloudBridgeInitializationResult<TSession, TOAuthSession = TSession> = {
 	cimdSession?: TSession;
+	o11yOAuthSession?: TOAuthSession;
 	registrationAndAuthProtocol: RegistrationAndAuthProtocol;
 	status: unknown;
 	warning?: string;
 };
 
-export async function initializeCloudBridgeState<TSession>(options: {
+export async function initializeCloudBridgeState<TSession, TOAuthSession = TSession>(options: {
 	readCimdSession: () => Promise<TSession>;
+	readO11yOAuthSession: () => Promise<TOAuthSession>;
 	readStatus: () => Promise<unknown>;
 	refreshStatus: () => Promise<unknown>;
 	registrationAndAuthProtocol: RegistrationAndAuthProtocol;
-}): Promise<CloudBridgeInitializationResult<TSession>> {
-	// Only CIMD has a session to restore on init; O11Y_OAUTH's Step 1 (registration)
-	// is a stateless probe like CIMD's own registerClientWithSIS, and NONE shows no
-	// control at all, so both skip the readCimdSession() round trip entirely.
-	if (options.registrationAndAuthProtocol !== 'CIMD') {
-		try {
+}): Promise<CloudBridgeInitializationResult<TSession, TOAuthSession>> {
+	if (options.registrationAndAuthProtocol === 'CIMD') {
+		const [refreshedStatus, initialCimdSession] = await Promise.allSettled([
+			options.refreshStatus(),
+			options.readCimdSession(),
+		]);
+		if (refreshedStatus.status === 'fulfilled' && initialCimdSession.status === 'fulfilled') {
 			return {
-				registrationAndAuthProtocol: options.registrationAndAuthProtocol,
-				status: await options.refreshStatus(),
-			};
-		} catch (error) {
-			return {
-				registrationAndAuthProtocol: options.registrationAndAuthProtocol,
-				warning: cloudErrorMessage(error),
-				status: await options.readStatus(),
+				cimdSession: initialCimdSession.value,
+				registrationAndAuthProtocol: 'CIMD',
+				status: refreshedStatus.value,
 			};
 		}
-	}
 
-	const [refreshedStatus, initialCimdSession] = await Promise.allSettled([
-		options.refreshStatus(),
-		options.readCimdSession(),
-	]);
-	if (refreshedStatus.status === 'fulfilled' && initialCimdSession.status === 'fulfilled') {
+		const warning = cloudErrorMessage(
+			refreshedStatus.status === 'rejected'
+				? refreshedStatus.reason
+				: initialCimdSession.status === 'rejected'
+					? initialCimdSession.reason
+					: new Error('Cloud initialization failed'),
+		);
+		const [fallbackStatus, fallbackCimdSession] = await Promise.allSettled([
+			refreshedStatus.status === 'fulfilled'
+				? Promise.resolve(refreshedStatus.value)
+				: options.readStatus(),
+			initialCimdSession.status === 'fulfilled'
+				? Promise.resolve(initialCimdSession.value)
+				: options.readCimdSession(),
+		]);
+		if (fallbackStatus.status === 'rejected') {
+			throw fallbackStatus.reason;
+		}
+		if (fallbackCimdSession.status === 'rejected') {
+			throw fallbackCimdSession.reason;
+		}
 		return {
-			cimdSession: initialCimdSession.value,
+			cimdSession: fallbackCimdSession.value,
 			registrationAndAuthProtocol: 'CIMD',
-			status: refreshedStatus.value,
+			status: fallbackStatus.value,
+			warning,
 		};
 	}
 
-	const warning = cloudErrorMessage(
-		refreshedStatus.status === 'rejected'
-			? refreshedStatus.reason
-			: initialCimdSession.status === 'rejected'
-				? initialCimdSession.reason
-				: new Error('Cloud initialization failed'),
-	);
-	const [fallbackStatus, fallbackCimdSession] = await Promise.allSettled([
-		refreshedStatus.status === 'fulfilled'
-			? Promise.resolve(refreshedStatus.value)
-			: options.readStatus(),
-		initialCimdSession.status === 'fulfilled'
-			? Promise.resolve(initialCimdSession.value)
-			: options.readCimdSession(),
-	]);
-	if (fallbackStatus.status === 'rejected') {
-		throw fallbackStatus.reason;
+	if (options.registrationAndAuthProtocol === 'O11Y_OAUTH') {
+		// Unlike CIMD's session (held in context.secrets, read natively by the extension),
+		// O11Y_OAUTH's session lives in the Go backend's own in-memory, process-wide state
+		// (see o11y_oauth_login.go) -- readO11yOAuthSession just proxies a GET to it, so this
+		// restores "connected" across a webview reload within the same running backend
+		// process, matching CIMD's restore semantics without needing extension-side storage.
+		const [refreshedStatus, initialO11yOAuthSession] = await Promise.allSettled([
+			options.refreshStatus(),
+			options.readO11yOAuthSession(),
+		]);
+		if (refreshedStatus.status === 'fulfilled' && initialO11yOAuthSession.status === 'fulfilled') {
+			return {
+				o11yOAuthSession: initialO11yOAuthSession.value,
+				registrationAndAuthProtocol: 'O11Y_OAUTH',
+				status: refreshedStatus.value,
+			};
+		}
+
+		const warning = cloudErrorMessage(
+			refreshedStatus.status === 'rejected'
+				? refreshedStatus.reason
+				: initialO11yOAuthSession.status === 'rejected'
+					? initialO11yOAuthSession.reason
+					: new Error('Cloud initialization failed'),
+		);
+		const [fallbackStatus, fallbackO11yOAuthSession] = await Promise.allSettled([
+			refreshedStatus.status === 'fulfilled'
+				? Promise.resolve(refreshedStatus.value)
+				: options.readStatus(),
+			initialO11yOAuthSession.status === 'fulfilled'
+				? Promise.resolve(initialO11yOAuthSession.value)
+				: options.readO11yOAuthSession(),
+		]);
+		if (fallbackStatus.status === 'rejected') {
+			throw fallbackStatus.reason;
+		}
+		if (fallbackO11yOAuthSession.status === 'rejected') {
+			throw fallbackO11yOAuthSession.reason;
+		}
+		return {
+			o11yOAuthSession: fallbackO11yOAuthSession.value,
+			registrationAndAuthProtocol: 'O11Y_OAUTH',
+			status: fallbackStatus.value,
+			warning,
+		};
 	}
-	if (fallbackCimdSession.status === 'rejected') {
-		throw fallbackCimdSession.reason;
+
+	// NONE shows no control at all, so it skips any session round trip.
+	try {
+		return {
+			registrationAndAuthProtocol: options.registrationAndAuthProtocol,
+			status: await options.refreshStatus(),
+		};
+	} catch (error) {
+		return {
+			registrationAndAuthProtocol: options.registrationAndAuthProtocol,
+			warning: cloudErrorMessage(error),
+			status: await options.readStatus(),
+		};
 	}
-	return {
-		cimdSession: fallbackCimdSession.value,
-		registrationAndAuthProtocol: 'CIMD',
-		status: fallbackStatus.value,
-		warning,
-	};
+}
+
+// Generic, injectable polling loop extracted so it can be unit tested without a real
+// VS Code host or network -- extension.ts's waitForO11yOAuthSessionOutcome is a thin
+// wrapper over this with the real session reader, real delay, and a real cancellation
+// flag. 'disconnected' is a terminal outcome alongside 'connected'/'error': cancelling a
+// sign-in posts a disconnect request that flips the backend to 'disconnected', and the
+// loop must notice that (not just the isCancelled() flag) so a disconnect that completes
+// before the extension's own cancellation bookkeeping still ends the wait promptly.
+export async function waitForO11yOAuthLoginOutcome<TSession extends { phase: string }>(options: {
+	delay: (ms: number) => Promise<void>;
+	intervalMs: number;
+	isCancelled: () => boolean;
+	readSession: () => Promise<TSession>;
+}): Promise<TSession> {
+	for (;;) {
+		const session = await options.readSession();
+		if (
+			options.isCancelled()
+			|| session.phase === 'connected'
+			|| session.phase === 'error'
+			|| session.phase === 'disconnected'
+		) {
+			return session;
+		}
+		await options.delay(options.intervalMs);
+	}
 }
 
 function isValidSplunkTokenSecret(value: string): boolean {

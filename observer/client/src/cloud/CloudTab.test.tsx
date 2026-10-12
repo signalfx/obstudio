@@ -6,7 +6,7 @@ import { resolve } from "path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
+import type { O11yOAuthSessionStatus, RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 import { CloudTab } from "./CloudTab";
 
 const disconnectedVersion = "D".repeat(43);
@@ -2634,6 +2634,172 @@ describe("CloudTab", () => {
     expect(screen.queryByLabelText("Client secret")).toBeNull();
   });
 
+  it("keeps the Authenticate button disabled until realm, org ID, client ID, and client secret are all filled", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { registrationAndAuthProtocol: "O11Y_OAUTH", status: disconnectedStatus() });
+
+    const authenticateButton = await screen.findByRole("button", { name: "Authenticate" }) as HTMLButtonElement;
+    expect(authenticateButton.disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Realm"), { target: { value: "us0" } });
+    expect(authenticateButton.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Org ID"), { target: { value: "org-123" } });
+    expect(authenticateButton.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Sign-in client ID"), { target: { value: "the-client-id" } });
+    expect(authenticateButton.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Sign-in client secret"), { target: { value: "the-client-secret" } });
+    expect(authenticateButton.disabled).toBe(false);
+  });
+
+  it("authenticates and disconnects O11y OAuth through the IDE bridge, without opening a browser tab itself", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { registrationAndAuthProtocol: "O11Y_OAUTH", status: disconnectedStatus() });
+
+    fireEvent.change(await screen.findByLabelText("Realm"), { target: { value: "us0" } });
+    fireEvent.change(screen.getByLabelText("Org ID"), { target: { value: "org-123" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client ID"), { target: { value: "the-client-id" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client secret"), { target: { value: "the-client-secret" } });
+
+    const openSpy = vi.spyOn(window, "open");
+    fireEvent.click(screen.getByRole("button", { name: "Authenticate" }));
+
+    const login = await bridge.next("login-o11y-oauth");
+    expect(login.payload).toMatchObject({
+      clientId: "the-client-id",
+      clientSecret: "the-client-secret",
+      orgId: "org-123",
+      realm: "us0",
+    });
+    bridge.respond(login, {
+      o11yOAuthSession: {
+        connectedAt: "2026-10-12T00:00:00Z",
+        expiresAt: "2026-10-12T01:00:00Z",
+        issuer: "https://api.us0.signalfx.com/us0/sis/v1/rg/org-123",
+        orgId: "org-123",
+        phase: "connected",
+        realm: "us0",
+      },
+    });
+
+    expect(await screen.findByText("Signed in with O11y OAuth. Cloud export is still disconnected.")).toBeTruthy();
+    expect(screen.getByText("User successfully logged in")).toBeTruthy();
+    expect(openSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
+    const disconnect = await bridge.next("disconnect-o11y-oauth");
+    bridge.respond(disconnect, { o11yOAuthSession: { phase: "disconnected" } });
+
+    expect(await screen.findByText("O11y OAuth sign-in disconnected.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Authenticate" })).toBeTruthy();
+  });
+
+  it("authenticates through Splunk Observability Studio's own backend and polls until connected, with no IDE bridge", async () => {
+    const sessionPhases: Array<{ issuer?: string; orgId?: string; phase: string; realm?: string }> = [
+      { phase: "pending" },
+      {
+        issuer: "https://api.us0.signalfx.com/us0/sis/v1/rg/org-123",
+        orgId: "org-123",
+        phase: "connected",
+        realm: "us0",
+      },
+    ];
+    const popup = fakePopup();
+    const openMock = vi.fn(() => popup);
+    vi.stubGlobal("open", openMock);
+    let loginBody: unknown;
+    // Mirrors the real backend: GET /session reports "disconnected" until /login has
+    // actually been called -- the pre-click automatic poll must see that, not "pending",
+    // or it would (correctly, per the fix for a reload mid-sign-in) start polling for a
+    // login that was never started.
+    let loginStarted = false;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/splunk/o11y-oauth/login") && init?.method === "POST") {
+        loginStarted = true;
+        loginBody = JSON.parse(String(init.body));
+        const headers = new Headers(init.headers);
+        expect(headers.get("X-Obstudio-Browser-Request")).toBe("1");
+        expect(headers.get("Authorization")).toBeNull();
+        return jsonResponse({
+          authorizationUrl: "https://api.us0.signalfx.com/us0/sis/v1/rg/org-123/oauth2/authorize?state=abc",
+        });
+      }
+      if (url.includes("/api/splunk/o11y-oauth/session")) {
+        if (!loginStarted) return jsonResponse({ phase: "disconnected" });
+        const nextPhase = sessionPhases.length > 1 ? sessionPhases.shift() : sessionPhases[0];
+        return jsonResponse(nextPhase);
+      }
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "O11Y_OAUTH" });
+    }));
+
+    render(<CloudTab />);
+    fireEvent.change(await screen.findByLabelText("Realm"), { target: { value: "us0" } });
+    fireEvent.change(screen.getByLabelText("Org ID"), { target: { value: "org-123" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client ID"), { target: { value: "the-client-id" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client secret"), { target: { value: "the-client-secret" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Authenticate" }));
+
+    expect(await screen.findByText("Complete sign-in in the new tab, then return here.")).toBeTruthy();
+    expect(openMock).toHaveBeenCalledWith("", "_blank");
+    expect(popup.location.href).toBe("https://api.us0.signalfx.com/us0/sis/v1/rg/org-123/oauth2/authorize?state=abc");
+
+    expect(await screen.findByText(
+      "Signed in with O11y OAuth. Cloud export is still disconnected.",
+      {},
+      { timeout: 5_000 },
+    )).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Authenticate" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+    expect(loginBody).toEqual({
+      clientId: "the-client-id",
+      clientSecret: "the-client-secret",
+      orgId: "org-123",
+      realm: "us0",
+    });
+  });
+
+  it("resumes polling after a reload finds an O11y OAuth sign-in already pending, with no IDE bridge", async () => {
+    // Simulates reloading the standalone page while a sign-in started in another tab is
+    // still in flight: the component mounts straight into "pending" with no Authenticate
+    // click of its own. The one-shot "not busy" poll must notice "pending" and start the
+    // recurring interval, or this would get stuck on "Waiting for sign-in" forever.
+    const sessionPhases: Array<{ issuer?: string; orgId?: string; phase: string; realm?: string }> = [
+      { phase: "pending" },
+      { phase: "pending" },
+      {
+        issuer: "https://api.us0.signalfx.com/us0/sis/v1/rg/org-123",
+        orgId: "org-123",
+        phase: "connected",
+        realm: "us0",
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/splunk/o11y-oauth/session")) {
+        const nextPhase = sessionPhases.length > 1 ? sessionPhases.shift() : sessionPhases[0];
+        return jsonResponse(nextPhase);
+      }
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "O11Y_OAUTH" });
+    }));
+
+    render(<CloudTab />);
+
+    expect(await screen.findByText("Waiting for sign-in to complete in the other tab...")).toBeTruthy();
+    expect(await screen.findByText(
+      "Signed in with O11y OAuth. Cloud export is still disconnected.",
+      {},
+      { timeout: 5_000 },
+    )).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+  });
+
   it("keeps cloud controls available on a fresh install with current Splunk Observability Studio status", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
@@ -2742,6 +2908,27 @@ describe("CloudTab", () => {
     expect(await screen.findByText("Signed in to SIS. Cloud export is still disconnected.")).toBeTruthy();
     expect(await screen.findByRole("button", { name: "Disconnect" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Register OAuth client with CIMD" })).toBeNull();
+  });
+
+  it("restores a connected O11y OAuth session from the IDE bridge on initialize", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, {
+      registrationAndAuthProtocol: "O11Y_OAUTH",
+      o11yOAuthSession: {
+        issuer: "https://api.us0.signalfx.com/us0/sis/v1/rg/org-123",
+        orgId: "org-123",
+        phase: "connected",
+        realm: "us0",
+      },
+      status: disconnectedStatus(),
+    });
+
+    expect(await screen.findByText("Signed in with O11y OAuth. Cloud export is still disconnected.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Disconnect" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Authenticate" })).toBeNull();
   });
 
   it("registers through Splunk Observability Studio's own backend when there is no IDE bridge", async () => {
@@ -3130,6 +3317,7 @@ function installBridge(options: {
       message?: string;
       o11yOAuthClientCreated?: boolean;
       o11yOAuthClientId?: string;
+      o11yOAuthSession?: O11yOAuthSessionStatus;
       realm?: string;
       region?: string;
       status?: SplunkExportStatus;
