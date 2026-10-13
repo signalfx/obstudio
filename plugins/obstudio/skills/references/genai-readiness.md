@@ -128,13 +128,27 @@ finding/acceptance fields; supplemental Markdown/JSON must agree with them.
 |---|---|---|---|---|---|
 
 Give each real agent, model, tool, applicable workflow/retrieval and auxiliary
-model call its own row. Join the named API to the boundary in that row. For a
-custom fresh Python agent, use the named-method table in
+model call its own row. Join the named API to the boundary in that row. Record
+the concrete official example filename/path as well as its revision/date and
+package version; a repository URL or revision alone is not example evidence.
+Distinguish an API inspected in SDK source from a method actually exercised by
+that example: the logger basic example illustrates trace/LLM/conclude, while
+`flush`, `terminate` and unexercised creators need their own signature/source
+receipt. For a custom fresh Python agent, use the named-method table and
+**Same SDK Span Content Enrichment** recipe in
 `splunk-agent-observability.md`: e.g. `add_agent_span` at the actual agent,
 `add_llm_span` at each model request and `add_tool_span` at each tool. Identify
 `SplunkAOLogger`, proposed or installed version, and exact example revision;
 a proposed version checked against latest examples is not proof of installed
 or emitted support.
+For a native field gap, name the safe SDK carrier and the exact same-span
+application hook, selected sink/exporter registration and version proof. A
+generic future hook promise is Partial. The checked Python exporter adapter
+uses `SpanExporter.export` and a `ReadableSpan` view with original context and
+parent; it does not create operation spans. Source-only plans may propose this
+concrete path while keeping registration, installed support and emissions
+unproven. Audit binds that path or the precise blocker in the owning finding;
+verification checks actual identity/value/safety evidence, not the API name.
 Record INTERNAL for an in-process agent/tool, CLIENT for a separate-process
 model, and their actual parents. A `start_trace`/`conclude` envelope is not an
 emitted workflow; `add_workflow_span` applies only to a real composed workflow.

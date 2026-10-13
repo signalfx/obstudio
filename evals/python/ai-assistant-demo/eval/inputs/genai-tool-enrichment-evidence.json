@@ -1,0 +1,396 @@
+{
+  "schema_version": 1,
+  "kind": "constructed-synthetic-safe-sdk-enrichment-contract",
+  "scope": "Public API and synthetic-safe record contract for a concrete same-SDK-span enrichment plan. Records below are constructed examples, not runtime captures, SDK execution, wire receipt or live cloud proof. Separate ignored app tests checked the0.4 compatibility illustration; consuming eval performs no SDK/app execution. No private app code or credentials are included.",
+  "source_provenance": {
+    "sdk_snapshot": {
+      "path": "eval/inputs/genai-sdk-source-snapshot.json",
+      "sha256": "9d4bb13d28c1892c96cf069f65fe129674e4dc5c86b21adb3823a82b2a378ef6",
+      "resolved_revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+      "captured_at_utc": "2026-10-13T06:51:01.162988+00:00",
+      "declared_main_version": "0.5.0",
+      "physical_example_path": "examples/logging-samples/splunk-ao-logger/basic-example.py",
+      "logger_signature_source_path": "src/splunk_ao/logger/logger.py",
+      "example_exercises": [
+        "SplunkAOLogger",
+        "start_session",
+        "start_trace",
+        "add_llm_span",
+        "conclude"
+      ],
+      "separate_signature_apis_not_exercised_by_basic_example": [
+        "add_tool_span",
+        "flush",
+        "terminate"
+      ]
+    },
+    "semconv_snapshot": {
+      "path": "eval/inputs/genai-semconv-source-snapshot.json",
+      "sha256": "37dcf51de2138b706b7272c32e4215d280a94790b3d4bb454000ef66ef24e3ae"
+    },
+    "public_otel_api_sources": [
+      "https://opentelemetry-python.readthedocs.io/en/latest/sdk/trace.export.html",
+      "https://opentelemetry-python.readthedocs.io/en/latest/sdk/trace.html"
+    ]
+  },
+  "checked_compatibility": {
+    "sdk_version": "splunk-ao==0.4.0",
+    "otel_version": "opentelemetry-sdk==1.38.0",
+    "basis": "Actual separately tested local SDK creator/native-converter/export pipeline; this fixture contains synthetic-safe contract examples only.0.5 snapshot/API signatures are source evidence and do not establish sink-registration compatibility or installed/emitted support.",
+    "installed_source_sha256": {
+      "splunk_ao/logger/logger.py": "11b01fd4945d51af2d4922a566a04a872ec2b764b580d5d6399397bcc3f888f7",
+      "splunk_ao/converter/attribute_mapping.py": "4af0bcba98480e45f9857d61fe1851c56c26c46b2c49835f01c64e6cc98c62f8",
+      "splunk_ao/exporter/sink.py": "d707064129491fce7596ee1a4b29fb6cb95e9e3a0e1d29d265a8cf8c21c46783"
+    },
+    "creator": "SplunkAOLogger.add_tool_span(input=...,output=...,metadata=...,tool_call_id=...)",
+    "metadata_keyword": "supported by supplied logger signature; pass sanitized values before SDK creation",
+    "verified_converter_mapping": "native user_metadata -> JSON splunk_ao.metadata; nested application.genai.required is an application-chosen JSON attribute-map carrier",
+    "sink_factory": "splunk_ao.exporter.sink.build_span_sink(exporter,batch_config=None)",
+    "logger_sink_parameter": "SplunkAOLogger(...,*,_sink=...) was inspected and used for local tests; _sink is underscored and absent from __init__ docstring. Not a universal documented production-registration API.",
+    "registration_rule": "For chosen runtime, inspect and name an actual supported application-owned SDK sink/exporter registration path. An unused adapter or global provider processor cannot intercept another SDK sink. If unavailable, state the exact version/API blocker and keep content coverage Partial; never assume0.5 supports _sink or returned-span setters."
+  },
+  "adapter_contract": {
+    "public_interface": "opentelemetry.sdk.trace.export.SpanExporter.export(spans)",
+    "view_constructor": "opentelemetry.sdk.trace.ReadableSpan(...)",
+    "carrier_path": [
+      "splunk_ao.metadata",
+      "application.genai.required"
+    ],
+    "source_hook": "bind actual arguments, observe produced result/error, track produced_result independently; sanitize/bound copies before native input/output and metadata=; never change business arguments/returns",
+    "merge": "The validation callback returns (validated_fields, explicit_owned_tool_content_removals). Remove only validated owned content fields on this canonical execute_tool record before merging replacement fields into a ReadableSpan view; keep every unrelated attribute and identity/lifecycle field. A merge-only adapter retains incompatible native defaults or fabricated output.",
+    "preserved_fields": [
+      "name",
+      "trace_id",
+      "span_id",
+      "parent_span_id",
+      "kind",
+      "scope",
+      "resource",
+      "status",
+      "start_time",
+      "end_time",
+      "events",
+      "links",
+      "dropped_attributes",
+      "dropped_events",
+      "dropped_links"
+    ],
+    "delivery": "delegate.export receives each SDK-created operation once; no new tracer/span IDs or wrapper; public force_flush/shutdown delegate while owned logger operations conclude first",
+    "error_rule": "No-produced-result error keeps actual error status/type and attempted arguments/input; no successful result/output mapping or invented model finish_reason",
+    "native_original_rule": "SDK native input/output and metadata must already be safe; redacted companions or export-only scrubbing cannot repair raw native records",
+    "removal_allowlist": [
+      "gen_ai.tool.call.arguments",
+      "gen_ai.tool.call.result",
+      "gen_ai.input.messages",
+      "gen_ai.output.messages",
+      "input.value",
+      "output.value"
+    ],
+    "removal_rule": "Removal is source/policy/schema-validated for the current canonical tool only. Never use carrier-provided arbitrary names to remove identity, status, parent, model/provider metadata or unrelated attributes. Unsupported repair stays Partial. Invalid native null result may be removed only with truthful supported same-span OpenInference replacement or exact gap; actual no-result error removes spurious successful output.",
+    "unrelated_span_rule": "Validation of an unrelated span returns ({},set()); delegate receives that identical original span, with no new view, metadata reinterpretation or field removal."
+  },
+  "content_policy": {
+    "max_messages": 16,
+    "max_parts_per_message": 64,
+    "max_utf8_bytes_per_attribute": 8192,
+    "synthetic_raw_sentinel": "SDK_CONTRACT_SYNTHETIC_TOKEN",
+    "redaction": "Credentials/tokens/email/identified sensitive fields and hidden reasoning excluded before SDK; retain useful safe JSON and explicit truncation/gap marker"
+  },
+  "synthetic_records": {
+    "success": {
+      "actual_safe_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-enrichment-call-1",
+        "arguments": {
+          "location": "Paris",
+          "api_key": "[REDACTED]"
+        },
+        "produced_result": true,
+        "result": {
+          "temperature_c": 18,
+          "debug_token": "[REDACTED]"
+        },
+        "outcome": "success"
+      },
+      "native_sdk_record": {
+        "input": "{\"location\":\"Paris\",\"api_key\":\"[REDACTED]\"}",
+        "output": "{\"temperature_c\":18,\"debug_token\":\"[REDACTED]\"}",
+        "user_metadata": {
+          "application.genai.required": "{\"gen_ai.tool.call.arguments\":\"{\\\"location\\\":\\\"Paris\\\",\\\"api_key\\\":\\\"[REDACTED]\\\"}\",\"gen_ai.input.messages\":\"[{\\\"role\\\":\\\"assistant\\\",\\\"parts\\\":[{\\\"type\\\":\\\"tool_call\\\",\\\"name\\\":\\\"lookup_weather\\\",\\\"id\\\":\\\"safe-enrichment-call-1\\\",\\\"arguments\\\":{\\\"location\\\":\\\"Paris\\\",\\\"api_key\\\":\\\"[REDACTED]\\\"}}]}]\",\"gen_ai.tool.call.result\":\"{\\\"temperature_c\\\":18,\\\"debug_token\\\":\\\"[REDACTED]\\\"}\",\"gen_ai.output.messages\":\"[{\\\"role\\\":\\\"tool\\\",\\\"parts\\\":[{\\\"type\\\":\\\"tool_call_response\\\",\\\"id\\\":\\\"safe-enrichment-call-1\\\",\\\"response\\\":{\\\"temperature_c\\\":18,\\\"debug_token\\\":\\\"[REDACTED]\\\"}}]}]\",\"app.tool.result_produced\":true}"
+        }
+      },
+      "sdk_span": {
+        "name": "execute_tool lookup_weather",
+        "trace_id": "00000000000000000000000000000021",
+        "span_id": "0000000000000023",
+        "parent_span_id": "0000000000000022",
+        "kind": "INTERNAL",
+        "scope": "splunk_ao",
+        "resource": {
+          "service.name": "synthetic-safe-tool-contract"
+        },
+        "status": "UNSET",
+        "start_time": 100,
+        "end_time": 200,
+        "events": [],
+        "links": [],
+        "ended": true,
+        "attributes": {
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "lookup_weather",
+          "gen_ai.tool.call.id": "safe-enrichment-call-1",
+          "gen_ai.tool.call.arguments": "{\"location\":\"Paris\",\"api_key\":\"[REDACTED]\"}",
+          "gen_ai.tool.call.result": "{\"temperature_c\":18,\"debug_token\":\"[REDACTED]\"}",
+          "splunk_ao.metadata": "{\"application.genai.required\":\"{\\\"gen_ai.tool.call.arguments\\\":\\\"{\\\\\\\"location\\\\\\\":\\\\\\\"Paris\\\\\\\",\\\\\\\"api_key\\\\\\\":\\\\\\\"[REDACTED]\\\\\\\"}\\\",\\\"gen_ai.input.messages\\\":\\\"[{\\\\\\\"role\\\\\\\":\\\\\\\"assistant\\\\\\\",\\\\\\\"parts\\\\\\\":[{\\\\\\\"type\\\\\\\":\\\\\\\"tool_call\\\\\\\",\\\\\\\"name\\\\\\\":\\\\\\\"lookup_weather\\\\\\\",\\\\\\\"id\\\\\\\":\\\\\\\"safe-enrichment-call-1\\\\\\\",\\\\\\\"arguments\\\\\\\":{\\\\\\\"location\\\\\\\":\\\\\\\"Paris\\\\\\\",\\\\\\\"api_key\\\\\\\":\\\\\\\"[REDACTED]\\\\\\\"}}]}]\\\",\\\"gen_ai.tool.call.result\\\":\\\"{\\\\\\\"temperature_c\\\\\\\":18,\\\\\\\"debug_token\\\\\\\":\\\\\\\"[REDACTED]\\\\\\\"}\\\",\\\"gen_ai.output.messages\\\":\\\"[{\\\\\\\"role\\\\\\\":\\\\\\\"tool\\\\\\\",\\\\\\\"parts\\\\\\\":[{\\\\\\\"type\\\\\\\":\\\\\\\"tool_call_response\\\\\\\",\\\\\\\"id\\\\\\\":\\\\\\\"safe-enrichment-call-1\\\\\\\",\\\\\\\"response\\\\\\\":{\\\\\\\"temperature_c\\\\\\\":18,\\\\\\\"debug_token\\\\\\\":\\\\\\\"[REDACTED]\\\\\\\"}}]}]\\\",\\\"app.tool.result_produced\\\":true}\"}"
+        },
+        "dropped_attributes": 1,
+        "dropped_events": 2,
+        "dropped_links": 3
+      }
+    },
+    "error_no_result": {
+      "actual_safe_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-enrichment-call-1",
+        "arguments": {
+          "location": "Paris",
+          "api_key": "[REDACTED]"
+        },
+        "produced_result": false,
+        "outcome": "error",
+        "error_type": "WeatherUnavailable"
+      },
+      "native_sdk_record": {
+        "input": "{\"location\":\"Paris\",\"api_key\":\"[REDACTED]\"}",
+        "output": null,
+        "user_metadata": {
+          "application.genai.required": "{\"gen_ai.tool.call.arguments\":\"{\\\"location\\\":\\\"Paris\\\",\\\"api_key\\\":\\\"[REDACTED]\\\"}\",\"gen_ai.input.messages\":\"[{\\\"role\\\":\\\"assistant\\\",\\\"parts\\\":[{\\\"type\\\":\\\"tool_call\\\",\\\"name\\\":\\\"lookup_weather\\\",\\\"id\\\":\\\"safe-enrichment-call-1\\\",\\\"arguments\\\":{\\\"location\\\":\\\"Paris\\\",\\\"api_key\\\":\\\"[REDACTED]\\\"}}]}]\",\"app.tool.result_produced\":false,\"error.type\":\"WeatherUnavailable\"}"
+        }
+      },
+      "sdk_span": {
+        "name": "execute_tool lookup_weather",
+        "trace_id": "00000000000000000000000000000021",
+        "span_id": "0000000000000023",
+        "parent_span_id": "0000000000000022",
+        "kind": "INTERNAL",
+        "scope": "splunk_ao",
+        "resource": {
+          "service.name": "synthetic-safe-tool-contract"
+        },
+        "status": "ERROR",
+        "start_time": 100,
+        "end_time": 200,
+        "events": [],
+        "links": [],
+        "ended": true,
+        "attributes": {
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "lookup_weather",
+          "gen_ai.tool.call.id": "safe-enrichment-call-1",
+          "gen_ai.tool.call.arguments": "{\"location\":\"Paris\",\"api_key\":\"[REDACTED]\"}",
+          "splunk_ao.metadata": "{\"application.genai.required\":\"{\\\"gen_ai.tool.call.arguments\\\":\\\"{\\\\\\\"location\\\\\\\":\\\\\\\"Paris\\\\\\\",\\\\\\\"api_key\\\\\\\":\\\\\\\"[REDACTED]\\\\\\\"}\\\",\\\"gen_ai.input.messages\\\":\\\"[{\\\\\\\"role\\\\\\\":\\\\\\\"assistant\\\\\\\",\\\\\\\"parts\\\\\\\":[{\\\\\\\"type\\\\\\\":\\\\\\\"tool_call\\\\\\\",\\\\\\\"name\\\\\\\":\\\\\\\"lookup_weather\\\\\\\",\\\\\\\"id\\\\\\\":\\\\\\\"safe-enrichment-call-1\\\\\\\",\\\\\\\"arguments\\\\\\\":{\\\\\\\"location\\\\\\\":\\\\\\\"Paris\\\\\\\",\\\\\\\"api_key\\\\\\\":\\\\\\\"[REDACTED]\\\\\\\"}}]}]\\\",\\\"app.tool.result_produced\\\":false,\\\"error.type\\\":\\\"WeatherUnavailable\\\"}\"}",
+          "error.type": "WeatherUnavailable"
+        },
+        "dropped_attributes": 1,
+        "dropped_events": 2,
+        "dropped_links": 3
+      }
+    },
+    "invalid_native_null_result": {
+      "actual_safe_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-enrichment-call-1",
+        "arguments": {
+          "location": "Paris",
+          "api_key": "[REDACTED]"
+        },
+        "produced_result": true,
+        "result": null,
+        "outcome": "success"
+      },
+      "native_sdk_record": {
+        "input": "{\"location\":\"Paris\",\"api_key\":\"[REDACTED]\"}",
+        "output": "null",
+        "user_metadata": {
+          "application.genai.required": "{\"gen_ai.tool.call.arguments\":\"{\\\"location\\\":\\\"Paris\\\",\\\"api_key\\\":\\\"[REDACTED]\\\"}\",\"gen_ai.input.messages\":\"[{\\\"role\\\":\\\"assistant\\\",\\\"parts\\\":[{\\\"type\\\":\\\"tool_call\\\",\\\"name\\\":\\\"lookup_weather\\\",\\\"id\\\":\\\"safe-enrichment-call-1\\\",\\\"arguments\\\":{\\\"location\\\":\\\"Paris\\\",\\\"api_key\\\":\\\"[REDACTED]\\\"}}]}]\",\"gen_ai.output.messages\":\"[{\\\"role\\\":\\\"tool\\\",\\\"parts\\\":[{\\\"type\\\":\\\"tool_call_response\\\",\\\"id\\\":\\\"safe-enrichment-call-1\\\",\\\"response\\\":null}]}]\",\"openinference.span.kind\":\"TOOL\",\"input.value\":\"{\\\"location\\\":\\\"Paris\\\",\\\"api_key\\\":\\\"[REDACTED]\\\"}\",\"input.mime_type\":\"application/json\",\"output.value\":\"null\",\"output.mime_type\":\"application/json\",\"app.tool.result_produced\":true}"
+        }
+      },
+      "sdk_span": {
+        "name": "execute_tool lookup_weather",
+        "trace_id": "00000000000000000000000000000021",
+        "span_id": "0000000000000023",
+        "parent_span_id": "0000000000000022",
+        "kind": "INTERNAL",
+        "scope": "splunk_ao",
+        "resource": {
+          "service.name": "synthetic-safe-tool-contract"
+        },
+        "status": "UNSET",
+        "start_time": 100,
+        "end_time": 200,
+        "events": [],
+        "links": [],
+        "ended": true,
+        "attributes": {
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "lookup_weather",
+          "gen_ai.tool.call.id": "safe-enrichment-call-1",
+          "gen_ai.tool.call.arguments": "{\"location\":\"Paris\",\"api_key\":\"[REDACTED]\"}",
+          "gen_ai.tool.call.result": "null",
+          "splunk_ao.metadata": "{\"application.genai.required\":\"{\\\"gen_ai.tool.call.arguments\\\":\\\"{\\\\\\\"location\\\\\\\":\\\\\\\"Paris\\\\\\\",\\\\\\\"api_key\\\\\\\":\\\\\\\"[REDACTED]\\\\\\\"}\\\",\\\"gen_ai.input.messages\\\":\\\"[{\\\\\\\"role\\\\\\\":\\\\\\\"assistant\\\\\\\",\\\\\\\"parts\\\\\\\":[{\\\\\\\"type\\\\\\\":\\\\\\\"tool_call\\\\\\\",\\\\\\\"name\\\\\\\":\\\\\\\"lookup_weather\\\\\\\",\\\\\\\"id\\\\\\\":\\\\\\\"safe-enrichment-call-1\\\\\\\",\\\\\\\"arguments\\\\\\\":{\\\\\\\"location\\\\\\\":\\\\\\\"Paris\\\\\\\",\\\\\\\"api_key\\\\\\\":\\\\\\\"[REDACTED]\\\\\\\"}}]}]\\\",\\\"gen_ai.output.messages\\\":\\\"[{\\\\\\\"role\\\\\\\":\\\\\\\"tool\\\\\\\",\\\\\\\"parts\\\\\\\":[{\\\\\\\"type\\\\\\\":\\\\\\\"tool_call_response\\\\\\\",\\\\\\\"id\\\\\\\":\\\\\\\"safe-enrichment-call-1\\\\\\\",\\\\\\\"response\\\\\\\":null}]}]\\\",\\\"openinference.span.kind\\\":\\\"TOOL\\\",\\\"input.value\\\":\\\"{\\\\\\\"location\\\\\\\":\\\\\\\"Paris\\\\\\\",\\\\\\\"api_key\\\\\\\":\\\\\\\"[REDACTED]\\\\\\\"}\\\",\\\"input.mime_type\\\":\\\"application/json\\\",\\\"output.value\\\":\\\"null\\\",\\\"output.mime_type\\\":\\\"application/json\\\",\\\"app.tool.result_produced\\\":true}\"}"
+        },
+        "dropped_attributes": 1,
+        "dropped_events": 2,
+        "dropped_links": 3
+      },
+      "validated_removals": [
+        "gen_ai.tool.call.result"
+      ],
+      "construction_note": "Adversarial synthetic native attribute defaults: not a claim that the checked baseline0.4 application emits this record. Null is produced; dedicated object schema fails unless invalid native result is removed and verified same-span OpenInference null replacement remains."
+    },
+    "spurious_native_output_on_error": {
+      "actual_safe_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-enrichment-call-1",
+        "arguments": {
+          "location": "Paris",
+          "api_key": "[REDACTED]"
+        },
+        "produced_result": false,
+        "outcome": "error",
+        "error_type": "WeatherUnavailable"
+      },
+      "native_sdk_record": {
+        "input": "{\"location\":\"Paris\",\"api_key\":\"[REDACTED]\"}",
+        "output": null,
+        "user_metadata": {
+          "application.genai.required": "{\"gen_ai.tool.call.arguments\":\"{\\\"location\\\":\\\"Paris\\\",\\\"api_key\\\":\\\"[REDACTED]\\\"}\",\"gen_ai.input.messages\":\"[{\\\"role\\\":\\\"assistant\\\",\\\"parts\\\":[{\\\"type\\\":\\\"tool_call\\\",\\\"name\\\":\\\"lookup_weather\\\",\\\"id\\\":\\\"safe-enrichment-call-1\\\",\\\"arguments\\\":{\\\"location\\\":\\\"Paris\\\",\\\"api_key\\\":\\\"[REDACTED]\\\"}}]}]\",\"app.tool.result_produced\":false,\"error.type\":\"WeatherUnavailable\"}"
+        }
+      },
+      "sdk_span": {
+        "name": "execute_tool lookup_weather",
+        "trace_id": "00000000000000000000000000000021",
+        "span_id": "0000000000000023",
+        "parent_span_id": "0000000000000022",
+        "kind": "INTERNAL",
+        "scope": "splunk_ao",
+        "resource": {
+          "service.name": "synthetic-safe-tool-contract"
+        },
+        "status": "ERROR",
+        "start_time": 100,
+        "end_time": 200,
+        "events": [],
+        "links": [],
+        "ended": true,
+        "attributes": {
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "lookup_weather",
+          "gen_ai.tool.call.id": "safe-enrichment-call-1",
+          "gen_ai.tool.call.arguments": "{\"location\":\"Paris\",\"api_key\":\"[REDACTED]\"}",
+          "splunk_ao.metadata": "{\"application.genai.required\":\"{\\\"gen_ai.tool.call.arguments\\\":\\\"{\\\\\\\"location\\\\\\\":\\\\\\\"Paris\\\\\\\",\\\\\\\"api_key\\\\\\\":\\\\\\\"[REDACTED]\\\\\\\"}\\\",\\\"gen_ai.input.messages\\\":\\\"[{\\\\\\\"role\\\\\\\":\\\\\\\"assistant\\\\\\\",\\\\\\\"parts\\\\\\\":[{\\\\\\\"type\\\\\\\":\\\\\\\"tool_call\\\\\\\",\\\\\\\"name\\\\\\\":\\\\\\\"lookup_weather\\\\\\\",\\\\\\\"id\\\\\\\":\\\\\\\"safe-enrichment-call-1\\\\\\\",\\\\\\\"arguments\\\\\\\":{\\\\\\\"location\\\\\\\":\\\\\\\"Paris\\\\\\\",\\\\\\\"api_key\\\\\\\":\\\\\\\"[REDACTED]\\\\\\\"}}]}]\\\",\\\"app.tool.result_produced\\\":false,\\\"error.type\\\":\\\"WeatherUnavailable\\\"}\"}",
+          "error.type": "WeatherUnavailable",
+          "gen_ai.tool.call.result": "{\"temperature_c\":99}",
+          "gen_ai.output.messages": "[{\"role\":\"tool\",\"parts\":[{\"type\":\"tool_call_response\",\"id\":\"safe-enrichment-call-1\",\"response\":{\"temperature_c\":99}}]}]"
+        },
+        "dropped_attributes": 1,
+        "dropped_events": 2,
+        "dropped_links": 3
+      },
+      "validated_removals": [
+        "gen_ai.tool.call.result",
+        "gen_ai.output.messages"
+      ],
+      "construction_note": "Adversarial synthetic native output fields disagree with actual produced_result=false and native output=None; not observed baseline SDK behavior. Merge-only retains fabricated successful output."
+    }
+  },
+  "route_cases": [
+    {
+      "case_id": "checked-local-sdk-chain",
+      "creator": "SplunkAOLogger.add_tool_span",
+      "metadata_path": [
+        "splunk_ao.metadata",
+        "application.genai.required"
+      ],
+      "adapter_api": "SpanExporter.export",
+      "view_api": "ReadableSpan",
+      "active_sink_routes_through_adapter": true,
+      "registration_scope": "inspected0.4 local test injection only; production compatibility not claimed"
+    },
+    {
+      "case_id": "concrete-route-unproven-production-registration",
+      "creator": "SplunkAOLogger.add_tool_span",
+      "metadata_path": [
+        "splunk_ao.metadata",
+        "application.genai.required"
+      ],
+      "adapter_api": "SpanExporter.export",
+      "view_api": "ReadableSpan",
+      "active_sink_routes_through_adapter": null,
+      "selected_version": "0.5.0 proposed",
+      "precise_blocker": "Supplied0.5 snapshot does not establish supported application-owned sink/exporter registration or converter key; inspect exact chosen API/serializer before activation; _sink local0.4 test injection is not portable production proof."
+    },
+    {
+      "case_id": "generic-supported-hook-someday",
+      "creator": "SplunkAOLogger.add_tool_span",
+      "metadata_path": null,
+      "adapter_api": "a supported hook later",
+      "view_api": null,
+      "active_sink_routes_through_adapter": null,
+      "claim": "actionable complete repair"
+    },
+    {
+      "case_id": "adapter-not-in-sdk-export-path",
+      "creator": "SplunkAOLogger.add_tool_span",
+      "metadata_path": [
+        "splunk_ao.metadata",
+        "application.genai.required"
+      ],
+      "adapter_api": "SpanExporter.export",
+      "view_api": "ReadableSpan",
+      "active_sink_routes_through_adapter": false,
+      "claim": "global provider adapter will cover separate SDK sink"
+    },
+    {
+      "case_id": "raw-native-original-with-safe-companion",
+      "sdk_native_input": "{\"location\":\"Paris\",\"api_key\":\"SDK_CONTRACT_SYNTHETIC_TOKEN\"}",
+      "redacted_companion": "{\"location\":\"Paris\",\"api_key\":\"[REDACTED]\"}",
+      "semantic_fields_are_safe": true
+    },
+    {
+      "case_id": "new-wrapper-identity",
+      "new_trace_id": "ffffffffffffffffffffffffffffffff",
+      "new_span_id": "ffffffffffffffff",
+      "same_actual_tool_call": true,
+      "claim": "new wrapper fills missing messages"
+    },
+    {
+      "case_id": "invalid-native-null-result-merge-only",
+      "record": "invalid_native_null_result",
+      "actual_result_produced": true,
+      "actual_result": null,
+      "native_dedicated_result": "null",
+      "removals": [
+        "gen_ai.tool.call.result"
+      ],
+      "replacement": "same-span typed response:null plus supported OpenInference output.value=null; scalar/null never fabricated as object"
+    },
+    {
+      "case_id": "spurious-native-error-output-merge-only",
+      "record": "spurious_native_output_on_error",
+      "actual_result_produced": false,
+      "native_error_type": "WeatherUnavailable",
+      "removals": [
+        "gen_ai.tool.call.result",
+        "gen_ai.output.messages"
+      ],
+      "replacement": "none; attempted safe args/input+actual ERROR/type retained"
+    }
+  ],
+  "proof_limits": [
+    "Constructed synthetic records; no imported/executed SDK/app/model/cloud in consuming eval.",
+    "Checked0.4 local test route does not establish documented production registration or0.5 compatibility.",
+    "Current actual runtime/source support remains unproven until the selected version is inspected/tested.",
+    "No generic returned ToolSpan attribute setter is established; no dependency edits allowed."
+  ]
+}

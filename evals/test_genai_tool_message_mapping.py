@@ -358,3 +358,165 @@ def test_focused_verifier_definition_and_safe_inputs_are_valid() -> None:
     fixture_root = INPUTS.parents[1]
     for relative in definition.prompts[0].eval_inputs:
         assert (fixture_root / relative).is_file()
+
+
+@pytest.fixture(scope="module")
+def enrichment_evidence() -> dict[str, Any]:
+    return json.loads((INPUTS / "genai-tool-enrichment-evidence.json").read_text(encoding="utf-8"))
+
+
+def _supplied_enriched_view(record: dict[str, Any]) -> dict[str, Any]:
+    """Project supplied safe records; this is not SDK/exporter execution."""
+    view = copy.deepcopy(record["sdk_span"])
+    metadata = json.loads(view["attributes"]["splunk_ao.metadata"])
+    view["attributes"].update(json.loads(metadata["application.genai.required"]))
+    return view
+
+
+def _observed_enrichment_case(record: dict[str, Any], span: dict[str, Any]) -> dict[str, Any]:
+    case = {
+        "tool_span_id": record["sdk_span"]["span_id"],
+        "actual_call": record["actual_safe_call"],
+        "spans": [span],
+    }
+    if not case["actual_call"]["produced_result"]:
+        case["output_applicability"] = {"reason": "Actual error occurred before a result was produced."}
+    return case
+
+
+@pytest.mark.parametrize("scenario", ["success", "error_no_result"])
+def test_supplied_sdk_carrier_preserves_own_identity_and_source_values(supplied, enrichment_evidence, scenario) -> None:
+    _, schemas = supplied
+    record = enrichment_evidence["synthetic_records"][scenario]
+    view = _supplied_enriched_view(record)
+    for field in enrichment_evidence["adapter_contract"]["preserved_fields"]:
+        assert view[field] == record["sdk_span"][field]
+    result = review_tool_case(_observed_enrichment_case(record, view), schemas, enrichment_evidence["content_policy"])
+    assert result["pass"], result
+    call = record["actual_safe_call"]
+    assert json.loads(record["native_sdk_record"]["input"]) == call["arguments"]
+    if call["produced_result"]:
+        assert json.loads(record["native_sdk_record"]["output"]) == call["result"]
+        assert all("finish_reason" not in message for message in json.loads(view["attributes"]["gen_ai.output.messages"]))
+    else:
+        assert record["native_sdk_record"]["output"] is None
+        assert "gen_ai.tool.call.result" not in view["attributes"]
+        assert "gen_ai.output.messages" not in view["attributes"]
+    sentinel = enrichment_evidence["content_policy"]["synthetic_raw_sentinel"]
+    assert sentinel not in json.dumps(record["native_sdk_record"])
+    maximum = enrichment_evidence["content_policy"]["max_utf8_bytes_per_attribute"]
+    assert len(json.dumps(record["native_sdk_record"]["user_metadata"]).encode("utf-8")) <= maximum
+
+
+def test_unused_adapter_leaves_native_message_gap(supplied, enrichment_evidence) -> None:
+    _, schemas = supplied
+    record = enrichment_evidence["synthetic_records"]["success"]
+    route = next(row for row in enrichment_evidence["route_cases"] if row["case_id"] == "adapter-not-in-sdk-export-path")
+    assert route["active_sink_routes_through_adapter"] is False
+    result = review_tool_case(_observed_enrichment_case(record, record["sdk_span"]), schemas, enrichment_evidence["content_policy"])
+    assert not result["pass"]
+    assert any("gen_ai.input.messages" in error for error in result["errors"])
+    assert any("gen_ai.output.messages" in error for error in result["errors"])
+
+
+def test_safe_semantic_companion_cannot_hide_raw_native_original(supplied, enrichment_evidence) -> None:
+    _, schemas = supplied
+    record = enrichment_evidence["synthetic_records"]["success"]
+    view = _supplied_enriched_view(record)
+    assert review_tool_case(_observed_enrichment_case(record, view), schemas, enrichment_evidence["content_policy"])["pass"]
+    unsafe = next(row for row in enrichment_evidence["route_cases"] if row["case_id"] == "raw-native-original-with-safe-companion")
+    sentinel = enrichment_evidence["content_policy"]["synthetic_raw_sentinel"]
+    assert sentinel in unsafe["sdk_native_input"]
+    assert sentinel not in unsafe["redacted_companion"]
+    assert unsafe["semantic_fields_are_safe"] is True
+    assert json.loads(unsafe["redacted_companion"]) == record["actual_safe_call"]["arguments"]
+    # Native-record safety must be checked separately from semantic-field acceptance.
+    assert sentinel not in json.dumps(view["attributes"])
+
+
+def test_new_wrapper_cannot_replace_original_sdk_identity(supplied, enrichment_evidence) -> None:
+    _, schemas = supplied
+    record = enrichment_evidence["synthetic_records"]["success"]
+    wrapper = _supplied_enriched_view(record)
+    route = next(row for row in enrichment_evidence["route_cases"] if row["case_id"] == "new-wrapper-identity")
+    wrapper.update(trace_id=route["new_trace_id"], span_id=route["new_span_id"])
+    assert not review_tool_case(_observed_enrichment_case(record, wrapper), schemas, enrichment_evidence["content_policy"])["pass"]
+    case = _observed_enrichment_case(record, record["sdk_span"])
+    case["spans"].append(wrapper)
+    result = review_tool_case(case, schemas, enrichment_evidence["content_policy"])
+    assert not result["pass"]
+    assert "duplicate producer for the same actual tool call" in result["errors"]
+
+
+def test_generic_hook_and_undocumented_sink_do_not_establish_production_route(enrichment_evidence) -> None:
+    routes = {row["case_id"]: row for row in enrichment_evidence["route_cases"]}
+    generic = routes["generic-supported-hook-someday"]
+    assert generic["metadata_path"] is None
+    assert generic["adapter_api"] != "SpanExporter.export"
+    assert generic["view_api"] is None
+    blocked = routes["concrete-route-unproven-production-registration"]
+    assert blocked["adapter_api"] == "SpanExporter.export"
+    assert blocked["view_api"] == "ReadableSpan"
+    assert blocked["active_sink_routes_through_adapter"] is None
+    assert "0.5" in blocked["precise_blocker"] and "registration" in blocked["precise_blocker"]
+    assert "Not a universal documented production" in enrichment_evidence["checked_compatibility"]["logger_sink_parameter"]
+
+
+def test_enrichment_source_receipt_separates_example_signatures_and_runtime(enrichment_evidence) -> None:
+    sdk = enrichment_evidence["source_provenance"]["sdk_snapshot"]
+    assert sdk["sha256"] == hashlib.sha256((INPUTS / "genai-sdk-source-snapshot.json").read_bytes()).hexdigest()
+    assert sdk["physical_example_path"] == "examples/logging-samples/splunk-ao-logger/basic-example.py"
+    assert "add_tool_span" not in sdk["example_exercises"]
+    assert "flush" not in sdk["example_exercises"]
+    assert "terminate" not in sdk["example_exercises"]
+    assert {"add_tool_span", "flush", "terminate"} <= set(sdk["separate_signature_apis_not_exercised_by_basic_example"])
+    assert sdk["declared_main_version"] == "0.5.0"
+    assert enrichment_evidence["checked_compatibility"]["sdk_version"] == "splunk-ao==0.4.0"
+    assert "not runtime captures" in enrichment_evidence["scope"]
+
+
+@pytest.mark.parametrize("scenario, error_fragment", [
+    ("invalid_native_null_result", "structured schema mismatch"),
+    ("spurious_native_output_on_error", "fabricated successful output"),
+])
+def test_merge_only_retains_invalid_native_fields_but_owned_removal_repairs(supplied, enrichment_evidence, scenario, error_fragment) -> None:
+    _, schemas = supplied
+    record = enrichment_evidence["synthetic_records"][scenario]
+    merged = _supplied_enriched_view(record)
+    failed = review_tool_case(_observed_enrichment_case(record, merged), schemas, enrichment_evidence["content_policy"])
+    assert not failed["pass"]
+    assert any(error_fragment in error for error in failed["errors"])
+    repaired = copy.deepcopy(record["sdk_span"])
+    fields = json.loads(json.loads(repaired["attributes"]["splunk_ao.metadata"])["application.genai.required"])
+    for field in record["validated_removals"]:
+        assert field in enrichment_evidence["adapter_contract"]["removal_allowlist"]
+        repaired["attributes"].pop(field, None)
+    repaired["attributes"].update(fields)
+    accepted = review_tool_case(_observed_enrichment_case(record, repaired), schemas, enrichment_evidence["content_policy"])
+    assert accepted["pass"], accepted
+    for field in enrichment_evidence["adapter_contract"]["preserved_fields"]:
+        assert repaired[field] == record["sdk_span"][field]
+    owned = set(record["validated_removals"]) | set(fields)
+    for field, value in record["sdk_span"]["attributes"].items():
+        if field not in owned:
+            assert repaired["attributes"][field] == value
+    assert "gen_ai.tool.call.result" not in repaired["attributes"]
+    if record["actual_safe_call"]["produced_result"]:
+        assert json.loads(repaired["attributes"]["output.value"]) is None
+        assert json.loads(repaired["attributes"]["gen_ai.output.messages"])[0]["parts"][0]["response"] is None
+    else:
+        assert "gen_ai.output.messages" not in repaired["attributes"]
+        assert repaired["status"] == "ERROR"
+        assert repaired["attributes"]["error.type"] == "WeatherUnavailable"
+
+
+def test_enrichment_removal_scope_and_drop_counts_are_explicit(enrichment_evidence) -> None:
+    contract = enrichment_evidence["adapter_contract"]
+    assert set(contract["removal_allowlist"]) == {
+        "gen_ai.tool.call.arguments", "gen_ai.tool.call.result",
+        "gen_ai.input.messages", "gen_ai.output.messages", "input.value", "output.value",
+    }
+    assert "gen_ai.provider.name" not in contract["removal_allowlist"]
+    assert "input.mime_type" not in contract["removal_allowlist"]
+    assert {"dropped_attributes", "dropped_events", "dropped_links"} <= set(contract["preserved_fields"])
+    assert "identical original span" in contract["unrelated_span_rule"]

@@ -444,6 +444,145 @@ values, exceptions and external call arguments/order exactly; keep telemetry
 carriers out of business outputs. `Projects`/`AgentStreams` APIs configure
 resources and do not create GenAI operation spans.
 
+### Same SDK Span Content Enrichment
+
+An actionable fresh-agent plan must name the SDK content carrier, the exact
+application enrichment API and the selected sink/exporter registration path.
+“Use a supported hook” is an unresolved prerequisite, not a complete repair.
+Prefer supported native fields or a yielded writable OTel span when the chosen
+integration provides them. For logger versions that expose only completed SDK
+records, use an application exporter adapter without creating another span.
+
+The following compatibility illustration was checked locally with
+`splunk-ao==0.4.0` and OTel Python `1.38.0`. The SDK/carrier test used the
+inspected version-specific `_sink` injection seam; that establishes local
+behavior, not documented production registration. Recheck the installed/chosen
+version and its supported application configuration boundary. This is not a
+claim that a newer SDK emits these fields or supports the same sink route:
+
+1. At the actual tool boundary, bind arguments and observe the return value or
+   exception. Redact and bound the values before any SDK call. Track
+   `produced_result` separately from the value, including successful null.
+   Build current typed tool input/output messages from those same safe values;
+   include only a real supplied call ID. Validate the dedicated arguments/result
+   schemas as well as the message and concrete-part schemas. If the actual
+   scalar/null cannot satisfy an object-only result schema, use a verified
+   supported OpenInference alternative or keep that field gap explicit.
+2. Use `SplunkAOLogger.add_tool_span(input=..., output=..., metadata=..., ...)`
+   once for that real operation. Pass JSON of the safe arguments/result to
+   native `input`/`output`, not raw originals with redacted companion fields.
+   The supported `metadata` argument carries a JSON string containing the
+   validated semantic attribute map, for example
+   `{"application.genai.required": json.dumps(safe_attributes)}`. Bound this
+   carrier too. In the checked version it reaches `splunk_ao.metadata` on the
+   SDK-created OTel record; inspect the chosen serializer rather than assuming
+   this key or adding a fictitious returned-span setter.
+3. Implement the public OTel `SpanExporter.export(spans)` interface around the
+   actual selected SDK sink's exporter. Parse only the verified safe carrier,
+   validate it, remove only explicitly identified invalid owned content fields,
+   and merge its attributes into a `ReadableSpan` view retaining
+   the original context, parent, timestamps, resource, scope, kind, status,
+   events, links and dropped counts. Forward each original operation once to the delegate;
+   create no tracer/span IDs or sibling wrapper. The adapter cannot recover
+   values that were never safely captured.
+4. Register that adapter through a version-checked, application-owned SDK
+   sink/exporter configuration boundary. Name the exact callable/signature in
+   the report. A processor on an unrelated global provider does not enrich
+   logger records exported by a separate sink. Do not patch SDK internals or
+   assume an uninspected sink injection parameter is supported. If the chosen
+   version offers no supported registration path, name that precise blocker
+   and keep fresh content coverage Partial.
+
+The public OTel interface is documented in
+[`SpanExporter`](https://opentelemetry-python.readthedocs.io/en/latest/sdk/trace.export.html)
+and
+[`ReadableSpan`](https://opentelemetry-python.readthedocs.io/en/latest/sdk/trace.html).
+This application adapter illustrates the identity-preserving copy; carrier
+validation, schema checks and sink registration still need the chosen-version
+proof above:
+
+```python
+from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.sdk.trace.export import SpanExporter
+
+TOOL_CONTENT_FIELDS = {
+    "gen_ai.tool.call.arguments", "gen_ai.tool.call.result",
+    "gen_ai.input.messages", "gen_ai.output.messages", "input.value", "output.value",
+}
+
+class ToolContentView(ReadableSpan):
+    def __init__(self, original, fields, removed):
+        self.original = original
+        super().__init__(
+            name=original.name, context=original.context, parent=original.parent,
+            resource=original.resource,
+            attributes={
+                **{key: value for key, value in (original.attributes or {}).items()
+                   if key not in removed},
+                **fields,
+            },
+            events=original.events, links=original.links, kind=original.kind,
+            instrumentation_scope=original.instrumentation_scope,
+            status=original.status, start_time=original.start_time,
+            end_time=original.end_time,
+        )
+
+    @property
+    def dropped_attributes(self):
+        return self.original.dropped_attributes
+
+    @property
+    def dropped_events(self):
+        return self.original.dropped_events
+
+    @property
+    def dropped_links(self):
+        return self.original.dropped_links
+
+class ToolContentExporter(SpanExporter):
+    def __init__(self, delegate, validated_attributes):
+        self.delegate = delegate
+        self.validated_attributes = validated_attributes
+
+    def export(self, spans):
+        views = []
+        for span in spans:
+            fields, removed = self.validated_attributes(span)
+            if not set(removed).issubset(TOOL_CONTENT_FIELDS):
+                raise ValueError("Removal must be limited to owned tool content")
+            views.append(ToolContentView(span, fields, removed)
+                         if fields or removed else span)
+        return self.delegate.export(views)
+
+    def force_flush(self, timeout_millis=30000):
+        return self.delegate.force_flush(timeout_millis)
+
+    def shutdown(self):
+        self.delegate.shutdown()
+```
+
+The validation callable returns `(validated_fields, removal_set)` and leaves
+unrelated spans unchanged with `({}, set())`. Require the same owning tool's
+safe values/identity and numeric limits; never reinterpret arbitrary metadata
+as trusted GenAI content. Selective removal must be justified by that tool's
+actual source outcome and current schema, not by deleting unrelated attributes.
+For example, when a verified OpenInference output represents a real null,
+remove a native schema-invalid `gen_ai.tool.call.result="null"`; simply adding
+`output.value` does not repair the invalid field. For a failed call with no
+produced result, remove any native fabricated successful result/output mapping
+while retaining attempted input and error evidence. Do not remove required
+safe output from a genuinely successful call to make a test pass. Retest the
+whole resulting owned content set, not only the added fields; unsupported
+representation or removal remains an explicit Partial gap. Error, timeout
+and cancellation with no produced result retain ended ERROR/error.type and
+no fabricated result/output mapping. Preserve native/input/output safety even
+when exporter normalization replaces older message shapes. Forward delegate
+export results and flush/shutdown behavior; do not hide rejected delivery.
+Test source values, SDK native records and exported attributes/events/wire,
+same trace/span/parent IDs, one node per actual call and unchanged business
+arguments/results/errors/order. Missing registration or emitted proof remains
+Not proven even when this concrete source recipe is available.
+
 Prefer the matching framework/provider integration before writing operation
 callbacks from scratch. Use decorators only on real logical boundaries and
 verify what arguments/results they capture. Conclude SDK-created operations
