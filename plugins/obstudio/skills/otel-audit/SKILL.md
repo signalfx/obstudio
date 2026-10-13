@@ -833,7 +833,11 @@ belong in their owning selectable OTel findings without an AO finding group.
 For a source-backed project/Agent Stream/routing gap that can be closed by
 application or deployment configuration, author selectable project configuration
 and selectable Agent Stream configuration findings with executable modes and
-their dependency edges. A target ID or credential may be supplied at the
+their dependency edges. Set `ao_target_scope: resource-routing` on these
+resource and runtime-routing configuration findings; do not mark AO callback
+content boundaries or unrelated configuration as resource-target eligible.
+Preserve the shared reference's unmarked legacy resource/routing findings.
+A target ID or credential may be supplied at the
 selected instrumentation/deployment step; missing audit-time credentials alone do not make an AO finding external.
 When all three gaps exist, create separate selectable AO findings for project, Agent Stream, and runtime routing
 rather than collapsing them into one card. The Agent Stream depends on project;

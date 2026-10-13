@@ -3,8 +3,8 @@
   "schema_version": 1,
   "producer": {
     "source": "skills/references/scripts/observe_report.py",
-    "source_sha256": "sha256:17a06cf7800ccb06c90546baa4a6450f222346f21a0a71d4764270a01c069b44",
-    "source_revision": "97b62df093153f8cfd47ccd0ab28f9ff94211063",
+    "source_sha256": "sha256:dc6d5048a117595bd658e7f4ff7f91e11cd512693ee0e37d09080578574e4325",
+    "source_revision": "cdde351b52d8fd040ae88fb7ef37de1ab0a67901",
     "functions_executed": [
       "normalize_audit_report",
       "audit_digest",
@@ -12,7 +12,9 @@
       "selection_digest",
       "normalize_instrumentation",
       "instrumentation_digest",
-      "normalize_verify"
+      "normalize_verify",
+      "ao_target_eligible_finding_ids",
+      "dependency_closure"
     ],
     "execution": "Local calls to the actual canonical Python normalizers; SDK, browser, Terraform, application runtime, model and cloud APIs were not executed.",
     "source_working_tree_changes": true
@@ -1045,6 +1047,1089 @@
       "case": "stale-verification-a-with-instrumentation-b",
       "outcome": "rejected",
       "error": "verify.instrumentation_sha256 does not match instrumentation"
+    }
+  ],
+  "ao_target_scope_cases": [
+    {
+      "case": "actual-callback-targetless",
+      "audit_fixture": "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json",
+      "variant": "unchanged fixture",
+      "audit_sha256": "sha256:84ea5f9f483d067c8479c2e7b57b8088e4216eb7cfaba7d2a7e0b7b5a508ec3a",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-splunk-ao-langchain-callback-privacy",
+        "audit_sha256": "sha256:84ea5f9f483d067c8479c2e7b57b8088e4216eb7cfaba7d2a7e0b7b5a508ec3a",
+        "requested_ids": [
+          "OTEL-001"
+        ]
+      },
+      "eligible_ids": [],
+      "dependency_closed_ids": [
+        "OTEL-001"
+      ],
+      "finding_classification": [
+        {
+          "id": "OTEL-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "splunk-ao.callback.content-boundary",
+              "attributes": [],
+              "product_view": "Safe callback-owned Agent Observability trace content"
+            }
+          ]
+        }
+      ],
+      "outcome": "accepted",
+      "normalized_selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-splunk-ao-langchain-callback-privacy",
+        "audit_sha256": "sha256:84ea5f9f483d067c8479c2e7b57b8088e4216eb7cfaba7d2a7e0b7b5a508ec3a",
+        "requested_ids": [
+          "OTEL-001"
+        ],
+        "approved_ids": [
+          "OTEL-001"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": []
+      },
+      "selection_sha256": "sha256:d4525237b791383f2b96c5cd8577bdbe191b191824309379f9f2fc4acde8e070"
+    },
+    {
+      "case": "actual-callback-target-pair-rejected",
+      "audit_fixture": "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json",
+      "variant": "unchanged fixture",
+      "audit_sha256": "sha256:84ea5f9f483d067c8479c2e7b57b8088e4216eb7cfaba7d2a7e0b7b5a508ec3a",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-splunk-ao-langchain-callback-privacy",
+        "audit_sha256": "sha256:84ea5f9f483d067c8479c2e7b57b8088e4216eb7cfaba7d2a7e0b7b5a508ec3a",
+        "requested_ids": [
+          "OTEL-001"
+        ],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream"
+        }
+      },
+      "eligible_ids": [],
+      "dependency_closed_ids": [
+        "OTEL-001"
+      ],
+      "finding_classification": [
+        {
+          "id": "OTEL-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "splunk-ao.callback.content-boundary",
+              "attributes": [],
+              "product_view": "Safe callback-owned Agent Observability trace content"
+            }
+          ]
+        }
+      ],
+      "outcome": "rejected",
+      "error": "selection.ao_target requires a selected Agent Observability resource or routing finding"
+    },
+    {
+      "case": "actual-callback-policy-only-rejected",
+      "audit_fixture": "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json",
+      "variant": "unchanged fixture",
+      "audit_sha256": "sha256:84ea5f9f483d067c8479c2e7b57b8088e4216eb7cfaba7d2a7e0b7b5a508ec3a",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-splunk-ao-langchain-callback-privacy",
+        "audit_sha256": "sha256:84ea5f9f483d067c8479c2e7b57b8088e4216eb7cfaba7d2a7e0b7b5a508ec3a",
+        "requested_ids": [
+          "OTEL-001"
+        ],
+        "ao_target": {
+          "create_if_missing": false
+        }
+      },
+      "eligible_ids": [],
+      "dependency_closed_ids": [
+        "OTEL-001"
+      ],
+      "finding_classification": [
+        {
+          "id": "OTEL-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "splunk-ao.callback.content-boundary",
+              "attributes": [],
+              "product_view": "Safe callback-owned Agent Observability trace content"
+            }
+          ]
+        }
+      ],
+      "outcome": "rejected",
+      "error": "selection.ao_target requires a selected Agent Observability resource or routing finding"
+    },
+    {
+      "case": "callback-ao-id-target-pair-rejected",
+      "audit_fixture": "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json",
+      "variant": "Only callback finding ID renamed OTEL-001 to AO-002",
+      "audit_sha256": "sha256:406984cbdd31c42fa07a5f2a049d500e33a7094b50409f4d09b9035e8ef1bf49",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-splunk-ao-langchain-callback-privacy",
+        "audit_sha256": "sha256:406984cbdd31c42fa07a5f2a049d500e33a7094b50409f4d09b9035e8ef1bf49",
+        "requested_ids": [
+          "AO-002"
+        ],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream"
+        }
+      },
+      "eligible_ids": [],
+      "dependency_closed_ids": [
+        "AO-002"
+      ],
+      "finding_classification": [
+        {
+          "id": "AO-002",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "splunk-ao.callback.content-boundary",
+              "attributes": [],
+              "product_view": "Safe callback-owned Agent Observability trace content"
+            }
+          ]
+        }
+      ],
+      "outcome": "rejected",
+      "error": "selection.ao_target requires a selected Agent Observability resource or routing finding"
+    },
+    {
+      "case": "resource-unselected-otel-target-rejected",
+      "audit_fixture": "evals/python/ai-assistant-demo/eval/inputs/ao-resource-audit.json",
+      "variant": "unchanged fixture",
+      "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+        "requested_ids": [
+          "OTEL-001"
+        ],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream"
+        }
+      },
+      "eligible_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "dependency_closed_ids": [
+        "OTEL-001"
+      ],
+      "finding_classification": [
+        {
+          "id": "AO-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.project-resource",
+              "attributes": [],
+              "product_view": "Agent Observability project resource"
+            }
+          ]
+        },
+        {
+          "id": "AO-002",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.agent-stream-resource",
+              "attributes": [],
+              "product_view": "Dedicated Agent Stream resource"
+            }
+          ]
+        },
+        {
+          "id": "OTEL-001",
+          "expected_telemetry": [
+            {
+              "type": "span",
+              "name": "evaluation_answer",
+              "attributes": [
+                "gen_ai.operation.name",
+                "gen_ai.provider.name",
+                "gen_ai.request.model",
+                "gen_ai.usage.input_tokens",
+                "gen_ai.usage.output_tokens",
+                "gen_ai.input.messages",
+                "gen_ai.output.messages"
+              ],
+              "product_view": "Verified offline model operation; workflow applicability assessed separately"
+            }
+          ]
+        }
+      ],
+      "outcome": "rejected",
+      "error": "selection.ao_target requires a selected Agent Observability resource or routing finding"
+    },
+    {
+      "case": "unmarked-unknown-route-rejected",
+      "audit_fixture": "evals/python/ai-assistant-demo/eval/inputs/ao-resource-audit.json",
+      "variant": "AO configuration telemetry names changed to custom.resource-routing; no marker",
+      "audit_sha256": "sha256:66d041428b369e68d315c5ddae7225954c9c6737d127eff08002f5a8b7b80f5f",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:66d041428b369e68d315c5ddae7225954c9c6737d127eff08002f5a8b7b80f5f",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream"
+        }
+      },
+      "eligible_ids": [],
+      "dependency_closed_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "finding_classification": [
+        {
+          "id": "AO-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "custom.resource-routing",
+              "attributes": [],
+              "product_view": "Agent Observability project resource"
+            }
+          ]
+        },
+        {
+          "id": "AO-002",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "custom.resource-routing",
+              "attributes": [],
+              "product_view": "Dedicated Agent Stream resource"
+            }
+          ]
+        },
+        {
+          "id": "OTEL-001",
+          "expected_telemetry": [
+            {
+              "type": "span",
+              "name": "evaluation_answer",
+              "attributes": [
+                "gen_ai.operation.name",
+                "gen_ai.provider.name",
+                "gen_ai.request.model",
+                "gen_ai.usage.input_tokens",
+                "gen_ai.usage.output_tokens",
+                "gen_ai.input.messages",
+                "gen_ai.output.messages"
+              ],
+              "product_view": "Verified offline model operation; workflow applicability assessed separately"
+            }
+          ]
+        }
+      ],
+      "outcome": "rejected",
+      "error": "selection.ao_target requires a selected Agent Observability resource or routing finding"
+    },
+    {
+      "case": "explicit-marked-route-accepted",
+      "audit_fixture": "evals/python/ai-assistant-demo/eval/inputs/ao-resource-audit.json",
+      "variant": "Custom AO configuration names with only AO-002 explicitly marked resource-routing",
+      "audit_sha256": "sha256:e734e6b420e8cb18e81ce19580af851e5634d677f280fe88758add9627e33ba7",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:e734e6b420e8cb18e81ce19580af851e5634d677f280fe88758add9627e33ba7",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream"
+        }
+      },
+      "eligible_ids": [
+        "AO-002"
+      ],
+      "dependency_closed_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "finding_classification": [
+        {
+          "id": "AO-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "custom.resource-routing",
+              "attributes": [],
+              "product_view": "Agent Observability project resource"
+            }
+          ]
+        },
+        {
+          "id": "AO-002",
+          "finding_group": "splunk-agent-observability",
+          "ao_target_scope": "resource-routing",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "custom.resource-routing",
+              "attributes": [],
+              "product_view": "Dedicated Agent Stream resource"
+            }
+          ]
+        },
+        {
+          "id": "OTEL-001",
+          "expected_telemetry": [
+            {
+              "type": "span",
+              "name": "evaluation_answer",
+              "attributes": [
+                "gen_ai.operation.name",
+                "gen_ai.provider.name",
+                "gen_ai.request.model",
+                "gen_ai.usage.input_tokens",
+                "gen_ai.usage.output_tokens",
+                "gen_ai.input.messages",
+                "gen_ai.output.messages"
+              ],
+              "product_view": "Verified offline model operation; workflow applicability assessed separately"
+            }
+          ]
+        }
+      ],
+      "outcome": "accepted",
+      "normalized_selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:e734e6b420e8cb18e81ce19580af851e5634d677f280fe88758add9627e33ba7",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": [],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream",
+          "create_if_missing": true
+        }
+      },
+      "selection_sha256": "sha256:04cd1079553e98953f572d48e570af4f798e2910a92027000ef257132626d742"
+    },
+    {
+      "case": "legacy-agent-observability.agent-stream-accepted",
+      "audit_fixture": "evals/python/ai-assistant-demo/eval/inputs/ao-resource-audit.json",
+      "variant": "Both unmarked AO configuration telemetry names replaced with agent-observability.agent-stream",
+      "audit_sha256": "sha256:d71cf4cc08b201b3952e642c23209fc8641b83a6a2d44de0b2045551c4477209",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:d71cf4cc08b201b3952e642c23209fc8641b83a6a2d44de0b2045551c4477209",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream"
+        }
+      },
+      "eligible_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "dependency_closed_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "finding_classification": [
+        {
+          "id": "AO-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.agent-stream",
+              "attributes": [],
+              "product_view": "Agent Observability project resource"
+            }
+          ]
+        },
+        {
+          "id": "AO-002",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.agent-stream",
+              "attributes": [],
+              "product_view": "Dedicated Agent Stream resource"
+            }
+          ]
+        },
+        {
+          "id": "OTEL-001",
+          "expected_telemetry": [
+            {
+              "type": "span",
+              "name": "evaluation_answer",
+              "attributes": [
+                "gen_ai.operation.name",
+                "gen_ai.provider.name",
+                "gen_ai.request.model",
+                "gen_ai.usage.input_tokens",
+                "gen_ai.usage.output_tokens",
+                "gen_ai.input.messages",
+                "gen_ai.output.messages"
+              ],
+              "product_view": "Verified offline model operation; workflow applicability assessed separately"
+            }
+          ]
+        }
+      ],
+      "outcome": "accepted",
+      "normalized_selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:d71cf4cc08b201b3952e642c23209fc8641b83a6a2d44de0b2045551c4477209",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": [],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream",
+          "create_if_missing": true
+        }
+      },
+      "selection_sha256": "sha256:f66076d8827d8abd743e636d324e394c22fe011667d78e0f1431d333986ee63b"
+    },
+    {
+      "case": "legacy-agent-observability.agent-stream-resource-accepted",
+      "audit_fixture": "evals/python/ai-assistant-demo/eval/inputs/ao-resource-audit.json",
+      "variant": "Both unmarked AO configuration telemetry names replaced with agent-observability.agent-stream-resource",
+      "audit_sha256": "sha256:9802903d0199fe9149f63cd75a98c054f916b6ff09e328436dd60bf280bdd18f",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:9802903d0199fe9149f63cd75a98c054f916b6ff09e328436dd60bf280bdd18f",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream"
+        }
+      },
+      "eligible_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "dependency_closed_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "finding_classification": [
+        {
+          "id": "AO-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.agent-stream-resource",
+              "attributes": [],
+              "product_view": "Agent Observability project resource"
+            }
+          ]
+        },
+        {
+          "id": "AO-002",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.agent-stream-resource",
+              "attributes": [],
+              "product_view": "Dedicated Agent Stream resource"
+            }
+          ]
+        },
+        {
+          "id": "OTEL-001",
+          "expected_telemetry": [
+            {
+              "type": "span",
+              "name": "evaluation_answer",
+              "attributes": [
+                "gen_ai.operation.name",
+                "gen_ai.provider.name",
+                "gen_ai.request.model",
+                "gen_ai.usage.input_tokens",
+                "gen_ai.usage.output_tokens",
+                "gen_ai.input.messages",
+                "gen_ai.output.messages"
+              ],
+              "product_view": "Verified offline model operation; workflow applicability assessed separately"
+            }
+          ]
+        }
+      ],
+      "outcome": "accepted",
+      "normalized_selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:9802903d0199fe9149f63cd75a98c054f916b6ff09e328436dd60bf280bdd18f",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": [],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream",
+          "create_if_missing": true
+        }
+      },
+      "selection_sha256": "sha256:b9fc6e832eaebf47e0d098ff4cb3e68e1473c025893dbeedab9540a5504a3815"
+    },
+    {
+      "case": "legacy-agent-observability.project-accepted",
+      "audit_fixture": "evals/python/ai-assistant-demo/eval/inputs/ao-resource-audit.json",
+      "variant": "Both unmarked AO configuration telemetry names replaced with agent-observability.project",
+      "audit_sha256": "sha256:38f7a932733d39fa11f7cbd798edf977bd095edf93f9104d7d64da4c11137e02",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:38f7a932733d39fa11f7cbd798edf977bd095edf93f9104d7d64da4c11137e02",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream"
+        }
+      },
+      "eligible_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "dependency_closed_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "finding_classification": [
+        {
+          "id": "AO-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.project",
+              "attributes": [],
+              "product_view": "Agent Observability project resource"
+            }
+          ]
+        },
+        {
+          "id": "AO-002",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.project",
+              "attributes": [],
+              "product_view": "Dedicated Agent Stream resource"
+            }
+          ]
+        },
+        {
+          "id": "OTEL-001",
+          "expected_telemetry": [
+            {
+              "type": "span",
+              "name": "evaluation_answer",
+              "attributes": [
+                "gen_ai.operation.name",
+                "gen_ai.provider.name",
+                "gen_ai.request.model",
+                "gen_ai.usage.input_tokens",
+                "gen_ai.usage.output_tokens",
+                "gen_ai.input.messages",
+                "gen_ai.output.messages"
+              ],
+              "product_view": "Verified offline model operation; workflow applicability assessed separately"
+            }
+          ]
+        }
+      ],
+      "outcome": "accepted",
+      "normalized_selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:38f7a932733d39fa11f7cbd798edf977bd095edf93f9104d7d64da4c11137e02",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": [],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream",
+          "create_if_missing": true
+        }
+      },
+      "selection_sha256": "sha256:daa078b4b451ee3910cbbe5e46ae7215b1fc057acb72dd29dbc9fb2dbce38caf"
+    },
+    {
+      "case": "legacy-agent-observability.project-resource-accepted",
+      "audit_fixture": "evals/python/ai-assistant-demo/eval/inputs/ao-resource-audit.json",
+      "variant": "Both unmarked AO configuration telemetry names replaced with agent-observability.project-resource",
+      "audit_sha256": "sha256:9b1cd86c22aad98c6207eacf38ffe340d55cf6c20dbf2d8535d46d243f8f312d",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:9b1cd86c22aad98c6207eacf38ffe340d55cf6c20dbf2d8535d46d243f8f312d",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream"
+        }
+      },
+      "eligible_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "dependency_closed_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "finding_classification": [
+        {
+          "id": "AO-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.project-resource",
+              "attributes": [],
+              "product_view": "Agent Observability project resource"
+            }
+          ]
+        },
+        {
+          "id": "AO-002",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.project-resource",
+              "attributes": [],
+              "product_view": "Dedicated Agent Stream resource"
+            }
+          ]
+        },
+        {
+          "id": "OTEL-001",
+          "expected_telemetry": [
+            {
+              "type": "span",
+              "name": "evaluation_answer",
+              "attributes": [
+                "gen_ai.operation.name",
+                "gen_ai.provider.name",
+                "gen_ai.request.model",
+                "gen_ai.usage.input_tokens",
+                "gen_ai.usage.output_tokens",
+                "gen_ai.input.messages",
+                "gen_ai.output.messages"
+              ],
+              "product_view": "Verified offline model operation; workflow applicability assessed separately"
+            }
+          ]
+        }
+      ],
+      "outcome": "accepted",
+      "normalized_selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:9b1cd86c22aad98c6207eacf38ffe340d55cf6c20dbf2d8535d46d243f8f312d",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": [],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream",
+          "create_if_missing": true
+        }
+      },
+      "selection_sha256": "sha256:08feb7f5123e4c3c8c53df630cfcf86ca81e855f0cf0aa247bad75e82fdb817d"
+    },
+    {
+      "case": "legacy-agent-observability.runtime-routing-accepted",
+      "audit_fixture": "evals/python/ai-assistant-demo/eval/inputs/ao-resource-audit.json",
+      "variant": "Both unmarked AO configuration telemetry names replaced with agent-observability.runtime-routing",
+      "audit_sha256": "sha256:681d774b4986be0ad8ed01b2d3eac00accf4c74c3b4a7f7272371086db2f8e07",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:681d774b4986be0ad8ed01b2d3eac00accf4c74c3b4a7f7272371086db2f8e07",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream"
+        }
+      },
+      "eligible_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "dependency_closed_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "finding_classification": [
+        {
+          "id": "AO-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.runtime-routing",
+              "attributes": [],
+              "product_view": "Agent Observability project resource"
+            }
+          ]
+        },
+        {
+          "id": "AO-002",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.runtime-routing",
+              "attributes": [],
+              "product_view": "Dedicated Agent Stream resource"
+            }
+          ]
+        },
+        {
+          "id": "OTEL-001",
+          "expected_telemetry": [
+            {
+              "type": "span",
+              "name": "evaluation_answer",
+              "attributes": [
+                "gen_ai.operation.name",
+                "gen_ai.provider.name",
+                "gen_ai.request.model",
+                "gen_ai.usage.input_tokens",
+                "gen_ai.usage.output_tokens",
+                "gen_ai.input.messages",
+                "gen_ai.output.messages"
+              ],
+              "product_view": "Verified offline model operation; workflow applicability assessed separately"
+            }
+          ]
+        }
+      ],
+      "outcome": "accepted",
+      "normalized_selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:681d774b4986be0ad8ed01b2d3eac00accf4c74c3b4a7f7272371086db2f8e07",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": [],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream",
+          "create_if_missing": true
+        }
+      },
+      "selection_sha256": "sha256:878e516d7b4507a0f6b9a17b9a87c4329751ff56b466e1b89f5359b7840b490c"
+    },
+    {
+      "case": "legacy-agent-observability.splunk-ao-routing-accepted",
+      "audit_fixture": "evals/python/ai-assistant-demo/eval/inputs/ao-resource-audit.json",
+      "variant": "Both unmarked AO configuration telemetry names replaced with agent-observability.splunk-ao-routing",
+      "audit_sha256": "sha256:a36a134ac559bbe802546a3e22b509e425f281088ea2f2423cd3d53b84e2441c",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:a36a134ac559bbe802546a3e22b509e425f281088ea2f2423cd3d53b84e2441c",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream"
+        }
+      },
+      "eligible_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "dependency_closed_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "finding_classification": [
+        {
+          "id": "AO-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.splunk-ao-routing",
+              "attributes": [],
+              "product_view": "Agent Observability project resource"
+            }
+          ]
+        },
+        {
+          "id": "AO-002",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.splunk-ao-routing",
+              "attributes": [],
+              "product_view": "Dedicated Agent Stream resource"
+            }
+          ]
+        },
+        {
+          "id": "OTEL-001",
+          "expected_telemetry": [
+            {
+              "type": "span",
+              "name": "evaluation_answer",
+              "attributes": [
+                "gen_ai.operation.name",
+                "gen_ai.provider.name",
+                "gen_ai.request.model",
+                "gen_ai.usage.input_tokens",
+                "gen_ai.usage.output_tokens",
+                "gen_ai.input.messages",
+                "gen_ai.output.messages"
+              ],
+              "product_view": "Verified offline model operation; workflow applicability assessed separately"
+            }
+          ]
+        }
+      ],
+      "outcome": "accepted",
+      "normalized_selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:a36a134ac559bbe802546a3e22b509e425f281088ea2f2423cd3d53b84e2441c",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": [],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_name": "review-stream",
+          "create_if_missing": true
+        }
+      },
+      "selection_sha256": "sha256:abe995aac60ff47245620874778893bee663b99a06cf767012f7ef22d87e8cd9"
+    },
+    {
+      "case": "targetless-fixture-digest-preserved",
+      "audit_fixture": "evals/python/ai-assistant-demo/eval/inputs/ao-resource-audit.json",
+      "variant": "unchanged fixture",
+      "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+      "input": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ]
+      },
+      "eligible_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "dependency_closed_ids": [
+        "AO-001",
+        "AO-002"
+      ],
+      "finding_classification": [
+        {
+          "id": "AO-001",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.project-resource",
+              "attributes": [],
+              "product_view": "Agent Observability project resource"
+            }
+          ]
+        },
+        {
+          "id": "AO-002",
+          "finding_group": "splunk-agent-observability",
+          "expected_telemetry": [
+            {
+              "type": "configuration",
+              "name": "agent-observability.agent-stream-resource",
+              "attributes": [],
+              "product_view": "Dedicated Agent Stream resource"
+            }
+          ]
+        },
+        {
+          "id": "OTEL-001",
+          "expected_telemetry": [
+            {
+              "type": "span",
+              "name": "evaluation_answer",
+              "attributes": [
+                "gen_ai.operation.name",
+                "gen_ai.provider.name",
+                "gen_ai.request.model",
+                "gen_ai.usage.input_tokens",
+                "gen_ai.usage.output_tokens",
+                "gen_ai.input.messages",
+                "gen_ai.output.messages"
+              ],
+              "product_view": "Verified offline model operation; workflow applicability assessed separately"
+            }
+          ]
+        }
+      ],
+      "outcome": "accepted",
+      "normalized_selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+        "requested_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_ids": [
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": []
+      },
+      "selection_sha256": "sha256:d54052e211f101b3a2e0bf4c194c2f461ad72a1ed025bc568351f08b56ec56a3",
+      "legacy_normalized_audit_unchanged": true,
+      "legacy_audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+      "legacy_selection_sha256": "sha256:fab507736de619a6af968f3249cf6914d8b3ec2ff6ce099d6809d471245355a0"
     }
   ]
 }

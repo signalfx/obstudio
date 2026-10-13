@@ -3491,6 +3491,103 @@ for (const [serviceRoot, input, expected] of cases) {
         }}, report)
         self.assertEqual(ids["ao_target"]["project_id"], "project-123")
 
+    def test_ao_target_scope_rejects_actual_callback_even_with_ao_ids_and_dependencies(self) -> None:
+        fixture = SCRIPT.parents[3] / "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json"
+        raw = json.loads(fixture.read_text(encoding="utf-8"))
+        target = {"project_name": "project", "agent_stream_name": "stream"}
+        for renamed in (False, True):
+            candidate = copy.deepcopy(raw)
+            if renamed:
+                prerequisite = copy.deepcopy(candidate["findings"][0])
+                prerequisite["id"] = "AO-001"
+                prerequisite["area"] = "Callback content prerequisite"
+                candidate["signal_flow"]["component_flow_map"] += "\nCallback configuration [GAP: Callback content prerequisite]"
+                callback = copy.deepcopy(candidate["findings"][0])
+                callback["id"] = "AO-002"
+                callback["dependencies"] = ["AO-001"]
+                candidate["findings"] = [prerequisite, callback]
+            report = MODULE.normalize_audit_report(candidate)
+            requested = "AO-002" if renamed else "OTEL-001"
+            base = {"schema_version": 3, "kind": "otel-selection",
+                    "audit_id": report["meta"]["audit_id"],
+                    "audit_sha256": MODULE.audit_digest(report), "requested_ids": [requested]}
+            blank = MODULE.normalize_selection(base, report)
+            expected = ["AO-001", "AO-002"] if renamed else ["OTEL-001"]
+            self.assertEqual(blank["approved_ids"], expected)
+            self.assertFalse(MODULE.has_selected_ao_configuration(report, expected))
+            for value in (target, {"create_if_missing": False}):
+                with self.subTest(renamed=renamed, target=value), self.assertRaisesRegex(
+                    MODULE.ReportError, "requires a selected Agent Observability resource or routing finding"
+                ):
+                    MODULE.normalize_selection({**base, "approved_ids": expected, "ao_target": value}, report)
+
+    def test_ao_target_scope_explicit_marker_and_legacy_names(self) -> None:
+        for name in MODULE.AO_TARGET_LEGACY_CONFIGURATION_NAMES:
+            finding = {"finding_group": "splunk-agent-observability",
+                       "expected_telemetry": [{"type": "configuration", "name": name}]}
+            self.assertTrue(MODULE.is_ao_target_configuration(finding), name)
+            self.assertFalse(MODULE.is_ao_target_configuration({
+                **finding, "expected_telemetry": [{"type": "span", "name": name}]
+            }))
+        raw = sample_splunk_agent_observability_report()
+        raw["findings"][2]["expected_telemetry"][0]["name"] = "custom.project-routing"
+        self.assertFalse(MODULE.is_ao_target_configuration(raw["findings"][2]))
+        raw["findings"][2]["ao_target_scope"] = "resource-routing"
+        report = MODULE.normalize_audit_report(raw)
+        self.assertEqual(report["findings"][2]["ao_target_scope"], "resource-routing")
+        self.assertNotIn("ao_target_scope", report["findings"][3])
+        selection = MODULE.normalize_selection({
+            "schema_version": 3, "kind": "otel-selection",
+            "audit_id": report["meta"]["audit_id"], "audit_sha256": MODULE.audit_digest(report),
+            "requested_ids": ["AO-002"],
+            "ao_target": {"project_name": "project", "agent_stream_name": "stream"},
+        }, report)
+        self.assertEqual(selection["approved_ids"], ["OTEL-001", "AO-001", "AO-002"])
+        for value in (None, "", "capture", True, 3):
+            invalid = copy.deepcopy(raw)
+            invalid["findings"][2]["ao_target_scope"] = value
+            with self.subTest(scope=value), self.assertRaises(MODULE.ReportError):
+                MODULE.normalize_audit_report(invalid)
+        for wrong_group in (True, False):
+            invalid = copy.deepcopy(raw)
+            if wrong_group:
+                invalid["findings"][2].pop("finding_group")
+            else:
+                invalid["findings"][2]["expected_telemetry"][0]["type"] = "span"
+            with self.subTest(wrong_group=wrong_group), self.assertRaisesRegex(
+                MODULE.ReportError, "ao_target_scope requires an Agent Observability configuration finding"
+            ):
+                MODULE.normalize_audit_report(invalid)
+
+    def test_ao_target_scope_omission_preserves_actual_targetless_digests(self) -> None:
+        inputs = SCRIPT.parents[3] / "evals/python/ai-assistant-demo/eval/inputs"
+        report = MODULE.normalize_audit_report(json.loads((inputs / "ao-resource-audit.json").read_text()))
+        raw_selection = json.loads((inputs / "ao-resource-selection.json").read_text())
+        instrumentation = json.loads((inputs / "ao-resource-instrumentation.json").read_text())
+        self.assertTrue(all("ao_target_scope" not in finding for finding in report["findings"]))
+        self.assertEqual(MODULE.audit_digest(report), raw_selection["audit_sha256"])
+        selection = MODULE.normalize_selection(raw_selection, report)
+        self.assertEqual(selection, raw_selection)
+        self.assertEqual(MODULE.selection_digest(selection), instrumentation["selection_sha256"])
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript behavior validation")
+    def test_ao_target_ui_uses_server_resource_eligibility(self) -> None:
+        fixture = SCRIPT.parents[3] / "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json"
+        callback = MODULE.normalize_audit_report(json.loads(fixture.read_text()))
+        reports = [(callback, []), (MODULE.normalize_audit_report(sample_splunk_agent_observability_report()), ["AO-001", "AO-002"])]
+        for report, eligible in reports:
+            rendered = MODULE.render_html(report, MODULE.empty_selection(report))
+            payload = json.loads(rendered.split("const DATA = ", 1)[1].split(";\nconst REPORT", 1)[0])
+            self.assertEqual(payload["ao_target_eligible_finding_ids"], eligible)
+            self.assertEqual('id="ao-target-controls"' in rendered, bool(eligible))
+            function = rendered[rendered.index("function hasSelectedAoConfiguration()"):rendered.index("function aoTargetArguments()") ]
+            script = "const DATA = " + json.dumps(payload) + ";const selected = new Set();" + function
+            script += "selected.add('OTEL-001');if(hasSelectedAoConfiguration())throw new Error('unrelated scope');"
+            if eligible:
+                script += "selected.add('AO-002');if(!hasSelectedAoConfiguration())throw new Error('resource dependency scope');"
+            result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_ao_target_length_counts_unicode_codepoints(self) -> None:
         for key in ("project_name", "project_id", "agent_stream_name", "agent_stream_id"):
             for character in ("x", "\U0001f9ea"):
@@ -3533,7 +3630,7 @@ for (const [serviceRoot, input, expected] of cases) {
                 MODULE.normalize_selection({**base, "schema_version": schema, "ao_target": target}, report)
         with self.assertRaisesRegex(MODULE.ReportError, "requires a selected Agent Observability"):
             MODULE.normalize_selection({**base, "requested_ids": ["OTEL-001"], "ao_target": target}, report)
-        # Classification follows the finding group and signal type, not its numeric ID.
+        # Resource classification is independent of numeric finding IDs.
         renamed = copy.deepcopy(report)
         renamed["findings"][2]["id"] = "PROJECT-BINDING"
         renamed["findings"][3]["dependencies"] = ["PROJECT-BINDING", "OTEL-001"]
@@ -3614,9 +3711,11 @@ for (const [serviceRoot, input, expected] of cases) {
         self.assertIn('value="project-123"', rendered)
         self.assertIn('aria-describedby="ao-target-help ao-target-error"', rendered)
         functions = rendered[rendered.index("function shellQuote(value)"):rendered.index("function syncDependencyClosure()")]
+        payload = json.loads(rendered.split("const DATA = ", 1)[1].split(";\nconst REPORT", 1)[0])
+        payload["service_root"] = "/repo with spaces"
         script = """
 const REPORT = REPORT_VALUE;
-const DATA = {service_root: "/repo with spaces"};
+const DATA = DATA_VALUE;
 const selected = new Set(["AO-002"]);
 const decisionAnswers = new Map();
 const nodes = {};
@@ -3671,7 +3770,7 @@ selected.clear();
 renderTray();
 assert(nodes["ao-target-controls"].hidden, "deselecting AO hides optional controls");
 process.stdout.write(JSON.stringify({command, negativeCommand}));
-""".replace("REPORT_VALUE", json.dumps(report)).replace("FUNCTIONS_VALUE", functions)
+""".replace("REPORT_VALUE", json.dumps(report)).replace("DATA_VALUE", json.dumps(payload)).replace("FUNCTIONS_VALUE", functions)
         result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(shlex.split(json.loads(result.stdout)["command"]), [
@@ -3688,8 +3787,10 @@ process.stdout.write(JSON.stringify({command, negativeCommand}));
         report = MODULE.normalize_audit_report(sample_splunk_agent_observability_report())
         rendered = MODULE.render_html(report, MODULE.empty_selection(report))
         functions = rendered[rendered.index("function shellQuote(value)"):rendered.index("function syncDependencyClosure()")]
+        payload = json.loads(rendered.split("const DATA = ", 1)[1].split(";\nconst REPORT", 1)[0])
         script = """
 const REPORT = REPORT_VALUE;
+const DATA = DATA_VALUE;
 const selected = new Set(["AO-002"]);
 const nodes = {};
 for (const resource of ["project", "agent_stream"]) {
@@ -3734,7 +3835,7 @@ assert(invalid("project") && invalid("agent_stream"), "offending value and missi
 fill("valid-project", "");
 assert(!invalid("project") && invalid("agent_stream"), "repair keeps only missing peer invalid");
 assert(!fill("valid-project", "valid-stream").error && !invalid("project") && !invalid("agent_stream"), "complete pair clears both");
-""".replace("REPORT_VALUE", json.dumps(report)).replace("FUNCTIONS_VALUE", functions)
+""".replace("REPORT_VALUE", json.dumps(report)).replace("DATA_VALUE", json.dumps(payload)).replace("FUNCTIONS_VALUE", functions)
         result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
 

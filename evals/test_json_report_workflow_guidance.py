@@ -549,3 +549,60 @@ def test_ao_target_handoff_ui_snapshot_records_bound_field_validity() -> None:
         assert len(case["rows"]) == len(seen)
     assert count == ui["field_matrix_case_count"]
     assert ui["case_count"] == count + len(ui["viewports"]) + 1
+
+
+def test_ao_target_scope_snapshots_preserve_resource_and_content_boundary() -> None:
+    inputs = ROOT / "evals/python/ai-assistant-demo/eval/inputs"
+    validator = json.loads(_read(inputs / "ao-target-handoff-validator-snapshot.json"))
+    cases = {case["case"]: case for case in validator["ao_target_scope_cases"]}
+    assert len(cases) == len(validator["ao_target_scope_cases"]) == 14
+    assert validator["producer"]["source_sha256"] == "sha256:" + hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
+    assert cases["actual-callback-targetless"]["outcome"] == "accepted"
+    assert cases["actual-callback-targetless"]["eligible_ids"] == []
+    for name in ("actual-callback-target-pair-rejected", "actual-callback-policy-only-rejected",
+                 "callback-ao-id-target-pair-rejected", "resource-unselected-otel-target-rejected",
+                 "unmarked-unknown-route-rejected"):
+        assert cases[name]["outcome"] == "rejected"
+        assert "requires a selected Agent Observability resource or routing finding" in cases[name]["error"]
+    marked = cases["explicit-marked-route-accepted"]
+    assert marked["outcome"] == "accepted"
+    assert marked["eligible_ids"] == ["AO-002"]
+    assert any(finding.get("ao_target_scope") == "resource-routing" for finding in marked["finding_classification"])
+    legacy_names = ("project", "agent-stream", "project-resource", "agent-stream-resource",
+                    "runtime-routing", "splunk-ao-routing")
+    for name in legacy_names:
+        case = cases["legacy-agent-observability." + name + "-accepted"]
+        assert case["outcome"] == "accepted"
+        assert case["eligible_ids"] == ["AO-001", "AO-002"]
+        assert all("ao_target_scope" not in finding for finding in case["finding_classification"])
+    preserved = cases["targetless-fixture-digest-preserved"]
+    selection = json.loads(_read(inputs / "ao-resource-selection.json"))
+    assert preserved["legacy_normalized_audit_unchanged"] is True
+    assert preserved["legacy_audit_sha256"] == selection["audit_sha256"] == validator["audit_sha256"]
+    assert preserved["legacy_selection_sha256"] == json.loads(_read(inputs / "ao-resource-instrumentation.json"))["selection_sha256"]
+    for role in ("audit", "instrument", "verify", "configure"):
+        packet = json.loads(_read(ROOT / f"evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-{role}.json"))
+        assert "ao_target_scope_cases" in packet["prompts"][0]["task"]
+        assert "resource-routing" in packet["rubric"][0]
+        assert "callback" in packet["rubric"][0]
+        criterion = packet["rubric"][0].lower()
+        assert "marker" in criterion and ("absent" in criterion or "omitted" in criterion)
+    ui = json.loads(_read(inputs / "ao-selector-field-validity-snapshot.json"))
+    gate = ui["ao_target_scope_gate"]
+    assert gate["producer_engine_sha256"] == hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
+    assert len(gate["cases"]) == 4
+    for case in gate["cases"]:
+        assert case["outcome"] == "pass"
+        assert case["actual"]["controls_visible"] is case["expected_controls_visible"]
+        assert case["actual"]["command_has_ao_target_flags"] is case["expected_controls_visible"]
+    browser = {case["case"]: case for case in gate["cases"]}
+    assert browser["actual-callback-content-OTEL001"]["actual"]["controls_present"] is False
+    hidden = browser["unselected-resource-findings-with-retained-values"]
+    assert hidden["actual"]["controls_hidden"] is True
+    assert hidden["actual"]["controls_inert"] is True
+    assert hidden["retained_field_values_unchanged"] is True
+    assert browser["reselected-resource-recovers-retained-values"]["retained_field_values_unchanged"] is True
+    assert len(gate["canonical_selection_cases"]) == 4
+    for case in gate["canonical_selection_cases"]:
+        assert case["outcome"] == "pass"
+        assert case["actual_outcome"] == case["expected_outcome"]

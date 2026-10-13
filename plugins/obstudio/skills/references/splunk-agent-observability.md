@@ -82,8 +82,21 @@ finding's required fix as resolving an existing resource or creating it when
 missing. Its acceptance criteria must exercise both outcomes; lookup-only
 code with blank settings does not close a selected provisioning finding.
 
+Mark Project, Agent Stream, and runtime-routing configuration findings with
+`ao_target_scope: resource-routing` so the canonical selector can offer their
+resource inputs. The marker is optional and valid only on AO configuration
+findings. Unmarked legacy configuration names `agent-observability.project`,
+`agent-observability.agent-stream`, `agent-observability.project-resource`,
+`agent-observability.agent-stream-resource`, `agent-observability.runtime-routing`,
+and `agent-observability.splunk-ao-routing` remain eligible. Keep the marker
+absent for callback content-capture boundaries, datasets, prompts, and other
+configuration whose selected work does not resolve Project/Agent Stream
+identity. Neither an AO group nor a configuration type alone authorizes these
+targets. Do not insert a marker into legacy normalized findings by default.
+
 Offer optional Project name and Agent Stream name inputs in the audit's
-selection controls. Existing configured names or IDs take precedence over
+selection controls for the selected resource-routing findings. Existing
+configured names or IDs take precedence over
 suggestions. When the application has no intended names, suggest the stable
 service name as the project and `<service-name>-live` as its dedicated stream,
 and label these as proposed names rather than existing resources. The user

@@ -38,6 +38,20 @@ Apply these precedence and identity rules throughout the chain:
   form `{create_if_missing: false}` with no selectors. Reject partial selector
   pairs. Optional resource inputs and policy never change `requested_ids` or
   dependency-closed `approved_ids`, add findings, or establish cloud identity.
+  AO targets require at least one dependency-closed selected AO resource or
+  runtime-routing configuration finding. Mark such findings with the optional
+  `ao_target_scope: resource-routing`; this marker is valid only for
+  `finding_group: splunk-agent-observability` with configuration telemetry.
+  Preserve unmarked legacy findings named `agent-observability.project`,
+  `agent-observability.agent-stream`, `agent-observability.project-resource`,
+  `agent-observability.agent-stream-resource`, `agent-observability.runtime-routing`,
+  or `agent-observability.splunk-ao-routing`. Do not infer target eligibility
+  from the AO group or configuration type alone: callback content capture,
+  dataset, prompt, or other unrelated configuration does not authorize resource
+  selectors or policy-only targets. An absent `ao_target_scope` stays absent
+  in normalized findings and audit digests. The report engine owns this
+  classification and supplies the eligible finding IDs to the HTML controls;
+  controls and command arguments apply only to the selected eligible scope.
   Verification remains transitively bound to that exact selection because its
   `instrumentation_sha256` covers the complete normalized instrumentation
   overlay, including `selection_sha256`.

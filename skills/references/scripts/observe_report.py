@@ -78,6 +78,15 @@ PROOF_LEVEL_ALIASES = {
 }
 SIGNAL_TYPES = {"span", "metric", "log", "resource", "configuration"}
 FINDING_GROUPS = {"splunk-agent-observability"}
+AO_TARGET_SCOPES = {"resource-routing"}
+AO_TARGET_LEGACY_CONFIGURATION_NAMES = {
+    "agent-observability.project",
+    "agent-observability.agent-stream",
+    "agent-observability.project-resource",
+    "agent-observability.agent-stream-resource",
+    "agent-observability.runtime-routing",
+    "agent-observability.splunk-ao-routing",
+}
 INCIDENT_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 GENAI_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 SCAN_BLOCKER_CHECKS = {
@@ -503,6 +512,15 @@ def normalize_finding(
         telemetry.append(telemetry_item)
     if not telemetry:
         fail(f"{path}.expected_telemetry must contain at least one item")
+    ao_target_scope = None
+    if "ao_target_scope" in row:
+        ao_target_scope = text(row["ao_target_scope"], f"{path}.ao_target_scope")
+        if ao_target_scope not in AO_TARGET_SCOPES:
+            fail(f"{path}.ao_target_scope must be one of {sorted(AO_TARGET_SCOPES)}")
+        if finding_group != "splunk-agent-observability" or not any(
+            item["type"] == "configuration" for item in telemetry
+        ):
+            fail(f"{path}.ao_target_scope requires an Agent Observability configuration finding")
     decision_owner = optional_text(row.get("decision_owner"), f"{path}.decision_owner")
     decision_question = optional_text(
         row.get("decision_question"), f"{path}.decision_question"
@@ -638,6 +656,8 @@ def normalize_finding(
             )
     if finding_group is not None:
         report["finding_group"] = finding_group
+    if ao_target_scope is not None:
+        report["ao_target_scope"] = ao_target_scope
     if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
         for index, value in enumerate(report["follow_up_actions"]):
             validate_audit_review_next_step(
@@ -1435,13 +1455,25 @@ def normalize_decision_answers(
     ]
 
 
-def has_selected_ao_configuration(report: dict[str, Any], approved_ids: list[str]) -> bool:
-    return any(
-        finding["id"] in approved_ids
-        and finding.get("finding_group") == "splunk-agent-observability"
-        and any(item["type"] == "configuration" for item in finding["expected_telemetry"])
-        for finding in report["findings"]
+def is_ao_target_configuration(finding: dict[str, Any]) -> bool:
+    if finding.get("finding_group") != "splunk-agent-observability":
+        return False
+    configurations = [
+        item for item in finding.get("expected_telemetry", [])
+        if item["type"] == "configuration"
+    ]
+    return bool(configurations) and (
+        finding.get("ao_target_scope") == "resource-routing"
+        or any(item["name"] in AO_TARGET_LEGACY_CONFIGURATION_NAMES for item in configurations)
     )
+
+
+def ao_target_eligible_finding_ids(report: dict[str, Any]) -> list[str]:
+    return [finding["id"] for finding in report["findings"] if is_ao_target_configuration(finding)]
+
+
+def has_selected_ao_configuration(report: dict[str, Any], approved_ids: list[str]) -> bool:
+    return any(finding_id in approved_ids for finding_id in ao_target_eligible_finding_ids(report))
 
 
 def normalize_ao_target(value: Any, path: str) -> dict[str, Any]:
@@ -4203,6 +4235,7 @@ def render_html(
             "report": report,
             "selection": selection,
             "selection_eligibility": selection_eligibility,
+            "ao_target_eligible_finding_ids": ao_target_eligible_finding_ids(report),
             "display_finding_ids": display_finding_ids(report),
             "source_references": source_references,
             "service_root": (
@@ -4217,7 +4250,7 @@ def render_html(
     findings = report["findings"]
     ao_target = selection.get("ao_target", {})
     ao_controls = ""
-    if any(finding.get("finding_group") == "splunk-agent-observability" for finding in findings):
+    if ao_target_eligible_finding_ids(report):
         resource_controls = []
         for resource, label in (("project", "Project"), ("agent_stream", "Agent Stream")):
             selector = "id" if f"{resource}_id" in ao_target else "name"
@@ -4888,9 +4921,7 @@ function renderTray() {{
 }}
 
 function hasSelectedAoConfiguration() {{
-  return REPORT.findings.some(finding => selected.has(finding.id)
-    && finding.finding_group === "splunk-agent-observability"
-    && (finding.expected_telemetry || []).some(item => item.type === "configuration"));
+  return (DATA.ao_target_eligible_finding_ids || []).some(id => selected.has(id));
 }}
 
 function aoTargetArguments() {{
