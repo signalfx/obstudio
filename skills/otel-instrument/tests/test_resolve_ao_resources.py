@@ -177,6 +177,78 @@ class ResolverTests(unittest.TestCase):
         self.assertEqual(evidence["project"]["id"], "p")
         self.assertEqual(len(streams.create_calls), 1)
 
+    def test_create_exception_remains_unresolved_when_relookup_fails(self):
+        for kind in ("project", "agent_stream"):
+            for create_error in (TimeoutError("private-create-body"), Exception("private-create-body"), HTTPError(409)):
+                for relookup_failure in ("timeout", "http503", "ambiguous", "wrong_parent"):
+                    if kind == "project" and relookup_failure == "wrong_parent":
+                        continue
+                    for project_exists in ((True, False) if kind == "agent_stream" else (False,)):
+                        with self.subTest(kind=kind, create_error=type(create_error).__name__, relookup_failure=relookup_failure, project_exists=project_exists):
+                            projects = Client([self.project] if project_exists else [])
+                            streams = Client()
+                            client = projects if kind == "project" else streams
+
+                            def failed_create(name, scope):
+                                if relookup_failure == "timeout":
+                                    client.lookup_error = TimeoutError("private-lookup-body")
+                                elif relookup_failure == "http503":
+                                    client.lookup_error = HTTPError(503)
+                                elif relookup_failure == "ambiguous":
+                                    client.resources.extend([
+                                        resource("r1", name, scope.get("project_id")),
+                                        resource("r2", name, scope.get("project_id")),
+                                    ])
+                                else:
+                                    def wrong_parent(**lookup_scope):
+                                        client.lookup_calls.append(lookup_scope)
+                                        return [resource("r1", name, "wrong-project")]
+                                    client.list = wrong_parent
+                                raise create_error
+
+                            client.on_create = failed_create
+                            with self.assertRaises(MODULE.ResolutionError) as raised:
+                                self.run_resolver(projects, streams)
+                            evidence = raised.exception.evidence
+                            record = evidence[kind]
+                            secondary = {
+                                "timeout": "lookup_failed", "http503": "lookup_failed",
+                                "ambiguous": "ambiguous_name", "wrong_parent": "wrong_project",
+                            }[relookup_failure]
+                            self.assertEqual(raised.exception.code, f"{kind}_create_unresolved")
+                            self.assertEqual(evidence["error"], raised.exception.code)
+                            self.assertEqual(record["reconciliation_error"], f"{kind}_{secondary}")
+                            self.assertEqual(record["create_attempts"], 1)
+                            self.assertEqual(record["relookup_attempts"], 1)
+                            self.assertEqual(len(client.create_calls), 1)
+                            self.assertEqual(record.get("create_http_status"), 409 if isinstance(create_error, HTTPError) else None)
+                            self.assertEqual(record.get("lookup_http_status"), 503 if relookup_failure == "http503" else None)
+                            serialized = json.dumps(evidence) + str(raised.exception)
+                            self.assertNotIn("private-create-body", serialized)
+                            self.assertNotIn("private-lookup-body", serialized)
+                            self.assertNotIn("private-token-and-response-body", serialized)
+                            if kind == "agent_stream":
+                                resolved_project = evidence["project"]
+                                self.assertEqual(resolved_project["id"], projects.resources[0].id)
+                                self.assertEqual(resolved_project["outcome"], "reused" if project_exists else "created")
+                                self.assertEqual(client.create_calls[0]["project_id"], resolved_project["id"])
+                                self.assertTrue(all(call["project_id"] == resolved_project["id"] for call in client.lookup_calls))
+                            else:
+                                self.assertEqual(streams.lookup_calls + streams.create_calls, [])
+
+    def test_successful_or_empty_create_keeps_relookup_failure_code(self):
+        for create_return in (None, self.stream):
+            projects, streams = Client([self.project]), Client()
+            def create_then_lookup_failure(name, scope):
+                streams.lookup_error = HTTPError(503)
+                return create_return
+            streams.on_create = create_then_lookup_failure
+            with self.assertRaises(MODULE.ResolutionError) as raised:
+                self.run_resolver(projects, streams)
+            self.assertEqual(raised.exception.code, "agent_stream_lookup_failed")
+            self.assertNotIn("reconciliation_error", raised.exception.evidence["agent_stream"])
+            self.assertEqual(len(streams.create_calls), 1)
+
     def test_empty_create_response_reconciles(self):
         for malformed in (None, SimpleNamespace(name="stream")):
             projects, streams = Client([self.project]), Client()
@@ -248,7 +320,8 @@ class ResolverTests(unittest.TestCase):
         streams.on_create = conflict
         with self.assertRaises(MODULE.ResolutionError) as raised:
             self.run_resolver(projects, streams)
-        self.assertEqual(raised.exception.code, "agent_stream_ambiguous_name")
+        self.assertEqual(raised.exception.code, "agent_stream_create_unresolved")
+        self.assertEqual(raised.exception.evidence["agent_stream"]["reconciliation_error"], "agent_stream_ambiguous_name")
         self.assertEqual(len(streams.create_calls), 1)
 
     def test_wrong_parent_response_is_rejected(self):

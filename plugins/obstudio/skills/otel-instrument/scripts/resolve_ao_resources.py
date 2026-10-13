@@ -170,6 +170,7 @@ def resolve_resources(
         record["create_attempts"] = 1
         creation_code = f"{kind}_create_unresolved"
         created_id = None
+        create_exception = False
         try:
             resource = client.create(name=name, **scope)
         except Exception as error:
@@ -180,6 +181,7 @@ def resolve_resources(
             # outcome by identity; never infer a duplicate from message text.
             if status is not None and status != 409:
                 fail(f"{kind}_create_failed")
+            create_exception = True
             reconciliation = "reused-after-conflict" if status == 409 else "reused-after-uncertain-create"
         else:
             if resource is not None:
@@ -198,7 +200,13 @@ def resolve_resources(
             if attempt:
                 sleep(relookup_delay)
             record["relookup_attempts"] += 1
-            resource = lookup()
+            try:
+                resource = lookup()
+            except ResolutionError as error:
+                if not create_exception:
+                    raise
+                record["reconciliation_error"] = error.code
+                fail(creation_code)
             if resource is not None:
                 if created_id is not None and resource.id != created_id:
                     fail(f"{kind}_create_identity_mismatch")
