@@ -37,6 +37,13 @@ and Required GenAI Coverage Profile. Verify fresh-agent Splunk AO span creation
 separately from export-only setup; preserve and verify the canonical existing
 OTel/Galileo producer when present. Applicable content/vendor fields are
 required acceptance even when OTel publishes them as Opt-In.
+For fixture-only GenAI reviews, report unknown capture configuration as
+`Not proven`. For each producer and exporter, name a pre-SDK redaction/schema
+hook and give concrete proposed UTF-8 byte/message/part limits, or an acceptance
+test against documented configured limits. Require useful schema-valid content,
+truthful truncation/gap handling and credential/token/email sentinel absence from
+native records, attributes/events and wire as applicable. Keep proposed settings
+and unrun acceptance tests separate from observed configuration or emission.
 For every fresh or export-only GenAI source scenario, also read
 `../references/splunk-agent-observability.md` and its Fresh Agent SDK
 Instrumentation named-method table, even with no `splunk_ao` import or selected
