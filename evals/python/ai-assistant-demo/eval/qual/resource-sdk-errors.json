@@ -1,0 +1,19 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "resource-sdk-errors",
+      "task": "Validate only the bundled otel-instrument/scripts/resolve_ao_resources.py SDK error compatibility using the provisioned Python and a temporary standard-library harness. Read and execute the actual bundled helper; do not copy or replace its implementation. Supply a source-faithful fake splunk_ao.projects module exposing a typed ProjectNotFoundError that inherits Exception and has neither status_code nor response, matching the supplied SDK 0.4 source contract. A selected project-ID get raising this type must yield project_id_not_found with one get, zero creates, no stream calls and no raw error-body leakage. A generic API exception containing 404/not found/ProjectNotFoundError text must remain project_lookup_failed. Also prove known HTTP 403 and 500 ID failures stay lookup_failed, failed name lookups never create, both missing selected names create Project before its scoped Agent Stream, repeated runs reuse both without extra creates, and duplicate 409 creation races recover by bounded exact lookup. Inspect ordered calls, counts, identities and resource-only evidence. Use fakes for every SDK/resource boundary; do not invoke make/uv sync, resolve or install dependencies, call services/models/cloud/gateway, modify app/dependency/env files, or initialize the real SDK. Write a durable supplemental .observe/resource-sdk-errors.md and JSON with executed commands, cases, results and proof limits. This is a focused supplemental test of the bundled SDK adapter; do not claim complete bootstrap/env, instrumentation, telemetry or cloud verification."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect the actual bundled resolver, temporary test harness, executed outputs and .observe/resource-sdk-errors.md/JSON. Grade real behavior and exact calls rather than copied skill instructions.",
+    "A source-faithful typed SDK fake is intentional here and does not establish installed-SDK or cloud proof. Read ./last_message.md and ./grade.json."
+  ],
+  "rubric": [
+    "Executes the actual bundled resolver with a typed SDK-shaped ProjectNotFoundError lacking status_code/response. Selected project-ID lookup reports project_id_not_found after one get, zero creates and no stream calls, retaining resource-only evidence without private body leakage. Test evidence must expose the fake type through the supported splunk_ao.projects import boundary; class-name or error-message string matching is insufficient.",
+    "Independently exercises generic API errors containing 404/not-found/type-name text and HTTP403/500 selected-ID errors, all remaining project_lookup_failed with zero creates/stream calls and no raw body leakage. Failed project-name lookups never authorize creation; typed ID absence is not generalized into speculative named creation.",
+    "Executes both-missing named creation in project-before-scoped-stream order, repeated reuse with no additional creates, and duplicate409 creation races for both resources with bounded exact relookup. Asserts returned IDs, stream parent scope, ordered calls and exact create counts; isolated error changes preserve existing creation/reuse/conflict behavior.",
+    "Uses provisioned Python and standard-library boundary fakes without application/dependency/env edits, dependency resolution, installs, services, cloud/model/gateway calls or a replacement resolver. Durable evidence reports actual commands/cases/results and distinguishes supplemental fake SDK compatibility from complete env bootstrap, installed SDK, telemetry or cloud proof."
+  ]
+}
