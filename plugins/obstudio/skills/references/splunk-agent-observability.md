@@ -73,11 +73,101 @@ closure, stale-selection rejection, manual-decision unlocks, and external
 blockers. A `manual decision` or `external follow-up` remains a blocker and is
 never auto-selected.
 
+## Project And Agent Stream Inputs
+
+Audit resource existence separately from application binding. A missing live
+binding does not prove that the cloud project or stream is absent. Keep the
+project, Agent Stream, and routing findings distinct, and write each resource
+finding's required fix as resolving an existing resource or creating it when
+missing. Its acceptance criteria must exercise both outcomes; lookup-only
+code with blank settings does not close a selected provisioning finding.
+
+Offer optional Project name and Agent Stream name inputs in the audit's
+selection controls. Existing configured names or IDs take precedence over
+suggestions. When the application has no intended names, suggest the stable
+service name as the project and `<service-name>-live` as its dedicated stream,
+and label these as proposed names rather than existing resources. The user
+can provide a different pair or select reuse-only behavior. Do not turn this
+input into a manual-decision blocker or require a cloud secret in the report.
+
+Persist supplied targets in the schema-v3 selection's optional `ao_target`:
+
+```json
+{
+  "project_name": "assistant-v3",
+  "agent_stream_name": "assistant-v3-local",
+  "create_if_missing": true
+}
+```
+
+Use `project_id` instead of `project_name`, or `agent_stream_id` instead of
+`agent_stream_name`, to select an existing resource by ID. Each resource has
+exactly one selector. IDs are lookup-only: an unresolved ID never authorizes
+creating a replacement. `create_if_missing: false` means reuse-only. The
+target changes configuration, not selected scope, and participates in
+`selection_sha256`; changing it invalidates older instrumentation evidence.
+Keep schema-v1/v2 selections valid with their original normalized digests.
+Use the shared `select` command's `--ao-project`, `--ao-project-id`,
+`--ao-agent-stream`, `--ao-agent-stream-id`, and `--ao-reuse-only` flags to
+materialize the target rather than hand-editing bound JSON. Resource inputs
+never select otherwise unapproved AO findings.
+
+## Idempotent Resource Provisioning
+
+Selected AO resource work includes a runnable provisioning step, through the
+installed supported SDK and the application's configured destination. A
+one-time setup command is sufficient when its resolved bindings are persisted
+and the real launch consumes them. Runtime `.get()` calls alone are sufficient
+only after that provisioning step has resolved or created the selected
+resources. Do not leave selected work as a placeholder profile asking the
+operator to create resources that the supported API can create.
+
+Resolve the exact project first, then the exact Agent Stream within that
+project. Reuse a unique existing match without a create call. Reject ambiguous
+matches and validate IDs and stream/project association before exporting. A
+successful lookup that establishes absence permits one create for a selected,
+named resource when `create_if_missing` is enabled. An authentication,
+permission, timeout, or server failure during lookup is not absence and must
+not trigger creation. Create a missing stream under an existing project, and
+reuse a project successfully created by an earlier partial run.
+
+Handle duplicate conflicts and uncertain create outcomes with a bounded exact
+relookup of the same resource in the same project. Reuse only one validated
+match; otherwise retain the failure. Never append random suffixes, choose an
+unrelated resource, repeat a create blindly after a timeout, or delete a
+successfully created project when stream creation fails. Inspect the installed
+SDK's actual error contract; known authentication, permission, and server
+errors remain failures rather than being classified as duplicate conflicts.
+If the SDK discards status information, a read-only relookup may establish
+the uncertain outcome, but an unresolved lookup must retain the original
+failure and must not cause a second create.
+
+For Python, `otel-instrument/scripts/resolve_ao_resources.py` provides this
+provisioning path with supported `Projects` and `AgentStreams` clients. Run it
+with the project-managed Python environment after validating the selected AO
+scope. Use the paired helper only when both resource findings are selected;
+for project-only scope, perform only the selected project operation through
+the SDK. Never create an unselected stream as a side effect. Its JSON evidence
+records reused, created, or recovered resources and
+real IDs; it is evidence of resource resolution, not an additional selection
+ledger or proof of cloud trace receipt. An application-native equivalent must
+prove the same behavior. Add credential-free tests for both existing, both
+missing, mixed existing/missing, repeated runs, project and stream creation
+races, ambiguous/wrong-parent resources, and isolated lookup/create failures.
+
+When live provisioning cannot run, record the attempted operation, selected
+target, exact SDK/API failure or unavailable prerequisite, and remaining
+resource work. Still implement and exercise the creation branch with fakes.
+Do not report a lookup-only implementation as completed merely because the
+gateway was previously unavailable; retry the configured API when that
+prerequisite recovers. Keep ordinary OTel active if AO resolution fails.
+
 ## Configured Runtime Destination
 
-For local development, default to the available Splunk Observability Studio
+For local development, default to an available Splunk Observability Studio
 cloud-compatible gateway. Preserve an explicit operator destination or a user
-request for direct cloud export. These are alternative routing modes, not two
+request for direct cloud export. Studio is optional for source work and
+credential-free tests. These are alternative routing modes, not two
 mandatory exporters. Do not require application cloud credentials for the
 gateway mode: Studio derives upstream API and ingest endpoints from its active
 cloud connection and realm and supplies its own credentials server-side.
@@ -99,7 +189,6 @@ gateway calls, even if that address is valid for ordinary OTLP. If the
 application cannot reach Studio through same-namespace loopback, record that
 exact compatibility blocker and preserve an explicit operator destination;
 do not weaken the gateway trust boundary or silently switch to direct cloud.
-
 Keep the application destination-agnostic. Use supported AO SDK resource calls
 and standard OTLP export with durable endpoint configuration. Do not add an
 Obstudio library, special route-registration call, startup endpoint discovery,
@@ -125,9 +214,9 @@ Verification must distinguish:
 
 A local receipt, resource API response, or upstream ingest acknowledgement is
 not proof of cloud Agent Observability visibility. Verify the exact fresh trace
-in the target product. In gateway mode, gateway availability is a normal export
-dependency; do not claim delivery continues while the gateway is stopped.
-On a cloud connection change, upstream addresses and credentials must follow
+in the target product. Only when gateway mode is selected does its availability
+affect live resource calls and export; it must not gate application startup,
+ordinary instrumentation, or credential-free verification. In particular, do not claim delivery continues while the gateway is stopped. On a cloud connection change, upstream addresses and credentials must follow
 that connection and old organization resource bindings must not be silently
 reused. Re-resolve named resources or report the stale binding.
 
@@ -139,10 +228,11 @@ configurable endpoint mode uses `SPLUNK_AO_API_URL`,
 `SPLUNK_AO_CONSOLE_URL`, and `SPLUNK_AO_API_KEY`. A compatible local Studio
 gateway implements that standard SDK API/authentication contract and
 `<api-base>/otel/v1/traces`, while delegating resource calls to cloud `/ao/api`
-and ingest to the realm-derived trace endpoint. Use the gateway's documented
-local-only credential, never its cloud token; do not mix these variables with
-O11y realm/token variables. Prove compatibility with the installed SDK before
-using this configuration, and record its version and effective endpoints.
+and ingest to the realm-derived trace endpoint. Studio's SDK-compatible gateway
+accepts the public `local-gateway` marker. The SDK reads it as an ordinary API
+key value; Studio recognizes the marker and supplies cloud authentication.
+Prove compatibility with the installed SDK before using this configuration,
+and record its version and effective endpoints.
 
 Discover the API address separately from the OTLP address during configuration
 using advertised service endpoints or checked-in runtime topology. For this
@@ -179,7 +269,8 @@ does not activate it. If discovery is blocked, keep ordinary OTel working and
 report AO as blocked rather than manufacturing a source-level port default.
 
 The Studio profile contains no active `SPLUNK_AO_REALM`,
-`SPLUNK_AO_O11Y_TOKEN`, or other cloud credential. If a direct-cloud example is
+`SPLUNK_AO_O11Y_TOKEN`, or other cloud credential. In this profile, do not mix these variables
+with local gateway configuration. If a direct-cloud example is
 requested or already maintained, keep it in a separate `.env.cloud.example`
 or equivalent profile using the installed SDK's supported cloud mode; do not
 mix the two modes in one file or activate both exporters. Document one-profile
@@ -187,6 +278,16 @@ loading and removal of inherited variables from the other AO mode: loading a
 Studio dotenv file does not unset a realm/token already present in the parent
 environment. Preserve an explicit active AO destination; the Studio example
 does not authorize replacing it. Do not commit live credentials.
+
+When Studio gateway mode is selected, populate the actual application or
+deployment env profile before provisioning, not only the example. The
+configured profile must supply `SPLUNK_AO_API_URL`,
+`SPLUNK_AO_CONSOLE_URL`, and `SPLUNK_AO_API_KEY=local-gateway` from the
+discovered same-namespace API base with its actual port. Exercise the real
+profile loader and any env generator with a credential-free SDK boundary.
+Prove the launched provisioning command receives all three populated values;
+an allowlist or blank generated assignment is insufficient. Missing application
+cloud credentials alone are not a provisioning blocker in this mode.
 
 Resolve or create the configured project and dedicated Agent Stream through
 normal SDK resource calls before the first AO trace export. Carry the resolved
@@ -203,9 +304,9 @@ Use this contract when Python dependencies or source contain `splunk_ao`.
 Determine behavior from the installed version and its source or API docs. The
 patterns below were reconciled against the official
 [`splunk/splunk-ao-python`](https://github.com/splunk/splunk-ao-python)
-repository at commit `7a80c1df3a6f5728eec8a470fe7498a3dc76086a`; record the installed
-package version and current source provenance when making a version-sensitive
-change.
+repository examples at the latest `main` revision resolved at task time;
+record that revision, the installed package version, and current source
+provenance when making a version-sensitive change.
 
 Search imports, decorators, constructors, callbacks, provider setup, and
 teardown for at least:
@@ -254,13 +355,13 @@ spans around those operations. Audit HTTP, runtime, metrics, logs, sessions,
 streaming lifecycle, and uncovered GenAI operations independently; SDK-created
 workflow or tool spans do not prove those other signals.
 
-When the application has neither OpenTelemetry nor Splunk AO span creation,
-use the selected finding and user intent to choose how spans are created. Ordinary OTel
-findings default to application-owned official OpenTelemetry. Use the Splunk AO
-instrumentation path only when the selected scope calls for SDK-created spans or a
-supported Splunk AO framework integration. Install only the extras required by
-the detected framework, decorate or wrap stable operation boundaries, and do
-not convert unrelated functions into spans.
+When the live agent has no GenAI span creation, default to Splunk AO
+instrumentation and apply **Fresh Agent SDK Instrumentation** below. Generic
+OpenTelemetry transport/provider setup and evaluation-only SDK usage do not
+change that fresh-agent classification. Ordinary non-GenAI OTel work continues
+to use application-owned official OpenTelemetry. When an OTel/Galileo GenAI
+producer already exists, preserve it and fill its gaps through supported
+application hooks; do not migrate it to Splunk AO by default.
 
 If a high-level helper creates a provider, retain the returned provider in
 application startup state, pass it to supported instrumentation that
@@ -268,6 +369,91 @@ must join the trace, and call `provider.shutdown()` at process teardown. If a
 `SplunkAOLogger` or SDK context manages the sink instead, prove its supported
 `logger.terminate()` or process teardown path. A flush drains completed work;
 it does not conclude unfinished operations or replace shutdown.
+
+### Fresh Agent SDK Instrumentation
+
+Use the installed version's supported Splunk AO span-creation APIs for a fresh
+agent, rather than only adding `add_splunk_ao_span_processor`. Before choosing
+an integration, inspect the current
+[official SDK examples](https://github.com/splunk/splunk-ao-python/tree/main/examples)
+and the matching installed API/source. Record the example path, revision/date,
+SDK version and supported invocation pattern in the audit/implementation proof.
+Do not copy a provider model, credential, project, stream, or deprecated
+framework API from an example into the application.
+
+Use the latest Python examples on the official SDK's `main` branch:
+
+- [LangChain callback](https://github.com/splunk/splunk-ao-python/blob/main/examples/agent/langchain-agent/main.py): `SplunkAOCallback` and `splunk_ao_context` for callback-based model/chain/tool operation capture.
+- [LangChain middleware](https://github.com/splunk/splunk-ao-python/blob/main/examples/agent/langchain-middleware/main.py): `SplunkAOMiddleware` on the supported `create_agent` middleware boundary. Choose callback OR middleware ownership for overlapping operations and confirm DeepAgents/framework/version compatibility before applying it.
+- [Logger operations](https://github.com/splunk/splunk-ao-python/blob/main/examples/logging-samples/splunk-ao-logger/basic-example.py): actual input/output and available model/usage passed to `SplunkAOLogger`, with a trace concluded at the actual terminal boundary. Use supported logger/schema/decorator APIs when no matching framework integration exists.
+- [Distributed tracing](https://github.com/splunk/splunk-ao-python/tree/main/examples/logging-samples/distributed-tracing): context propagation across services; complement GenAI creation with supported OTel transport instrumentation while preserving one producer per operation.
+
+Resolve `main` at task time and record its revision/date in the report, then
+check the relevant example and SDK source against the installed or proposed
+package version. Do not treat a previously recorded commit as the latest
+example. If current examples cannot be retrieved, report that prerequisite
+and the snapshot actually used; do not claim a fresh check.
+
+For a custom Python agent without a matching framework integration, the
+following method mapping is a compatibility illustration runtime-tested with
+`splunk-ao==0.4.0`. The latest official examples and chosen version's inspected
+APIs govern implementation. If signatures or lifecycle behavior differ,
+record and use the current supported mapping rather than forcing this older
+recipe. Label installed/runtime support unproven until checked.
+
+| Actual operation boundary | Named SDK creator/lifecycle API | Source data and ownership |
+|---|---|---|
+| SDK trace envelope | `SplunkAOLogger.start_trace(...)` then `conclude(...)` | Vendor trace/session grouping. In0.4.0 the trace container is not emitted as an OTel operation span; this alone proves no workflow coverage. |
+| Actual coordinated workflow | `SplunkAOLogger.add_workflow_span(...)` | Log one real workflow with actual input, terminal output, timestamps and children inside the trace envelope. Apply current OTel workflow applicability; never invent a workflow for a standalone agent. |
+| Agent invocation | `SplunkAOLogger.add_agent_span(...)` | Actual agent identity, input/output and parent/children from the real invocation. |
+| Model request | `SplunkAOLogger.add_llm_span(...)` | Actual request messages/model/parameters and observed response/usage; preserve CLIENT kind and real errors/partial outcomes. |
+| Tool execution | `SplunkAOLogger.add_tool_span(...)` | Actual name/arguments/result/call ID and parent; no successful result on failure. |
+| AI-context retrieval | `SplunkAOLogger.add_retriever_span(...)` | Actual query and available returned document/context data from a real retriever; ordinary database/auth lookup is not automatically retrieval. |
+| Owned logger shutdown | `SplunkAOLogger.flush()` and `terminate()` | Conclude real operations first, then drain/close the owned sink. |
+
+Use the latest
+[`basic-example.py`](https://github.com/splunk/splunk-ao-python/blob/main/examples/logging-samples/splunk-ao-logger/basic-example.py)
+and inspect the latest logger/schema source for methods that example does not exercise:
+[`src/splunk_ao/logger/logger.py`](https://github.com/splunk/splunk-ao-python/blob/main/src/splunk_ao/logger/logger.py).
+Record the resolved revision and matching package support in each producer
+receipt. In the tested 0.4.0 logger, `_emit_and_release` skips the `Trace` container;
+`add_workflow_span` supplies an actual workflow operation when applicable.
+Starting the envelope plus logging one workflow is not a duplicate workflow.
+These named creators are different from export-only `add_splunk_ao_span_processor`. A version may
+need a supported application OTel processor/exporter hook to enrich the same
+SDK-created span IDs from actual source metadata; such a hook creates no
+operations and cannot repair data never captured. Preserve business return
+values, exceptions and external call arguments/order exactly; keep telemetry
+carriers out of business outputs. `Projects`/`AgentStreams` APIs configure
+resources and do not create GenAI operation spans.
+
+Prefer the matching framework/provider integration before writing operation
+callbacks from scratch. Use decorators only on real logical boundaries and
+verify what arguments/results they capture. Conclude SDK-created operations
+and shut down the owned logger/provider, including streaming, auxiliary model
+calls, timeout/cancellation and process teardown. SDK output must join the real
+application trace and retain actual conversation/tool-call identity; do not
+create an unexported synthetic parent or duplicate wrappers.
+
+Apply `genai-readiness.md`'s Required GenAI Coverage Profile to SDK-created and
+existing-library spans alike. Inspect actual emitted attributes: SDK use alone
+does not prove current OTel or vendor completeness. Fill version-specific gaps
+on the canonical operation through supported schema fields, callback hooks or
+the yielded OTel span. For example, a version may omit agent provider or tool
+message mappings despite the guide; preserve truthful provider identity and
+consistent actual arguments/results without creating another operation span.
+Do not edit dependencies/site-packages or assume export normalization repairs
+missing data. If the required mapping cannot be supplied through a supported
+application boundary, report that exact prerequisite as partial; do not
+silently fall back to a metadata-only custom producer for a fresh agent.
+
+This choice does not require Studio/gateway availability or live credentials
+for source work and deterministic tests. Use the selected supported export
+destination and normal SDK resource/config APIs; existing direct-cloud and
+gateway behavior stays independent of the span-creation choice. For another
+language, verify the supported SDK/integration for that runtime; Python
+examples do not prove another language's API. An unsupported runtime is an
+explicit prerequisite rather than an invented SDK or silent default change.
 
 ### Existing OpenTelemetry Provider
 
@@ -315,8 +501,13 @@ or other sensitive values. Decorator or wrapper arguments and results must
 already be safe metadata, or the installed integration must have a verified
 control that prevents raw capture at the source. `redacted_input` and
 `redacted_output` companion values do not by themselves remove the original
-raw input or output. Prefer an app-owned metadata-only OTel span when the SDK
-path cannot prevent raw capture. Do not claim that renaming a parameter,
+raw input or output. The required GenAI profile calls for useful bounded,
+redacted inputs/outputs through verified source-side controls, not raw capture
+or an optional content toggle. If the SDK path cannot meet that profile,
+record the precise content/API prerequisite and keep coverage partial. An
+explicitly selected metadata-only exception may use an app-owned OTel closure
+for an existing producer, but cannot pass full required content coverage.
+Do not claim that renaming a parameter,
 omitting metric dimensions, adding companion redacted fields, or using an
 exporter prevents the decorator from capturing content. If the installed SDK
 cannot meet the selected privacy mode without changing application behavior,
@@ -333,6 +524,11 @@ credentials and no provider/model network calls. Prove all applicable outcomes:
 - expected workflow/model/tool/retrieval parent-child shape;
 - absence of a unique raw-content sentinel from every exported span attribute
   and event when capture is disabled or metadata-only;
+- presence and latest-schema validity of applicable redacted input/output,
+  instructions, tool definitions, arguments/results and vendor message
+  mappings, matching actual invocation/result values in the required profile;
+- truthful provider/request/response/usage/stream fields independently of
+  content capture, with unavailable values explicitly unproven rather than zero;
 - error and generator/stream completion behavior;
 - `provider.shutdown()` for an application provider and `logger.terminate()`
   for a Splunk AO logger; and

@@ -1,0 +1,8 @@
+Bound proof-only snapshot of eval_runner.py; completed instrumentation is not claimed.
+Projects().get is the only project operation; an absent project raises before logger creation.
+AgentStreams().get may be followed by create; project ownership and duplicate-create race recovery are not checked.
+Verify actual source with fake SDK/network boundaries; existing and missing-stream paths may pass while missing-project, wrong ownership, and create races remain Not Working.
+No cloud endpoint, credential, or fresh cloud Agent Stream receipt evidence is supplied.
+Application source, dependencies, configuration, and tests stay unchanged; temporary harnesses under .observe/tmp/ are allowed.
+Post-initialization fault proof is explicitly selected: inject errors independently at start_trace, add_llm_span, conclude, and flush, then assert the actual finally propagates the error and terminates exactly once.
+Resource-setup errors with no logger initialization do not prove that post-initialization cleanup works.

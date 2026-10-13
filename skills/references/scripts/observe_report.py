@@ -30,8 +30,9 @@ else:
 
 
 OVERLAY_SCHEMA_VERSION = 1
-CURRENT_SELECTION_SCHEMA_VERSION = 2
-SUPPORTED_SELECTION_SCHEMA_VERSIONS = {1, CURRENT_SELECTION_SCHEMA_VERSION}
+DECISION_SELECTION_SCHEMA_VERSION = 2
+CURRENT_SELECTION_SCHEMA_VERSION = 3
+SUPPORTED_SELECTION_SCHEMA_VERSIONS = {1, 2, CURRENT_SELECTION_SCHEMA_VERSION}
 CURRENT_AUDIT_SCHEMA_VERSION = 2
 SUPPORTED_AUDIT_SCHEMA_VERSIONS = {1, CURRENT_AUDIT_SCHEMA_VERSION}
 REPORT_SERVER_SCHEMA_VERSION = 5
@@ -1362,6 +1363,7 @@ def select_all_selection(
     decision_answers: list[dict[str, str]] | dict[str, str] | None = None,
     approved_by: str | None = None,
     approved_at: str | None = None,
+    ao_target: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_answers = normalize_decision_answers(
         decision_answers or [],
@@ -1378,6 +1380,8 @@ def select_all_selection(
         {
             "schema_version": (
                 CURRENT_SELECTION_SCHEMA_VERSION
+                if ao_target is not None
+                else DECISION_SELECTION_SCHEMA_VERSION
                 if normalized_answers
                 else OVERLAY_SCHEMA_VERSION
             ),
@@ -1388,6 +1392,7 @@ def select_all_selection(
             "decision_answers": normalized_answers,
             "approved_by": approved_by,
             "approved_at": approved_at,
+            **({"ao_target": ao_target} if ao_target is not None else {}),
         },
         report,
     )
@@ -1430,6 +1435,39 @@ def normalize_decision_answers(
     ]
 
 
+def has_selected_ao_configuration(report: dict[str, Any], approved_ids: list[str]) -> bool:
+    return any(
+        finding["id"] in approved_ids
+        and finding.get("finding_group") == "splunk-agent-observability"
+        and any(item["type"] == "configuration" for item in finding["expected_telemetry"])
+        for finding in report["findings"]
+    )
+
+
+def normalize_ao_target(value: Any, path: str) -> dict[str, Any]:
+    target = as_object(value, path)
+    selectors = ("project_name", "project_id", "agent_stream_name", "agent_stream_id")
+    unknown = set(target) - {*selectors, "create_if_missing"}
+    if unknown:
+        fail(f"{path} contains unsupported fields: {sorted(unknown)}")
+    normalized: dict[str, Any] = {}
+    for resource in ("project", "agent_stream"):
+        supplied = [key for key in (f"{resource}_name", f"{resource}_id") if key in target]
+        if len(supplied) != 1:
+            fail(f"{path} requires exactly one {resource}_name or {resource}_id selector")
+        key = supplied[0]
+        raw_value = text(target[key], f"{path}.{key}")
+        value = raw_value.strip()
+        if len(value) > 512 or any(unicodedata.category(char).startswith("C") for char in raw_value):
+            fail(f"{path}.{key} must be at most 512 characters without control characters")
+        normalized[key] = value
+    create_if_missing = target.get("create_if_missing", True)
+    if not isinstance(create_if_missing, bool):
+        fail(f"{path}.create_if_missing must be a boolean")
+    normalized["create_if_missing"] = create_if_missing
+    return normalized
+
+
 def normalize_selection(data: dict[str, Any], report: dict[str, Any], path: str = "selection") -> dict[str, Any]:
     schema_version = data.get("schema_version")
     if schema_version not in SUPPORTED_SELECTION_SCHEMA_VERSIONS:
@@ -1446,7 +1484,7 @@ def normalize_selection(data: dict[str, Any], report: dict[str, Any], path: str 
     expected_digest = audit_digest(report)
     if digest != expected_digest:
         fail(f"{path}.audit_sha256 does not match audit")
-    if schema_version == CURRENT_SELECTION_SCHEMA_VERSION and "requested_ids" not in data:
+    if schema_version >= DECISION_SELECTION_SCHEMA_VERSION and "requested_ids" not in data:
         fail(f"{path}.requested_ids is required for schema_version {schema_version}")
     requested_source = (
         data.get("requested_ids")
@@ -1466,7 +1504,7 @@ def normalize_selection(data: dict[str, Any], report: dict[str, Any], path: str 
     )
     if schema_version == 1 and decision_answers:
         fail(
-            f"{path}.schema_version must be {CURRENT_SELECTION_SCHEMA_VERSION} "
+            f"{path}.schema_version must be at least {DECISION_SELECTION_SCHEMA_VERSION} "
             "when decision_answers are present"
         )
     if not requested_ids and not decision_answers:
@@ -1491,8 +1529,14 @@ def normalize_selection(data: dict[str, Any], report: dict[str, Any], path: str 
         "approved_by": optional_text(data.get("approved_by"), f"{path}.approved_by"),
         "approved_at": optional_text(data.get("approved_at"), f"{path}.approved_at"),
     }
-    if schema_version == CURRENT_SELECTION_SCHEMA_VERSION:
+    if schema_version >= DECISION_SELECTION_SCHEMA_VERSION:
         normalized["decision_answers"] = decision_answers
+    if "ao_target" in data:
+        if schema_version < CURRENT_SELECTION_SCHEMA_VERSION:
+            fail(f"{path}.schema_version must be {CURRENT_SELECTION_SCHEMA_VERSION} when ao_target is present")
+        if not has_selected_ao_configuration(report, approved_ids):
+            fail(f"{path}.ao_target requires a selected Agent Observability resource or routing finding")
+        normalized["ao_target"] = normalize_ao_target(data["ao_target"], f"{path}.ao_target")
     return normalized
 
 
@@ -4169,6 +4213,34 @@ def render_html(
     mode_guidance_payload = script_json(MODE_GUIDANCE)
     title = esc(report["meta"]["service_name"])
     findings = report["findings"]
+    ao_target = selection.get("ao_target", {})
+    ao_controls = ""
+    if any(finding.get("finding_group") == "splunk-agent-observability" for finding in findings):
+        resource_controls = []
+        for resource, label in (("project", "Project"), ("agent_stream", "Agent Stream")):
+            selector = "id" if f"{resource}_id" in ao_target else "name"
+            value = ao_target.get(f"{resource}_{selector}", "")
+            resource_controls.append(
+                f'<div class="ao-target-resource"><label for="ao-{resource}-selector">{label} selector</label>'
+                f'<select id="ao-{resource}-selector" data-ao-selector="{resource}">'
+                f'<option value="name"{" selected" if selector == "name" else ""}>Name</option>'
+                f'<option value="id"{" selected" if selector == "id" else ""}>ID</option></select>'
+                f'<label id="ao-{resource}-label" for="ao-{resource}-value">{label} {selector.upper() if selector == "id" else "name"}</label>'
+                f'<input id="ao-{resource}-value" data-ao-value="{resource}" type="text" maxlength="512" '
+                f'aria-describedby="ao-target-help ao-target-error" value="{esc(value)}"></div>'
+            )
+        ao_controls = (
+            '<fieldset id="ao-target-controls" class="ao-target-controls" hidden inert>'
+            '<legend>Agent Observability destination (optional)</legend>'
+            '<p id="ao-target-help">Provide both resources, or leave both blank to use the application configuration. '
+            'Named resources are reused or created if missing. IDs always select existing resources. '
+            'Changing these values does not select findings.</p>'
+            '<div class="ao-target-grid">' + "".join(resource_controls) + '</div>'
+            '<label class="ao-reuse-only" for="ao-reuse-only"><input id="ao-reuse-only" type="checkbox"'
+            + (' checked' if ao_target.get("create_if_missing") is False else '')
+            + '> Reuse existing resources only</label>'
+            '<p id="ao-target-error" class="ao-target-error" aria-live="polite"></p></fieldset>'
+        )
     decision_view = render_decision_overview(report, selection)
     technical_summary = render_list(report["summary"])
     evidence_table = html_table(
@@ -4316,6 +4388,15 @@ h1 {{ margin: 8px 0 4px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; }}
 .decision-option strong, .decision-option span {{ grid-column: 2; }}
 .decision-option span {{ color: var(--muted); font-size: 12px; }}
 .decision-clear {{ border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 11px; margin-top: 8px; padding: 0; text-decoration: underline; }}
+.ao-target-controls {{ margin: 20px 0 0; padding: 14px; border: 1px solid var(--line); border-radius: 7px; background: #fbfcfe; min-width: 0; }}
+.ao-target-controls legend {{ font-weight: 700; }}
+.ao-target-controls p {{ color: var(--muted); font-size: 12px; }}
+.ao-target-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }}
+.ao-target-resource {{ display: grid; gap: 5px; min-width: 0; }}
+.ao-target-resource input,.ao-target-resource select {{ box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 5px; background: #fff; color: var(--ink); font: inherit; padding: 7px 8px; }}
+.ao-reuse-only {{ display: flex; gap: 7px; align-items: center; margin-top: 12px; }}
+.ao-target-controls .ao-target-error {{ color: #b42318; margin: 8px 0 0; }}
+@media (max-width: 620px) {{ .ao-target-grid {{ grid-template-columns: 1fr; }} }}
 .caret {{ color: var(--muted); font-size: 20px; }}
 .card.open .caret {{ transform: rotate(90deg); }}
 .body {{ display: none; border-top: 1px solid var(--line); background: #fbfcfe; padding: 16px 18px; }}
@@ -4388,6 +4469,7 @@ th {{ color: var(--muted); font-size: 12px; }}
   <section class="findings-section" aria-labelledby="findings-heading">
     <h2 id="findings-heading" tabindex="-1">Findings <span class="findings-total">· {len(findings)}</span></h2>
     <div id="cards"></div>
+    {ao_controls}
   </section>
   <section class="panel technical-appendix"><details><summary>Technical appendix</summary>
     <h2>Source-visible instrumentation evidence</h2>{existing_evidence}
@@ -4775,6 +4857,9 @@ function terminalInstrumentCommand() {{
   for (const answer of orderedDecisionAnswers()) {{
     parts.push("--decision", `${{answer.finding_id}}=${{answer.option_id}}`);
   }}
+  const target = aoTargetArguments();
+  if (target.error) return target.error;
+  parts.push(...target.parts);
   parts.push(serviceRoot);
   return parts.map((part, index) => index === 0 ? part : commandPart(part)).join(" ");
 }}
@@ -4791,6 +4876,61 @@ function renderTray() {{
   tray.hidden = !hasSelection;
   tray.toggleAttribute("inert", !hasSelection);
   tray.setAttribute("aria-hidden", String(!hasSelection));
+  const aoControls = document.getElementById("ao-target-controls");
+  if (aoControls) {{
+    const hasAo = hasSelectedAoConfiguration();
+    aoControls.hidden = !hasAo;
+    aoControls.toggleAttribute("inert", !hasAo);
+  }}
+  renderInstrumentCommand();
+}}
+
+function hasSelectedAoConfiguration() {{
+  return REPORT.findings.some(finding => selected.has(finding.id)
+    && finding.finding_group === "splunk-agent-observability"
+    && (finding.expected_telemetry || []).some(item => item.type === "configuration"));
+}}
+
+function aoTargetArguments() {{
+  if (!hasSelectedAoConfiguration()) return {{parts: [], error: ""}};
+  const resources = ["project", "agent_stream"].map(resource => ({{
+    resource,
+    selector: document.getElementById(`ao-${{resource}}-selector`)?.value || "name",
+    rawValue: document.getElementById(`ao-${{resource}}-value`)?.value || "",
+    value: (document.getElementById(`ao-${{resource}}-value`)?.value || "").trim(),
+  }}));
+  const hasValue = resources.some(resource => resource.value);
+  const reuseOnly = document.getElementById("ao-reuse-only")?.checked || false;
+  const invalid = resources.some(resource => resource.value.length > 512 || /\\p{{C}}/u.test(resource.rawValue));
+  const error = invalid ? "Resource selectors must not contain control characters."
+    : (hasValue || reuseOnly) && resources.some(resource => !resource.value)
+      ? "Provide both the Project and Agent Stream, or clear both fields and turn off reuse-only to use application configuration."
+      : "";
+  const errorNode = document.getElementById("ao-target-error");
+  if (errorNode) errorNode.textContent = error;
+  for (const resource of resources) {{
+    document.getElementById(`ao-${{resource.resource}}-value`)?.setAttribute("aria-invalid",
+      String(Boolean(error) && (invalid || !resource.value)));
+  }}
+  if (error || !hasValue) return {{parts: [], error}};
+  const parts = [];
+  for (const resource of resources) {{
+    const flag = (resource.resource === "project" ? "--ao-project" : "--ao-agent-stream")
+      + (resource.selector === "id" ? "-id" : "");
+    if (resource.value.startsWith("-")) parts.push(flag + "=" + resource.value);
+    else parts.push(flag, resource.value);
+  }}
+  if (reuseOnly) parts.push("--ao-reuse-only");
+  return {{parts, error: ""}};
+}}
+
+function updateAoTargetInput(resource, selectorChanged = false) {{
+  const selector = document.getElementById(`ao-${{resource}}-selector`);
+  const input = document.getElementById(`ao-${{resource}}-value`);
+  const label = document.getElementById(`ao-${{resource}}-label`);
+  if (selectorChanged && input) input.value = "";
+  if (label) label.textContent = (resource === "project" ? "Project" : "Agent Stream")
+    + (selector?.value === "id" ? " ID" : " name");
   renderInstrumentCommand();
 }}
 
@@ -4938,6 +5078,15 @@ document.addEventListener("click", event => {{
 }});
 
 document.addEventListener("change", event => {{
+  const aoSelector = event.target.closest("select[data-ao-selector]");
+  if (aoSelector) {{
+    updateAoTargetInput(aoSelector.dataset.aoSelector, true);
+    return;
+  }}
+  if (event.target.id === "ao-reuse-only") {{
+    renderInstrumentCommand();
+    return;
+  }}
   const decisionInput = event.target.closest("input[data-decision-id][data-option-id]");
   if (decisionInput) {{
     applyDecisionAnswer(decisionInput.dataset.decisionId, decisionInput.dataset.optionId);
@@ -4946,6 +5095,11 @@ document.addEventListener("change", event => {{
   const input = event.target.closest("input[data-id]");
   if (!input) return;
   applySelectionInput(input);
+}});
+
+document.addEventListener("input", event => {{
+  const aoInput = event.target.closest("input[data-ao-value]");
+  if (aoInput) updateAoTargetInput(aoInput.dataset.aoValue);
 }});
 
 syncDependencyClosure();
@@ -5303,10 +5457,28 @@ def cmd_select(args: argparse.Namespace) -> int:
         raw_ids = [item.strip() for item in args.ids.split(",") if item.strip()]
     if not raw_ids and not raw_answers:
         fail("select requires --ids, --all, and/or at least one --decision answer")
+    ao_selectors = {
+        key: value
+        for key, value in (
+            ("project_name", args.ao_project),
+            ("project_id", args.ao_project_id),
+            ("agent_stream_name", args.ao_agent_stream),
+            ("agent_stream_id", args.ao_agent_stream_id),
+        )
+        if value is not None
+    }
+    if args.ao_reuse_only and not ao_selectors:
+        fail("--ao-reuse-only requires project and Agent Stream selectors")
+    ao_target = (
+        {**ao_selectors, "create_if_missing": not args.ao_reuse_only}
+        if ao_selectors else None
+    )
     selection = normalize_selection(
         {
             "schema_version": (
                 CURRENT_SELECTION_SCHEMA_VERSION
+                if ao_target is not None
+                else DECISION_SELECTION_SCHEMA_VERSION
                 if raw_answers
                 else OVERLAY_SCHEMA_VERSION
             ),
@@ -5317,6 +5489,7 @@ def cmd_select(args: argparse.Namespace) -> int:
             "decision_answers": raw_answers,
             "approved_by": args.approved_by,
             "approved_at": args.approved_at,
+            **({"ao_target": ao_target} if ao_target is not None else {}),
         },
         report,
     )
@@ -5378,6 +5551,7 @@ def cmd_adopt_selection(args: argparse.Namespace) -> int:
             selection.get("decision_answers", []),
             selection.get("approved_by"),
             selection.get("approved_at"),
+            selection.get("ao_target"),
         )
         selected_all_from_empty = True
     write_json(args.output, selection)
@@ -6196,6 +6370,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="FINDING_ID=OPTION_ID",
         help="record a manual decision answer; repeat for multiple decisions",
     )
+    select.add_argument("--ao-project", help="Agent Observability project name; reuse or create if missing")
+    select.add_argument("--ao-project-id", help="existing Agent Observability project ID; lookup only")
+    select.add_argument("--ao-agent-stream", help="Agent Stream name within the selected project; reuse or create if missing")
+    select.add_argument("--ao-agent-stream-id", help="existing Agent Stream ID; lookup only")
+    select.add_argument("--ao-reuse-only", action="store_true", help="require existing named AO resources instead of creating missing resources")
     select.set_defaults(func=cmd_select)
 
     adopt = subparsers.add_parser(

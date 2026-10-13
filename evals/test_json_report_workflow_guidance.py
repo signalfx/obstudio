@@ -307,9 +307,14 @@ def test_current_audit_and_selection_versions_are_explicit() -> None:
     assert audit_input["schema_version"] == 2
     assert "Write new audits as schema v2" in audit
     assert "OVERLAY_SCHEMA_VERSION = 1" in report_tool
-    assert "CURRENT_SELECTION_SCHEMA_VERSION = 2" in report_tool
+    assert "DECISION_SELECTION_SCHEMA_VERSION = 2" in report_tool
+    assert "CURRENT_SELECTION_SCHEMA_VERSION = 3" in report_tool
+    assert "SUPPORTED_SELECTION_SCHEMA_VERSIONS = {1, 2, CURRENT_SELECTION_SCHEMA_VERSION}" in report_tool
     assert "CURRENT_AUDIT_SCHEMA_VERSION = 2" in report_tool
     assert "a selection carrying `decision_answers` is schema v2" in audit_normalized
+    report_tests = _read(ROOT / "skills/references/tests/test_observe_report.py")
+    assert "def test_ao_target_preserves_legacy_selection_shape_and_decisions" in report_tests
+    assert "def test_selection_v3_ao_target_normalization_and_digest_binding" in report_tests
 
 
 def test_representative_evals_require_canonical_artifacts_and_scope() -> None:

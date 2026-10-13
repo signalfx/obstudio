@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -3460,6 +3461,201 @@ for (const [serviceRoot, input, expected] of cases) {
                     MODULE.ReportError, "Blocked by OTEL-001"
                 ):
                     MODULE.dependency_closure(blocked, ["OTEL-002"])
+
+    def test_selection_v3_ao_target_normalization_and_digest_binding(self) -> None:
+        report = MODULE.normalize_audit_report(sample_splunk_agent_observability_report())
+        base = {
+            "schema_version": 3,
+            "kind": "otel-selection",
+            "audit_id": report["meta"]["audit_id"],
+            "audit_sha256": MODULE.audit_digest(report),
+            "requested_ids": ["AO-002"],
+        }
+        target = {"project_name": " checkout ", "agent_stream_name": "live"}
+        selection = MODULE.normalize_selection({**base, "ao_target": target}, report)
+        self.assertEqual(selection["schema_version"], 3)
+        self.assertEqual(selection["decision_answers"], [])
+        self.assertEqual(selection["ao_target"], {
+            "project_name": "checkout", "agent_stream_name": "live", "create_if_missing": True,
+        })
+        other = MODULE.normalize_selection({**base, "ao_target": {
+            "project_name": "other", "agent_stream_name": "live", "create_if_missing": False,
+        }}, report)
+        self.assertEqual(selection["approved_ids"], other["approved_ids"])
+        self.assertNotEqual(MODULE.selection_digest(selection), MODULE.selection_digest(other))
+        instrumentation = sample_instrumentation(report, MODULE.audit_digest(report), selection)
+        with self.assertRaisesRegex(MODULE.ReportError, "selection_sha256 does not match selection"):
+            MODULE.normalize_instrumentation(instrumentation, report, other)
+        ids = MODULE.normalize_selection({**base, "ao_target": {
+            "project_id": "project-123", "agent_stream_id": "stream-123",
+        }}, report)
+        self.assertEqual(ids["ao_target"]["project_id"], "project-123")
+
+    def test_selection_ao_target_requires_valid_selectors_and_selected_configuration(self) -> None:
+        report = MODULE.normalize_audit_report(sample_splunk_agent_observability_report())
+        base = {
+            "schema_version": 3, "kind": "otel-selection",
+            "audit_id": report["meta"]["audit_id"], "audit_sha256": MODULE.audit_digest(report),
+            "requested_ids": ["AO-002"],
+        }
+        target = {"project_name": "checkout", "agent_stream_name": "live"}
+        bad_targets = [
+            {"project_name": "checkout"},
+            {**target, "project_id": "project-123"},
+            {**target, "project_name": " "},
+            {**target, "agent_stream_name": "bad\nname"},
+            {**target, "agent_stream_name": "\nlive"},
+            {**target, "create_if_missing": "true"},
+            {**target, "token": "not-allowed"},
+        ]
+        for bad in bad_targets:
+            with self.subTest(target=bad), self.assertRaises(MODULE.ReportError):
+                MODULE.normalize_selection({**base, "ao_target": bad}, report)
+        for schema in (1, 2):
+            with self.subTest(schema=schema), self.assertRaisesRegex(MODULE.ReportError, "schema_version must be 3"):
+                MODULE.normalize_selection({**base, "schema_version": schema, "ao_target": target}, report)
+        with self.assertRaisesRegex(MODULE.ReportError, "requires a selected Agent Observability"):
+            MODULE.normalize_selection({**base, "requested_ids": ["OTEL-001"], "ao_target": target}, report)
+        # Classification follows the finding group and signal type, not its numeric ID.
+        renamed = copy.deepcopy(report)
+        renamed["findings"][2]["id"] = "PROJECT-BINDING"
+        renamed["findings"][3]["dependencies"] = ["PROJECT-BINDING", "OTEL-001"]
+        accepted = MODULE.normalize_selection({**base, "audit_sha256": MODULE.audit_digest(renamed),
+            "requested_ids": ["PROJECT-BINDING"], "ao_target": target}, renamed)
+        self.assertIn("ao_target", accepted)
+
+    def test_ao_target_preserves_legacy_selection_shape_and_decisions(self) -> None:
+        report = MODULE.normalize_audit_report(sample_decision_branch_report())
+        answers = [{"finding_id": "OTEL-001", "option_id": "application-owned"}]
+        expected = {
+            "schema_version": 2, "kind": "otel-selection", "audit_id": report["meta"]["audit_id"],
+            "audit_sha256": MODULE.audit_digest(report), "requested_ids": ["OTEL-002"],
+            "approved_ids": ["OTEL-002"], "approved_by": None, "approved_at": None,
+            "decision_answers": answers,
+        }
+        self.assertEqual(MODULE.normalize_selection(expected, report), expected)
+        self.assertEqual(MODULE.selection_digest(MODULE.normalize_selection(expected, report)), MODULE.selection_digest(expected))
+        v3 = MODULE.normalize_selection({**expected, "schema_version": 3}, report)
+        self.assertEqual(v3["decision_answers"], answers)
+        self.assertNotIn("ao_target", v3)
+        ao_report = MODULE.normalize_audit_report(sample_splunk_agent_observability_report())
+        all_selected = MODULE.select_all_selection(ao_report, ao_target={
+            "project_name": "checkout", "agent_stream_id": "existing-stream", "create_if_missing": False,
+        })
+        self.assertEqual(all_selected["schema_version"], 3)
+        self.assertEqual(all_selected["ao_target"]["agent_stream_id"], "existing-stream")
+
+    def test_cli_ao_target_roundtrip_and_adoption(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audit = root / "otel-audit.json"
+            selection = root / "otel-selection.json"
+            adopted = root / "adopted.json"
+            audit.write_text(json.dumps(sample_splunk_agent_observability_report()), encoding="utf-8")
+            command = [sys.executable, str(SCRIPT), "select", str(audit), "--ids", "AO-002",
+                "--ao-project", "checkout's project", "--ao-agent-stream-id", "stream-123",
+                "--ao-reuse-only", "-o", str(selection)]
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            selected = json.loads(selection.read_text(encoding="utf-8"))
+            self.assertEqual(selected["schema_version"], 3)
+            self.assertEqual(selected["ao_target"], {
+                "project_name": "checkout's project", "agent_stream_id": "stream-123", "create_if_missing": False,
+            })
+            result = subprocess.run([sys.executable, str(SCRIPT), "adopt-selection", str(audit),
+                "--candidate", str(selection), "--all-if-empty", "-o", str(adopted)],
+                capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(adopted.read_text(encoding="utf-8")), selected)
+            result = subprocess.run([sys.executable, str(SCRIPT), "select", str(audit), "--ids", "AO-002",
+                "--ao-project=--ao-reuse-only", "--ao-agent-stream=-stream name", "-o", str(selection)],
+                capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            negative = json.loads(selection.read_text(encoding="utf-8"))["ao_target"]
+            self.assertEqual(negative, {
+                "project_name": "--ao-reuse-only", "agent_stream_name": "-stream name", "create_if_missing": True,
+            })
+            result = subprocess.run([sys.executable, str(SCRIPT), "select", str(audit), "--ids", "AO-002",
+                "--ao-reuse-only", "-o", str(selection)], capture_output=True, text=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("requires project and Agent Stream selectors", result.stderr)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript behavior validation")
+    def test_html_ao_resource_inputs_generate_validated_quoted_commands(self) -> None:
+        report = MODULE.normalize_audit_report(sample_splunk_agent_observability_report())
+        selection = MODULE.normalize_selection({
+            "schema_version": 3, "kind": "otel-selection", "audit_id": report["meta"]["audit_id"],
+            "audit_sha256": MODULE.audit_digest(report), "requested_ids": ["AO-002"],
+            "ao_target": {"project_id": "project-123", "agent_stream_id": "stream-123"},
+        }, report)
+        rendered = MODULE.render_html(report, selection)
+        self.assertIn('for="ao-project-value">Project ID</label>', rendered)
+        self.assertIn('value="project-123"', rendered)
+        self.assertIn('aria-describedby="ao-target-help ao-target-error"', rendered)
+        functions = rendered[rendered.index("function shellQuote(value)"):rendered.index("function syncDependencyClosure()")]
+        script = """
+const REPORT = REPORT_VALUE;
+const DATA = {service_root: "/repo with spaces"};
+const selected = new Set(["AO-002"]);
+const decisionAnswers = new Map();
+const nodes = {};
+for (const id of ["ao-project-selector", "ao-agent_stream-selector", "ao-project-value", "ao-agent_stream-value",
+  "ao-project-label", "ao-agent_stream-label", "ao-reuse-only", "ao-target-error", "ao-target-controls", "tray", "instrumentCommand"]) {
+  nodes[id] = {value: "", textContent: "", hidden: true, checked: false, toggleAttribute() {}, setAttribute() {}};
+}
+const document = {getElementById(id) {return nodes[id];}};
+function orderedRequested() {return selected.has("AO-002") ? ["AO-002"] : [];}
+function orderedDecisionAnswers() {return [];}
+function assert(condition, message) {if (!condition) throw new Error(message);}
+FUNCTIONS_VALUE
+nodes["ao-project-selector"].value = "id";
+nodes["ao-agent_stream-selector"].value = "id";
+nodes["ao-project-value"].value = "project-123";
+nodes["ao-agent_stream-value"].value = "stream-123";
+renderTray();
+assert(!nodes["ao-target-controls"].hidden, "AO selection exposes destination controls");
+assert(nodes.instrumentCommand.value.includes("--ao-project-id project-123"), "saved ID is retained");
+nodes["ao-project-selector"].value = "name";
+updateAoTargetInput("project", true);
+assert(!nodes["ao-project-value"].value, "changing selector clears incompatible value");
+assert(nodes["ao-project-label"].textContent === "Project name", "input label follows selector");
+assert(nodes["ao-target-error"].textContent.includes("Provide both"), "partial target exposes error");
+nodes["ao-project-value"].value = "checkout's $(project)";
+nodes["ao-reuse-only"].checked = true;
+updateAoTargetInput("project");
+assert(!nodes["ao-target-error"].textContent, "complete target clears error");
+assert(nodes.instrumentCommand.value.includes("--ao-reuse-only"), "reuse choice reaches command");
+const command = nodes.instrumentCommand.value;
+nodes["ao-project-value"].value = "--ao-reuse-only";
+nodes["ao-agent_stream-value"].value = "-stream name";
+nodes["ao-agent_stream-selector"].value = "name";
+nodes["ao-reuse-only"].checked = false;
+updateAoTargetInput("project");
+const negativeCommand = nodes.instrumentCommand.value;
+assert(negativeCommand.includes("--ao-project=--ao-reuse-only"), "option-like values stay resource values");
+nodes["ao-project-value"].value = "bad\\nname";
+updateAoTargetInput("project");
+assert(nodes["ao-target-error"].textContent.includes("control characters"), "invalid names block command");
+nodes["ao-project-value"].value = "";
+nodes["ao-agent_stream-value"].value = "";
+nodes["ao-reuse-only"].checked = false;
+updateAoTargetInput("project");
+assert(!nodes.instrumentCommand.value.includes("--ao-"), "cleared target restores application configuration");
+selected.clear();
+renderTray();
+assert(nodes["ao-target-controls"].hidden, "deselecting AO hides optional controls");
+process.stdout.write(JSON.stringify({command, negativeCommand}));
+""".replace("REPORT_VALUE", json.dumps(report)).replace("FUNCTIONS_VALUE", functions)
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(shlex.split(json.loads(result.stdout)["command"]), [
+            "$otel-instrument", "--ids", "AO-002", "--ao-project", "checkout's $(project)",
+            "--ao-agent-stream-id", "stream-123", "--ao-reuse-only", "/repo with spaces",
+        ])
+        self.assertEqual(shlex.split(json.loads(result.stdout)["negativeCommand"]), [
+            "$otel-instrument", "--ids", "AO-002", "--ao-project=--ao-reuse-only",
+            "--ao-agent-stream=-stream name", "/repo with spaces",
+        ])
 
     def test_selection_v2_answer_unlocks_only_its_direct_executable_branch(self) -> None:
         report = MODULE.normalize_audit_report(sample_decision_branch_report())

@@ -1363,12 +1363,97 @@ def test_genai_reference_covers_content_governance_contract():
         "do not create a separate",
         "without a second content-capture",
         "Redact and truncate before recording",
+        "required profile defaults to useful redacted",
+        "Populate the real",
+        "capture configuration",
+        "redaction/truncation hook",
         "retention/access owner",
         "Never",
         "metric dimensions",
     ]
     missing = [term for term in required_terms if term not in text]
     assert not missing
+
+
+def test_required_genai_profile_is_shared_with_verification():
+    consumers = json.loads(_read(SKILLS_DIR / "references" / "consumers.json"))
+    assert consumers["genai-readiness.md"] == [
+        "otel-audit", "otel-instrument", "otel-verify"
+    ]
+    for name in consumers["genai-readiness.md"]:
+        entrypoint = _read(SKILLS_DIR / name / "SKILL.md")
+        assert "../references/genai-readiness.md" in entrypoint
+        assert "Required GenAI Coverage Profile" in " ".join(entrypoint.split())
+
+
+def test_genai_reports_require_joined_producer_field_and_lifecycle_evidence():
+    text = _read(GENAI_REF)
+    section = text.split("## Required GenAI Report Evidence", 1)[1].split("\n## ", 1)[0]
+    for term in (
+        "Operation and actual source boundary", "Exact creator or preserved hook",
+        "Version and example/source revision", "Official OTel level",
+        "Galileo/Splunk AO expectation", "Required profile acceptance",
+        "8192 UTF-8 bytes", "before every", "Opt-In", "span-only correlation",
+        "cancellation", "process-teardown", "GenAI **N/A**", "partial-success",
+        "add_agent_span", "add_llm_span", "add_tool_span", "latest examples",
+    ):
+        assert term in section, term
+    for name in ("otel-audit", "otel-instrument", "otel-verify"):
+        entrypoint = " ".join(_read(SKILLS_DIR / name / "SKILL.md").split())
+        assert "Required GenAI Report Evidence" in entrypoint
+
+
+def test_fresh_genai_sdk_examples_are_resolved_from_latest_main():
+    text = _read(SPLUNK_AO_REF)
+    assert "Use the latest Python examples" in text
+    assert "Resolve `main` at task time" in text
+    assert "matching package support" in text
+    assert "previously recorded commit" in text
+    assert "checked at SDK main commit" not in text
+    assert "/blob/main/src/splunk_ao/logger/logger.py" in text
+
+
+def test_genai_sdk_default_rubrics_exercise_new_and_preserved_producers():
+    fixture = REPO_ROOT / "evals/python/ai-assistant-demo/eval"
+    scenarios = json.loads(_read(fixture / "inputs/genai-default-scenarios.json"))
+    assert scenarios["fresh_agent"]["existing_genai_producer"] is None
+    assert scenarios["export_only_fresh_agent"]["existing_genai_producer"] is None
+    assert "add_splunk_ao_span_processor" in scenarios["export_only_fresh_agent"]["source_snapshot"]
+    for key in ("existing_otel", "existing_galileo"):
+        assert "start_as_current_span" in scenarios[key]["source_snapshot"]
+        assert scenarios[key]["known_values"]["stream"] is True
+    assert "add_galileo_span_processor" in scenarios["existing_galileo"]["source_snapshot"]
+    for skill, filename in (
+        ("otel-audit", "genai-sdk-default-audit.json"),
+        ("otel-instrument", "genai-sdk-default-instrument.json"),
+        ("otel-verify", "genai-sdk-required-verify.json"),
+    ):
+        case = json.loads(_read(fixture / "qual" / filename))
+        assert case["skill"] == skill
+        inputs = case["prompts"][0]["eval_inputs"]
+        assert "eval/inputs/genai-default-scenarios.json" in inputs
+        rubric = " ".join(case["rubric"])
+        assert "existing OTel and Galileo" in rubric
+        assert "Splunk AO span creation by default" in rubric
+        assert "required acceptance" in rubric
+        assert "Opt-In provenance" in rubric
+
+
+def test_genai_verification_fixture_cannot_pass_from_export_or_placeholder():
+    fixture = REPO_ROOT / "evals/python/ai-assistant-demo/eval"
+    evidence = json.loads(_read(fixture / "inputs/genai-required-evidence.json"))
+    missing = evidence["missing_content"]
+    assert missing["cloud_is_complete"] is True
+    assert missing["otlp_response"]["http_status"] == 200
+    assert missing["otlp_response"]["partialSuccess"]["rejectedSpans"] == 1
+    assert len(missing["spans"]) == 5
+    assert all("gen_ai.input.messages" not in span["attributes"] for span in missing["spans"])
+    malformed = evidence["malformed_content"]["attributes"]
+    assert "parts" not in json.loads(malformed["gen_ai.input.messages"])[0]
+    assert json.loads(malformed["gen_ai.output.messages"])[0]["content"] == ""
+    for messages in evidence["safe_model_content_example"].values():
+        assert all(message["parts"] for message in messages)
+    assert "timed out" in evidence["source_facts"]["auxiliary"]
 
 
 def test_genai_reference_covers_memory_framework_and_cost_contracts():

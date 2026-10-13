@@ -1,0 +1,26 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "genai-sdk-required-verify",
+      "eval_inputs": [
+        "eval/inputs/genai-default-scenarios.json",
+        "eval/inputs/genai-default-audit.json",
+        "eval/inputs/genai-required-evidence.json"
+      ],
+      "task": "Perform supplemental read-only GenAI verification of genai-required-evidence.json and producer scenarios in genai-default-scenarios.json. Write .observe/genai-required-review.md and machine-readable .observe/genai-required-review.json with per-span/per-field results against current OTel and both vendor guides. Useful safe content is required. Compare missing and malformed content, recorded kinds/metadata, embedded versus separate instructions, auxiliary timeout and partial-success response. This is a captured-fixture review: no app-code/runtime proof is provided, so do not fabricate or mutate canonical audit/selection/instrumentation/verification state, source, dependencies, profiles or installed SDK files. Do not run apps, install dependencies, start services or call models/cloud."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect app.py, eval_runner.py, the unchanged provided source/telemetry snapshots, loaded skill sources and generated .observe reports/plan; evaluate actual per-scenario decisions and field assessments, not copied skill wording.",
+    "Read ./last_message.md and ./grade.json."
+  ],
+  "rubric": [
+    "Selects Splunk AO span creation by default for the actual fresh interactive agent and export-only-fresh snapshot, while leaving existing OTel and Galileo GenAI producers/provider/export paths in place and filling only their gaps. Evaluation-only SDK usage and generic HTTP/provider setup do not count as live GenAI coverage.",
+    "Treats applicable safe content and vendor-required fields as required acceptance. Separately preserves OTel official Opt-In provenance instead of relabeling the standard, and never closes required coverage using metadata-only, empty payloads, placeholder completions, or unavailable values fabricated as zeros. Includes operation-specific field provenance and concrete numeric redaction/capture limits with a pre-export hook; generic redaction intent is insufficient. Source-unavailable fields have explicit reasons rather than invented telemetry.",
+    "Reconciles latest official OTel docs/schemas with both Galileo and Splunk AO integration recommendations. Calls out vendor INTERNAL-agent provider and tool message-mapping expectations separately, uses typed-parts schemas instead of outdated role/content examples, and avoids inventing separate instructions for embedded Chat Completions system messages.",
+    "Uses current official splunk/splunk-ao-python/examples and a matching SDK version/API as evidence for the fresh plan, including a supported callback or middleware OR logger/schema/decorator creation path. Does not claim add_splunk_ao_span_processor instruments operations or assume every vendor field is automatically mapped. The generated artifact contains a concrete per-operation producer receipt with named creator symbols, actual boundaries, exact example path/revision and installed support or an explicitly proposed source-verified SDK version. For a custom fresh Python agent, generic logger/schema wording without named method mapping is insufficient; absent installed SDK support remains unproven instead of changing the default. Resolves the latest official main examples at task time and records the actual revision/date plus chosen package compatibility; a hardcoded historical revision is not evidence of a fresh latest-example check. If retrieval is unavailable, distinguishes that prerequisite from the snapshot used.",
+    "Preserves one producer and one node per real operation, safe meaningful redacted content, actual offered tool definitions/arguments/results and opaque correlation, correct parentage, auxiliary model timeout/cancel lifecycle and teardown. Does not edit installed SDK files or require Studio/gateway or live credentials for source work and local proof. Includes explicit main/auxiliary timeout, cancellation and process-teardown rows, marking unavailable runtime proof Not proven and absent source operations N/A. Maps supplied safe opaque IDs to span-only correlation and assesses ordinary HTTP/ASGI/auth/SQL helpers as GenAI N/A.",
+    "Fails applicable missing content, vendor agent-provider/tool-message gaps and malformed role/content payloads under the required profile; flags separate-process model INTERNAL kind, missing streaming/known temperature, correlation and timeout lifecycle. Recognizes HTTP200/rejectedSpans1 as failed batch acceptance despite cloud complete, treats ordinary helpers as GenAI N/A, and keeps app-code execution/cloud delivery unproven rather than passing fixture-only evidence."
+  ]
+}

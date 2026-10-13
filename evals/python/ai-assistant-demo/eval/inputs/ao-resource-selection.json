@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "kind": "otel-selection",
+  "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+  "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+  "requested_ids": [
+    "AO-001",
+    "AO-002"
+  ],
+  "approved_ids": [
+    "AO-001",
+    "AO-002"
+  ],
+  "approved_by": null,
+  "approved_at": null
+}
