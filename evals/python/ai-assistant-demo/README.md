@@ -72,3 +72,10 @@ make -C evals eval-validation SKILL=skills/otel-instrument EVAL_PATTERN='python/
 This lets the example act as a before/after eval fixture: the baseline should
 show gaps, and the instrumented version should satisfy the rubric signal
 criteria.
+
+The GenAI default-profile rubrics include dated public OTel schema/requirement
+and Splunk AO example/API snapshots for offline evaluation. Their receipts name
+the exact source revision and capture date; they do not assert future `main`
+freshness or installed runtime support. The prompts distinguish live source
+from synthetic producer/trace facts, and constant-returning `search_docs` does
+not establish a separate query/document retrieval operation.

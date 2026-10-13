@@ -1450,6 +1450,11 @@ def normalize_ao_target(value: Any, path: str) -> dict[str, Any]:
     unknown = set(target) - {*selectors, "create_if_missing"}
     if unknown:
         fail(f"{path} contains unsupported fields: {sorted(unknown)}")
+    create_if_missing = target.get("create_if_missing", True)
+    if not isinstance(create_if_missing, bool):
+        fail(f"{path}.create_if_missing must be a boolean")
+    if not any(key in target for key in selectors) and create_if_missing is False:
+        return {"create_if_missing": False}
     normalized: dict[str, Any] = {}
     for resource in ("project", "agent_stream"):
         supplied = [key for key in (f"{resource}_name", f"{resource}_id") if key in target]
@@ -1461,9 +1466,6 @@ def normalize_ao_target(value: Any, path: str) -> dict[str, Any]:
         if len(value) > 512 or any(unicodedata.category(char).startswith("C") for char in raw_value):
             fail(f"{path}.{key} must be at most 512 characters without control characters")
         normalized[key] = value
-    create_if_missing = target.get("create_if_missing", True)
-    if not isinstance(create_if_missing, bool):
-        fail(f"{path}.create_if_missing must be a boolean")
     normalized["create_if_missing"] = create_if_missing
     return normalized
 
@@ -4903,8 +4905,8 @@ function aoTargetArguments() {{
   const reuseOnly = document.getElementById("ao-reuse-only")?.checked || false;
   const invalid = resources.some(resource => resource.value.length > 512 || /\\p{{C}}/u.test(resource.rawValue));
   const error = invalid ? "Resource selectors must not contain control characters."
-    : (hasValue || reuseOnly) && resources.some(resource => !resource.value)
-      ? "Provide both the Project and Agent Stream, or clear both fields and turn off reuse-only to use application configuration."
+    : hasValue && resources.some(resource => !resource.value)
+      ? "Provide both the Project and Agent Stream, or clear both fields to use application configuration."
       : "";
   const errorNode = document.getElementById("ao-target-error");
   if (errorNode) errorNode.textContent = error;
@@ -4912,7 +4914,7 @@ function aoTargetArguments() {{
     document.getElementById(`ao-${{resource.resource}}-value`)?.setAttribute("aria-invalid",
       String(Boolean(error) && (invalid || !resource.value)));
   }}
-  if (error || !hasValue) return {{parts: [], error}};
+  if (error || !hasValue) return {{parts: !error && reuseOnly ? ["--ao-reuse-only"] : [], error}};
   const parts = [];
   for (const resource of resources) {{
     const flag = (resource.resource === "project" ? "--ao-project" : "--ao-agent-stream")
@@ -5467,11 +5469,9 @@ def cmd_select(args: argparse.Namespace) -> int:
         )
         if value is not None
     }
-    if args.ao_reuse_only and not ao_selectors:
-        fail("--ao-reuse-only requires project and Agent Stream selectors")
     ao_target = (
         {**ao_selectors, "create_if_missing": not args.ao_reuse_only}
-        if ao_selectors else None
+        if ao_selectors or args.ao_reuse_only else None
     )
     selection = normalize_selection(
         {

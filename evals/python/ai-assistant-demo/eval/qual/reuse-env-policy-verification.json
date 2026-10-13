@@ -1,0 +1,25 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "reuse-env-policy-verification",
+      "eval_inputs": [
+        "eval/inputs/ao-resource-audit.json",
+        "eval/inputs/ao-resource-selection.json",
+        "eval/inputs/ao-resource-instrumentation.json",
+        "eval/inputs/ao-resource-resolver.py"
+      ],
+      "task": "Perform only read-only supplemental verification of the selected AO resource policy in ./service. Copy the supplied canonical packet to .observe and validate its existing bindings; keep its incomplete outcomes intact. In a separate .observe/tmp packet, invoke the bundled selection command for AO-002 with --ao-reuse-only and no resource-name or ID flags. Verify a schema-v3 policy-only ao_target with create_if_missing=false, unchanged dependency-closed finding scope, and a changed selection digest. Render its HTML and inspect/test that both optional resource fields may stay blank while the reuse-only policy reaches the generated instrumentation command; partial explicit selector pairs remain invalid. Exercise the supplied snapshot of the actual resource helper with credential-free fake SDK clients and temporary process env names/IDs, proving both-existing reuses and an absent named stream makes zero create calls under --reuse-only. Keep supplied source, real env profiles and original canonical evidence unchanged; use only scratch harnesses under .observe/tmp. Write durable supplemental evidence and a concise reader report. No SDK download, services, gateway, model/cloud calls or live resource creation. Local fake proof does not close missing cloud resource/receipt or logger lifecycle evidence."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect actual selection JSON, selection/digest/HTML command tests, actual helper-snapshot fake call counts, unchanged original packet/source evidence, and supplemental verification report.",
+    "Read ./last_message.md and ./grade.json."
+  ],
+  "rubric": [
+    "Executes the bundled selection CLI with --ao-reuse-only and omitted resource flags; records schema-v3 ao_target={create_if_missing:false}, unchanged requested/dependency scope and a digest different from the original no-policy selection. Does not invent project/stream names or claim the original instrumentation digest binds to this scratch target.",
+    "Proves rendered HTML permits both optional fields blank with reuse-only checked and retains --ao-reuse-only in the generated command. Partial explicit pairs remain invalid; existing schema-v1/v2/no-policy behavior is preserved or explicitly limited to available evidence.",
+    "Executes the supplied actual resolver snapshot with env-backed names and IDs and credential-free SDK fakes, inspects ordered lookups/returned identities, and proves both-existing reuses with zero creates and a missing named stream fails reuse-only with zero creates. Does not replace the implementation or infer no creation from source text alone.",
+    "Keeps application/source/env inputs and original bound packet unchanged; supplemental local fake/config proof is distinct from live resource creation, transport, cloud receipt and incomplete logger lifecycle. Reports actual commands/results and remaining proof accurately."
+  ]
+}

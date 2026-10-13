@@ -101,8 +101,12 @@ Persist supplied targets in the schema-v3 selection's optional `ao_target`:
 ```
 
 Use `project_id` instead of `project_name`, or `agent_stream_id` instead of
-`agent_stream_name`, to select an existing resource by ID. Each resource has
-exactly one selector. IDs are lookup-only: an unresolved ID never authorizes
+`agent_stream_name`, to select an existing resource by ID. When resource selectors are supplied, each resource has
+exactly one selector. A reuse-only policy may omit both selectors:
+`{"create_if_missing": false}` uses the application's effective env/config
+resource identity and forbids creation. `select --ao-reuse-only` and the audit
+checkbox preserve that policy even with both optional fields blank; partial
+resource overrides still require the complete pair. IDs are lookup-only: an unresolved ID never authorizes
 creating a replacement. `create_if_missing: false` means reuse-only. The
 target changes configuration, not selected scope, and participates in
 `selection_sha256`; changing it invalidates older instrumentation evidence.

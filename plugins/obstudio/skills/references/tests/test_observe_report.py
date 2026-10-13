@@ -3499,7 +3499,12 @@ for (const [serviceRoot, input, expected] of cases) {
             "requested_ids": ["AO-002"],
         }
         target = {"project_name": "checkout", "agent_stream_name": "live"}
+        env_policy = MODULE.normalize_selection({**base, "ao_target": {"create_if_missing": False}}, report)
+        self.assertEqual(env_policy["ao_target"], {"create_if_missing": False})
         bad_targets = [
+            {},
+            {"create_if_missing": True},
+            {"create_if_missing": "false"},
             {"project_name": "checkout"},
             {**target, "project_id": "project-123"},
             {**target, "project_name": " "},
@@ -3577,8 +3582,12 @@ for (const [serviceRoot, input, expected] of cases) {
             })
             result = subprocess.run([sys.executable, str(SCRIPT), "select", str(audit), "--ids", "AO-002",
                 "--ao-reuse-only", "-o", str(selection)], capture_output=True, text=True, check=False)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("requires project and Agent Stream selectors", result.stderr)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            env_policy = json.loads(selection.read_text(encoding="utf-8"))
+            self.assertEqual(env_policy["schema_version"], 3)
+            self.assertEqual(env_policy["ao_target"], {"create_if_missing": False})
+            self.assertEqual(env_policy["approved_ids"], selected["approved_ids"])
+            self.assertNotEqual(MODULE.selection_digest(env_policy), MODULE.selection_digest(selected))
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript behavior validation")
     def test_html_ao_resource_inputs_generate_validated_quoted_commands(self) -> None:
@@ -3641,6 +3650,11 @@ nodes["ao-agent_stream-value"].value = "";
 nodes["ao-reuse-only"].checked = false;
 updateAoTargetInput("project");
 assert(!nodes.instrumentCommand.value.includes("--ao-"), "cleared target restores application configuration");
+nodes["ao-reuse-only"].checked = true;
+updateAoTargetInput("project");
+assert(!nodes["ao-target-error"].textContent, "reuse-only permits env fallback");
+assert(nodes.instrumentCommand.value.includes("--ao-reuse-only"), "env reuse policy reaches command");
+assert(!nodes.instrumentCommand.value.includes("--ao-project"), "env fallback does not invent selectors");
 selected.clear();
 renderTray();
 assert(nodes["ao-target-controls"].hidden, "deselecting AO hides optional controls");

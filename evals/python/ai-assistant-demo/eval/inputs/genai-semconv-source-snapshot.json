@@ -1,0 +1,1897 @@
+{
+  "kind": "public-official-genai-source-snapshot",
+  "scope": "Dated offline eval evidence, not proof that main remains latest during future runs. Record snapshot provenance and mark a newer live lookup unavailable/unverified when network is restricted. Source evidence does not establish emitted/runtime configuration.",
+  "otel": {
+    "repository": "https://github.com/open-telemetry/semantic-conventions-genai",
+    "requested_ref": "main",
+    "resolved_revision": "5293effb97f18ddb0602da884dadee6119d67679",
+    "commit_date": "2026-10-12T19:05:02Z",
+    "captured_at_utc": "2026-10-13T06:56:26.057696+00:00",
+    "files": [
+      {
+        "path": "docs/gen-ai/gen-ai-agent-spans.md",
+        "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/docs/gen-ai/gen-ai-agent-spans.md",
+        "sha256": "018ffd339be99c7e56ddba7265dd3095ca0735ddf680d28f96036043641384f4",
+        "bytes": 146984
+      },
+      {
+        "path": "docs/gen-ai/client-inference.md",
+        "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/docs/gen-ai/client-inference.md",
+        "sha256": "d66935733da1edd048cfa3b90d081f8d81b6961b62a69dafa15c1c5ad03b9c5b",
+        "bytes": 116267
+      },
+      {
+        "path": "model/gen-ai/gen-ai-input-messages.json",
+        "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-input-messages.json",
+        "sha256": "034fcd8c87f1e013f3a5a5018503210e2bee4d2499c361823b96e906d40a50ad",
+        "bytes": 20355
+      },
+      {
+        "path": "model/gen-ai/gen-ai-output-messages.json",
+        "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-output-messages.json",
+        "sha256": "cb1e0296de9a5c15237f4e49af2f13e1409ffc9a671f89767da20ad986f37461",
+        "bytes": 21615
+      },
+      {
+        "path": "model/gen-ai/gen-ai-tool-call-arguments.json",
+        "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-tool-call-arguments.json",
+        "sha256": "73607a8e8d9e84393475ef460108c59dbb9e1d2ddc0d0177fce6f735a62367ea",
+        "bytes": 171
+      },
+      {
+        "path": "model/gen-ai/gen-ai-tool-call-result.json",
+        "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-tool-call-result.json",
+        "sha256": "44eb4a93b05eea7da14489f1d253814c6429772d1fe869f8f6fc1749d7593412",
+        "bytes": 168
+      },
+      {
+        "path": "model/gen-ai/gen-ai-tool-definitions.json",
+        "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-tool-definitions.json",
+        "sha256": "023501e9835139703d4b475c86d3d6b6b11dee2ccc08ea6c8ab48d173b89aa80",
+        "bytes": 3227
+      },
+      {
+        "path": "docs/gen-ai/gen-ai-spans.md",
+        "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/docs/gen-ai/gen-ai-spans.md",
+        "sha256": "af0b7501177452a5fb929e09a42d791631511a0544f2c71e1a008ff177bcebf0",
+        "bytes": 84003
+      }
+    ],
+    "attribute_requirement_rows": [
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.operation.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.provider.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "error.type",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.agent.description",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.agent.id",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.agent.name",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.agent.version",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.conversation.id",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.data_source.id",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.output.type",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.request.choice.count",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.request.seed",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "server.port",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.request.frequency_penalty",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.request.max_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.request.model",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.request.presence_penalty",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.request.previous_response.id",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.request.stop_sequences",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.request.temperature",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.request.top_p",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.response.finish_reasons",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.audio.cache_read.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.audio.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.audio.output_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.cache_read.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.cache_write.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.image.cache_read.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.image.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.image.output_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.output_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.text.cache_read.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.text.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.usage.text.output_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "server.address",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.input.messages",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.output.messages",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.system_instructions",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent client span",
+        "attribute": "gen_ai.tool.definitions",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.operation.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "error.type",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.agent.description",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.agent.name",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.conversation.id",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.data_source.id",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.output.type",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.choice.count",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.seed",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.frequency_penalty",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.max_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.model",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.presence_penalty",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.stop_sequences",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.temperature",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.top_p",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.response.finish_reasons",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.usage.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.usage.output_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.input.messages",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.output.messages",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.system_instructions",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.tool.definitions",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke workflow span",
+        "attribute": "gen_ai.operation.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke workflow span",
+        "attribute": "error.type",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke workflow span",
+        "attribute": "gen_ai.conversation.id",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke workflow span",
+        "attribute": "gen_ai.workflow.name",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke workflow span",
+        "attribute": "gen_ai.input.messages",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke workflow span",
+        "attribute": "gen_ai.output.messages",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.operation.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.provider.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "error.type",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.conversation.id",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.output.type",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.prompt.name",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.prompt.version",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.choice.count",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.model",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.seed",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.stream",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.top_k",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "server.port",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.conversation.compacted",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.frequency_penalty",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.max_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.presence_penalty",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.previous_response.id",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.reasoning.level",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.stop_sequences",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.temperature",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.top_p",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.response.finish_reasons",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.response.id",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.response.model",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.response.time_to_first_chunk",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.audio.cache_read.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.audio.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.audio.output_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.cache_read.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.cache_write.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.image.cache_read.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.image.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.image.output_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.output_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.reasoning.output_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.text.cache_read.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.text.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.text.output_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "server.address",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.input.messages",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.output.messages",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.prompt.variable",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.system_instructions",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.tool.definitions",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.operation.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "error.type",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.data_source.id",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.provider.name",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.request.model",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "server.port",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.retrieval.top_k",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "server.address",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.retrieval.documents",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.retrieval.query.text",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.operation.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.tool.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "error.type",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.agent.name",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.conversation.id",
+        "official_level": "Conditionally Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.tool.call.id",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.tool.description",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.tool.type",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.tool.call.arguments",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.tool.call.result",
+        "official_level": "Opt-In"
+      }
+    ],
+    "structured_schemas": {
+      "model/gen-ai/gen-ai-input-messages.json": {
+        "$defs": {
+          "BlobPart": {
+            "properties": {
+              "type": {
+                "const": "blob",
+                "type": "string"
+              },
+              "mime_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "modality": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Modality"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "content": {
+                "format": "binary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "modality",
+              "content"
+            ],
+            "type": "object"
+          },
+          "ChatMessage": {
+            "additionalProperties": true,
+            "properties": {
+              "role": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Role"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "parts": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/TextPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ToolCallRequestPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ToolCallResponsePart"
+                    },
+                    {
+                      "$ref": "#/$defs/ServerToolCallPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ServerToolCallResponsePart"
+                    },
+                    {
+                      "$ref": "#/$defs/BlobPart"
+                    },
+                    {
+                      "$ref": "#/$defs/FilePart"
+                    },
+                    {
+                      "$ref": "#/$defs/UriPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ReasoningPart"
+                    },
+                    {
+                      "$ref": "#/$defs/CompactionPart"
+                    },
+                    {
+                      "$ref": "#/$defs/GenericPart"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "role",
+              "parts"
+            ],
+            "type": "object"
+          },
+          "CompactionPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "compaction",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "content": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          },
+          "FilePart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "file",
+                "type": "string"
+              },
+              "mime_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "modality": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Modality"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "file_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "modality",
+              "file_id"
+            ],
+            "type": "object"
+          },
+          "GenericPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          },
+          "GenericServerToolCall": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          },
+          "GenericServerToolCallResponse": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          },
+          "Modality": {
+            "enum": [
+              "image",
+              "video",
+              "audio",
+              "document"
+            ],
+            "type": "string"
+          },
+          "ReasoningPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "reasoning",
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "content"
+            ],
+            "type": "object"
+          },
+          "Role": {
+            "enum": [
+              "system",
+              "user",
+              "assistant",
+              "tool"
+            ],
+            "type": "string"
+          },
+          "ServerToolCallPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "server_tool_call",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "name": {
+                "type": "string"
+              },
+              "server_tool_call": {
+                "$ref": "#/$defs/GenericServerToolCall"
+              }
+            },
+            "required": [
+              "type",
+              "name",
+              "server_tool_call"
+            ],
+            "type": "object"
+          },
+          "ServerToolCallResponsePart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "server_tool_call_response",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "server_tool_call_response": {
+                "$ref": "#/$defs/GenericServerToolCallResponse"
+              }
+            },
+            "required": [
+              "type",
+              "server_tool_call_response"
+            ],
+            "type": "object"
+          },
+          "TextPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "text",
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "content"
+            ],
+            "type": "object"
+          },
+          "ToolCallRequestPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "tool_call",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "name": {
+                "type": "string"
+              },
+              "arguments": {
+                "default": null
+              }
+            },
+            "required": [
+              "type",
+              "name"
+            ],
+            "type": "object"
+          },
+          "ToolCallResponsePart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "tool_call_response",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "response": {}
+            },
+            "required": [
+              "type",
+              "response"
+            ],
+            "type": "object"
+          },
+          "UriPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "uri",
+                "type": "string"
+              },
+              "mime_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "modality": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Modality"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "uri": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "modality",
+              "uri"
+            ],
+            "type": "object"
+          }
+        },
+        "items": {
+          "$ref": "#/$defs/ChatMessage"
+        },
+        "type": "array"
+      },
+      "model/gen-ai/gen-ai-output-messages.json": {
+        "$defs": {
+          "BlobPart": {
+            "properties": {
+              "type": {
+                "const": "blob",
+                "type": "string"
+              },
+              "mime_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "modality": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Modality"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "content": {
+                "format": "binary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "modality",
+              "content"
+            ],
+            "type": "object"
+          },
+          "CompactionPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "compaction",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "content": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          },
+          "FilePart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "file",
+                "type": "string"
+              },
+              "mime_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "modality": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Modality"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "file_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "modality",
+              "file_id"
+            ],
+            "type": "object"
+          },
+          "FinishReason": {
+            "enum": [
+              "stop",
+              "length",
+              "content_filter",
+              "tool_call",
+              "compaction",
+              "error"
+            ],
+            "type": "string"
+          },
+          "GenericPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          },
+          "GenericServerToolCall": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          },
+          "GenericServerToolCallResponse": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          },
+          "Modality": {
+            "enum": [
+              "image",
+              "video",
+              "audio",
+              "document"
+            ],
+            "type": "string"
+          },
+          "OutputMessage": {
+            "additionalProperties": true,
+            "properties": {
+              "role": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Role"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "parts": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/TextPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ToolCallRequestPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ToolCallResponsePart"
+                    },
+                    {
+                      "$ref": "#/$defs/ServerToolCallPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ServerToolCallResponsePart"
+                    },
+                    {
+                      "$ref": "#/$defs/BlobPart"
+                    },
+                    {
+                      "$ref": "#/$defs/FilePart"
+                    },
+                    {
+                      "$ref": "#/$defs/UriPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ReasoningPart"
+                    },
+                    {
+                      "$ref": "#/$defs/CompactionPart"
+                    },
+                    {
+                      "$ref": "#/$defs/GenericPart"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "finish_reason": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/FinishReason"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "deprecated": true
+              }
+            },
+            "required": [
+              "role",
+              "parts"
+            ],
+            "type": "object"
+          },
+          "ReasoningPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "reasoning",
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "content"
+            ],
+            "type": "object"
+          },
+          "Role": {
+            "enum": [
+              "system",
+              "user",
+              "assistant",
+              "tool"
+            ],
+            "type": "string"
+          },
+          "ServerToolCallPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "server_tool_call",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "name": {
+                "type": "string"
+              },
+              "server_tool_call": {
+                "$ref": "#/$defs/GenericServerToolCall"
+              }
+            },
+            "required": [
+              "type",
+              "name",
+              "server_tool_call"
+            ],
+            "type": "object"
+          },
+          "ServerToolCallResponsePart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "server_tool_call_response",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "server_tool_call_response": {
+                "$ref": "#/$defs/GenericServerToolCallResponse"
+              }
+            },
+            "required": [
+              "type",
+              "server_tool_call_response"
+            ],
+            "type": "object"
+          },
+          "TextPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "text",
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "content"
+            ],
+            "type": "object"
+          },
+          "ToolCallRequestPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "tool_call",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "name": {
+                "type": "string"
+              },
+              "arguments": {
+                "default": null
+              }
+            },
+            "required": [
+              "type",
+              "name"
+            ],
+            "type": "object"
+          },
+          "ToolCallResponsePart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "tool_call_response",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "response": {}
+            },
+            "required": [
+              "type",
+              "response"
+            ],
+            "type": "object"
+          },
+          "UriPart": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "uri",
+                "type": "string"
+              },
+              "mime_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "modality": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Modality"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "uri": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "modality",
+              "uri"
+            ],
+            "type": "object"
+          }
+        },
+        "items": {
+          "$ref": "#/$defs/OutputMessage"
+        },
+        "type": "array"
+      },
+      "model/gen-ai/gen-ai-tool-call-arguments.json": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "model/gen-ai/gen-ai-tool-call-result.json": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "model/gen-ai/gen-ai-tool-definitions.json": {
+        "$defs": {
+          "FunctionToolDefinition": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "const": "function",
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "parameters": {
+                "anyOf": [
+                  {
+                    "$ref": "http://json-schema.org/draft-07/schema#"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "type",
+              "name"
+            ],
+            "type": "object"
+          },
+          "GenericToolDefinition": {
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "name"
+            ],
+            "type": "object"
+          }
+        },
+        "items": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FunctionToolDefinition"
+            },
+            {
+              "$ref": "#/$defs/GenericToolDefinition"
+            }
+          ]
+        },
+        "type": "array"
+      }
+    },
+    "schema_extract": "Validation structure retained; descriptive prose/examples omitted. Full source hashes and URLs above."
+  },
+  "vendor_sources": [
+    {
+      "url": "https://docs.galileo.ai/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+      "checked_at_utc": "2026-10-13T06:56:26.057696+00:00",
+      "paraphrased_requirements": {
+        "agent": [
+          "operation and provider identity",
+          "operation-derived span name; CLIENT remote or INTERNAL in-process",
+          "actual input/output via GenAI messages or OpenInference values"
+        ],
+        "model": [
+          "operation and provider; request model conditionally required",
+          "actual input/output via supported GenAI/OpenInference mapping"
+        ],
+        "tool": [
+          "execute_tool operation; tool name",
+          "call ID recommended",
+          "arguments plus input message mapping; result plus output message mapping, or OpenInference values"
+        ],
+        "errors": [
+          "error.type and ERROR status"
+        ],
+        "delivery": [
+          "Check partialSuccess rejection even with HTTP 200"
+        ],
+        "schema_note": "Assess current typed-parts schemas separately from older vendor examples."
+      }
+    },
+    {
+      "url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+      "checked_at_utc": "2026-10-13T06:56:26.057696+00:00",
+      "paraphrased_requirements": {
+        "agent": [
+          "operation and provider identity",
+          "operation-derived span name; CLIENT remote or INTERNAL in-process",
+          "actual input/output via GenAI messages or OpenInference values"
+        ],
+        "model": [
+          "operation and provider; request model conditionally required",
+          "actual input/output via supported GenAI/OpenInference mapping"
+        ],
+        "tool": [
+          "execute_tool operation; tool name",
+          "call ID recommended",
+          "arguments plus input message mapping; result plus output message mapping, or OpenInference values"
+        ],
+        "errors": [
+          "error.type and ERROR status"
+        ],
+        "delivery": [
+          "Check partialSuccess rejection even with HTTP 200"
+        ],
+        "schema_note": "Assess current typed-parts schemas separately from older vendor examples."
+      }
+    }
+  ]
+}

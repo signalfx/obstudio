@@ -2332,3 +2332,24 @@ def test_splunk_detector_publish_skill_normalizes_program_text_before_create():
     )
     # The failure is a SignalFlow parse 400, distinct from a field-name 400.
     assert "400" in text, "SKILL.md must document the HTTP 400 SignalFlow-parse failure"
+
+
+def test_resource_resolver_eval_snapshot_matches_shipped_helper():
+    assert (REPO_ROOT / "evals/python/ai-assistant-demo/eval/inputs/ao-resource-resolver.py").read_bytes() == (SKILLS_DIR / "otel-instrument/scripts/resolve_ao_resources.py").read_bytes()
+
+
+def test_genai_default_eval_sources_and_applicability_are_explicit():
+    inputs = REPO_ROOT / "evals/python/ai-assistant-demo/eval/inputs"
+    audit = json.loads((inputs / "genai-default-audit.json").read_text())
+    assert all(row["id"] != "OTEL-002" for row in audit["findings"])
+    assert all(row["id"] != "genai.search_docs.retrieval" for row in audit["verification"]["scenarios"])
+    for name in ("genai-sdk-source-snapshot.json", "genai-semconv-source-snapshot.json"):
+        snapshot = json.loads((inputs / name).read_text())
+        assert snapshot["kind"].startswith("public-official-")
+        assert "future" in snapshot["scope"]
+    for name in ("genai-sdk-default-audit.json", "genai-sdk-default-instrument.json", "genai-sdk-required-verify.json"):
+        case = json.loads((inputs.parent / "qual" / name).read_text())
+        prompt = case["prompts"][0]
+        assert set(("eval/inputs/genai-required-evidence.json", "eval/inputs/genai-sdk-source-snapshot.json", "eval/inputs/genai-semconv-source-snapshot.json")) <= set(prompt["eval_inputs"])
+        assert "separate captured synthetic case" in prompt["task"]
+        assert "live networking" in case["rubric"][3]

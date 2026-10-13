@@ -392,6 +392,15 @@ class CLITests(unittest.TestCase):
             self.assertEqual(evidence["agent_stream"]["id"], "s")
             self.assertEqual(stderr, "")
 
+    def test_env_fallback_reuse_only_never_creates_missing_resources(self):
+        environment = {"SPLUNK_AO_PROJECT": "project", "SPLUNK_AO_AGENT_STREAM": "stream"}
+        clients = (Client([resource("p", "project")]), Client())
+        result, evidence, _ = self.run_with_environment(environment, ["--reuse-only"], clients)
+        self.assertEqual(result, 1)
+        self.assertEqual(evidence["error"], "agent_stream_name_not_found_reuse_only")
+        self.assertEqual(clients[0].create_calls, [])
+        self.assertEqual(clients[1].create_calls, [])
+
     def test_cli_project_selector_overrides_both_env_project_selectors(self):
         environment = {
             "SPLUNK_AO_PROJECT": "stale-project", "SPLUNK_AO_PROJECT_ID": "stale-id",
