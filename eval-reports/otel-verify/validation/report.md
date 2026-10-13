@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-verify |
-| Run ID | 20261013T192108942104Z |
+| Run ID | 20261013T233359490821Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -24,4 +24,5 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/ai-assistant-demo/qual/resource-selector-failures | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/resource-selector-failures.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/resource-selector-length-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/resource-selector-length-verify.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/reuse-env-policy-verification | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/reuse-env-policy-verification.json | 0 | 4 | 0 |
+| python/ai-assistant-demo/qual/tool-message-mapping-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/tool-message-mapping-verify.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/verify.json | 0 | 6 | 0 |
