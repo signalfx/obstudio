@@ -71,6 +71,38 @@ separate system instructions apply only when the API supplies them separately.
 The vendor agent tables additionally require provider identity, and their tool
 tables call for message mappings alongside arguments/results. Preserve these
 as vendor compatibility checks when the latest OTel operation table differs.
+For each applicable `execute_tool` span, reconcile the actual call arguments
+and terminal result with this vendor content contract:
+
+| Tool value | GenAI mapping on the same tool span | Supported OpenInference alternative |
+|---|---|---|
+| Redacted actual arguments | `gen_ai.tool.call.arguments` and `gen_ai.input.messages` | `input.value` |
+| Redacted actual result, when produced | `gen_ai.tool.call.result` and `gen_ai.output.messages` | `output.value` |
+
+Arguments/results alone leave the vendor message mapping missing. Messages on
+an agent, model, parent, sibling, event on another span, or duplicate wrapper
+cannot close a tool's fields. Use current typed-parts schemas and a supported
+serialization of those same sanitized arguments/results, not unrelated chat
+history or placeholders. Preserve source types/structure where supported,
+actual safe call identity, configured limits and truthful truncation/gap reasons.
+Track whether a result was produced separately from its value: a successful
+`null`, `false`, zero or empty collection is still an actual result and must
+retain its truthful mapping. An error/cancel/timeout with no produced result
+must record error status/type and an explicit output applicability reason;
+never synthesize successful output.
+
+Audit must put each missing applicable field in the owning canonical finding's
+`required_fix`, per-tool `expected_telemetry`, acceptance and verification
+scenario, then check those fields before handoff. Instrumentation must inspect
+what the chosen SDK or preserved producer actually emits and fill missing
+mappings through supported same-span application hooks from pre-SDK sanitized
+values. SDK installation, creator method names or exporter setup prove no field.
+Verification must match by the tool span's trace/span ID, validate each mapping
+against the observed sanitized arguments/result and current schema, and report
+missing, malformed or mismatched fields individually. Restricted capture of an
+otherwise available value remains partial with a reason, even when its safety test passes. Source-unavailable output on a failed
+operation is N/A only with the corresponding lifecycle and no-result evidence.
+
 Use current OTel typed-parts schemas rather than copying older vendor
 role/content examples. Do not convert HTTP, database authorization, ASGI, or
 setup helpers into GenAI workflows/retrievers because a backend labels them

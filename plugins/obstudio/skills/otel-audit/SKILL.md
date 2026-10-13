@@ -680,6 +680,17 @@ Do not collapse a partial GenAI gap into `covered` because one metric or span
 exists. The GenAI Readiness surface row is the source of truth for deciding
 whether a selectable `$otel-instrument` finding is warranted.
 
+Before handoff, apply the per-tool vendor content contract in
+`../references/genai-readiness.md` to every actual tool boundary. For the GenAI
+path, list `gen_ai.tool.call.arguments` plus `gen_ai.input.messages` for its
+arguments, and `gen_ai.tool.call.result` plus `gen_ai.output.messages` for any
+produced result, on that tool's canonical `expected_telemetry`. Bind missing
+mappings in `required_fix`, acceptance and its verification scenario; preserve
+an explicitly supported OpenInference alternative when that producer uses it.
+Parent/model messages and an arguments/results-only tool span do not cover
+these fields. Correct a canonical omission before rendering or handoff rather
+than leaving the requirement only in supplemental prose.
+
 Make each selected GenAI contract concrete and consistent across readiness
 `required_signals`, finding `required_fix`, `expected_telemetry`, acceptance and
 verification scenarios. Name the actual existing producer or the proposed SDK

@@ -526,6 +526,20 @@ or required resource permission may block live product proof without blocking
 credential-free configuration, provider-reuse, lifecycle, content-safety, and
 duplicate-span tests.
 
+Apply the per-tool vendor content contract in
+`../references/genai-readiness.md` per actual tool span ID. Arguments/results
+alone or messages on its parent/model do not satisfy the tool's message fields.
+For the GenAI path, check arguments against both `gen_ai.tool.call.arguments`
+and schema-valid `gen_ai.input.messages`, and produced results against both
+`gen_ai.tool.call.result` and `gen_ai.output.messages`. A supported
+OpenInference `input.value`/`output.value` path is an explicit alternative,
+not a reason to silently pass missing content. Compare the same sanitized
+source values, correlation and configured limits; missing, malformed or
+mismatched mappings are individual failures. For error/cancel/timeout without
+a produced result, require error/lifecycle evidence and an exact absent-output
+reason, never a fabricated successful output. A fixture-only pass remains
+structural proof; SDK-created spans still need actual runtime capture.
+
 For selected GenAI spans, reconcile current OTel docs/schemas and both vendor
 integration guides before scoring. Inventory every operation and field with
 official level, vendor requirement, skill acceptance, applicability, actual

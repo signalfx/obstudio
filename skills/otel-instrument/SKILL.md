@@ -389,6 +389,19 @@ If those authored contracts disagree, report the exact stale fields and
 refresh/rebind the audit selection through the normal flow before code changes;
 do not silently narrow the work or mutate a bound audit to make it pass.
 
+Apply the per-tool vendor content contract in
+`../references/genai-readiness.md` before closing a selected tool finding.
+Inspect the actual SDK/preserved producer's tool output: arguments/results
+without input/output message mappings remain a gap. Populate both GenAI pairs
+on the same existing tool span, or its supported OpenInference equivalent,
+using the same pre-SDK sanitized arguments and produced result. Name the
+supported enrichment hook and prove the span ID stays unchanged; preserve the
+producer, provider/exporter and business calls. Do not add a wrapper span or
+assume `add_tool_span`/a callback supplies fields that were never observed.
+Test arguments/results-only and parent-only-message cases as failures, a
+schema-valid matching tool as success, and error/no-result as truthful output
+applicability without fabricated completion.
+
 For every GenAI plan/report, populate all three **Required GenAI Report
 Evidence** tables in `../references/genai-readiness.md`. Each operation row
 must join its actual boundary to its exact creator, kind/parent, version/example
@@ -1593,9 +1606,13 @@ At minimum:
    exactly one candidate whose safe content matches the redacted/truncated
    actual provider return, not merely its role or finish reason. Likewise
    assert the recorded input-message content matches the safe model-bound
-   input and that tool arguments/results match their safe call boundaries;
-   check structure, redaction, and absence of duplicate content on those
-   same completed spans.
+   input and that tool arguments/results match their safe call boundaries.
+   For each tool, also parse its own input/output message mappings (or the
+   supported OpenInference values) and compare them to those same sanitized
+   arguments/result; fields on the parent/model are insufficient. Remove each
+   mapping in a negative test so arguments/results-only content cannot pass.
+   Check current schema, redaction and unchanged trace/span identity with no
+   duplicate node; test successful null separately from no result on failure.
    Build an exact signal closure matrix and execute every changed span name and
    metric call site that should still emit, plus explicit absence proof for
    every removed signal. Do not infer coverage for create, batch, update,
