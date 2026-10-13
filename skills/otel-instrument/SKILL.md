@@ -144,8 +144,9 @@ Markdown reports.
   a separate AO section or create a second selection ledger. The implemented
   application or deployment uses the selected destination mode. Preserve
   configured supported AO APIs, operator destinations, and direct-cloud
-  requests. A cloud-compatible Studio gateway is optional: its absence must
-  not block instrumentation implementation, SDK imports, local tests, or the
+  requests. When AO destination settings are absent, default the local route
+  to an available cloud-compatible Studio gateway. Its absence must not block
+  source instrumentation, SDK imports, local tests, or implementation of the
   supported resource-creation branch. Use normal AO SDK resource
   calls and per-request routing, not a Studio-specific application adapter or
   global destination registration. Local receiver receipt is not cloud proof.
@@ -545,7 +546,8 @@ report background:
   profile used by the actual launch), then import and
   exercise the installed SDK exporter without live credentials. A preflight
   environment containing the SDK does not prove that a later normal sync kept
-  it installed. Treat missing credentials for remote project, Agent Stream,  or delivery proof separately from dependency resolution: credentials do not
+  it installed. Treat missing credentials for remote project, Agent Stream,
+  or delivery proof separately from dependency resolution: credentials do not
   block local lockfile, import, or configuration checks. If package resolution
   itself is unavailable, record that exact blocker and keep export
   `Not proven` or `Not configured` as appropriate; a manifest entry plus

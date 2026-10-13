@@ -507,7 +507,8 @@ non-default ports; an unused sample, pass-through allowlist, or blank generated
 assignment is `Not configured`. Keep verify read-only for application/env
 files and report the missing fields instead of repairing them. Preserve
 explicit direct-cloud mode and do not require this trio for an unselected or
-direct-cloud AO path. Separatelyprove that Studio uses its active connection/realm, supplies upstream auth,
+direct-cloud AO path. Separately prove that Studio uses its active
+connection/realm, supplies upstream auth,
 preserves per-request resource bindings without cross-application leakage, and
 handles unavailable or changed connections honestly. Application cloud
 credentials are not a prerequisite for this mode. A missing Studio connection

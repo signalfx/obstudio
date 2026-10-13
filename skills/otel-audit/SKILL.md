@@ -866,9 +866,11 @@ runner that instrumentation should update/load, with user-supplied selection
 values taking precedence. Record missing or unsupported profile wiring as a
 gap. Audit remains read-only for env files and cloud resources.
 Distinguish ordinary local OTLP receipt from AO resource and delivery evidence.
-An available cloud-compatible Studio gateway is an optional local destination.
-Its absence must not block instrumentation code or credential-free tests, and
-an existing direct-cloud route remains valid. Assess normal SDK resource calls,supported per-request project/stream binding, gateway compatibility, and cloud
+When AO destination settings are absent, an available cloud-compatible Studio
+gateway is the default local destination. Its absence must not block source
+instrumentation or credential-free tests. An existing direct-cloud route
+remains valid. Assess normal SDK resource calls, supported per-request
+project/stream binding, gateway compatibility, and cloud
 receipt separately. Preserve explicit operator/direct-cloud destinations.
 Do not propose a Studio-specific application adapter or global route
 registration. If the SDK or gateway cannot implement the standard API/ingest
