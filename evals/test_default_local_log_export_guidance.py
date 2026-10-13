@@ -227,6 +227,15 @@ def test_language_guides_inherit_compatible_generic_nondefault_receiver() -> Non
     assert 'local_logs_endpoint=$local_http_endpoint/v1/logs' in java
 
 
+def test_complete_go_setup_has_no_unreferenced_imports() -> None:
+    setup = _fenced_code_after(LANGUAGES / "go.md", "**File**: `otel.go`", "go")
+    imports = setup.split("import (", 1)[1].split(")", 1)[0]
+    body = setup.split("import (", 1)[1].split(")", 1)[1]
+    for alias, package in re.findall(r'(?:([A-Za-z_]\w*)\s+)?"([^"\n]+)"', imports):
+        name = alias or package.rsplit("/", 1)[-1]
+        assert re.search(rf"\b{re.escape(name)}\.", body), f"Unreferenced import: {package}"
+
+
 def test_go_logs_match_preflight_receiver_without_stopping_traces_or_metrics() -> None:
     go = _read(LANGUAGES / "go.md")
     setup = _fenced_code_after(LANGUAGES / "go.md", "**File**: `otel.go`", "go")

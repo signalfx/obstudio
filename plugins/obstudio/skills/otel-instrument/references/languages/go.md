@@ -173,7 +173,6 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -197,6 +196,7 @@ import (
 // Replace during preflight when this runtime has a configured or discovered receiver.
 // Keep the fallback only when no receiver evidence exists for this runtime.
 const preflightApprovedLocalOTLPLogsEndpoint = "http://127.0.0.1:4318/v1/logs"
+
 func initOTel(
 	ctx context.Context,
 	existingLogHandler slog.Handler,
@@ -318,7 +318,8 @@ func useDefaultLocalLogExport() bool {
 		return false
 	}
 
-	return true}
+	return true
+}
 
 func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, error) {
 	protocol := strings.ToLower(strings.TrimSpace(
@@ -347,7 +348,8 @@ func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, erro
 
 	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"))
 	if endpoint == "" {
-		endpoint = preflightApprovedLocalOTLPLogsEndpoint	}
+		endpoint = preflightApprovedLocalOTLPLogsEndpoint
+	}
 	if endpoint != preflightApprovedLocalOTLPLogsEndpoint {
 		return nil, errors.New("logs endpoint differs from the preflight-approved local receiver")
 	}
@@ -536,7 +538,8 @@ protocol, generic or logs-specific OTLP headers, or log exporter setup failure s
 added log provider and bridge, with a fixed diagnostic that contains no
 configuration values. Trace and metric providers still start, and the original
 logger sink remains active. Report a source-proven non-local endpoint as an
-operator-owned boundary conflict during preflight. Exact`none` and every other explicit
+operator-owned boundary conflict during preflight. Exact
+`none` and every other explicit
 exporter skip the app-owned provider and bridge without validating the
 operator-owned endpoint: `none` is the opt-out, while another value belongs to
 an existing or operator-configured exporter and must not be supplemented by
@@ -767,6 +770,7 @@ add a runtime Obstudio lookup or derive the log destination from
 `OTEL_EXPORTER_OTLP_ENDPOINT`; preflight may classify a generic local HTTP
 receiver to determine the approved URL. Use signal-specific trace and metric
 settings for direct-cloud export.
+
 ### Local Splunk Observability Studio application logs and cloud boundary
 
 Local OTLP application logs are the default for a detected supported Go
@@ -783,7 +787,8 @@ configuration and require exact equality with the approved local URL at
 runtime. Report a source-proven non-local value as the boundary conflict
 before applying this pattern. Reject generic and signal-specific OTLP headers
 on the local log branch; move generic credentials to trace/metric variables and
-leave signal-specific log credentials operator-owned. Splunk Observability Studio cloud forwarding remains traces and metrics only.
+leave signal-specific log credentials operator-owned. Splunk Observability Studio cloud
+forwarding remains traces and metrics only.
 
 Add an in-memory SDK log test and a full local Splunk Observability Studio runtime check. Emit one
 sanitized application record at each required severity both outside and inside

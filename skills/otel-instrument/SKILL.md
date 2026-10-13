@@ -183,7 +183,8 @@ Markdown reports.
   new dotenv parser or gateway-specific config loader to application code.
   Validate that the actual launch reads the persisted target, and record its
   source as supplied input, existing env, or disclosed default. No selected
-  AO work means no AO env additions or resource creation.- Detect incident-readiness surfaces. Search source and configuration for
+  AO work means no AO env additions or resource creation.
+- Detect incident-readiness surfaces. Search source and configuration for
   user-visible workflows, dependency clients, background jobs, queues/streams,
   data freshness, input complexity, synthetic/canary checks, auth/edge paths,
   capacity limits, and release/config context. When any are present or when the

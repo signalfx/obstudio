@@ -2335,7 +2335,10 @@ def test_splunk_detector_publish_skill_normalizes_program_text_before_create():
 
 
 def test_resource_resolver_eval_snapshot_matches_shipped_helper():
-    assert (REPO_ROOT / "evals/python/ai-assistant-demo/eval/inputs/ao-resource-resolver.py").read_bytes() == (SKILLS_DIR / "otel-instrument/scripts/resolve_ao_resources.py").read_bytes()
+    helper = (SKILLS_DIR / "otel-instrument/scripts/resolve_ao_resources.py").read_bytes()
+    assert (REPO_ROOT / "evals/python/ai-assistant-demo/eval/inputs/ao-resource-resolver.py").read_bytes() == helper
+    assert (REPO_ROOT / "plugins/obstudio/skills/otel-instrument/scripts/resolve_ao_resources.py").read_bytes() == helper
+    assert (REPO_ROOT / "plugins/obstudio/skills/otel-instrument/tests/test_resolve_ao_resources.py").read_bytes() == (SKILLS_DIR / "otel-instrument/tests/test_resolve_ao_resources.py").read_bytes()
 
 
 def test_genai_default_eval_sources_and_applicability_are_explicit():
@@ -2343,6 +2346,12 @@ def test_genai_default_eval_sources_and_applicability_are_explicit():
     audit = json.loads((inputs / "genai-default-audit.json").read_text())
     assert all(row["id"] != "OTEL-002" for row in audit["findings"])
     assert all(row["id"] != "genai.search_docs.retrieval" for row in audit["verification"]["scenarios"])
+    validated = subprocess.run(
+        [sys.executable, str(SKILLS_DIR / "otel-audit/scripts/observe_report.py"),
+         "validate", str(inputs / "genai-default-audit.json")],
+        capture_output=True, text=True,
+    )
+    assert validated.returncode == 0, validated.stderr + validated.stdout
     for name in ("genai-sdk-source-snapshot.json", "genai-semconv-source-snapshot.json"):
         snapshot = json.loads((inputs / name).read_text())
         assert snapshot["kind"].startswith("public-official-")
@@ -2353,3 +2362,10 @@ def test_genai_default_eval_sources_and_applicability_are_explicit():
         assert set(("eval/inputs/genai-required-evidence.json", "eval/inputs/genai-sdk-source-snapshot.json", "eval/inputs/genai-semconv-source-snapshot.json")) <= set(prompt["eval_inputs"])
         assert "separate captured synthetic case" in prompt["task"]
         assert "live networking" in case["rubric"][3]
+
+
+def test_incident_preflight_is_independent_from_ao_resource_work():
+    text = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
+    bullet = "- Detect incident-readiness surfaces."
+    line = next(line for line in text.splitlines() if bullet in line)
+    assert line.startswith(bullet), "Incident preflight must remain its own top-level bullet"

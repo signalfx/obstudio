@@ -314,6 +314,32 @@ class ResolverTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, "invalid_selectors")
             self.assertEqual(projects.lookup_calls + streams.lookup_calls, [])
 
+    def test_unicode_category_c_selectors_fail_before_any_sdk_call(self):
+        for character in ("\u0085", "\u202e", "\u200b", "\u2066", "\ud800", "\ue000", "\u0378"):
+            for key in ("project_name", "project_id", "agent_stream_name", "agent_stream_id"):
+                with self.subTest(codepoint=f"U+{ord(character):04X}", selector=key):
+                    selectors = {"project_name": "project", "agent_stream_name": "stream"}
+                    if key.endswith("_id"):
+                        selectors.pop(key.removesuffix("_id") + "_name")
+                    selectors[key] = "safe" + character + "selector"
+                    projects, streams = Client(), Client()
+                    with self.assertRaises(MODULE.ResolutionError) as raised:
+                        MODULE.resolve_resources(projects, streams, **selectors)
+                    self.assertEqual(raised.exception.code, "invalid_selectors")
+                    self.assertEqual(projects.lookup_calls + streams.lookup_calls, [])
+                    self.assertEqual(projects.create_calls + streams.create_calls, [])
+
+    def test_valid_unicode_names_are_preserved(self):
+        project_name, stream_name = "Projet-caf\u00e9-\u9879\u76ee", "stream-e\u0301-\u6d41"
+        projects = Client([resource("p", project_name)])
+        streams = Client([resource("s", stream_name, "p")])
+        evidence = MODULE.resolve_resources(
+            projects, streams, project_name=project_name, agent_stream_name=stream_name,
+        )
+        self.assertEqual(evidence["project"]["name"], project_name)
+        self.assertEqual(evidence["agent_stream"]["name"], stream_name)
+        self.assertEqual(projects.create_calls + streams.create_calls, [])
+
     def test_fakes_work_with_sdk_imports_unavailable(self):
         original_import = builtins.__import__
         def without_sdk(name, *args, **kwargs):
@@ -420,6 +446,34 @@ class CLITests(unittest.TestCase):
             result, evidence, _ = self.run_with_environment(environment, arguments)
             self.assertEqual(result, 0)
             self.assertEqual(evidence["agent_stream"]["id"], "s")
+
+    def test_unicode_category_c_cli_and_env_selectors_fail_before_sdk_initialization(self):
+        selectors = (
+            ("--project-name", "SPLUNK_AO_PROJECT", "SPLUNK_AO_PROJECT_ID"),
+            ("--project-id", "SPLUNK_AO_PROJECT_ID", "SPLUNK_AO_PROJECT"),
+            ("--agent-stream-name", "SPLUNK_AO_AGENT_STREAM", "SPLUNK_AO_AGENT_STREAM_ID"),
+            ("--agent-stream-id", "SPLUNK_AO_AGENT_STREAM_ID", "SPLUNK_AO_AGENT_STREAM"),
+        )
+        for character in ("\u0085", "\u202e", "\u200b", "\u2066", "\ue000", "\u0378"):
+            for flag, env_key, other_key in selectors:
+                for source in ("cli", "env"):
+                    with self.subTest(codepoint=f"U+{ord(character):04X}", selector=flag, source=source):
+                        value = "safe" + character + "selector"
+                        environment = {"SPLUNK_AO_PROJECT": "project", "SPLUNK_AO_AGENT_STREAM": "stream"}
+                        arguments = [flag, value] if source == "cli" else []
+                        if source == "env":
+                            environment.pop(other_key, None)
+                            environment[env_key] = value
+                        projects, streams = Client(), Client()
+                        stdout, stderr = io.StringIO(), io.StringIO()
+                        with patch.dict(os.environ, environment, clear=True), patch.object(MODULE, "_sdk_clients", return_value=(projects, streams)) as sdk, contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                            result = MODULE.main(arguments)
+                        sdk.assert_not_called()
+                        self.assertEqual(result, 1)
+                        self.assertEqual(json.loads(stdout.getvalue())["error"], "invalid_selectors")
+                        self.assertEqual(projects.lookup_calls + streams.lookup_calls, [])
+                        self.assertEqual(projects.create_calls + streams.create_calls, [])
+                        self.assertNotIn(value, stdout.getvalue() + stderr.getvalue())
 
     def test_missing_env_selector_fails_before_sdk_initialization(self):
         for environment, code in (

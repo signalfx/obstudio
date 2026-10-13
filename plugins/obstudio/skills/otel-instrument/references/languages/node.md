@@ -127,7 +127,8 @@ function reportLocalLogSkip() {
   // Never include endpoint, headers, credentials, or exception details here.
   process.stderr.write(
     'OTel local log pipeline skipped; trace and metric startup continues.\n',
-  );}
+  );
+}
 
 function defaultLocalLogConfiguration() {
   const configured = process.env.OTEL_LOGS_EXPORTER?.trim().toLowerCase();
@@ -156,6 +157,7 @@ function defaultLocalLogConfiguration() {
         explicitLogsEndpoint !== PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT) {
       throw new Error('logs endpoint differs from preflight-approved receiver');
     }
+
     // The OTLP exporter can read both environment header sources even when
     // given an explicit URL. Keep credentials out of the local log path.
     if (process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim() ||
@@ -189,7 +191,8 @@ const originalLogsExporter = process.env.OTEL_LOGS_EXPORTER;
 const { logRecordProcessors, logInstrumentations, suppressAutoLogs: skipLocalLogs } =
   defaultLocalLogConfiguration();
 
-function baseSdkOptions() {  return {
+function baseSdkOptions() {
+  return {
     resource: resourceFromAttributes({
       'service.name': process.env.OTEL_SERVICE_NAME || 'my-service',
     }),
@@ -360,6 +363,7 @@ OTLP log headers must have no non-empty value on this local path; move generic
 OTLP headers to trace/metric signal variables and remove signal-specific log
 headers. For a different logs protocol, select the official exporter matching
 that protocol during instrumentation preflight.
+
 With `OTEL_LOGS_EXPORTER=none`, both the added processor and bridge are omitted.
 For another explicit exporter such as `console`, leave provider, exporter, and
 bridge ownership entirely to the proven operator-owned setup; this helper adds
@@ -597,7 +601,8 @@ and let it win at runtime. Report a source-proven non-local value as the
 cloud-boundary conflict before applying this pattern. Reject non-empty generic
 and signal-specific log headers on the added local branch; the exporter may read
 either source from the environment. Move cloud credentials to trace/metric
-signal variables and remove the log header setting. Splunk Observability Studio cloud forwarding remains traces and metrics only.
+signal variables and remove the log header setting. Splunk Observability Studio cloud
+forwarding remains traces and metrics only.
 
 Verify one sanitized record at each required severity both outside and inside
 an active span. Assert body/category, severity, shared `service.name`,

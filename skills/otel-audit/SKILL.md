@@ -692,6 +692,16 @@ OTel levels. Require current typed-parts schema/value/redaction proof and actual
 success/error/cancel parentage with no duplicate nodes; a generic 'GenAI
 semconv' requirement cannot stand in for missing field acceptance.
 
+For each producer path, place the concrete capture policy in the canonical
+finding and acceptance scenario: preserve a known stricter policy, otherwise
+propose redacted capture with 16 messages, 64 parts per message and 8192 UTF-8
+bytes per content attribute. Name the actual or proposed file/function hook
+that sanitizes before SDK capture and every export sink. Unknown existing
+settings stay unproven; a proposed policy must still specify those limits,
+valid typed-parts truncation and native-record/OTLP sentinel-absence tests.
+Do not let a supplemental statement of 'bounded/redacted' replace this
+selected finding contract.
+
 Compute each GenAI surface independently. Generic HTTP/database/runtime or
 infrastructure metrics do not improve a GenAI surface status unless they
 satisfy that row's required workflow, model, tool, token, memory, evaluation,
@@ -767,9 +777,11 @@ Before `finalize-audit`, apply this AO acceptance gate to each live-routing
 finding, not only to a generic provider finding:
 
 1. Name the selected destination. Preserve any configured supported AO API
-   and direct-cloud endpoint. An available Splunk Observability Studio
-   cloud-compatible gateway is an optional local candidate, not an
-   instrumentation prerequisite. Cite the actual endpoint and
+   and direct-cloud endpoint. When AO destination settings are absent, prefer
+   an available Splunk Observability Studio cloud-compatible gateway as the
+   default local route. Its availability is a delivery prerequisite for that
+   route; source instrumentation, imports, and local tests do not depend on
+   the gateway. Cite the actual endpoint and
    availability evidence only when discovered. If no gateway or live target
    was inspected, say `unverified` and do not invent a host or port.
    For Python Studio gateway mode, inspect populated `SPLUNK_AO_API_URL`,

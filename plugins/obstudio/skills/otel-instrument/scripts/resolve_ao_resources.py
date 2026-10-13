@@ -15,6 +15,7 @@ import os
 import sys
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable
 
@@ -50,6 +51,14 @@ def _identity(resource: Any, *, project_id: str | None = None) -> dict[str, str]
     return result
 
 
+def _invalid_selector(value: Any) -> bool:
+    return value is not None and (
+        not isinstance(value, str) or not value.strip()
+        or value != value.strip()
+        or any(unicodedata.category(character).startswith("C") for character in value)
+    )
+
+
 def resolve_resources(
     projects: Any,
     agent_streams: Any,
@@ -77,12 +86,7 @@ def resolve_resources(
     selectors = ((project_name, project_id), (agent_stream_name, agent_stream_id))
     if any(
         (name is None) == (resource_id is None)
-        or any(value is not None and (
-                   not isinstance(value, str) or not value.strip()
-                   or value != value.strip()
-                   or any(ord(character) < 32 or ord(character) == 127 for character in value)
-               )
-               for value in (name, resource_id))
+        or any(_invalid_selector(value) for value in (name, resource_id))
         for name, resource_id in selectors
     ):
         fail("invalid_selectors")
@@ -266,16 +270,18 @@ def _write_evidence(path: Path, evidence: dict[str, Any]) -> None:
 def _cli_selector(
     kind: str, name: str | None, resource_id: str | None, name_key: str, id_key: str,
 ) -> tuple[str | None, str | None]:
-    if name is not None or resource_id is not None:
-        return name, resource_id
-    name = os.environ.get(name_key) or None
-    resource_id = os.environ.get(id_key) or None
-    code = None
-    if name is not None and resource_id is not None:
-        code = f"{kind}_environment_selectors_conflict"
-    elif name is None and resource_id is None:
-        code = f"{kind}_selector_missing"
-    if code:
+    if name is None and resource_id is None:
+        name = os.environ.get(name_key) or None
+        resource_id = os.environ.get(id_key) or None
+        code = None
+        if name is not None and resource_id is not None:
+            code = f"{kind}_environment_selectors_conflict"
+        elif name is None and resource_id is None:
+            code = f"{kind}_selector_missing"
+        if code:
+            raise ResolutionError(code, {"schema_version": 1, "status": "failed", "error": code})
+    if any(_invalid_selector(value) for value in (name, resource_id)):
+        code = "invalid_selectors"
         raise ResolutionError(code, {"schema_version": 1, "status": "failed", "error": code})
     return name, resource_id
 

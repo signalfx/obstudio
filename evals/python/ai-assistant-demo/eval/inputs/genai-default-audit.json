@@ -74,7 +74,7 @@
     }
   ],
   "signal_flow": {
-    "component_flow_map": "Assistant lifecycle\nFastAPI routes [SOURCE-COVERED] -> build_turn [GAP: Assistant GenAI lifecycle] -> run_tool search_docs [GAP: Document retrieval inside search_docs] -> call_provider [SOURCE-COVERED]\n\nAgent Observability deployment\nproject resource [GAP: Agent Observability project resource] -> Agent Stream resource [GAP: Dedicated Agent Stream resource] -> configured API/ingest endpoint [GAP: Agent Observability runtime routing]"
+    "component_flow_map": "Assistant lifecycle\nFastAPI routes [SOURCE-COVERED] -> build_turn [GAP: Assistant GenAI lifecycle] -> run_tool search_docs [GAP: Assistant GenAI lifecycle] -> call_provider [SOURCE-COVERED]\n\nAgent Observability deployment\nproject resource [GAP: Agent Observability project resource] -> Agent Stream resource [GAP: Dedicated Agent Stream resource] -> configured API/ingest endpoint [GAP: Agent Observability runtime routing]"
   },
   "current_instrumentation": {
     "spans": [],
