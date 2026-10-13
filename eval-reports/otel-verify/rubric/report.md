@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-verify |
-| Run ID | 20261013T173320654485Z |
+| Run ID | 20261013T192213888304Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/resource-selector-length-verify | python/ai-assistant-demo | 1 | 100% (4/4), avg score 97 | 2.0M | 12.3m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/ao-target-handoff-verify | python/ai-assistant-demo | 1 | 100% (4/4), avg score 98 | 671.3K | 9.6m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/resource-selector-length-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1966255 | 1823872 | 0 | 28595 | 12044 | unknown | 1994850 |
+| with_skill | python/ai-assistant-demo/qual/ao-target-handoff-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 651263 | 557440 | 0 | 19995 | 5982 | unknown | 671258 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/resource-selector-length-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 883258 | 752000 | 0 | 8160 | 3071 | unknown | 891418 |
+| with_skill | python/ai-assistant-demo/qual/ao-target-handoff-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1691337 | 1584000 | 0 | 8447 | 3216 | unknown | 1699784 |
 
 ## Rubric Failures
 

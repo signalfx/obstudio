@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261013T174746314127Z |
+| Run ID | 20261013T192108839483Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -34,6 +34,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/springboot-basic/qual/instrument | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/instrument.json | 0 | 10 | 0 |
 | node/express-basic/qual/instrument | node/express-basic | 2 | evals/node/express-basic/eval/qual/instrument.json | 0 | 10 | 0 |
 | node/express-basic/runtime/instrument | node/express-basic | 1 | evals/node/express-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
+| python/ai-assistant-demo/qual/ao-target-handoff-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-instrument.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/content-coverage-instrument.json | 0 | 6 | 0 |
 | python/ai-assistant-demo/qual/gateway-env-bootstrap | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/gateway-env-bootstrap.json | 0 | 5 | 0 |
 | python/ai-assistant-demo/qual/genai-sdk-default-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json | 0 | 6 | 0 |

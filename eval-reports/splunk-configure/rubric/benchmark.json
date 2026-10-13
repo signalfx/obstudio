@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "splunk-configure",
-    "run_id": "20260923T183632494932Z",
+    "run_id": "20261013T192032768817Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
@@ -21,11 +21,11 @@
     "failure_count": 0,
     "with_skill": {
       "prompt_count": 1,
-      "command_count": 34,
-      "duration_seconds": 501.34,
-      "agent_duration_seconds": 355.985,
-      "tokens": 1288298,
-      "agent_tokens": 1093583,
+      "command_count": 15,
+      "duration_seconds": 445.773,
+      "agent_duration_seconds": 312.596,
+      "tokens": 1535305,
+      "agent_tokens": 607505,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 1,
         "selected_record_count": 1,
-        "input_tokens": 1075508,
-        "cached_input_tokens": 968320,
+        "input_tokens": 591371,
+        "cached_input_tokens": 521984,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 18075,
-        "reasoning_output_tokens": 7778,
+        "output_tokens": 16134,
+        "reasoning_output_tokens": 4368,
         "provider_total_tokens": null,
-        "derived_total_tokens": 1093583,
-        "effective_total_tokens": 1093583,
+        "derived_total_tokens": 607505,
+        "effective_total_tokens": 607505,
         "coverage": {
           "record_count": 1,
           "modeled_count": 1,
@@ -59,26 +59,26 @@
         }
       },
       "rubric": {
-        "passed": 10,
-        "total": 10,
-        "average_score": 96.0
+        "passed": 3,
+        "total": 3,
+        "average_score": 100.0
       },
-      "rubric_tokens": 194715,
-      "rubric_duration_seconds": 145.308,
+      "rubric_tokens": 927800,
+      "rubric_duration_seconds": 133.141,
       "rubric_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
         "usage_record_count": 1,
         "selected_record_count": 1,
-        "input_tokens": 187405,
-        "cached_input_tokens": 154240,
+        "input_tokens": 921945,
+        "cached_input_tokens": 841344,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 7310,
-        "reasoning_output_tokens": 4390,
+        "output_tokens": 5855,
+        "reasoning_output_tokens": 2892,
         "provider_total_tokens": null,
-        "derived_total_tokens": 194715,
-        "effective_total_tokens": 194715,
+        "derived_total_tokens": 927800,
+        "effective_total_tokens": 927800,
         "coverage": {
           "record_count": 1,
           "modeled_count": 1,
@@ -101,21 +101,21 @@
   },
   "evals": [
     {
-      "id": "dashboards/checkout-configure/qual/configure",
-      "case": "dashboards/checkout-configure",
-      "language": "dashboards",
-      "service": "checkout-configure",
+      "id": "python/ai-assistant-demo/qual/ao-target-handoff-configure",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
       "prompt_count": 1,
       "prompts": [
-        "generate"
+        "ao-target-handoff-configure"
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 34,
-        "duration_seconds": 501.34,
-        "agent_duration_seconds": 355.985,
-        "tokens": 1288298,
-        "agent_tokens": 1093583,
+        "command_count": 15,
+        "duration_seconds": 445.773,
+        "agent_duration_seconds": 312.596,
+        "tokens": 1535305,
+        "agent_tokens": 607505,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -123,14 +123,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 1075508,
-          "cached_input_tokens": 968320,
+          "input_tokens": 591371,
+          "cached_input_tokens": 521984,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 18075,
-          "reasoning_output_tokens": 7778,
+          "output_tokens": 16134,
+          "reasoning_output_tokens": 4368,
           "provider_total_tokens": null,
-          "derived_total_tokens": 1093583,
-          "effective_total_tokens": 1093583,
+          "derived_total_tokens": 607505,
+          "effective_total_tokens": 607505,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -149,26 +149,26 @@
           }
         },
         "rubric": {
-          "passed": 10,
-          "total": 10,
-          "average_score": 96.0
+          "passed": 3,
+          "total": 3,
+          "average_score": 100.0
         },
-        "rubric_tokens": 194715,
-        "rubric_duration_seconds": 145.308,
+        "rubric_tokens": 927800,
+        "rubric_duration_seconds": 133.141,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 187405,
-          "cached_input_tokens": 154240,
+          "input_tokens": 921945,
+          "cached_input_tokens": 841344,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 7310,
-          "reasoning_output_tokens": 4390,
+          "output_tokens": 5855,
+          "reasoning_output_tokens": 2892,
           "provider_total_tokens": null,
-          "derived_total_tokens": 194715,
-          "effective_total_tokens": 194715,
+          "derived_total_tokens": 927800,
+          "effective_total_tokens": 927800,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -190,36 +190,44 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-configure/20260923T183632494932Z/results/dashboards/checkout-configure/qual-configure/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-configure/20260923T183632494932Z/results/dashboards/checkout-configure/qual-configure/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-configure/20260923T183632494932Z/results/dashboards/checkout-configure/qual-configure/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-configure/20261013T192032768817Z/results/python/ai-assistant-demo/qual-ao-target-handoff-configure/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-configure/20261013T192032768817Z/results/python/ai-assistant-demo/qual-ao-target-handoff-configure/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-configure/20261013T192032768817Z/results/python/ai-assistant-demo/qual-ao-target-handoff-configure/with_baseline.json"
       }
     }
   ],
   "failures": [],
   "source": {
-    "digest_version": 3,
-    "digest": "adef2ecdf0ef65c82c320664eceabf8ae4e6f806bc3cf93112021ed48411d8a0",
+    "digest_version": 4,
+    "digest": "c38bcf5240c9083cbe6007607ebfb5533483fac18c1a38539e9a817c86fd3ad5",
     "eval_kinds": [
       "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
       "evals/codex-evals.toml": "c0b019453c76a5b6d8692346f984ea91af04ca91331aa333b56d7a717b7b07c7",
-      "evals/dashboards/checkout-configure/eval/qual/configure.json": "c75759c1cbd7745595f689eb8ca1d0387e1ebb907855aeafd4612f1376c24a23",
-      "evals/dashboards/checkout-configure/otel-audit.json": "ba1843457773445a06e59522e1572316d95075f2c007576fd4becd75da33ce7d",
-      "skills/references/consumers.json": "cd8084854d7042b7ecc306ef1efca5f1866f1616c4c0ea0f6522e4bce4efd852",
+      "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
+      "evals/python/ai-assistant-demo/README.md": "eebd4711ef5b6d9325e15d0488b43da6b3fde8bc48ffff91fa44841fd1dfaf0e",
+      "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-target-handoff-validator-snapshot.json": "a66bac4283ee416a35f9b27255c4600a7d11ab3c9ba57f6bbe6dc49c5a53d486",
+      "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-configure.json": "ecb43090690aef8bda91e9d4acdeb966dec79de8e9b02cdda1505fe3da9f932d",
+      "evals/python/ai-assistant-demo/eval_runner.py": "6b685cf5472871a9b227e652e47fd23a68b5ffe38021d4b6f3802236be65e2c8",
+      "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
+      "evals/python/ai-assistant-demo/pyproject.toml": "90be0bda1c6147fc324325b0f8a65a82499d65840df190a76b633c992e511f00",
+      "skills/references/consumers.json": "abb97d53704c51d5a49a3de02505f8b1bba0fc13c51b7913b9cf0d186040aa19",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
-      "skills/references/genai-readiness.md": "73e8af6407a4074ea7942df9e26be95b807e0bc69dd58e403819bc108db12209",
+      "skills/references/genai-readiness.md": "47424e797446bfd0564d6b28d8e836faa1f14322411d4f94381e5806240ff95e",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
-      "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
-      "skills/references/scripts/observe_report.py": "8505513574a485f39b4197ee4995449dfe1ba4cf8730a6ee34c4215e90b2711e",
+      "skills/references/local-otlp-receiver.md": "701585b31eb131702194e4619f5a1054615e1c11c5071af5e2dd22d40232cdd6",
+      "skills/references/report-flow-contract.md": "7979f30b648b14ea3427e10195b6dd2d4996ce0c3d6e6cf505fbe92914524a79",
+      "skills/references/scripts/observe_report.py": "17a06cf7800ccb06c90546baa4a6450f222346f21a0a71d4764270a01c069b44",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
+      "skills/references/splunk-agent-observability.md": "7aa4034a57377284bd90ebaf14fea84c32a11d4c06b9b73614bb33f3b09cb14a",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "2498dbfe77a969660b1212cbfa84811b5707efee779608b6d8699272a80eba1c",
+      "skills/references/tests/test_observe_report.py": "38eded9e383f5a09d2094645f81dcd2fc5dc6b6be257ce7026eb90efa572e098",
       "skills/splunk-configure/SKILL.md": "af20f028de3d6d9f0265511094583a8e5274ffca23fa2d4b8ac63eeef5076d99",
       "skills/splunk-configure/references/detector-classification.md": "c389dc47e64719b46fe0ee8674231e6dc8f61c27d59d828c2bc10b5032971295",
       "skills/splunk-configure/references/terraform-templates.md": "68dabdd5c40321baf57522de55cfa9c182557ed7791475998d814f004da835fc",
@@ -227,13 +235,19 @@
       "skills/splunk-configure/tests/test_validate_configure_output.py": "fdc01a7ef27c712df29a53b5ab5c21ad4de6ab5816301d337235226c113b8953"
     },
     "skill_path": "skills/splunk-configure",
+    "shared_reference_consumers": [
+      "skills/references/report-flow-contract.md",
+      "skills/references/signalflow-patterns.md"
+    ],
     "selections": [
       {
-        "definition_path": "evals/dashboards/checkout-configure/eval/qual/configure.json",
-        "fixture_dir": "evals/dashboards/checkout-configure",
-        "prompt_id": "generate",
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-configure.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "ao-target-handoff-configure",
         "eval_kind": "rubric",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/ao-target-handoff-validator-snapshot.json"
+        ]
       }
     ],
     "config_path": "evals/codex-evals.toml"

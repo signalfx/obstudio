@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261013T174649586772Z |
+| Run ID | 20261013T192108839329Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/resource-env-bootstrap | python/ai-assistant-demo | 1 | 100% (8/8), avg score 94 | 7.5M | 24.5m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/ao-target-handoff-instrument | python/ai-assistant-demo | 1 | 100% (6/6), avg score 96 | 1.0M | 7.9m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/resource-env-bootstrap | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 7474984 | 7269760 | 0 | 56289 | 19262 | unknown | 7531273 |
+| with_skill | python/ai-assistant-demo/qual/ao-target-handoff-instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1029122 | 925184 | 0 | 18429 | 4837 | unknown | 1047551 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/resource-env-bootstrap | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1849781 | 1710464 | 0 | 15611 | 6848 | unknown | 1865392 |
+| with_skill | python/ai-assistant-demo/qual/ao-target-handoff-instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 524054 | 449536 | 0 | 6047 | 2088 | unknown | 530101 |
 
 ## Rubric Failures
 

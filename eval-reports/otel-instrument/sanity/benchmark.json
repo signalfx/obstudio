@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "otel-instrument",
-    "run_id": "20261013T174746907896Z",
+    "run_id": "20261013T192252540705Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -22,10 +22,10 @@
     "with_skill": {
       "prompt_count": 2,
       "command_count": 2,
-      "duration_seconds": 19.294,
-      "agent_duration_seconds": 19.238,
-      "tokens": 179757,
-      "agent_tokens": 179757,
+      "duration_seconds": 24.076,
+      "agent_duration_seconds": 24.015,
+      "tokens": 180292,
+      "agent_tokens": 180292,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 2,
         "selected_record_count": 2,
-        "input_tokens": 179503,
-        "cached_input_tokens": 93696,
+        "input_tokens": 179758,
+        "cached_input_tokens": 103936,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 254,
-        "reasoning_output_tokens": 143,
+        "output_tokens": 534,
+        "reasoning_output_tokens": 363,
         "provider_total_tokens": null,
-        "derived_total_tokens": 179757,
-        "effective_total_tokens": 179757,
+        "derived_total_tokens": 180292,
+        "effective_total_tokens": 180292,
         "coverage": {
           "record_count": 2,
           "modeled_count": 2,
@@ -80,10 +80,10 @@
       "with_skill": {
         "prompt_count": 2,
         "command_count": 2,
-        "duration_seconds": 19.294,
-        "agent_duration_seconds": 19.238,
-        "tokens": 179757,
-        "agent_tokens": 179757,
+        "duration_seconds": 24.076,
+        "agent_duration_seconds": 24.015,
+        "tokens": 180292,
+        "agent_tokens": 180292,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -91,14 +91,14 @@
           "observed": true,
           "usage_record_count": 2,
           "selected_record_count": 2,
-          "input_tokens": 179503,
-          "cached_input_tokens": 93696,
+          "input_tokens": 179758,
+          "cached_input_tokens": 103936,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 254,
-          "reasoning_output_tokens": 143,
+          "output_tokens": 534,
+          "reasoning_output_tokens": 363,
           "provider_total_tokens": null,
-          "derived_total_tokens": 179757,
-          "effective_total_tokens": 179757,
+          "derived_total_tokens": 180292,
+          "effective_total_tokens": 180292,
           "coverage": {
             "record_count": 2,
             "modeled_count": 2,
@@ -125,16 +125,16 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20261013T174746907896Z/results/sanity/skill-smoke/sanity-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20261013T174746907896Z/results/sanity/skill-smoke/sanity-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20261013T174746907896Z/results/sanity/skill-smoke/sanity-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20261013T192252540705Z/results/sanity/skill-smoke/sanity-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20261013T192252540705Z/results/sanity/skill-smoke/sanity-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20261013T192252540705Z/results/sanity/skill-smoke/sanity-instrument/with_baseline.json"
       }
     }
   ],
   "failures": [],
   "source": {
     "digest_version": 4,
-    "digest": "b93fdf04677072030d1072625d8710b0b21721424b4ef93182076efadebbd1d4",
+    "digest": "f5bb8c5f5dcc675ad36c090263e98ee514a049f692af70a5366d92134437d70c",
     "eval_kinds": [
       "sanity"
     ],
@@ -164,13 +164,13 @@
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "701585b31eb131702194e4619f5a1054615e1c11c5071af5e2dd22d40232cdd6",
-      "skills/references/report-flow-contract.md": "4d65f39dd3feac8b3fdfe5e570e7581e8705d0ce358e500aefc808023bc32dd8",
-      "skills/references/scripts/observe_report.py": "db43588670c6311cd356fb14b73409af4d096adf1b17fdbadc890155bdd540a0",
+      "skills/references/report-flow-contract.md": "7979f30b648b14ea3427e10195b6dd2d4996ce0c3d6e6cf505fbe92914524a79",
+      "skills/references/scripts/observe_report.py": "17a06cf7800ccb06c90546baa4a6450f222346f21a0a71d4764270a01c069b44",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-agent-observability.md": "7aa4034a57377284bd90ebaf14fea84c32a11d4c06b9b73614bb33f3b09cb14a",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "22fac9cc4acf7df80647fec215cba8aa68ac4ef2ff91f5e5cd01ff4fe63e7c4c"
+      "skills/references/tests/test_observe_report.py": "38eded9e383f5a09d2094645f81dcd2fc5dc6b6be257ce7026eb90efa572e098"
     },
     "skill_path": "skills/otel-instrument",
     "shared_reference_consumers": [
