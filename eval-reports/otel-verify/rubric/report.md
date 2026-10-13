@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-verify |
-| Run ID | 20261008T182025695767Z |
+| Run ID | 20261013T173320654485Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/verify | python/ai-assistant-demo | 1 | 100% (6/6), avg score 90 | 4.7M | 13.9m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/resource-selector-length-verify | python/ai-assistant-demo | 1 | 100% (4/4), avg score 97 | 2.0M | 12.3m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 4682302 | 4510464 | 0 | 30627 | 8866 | unknown | 4712929 |
+| with_skill | python/ai-assistant-demo/qual/resource-selector-length-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1966255 | 1823872 | 0 | 28595 | 12044 | unknown | 1994850 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 834710 | 746112 | 0 | 10070 | 5223 | unknown | 844780 |
+| with_skill | python/ai-assistant-demo/qual/resource-selector-length-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 883258 | 752000 | 0 | 8160 | 3071 | unknown | 891418 |
 
 ## Rubric Failures
 

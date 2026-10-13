@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261008T211520204794Z |
+| Run ID | 20261013T174649586772Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,22 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | 1 | 100% (6/6), avg score 94 | 6.1M | 15.7m | - | - | - |
-| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | 100% (14/14), avg score 90 | 11.2M | 36.1m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/resource-env-bootstrap | python/ai-assistant-demo | 1 | 100% (8/8), avg score 94 | 7.5M | 24.5m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 6076544 | 5887232 | 0 | 36998 | 13534 | unknown | 6113542 |
-| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 11109635 | 10696320 | 0 | 68712 | 20111 | unknown | 11178347 |
+| with_skill | python/ai-assistant-demo/qual/resource-env-bootstrap | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 7474984 | 7269760 | 0 | 56289 | 19262 | unknown | 7531273 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 433543 | 370816 | 0 | 8612 | 4571 | unknown | 442155 |
-| with_skill | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1050423 | 935936 | 0 | 16292 | 8783 | unknown | 1066715 |
+| with_skill | python/ai-assistant-demo/qual/resource-env-bootstrap | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1849781 | 1710464 | 0 | 15611 | 6848 | unknown | 1865392 |
 
 ## Rubric Failures
 

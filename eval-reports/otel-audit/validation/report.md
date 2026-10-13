@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20261008T180141679336Z |
+| Run ID | 20261013T164921297478Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -28,6 +28,10 @@ This report validates eval JSON, eval directory availability, and skill source a
 | node/express-basic/qual/audit | node/express-basic | 2 | evals/node/express-basic/eval/qual/audit.json | 0 | 6 | 0 |
 | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | evals/python/ai-assistant-demo/eval/qual/audit.json | 0 | 14 | 0 |
 | python/ai-assistant-demo/qual/content-coverage-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/content-coverage-audit.json | 0 | 4 | 0 |
+| python/ai-assistant-demo/qual/env-resource-plan | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/env-resource-plan.json | 0 | 4 | 0 |
+| python/ai-assistant-demo/qual/gateway-env-plan | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/gateway-env-plan.json | 0 | 4 | 0 |
+| python/ai-assistant-demo/qual/genai-sdk-default-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-audit.json | 0 | 6 | 0 |
+| python/ai-assistant-demo/qual/resource-selector-length-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/resource-selector-length-audit.json | 0 | 3 | 0 |
 | python/assistant-v3-framework-bridge-demo/qual/audit | python/assistant-v3-framework-bridge-demo | 1 | evals/python/assistant-v3-framework-bridge-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | python/checkout-red-demo/qual/audit | python/checkout-red-demo | 1 | evals/python/checkout-red-demo/eval/qual/audit.json | 0 | 5 | 0 |
 | python/fastapi-celery/qual/audit | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/audit.json | 0 | 5 | 0 |
