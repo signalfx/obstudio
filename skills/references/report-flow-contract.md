@@ -28,8 +28,16 @@ Apply these precedence and identity rules throughout the chain:
 - `.observe/otel-instrumentation.json` must also match the validator-computed
   digest of the exact normalized selection through `selection_sha256`. That
   digest includes `requested_ids`, dependency-closed `approved_ids`, stable
-  `decision_answers`, and approval metadata. Changing an answer invalidates
-  older instrumentation even when the executable finding IDs do not change.
+  `decision_answers`, any optional schema-v3 `ao_target`, and approval metadata.
+  Changing an answer or AO target invalidates older instrumentation even when
+  the executable finding IDs do not change. Preserve legacy schema-v1/v2 and
+  targetless selection shapes and digests: an absent `ao_target` stays absent;
+  do not insert resource defaults or policy fields into those packets.
+  When present, `ao_target` carries exactly one Project name or ID and exactly
+  one Agent Stream name or ID as a complete selector pair, or the policy-only
+  form `{create_if_missing: false}` with no selectors. Reject partial selector
+  pairs. Optional resource inputs and policy never change `requested_ids` or
+  dependency-closed `approved_ids`, add findings, or establish cloud identity.
   Verification remains transitively bound to that exact selection because its
   `instrumentation_sha256` covers the complete normalized instrumentation
   overlay, including `selection_sha256`.
@@ -65,7 +73,7 @@ Each document has one job. Do not mix these responsibilities.
 | `.observe/otel-audit.selected.json` | Human scope-planning flow | Optional saved copy of the canonical audit carrying top-level `review_selection`; the selection is excluded from the normalized audit digest | A different audit baseline, implementation state, or verification state |
 | `.observe/otel.html` | `$otel-audit` renderer + human reviewer | Interactive review of the canonical audit and saved `review_selection` export | Instrumentation or verification overlays |
 | `.observe/otel-instrumentation.html` | `$otel-instrument` renderer, refreshed by `$otel-verify` | Concise verification status followed by every selected finding's change, observability impact, item proof, and coverage | Aggregate technical ledgers, audit selection controls, unbound overlays, or an independently rewritten baseline |
-| `.observe/otel-selection.json` | Human scope-planning flow | Authoritative manual `decision_answers` plus requested and dependency-closed executable finding IDs (stored in the compatibility field `approved_ids`) | Manual/external finding IDs in `requested_ids` or `approved_ids`, executable work not unlocked by its recorded answer, findings absent from the audit, or silently inferred selection |
+| `.observe/otel-selection.json` | Human scope-planning flow | Authoritative manual `decision_answers`, optional schema-v3 `ao_target`, and requested and dependency-closed executable finding IDs (stored in the compatibility field `approved_ids`) | Manual/external finding IDs in `requested_ids` or `approved_ids`, executable work not unlocked by its recorded answer, findings absent from the audit, or silently inferred selection |
 | `.observe/otel-instrumentation.json` | `$otel-instrument` | Authoritative implementation result for every dependency-closed selected finding ID (`approved_ids`), bound to the exact normalized selection by `selection_sha256` | Unselected findings, stale decision answers, or a rewritten audit baseline |
 | `.observe/otel-verify.json` | `$otel-verify` | Authoritative scenario proof for every dependency-closed selected finding ID (`approved_ids`), bound to the exact normalized instrumentation overlay by `instrumentation_sha256` | Unselected findings, stale/unbound instrumentation proof, or unsupported `working` claims |
 | `.observe/otel-instrumentation.md` | `$otel-instrument` | Generated readable compatibility view of the instrumentation overlay | State that differs from `.observe/otel-instrumentation.json` |
@@ -685,8 +693,9 @@ require instrumentation's `selection_sha256` to match the exact normalized
 selection and bind verification to the exact normalized instrumentation overlay
 with `instrumentation_sha256`. Because that instrumentation digest includes
 `selection_sha256`, verification is transitively bound to reviewer intent. A
-matching executable or item inventory is not enough: a changed decision answer
-or any material instrumentation change invalidates older proof. Write
+matching executable or item inventory is not enough: a changed decision answer,
+AO target, or any material instrumentation change invalidates older proof even
+when the selected finding IDs remain unchanged. Write
 one verification finding for every dependency-closed selected ID
 (`approved_ids`) in canonical audit order.
 

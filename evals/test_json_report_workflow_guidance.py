@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -405,3 +406,81 @@ def test_human_html_uses_generated_trace_without_raw_correlation_ids() -> None:
         assert "raw trace IDs or span IDs" in text
         assert "the generated trace" in text
         assert "canonical" in text
+
+
+def test_shared_ao_target_binding_contract_is_explicit_for_every_consumer() -> None:
+    flow = " ".join(_read(REPORT_FLOW).split())
+    verification = flow.split("## Verification Report Contract", 1)[1]
+    ownership = flow.split("## Document Ownership", 1)[1].split("## Human HTML Usage Flow", 1)[0]
+
+    for term in (
+        "any optional schema-v3 `ao_target`",
+        "Changing an answer or AO target invalidates older instrumentation",
+        "Preserve legacy schema-v1/v2 and targetless selection shapes and digests",
+        "an absent `ao_target` stays absent",
+        "exactly one Project name or ID and exactly one Agent Stream name or ID",
+        "{create_if_missing: false}",
+        "Reject partial selector pairs",
+        "never change `requested_ids` or dependency-closed `approved_ids`",
+    ):
+        assert term in flow
+    assert "optional schema-v3 `ao_target`" in ownership
+    assert "changed decision answer, AO target" in verification
+    assert "even when the selected finding IDs remain unchanged" in verification
+    assert "`instrumentation_sha256`" in verification
+    consumers = json.loads(_read(ROOT / "skills/references/consumers.json"))
+    assert consumers["report-flow-contract.md"] == [
+        "otel-audit", "otel-instrument", "otel-verify", "splunk-configure",
+    ]
+    assert _read(REPORT_FLOW) == _read(ROOT / "plugins/obstudio/skills/references/report-flow-contract.md")
+
+
+def test_ao_target_handoff_evals_review_actual_snapshot_without_runtime_claims() -> None:
+    fixture = ROOT / "evals/python/ai-assistant-demo/eval/inputs/ao-target-handoff-validator-snapshot.json"
+    snapshot = json.loads(_read(fixture))
+    assert snapshot["producer"]["source"] == "skills/references/scripts/observe_report.py"
+    assert snapshot["producer"]["source_sha256"] == "sha256:" + hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
+    cases = {case["case"]: case for case in snapshot["selection_cases"]}
+    for name in ("legacy-v1-no-target", "legacy-v2-no-target", "schema-v3-no-target"):
+        assert cases[name]["outcome"] == "accepted"
+        assert "ao_target" not in cases[name]["normalized_selection"]
+    legacy_instrumentation = json.loads(_read(fixture.parent / "ao-resource-instrumentation.json"))
+    assert cases["legacy-v1-no-target"]["selection_sha256"] == legacy_instrumentation["selection_sha256"]
+    a, b = cases["schema-v3-names-a"], cases["schema-v3-names-b"]
+    for ids in ("requested_ids", "approved_ids"):
+        assert a["normalized_selection"][ids] == b["normalized_selection"][ids]
+    assert a["selection_sha256"] != b["selection_sha256"]
+    assert cases["schema-v3-policy-only-reuse"]["normalized_selection"]["ao_target"] == {"create_if_missing": False}
+    assert cases["schema-v3-partial-selector"]["outcome"] == "rejected"
+    for name in ("schema-v3-ids", "schema-v3-project-name-stream-id", "schema-v3-project-id-stream-name"):
+        assert cases[name]["outcome"] == "accepted"
+    bindings = snapshot["instrumentation_bindings"]
+    assert bindings["names-a"]["instrumentation_sha256"] != bindings["names-b"]["instrumentation_sha256"]
+    checks = {check["case"]: check for check in snapshot["binding_checks"]}
+    assert checks["instrumentation-a-with-selection-a"]["outcome"] == "accepted"
+    assert checks["stale-instrumentation-a-with-selection-b"]["error"] == "instrumentation.selection_sha256 does not match selection"
+    assert checks["verification-a-with-instrumentation-a"]["outcome"] == "accepted"
+    assert checks["stale-verification-a-with-instrumentation-b"]["error"] == "verify.instrumentation_sha256 does not match instrumentation"
+    assert snapshot["normalized_verification_names_a"]["meta"]["result"] == "Not run"
+    roles = {
+        "audit": ("otel-audit", "proposed names"),
+        "instrument": ("otel-instrument", "effective-profile precedence"),
+        "verify": ("otel-verify", "Rejects cached verification"),
+        "configure": ("splunk-configure", "metric readiness, detector coverage"),
+    }
+    for role, (skill, role_requirement) in roles.items():
+        packet = json.loads(_read(ROOT / f"evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-{role}.json"))
+        assert packet["skill"] == skill
+        assert len(packet["rubric"]) == 3
+        assert role_requirement in packet["rubric"][2]
+        assert packet["prompts"][0]["eval_inputs"] == ["eval/inputs/ao-target-handoff-validator-snapshot.json"]
+        task = packet["prompts"][0]["task"]
+        for phrase in (
+            "Read-only supplemental AO target handoff contract review",
+            "Review the supplied snapshot only",
+            "do not invoke a new normalizer",
+            "Write only ./service/.observe/ao-target-handoff-review.json and .md",
+            "supplied canonical-validator evidence rather than engine execution",
+        ):
+            assert phrase.lower() in task.lower()
+        assert "No resource creation" in snapshot["proof_limits"][2]
