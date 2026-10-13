@@ -33,7 +33,7 @@ export target. When selected or bound findings use
 `../references/splunk-agent-observability.md`.
 When the selected scope or application owns GenAI operations, also read
 `../references/genai-readiness.md` and apply its GenAI Instrumentation Selection
-and Required GenAI Coverage Profile. Verify fresh-agent Splunk AO span creation
+and Required GenAI Coverage Profile. Verify the chosen producer's span creation
 separately from export-only setup; preserve and verify the canonical existing
 OTel/Galileo producer when present. Applicable content/vendor fields are
 required acceptance even when OTel publishes them as Opt-In.
