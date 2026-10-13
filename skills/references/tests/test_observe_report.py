@@ -3491,6 +3491,18 @@ for (const [serviceRoot, input, expected] of cases) {
         }}, report)
         self.assertEqual(ids["ao_target"]["project_id"], "project-123")
 
+    def test_ao_target_length_counts_unicode_codepoints(self) -> None:
+        for key in ("project_name", "project_id", "agent_stream_name", "agent_stream_id"):
+            for character in ("x", "\U0001f9ea"):
+                target = {"project_name": "project", "agent_stream_name": "stream"}
+                if key.endswith("_id"):
+                    target.pop(key.removesuffix("_id") + "_name")
+                target[key] = character * 512
+                self.assertEqual(MODULE.normalize_ao_target(target, "target")[key], character * 512)
+                target[key] += character
+                with self.assertRaisesRegex(MODULE.ReportError, "512 characters"):
+                    MODULE.normalize_ao_target(target, "target")
+
     def test_selection_ao_target_requires_valid_selectors_and_selected_configuration(self) -> None:
         report = MODULE.normalize_audit_report(sample_splunk_agent_observability_report())
         base = {

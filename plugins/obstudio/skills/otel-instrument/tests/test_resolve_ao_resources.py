@@ -384,6 +384,28 @@ class ResolverTests(unittest.TestCase):
         self.assertEqual(evidence["agent_stream"]["name"], stream_name)
         self.assertEqual(projects.create_calls + streams.create_calls, [])
 
+    def test_selector_length_uses_unicode_codepoints(self):
+        for character in ("x", "\U0001f9ea"):
+            for key in ("project_name", "project_id", "agent_stream_name", "agent_stream_id"):
+                for count in (512, 513):
+                    with self.subTest(character=character, selector=key, count=count):
+                        selectors = {"project_name": "project", "agent_stream_name": "stream"}
+                        if key.endswith("_id"):
+                            selectors.pop(key.removesuffix("_id") + "_name")
+                        selectors[key] = character * count
+                        project = resource(selectors.get("project_id", "p"), selectors.get("project_name", "project"))
+                        stream = resource(selectors.get("agent_stream_id", "s"), selectors.get("agent_stream_name", "stream"), project.id)
+                        projects, streams = Client([project]), Client([stream])
+                        if count == 513:
+                            with self.assertRaises(MODULE.ResolutionError) as raised:
+                                MODULE.resolve_resources(projects, streams, **selectors)
+                            self.assertEqual(raised.exception.code, "invalid_selectors")
+                            self.assertEqual(projects.lookup_calls + streams.lookup_calls, [])
+                        else:
+                            evidence = MODULE.resolve_resources(projects, streams, **selectors)
+                            self.assertEqual(evidence["status"], "resolved")
+                        self.assertEqual(projects.create_calls + streams.create_calls, [])
+
     def test_fakes_work_with_sdk_imports_unavailable(self):
         original_import = builtins.__import__
         def without_sdk(name, *args, **kwargs):
@@ -450,6 +472,31 @@ class CLITests(unittest.TestCase):
         with patch.dict(os.environ, environment, clear=True), patch.object(MODULE, "_sdk_clients", return_value=clients), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             result = MODULE.main(arguments or [])
         return result, json.loads(stdout.getvalue()), stderr.getvalue()
+
+    def test_overlong_cli_and_env_selectors_fail_before_sdk_initialization(self):
+        keys = {
+            "project_name": ("--project-name", "SPLUNK_AO_PROJECT"),
+            "project_id": ("--project-id", "SPLUNK_AO_PROJECT_ID"),
+            "agent_stream_name": ("--agent-stream-name", "SPLUNK_AO_AGENT_STREAM"),
+            "agent_stream_id": ("--agent-stream-id", "SPLUNK_AO_AGENT_STREAM_ID"),
+        }
+        for character in ("x", "\U0001f9ea"):
+            for key, (flag, env_key) in keys.items():
+                for source in ("cli", "env"):
+                    with self.subTest(selector=key, source=source, character=character):
+                        environment = {"SPLUNK_AO_PROJECT": "project", "SPLUNK_AO_AGENT_STREAM": "stream"}
+                        arguments = []
+                        if source == "cli":
+                            arguments = [flag, character * 513]
+                        else:
+                            if key.endswith("_id"):
+                                environment.pop("SPLUNK_AO_PROJECT" if key.startswith("project") else "SPLUNK_AO_AGENT_STREAM")
+                            environment[env_key] = character * 513
+                        stdout = io.StringIO()
+                        with patch.dict(os.environ, environment, clear=True), patch.object(MODULE, "_sdk_clients") as sdk, contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(io.StringIO()):
+                            self.assertEqual(MODULE.main(arguments), 1)
+                        sdk.assert_not_called()
+                        self.assertEqual(json.loads(stdout.getvalue())["error"], "invalid_selectors")
 
     def test_env_only_names_and_ids_resolve_existing_resources(self):
         for environment in (

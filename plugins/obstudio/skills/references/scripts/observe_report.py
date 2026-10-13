@@ -4228,7 +4228,7 @@ def render_html(
                 f'<option value="name"{" selected" if selector == "name" else ""}>Name</option>'
                 f'<option value="id"{" selected" if selector == "id" else ""}>ID</option></select>'
                 f'<label id="ao-{resource}-label" for="ao-{resource}-value">{label} {selector.upper() if selector == "id" else "name"}</label>'
-                f'<input id="ao-{resource}-value" data-ao-value="{resource}" type="text" maxlength="512" '
+                f'<input id="ao-{resource}-value" data-ao-value="{resource}" type="text" '
                 f'aria-describedby="ao-target-help ao-target-error" value="{esc(value)}"></div>'
             )
         ao_controls = (
@@ -4903,8 +4903,8 @@ function aoTargetArguments() {{
   }}));
   const hasValue = resources.some(resource => resource.value);
   const reuseOnly = document.getElementById("ao-reuse-only")?.checked || false;
-  const invalid = resources.some(resource => resource.value.length > 512 || /\\p{{C}}/u.test(resource.rawValue));
-  const error = invalid ? "Resource selectors must not contain control characters."
+  const invalid = resources.some(resource => Array.from(resource.value).length > 512 || /\\p{{C}}/u.test(resource.rawValue));
+  const error = invalid ? "Resource selectors must be at most 512 characters and contain no control characters."
     : hasValue && resources.some(resource => !resource.value)
       ? "Provide both the Project and Agent Stream, or clear both fields to use application configuration."
       : "";

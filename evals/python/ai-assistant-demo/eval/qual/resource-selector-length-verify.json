@@ -1,0 +1,21 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "resource-selector-length-verify",
+      "eval_inputs": [
+        "eval/inputs/otel-audit.json"
+      ],
+      "task": "Run a focused supplemental read-only AO selector length contract review using only provisioned Python, the actual bundled shared references/scripts/observe_report.py and its otel-verify wrapper. Copy supplied otel-audit.json only to .observe/otel-audit.json; preserve application/dependency/env files. Execute normalize_ao_target and the actual select CLI with AO-002 (AO-001 prerequisite), testing Project and Agent Stream names and IDs at512/513 Unicode code points using ASCII and non-BMP emoji. At512 preserve exact identities and schema-v3 target/digest bindings; at513 fail without replacing a previously valid saved selection. A300emoji value is valid even though it occupies600 UTF-16 units. Render HTML for valid saved300/512emoji names and ID targets; inspect actual generated input values, selector modes and JavaScript code-point counting. Limit this task to rendered-source checks; do not run a browser. Report actual browser interaction as Not run in this task. Write .observe/selector-length-review.md and JSON with executed commands, cases, results and limits. No SDK/resource calls, dependency resolution/downloads, services/models/cloud/gateway, or code/env edits; no broader instrumentation/telemetry/cloud proof."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect the actual bundled shared helper/wrapper, temporary standard-library harness, executed command outputs and supplemental .observe reports. A renderer source check is not a browser interaction claim.",
+    "Read ./last_message.md and ./grade.json."
+  ],
+  "rubric": [
+    "Executes canonical normalization and the real selection CLI at512/513 code-point boundaries for all four Project/Agent Stream name/ID selectors, using ASCII and non-BMP emoji. Valid targets retain exact values and schema-v3 digest binding; overlong targets fail and do not overwrite the previously valid selection. A300emoji value is valid despite600UTF-16units; byte/unit/grapheme counts do not replace code-point count.",
+    "Renders actual HTML from valid saved emoji name and ID targets and inspects preserved values/modes plus code-point JavaScript validation and absence of a conflicting UTF-16 maxlength restriction. Keeps rendered-source proof distinct from unrun real browser interaction; does not claim a static string proves browser behavior.",
+    "Uses actual bundled shared helper and owning skill wrapper with standard-library temporary tests only. Application/dependency/env files are unchanged, and no SDK/resource calls, dependency resolution/downloads or services/models/cloud/gateway occur. Durable reports identify commands/results and supplemental proof limits without claiming broader instrumentation or cloud closure."
+  ]
+}

@@ -61,7 +61,7 @@ def _identity(resource: Any, *, project_id: str | None = None) -> dict[str, str]
 
 def _invalid_selector(value: Any) -> bool:
     return value is not None and (
-        not isinstance(value, str) or not value.strip()
+        not isinstance(value, str) or not value.strip() or len(value) > 512
         or value != value.strip()
         or any(unicodedata.category(character).startswith("C") for character in value)
     )
