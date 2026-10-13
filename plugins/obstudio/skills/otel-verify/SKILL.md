@@ -44,11 +44,14 @@ test against documented configured limits. Require useful schema-valid content,
 truthful truncation/gap handling and credential/token/email sentinel absence from
 native records, attributes/events and wire as applicable. Keep proposed settings
 and unrun acceptance tests separate from observed configuration or emission.
-For every fresh or export-only GenAI source scenario, also read
+For fresh or export-only GenAI scenarios using the Splunk AO default or an
+explicit Splunk AO choice, also read
 `../references/splunk-agent-observability.md` and its Fresh Agent SDK
 Instrumentation named-method table, even with no `splunk_ao` import or selected
-AO resource finding. Explicitly select a supported Splunk AO creator, rather
-than a generic app-owned span plan. Record creator symbols, actual boundary,
+AO resource finding. Select a supported Splunk AO creator for that path. An
+explicit user choice of another supported producer overrides the default;
+verify that chosen canonical producer and its required coverage. Record
+creator symbols, actual boundary,
 installed or proposed source-verified version and exact example/revision;
 separate that prospective choice from actual emitted-span proof. A fixture
 without an installed SDK does not justify silently changing the fresh default.
