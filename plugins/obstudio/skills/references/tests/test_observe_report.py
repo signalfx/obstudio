@@ -3683,6 +3683,61 @@ process.stdout.write(JSON.stringify({command, negativeCommand}));
             "--ao-agent-stream=-stream name", "/repo with spaces",
         ])
 
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript behavior validation")
+    def test_html_ao_resource_invalid_state_is_specific_to_each_field(self) -> None:
+        report = MODULE.normalize_audit_report(sample_splunk_agent_observability_report())
+        rendered = MODULE.render_html(report, MODULE.empty_selection(report))
+        functions = rendered[rendered.index("function shellQuote(value)"):rendered.index("function syncDependencyClosure()")]
+        script = """
+const REPORT = REPORT_VALUE;
+const selected = new Set(["AO-002"]);
+const nodes = {};
+for (const resource of ["project", "agent_stream"]) {
+  nodes[`ao-${resource}-selector`] = {value: "name"};
+  nodes[`ao-${resource}-value`] = {value: "valid", attributes: {},
+    setAttribute(name, value) {this.attributes[name] = value;}};
+}
+nodes["ao-reuse-only"] = {checked: false};
+nodes["ao-target-error"] = {textContent: ""};
+const document = {getElementById(id) {return nodes[id];}};
+function assert(condition, message) {if (!condition) throw new Error(message);}
+function invalid(resource) {return nodes[`ao-${resource}-value`].attributes["aria-invalid"] === "true";}
+function fill(project, stream) {
+  nodes["ao-project-value"].value = project;
+  nodes["ao-agent_stream-value"].value = stream;
+  return aoTargetArguments();
+}
+FUNCTIONS_VALUE
+for (const resource of ["project", "agent_stream"]) {
+  const other = resource === "project" ? "agent_stream" : "project";
+  for (const mode of ["name", "id"]) {
+    nodes[`ao-${resource}-selector`].value = mode;
+    for (const value of ["x".repeat(513), "🧪".repeat(513), "bad\u202evalue"]) {
+      fill("valid-project", "valid-stream");
+      nodes[`ao-${resource}-value`].value = value;
+      const target = aoTargetArguments();
+      assert(target.error, `${resource}/${mode}: invalid field blocks command`);
+      assert(invalid(resource), `${resource}/${mode}: offending field is invalid`);
+      assert(!invalid(other), `${resource}/${mode}: valid peer stays valid`);
+      const repaired = fill("valid-project", "valid-stream");
+      assert(!repaired.error && !invalid(resource) && !invalid(other), "repair clears field errors");
+    }
+    fill("valid-project", "valid-stream");
+    nodes[`ao-${resource}-value`].value = "";
+    assert(aoTargetArguments().error, "partial pair blocks command");
+    assert(invalid(resource) && !invalid(other), "only actually missing selector is invalid");
+  }
+}
+assert(!fill("", "").error && !invalid("project") && !invalid("agent_stream"), "empty fallback is valid");
+fill("x".repeat(513), "");
+assert(invalid("project") && invalid("agent_stream"), "offending value and missing peer are both invalid");
+fill("valid-project", "");
+assert(!invalid("project") && invalid("agent_stream"), "repair keeps only missing peer invalid");
+assert(!fill("valid-project", "valid-stream").error && !invalid("project") && !invalid("agent_stream"), "complete pair clears both");
+""".replace("REPORT_VALUE", json.dumps(report)).replace("FUNCTIONS_VALUE", functions)
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_selection_v2_answer_unlocks_only_its_direct_executable_branch(self) -> None:
         report = MODULE.normalize_audit_report(sample_decision_branch_report())
         answers = [

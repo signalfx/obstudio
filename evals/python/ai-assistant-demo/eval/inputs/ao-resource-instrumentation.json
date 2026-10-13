@@ -2,8 +2,8 @@
   "schema_version": 1,
   "kind": "otel-instrumentation",
   "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-  "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
-  "selection_sha256": "sha256:6672f109ff4c910a4ee91c9227019bd0800992f3ab99eeb32368d30e88c6450d",
+  "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+  "selection_sha256": "sha256:fab507736de619a6af968f3249cf6914d8b3ec2ff6ce099d6809d471245355a0",
   "meta": {
     "service_name": "python-ai-assistant-offline-evaluation",
     "date": "2026-10-12",

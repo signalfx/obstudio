@@ -3,17 +3,19 @@
   "schema_version": 1,
   "producer": {
     "source": "skills/references/scripts/observe_report.py",
-    "source_sha256": "sha256:db43588670c6311cd356fb14b73409af4d096adf1b17fdbadc890155bdd540a0",
-    "source_revision": "06458a6e51c139fde2312c0fcdcf37dab9f5b093",
+    "source_sha256": "sha256:17a06cf7800ccb06c90546baa4a6450f222346f21a0a71d4764270a01c069b44",
+    "source_revision": "97b62df093153f8cfd47ccd0ab28f9ff94211063",
     "functions_executed": [
       "normalize_audit_report",
+      "audit_digest",
       "normalize_selection",
       "selection_digest",
       "normalize_instrumentation",
       "instrumentation_digest",
       "normalize_verify"
     ],
-    "execution": "Local calls to the actual canonical Python normalizers; SDK, browser, Terraform, application runtime, model and cloud APIs were not executed."
+    "execution": "Local calls to the actual canonical Python normalizers; SDK, browser, Terraform, application runtime, model and cloud APIs were not executed.",
+    "source_working_tree_changes": true
   },
   "proof_limits": [
     "The snapshot records validator behavior at the producer source SHA; consuming it is supplied evidence, not a fresh engine execution.",
@@ -66,7 +68,7 @@
     ],
     "routes": [],
     "signal_flow": {
-      "component_flow_map": "Offline evaluation\nrun_evaluation -> project lookup [GAP: Offline project resource] -> Agent Stream lookup or create [GAP: Offline Agent Stream resource] -> SDK logger -> flush -> terminate"
+      "component_flow_map": "Offline evaluation\nrun_evaluation -> project lookup [GAP: Offline project resource] -> Agent Stream lookup or create [GAP: Offline Agent Stream resource] -> SDK logger [GAP: Offline synthetic evaluation envelope and model] -> flush -> terminate"
     },
     "current_instrumentation": {
       "spans": [],
@@ -76,12 +78,12 @@
     },
     "genai_readiness": [
       {
-        "surface": "Offline synthetic evaluation workflow and model",
-        "status": "covered",
-        "evidence": "eval_runner.py:27-40",
-        "required_signals": "Existing SDK-created offline_assistant_evaluation workflow and evaluation_answer model spans",
-        "owner": "App-owned: eval_runner.py:27-40",
-        "acceptance_criteria": "The source-owned logger creates workflow and model operations and is terminated in finally; live delivery remains unproven.",
+        "surface": "Offline synthetic evaluation envelope and model",
+        "status": "partial",
+        "evidence": "eval_runner.py:25-37; pyproject.toml",
+        "required_signals": "Existing evaluation_answer model-span call and offline_assistant_evaluation Trace envelope; no exported workflow operation is established.",
+        "owner": "App-owned: eval_runner.py:25-37",
+        "acceptance_criteria": "The source-owned logger starts and concludes a Trace envelope, calls add_llm_span for evaluation_answer, and terminates in finally. In the pinned splunk-ao 0.4.0 SDK, start_trace does not emit a workflow operation span; workflow applicability and emission, full GenAI field coverage, and live delivery remain unproven.",
         "impact": "Resource failures prevent this offline evaluation route from reaching its intended destination."
       }
     ],
@@ -177,6 +179,57 @@
         "resolution": null,
         "resolved_commit": null,
         "finding_group": "splunk-agent-observability"
+      },
+      {
+        "id": "OTEL-001",
+        "title": "Assess offline GenAI span coverage",
+        "severity": "medium",
+        "priority": "recommended",
+        "effort": "small",
+        "status": "proposed",
+        "area": "Offline synthetic evaluation envelope and model",
+        "gap": "The pinned splunk-ao 0.4.0 source starts and concludes a Trace envelope and calls add_llm_span, but has no add_workflow_span call. Workflow applicability and emission, full GenAI field coverage, bounded redacted content, and error or cancellation span semantics remain unproven.",
+        "impact": "Resource-path acceptance cannot establish complete GenAI operation semantics or observable offline execution.",
+        "product_outcome": "Existing model operations and any actually applicable coordinated workflow have source-backed, verified GenAI coverage.",
+        "required_fix": "Only if separately selected: assess the existing Splunk AO model-span hook and its exported semantics, safe content and lifecycle proof. Establish whether the offline runner owns a composed workflow before proposing add_workflow_span. Preserve the existing producer and do not count start_trace as a workflow operation or treat this audit row as approval to repair the application.",
+        "instrument_mode": "default",
+        "verification_scenarios": [
+          "genai.offline.coverage"
+        ],
+        "dependencies": [],
+        "evidence": [
+          "eval_runner.py:25-37",
+          "pyproject.toml"
+        ],
+        "acceptance_criteria": [
+          "Preserve the original trace-envelope and model-span call sites; start_trace alone is not exported workflow coverage. A workflow operation requires established applicability and a real matching creator.",
+          "When separately authorized, capture actual installed-SDK spans while faking only external transport or resource boundaries; verify applicable model/provider/usage, safe bounded input/output and terminal error/cancellation behavior without duplicating operations.",
+          "Fake resource calls and canonical validator binding do not prove span emission or fresh cloud Agent Stream receipt."
+        ],
+        "constraints": [
+          "This optional finding is not selected by the AO-001/AO-002 resource selection and authorizes no application change or cloud creation."
+        ],
+        "expected_telemetry": [
+          {
+            "type": "span",
+            "name": "evaluation_answer",
+            "attributes": [
+              "gen_ai.operation.name",
+              "gen_ai.provider.name",
+              "gen_ai.request.model",
+              "gen_ai.usage.input_tokens",
+              "gen_ai.usage.output_tokens",
+              "gen_ai.input.messages",
+              "gen_ai.output.messages"
+            ],
+            "product_view": "Verified offline model operation; workflow applicability assessed separately"
+          }
+        ],
+        "follow_up_actions": [
+          "Select this finding separately before instrumentation or test repair; prove actual span semantics and cloud delivery at their own boundaries."
+        ],
+        "resolution": null,
+        "resolved_commit": null
       }
     ],
     "verification": {
@@ -212,6 +265,17 @@
           "environments": [
             "python.local"
           ]
+        },
+        {
+          "id": "genai.offline.coverage",
+          "trigger": "Only when separately authorized, run original eval_runner.run_evaluation with the installed SDK and fake external transport/resource responses; capture real exported model spans and assess whether an actual coordinated workflow exists.",
+          "entrypoint": "eval_runner.py:10",
+          "expected_signals": "The existing evaluation_answer model operation with applicable GenAI fields and safe bounded content; correct terminal lifecycle and no duplicate operations. A workflow span is expected only after applicability and its actual creator are established.",
+          "proof_level": "focused call-site",
+          "acceptance_criteria": "Source call sites remain unchanged. Actual SDK span emission is captured rather than fabricated by SDK mocks; trace-envelope creation alone proves no workflow operation. Known parameters, usage, content bounds and error/cancellation lifecycle are verified only if executed; resource-only success and canonical binding leave this optional GenAI coverage unproven.",
+          "environments": [
+            "python.local"
+          ]
         }
       ]
     },
@@ -221,7 +285,7 @@
     ],
     "scan_blockers": []
   },
-  "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+  "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
   "selection_cases": [
     {
       "case": "legacy-v1-no-target",
@@ -229,7 +293,7 @@
         "schema_version": 1,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -246,7 +310,7 @@
         "schema_version": 1,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -258,7 +322,7 @@
         "approved_by": null,
         "approved_at": null
       },
-      "selection_sha256": "sha256:6672f109ff4c910a4ee91c9227019bd0800992f3ab99eeb32368d30e88c6450d"
+      "selection_sha256": "sha256:fab507736de619a6af968f3249cf6914d8b3ec2ff6ce099d6809d471245355a0"
     },
     {
       "case": "legacy-v2-no-target",
@@ -266,7 +330,7 @@
         "schema_version": 2,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -283,7 +347,7 @@
         "schema_version": 2,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -296,7 +360,7 @@
         "approved_at": null,
         "decision_answers": []
       },
-      "selection_sha256": "sha256:312c617f933c4563027193873d497e83f88dba794fbc9293cf6bc3d70b3bded6"
+      "selection_sha256": "sha256:7ecc46bb0e8042b98f387c588c26685c48d86d9e5f0c6c9ff3e9fc5c363cfc41"
     },
     {
       "case": "schema-v3-no-target",
@@ -304,7 +368,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -321,7 +385,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -334,7 +398,7 @@
         "approved_at": null,
         "decision_answers": []
       },
-      "selection_sha256": "sha256:335d5bbfd6692ab3d19bce6d585a9e75303ba35cf6f07a61d7877370ad76749d"
+      "selection_sha256": "sha256:d54052e211f101b3a2e0bf4c194c2f461ad72a1ed025bc568351f08b56ec56a3"
     },
     {
       "case": "schema-v3-names-a",
@@ -342,7 +406,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -363,7 +427,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -381,7 +445,7 @@
           "create_if_missing": true
         }
       },
-      "selection_sha256": "sha256:d265e9456fa90c381b10cae772a9aea21cb726a0b98c268432be099889589efc"
+      "selection_sha256": "sha256:9e46b34e0e1cc6a4255d8339ca06069c90cb66cde8110a04ffd1c3b99914e815"
     },
     {
       "case": "schema-v3-names-b",
@@ -389,7 +453,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -410,7 +474,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -428,7 +492,7 @@
           "create_if_missing": true
         }
       },
-      "selection_sha256": "sha256:6180c6ed38ba3542a90ae63a1f0e66b2fb8045dddb62b243903325405a5371e7"
+      "selection_sha256": "sha256:9798369869fa350d546f98812ec954495538469f79fb7d7c7a61ebdc79fe1f64"
     },
     {
       "case": "schema-v3-ids",
@@ -436,7 +500,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -457,7 +521,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -475,7 +539,7 @@
           "create_if_missing": true
         }
       },
-      "selection_sha256": "sha256:39e3c5d2dc6ec2201953e71d1cce217c26b68fe3874c40106c947468c15ef1e9"
+      "selection_sha256": "sha256:e36283f370bc553c638a8d41a38f28cfff4cd72fe9d2926fdcfe69afa019ba11"
     },
     {
       "case": "schema-v3-project-name-stream-id",
@@ -483,7 +547,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -504,7 +568,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -522,7 +586,7 @@
           "create_if_missing": true
         }
       },
-      "selection_sha256": "sha256:5c89daefebb6a741e27f3ccc2487afc8c75af69a4b1572d6d4e4765723f3378e"
+      "selection_sha256": "sha256:1436d919d6f587c186d859bb39ad9fb08ed3027b65a5a0a9c1d4cd99519825f6"
     },
     {
       "case": "schema-v3-project-id-stream-name",
@@ -530,7 +594,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -551,7 +615,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -569,7 +633,7 @@
           "create_if_missing": true
         }
       },
-      "selection_sha256": "sha256:283eaa89b18978e642a94b1406ae8461346334f1d0bad47085853e2b6424ee01"
+      "selection_sha256": "sha256:722c2f5e241f2b569b475878b2c0006cd2fe074bf0137932bfe521b7e1edc671"
     },
     {
       "case": "schema-v3-policy-only-reuse",
@@ -577,7 +641,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -597,7 +661,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -613,7 +677,7 @@
           "create_if_missing": false
         }
       },
-      "selection_sha256": "sha256:147c7bb23bb9d388b345a34566030b49629e85f2f39e59e0dee7b8198d4790d8"
+      "selection_sha256": "sha256:8a45d6003a3f1032e012e3eb0a8f60b4fd7c734a2030243a4979ae6f1ee56aa6"
     },
     {
       "case": "schema-v3-partial-selector",
@@ -621,7 +685,7 @@
         "schema_version": 3,
         "kind": "otel-selection",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
         "requested_ids": [
           "AO-001",
           "AO-002"
@@ -646,8 +710,8 @@
         "schema_version": 1,
         "kind": "otel-instrumentation",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
-        "selection_sha256": "sha256:d265e9456fa90c381b10cae772a9aea21cb726a0b98c268432be099889589efc",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+        "selection_sha256": "sha256:9e46b34e0e1cc6a4255d8339ca06069c90cb66cde8110a04ffd1c3b99914e815",
         "meta": {
           "service_name": "python-ai-assistant-offline-evaluation",
           "date": "2026-10-12",
@@ -693,15 +757,15 @@
           "Run read-only resource-path verification; real resource and fresh stream receipt proof require a separate configured target."
         ]
       },
-      "instrumentation_sha256": "sha256:3b85d513cf98acc202da9f007bb5bbeff222f89956b660d1833f0a77c5913c21"
+      "instrumentation_sha256": "sha256:526a718e493f838c48598f88fa8895560d7e57a5e2efd6eda7c1dc040c56565a"
     },
     "names-b": {
       "normalized_instrumentation": {
         "schema_version": 1,
         "kind": "otel-instrumentation",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
-        "selection_sha256": "sha256:6180c6ed38ba3542a90ae63a1f0e66b2fb8045dddb62b243903325405a5371e7",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+        "selection_sha256": "sha256:9798369869fa350d546f98812ec954495538469f79fb7d7c7a61ebdc79fe1f64",
         "meta": {
           "service_name": "python-ai-assistant-offline-evaluation",
           "date": "2026-10-12",
@@ -747,15 +811,15 @@
           "Run read-only resource-path verification; real resource and fresh stream receipt proof require a separate configured target."
         ]
       },
-      "instrumentation_sha256": "sha256:44f028337e72e16eae34a0e247fdb81fbdefeb332feb8ddc38fe95c393abad93"
+      "instrumentation_sha256": "sha256:4b5af74c403d7844f58a39e95398fa10f9d8abdbaee921252514cb8c1316a420"
     }
   },
   "normalized_verification_names_a": {
     "schema_version": 1,
     "kind": "otel-verify",
     "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-    "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
-    "instrumentation_sha256": "sha256:3b85d513cf98acc202da9f007bb5bbeff222f89956b660d1833f0a77c5913c21",
+    "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+    "instrumentation_sha256": "sha256:526a718e493f838c48598f88fa8895560d7e57a5e2efd6eda7c1dc040c56565a",
     "meta": {
       "service_name": "python-ai-assistant-offline-evaluation",
       "date": "2026-10-13",
@@ -839,8 +903,8 @@
         "schema_version": 1,
         "kind": "otel-instrumentation",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
-        "selection_sha256": "sha256:d265e9456fa90c381b10cae772a9aea21cb726a0b98c268432be099889589efc",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+        "selection_sha256": "sha256:9e46b34e0e1cc6a4255d8339ca06069c90cb66cde8110a04ffd1c3b99914e815",
         "meta": {
           "service_name": "python-ai-assistant-offline-evaluation",
           "date": "2026-10-12",
@@ -899,8 +963,8 @@
         "schema_version": 1,
         "kind": "otel-verify",
         "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
-        "audit_sha256": "sha256:68617791f994e0d92e5305c6eedf75f63714facdc1beb1aeabdf7f5067fc727a",
-        "instrumentation_sha256": "sha256:3b85d513cf98acc202da9f007bb5bbeff222f89956b660d1833f0a77c5913c21",
+        "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+        "instrumentation_sha256": "sha256:526a718e493f838c48598f88fa8895560d7e57a5e2efd6eda7c1dc040c56565a",
         "meta": {
           "service_name": "python-ai-assistant-offline-evaluation",
           "date": "2026-10-13",

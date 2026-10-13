@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 from pathlib import Path
@@ -438,6 +439,21 @@ def test_shared_ao_target_binding_contract_is_explicit_for_every_consumer() -> N
 def test_ao_target_handoff_evals_review_actual_snapshot_without_runtime_claims() -> None:
     fixture = ROOT / "evals/python/ai-assistant-demo/eval/inputs/ao-target-handoff-validator-snapshot.json"
     snapshot = json.loads(_read(fixture))
+    resource_audit = json.loads(_read(fixture.parent / "ao-resource-audit.json"))
+    readiness = resource_audit["genai_readiness"][0]
+    runner = ast.parse(_read(ROOT / "evals/python/ai-assistant-demo/eval_runner.py"))
+    logger_calls = {
+        node.func.attr for node in ast.walk(runner)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name) and node.func.value.id == "logger"
+    }
+    assert {"start_trace", "add_llm_span", "conclude", "flush", "terminate"} <= logger_calls
+    assert "add_workflow_span" not in logger_calls
+    assert readiness["status"] == "partial"
+    assert "Trace envelope" in readiness["required_signals"]
+    assert "workflow" in readiness["acceptance_criteria"]
+    assert "unproven" in readiness["acceptance_criteria"]
+    assert snapshot["normalized_audit"]["genai_readiness"] == resource_audit["genai_readiness"]
     assert snapshot["producer"]["source"] == "skills/references/scripts/observe_report.py"
     assert snapshot["producer"]["source_sha256"] == "sha256:" + hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
     cases = {case["case"]: case for case in snapshot["selection_cases"]}
@@ -471,16 +487,65 @@ def test_ao_target_handoff_evals_review_actual_snapshot_without_runtime_claims()
     for role, (skill, role_requirement) in roles.items():
         packet = json.loads(_read(ROOT / f"evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-{role}.json"))
         assert packet["skill"] == skill
-        assert len(packet["rubric"]) == 3
+        assert len(packet["rubric"]) == (3 if role == "configure" else 4)
         assert role_requirement in packet["rubric"][2]
-        assert packet["prompts"][0]["eval_inputs"] == ["eval/inputs/ao-target-handoff-validator-snapshot.json"]
+        if role != "configure":
+            assert "aria-invalid" in packet["rubric"][3]
+            assert "valid peer" in packet["rubric"][3]
+        expected_inputs = {"eval/inputs/ao-target-handoff-validator-snapshot.json"}
+        if role != "configure":
+            expected_inputs.add("eval/inputs/ao-selector-field-validity-snapshot.json")
+        inputs = packet["prompts"][0]["eval_inputs"]
+        assert set(inputs) == expected_inputs
+        assert len(inputs) == len(expected_inputs)
         task = packet["prompts"][0]["task"]
         for phrase in (
             "Read-only supplemental AO target handoff contract review",
-            "Review the supplied snapshot only",
+            ("Review the supplied snapshot only" if role == "configure"
+             else "Review the supplied snapshots only"),
             "do not invoke a new normalizer",
             "Write only ./service/.observe/ao-target-handoff-review.json and .md",
             "supplied canonical-validator evidence rather than engine execution",
         ):
             assert phrase.lower() in task.lower()
         assert "No resource creation" in snapshot["proof_limits"][2]
+
+
+def test_ao_target_handoff_ui_snapshot_records_bound_field_validity() -> None:
+    inputs = ROOT / "evals/python/ai-assistant-demo/eval/inputs"
+    ui = json.loads(_read(inputs / "ao-selector-field-validity-snapshot.json"))
+    validator = json.loads(_read(inputs / "ao-target-handoff-validator-snapshot.json"))
+    assert ui["schema_version"] == 1
+    assert ui["kind"] == "ao-selector-field-validity-browser-snapshot"
+    assert ui["outcome"] == "pass"
+    assert ui["producer"]["engine_sha256"] == hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
+    assert ui["producer"]["audit_fixture_sha256"] == hashlib.sha256(
+        (inputs / "ao-resource-audit.json").read_bytes()
+    ).hexdigest()
+    assert ui["fixture"]["normalized_audit_sha256"] == validator["audit_sha256"]
+    assert ui["fixture"]["requested_finding_ids"] == ["AO-002"]
+    assert ui["fixture"]["approved_finding_ids"] == ["AO-001", "AO-002"]
+    assert ui["fixture"]["unselected_finding_ids"] == ["OTEL-001"]
+    assert ui["scope_unchanged"]["initial"] == ui["scope_unchanged"]["final"] == {
+        "requested": ui["fixture"]["requested_finding_ids"],
+        "selected": ui["fixture"]["approved_finding_ids"],
+    }
+    assert ui["case_encoding"]["aria_invalid_order"] == ["project", "agent_stream"]
+    assert {(case["resource"], case["selector"]) for case in ui["cases"]} == {
+        (resource, selector)
+        for resource in ("project", "agent_stream") for selector in ("name", "id")
+    }
+    count = 0
+    for case in ui["cases"]:
+        seen = set()
+        for values in case["rows"]:
+            assert len(values) == len(ui["case_encoding"]["columns"])
+            row = dict(zip(ui["case_encoding"]["columns"], values))
+            seen.add(row["scenario_id"])
+            assert row["expected_aria_invalid"] == row["actual_aria_invalid"]
+            assert row["expected_command_blocked"] is row["actual_command_blocked"]
+            count += 1
+        assert seen == set(ui["scenario_definitions"])
+        assert len(case["rows"]) == len(seen)
+    assert count == ui["field_matrix_case_count"]
+    assert ui["case_count"] == count + len(ui["viewports"]) + 1

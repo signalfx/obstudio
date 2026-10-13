@@ -4903,7 +4903,8 @@ function aoTargetArguments() {{
   }}));
   const hasValue = resources.some(resource => resource.value);
   const reuseOnly = document.getElementById("ao-reuse-only")?.checked || false;
-  const invalid = resources.some(resource => Array.from(resource.value).length > 512 || /\\p{{C}}/u.test(resource.rawValue));
+  const invalidResources = resources.filter(resource => Array.from(resource.value).length > 512 || /\\p{{C}}/u.test(resource.rawValue));
+  const invalid = invalidResources.length > 0;
   const error = invalid ? "Resource selectors must be at most 512 characters and contain no control characters."
     : hasValue && resources.some(resource => !resource.value)
       ? "Provide both the Project and Agent Stream, or clear both fields to use application configuration."
@@ -4912,7 +4913,7 @@ function aoTargetArguments() {{
   if (errorNode) errorNode.textContent = error;
   for (const resource of resources) {{
     document.getElementById(`ao-${{resource.resource}}-value`)?.setAttribute("aria-invalid",
-      String(Boolean(error) && (invalid || !resource.value)));
+      String(invalidResources.includes(resource) || (hasValue && !resource.value)));
   }}
   if (error || !hasValue) return {{parts: !error && reuseOnly ? ["--ao-reuse-only"] : [], error}};
   const parts = [];

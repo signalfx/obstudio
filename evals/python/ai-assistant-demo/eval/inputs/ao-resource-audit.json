@@ -51,16 +51,16 @@
   ],
   "routes": [],
   "signal_flow": {
-    "component_flow_map": "Offline evaluation\nrun_evaluation -> project lookup [GAP: Offline project resource] -> Agent Stream lookup or create [GAP: Offline Agent Stream resource] -> SDK logger -> flush -> terminate"
+    "component_flow_map": "Offline evaluation\nrun_evaluation -> project lookup [GAP: Offline project resource] -> Agent Stream lookup or create [GAP: Offline Agent Stream resource] -> SDK logger [GAP: Offline synthetic evaluation envelope and model] -> flush -> terminate"
   },
   "genai_readiness": [
     {
-      "surface": "Offline synthetic evaluation workflow and model",
-      "status": "covered",
-      "evidence": "eval_runner.py:27-40",
-      "required_signals": "Existing SDK-created offline_assistant_evaluation workflow and evaluation_answer model spans",
-      "owner": "App-owned: eval_runner.py:27-40",
-      "acceptance_criteria": "The source-owned logger creates workflow and model operations and is terminated in finally; live delivery remains unproven.",
+      "surface": "Offline synthetic evaluation envelope and model",
+      "status": "partial",
+      "evidence": "eval_runner.py:25-37; pyproject.toml",
+      "required_signals": "Existing evaluation_answer model-span call and offline_assistant_evaluation Trace envelope; no exported workflow operation is established.",
+      "owner": "App-owned: eval_runner.py:25-37",
+      "acceptance_criteria": "The source-owned logger starts and concludes a Trace envelope, calls add_llm_span for evaluation_answer, and terminates in finally. In the pinned splunk-ao 0.4.0 SDK, start_trace does not emit a workflow operation span; workflow applicability and emission, full GenAI field coverage, and live delivery remain unproven.",
       "impact": "Resource failures prevent this offline evaluation route from reaching its intended destination."
     }
   ],
@@ -152,6 +152,55 @@
       "follow_up_actions": [
         "Repair failed resource-resolution branches through instrumentation and verify fresh cloud receipt separately."
       ]
+    },
+    {
+      "id": "OTEL-001",
+      "title": "Assess offline GenAI span coverage",
+      "severity": "medium",
+      "priority": "recommended",
+      "effort": "small",
+      "status": "proposed",
+      "area": "Offline synthetic evaluation envelope and model",
+      "gap": "The pinned splunk-ao 0.4.0 source starts and concludes a Trace envelope and calls add_llm_span, but has no add_workflow_span call. Workflow applicability and emission, full GenAI field coverage, bounded redacted content, and error or cancellation span semantics remain unproven.",
+      "impact": "Resource-path acceptance cannot establish complete GenAI operation semantics or observable offline execution.",
+      "product_outcome": "Existing model operations and any actually applicable coordinated workflow have source-backed, verified GenAI coverage.",
+      "required_fix": "Only if separately selected: assess the existing Splunk AO model-span hook and its exported semantics, safe content and lifecycle proof. Establish whether the offline runner owns a composed workflow before proposing add_workflow_span. Preserve the existing producer and do not count start_trace as a workflow operation or treat this audit row as approval to repair the application.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "genai.offline.coverage"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "eval_runner.py:25-37",
+        "pyproject.toml"
+      ],
+      "acceptance_criteria": [
+        "Preserve the original trace-envelope and model-span call sites; start_trace alone is not exported workflow coverage. A workflow operation requires established applicability and a real matching creator.",
+        "When separately authorized, capture actual installed-SDK spans while faking only external transport or resource boundaries; verify applicable model/provider/usage, safe bounded input/output and terminal error/cancellation behavior without duplicating operations.",
+        "Fake resource calls and canonical validator binding do not prove span emission or fresh cloud Agent Stream receipt."
+      ],
+      "constraints": [
+        "This optional finding is not selected by the AO-001/AO-002 resource selection and authorizes no application change or cloud creation."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "span",
+          "name": "evaluation_answer",
+          "attributes": [
+            "gen_ai.operation.name",
+            "gen_ai.provider.name",
+            "gen_ai.request.model",
+            "gen_ai.usage.input_tokens",
+            "gen_ai.usage.output_tokens",
+            "gen_ai.input.messages",
+            "gen_ai.output.messages"
+          ],
+          "product_view": "Verified offline model operation; workflow applicability assessed separately"
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding separately before instrumentation or test repair; prove actual span semantics and cloud delivery at their own boundaries."
+      ]
     }
   ],
   "verification": {
@@ -184,6 +233,17 @@
         "expected_signals": "One initialized fake logger per case, the injected post-initialization error propagates, and exactly one terminate call from actual finally; no live provider or cloud calls",
         "proof_level": "focused call-site",
         "acceptance_criteria": "Durable executed evidence records each independent fault point, injected exception, initialization count, and terminate count. Every case initializes once and terminates exactly once while preserving error propagation. Resource-setup failures with zero initialized loggers cannot substitute for this post-initialization lifecycle proof.",
+        "environments": [
+          "python.local"
+        ]
+      },
+      {
+        "id": "genai.offline.coverage",
+        "trigger": "Only when separately authorized, run original eval_runner.run_evaluation with the installed SDK and fake external transport/resource responses; capture real exported model spans and assess whether an actual coordinated workflow exists.",
+        "entrypoint": "eval_runner.py:10",
+        "expected_signals": "The existing evaluation_answer model operation with applicable GenAI fields and safe bounded content; correct terminal lifecycle and no duplicate operations. A workflow span is expected only after applicability and its actual creator are established.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Source call sites remain unchanged. Actual SDK span emission is captured rather than fabricated by SDK mocks; trace-envelope creation alone proves no workflow operation. Known parameters, usage, content bounds and error/cancellation lifecycle are verified only if executed; resource-only success and canonical binding leave this optional GenAI coverage unproven.",
         "environments": [
           "python.local"
         ]
