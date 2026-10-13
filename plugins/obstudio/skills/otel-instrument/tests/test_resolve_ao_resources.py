@@ -286,6 +286,50 @@ class ResolverTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "project_id_not_found")
         self.assertEqual(projects.create_calls + streams.create_calls, [])
 
+    def test_sdk_project_not_found_without_http_status_is_missing_id(self):
+        class ProjectNotFoundError(Exception):
+            pass
+
+        projects, streams = Client(), Client()
+        projects.lookup_error = ProjectNotFoundError("private-not-found-body")
+        with patch.dict("sys.modules", {
+            "splunk_ao.projects": SimpleNamespace(ProjectNotFoundError=ProjectNotFoundError),
+        }):
+            with self.assertRaises(MODULE.ResolutionError) as raised:
+                MODULE.resolve_resources(projects, streams, project_id="missing", agent_stream_name="stream")
+        self.assertEqual(raised.exception.code, "project_id_not_found")
+        self.assertEqual(projects.create_calls + streams.create_calls + streams.lookup_calls, [])
+        self.assertNotIn("private-not-found-body", json.dumps(raised.exception.evidence))
+
+    def test_generic_sdk_error_body_never_implies_missing_project_id(self):
+        class ProjectNotFoundError(Exception):
+            pass
+
+        projects, streams = Client(), Client()
+        projects.lookup_error = Exception("404 ProjectNotFoundError: private-body")
+        with patch.dict("sys.modules", {
+            "splunk_ao.projects": SimpleNamespace(ProjectNotFoundError=ProjectNotFoundError),
+        }):
+            with self.assertRaises(MODULE.ResolutionError) as raised:
+                MODULE.resolve_resources(projects, streams, project_id="missing", agent_stream_name="stream")
+        self.assertEqual(raised.exception.code, "project_lookup_failed")
+        self.assertEqual(projects.create_calls + streams.create_calls + streams.lookup_calls, [])
+        self.assertNotIn("private-body", json.dumps(raised.exception.evidence))
+
+    def test_sdk_not_found_on_name_lookup_never_authorizes_creation(self):
+        class ProjectNotFoundError(Exception):
+            pass
+
+        projects, streams = Client(), Client()
+        projects.lookup_error = ProjectNotFoundError("private-body")
+        with patch.dict("sys.modules", {
+            "splunk_ao.projects": SimpleNamespace(ProjectNotFoundError=ProjectNotFoundError),
+        }):
+            with self.assertRaises(MODULE.ResolutionError) as raised:
+                self.run_resolver(projects, streams)
+        self.assertEqual(raised.exception.code, "project_lookup_failed")
+        self.assertEqual(projects.create_calls + streams.create_calls + streams.lookup_calls, [])
+
     def test_reuse_only_never_creates(self):
         for projects, streams, kind in ((Client(), Client(), "project"), (Client([self.project]), Client(), "agent_stream")):
             with self.assertRaises(MODULE.ResolutionError) as raised:

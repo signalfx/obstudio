@@ -36,6 +36,14 @@ def _status(error: Exception) -> int | None:
     return status if isinstance(status, int) and not isinstance(status, bool) else None
 
 
+def _project_not_found(error: Exception) -> bool:
+    try:
+        from splunk_ao.projects import ProjectNotFoundError
+    except ImportError:
+        return False
+    return isinstance(error, ProjectNotFoundError)
+
+
 def _identity(resource: Any, *, project_id: str | None = None) -> dict[str, str]:
     resource_id = getattr(resource, "id", None)
     name = getattr(resource, "name", None)
@@ -141,7 +149,10 @@ def resolve_resources(
                 if status is not None:
                     record["lookup_http_status"] = status
                 # Missing selected IDs are failures, never name creation requests.
-                if resource_id is not None and status == 404:
+                if resource_id is not None and (
+                    status == 404
+                    or (kind == "project" and status is None and _project_not_found(error))
+                ):
                     fail(f"{kind}_id_not_found")
                 if isinstance(error, ValueError) and error.args == ("wrong_project",):
                     fail(f"{kind}_wrong_project")
