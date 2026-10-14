@@ -20,12 +20,12 @@ detected in the codebase. Only install what the project actually uses.
 | `mysql2` | `@opentelemetry/instrumentation-mysql2` | SQL query spans |
 | `mongodb` | `@opentelemetry/instrumentation-mongodb` | MongoDB command spans |
 | `ioredis` | `@opentelemetry/instrumentation-ioredis` | Redis command spans |
-| `redis` (node-redis v4+) | `@opentelemetry/instrumentation-redis-4` | Redis command spans |
+| `redis` (matching client API) | `@opentelemetry/instrumentation-redis-4` | Redis command spans; check the bridge's supported client APIs |
 | `@grpc/grpc-js` | `@opentelemetry/instrumentation-grpc` | gRPC client/server spans |
 | `kafkajs` | `@opentelemetry/instrumentation-kafkajs` | Producer/consumer spans with topic |
 | `graphql` | `@opentelemetry/instrumentation-graphql` | GraphQL resolve spans |
 | `aws-sdk` / `@aws-sdk/*` | `@opentelemetry/instrumentation-aws-sdk` | AWS service call spans |
-| `console.*` | `@opentelemetry/instrumentation-console` 0.3.0 | Application LogRecords while preserving console output; Node `^18.19.0 || >=20.6.0` and `@opentelemetry/api >=1.9.1` only |
+| `console.*` | `@opentelemetry/instrumentation-console` | Application LogRecords while preserving console output; check the resolved package's runtime engines and API peers |
 | `pino` | `@opentelemetry/instrumentation-pino` | Log sending plus trace/span correlation |
 | `winston` | `@opentelemetry/instrumentation-winston` + `@opentelemetry/winston-transport` | Log sending plus trace/span correlation |
 
@@ -40,6 +40,16 @@ requirement when assessing instrumentation coverage.
 ---
 
 ## Dependencies
+
+Resolve the latest compatible published packages at task time, respecting the
+project-selected Node runtime, package-manager constraints, and lockfile. Check
+the resolved packages' `engines`, `peerDependencies`, SDK/API/bridge dependency
+graph, and exporter protocol together before installation. Use `npm view` to
+inspect current registry metadata, then inspect the installed documented APIs
+and run a bounded compatibility probe. Do not use a floating latest tag as
+compatibility proof or force an application/runtime upgrade to copy a snippet.
+Record exact resolved releases, metadata/source receipts, and probe results in
+run evidence; keep skill guidance independent of a particular release.
 
 ```bash
 npm install @opentelemetry/sdk-node \
@@ -65,18 +75,21 @@ project uses a known framework such as Express, Fastify, Koa, NestJS, or a
 known client library. The manifest should name the matching instrumentation
 packages directly.
 
-Install only the detected logging bridge. For detected `console.*` calls, the
-current official bridge is version 0.3.0 and requires Node
-`^18.19.0 || >=20.6.0` plus `@opentelemetry/api >=1.9.1`; verify the
-project-selected runtime and locked API version before adding it:
+Install only the detected logging bridge. For detected `console.*` calls,
+resolve the latest published `@opentelemetry/instrumentation-console` release
+compatible with the selected Node runtime and constrained OTel APIs. Inspect
+its `engines`, `peerDependencies`, log-sending API, and duplicate-ownership
+behavior before adding it:
 
 ```bash
-npm install @opentelemetry/instrumentation-console@0.3.0
+npm install @opentelemetry/instrumentation-console
 ```
 
-If either selected version is older, do not force an application/toolchain
-upgrade just to add the bridge. Report `unsupported-stack` and the exact
-runtime/API prerequisite instead.
+Use that unpinned install only after resolver preflight confirms it selects the
+compatible candidate under the project's constraints, then preserve the
+resolved lockfile. If no supported release fits, do not force an
+application/toolchain upgrade; report `unsupported-stack` with the inspected
+runtime/API prerequisite and leave the original console sink active.
 
 For Pino install `@opentelemetry/instrumentation-pino`. For Winston install
 both `@opentelemetry/instrumentation-winston` and
@@ -89,6 +102,13 @@ transport for log sending.
 
 Create a separate file for OTel setup. This file must be loaded before any
 application code runs.
+
+The normal generated profile and launch command enable `OTEL_LOGS_EXPORTER=otlp`
+and route application logs to the resolved local Studio receiver. Persist
+`none` only for an explicit user opt-out, preserving its provenance. A
+logs-only compatibility or configuration failure remains an incomplete log
+path with its diagnostic and original sink; do not silently make `none` the
+normal configuration to obtain a passing trace check.
 
 Treat the local log path as optional. A logs-only endpoint, header, or protocol
 conflict must not make trace/metric startup throw: preserve the application's
@@ -233,9 +253,8 @@ if (logRecordProcessors?.length) {
   sdk = new NodeSDK(base);
 }
 
-// Without log options, NodeSDK 0.221.x defaults to OTLP logs when the exporter
-// is absent. Suppress that default only for a skipped local path, then restore
-// the operator's value after synchronous startup.
+// Inspect the resolved SDK's automatic log-export behavior before using this
+// skipped-path guard. Preserve the operator's value after synchronous startup.
 if (suppressAutoLogs) process.env.OTEL_LOGS_EXPORTER = 'none';
 try {
   sdk.start();
@@ -350,8 +369,10 @@ emits one value-free diagnostic and starts tracing and metrics without the
 added log pipeline. Keep all three constructors inside the guarded log helper
 and the optional NodeSDK integration inside its guarded branch. On a skipped
 local path, temporarily set `OTEL_LOGS_EXPORTER=none` during `NodeSDK.start()`;
-without log options, NodeSDK 0.221.x otherwise creates its default OTLP log
-exporter. Restore the original value afterward. Preserve an explicit non-OTLP
+first inspect the resolved `NodeSDK` source/API to establish whether omitted
+log options otherwise create an automatic OTLP exporter. The temporary guard
+is failure isolation, not a generated profile or a verified log path. Restore
+the original value afterward. Preserve an explicit non-OTLP
 operator exporter, and do not retry `start()` after partial global registration.
 Never turn a log-only protocol conflict into a process-wide exception or move
 the optional log-enabled `new NodeSDK(...)` outside its pre-start `try`/`catch`.
@@ -375,23 +396,25 @@ value alone is not evidence of a working pipeline. Adding
 `ConsoleInstrumentation` here would duplicate console output when NodeSDK owns
 the console exporter.
 
-The processor construction above matches current `@opentelemetry/sdk-logs`
-0.221.x, whose constructor receives `{ exporter }`. Older project-pinned SDK
-versions used `new BatchLogRecordProcessor(exporter)`; inspect the installed
-version and retain its documented signature instead of changing versions just
-to copy this example.
+The processor construction above uses an options object containing
+`{ exporter }`. Check the resolved `@opentelemetry/sdk-logs` public constructor
+before copying it; if the constrained API instead accepts the exporter
+directly, use its documented `new BatchLogRecordProcessor(exporter)` signature.
+Verify batching, resource/context ownership, and protocol compatibility with
+the resolved Node SDK and exporter. Do not change dependencies solely to copy
+the example signature.
 
 For Pino or Winston, replace `ConsoleInstrumentation` with exactly one detected
 bridge:
 
 ```typescript
-// Pino v7+ log sending; keep its existing destination/transports.
+// Use only when the resolved Pino bridge supports log sending; preserve sinks.
 new PinoInstrumentation({
   disableLogSending: false,
   disableLogCorrelation: false,
 })
 
-// Winston v3 log sending; keep its existing Console/File transports.
+// Use only when the resolved Winston bridge supports log sending; preserve sinks.
 new WinstonInstrumentation({
   disableLogSending: false,
   disableLogCorrelation: false,

@@ -222,6 +222,34 @@
       "scope": "Separate source-only coordinated workflow with its own run boundary, an agent invoke boundary and their explicit call relationship. Not app.py and not installed-helper capture. No source case was executed.",
       "source": "import json\nfrom dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass WorkflowContext:\n    conversation_id: str\n\nasync def collect_service_health(service):\n    return {\"service\": service, \"status\": \"degraded\"}\n\nclass SummaryAgent:\n    name = \"Summary Agent\"\n    description = \"Summarize collected synthetic service health.\"\n    model = \"qwen3:8b\"\n\n    async def invoke(self, context, question, health, client):\n        reply = await client.chat(\n            model=self.model,\n            messages=[{\"role\": \"user\", \"content\": question},\n                      {\"role\": \"user\", \"content\": json.dumps(health)}],\n        )\n        return reply\n\nclass IncidentTriageWorkflow:\n    name = \"Incident triage\"\n    steps = (\"collect_service_health\", \"summarize_agent\", \"finalize_report\")\n\n    def __init__(self):\n        self.summary_agent = SummaryAgent()\n\n    async def run(self, context, question, service, client):\n        health = await collect_service_health(service)\n        summary = await self.summary_agent.invoke(context, question, health, client)\n        return {\"service\": service, \"health\": health, \"summary\": summary}\n\ncontext = WorkflowContext(conversation_id=\"conv_demo_workflow_94ead5\")\n# IncidentTriageWorkflow().run(context, \"Summarize checkout\", \"checkout\", client)\n",
       "source_sha256": "06b494890ae2d3402716a102d18800fd12fbabf7b736a9e19a1016386dab6c77"
+    },
+    "distinct_tool_metadata_context": {
+      "source_path": "synthetic/distinct_tool_metadata_context.py",
+      "scope": "Separate source-only context with one status_turn orchestration boundary and two actual execute_tool calls. Not app.py, SDK capture, model invocation, retrieval, workflow or received OTLP. No case was executed.",
+      "source": "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass AgentContext:\n    agent_name: str = \"Status Desk\"\n    conversation_id: str = \"conv_status_approved_46c2\"\n\nTOOL_DEFINITIONS = {\n    \"read_health\": {\"type\": \"function\", \"description\": \"Read synthetic service health.\"},\n    \"read_queue\": {\"type\": \"function\", \"description\": \"Read synthetic pending queue depth.\"},\n}\n\nasync def read_health(service):\n    return {\"service\": service, \"status\": \"healthy\"}\n\nasync def read_queue(service):\n    return {\"service\": service, \"depth\": 2}\n\nHANDLERS = {\"read_health\": read_health, \"read_queue\": read_queue}\n\nasync def execute_tool(context, tool_name, arguments):\n    definition = TOOL_DEFINITIONS[tool_name]\n    return await HANDLERS[tool_name](**arguments)\n\nasync def status_turn(context, question):\n    health = await execute_tool(context, \"read_health\", {\"service\": \"checkout\"})\n    queue = await execute_tool(context, \"read_queue\", {\"service\": \"checkout\"})\n    return {\"health\": health, \"queue\": queue}\n\n# Source-only caller binding, approved opaque span correlation, not metric labels.\ncontext = AgentContext()\n",
+      "source_sha256": "614405bcfee96c5807a6e9f18fe22c993dfbdfe49922101173a8ee4f3987149b",
+      "offered_tool_metadata": [
+        {
+          "call_name": "read_health",
+          "gen_ai.agent.name": "Status Desk",
+          "gen_ai.conversation.id": "conv_status_approved_46c2",
+          "gen_ai.tool.description": "Read synthetic service health.",
+          "gen_ai.tool.type": "function"
+        },
+        {
+          "call_name": "read_queue",
+          "gen_ai.agent.name": "Status Desk",
+          "gen_ai.conversation.id": "conv_status_approved_46c2",
+          "gen_ai.tool.description": "Read synthetic pending queue depth.",
+          "gen_ai.tool.type": "function"
+        }
+      ],
+      "source_unavailable": [
+        "configured agent description",
+        "model/provider call",
+        "fixed agent model"
+      ],
+      "primary_requirements": "Use existing operation_metadata_primary_sources exact pinned tool attribute levels. These safe values are source-only and must be assessed independently on each owning execute_tool call; a container description or one shared description cannot close both."
     }
   },
   "synthetic_field_acceptance_contract": {
@@ -327,5 +355,48 @@
     ],
     "public_signature_fact": "start_splunk_ao_span(splunk_ao_span) has no public kind or attributes argument in the supplied installed0.5 source.",
     "acceptance": "Record the concrete source-stage limitation for each applicable operation, and bind a verified supported initial-creation hook or remaining runtime boundary test. Compare head sampler/on_start observations with finished/exported attributes/kind; final export success or wire normalization does not repair earlier creation metadata. Keep supported same-span content/null capabilities distinct, and do not invent parameters, patch SDK internals or create duplicate nodes. Existing AlwaysOn success is not disproved by an unexecuted per-attribute sampling capability check."
+  },
+  "synthetic_audit_compatibility_context": {
+    "scope": "Separate fictional package candidate facts for read-only reasoning; not actual SDK releases, package registry, installation or app runtime. No candidate was executed.",
+    "package": "example-capture-sdk",
+    "operator_constraints": {
+      "python": "selected existing runtime",
+      "sdk_api": "existing supported peer API",
+      "required_capture_capability": "bounded source-side content transformation"
+    },
+    "published_candidates_oldest_to_newest": [
+      {
+        "candidate": "release-a",
+        "runtime_compatible": true,
+        "peer_compatible": true,
+        "required_capture_api": true
+      },
+      {
+        "candidate": "release-b",
+        "runtime_compatible": true,
+        "peer_compatible": true,
+        "required_capture_api": true
+      },
+      {
+        "candidate": "release-c",
+        "runtime_compatible": true,
+        "peer_compatible": false,
+        "required_capture_api": true
+      },
+      {
+        "candidate": "release-d",
+        "runtime_compatible": true,
+        "peer_compatible": true,
+        "required_capture_api": false
+      },
+      {
+        "candidate": "release-e",
+        "runtime_compatible": false,
+        "peer_compatible": true,
+        "required_capture_api": true
+      }
+    ],
+    "existing_release_recipe": "release-a",
+    "required_assessment": "Select the newest candidate satisfying all supplied runtime, peer and required-API constraints, state per-candidate exclusions and separate this scoped choice from real current SDK metadata/API evidence; preserve operator constraints. Do not choose an incompatible largest candidate or copy the oldest recipe."
   }
 }

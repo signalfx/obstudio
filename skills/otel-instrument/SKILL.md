@@ -86,6 +86,13 @@ and ask the user to run `$otel-audit` first. Never infer scope from generated
 Markdown reports.
 
 - Confirm the language and framework from actual dependency or source files
+- Resolve the latest compatible published library release set from official
+  package metadata, compatibility documentation and the project resolver.
+  Check runtime, peer dependencies, SDK/exporter/bridge APIs and existing
+  constraints together; do not independently mix latest packages or force an
+  unrelated upgrade. Keep fixed library release numbers out of skill recipes.
+  Record the resolved versions, metadata source/date and tested signatures in
+  the run report, then persist the approved dependency set in the app lockfile.
 - Read `./references/project-runtime-validation.md`, inventory the repository's
   configured runtime and build/test commands, and select the locally available
   project runtime before editing. Do not use the shell's default runtime when
@@ -134,6 +141,13 @@ Markdown reports.
   span work only; it is not a log-export opt-out. Only the explicit exporter,
   endpoint, and supported-stack conditions above may suppress the default local
   log pipeline.
+- In the normal generated launch profile, explicitly set
+  `OTEL_LOGS_EXPORTER=otlp` with the resolved local Studio logs endpoint and
+  matching protocol, alongside trace and metric export. Do not generate `none`
+  as the default or use an unrequested log-disable override to make startup or
+  verification pass. Honor a real explicit user/operator opt-out separately;
+  SDK `@log` GenAI spans and stdout correlation do not replace OTLP LogRecords.
+  Verify application log receipt in Studio as well as traces and metrics.
 - When `.observe/otel-audit.json` exists, use only the validated selected
   findings and their referenced `verification.scenarios` and environments as
   the implementation and validation plan. Preserve every stable finding,
@@ -420,6 +434,32 @@ correlation ID: source value/hook, current value or gap, intended supported API,
 schema/redaction policy and test. State exact lifecycle/parent/duplicate and
 auxiliary timeout/cancel proof. Copying an old Required Signals subset or
 writing only 'SDK logger/schema helpers' does not satisfy a reviewable plan.
+
+Before finalizing a GenAI plan or report, reconcile each supplied source case
+and captured operation against its own acceptance rows, including operations
+visible only in a probe receipt. A grouped category or correct parent row does
+not close a missing child requirement:
+
+- List source-backed owning agent, conversation and tool metadata on each
+  tool's own span. A safe available conversation binding belongs on that tool
+  too; parent-only correlation fails acceptance. Give an explicit absence
+  reason when the operation has no such source context.
+- Assess each observed decorator surface, including bound methods, nested
+  distinct operations and finite sync/async iteration when present. Name the
+  selected SDK `@log` function/span type, or the exact unsupported contract and
+  application-owned function-decorator SDK creator fallback. Preserve real
+  nesting without adding duplicate operations; dispatch support alone does
+  not prove required fields, safe capture, lifecycle or the selected sink.
+- Bind normal local log acceptance to the consumed launch profile's
+  `OTEL_LOGS_EXPORTER=otlp`, resolved same-namespace logs endpoint and protocol.
+  Require separate local receipts for a span, metric datapoints and a bounded,
+  redacted application LogRecord with body, severity, the same service resource
+  and trace/span correlation. Preserve stdout/file sinks and owned flush and
+  shutdown; keep logs out of cloud forwarding. Distinguish supplied synthetic
+  receipts from actual application proof and preserve an explicit operator
+  opt-out. A plan names these concrete settings and assertions while marking
+  execution unproven; SDK `@log` spans or exporter configuration alone do not
+  supply the native LogRecord receipt.
 
 Reconcile every GenAI audit gap to a required instrumentation result:
 
@@ -1072,10 +1112,14 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     add an app-owned OTel span around the same logical operation. Treat HTTP,
     metrics, logs, streaming, sessions, and uncovered GenAI operations as
     independent closure work.
-    A fresh agent without GenAI span creation uses the documented Splunk AO
-    SDK integration/logger/schema/decorator path by default. Inspect the
-    matching official examples and installed APIs; an evaluation-only SDK
-    import or HTTP provider is not existing live-agent GenAI instrumentation.
+    A fresh agent without GenAI span creation uses supported Splunk AO creators
+    by default. Apply Decorator Selection: use SDK `@log` for every supported
+    uncovered function scenario, or an application-owned function decorator
+    invoking the documented chosen creator for an exact SDK decorator contract
+    limitation. Preserve supported framework/provider ownership without a
+    duplicate decorator span. Inspect current examples and chosen compatible
+    APIs; an evaluation-only SDK import or HTTP provider is not existing
+    live-agent GenAI instrumentation.
   - With an **existing OpenTelemetry provider**, preserve that provider and
     pass the exact instance to Splunk AO export when selected. A single
     `add_splunk_ao_span_processor` registration is valid only when all AO
@@ -1095,8 +1139,8 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     for credential-free compatibility tests, record the lock as a distinct
     blocker, and leave AO status partial; do not misreport this as missing
     cloud credentials or a durable installed route.
-  - For the inspected `splunk-ao` 0.4.0 SDK, `SplunkAOOTLPExporter` captures
-    project and Agent Stream routing when constructed; the processor created
+  - Inspect when the selected `SplunkAOOTLPExporter` captures project and Agent
+    Stream routing. If it captures them at construction, a processor created
     by `add_splunk_ao_span_processor(provider)` inherits that fixed route.
     Calling it without routing arguments and later adding project/stream span
     attributes does not route those spans. The SDK's `splunk_ao_context` is
@@ -1120,9 +1164,9 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     its network exporter with a capture sink, exercise two request-selected
     operations and a third request-selected route whose project or Agent
     Stream lookup fails, then assert one export with the matching
-    project/stream headers for each resolved route. In `splunk-ao` 0.4.0, the
-    test-only `_exporter_factory` argument of `SplunkAOOTLPExporter` can capture
-    its effective endpoint and `projectid`/`logstreamid` headers; construct
+    project/stream headers for each resolved route. Inspect the selected SDK's
+    actual test-only delegate seam, such as `_exporter_factory` when supported,
+    to capture its endpoint and `projectid`/`logstreamid` headers; construct
     the real SDK exporter for each route and replace only its network delegate.
     Replacing `SplunkAOOTLPExporter` itself with a fake proves only app
     dispatch, not the installed SDK contract. Explicitly assert that
@@ -1431,8 +1475,9 @@ Python:
   `BatchLogRecordProcessor`, and the selected OTLP log exporter. Its guarded
   setup must preserve logging configuration performed before or after OTel;
   do not call `basicConfig(force=True)` or replace stdout/file handlers. For a
-  project pinned before OTel Python 1.40.0, retain the documented SDK
-  `LoggingHandler` compatibility path instead of forcing an upgrade. Shut the
+  project whose installed instrumentor lacks that supported bridge, inspect
+  and retain its documented SDK `LoggingHandler` compatibility path instead
+  of forcing an upgrade. Shut the
   log provider down with the other providers.
 - The ASGI/WSGI instrumentation underlying Flask/FastAPI already sets
   `http.response.status_code` on `http.server.request.duration` for every
@@ -1452,11 +1497,12 @@ Node.js:
   `@opentelemetry/sdk-logs`, pass one `BatchLogRecordProcessor` through
   `NodeSDK.logRecordProcessors`, and add only the detected official bridge.
   For detected `console.*` calls, use
-  `@opentelemetry/instrumentation-console` 0.3.0 only when the selected Node
-  runtime satisfies `^18.19.0 || >=20.6.0` and the project has
-  `@opentelemetry/api >=1.9.1`; it emits LogRecords while preserving console
-  output. Treat an older pinned runtime/API as unsupported instead of forcing
-  an upgrade. Otherwise select the detected Winston or Pino
+  `@opentelemetry/instrumentation-console` only after checking its current
+  package engines, peers and API against the selected runtime and project.
+  Choose the latest compatible release; it must emit LogRecords while
+  preserving console output. If no compatible bridge exists under the project
+  constraints, report the exact unsupported contract instead of forcing an
+  upgrade. Otherwise select the detected Winston or Pino
   instrumentation/transport bridge. Keep existing console/file transports.
   Do not enable an instrumentation sender and an OTel transport for the same
   logger; `sdk.shutdown()` must flush logs as well as traces and metrics.

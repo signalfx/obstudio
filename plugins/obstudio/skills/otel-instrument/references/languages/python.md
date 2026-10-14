@@ -53,8 +53,17 @@ additional convenience when the project explicitly wants broad CLI
 auto-discovery. For code changes, keep the explicit `opentelemetry-api` and
 `opentelemetry-sdk` dependencies in the project manifest and wire a setup file.
 
-Install the official stdlib bridge. OpenTelemetry Python 1.40.0 and later moved
-automatic handler ownership from the SDK to this instrumentation package:
+Resolve the latest compatible published packages at task time, using the
+project's selected Python runtime, dependency constraints, and lockfile. Check
+`Requires-Python`, `Requires-Dist`, and the resolved SDK/exporter/instrumentor
+APIs together; do not override an operator constraint or upgrade the runtime
+just to copy an example. Record exact resolved releases, metadata/source
+receipts, and the compatibility probe in run evidence, not as fixed skill
+defaults. Retain a compatible locked setup when its ownership and APIs are
+already proven.
+
+Install the official stdlib bridge when the resolved instrumentation package
+owns the stdlib-to-OTel handler:
 
 ```bash
 pip install opentelemetry-instrumentation-logging
@@ -70,30 +79,37 @@ LoggingInstrumentor().instrument(
 )
 ```
 
-The instrumentor installs the stdlib-to-OTel handler by default and protects it
-across later `basicConfig`, `dictConfig`, and `fileConfig` calls without
-replacing the application's console/file handlers. On
-`opentelemetry-instrumentation-logging` 0.64b0+ (paired with Python OTel
-1.43.0+), pass `inject_trace_context=True` to add `otelTraceID`, `otelSpanID`,
-`otelTraceSampled`, and `otelServiceName` to the original stdlib `LogRecord`
-without changing its format. Keep `set_logging_format=False` to preserve the
-existing stdout/file format. For an older locked instrumentation version, omit
-the unsupported `inject_trace_context` argument; the OTLP handler still derives
-correlation from the current OTel context independently. If the older
+Inspect the resolved instrumentor's documentation/source and run a bounded
+probe before using this example: establish whether it installs and guards the
+handler across later `basicConfig`, `dictConfig`, and `fileConfig` calls while
+preserving the application's console/file handlers. Pass
+`inject_trace_context=True` only when that API supports it, to add
+`otelTraceID`, `otelSpanID`, `otelTraceSampled`, and `otelServiceName` to the
+original stdlib `LogRecord` without changing its format. Keep
+`set_logging_format=False` to preserve the existing stdout/file format. When
+the resolved API lacks that capability, omit the unsupported
+`inject_trace_context` argument; prove that the OTLP handler derives
+correlation from current OTel context independently. If the retained
 stdout/file formatter itself must consume those fields, use
 `OTEL_PYTHON_LOG_CORRELATION=true` or `set_logging_format=True` and update an
 already-created formatter explicitly. That older option also asks
 `logging.basicConfig` to install the OTel format, which may be a no-op when
-handlers already exist and does not enable OTLP export. For a project pinned
-before Python OTel 1.40.0, inspect the installed APIs and retain the older SDK
-`LoggingHandler` compatibility path rather than upgrading dependencies solely
-to copy this example.
+handlers already exist and does not enable OTLP export. If the constrained SDK
+instead owns the supported `LoggingHandler` path, retain and test that path;
+do not install a second handler or upgrade dependencies solely to copy the
+instrumentor example.
 
 ---
 
 ## Auto-Instrumentation (CLI Wrapper)
 
 Reuse the current app command and wrap it with the OTel auto-instrumentation agent. Do not introduce Docker just for observability.
+
+The normal generated profile and launch command enable `OTEL_LOGS_EXPORTER=otlp`
+and route application logs to the resolved local Studio receiver. Use `none`
+only for an explicit user opt-out, preserving its provenance; an unavailable
+bridge, conflict, or failed verification is a reported incomplete log path,
+not permission to persist `none` as the normal configuration.
 
 ```bash
 #!/bin/sh
@@ -452,11 +468,12 @@ provider or signal handler during reloads or per worker request.
 `LoggingInstrumentor` is the current stdlib-to-OTel bridge. Its handler is an
 additional path, and its guarded configuration wrappers let later application
 logging setup proceed before reattaching the OTel handler. Do not use
-`logging.basicConfig(force=True)`. On 0.64b0+/1.43.0+,
+`logging.basicConfig(force=True)`. Check the resolved instrumentor's API and
+handler ownership before copying the setup. When supported,
 `inject_trace_context=True` injects the OTel fields without changing the
-existing text format; `set_logging_format=False` preserves that format. On an
-older locked version, omit the unsupported injection argument. The OTLP handler
-still derives correlation from current context; use
+existing text format; `set_logging_format=False` preserves that format. If the
+constrained API lacks it, omit the unsupported injection argument and prove
+that the OTLP handler still derives correlation from current context; use
 `OTEL_PYTHON_LOG_CORRELATION=true`/`set_logging_format=True` only when the older
 stdout/file formatter must receive those fields, and update an already-created
 formatter explicitly because `basicConfig` may not replace it.

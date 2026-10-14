@@ -30,7 +30,7 @@ its export destination:
 |---|---|
 | Existing OTel GenAI library, Galileo integration, framework bridge, or application GenAI spans | Preserve the current producer and provider; fill only uncovered operations, attributes, content, context, metrics, and lifecycle through supported hooks. Do not migrate to Splunk AO merely to export there. |
 | Existing Splunk AO span creation | Preserve it and fill its version-specific gaps without duplicate operation spans. |
-| Fresh agent application without GenAI span creation | Use Splunk AO instrumentation by default: prefer its supported framework/provider integration, otherwise its logger, schema span helpers, or decorators at real operation boundaries. A generic OTel provider, HTTP spans, or an evaluation-only SDK import does not make the live agent instrumented. |
+| Fresh agent application without GenAI span creation | Use Splunk AO instrumentation by default: preserve matching supported framework/provider ownership and use SDK `@log` for supported uncovered function boundaries. If its exact capture, lifecycle or sink contract cannot meet requirements, use an application-owned function decorator around the supported SDK creator; document that fallback. A generic OTel provider, HTTP spans, or an evaluation-only SDK import does not make the live agent instrumented. |
 
 For a fresh Python agent, read the **Fresh Agent SDK Instrumentation** section
 of `splunk-agent-observability.md` before authoring the audit finding or code.
@@ -45,6 +45,27 @@ exact prerequisite and keep the surface partial; do not silently substitute a
 complete handwritten OTel GenAI implementation. Explicit user choices override
 the default. Existing integrations remain the default for already instrumented
 operations, even when they need enrichment.
+
+For every new or repaired function hook, assess the decorator pattern first.
+Use SDK `@log` wherever the chosen release supports the actual function and
+required safe content, semantics, lifecycle and export path. This includes
+ordinary sync/async functions, methods, serial nested calls and bounded plain
+sync/async iteration; async generators alone are not a reason to avoid it.
+Do not decorate an operation already captured by a framework/provider wrapper.
+When SDK `@log` has a concrete incompatible contract, keep the function decorator
+pattern through an application-owned decorator invoking the documented chosen
+creator for that same operation. Manual scopes remain appropriate for genuine
+non-function or externally managed lifetimes. Preserve existing valid producers
+and explicit supported choices; do not rewrite working instrumentation merely
+to change its syntax.
+
+Resolve the latest compatible published library release set at task time from
+official metadata and the project resolver, checking runtime, peers, APIs and
+existing constraints together. This applies to every library, including SDKs,
+schema packages, framework integrations, bridges and exporters. Fixed release
+numbers and historical version thresholds do not belong in skill recipes.
+Record exact chosen versions, source/date and compatibility probes in each run
+report; an existing constrained compatible set may be retained with its reason.
 
 ## Required GenAI Coverage Profile
 

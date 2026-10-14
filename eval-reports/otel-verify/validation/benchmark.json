@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261014T070426757551Z",
+    "run_id": "20261014T081933634218Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -82,7 +82,7 @@
       "eval_dir": "evals/python/ai-assistant-demo",
       "skill_path": "skills/otel-verify",
       "sanity_check_count": 0,
-      "rubric_check_count": 10,
+      "rubric_check_count": 14,
       "runtime_check_count": 0
     },
     {
@@ -171,12 +171,12 @@
     "case_count": 9,
     "prompt_count": 9,
     "sanity_check_count": 0,
-    "rubric_check_count": 45,
+    "rubric_check_count": 49,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 4,
-    "digest": "e27e795c9e573b5e272e1249c1978cb5e82219a9599f9c6d42f11f1c690419ec",
+    "digest": "c1c977291b6a8c62069c4971331ab9eca1526b727ce99fd1b36f1cfd13a479f6",
     "eval_kinds": [
       "rubric"
     ],
@@ -191,7 +191,7 @@
       "evals/go/chi-basic/eval/qual/verify.json": "225a5744d2a38aeaadcb3003221d2f2e9f5d960fc05d12636eab5241afcce5d2",
       "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
-      "skills/otel-verify/SKILL.md": "d919acba22bc5a1cde8e1d47b98021415be1420495be4ef8935941a08373cdba",
+      "skills/otel-verify/SKILL.md": "239597ad75d08ed6d3b39ce4f27084a54d9ddc000eea8eda82c55de5e83b2ae9",
       "skills/otel-verify/references/app-code-test-authoring.md": "d535a0acb3d123ee01eb5b39c3247378b4900f4977672021022dd0fe3885f91f",
       "skills/otel-verify/references/explorer-witness.md": "ee76d5856b1c0858a6bcb22e4c9c4526ddf550f2ae3122ea01ea21d505b8931a",
       "skills/otel-verify/references/json-approval-handoff.md": "e8c258074665349efecdc5d7e9b25fd0ab6217e3cdc40ae21a434c2c5d11f763",
@@ -204,14 +204,14 @@
       "skills/references/consumers.json": "abb97d53704c51d5a49a3de02505f8b1bba0fc13c51b7913b9cf0d186040aa19",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
-      "skills/references/genai-readiness.md": "d09c0319ee6a14d1b574fff8d9fe2b434989be088ca65e5277c1996e4052e45e",
+      "skills/references/genai-readiness.md": "1d7fd7a9efd8323ebd5e1c30ee7c0acf17ccacec4456b2b962291fb7e866b479",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "701585b31eb131702194e4619f5a1054615e1c11c5071af5e2dd22d40232cdd6",
       "skills/references/report-flow-contract.md": "be4af921d9faf71ca9c206a91ba091db5d8bc878dc87ab6b844bc39cc455eb0e",
       "skills/references/scripts/observe_report.py": "dc6d5048a117595bd658e7f4ff7f91e11cd512693ee0e37d09080578574e4325",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
-      "skills/references/splunk-agent-observability.md": "f8e601ddcdb798bdf184660884540bb083b8deb938495f7e3561f08bd9576922",
+      "skills/references/splunk-agent-observability.md": "95d546a66cee6dbd2b7cd9a7cc93c35a7a635d6da85a884651266876180abdf3",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "39e6e35f16272b4f33f202b03dd13823284d4067fb50ebba48fb80bb67f4ce16",
@@ -233,15 +233,16 @@
       "evals/python/ai-assistant-demo/eval/inputs/ao-resource-instrumentation.json": "b750b03d75688124f3cd868f90844f25c176ac88ad998506f6249ea38bc8c99a",
       "evals/python/ai-assistant-demo/eval/inputs/ao-resource-selection.json": "c5140691210e5a745d1112b7990f273f377aa12c6dde28372e42b6c173dadd8a",
       "evals/python/ai-assistant-demo/eval/qual/gateway-env-verification.json": "ef45a75f3c91358281cfb6a554c26f02d4670b8fc27df044335c21484e856c95",
+      "evals/python/ai-assistant-demo/eval/inputs/genai-decorator-version-logs-verify-evidence.json": "72375fd49c904a7780cb49d2b412625b8b57d415eaeabd7ee1eb42a71f314d44",
       "evals/python/ai-assistant-demo/eval/inputs/genai-default-audit.json": "a9eb87f3275253e6b73f90a91a645573022201633c8bb13f87362fd450d62a2e",
       "evals/python/ai-assistant-demo/eval/inputs/genai-default-scenarios.json": "4a8d08e43b2517b6b241a0ce8e78674981e6ecce22d16ce8b5d5772964cb5d49",
-      "evals/python/ai-assistant-demo/eval/inputs/genai-operation-metadata-verify-evidence.json": "8bba8ca67efd875351c73a3c20497a268bbe27ad270ce35b3d5dd902258f6c1a",
+      "evals/python/ai-assistant-demo/eval/inputs/genai-operation-metadata-verify-evidence.json": "8b5b7c2efb296148b7f65bf6977fee27a8c718b7ec14b60eaee2bc3462dc066c",
       "evals/python/ai-assistant-demo/eval/inputs/genai-required-evidence.json": "b0b3e76d7a66065b4a8d83e77cf207497221e738ba9852447eb441a9c7793c2d",
       "evals/python/ai-assistant-demo/eval/inputs/genai-sdk-helper-evidence.json": "fdd74f3e9d4ed09bb8fe61ebd0b6e4593b429078d34fc41c4b9e35ddc4ce475e",
       "evals/python/ai-assistant-demo/eval/inputs/genai-sdk-source-snapshot.json": "9d4bb13d28c1892c96cf069f65fe129674e4dc5c86b21adb3823a82b2a378ef6",
       "evals/python/ai-assistant-demo/eval/inputs/genai-semconv-source-snapshot.json": "37dcf51de2138b706b7272c32e4215d280a94790b3d4bb454000ef66ef24e3ae",
       "evals/python/ai-assistant-demo/eval/inputs/genai-usage-namespace-verify-evidence.json": "973b266667512deecea1995086c69a761c5b2d5a910e53b2944071bd352f3f0a",
-      "evals/python/ai-assistant-demo/eval/qual/genai-sdk-required-verify.json": "00b9f4984d2e81661bbdade7e49d9c9ea7f7cce892ac5f990f3e944878799cd3",
+      "evals/python/ai-assistant-demo/eval/qual/genai-sdk-required-verify.json": "e29bf47d14770c61cfe5c5328c25273ecb05c9f537b3a755442ae4c62671e260",
       "evals/python/ai-assistant-demo/eval/inputs/ao-resource-verification-evidence.txt": "8f935bbdebb073f4037a76e8d84e0881e98376b4e0a123f270953dac80f9063d",
       "evals/python/ai-assistant-demo/eval/qual/resource-selector-failures.json": "630135f49ec0d4334185aa8778f56f1ed24ca1372be34f50b0b2c45154f9efcd",
       "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json": "0aa217a1410c384a8afda2ab7608e19c93bb9e5ae5483a87e5bec66e8bf5ea1d",
@@ -319,7 +320,8 @@
           "eval/inputs/genai-semconv-source-snapshot.json",
           "eval/inputs/genai-sdk-helper-evidence.json",
           "eval/inputs/genai-usage-namespace-verify-evidence.json",
-          "eval/inputs/genai-operation-metadata-verify-evidence.json"
+          "eval/inputs/genai-operation-metadata-verify-evidence.json",
+          "eval/inputs/genai-decorator-version-logs-verify-evidence.json"
         ]
       },
       {

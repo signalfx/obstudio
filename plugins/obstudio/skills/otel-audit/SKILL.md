@@ -334,6 +334,13 @@ proof.
   `OTEL_LOGS_EXPORTER=none` producing no OTLP record. When cloud trace/metric
   export or forwarding exists, also prove the application record remains
   visible in local Splunk Observability Studio without any cloud log path.
+- Require the normal generated launch profile to set
+  `OTEL_LOGS_EXPORTER=otlp`, the resolved local Studio logs endpoint and its
+  matching protocol alongside trace and metric settings. An absent logs bridge
+  or an unrequested generated `none` setting is a log coverage gap, even when
+  traces and metrics work. Keep a real explicit user/operator logs opt-out as
+  separate scope; do not recommend `none` as the normal launch default. SDK
+  `@log` spans and stdout correlation are not received OTLP LogRecords.
 - For local OTLP export, include at least one scenario using a discovered or
   fixture-provided non-default receiver port. Its acceptance criteria must
   prove the exact endpoint/protocol/path tuple and that application startup
@@ -1015,6 +1022,13 @@ For partially instrumented Go services, explicitly check and report:
 
 ### Step 3 -- Report
 
+Library selection guidance must remain release-neutral. Assess current official
+package metadata and the project's runtime, peer, SDK/exporter/bridge and lock
+constraints; name the latest compatible proposed set or the preserved installed
+set and its reason in the report. Exact resolved release numbers belong in
+dated run evidence, not fixed skill recipes. A latest-example lookup is not
+proof that independently chosen latest packages work together.
+
 For GenAI, populate all three **Required GenAI Report Evidence** tables from
 `../references/genai-readiness.md` before handoff. Keep field-level official
 Opt-In provenance in the canonical evidence, not only a supplemental summary.
@@ -1040,6 +1054,18 @@ available' statement or parent-only field does not assess these values. Keep
 nonlive cases supplemental and source-unavailable fields explicit; never copy
 their values into live findings without matching application source.
 
+When the task requests assessment of independent supplied source, capture or
+compatibility cases, inventory those cases before synthesis. Reconcile each
+requested case individually: its scope, actual boundaries/owners, available
+field values and status, creator/route decision and remaining proof, or the
+exact reason a requirement is not applicable. A container-level summary does
+not close its separate cases. For candidate compatibility matrices, state the
+chosen candidate, satisfied constraints and why alternatives are rejected;
+disclaiming live installation alone does not assess the selection. Check the
+finished receipt against the inventory before handoff. Keep nonlive evidence
+separate and do not invent cases from reference examples or expand the task's
+audit domains.
+
 For each inspected creator, record its version/file/symbol and actual start
 arguments, which attributes/kind reach the sampler and `on_start`, and which
 fields are applied later or during finalization. When source establishes a
@@ -1061,13 +1087,14 @@ For each GenAI runtime, write a concrete producer receipt before finalizing:
 `runtime -> preserved/proposed creator symbols and source boundary -> installed
 version or explicitly proposed source-verified version -> exact official example
 path/revision/date -> inspected API support -> actual/prospective proof ->
-remaining`. Use the Fresh Agent SDK Instrumentation named-method table for a
-custom fresh Python agent. For example, an applicable workflow may propose
-`SplunkAOLogger.add_workflow_span` inside a `start_trace`/`conclude` envelope,
-with agent/model/tool boundaries mapped to
-`add_agent_span`/`add_llm_span`/`add_tool_span`, after checking the latest
-official example and matching proposed SDK APIs; record the resolved example
-revision and chosen version. This is a plan, not installed or runtime proof.
+remaining`. Apply Decorator Selection for each custom Python function: name
+SDK `@log`, its actual `span_type`/function and public capture/sink support where
+compatible. For a precise SDK decorator limitation, name the application-owned
+function decorator and documented creator it invokes once at that boundary.
+Use the lower-level method table only for a supported fallback or non-function
+lifetime. Check the current official example and matching APIs; record the
+resolved example revision and chosen compatible packages in the report. This
+is a plan, not installed or runtime proof.
 Keep the receipt in canonical evidence and the applicable finding's
 `required_fix`/acceptance. A general SDK citation or 'logger/schema helpers'
 without named symbols/example/version is incomplete; correct that report
@@ -1633,12 +1660,12 @@ instrumentation") without that package name is incomplete.
 | `mysql2` | `@opentelemetry/instrumentation-mysql2` | spans |
 | `mongodb` | `@opentelemetry/instrumentation-mongodb` | spans |
 | `ioredis` | `@opentelemetry/instrumentation-ioredis` | spans |
-| `redis` (node-redis v4+) | `@opentelemetry/instrumentation-redis-4` | spans |
+| `redis` (node-redis) | `@opentelemetry/instrumentation-redis-4` when its current support metadata matches the detected client | spans |
 | `@grpc/grpc-js` | `@opentelemetry/instrumentation-grpc` | spans |
 | `kafkajs` | `@opentelemetry/instrumentation-kafkajs` | spans |
 | `graphql` | `@opentelemetry/instrumentation-graphql` | spans |
 | `aws-sdk` / `@aws-sdk/*` | `@opentelemetry/instrumentation-aws-sdk` | spans |
-| `console.*` | `@opentelemetry/instrumentation-console` 0.3.0 when Node is `^18.19.0 || >=20.6.0` and `@opentelemetry/api >=1.9.1` | logs |
+| `console.*` | latest compatible `@opentelemetry/instrumentation-console`, after checking current engines, peers and installed APIs | logs |
 | `winston` | `@opentelemetry/instrumentation-winston` + `@opentelemetry/winston-transport` | logs |
 | `pino` | `@opentelemetry/instrumentation-pino` | logs |
 

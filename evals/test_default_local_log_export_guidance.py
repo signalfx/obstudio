@@ -417,16 +417,42 @@ printf 'LOGS=%s\n' "${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT-<unset>}"
     )
 
 
-def test_python_logging_trace_injection_is_version_conditional() -> None:
+def test_python_logging_trace_injection_requires_installed_capability() -> None:
     python = _read(LANGUAGES / "python.md")
     normalized = " ".join(python.split())
 
     assert python.count("inject_trace_context=True") >= 2
-    assert "0.64b0+" in python
-    assert "1.43.0+" in python
-    assert "older locked instrumentation version" in normalized
+    assert "Requires-Python" in python
+    assert "Requires-Dist" in python
+    assert "installed" in normalized and "signature" in normalized
+    assert "source" in normalized and "probe" in normalized
     assert "omit the unsupported `inject_trace_context` argument" in normalized
     assert "it is not a supported `LoggingInstrumentor` option" not in python
+
+
+def test_shipped_guidance_has_no_fixed_library_release_recipes() -> None:
+    release_number = re.compile(r"(?<![\w.])v?\d+\.\d+\.\d+(?:[a-z]\d+)?(?![\w.])")
+    offenders = []
+    for path in SKILLS.rglob("*.md"):
+        if "tests" in path.relative_to(SKILLS).parts:
+            continue
+        for number, line in enumerate(_read(path).splitlines(), 1):
+            if re.match(r"\s*version:\s*\S+", line):
+                continue  # Skill metadata is not a library dependency recipe.
+            app_resource = re.sub(r"service\.version[\"`:= ]+\S+", "service.version", line)
+            if release_number.search(app_resource):
+                offenders.append(f"{path.relative_to(SKILLS)}:{number}: {line}")
+    assert not offenders, "Fixed library release recipes: " + "\n".join(offenders)
+
+
+def test_normal_skill_profiles_enable_native_studio_logs() -> None:
+    for name in ("otel-audit", "otel-instrument", "otel-verify"):
+        source = _normalized(SKILLS / name / "SKILL.md")
+        assert "`OTEL_LOGS_EXPORTER=otlp`" in source
+        assert "LogRecords" in source and "Studio" in source
+        assert "opt-out" in source
+    producer = _normalized(SKILLS / "references" / "splunk-agent-observability.md")
+    assert "SDK operation records remain distinct from ordinary OTLP application logs" in producer
 
 
 def test_java_launcher_ignores_properties_after_the_launch_target(

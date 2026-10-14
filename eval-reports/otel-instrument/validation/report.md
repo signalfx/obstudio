@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261014T062001970437Z |
+| Run ID | 20261014T082753927225Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -37,7 +37,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/ai-assistant-demo/qual/ao-target-handoff-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-instrument.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/content-coverage-instrument.json | 0 | 6 | 0 |
 | python/ai-assistant-demo/qual/gateway-env-bootstrap | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/gateway-env-bootstrap.json | 0 | 5 | 0 |
-| python/ai-assistant-demo/qual/genai-sdk-default-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json | 0 | 10 | 0 |
+| python/ai-assistant-demo/qual/genai-sdk-default-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json | 0 | 13 | 0 |
 | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/instrument.json | 0 | 14 | 0 |
 | python/ai-assistant-demo/qual/resource-env-bootstrap | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/resource-env-bootstrap.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/resource-sdk-errors | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/resource-sdk-errors.json | 0 | 5 | 0 |
@@ -47,7 +47,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/fastapi-celery/qual/incident-readiness | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/qual/incident-readiness.json | 0 | 7 | 0 |
 | python/fastapi-celery/qual/instrument | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/instrument.json | 0 | 5 | 0 |
 | python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/runtime/instrument.json | 0 | 0 | 1 |
-| python/flask-basic/qual/instrument | python/flask-basic | 2 | evals/python/flask-basic/eval/qual/instrument.json | 0 | 10 | 0 |
+| python/flask-basic/qual/instrument | python/flask-basic | 3 | evals/python/flask-basic/eval/qual/instrument.json | 0 | 12 | 0 |
 | python/flask-basic/runtime/instrument | python/flask-basic | 1 | evals/python/flask-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
 | python/galileo-agent-demo/qual/instrument | python/galileo-agent-demo | 2 | evals/python/galileo-agent-demo/eval/qual/instrument.json | 0 | 6 | 0 |
 | python/mcp-ai-tool-demo/qual/instrument | python/mcp-ai-tool-demo | 1 | evals/python/mcp-ai-tool-demo/eval/qual/instrument.json | 0 | 7 | 0 |

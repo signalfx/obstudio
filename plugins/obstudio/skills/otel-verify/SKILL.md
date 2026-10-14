@@ -46,8 +46,8 @@ native records, attributes/events and wire as applicable. Keep proposed settings
 and unrun acceptance tests separate from observed configuration or emission.
 For fresh or export-only GenAI scenarios using the Splunk AO default or an
 explicit Splunk AO choice, also read
-`../references/splunk-agent-observability.md` and its Fresh Agent SDK
-Instrumentation named-method table, even with no `splunk_ao` import or selected
+`../references/splunk-agent-observability.md` and its Decorator Selection plus
+Fresh Agent SDK Instrumentation mapping, even with no `splunk_ao` import or selected
 AO resource finding. Select a supported Splunk AO creator for that path. An
 explicit user choice of another supported producer overrides the default;
 verify that chosen canonical producer and its required coverage. Record
@@ -55,6 +55,12 @@ creator symbols, actual boundary,
 installed or proposed source-verified version and exact example/revision;
 separate that prospective choice from actual emitted-span proof. A fixture
 without an installed SDK does not justify silently changing the fresh default.
+Verify decorator selection per function: supported SDK `@log` scenarios use it;
+an incompatible capture, generator protocol, lifecycle or sink requires exact
+evidence and a supported application-owned function-decorator fallback. Verify
+actual business values, stream behavior and one node per operation, not merely
+the presence of an annotation. Preserve framework/provider-owned operations
+without a duplicate decorator span and keep all remaining field gaps visible.
 
 
 ## Contract
@@ -457,6 +463,17 @@ not an instrumentation failure.
   the matching receiver: gRPC commonly uses `4317`; HTTP/protobuf commonly
   uses `4318/v1/<signal>`. Do not treat successful traces as evidence that the
   metrics exporter is valid.
+- For the default Studio pipeline, verify the consumed launch profile has
+  `OTEL_LOGS_EXPORTER=otlp` and that application LogRecords arrive in Studio
+  alongside the actual trace spans and metric datapoints. A generated `none`
+  setting without an explicit user/operator opt-out does not satisfy default
+  log acceptance. SDK `@log` GenAI spans and stdout correlation do not prove
+  log export. Keep intentional opt-out tests separate from the normal launch.
+- Verify dependency compatibility using the actual installed/locked packages
+  and current official metadata/APIs; record exact resolved versions and
+  source dates in run evidence. Skills contain no fixed library release
+  recipes. Do not upgrade the application during read-only verification or
+  claim a newer proposed compatible set was installed or executed.
 - Assert effective resource attributes from collector data, including
   `service.name`, environment, and version. Source-level merge logic alone does
   not prove operator-provided values survive provider construction.
@@ -508,8 +525,8 @@ runtime that passes its own resource names explicitly. Prove explicit-ID
 plumbing when supported, or state the source-backed name-only limitation;
 passing an ID string to a name lookup does not prove ID support.
 
-Local Studio visibility proves receiver delivery only. In gateway mode also
-verify Python's actual profile loader and env generator deliver populated
+Local Studio visibility proves receiver delivery only. For Python SDK gateway
+mode, verify its actual profile loader and env generator deliver populated
 `SPLUNK_AO_API_URL`, `SPLUNK_AO_CONSOLE_URL`, and
 `SPLUNK_AO_API_KEY=local-gateway` to the provisioning process through a
 credential-free SDK boundary. Compare with the discovered API base, including
@@ -517,7 +534,11 @@ non-default ports; an unused sample, pass-through allowlist, or blank generated
 assignment is `Not configured`. Keep verify read-only for application/env
 files and report the missing fields instead of repairing them. Preserve
 explicit direct-cloud mode and do not require this trio for an unselected or
-direct-cloud AO path. Separately prove that Studio uses its active
+direct-cloud AO path. For other languages, verify the runtime's actual supported
+gateway endpoint, authentication, resource selectors and consumed profile;
+absence of Python SDK variables alone is not `Not configured`. Keep source
+configuration, runtime receipt and fresh cloud visibility separate. Separately
+prove that Studio uses its active
 connection/realm, supplies upstream auth,
 preserves per-request resource bindings without cross-application leakage, and
 handles unavailable or changed connections honestly. Application cloud
@@ -549,6 +570,15 @@ conversation/tool-call IDs, input/output messages, effective instructions/tool
 definitions, actual arguments/results and retrieval content when applicable.
 SDK-created spans are not automatic proof; empty placeholders, omitted
 applicable content and wrong schema/value mappings fail required coverage.
+Before finalizing, reconcile every requested case and source-known request
+control with its report evidence. Record the actual value, applicability,
+result and proof; generic policy does not assess a supplied parameter,
+dependency selection or signal record. Include exact source URLs and provided
+revision/date/hash receipts rather than only naming an input artifact.
+Supplemental source or captured cases may use accurate Markdown, JSON or linked
+equivalent evidence; preserve canonical JSON contracts separately and never
+invent live findings for fixtures. State an omitted or unavailable check
+explicitly instead of silently dropping the case or field.
 An explicit restricted-content scenario can pass its safety assertion while
 remaining partial for the full profile. Never fabricate successful output for
 failed operations or duplicate system-role content in separate instructions.

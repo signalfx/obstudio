@@ -251,9 +251,9 @@ reused. Re-resolve named resources or report the stale binding.
 
 ### Python SDK Gateway Configuration
 
-For the inspected `splunk-ao` 0.4.0, O11y mode derives cloud hosts from
-`SPLUNK_AO_REALM`; `SPLUNK_AO_API_URL` is not an O11y override. Its supported
-configurable endpoint mode uses `SPLUNK_AO_API_URL`,
+Inspect the chosen SDK's deployment/configuration source: when O11y mode derives
+cloud hosts from `SPLUNK_AO_REALM`, `SPLUNK_AO_API_URL` is not an O11y override
+for that mode. Verify the supported configurable endpoint mode using `SPLUNK_AO_API_URL`,
 `SPLUNK_AO_CONSOLE_URL`, and `SPLUNK_AO_API_KEY`. A compatible local Studio
 gateway implements that standard SDK API/authentication contract and
 `<api-base>/otel/v1/traces`, while delegating resource calls to cloud `/ao/api`
@@ -282,7 +282,7 @@ For selected AO configuration work, provide a Studio-only example profile:
 `.env.studio.example` for a dotenv application, or the equivalent named
 deployment/launch profile for the repository's configuration system. Put the
 supported local AO API, console, and authentication settings together in that
-profile. For `splunk-ao` 0.4.0 these are `SPLUNK_AO_API_URL`,
+profile. Verify the chosen SDK's support for `SPLUNK_AO_API_URL`,
 `SPLUNK_AO_CONSOLE_URL`, and `SPLUNK_AO_API_KEY=local-gateway`. Render both URLs
 from the discovered same-namespace loopback API origin, including its actual
 port. The SDK appends its own resource and `/otel/v1/traces` paths; do not use
@@ -412,6 +412,8 @@ framework API from an example into the application.
 
 Use the latest Python examples on the official SDK's `main` branch:
 
+- [Function decorators](https://github.com/splunk/splunk-ao-python/blob/main/examples/logging-samples/banking-agent-sample/sample_app.py): `@log(span_type="agent")` and `@log(span_type="tool")` on actual function boundaries, with `splunk_ao_context` for destination/session scope.
+- [Ollama chat](https://github.com/splunk/splunk-ao-python/blob/main/examples/chatbot/sample-project-chatbot/openai-ollama/app.py): a decorated chat function with the supported provider wrapper. Use it only when that client protocol matches the app; do not replace a native Ollama request merely to copy the example.
 - [LangChain callback](https://github.com/splunk/splunk-ao-python/blob/main/examples/agent/langchain-agent/main.py): `SplunkAOCallback` and `splunk_ao_context` for callback-based model/chain/tool operation capture.
 - [LangChain middleware](https://github.com/splunk/splunk-ao-python/blob/main/examples/agent/langchain-middleware/main.py): `SplunkAOMiddleware` on the supported `create_agent` middleware boundary. Choose callback OR middleware ownership for overlapping operations and confirm DeepAgents/framework/version compatibility before applying it.
 - [Logger operations](https://github.com/splunk/splunk-ao-python/blob/main/examples/logging-samples/splunk-ao-logger/basic-example.py): actual input/output and available model/usage passed to `SplunkAOLogger`, with a trace concluded at the actual terminal boundary. Use supported logger/schema/decorator APIs when no matching framework integration exists.
@@ -423,16 +425,16 @@ package version. Do not treat a previously recorded commit as the latest
 example. If current examples cannot be retrieved, report that prerequisite
 and the snapshot actually used; do not claim a fresh check.
 
-For a custom Python agent without a matching framework integration, the
-following method mapping is a compatibility illustration runtime-tested with
-`splunk-ao==0.4.0`. The latest official examples and chosen version's inspected
-APIs govern implementation. If signatures or lifecycle behavior differ,
-record and use the current supported mapping rather than forcing this older
-recipe. Label installed/runtime support unproven until checked.
+For a custom Python agent without a matching framework integration, choose the
+supported decorator pattern first as described below. The following lower-level
+method mapping is a fallback capability checklist, not a pinned release recipe.
+Current official examples and the chosen compatible package's inspected APIs
+govern implementation. Record any decorator limitation that requires a fallback
+and keep installed/runtime support unproven until checked.
 
 | Actual operation boundary | Named SDK creator/lifecycle API | Source data and ownership |
 |---|---|---|
-| SDK trace envelope | `SplunkAOLogger.start_trace(...)` then `conclude(...)` | Vendor trace/session grouping. In0.4.0 the trace container is not emitted as an OTel operation span; this alone proves no workflow coverage. |
+| SDK trace envelope | `SplunkAOLogger.start_trace(...)` then `conclude(...)` | Vendor trace/session grouping; inspect whether the selected SDK emits an operation node. An envelope alone proves no actual workflow boundary. |
 | Actual coordinated workflow | `SplunkAOLogger.add_workflow_span(...)` | Log one real workflow with actual input, terminal output, timestamps and children inside the trace envelope. Apply current OTel workflow applicability; never invent a workflow for a standalone agent. |
 | Agent invocation | `SplunkAOLogger.add_agent_span(...)` | Actual agent identity, input/output and parent/children from the real invocation. |
 | Model request | `SplunkAOLogger.add_llm_span(...)` | Actual request messages/model/parameters and observed response/usage; preserve CLIENT kind and real errors/partial outcomes. |
@@ -445,8 +447,8 @@ Use the latest
 and inspect the latest logger/schema source for methods that example does not exercise:
 [`src/splunk_ao/logger/logger.py`](https://github.com/splunk/splunk-ao-python/blob/main/src/splunk_ao/logger/logger.py).
 Record the resolved revision and matching package support in each producer
-receipt. In the tested 0.4.0 logger, `_emit_and_release` skips the `Trace` container;
-`add_workflow_span` supplies an actual workflow operation when applicable.
+receipt. Inspect whether the selected logger omits its trace container from
+emission; `add_workflow_span` supplies an actual workflow when applicable.
 Starting the envelope plus logging one workflow is not a duplicate workflow.
 These named creators are different from export-only `add_splunk_ao_span_processor`. A version may
 need a supported application OTel processor/exporter hook to enrich the same
@@ -455,6 +457,49 @@ operations and cannot repair data never captured. Preserve business return
 values, exceptions and external call arguments/order exactly; keep telemetry
 carriers out of business outputs. `Projects`/`AgentStreams` APIs configure
 resources and do not create GenAI operation spans.
+
+### Decorator Selection
+
+For supported function scenarios, use the decorator pattern when adding or
+repairing hooks. Prefer SDK `@log` at the uncovered operation boundary after
+checking current [decorator documentation](https://agent-observability-docs.splunk.com/sdk-api/logging/log-decorator/log-decorator),
+chosen package source and public configuration. Keep existing valid producers.
+
+| Actual function scenario | Preferred pattern and required checks |
+|---|---|
+| Safe bounded sync/async function or bound method | SDK `@log` with the actual agent, tool, retrieval, model or workflow type; verify complete input binding including used variadic arguments, return/exception preservation and supported parameter mappings. Inspect classmethod/staticmethod decorator order and exclusion of `self`/`cls`. |
+| Serial nested agent/workflow/tool/retrieval functions | Decorate each distinct uncovered source operation once. Verify actual parentage, context cleanup, resource route and one emitted node per boundary. Do not add a workflow only because the SDK creates a trace envelope. |
+| Finite sync/async generator consumed through ordinary iteration | SDK `@log` when its aggregation, size bounds, termination and partial/error/cancel behavior meet the application's contract. Async generation is supported in principle, not a blanket fallback reason. |
+| Provider/framework integration already creates the operation | Preserve that creator. Decorate only uncovered surrounding functions, never another model/tool span around the same captured operation. |
+| SDK decorator cannot preserve a required capture, generator protocol, lifecycle, sampling or sink contract | Use an application-owned function decorator around the documented supported creator at the same boundary, with an exact reason and focused proof. Non-function/external lifetimes may use a manual public scope. |
+
+Do not infer full decorator support solely from dispatching to an async/generator
+wrapper. Inspect `send`/`throw`/`asend`/`athrow` if used, retained item counts,
+early close, cancellation and genuine partial output. Inspect source-side input
+binding, used variadic arguments, framework dispatch/introspection after
+decoration, and result serialization: a documented `params["input"]` mapping or
+redacted companion does not prove raw originals were excluded. Prove the chosen
+public mechanism with synthetic raw-content sentinels before using it. Prefer
+already safe bounded function data or a behavior-preserving telemetry boundary;
+never sanitize business arguments/results in place merely to satisfy capture.
+
+SDK `@log` may use a SDK-owned completed-record sink rather than the application's
+global OTel provider. Verify its actual public destination/configuration and
+same-operation fields; an adapter on an unrelated global provider cannot enrich
+those records. Inspect native schema fields and any public ingestion hook
+separately from an OTel exporter hook. A trace/schema ingestion hook is not proof
+of a returned writable OTel span or a public exporter-registration seam. Normal
+compatible SDK configuration may route that sink to Studio's SDK endpoint;
+do not invent private sink injection or require a Studio-specific app adapter.
+SDK operation records remain distinct from ordinary OTLP application logs.
+
+When a precise SDK decorator limitation requires the public helper below, retain
+the function decorator pattern around that helper. Name it as application-owned
+and distinguish it from SDK `@log`; create one SDK operation, preserve business
+values/errors/stream behavior and prove source-side redaction plus the actual
+sink. A supported fallback is independent of gateway availability for source
+instrumentation and local tests. Never declare a decorator path fully compliant
+without emitted field, lifecycle and sink evidence.
 
 ### Public Schema Span Helpers
 
@@ -471,28 +516,28 @@ For supported `AgentSpan`, `LlmSpan`, `ToolSpan` and `RetrieverSpan` operations,
 sanitize source values before constructing the schema record, then fill missing
 attributes on that yielded span through `Span.set_attribute`/`set_attributes`.
 Keep one SDK-created operation, its actual context, errors and business outcome.
-The checked 0.5.0 helper writes SDK-derived attributes on context exit, so
-inspect the final emitted span for overwrites rather than assuming earlier
+Inspect when the chosen helper writes SDK-derived attributes, including context
+exit; check the final emitted span for overwrites rather than assuming earlier
 setters survive. Bind the helper to the actual registered provider, configure
 the supported AO processor/exporter where selected, and prove owned flush and
 shutdown. An unrelated provider or unregistered local provider proves no export.
 
-Inspect creation-time capability too. The checked 0.5.0 helper opens the span
-with its name before yielding or writing schema-derived attributes. Its sampler
-and `on_start` therefore do not receive later operation/provider/model/server
-fields, and the helper has no public kind/attributes argument. Same-span setters
-or a completed `ReadableSpan` view cannot repair those earlier inputs. Separate
-completed wire compatibility from recommended creation-time support; disclose
-the chosen-version limit and keep affected attribute-based sampling acceptance
-Partial. Do not patch SDK internals, invent arguments or add a duplicate span.
+Inspect creation-time capability too. If the chosen helper opens a name-only
+span before yielding or writing schema-derived attributes, the sampler and
+`on_start` do not receive those later fields. Inspect its public signature for
+initial kind/attributes support instead of assuming either support or absence.
+Same-span setters or a completed `ReadableSpan` view cannot repair earlier
+inputs. Separate completed wire compatibility from recommended creation-time
+support; disclose observed limits and keep affected attribute-based sampling
+acceptance Partial. Do not patch SDK internals, invent arguments or add a
+duplicate span.
 
-Check support independently for each operation. A local 0.5.0 probe with
-`galileo-core==4.5.0` and OTel `1.45.1` exercised same-span tool message setters,
-truthful successful-null `output.value`, no-result errors and parent context.
-It also emitted `INTERNAL` for `LlmSpan` with no public kind argument: that does
-not close a separate-process model's `CLIENT` requirement. Recheck the selected
-version; never invent a kind parameter, mutate SDK internals or claim full
-coverage from the helper name. Keep exact unsupported fields/kinds Partial and
+Check support independently for each operation with the resolved compatible
+SDK, schema and OTel packages. Probe same-span tool messages, truthful successful
+null `output.value`, no-result errors and parent context. If an `LlmSpan` emits
+`INTERNAL`, that does not close a separate-process model's `CLIENT` requirement.
+Never invent a kind parameter, mutate SDK internals or claim full coverage from
+the helper name. Keep exact unsupported fields/kinds Partial and
 do not make independently supported agent/tool/retrieval work depend on a
 logger-only sink prerequisite. Source/probe capability remains distinct from
 application integration, schema-valid wire export, resource binding and cloud
@@ -508,12 +553,12 @@ Prefer supported native fields or a yielded writable OTel span when the chosen
 integration provides them. For logger versions that expose only completed SDK
 records, use an application exporter adapter without creating another span.
 
-The following compatibility illustration was checked locally with
-`splunk-ao==0.4.0` and OTel Python `1.38.0`. The SDK/carrier test used the
-inspected version-specific `_sink` injection seam; that establishes local
-behavior, not documented production registration. Recheck the installed/chosen
-version and its supported application configuration boundary. This is not a
-claim that a newer SDK emits these fields or supports the same sink route:
+The following compatibility illustration requires chosen-package checks for
+the carrier and public exporter interfaces. A test that uses an internal `_sink`
+injection seam establishes isolated test behavior, not documented production
+registration. Resolve the latest compatible releases and inspect their supported
+application configuration boundary; do not assume that an old test proves the
+currently selected SDK emits these fields or supports that sink route:
 
 1. At the actual tool boundary, bind arguments and observe the return value or
    exception. Redact and bound the values before any SDK call. Track

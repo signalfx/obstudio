@@ -497,5 +497,118 @@
       },
       "expected_assessment": "The supplied known slots have positional [stop,error]; preserve actual produced partial content on ERROR and separate choice messages. Never blanket-delete finish reasons or actually produced output just because span failed; never fill additional unsupplied generations or usage."
     }
-  ]
+  ],
+  "gateway_language_cases": {
+    "scope": "Independent synthetic Python/non-Python configured-source cases, not app.py/demo runtime, resolved real resource IDs, loader execution, received OTLP or cloud receipt. Public Go options and standard exporter parameters are dated official source capability, not installed-version or transport proof.",
+    "source_receipts": [
+      {
+        "name": "otel-exporter-spec",
+        "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-specification/main/specification/protocol/exporter.md",
+        "captured_at": "2026-10-14T07:54:25.808182+00:00",
+        "sha256": "fbd163b83eb2ba273bc97525cdb1d45e344fe1a7f29be3e27589fd40242a562d",
+        "bytes": 14899,
+        "matching_source_lines": {
+          "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": [
+            28,
+            33,
+            144
+          ],
+          "OTEL_EXPORTER_OTLP_TRACES_HEADERS": [
+            58,
+            188
+          ]
+        },
+        "scope": "Dated official source bytes; no installed exporter, runtime, package resolver or network-delivery execution."
+      },
+      {
+        "name": "go-native-otlp-options",
+        "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-go/main/exporters/otlp/otlptrace/otlptracehttp/options.go",
+        "captured_at": "2026-10-14T07:54:26.037045+00:00",
+        "sha256": "718dde24800066c95c50886726b3ea3ca360fc959bdd38862e9e34b60706e6e6",
+        "bytes": 8589,
+        "matching_source_lines": {
+          "func WithEndpointURL": [
+            115
+          ],
+          "func WithHeaders": [
+            155
+          ]
+        },
+        "scope": "Dated official source bytes; no installed exporter, runtime, package resolver or network-delivery execution."
+      },
+      {
+        "path": "observer/internal/otlp/httphandler.go",
+        "sha256": "dd1c21671f47b9a5a46fdf895646242b10b9d861518ede9c4ec8ac3f6aae230c",
+        "read_at": "2026-10-14T07:55:49.628656+00:00",
+        "lines": [
+          41,
+          55
+        ],
+        "facts": "Standard /v1/traces and AO alias parse paired projectid/logstreamid headers. Routed agent forwarding requires native loopback; AO alias additionally requires IDs. Receiver config source only, not an acceptance test."
+      }
+    ],
+    "generic_acceptance": "Every runtime still needs consumed effective profile, selected project/Agent Stream identity/ownership, endpoint and auth appropriate to its actual public transport, per-request resource binding, receiver batch acceptance and fresh cloud visibility where requested. No local field-level plan proves these executed.",
+    "cases": [
+      {
+        "id": "python-sdk-gateway-triplet-missing",
+        "runtime": "Python",
+        "selected_mode": "Splunk AO Python SDK standalone gateway",
+        "discovered_api_base": "http://127.0.0.1:55300",
+        "consumed_profile_source": ".local/python.env sourced by declared launcher before SDK initialization",
+        "profile": {
+          "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55318",
+          "SPLUNK_AO_API_URL": "",
+          "SPLUNK_AO_CONSOLE_URL": "",
+          "SPLUNK_AO_API_KEY": ""
+        },
+        "selected_resource_plan": {
+          "project_id": "11111111-1111-4111-8111-111111111111",
+          "agent_stream_id": "22222222-2222-4222-8222-222222222222",
+          "synthetic_ids_not_resolved": true
+        },
+        "expected": "Not configured for selected Python SDK gateway provisioning/export config: actual consumed triplet is blank despite OTLP endpoint. Require all three supported values at discovered nondefault API base before SDK initialization; verify stays read-only. IDs/binding/cloud remain unproven."
+      },
+      {
+        "id": "python-sdk-gateway-triplet-configured-source",
+        "runtime": "Python",
+        "selected_mode": "Splunk AO Python SDK standalone gateway",
+        "discovered_api_base": "http://127.0.0.1:55300",
+        "consumed_profile_source": ".local/python.env sourced by declared launcher before SDK initialization",
+        "profile": {
+          "SPLUNK_AO_API_URL": "http://127.0.0.1:55300",
+          "SPLUNK_AO_CONSOLE_URL": "http://127.0.0.1:55300",
+          "SPLUNK_AO_API_KEY": "local-gateway",
+          "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55318"
+        },
+        "selected_resource_plan": {
+          "project_id": "11111111-1111-4111-8111-111111111111",
+          "agent_stream_id": "22222222-2222-4222-8222-222222222222",
+          "synthetic_ids_not_resolved": true
+        },
+        "expected": "Required Python SDK triplet is present in the declared consumed source profile and uses actual discovered API base, distinct from OTLP. This is source-plan field support only, not actual loader/SDK execution, resolved IDs, binding, receiver/cloud proof."
+      },
+      {
+        "id": "go-native-gateway-no-python-variables",
+        "runtime": "Go",
+        "selected_mode": "Native standard OTLP/HTTP producer to selected loopback Studio gateway with per-request agent route",
+        "discovered_otlp_base": "http://127.0.0.1:55318",
+        "consumed_profile_source": "Declared launcher loads .local/go.env; the synthetic exporter source reads its endpoint and paired routing header values. No Python SDK initialization exists.",
+        "profile": {
+          "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://127.0.0.1:55318/v1/traces",
+          "OTEL_EXPORTER_OTLP_TRACES_HEADERS": "projectid=11111111-1111-4111-8111-111111111111,logstreamid=22222222-2222-4222-8222-222222222222",
+          "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": "http/protobuf"
+        },
+        "native_source": "otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(cfg.TraceEndpoint), otlptracehttp.WithHeaders(cfg.TraceHeaders))",
+        "source_binding": "Declared source loads TraceEndpoint and TraceHeaders from standard trace-specific profile variables. The provided resource IDs and loopback route are synthetic selectors, not successful lookup results.",
+        "authentication_scope": "This selected native loopback OTLP receiver path has no Python SDK API-key/login handshake. Studio supplies upstream auth via active connection when agent forwarding is executed. Source receipt proves paired-header routing checks and local origin requirement only.",
+        "python_sdk_environment_variables": null,
+        "selected_resource_plan": {
+          "project_id": "11111111-1111-4111-8111-111111111111",
+          "agent_stream_id": "22222222-2222-4222-8222-222222222222",
+          "synthetic_ids_not_resolved": true
+        },
+        "expected": "Do not mark Not configured solely because SPLUNK_AO_API_URL/CONSOLE_URL/API_KEY are absent; this Go source has no Python SDK path. Assess its actual supported native endpoint/protocol/headers/profile and selected resource identity/ownership/binding. Configured source is scoped field support, actual profile load, installed compatibility, OTLP acceptance and active-connection/cloud receipt stay Not proven."
+      }
+    ]
+  }
 }
