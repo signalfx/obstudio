@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-verify |
-| Run ID | 20261013T230132232690Z |
+| Run ID | 20261014T052957204979Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/tool-message-mapping-verify | python/ai-assistant-demo | 1 | 100% (4/4), avg score 96 | 1.5M | 17.4m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/genai-sdk-required-verify | python/ai-assistant-demo | 1 | 100% (8/8), avg score 96 | 1.4M | 11.6m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/tool-message-mapping-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1521607 | 1266688 | 0 | 27004 | 8548 | unknown | 1548611 |
+| with_skill | python/ai-assistant-demo/qual/genai-sdk-required-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1412304 | 1259520 | 0 | 27828 | 6396 | unknown | 1440132 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/tool-message-mapping-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1015375 | 925824 | 0 | 8607 | 3946 | unknown | 1023982 |
+| with_skill | python/ai-assistant-demo/qual/genai-sdk-required-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 946787 | 868480 | 0 | 7521 | 2687 | unknown | 954308 |
 
 ## Rubric Failures
 
