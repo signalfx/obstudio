@@ -109,6 +109,13 @@ def test_native_probe_preserves_real_negative_and_positive_capture_facts():
                    if item["operation"] == "safe-tool")
     assert current["span_id"] == base64.b64decode(leaf["parentSpanId"]).hex()
     assert current["span_id"] != base64.b64decode(leaf["spanId"]).hex()
+    model = next(span for span in spans if span["name"] == "chat synthetic-model")
+    assert not {"gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens",
+                "gen_ai.response.finish_reasons"} & _attributes(model).keys()
+    for operation in ("safe-model", "safe-retriever"):
+        context = next(item for item in probe["contexts_during_business_call"]
+                       if item["operation"] == operation)
+        assert context["span_id"] == current["span_id"]
 
 
 def test_field_good_candidates_differ_in_function_producer_evidence():

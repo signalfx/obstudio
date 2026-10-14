@@ -482,7 +482,12 @@ Selection.
    capture and source-side privacy bounds, required fields, used iteration
    protocol, partial output, early close/cancellation, creation-time kind and
    attributes, and actual sink/registration/lifecycle support. Dispatch support
-   alone does not prove these contracts. An async-generator agent is supported
+   alone does not prove these contracts. Carry each observed source or wire
+   probe failure into the affected function's decision before proposing future
+   checks. Check response usage/finish conversion and the active span during
+   the business call, which determines nested transport/retrieval parentage;
+   completed leaf parentage alone does not prove leaf activation. An
+   async-generator agent is supported
    in principle; check its actual bounds and close/cancel behavior rather than
    rejecting it by shape.
 3. Choose native SDK `@log` when those applicable contracts are supported.
@@ -491,6 +496,15 @@ Selection.
    decorator** invoking a documented supported creator once at that same
    boundary. Preserve the business invocation/iteration protocol and required
    mappings; a schema constructor or inline manual scope is not this decision.
+   Record the concrete decorator symbol and its attachment or invocation
+   wrapper separately from the creator it calls. A generic promise to add an
+   application-owned decorator does not identify the chosen function pattern.
+
+For either pattern, define assertions comparing the final sanitized content to
+the actual source arguments, produced results and partial output on that same
+native operation and its wire record. Attribute presence or sentinel absence
+alone does not prove useful, equal input/output or distinguish null from no
+produced result.
 
 Manual public scopes are for a source-proven non-function or external lifetime,
 not a substitute for decorating a fresh function boundary. `@contextmanager`
