@@ -1021,6 +1021,34 @@ Opt-In provenance in the canonical evidence, not only a supplemental summary.
 Assess supplied auxiliary timeout/cancel facts and actual opaque IDs even when
 the main application has no matching auxiliary phase; distinguish source
 scenarios instead of dropping their evidence.
+Before finalizing, reconcile a source-operation ledger against every proposed
+node in canonical readiness, findings, expected telemetry, acceptance scenarios
+and flow. Record the source function/call site and operation for each node.
+One agent turn coordinating models/tools is one orchestration boundary; propose
+both workflow and agent nodes only when distinct source operations and their
+call relationship establish both. A report title, README description or SDK
+trace envelope does not establish another application boundary. Correct every
+canonical occurrence of an unsupported node, not only the supplemental prose.
+
+Audit separately supplied source cases with the same field-level care. For each
+available agent/tool context field, record the exact attribute, actual safe
+value and source, owning operation, official requirement level, profile
+acceptance and remaining proof. Include configured agent description, the
+fixed-single-model versus dynamic-model condition, and the tool's own agent
+name, safe conversation ID and offered description. A generic 'metadata is
+available' statement or parent-only field does not assess these values. Keep
+nonlive cases supplemental and source-unavailable fields explicit; never copy
+their values into live findings without matching application source.
+
+For each inspected creator, record its version/file/symbol and actual start
+arguments, which attributes/kind reach the sampler and `on_start`, and which
+fields are applied later or during finalization. When source establishes a
+name-only helper with no public initial kind/attributes argument, state that
+concrete capability limit rather than a conditional 'if unsupported'. Identify
+the supported hook or remaining creation-boundary test needed. Finished-span
+setters/exporter enrichment do not prove earlier sampling inputs; source
+inspection does not prove a runtime sampler result. Keep this scoped limit
+separate from independently supported content and operation coverage.
 Reconcile every newly proposed `gen_ai.*` attribute with the inspected official
 registry and preserve the vendor/legacy provenance of existing fields. Do not
 invent a reserved semantic attribute such as `gen_ai.usage.total_tokens` when

@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Splunk Observability Studio Codex eval definitions"
 requires-python = ">=3.11"
 dependencies = [
+  "opentelemetry-exporter-otlp-proto-http>=1.38.0,<2",
+  "opentelemetry-sdk>=1.38.0,<2",
   "pytest-codex-evals",
   "pytest>=8.0.0",
   "pytest-xdist>=3.6.0",

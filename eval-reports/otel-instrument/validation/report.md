@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261014T052945260131Z |
+| Run ID | 20261014T062001970437Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -37,7 +37,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/ai-assistant-demo/qual/ao-target-handoff-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-instrument.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/content-coverage-instrument.json | 0 | 6 | 0 |
 | python/ai-assistant-demo/qual/gateway-env-bootstrap | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/gateway-env-bootstrap.json | 0 | 5 | 0 |
-| python/ai-assistant-demo/qual/genai-sdk-default-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json | 0 | 8 | 0 |
+| python/ai-assistant-demo/qual/genai-sdk-default-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json | 0 | 10 | 0 |
 | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/instrument.json | 0 | 14 | 0 |
 | python/ai-assistant-demo/qual/resource-env-bootstrap | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/resource-env-bootstrap.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/resource-sdk-errors | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/resource-sdk-errors.json | 0 | 5 | 0 |

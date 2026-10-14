@@ -477,6 +477,15 @@ setters survive. Bind the helper to the actual registered provider, configure
 the supported AO processor/exporter where selected, and prove owned flush and
 shutdown. An unrelated provider or unregistered local provider proves no export.
 
+Inspect creation-time capability too. The checked 0.5.0 helper opens the span
+with its name before yielding or writing schema-derived attributes. Its sampler
+and `on_start` therefore do not receive later operation/provider/model/server
+fields, and the helper has no public kind/attributes argument. Same-span setters
+or a completed `ReadableSpan` view cannot repair those earlier inputs. Separate
+completed wire compatibility from recommended creation-time support; disclose
+the chosen-version limit and keep affected attribute-based sampling acceptance
+Partial. Do not patch SDK internals, invent arguments or add a duplicate span.
+
 Check support independently for each operation. A local 0.5.0 probe with
 `galileo-core==4.5.0` and OTel `1.45.1` exercised same-span tool message setters,
 truthful successful-null `output.value`, no-result errors and parent context.

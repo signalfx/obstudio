@@ -183,6 +183,21 @@ and failed successful outputs are absent with a reason, not invented. Preserve
 safe source-provided conversation/tool-call IDs as span-only correlation when
 the bound capture contract permits them; do not add an unnecessary approval
 question or silently drop them. Keep IDs out of metrics and span names.
+For each tool execution, explicitly assess `gen_ai.agent.name` from the active
+owning agent, `gen_ai.conversation.id` from the available safe conversation
+context, and `gen_ai.tool.description` from the actual tool definition. Parent
+attributes do not supply these fields on the tool's own span. For agent
+invocations, apply the inspected model applicability footnote: populate
+`gen_ai.request.model` for a known fixed single-model agent, not an agent that
+permits multiple models or dynamic selection. Keep the actual requested model
+on its inference span; a service-owned selected-model field may describe
+dynamic agent context. An unused demo-mode argument is not model evidence.
+Assess a configured `gen_ai.agent.description` when available; do not invent
+agent metadata by paraphrasing a system prompt or README.
+Bind applicable missing fields to the owning finding and span assertions, with
+source-backed reasons where unavailable. Preserve the inspected official
+conditional/recommended levels separately from this profile's required known
+field acceptance; do not invent an agent ID, model or conversation.
 
 Specify concrete capture settings and where they are applied before every
 exporter. Preserve an existing stricter policy; otherwise propose/implement
@@ -211,6 +226,18 @@ spans. Assess context cleanup and exactly one node per actual operation.
 Captured fixtures cannot prove application cleanup/SDK execution; absent
 teardown/cancel evidence remains Not proven with a concrete test. Assess OTLP
 partial-success rejection separately from HTTP200 or cloud completeness.
+Preserve finish-reason positions for known expected generations. If a reason
+was expected but absent after failure, cancellation or abnormal stream end,
+record `error` for that known position while keeping unproduced output absent.
+Do not invent generation slots when their count is unknown.
+Assess creation-time sampling context separately from completed-span content.
+When the inspected conventions recommend operation/provider/model/server or
+other fields at creation, inspect the selected creator's arguments and the
+actual sampler/`on_start` inputs. Later setters or exporter views cannot change
+an earlier sampling decision. Record SDK limits and any affected configured
+sampling behavior without inventing a new API or equating wire enrichment with
+creation-time support; an always-on policy does not demonstrate attribute-based
+sampling compatibility.
 Before finalizing, reconcile all source operations/known fields against these
 tables and correct missing rows. Do not claim full coverage from a score or
 summary when any applicable requirement remains missing.

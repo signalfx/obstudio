@@ -1,13 +1,26 @@
 from __future__ import annotations
 
+import ast
 import copy
 import hashlib
+import io
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 import jsonschema
 import pytest
+import requests
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http import Compression
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import SpanLimits, TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter, SpanExportResult
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -520,3 +533,275 @@ def test_enrichment_removal_scope_and_drop_counts_are_explicit(enrichment_eviden
     assert "input.mime_type" not in contract["removal_allowlist"]
     assert {"dropped_attributes", "dropped_events", "dropped_links"} <= set(contract["preserved_fields"])
     assert "identical original span" in contract["unrelated_span_rule"]
+
+
+@pytest.fixture(scope="module")
+def shipped_tool_adapter():
+    source_path = ROOT / "skills/references/splunk-agent-observability.md"
+    source = source_path.read_text(encoding="utf-8")
+    blocks = [match for match in re.finditer(r"```python\n(.*?)\n```", source, re.DOTALL)
+              if "class ToolContentView(ReadableSpan):" in match.group(1)]
+    assert len(blocks) == 1
+    block = blocks[0]
+    code = block.group(1)
+    assert {node.name for node in ast.parse(code).body if isinstance(node, ast.ClassDef)} == {
+        "ToolContentView", "ToolContentExporter",
+    }
+    assert all(isinstance(node, (ast.ImportFrom, ast.Assign, ast.ClassDef))
+               for node in ast.parse(code).body)
+    namespace = {"__name__": "shipped_tool_content_adapter"}
+    prefix = "\n" * source.count("\n", 0, block.start(1))
+    exec(compile(prefix + code, str(source_path), "exec"), namespace)
+    return namespace["ToolContentView"], namespace["ToolContentExporter"]
+
+
+def _real_sdk_tool_batch(outcome: str):
+    capture = InMemorySpanExporter()
+    provider = TracerProvider(
+        sampler=ALWAYS_ON,
+        shutdown_on_exit=False,
+        resource=Resource({"service.name": "adapter-contract", "service.test": "sdk"},
+                          schema_url="https://example.test/resource-schema"),
+        span_limits=SpanLimits(
+            max_attributes=16, max_span_attributes=16,
+            max_events=1, max_links=1,
+            max_event_attributes=1, max_link_attributes=1,
+            max_attribute_length=8192, max_span_attribute_length=8192,
+        ),
+    )
+    provider.add_span_processor(SimpleSpanProcessor(capture))
+    tracer = provider.get_tracer("adapter-contract", "1.0", "https://example.test/span-schema",
+                                 attributes={"scope.test": "preserved"})
+    parent = trace.SpanContext(
+        trace_id=0x123456789ABCDEF123456789ABCDEF12, span_id=0x123456789ABCDEF1,
+        is_remote=True, trace_flags=trace.TraceFlags(trace.TraceFlags.SAMPLED),
+        trace_state=trace.TraceState([("contract", "preserved")]),
+    )
+    context = trace.set_span_in_context(trace.NonRecordingSpan(parent))
+    links = [trace.Link(trace.SpanContext(
+        trace_id=parent.trace_id + index + 1, span_id=parent.span_id + index + 1,
+        is_remote=bool(index), trace_flags=trace.TraceFlags(trace.TraceFlags.SAMPLED),
+        trace_state=trace.TraceState([("link", str(index))]),
+    ), {"discard": "first", "link.keep": str(index)}) for index in range(2)]
+    arguments = {"incident_id": "INC-SYNTHETIC"}
+    call_id = "safe-sdk-call"
+    fields = {"gen_ai.input.messages": json.dumps([{
+        "role": "assistant", "parts": [{"type": "tool_call", "id": call_id,
+                                         "name": "lookup_incident", "arguments": arguments}],
+    }])}
+    removed = {"gen_ai.tool.call.result"}
+
+    def lookup_incident(incident_id):
+        assert incident_id == arguments["incident_id"]
+        if outcome == "error_no_result":
+            raise LookupError("Synthetic dependency failed")
+        return None
+
+    try:
+        with tracer.start_as_current_span("execute_tool lookup_incident", context=context,
+                                         links=links, kind=trace.SpanKind.INTERNAL) as span:
+            span.set_attributes({f"discard.{index}": str(index) for index in range(20)})
+            span.add_event("discard-event", {"event.discard": "first"})
+            span.add_event("kept-event", {"discard": "first", "event.keep": "second"})
+            try:
+                result = lookup_incident(**arguments)
+            except LookupError:
+                span.set_status(trace.Status(trace.StatusCode.ERROR, "Synthetic dependency failed"))
+                span.set_attribute("error.type", "LookupError")
+                removed.update({"gen_ai.output.messages", "output.value"})
+            else:
+                fields.update({
+                    "gen_ai.output.messages": json.dumps([{
+                        "role": "tool", "parts": [{"type": "tool_call_response",
+                                                    "id": call_id, "response": result}],
+                    }]),
+                    "openinference.span.kind": "TOOL",
+                    "output.mime_type": "application/json",
+                    "output.value": json.dumps(result),
+                })
+            span.set_attributes({
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.tool.name": "lookup_incident",
+                "gen_ai.tool.call.id": call_id,
+                "gen_ai.tool.call.arguments": json.dumps(arguments),
+                "gen_ai.tool.call.result": "null",
+                "gen_ai.input.messages": "[]",
+                "gen_ai.output.messages": "[]",
+                "output.value": "\"stale\"",
+                "input.mime_type": "application/json",
+                "application.keep": "preserved",
+                "splunk_ao.metadata": json.dumps({"application.genai.required": json.dumps(fields)}),
+            })
+        with tracer.start_as_current_span("HTTP helper", context=context, kind=trace.SpanKind.CLIENT) as span:
+            span.set_attribute("http.request.method", "GET")
+        spans = capture.get_finished_spans()
+        assert len(spans) == 2
+        assert all(count > 0 for count in (
+            spans[0].dropped_attributes, spans[0].dropped_events, spans[0].dropped_links,
+            spans[0].events[0].dropped_attributes, spans[0].links[0].dropped_attributes,
+        ))
+        return spans, fields, removed
+    finally:
+        provider.shutdown()
+
+
+def _safe_sdk_carrier_fields(span, removed):
+    if span.attributes.get("gen_ai.operation.name") != "execute_tool":
+        return {}, set()
+    metadata = json.loads(span.attributes["splunk_ao.metadata"])
+    return json.loads(metadata["application.genai.required"]), removed
+
+
+class _RecordingSpanExporter(SpanExporter):
+    def __init__(self, result):
+        self.result = result
+        self.batches = []
+        self.flush_timeouts = []
+        self.shutdown_count = 0
+
+    def export(self, spans):
+        self.batches.append(tuple(spans))
+        return self.result
+
+    def force_flush(self, timeout_millis=30000):
+        self.flush_timeouts.append(timeout_millis)
+        return False
+
+    def shutdown(self):
+        self.shutdown_count += 1
+
+
+@pytest.mark.parametrize("delegate_result", [SpanExportResult.SUCCESS, SpanExportResult.FAILURE])
+def test_shipped_adapter_preserves_real_sdk_identity_and_export_lifecycle(shipped_tool_adapter, monkeypatch, delegate_result):
+    monkeypatch.setenv("OTEL_SDK_DISABLED", "false")
+    view_class, exporter_class = shipped_tool_adapter
+    spans, fields, removed = _real_sdk_tool_batch("successful_null")
+    original_attributes = dict(spans[0].attributes)
+    delegate = _RecordingSpanExporter(delegate_result)
+    adapter = exporter_class(delegate, lambda span: _safe_sdk_carrier_fields(span, removed))
+    assert adapter.export(spans) is delegate_result
+    assert len(delegate.batches) == 1
+    view, unrelated = delegate.batches[0]
+    assert isinstance(view, view_class)
+    assert unrelated is spans[1]
+    for field in ("context", "parent", "resource", "instrumentation_scope", "status"):
+        assert getattr(view, field) is getattr(spans[0], field)
+    for field in ("name", "kind", "start_time", "end_time", "events", "links",
+                  "dropped_attributes", "dropped_events", "dropped_links"):
+        assert getattr(view, field) == getattr(spans[0], field)
+    assert dict(view.attributes) == {**{key: value for key, value in original_attributes.items()
+                                      if key not in removed}, **fields}
+    assert dict(spans[0].attributes) == original_attributes
+    assert adapter.force_flush(timeout_millis=174) is False
+    assert delegate.flush_timeouts == [174]
+    adapter.shutdown()
+    assert delegate.shutdown_count == 1
+
+
+@pytest.mark.parametrize("unowned_field", ["gen_ai.provider.name", "input.mime_type", "application.keep"])
+def test_shipped_adapter_rejects_unowned_removal_without_export(shipped_tool_adapter, monkeypatch, unowned_field):
+    monkeypatch.setenv("OTEL_SDK_DISABLED", "false")
+    _, exporter_class = shipped_tool_adapter
+    spans, _, _ = _real_sdk_tool_batch("successful_null")
+    before = [dict(span.attributes) for span in spans]
+    delegate = _RecordingSpanExporter(SpanExportResult.SUCCESS)
+    adapter = exporter_class(delegate, lambda span: ({}, {unowned_field}))
+    with pytest.raises(ValueError, match="limited to owned tool content"):
+        adapter.export(spans)
+    assert delegate.batches == []
+    assert [dict(span.attributes) for span in spans] == before
+
+
+class _CapturingHTTPSession(requests.Session):
+    def __init__(self):
+        super().__init__()
+        self.posts = []
+        self.close_count = 0
+
+    def send(self, request, **kwargs):
+        assert request.method == "POST"
+        self.posts.append((request.url, request.body))
+        response = requests.Response()
+        response.status_code = 200
+        response.url = request.url
+        response.request = request
+        response.raw = io.BytesIO(b"")
+        return response
+
+    def close(self):
+        self.close_count += 1
+        super().close()
+
+
+def _http_exporter(session):
+    return OTLPSpanExporter(
+        endpoint="http://127.0.0.1:1/v1/traces", session=session,
+        compression=Compression.NoCompression, timeout=1,
+        headers={"test.adapter": "public-session-injection"},
+    )
+
+
+def _serialized_request(session):
+    assert len(session.posts) == 1
+    url, body = session.posts[0]
+    assert url == "http://127.0.0.1:1/v1/traces"
+    assert isinstance(body, bytes)
+    message = ExportTraceServiceRequest()
+    message.ParseFromString(body)
+    return message
+
+
+@pytest.mark.parametrize("outcome", ["successful_null", "error_no_result"])
+def test_shipped_adapter_real_otlp_preserves_metadata_and_selective_content(shipped_tool_adapter, monkeypatch, outcome):
+    monkeypatch.setenv("OTEL_SDK_DISABLED", "false")
+    def no_network(self, request, **kwargs):
+        pytest.fail("Exporter bypassed the injected public fake Session")
+    monkeypatch.setattr(requests.Session, "send", no_network)
+    _, exporter_class = shipped_tool_adapter
+    spans, fields, removed = _real_sdk_tool_batch(outcome)
+    baseline_session, enriched_session = _CapturingHTTPSession(), _CapturingHTTPSession()
+    baseline = _http_exporter(baseline_session)
+    adapter = exporter_class(_http_exporter(enriched_session),
+                             lambda span: _safe_sdk_carrier_fields(span, removed))
+    try:
+        assert baseline.export(spans) is SpanExportResult.SUCCESS
+        assert adapter.export(spans) is SpanExportResult.SUCCESS
+        before, after = _serialized_request(baseline_session), _serialized_request(enriched_session)
+        assert len(after.resource_spans) == 1
+        scope = after.resource_spans[0].scope_spans[0]
+        assert len(scope.spans) == 2
+        tool, unrelated = scope.spans
+        assert tool.trace_id == spans[0].context.trace_id.to_bytes(16, "big")
+        assert tool.span_id == spans[0].context.span_id.to_bytes(8, "big")
+        assert tool.parent_span_id == spans[0].parent.span_id.to_bytes(8, "big")
+        assert tool.dropped_attributes_count == spans[0].dropped_attributes > 0
+        assert tool.dropped_events_count == spans[0].dropped_events > 0
+        assert tool.dropped_links_count == spans[0].dropped_links > 0
+        assert tool.events[0].dropped_attributes_count == spans[0].events[0].dropped_attributes > 0
+        assert tool.links[0].dropped_attributes_count == spans[0].links[0].dropped_attributes > 0
+        attributes = {item.key: getattr(item.value, item.value.WhichOneof("value"))
+                      for item in tool.attributes}
+        for key, value in fields.items():
+            assert attributes[key] == value
+        assert removed.isdisjoint(attributes)
+        assert attributes["application.keep"] == "preserved"
+        if outcome == "successful_null":
+            assert json.loads(attributes["output.value"]) is None
+            assert json.loads(attributes["gen_ai.output.messages"])[0]["parts"][0]["response"] is None
+        else:
+            assert attributes["error.type"] == "LookupError"
+            assert tool.status.code == 2
+            assert {"gen_ai.tool.call.result", "gen_ai.output.messages", "output.value"}.isdisjoint(attributes)
+        assert unrelated == before.resource_spans[0].scope_spans[0].spans[1]
+        for message in (before, after):
+            for resource_spans in message.resource_spans:
+                for scope_spans in resource_spans.scope_spans:
+                    for span in scope_spans.spans:
+                        span.ClearField("attributes")
+        assert after == before
+        assert adapter.force_flush(timeout_millis=183) is True
+    finally:
+        baseline.shutdown()
+        adapter.shutdown()
+    assert baseline_session.close_count == 1
+    assert enriched_session.close_count == 1
