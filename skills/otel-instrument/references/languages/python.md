@@ -32,27 +32,6 @@ detected in the codebase. Only install what the project actually uses.
 
 ## Dependencies
 
-```bash
-pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
-```
-
-Or in `requirements.txt`:
-```
-opentelemetry-api
-opentelemetry-sdk
-opentelemetry-exporter-otlp
-opentelemetry-instrumentation-flask      # if Flask
-opentelemetry-instrumentation-fastapi    # if FastAPI
-opentelemetry-instrumentation-django     # if Django
-opentelemetry-instrumentation-requests   # if using requests
-opentelemetry-instrumentation-sqlalchemy # if using SQLAlchemy
-```
-
-Use `opentelemetry-distro` and `opentelemetry-bootstrap -a install` only as an
-additional convenience when the project explicitly wants broad CLI
-auto-discovery. For code changes, keep the explicit `opentelemetry-api` and
-`opentelemetry-sdk` dependencies in the project manifest and wire a setup file.
-
 Resolve the latest compatible published packages at task time, using the
 project's selected Python runtime, dependency constraints, and lockfile. Check
 `Requires-Python`, `Requires-Dist`, and the resolved SDK/exporter/instrumentor
@@ -62,11 +41,41 @@ receipts, and the compatibility probe in run evidence, not as fixed skill
 defaults. Retain a compatible locked setup when its ownership and APIs are
 already proven.
 
+Apply the checked candidate set through the project resolver and lockfile, or
+use exact resolved release specs for every added package. Replace the release
+placeholders below with task-time values before running the command; preserve
+operator constraints and verify the installed graph/APIs. Do not re-resolve a
+floating latest tag after checking another candidate.
+
+```bash
+pip install \
+  'opentelemetry-api==<resolved-api-release>' \
+  'opentelemetry-sdk==<resolved-sdk-release>' \
+  'opentelemetry-exporter-otlp==<resolved-exporter-release>'
+```
+
+Or in `requirements.txt`:
+```
+opentelemetry-api==<resolved-api-release>
+opentelemetry-sdk==<resolved-sdk-release>
+opentelemetry-exporter-otlp==<resolved-exporter-release>
+opentelemetry-instrumentation-flask==<resolved-flask-bridge-release>      # if Flask
+opentelemetry-instrumentation-fastapi==<resolved-fastapi-bridge-release>    # if FastAPI
+opentelemetry-instrumentation-django==<resolved-django-bridge-release>     # if Django
+opentelemetry-instrumentation-requests==<resolved-requests-bridge-release>   # if using requests
+opentelemetry-instrumentation-sqlalchemy==<resolved-sqlalchemy-bridge-release> # if using SQLAlchemy
+```
+
+Use `opentelemetry-distro` and `opentelemetry-bootstrap -a install` only as an
+additional convenience when the project explicitly wants broad CLI
+auto-discovery. For code changes, keep the explicit `opentelemetry-api` and
+`opentelemetry-sdk` dependencies in the project manifest and wire a setup file.
+
 Install the official stdlib bridge when the resolved instrumentation package
 owns the stdlib-to-OTel handler:
 
 ```bash
-pip install opentelemetry-instrumentation-logging
+pip install 'opentelemetry-instrumentation-logging==<resolved-logging-bridge-release>'
 ```
 
 ```python

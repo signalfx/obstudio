@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -31,6 +32,25 @@ def _fenced_code_after(path: Path, marker: str, language: str) -> str:
 def _write_executable(path: Path, contents: str) -> None:
     path.write_text(contents, encoding="utf-8")
     path.chmod(0o755)
+
+
+def test_dependency_install_examples_apply_checked_candidates() -> None:
+    for filename, command, separator in (
+        ("node.md", "npm install", "@"),
+        ("python.md", "pip install", "=="),
+    ):
+        guide = _read(LANGUAGES / filename)
+        commands = re.findall(
+            rf"^{command} [^\n]+", guide.replace("\\\n", " "), re.MULTILINE
+        )
+        assert commands, filename
+        for install in commands:
+            specs = shlex.split(install)[2:]
+            assert specs, install
+            for spec in specs:
+                assert separator + "<resolved-" in spec, spec
+                assert spec.endswith("-release>"), spec
+                assert "latest" not in spec, spec
 
 
 def _java_launcher(tmp_path: Path) -> tuple[Path, dict[str, str]]:

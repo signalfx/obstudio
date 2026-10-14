@@ -435,19 +435,25 @@ schema/redaction policy and test. State exact lifecycle/parent/duplicate and
 auxiliary timeout/cancel proof. Copying an old Required Signals subset or
 writing only 'SDK logger/schema helpers' does not satisfy a reviewable plan.
 
-Before finalizing a GenAI plan or report, reconcile each supplied source case
-and captured operation against its own acceptance rows, including operations
-visible only in a probe receipt. A grouped category or correct parent row does
-not close a missing child requirement:
+For a GenAI plan or report with supplied cases or captures, first inventory
+their distinct source boundaries, case identities and probe-only operations.
+Use that inventory to write a concrete decision and acceptance assertion for
+each case before finalizing. Reconcile the inventory against the completed
+report; do not replace an individual decision with a grouped category, general
+SDK preference or future checklist. A correct parent row does not close a
+missing child requirement:
 
 - List source-backed owning agent, conversation and tool metadata on each
-  tool's own span. A safe available conversation binding belongs on that tool
-  too; parent-only correlation fails acceptance. Give an explicit absence
-  reason when the operation has no such source context.
+  tool's own span, with its actual safe source value or absence reason. Assert
+  the owning agent and available conversation binding on that tool, and add
+  a parent-only negative assertion; parent-only correlation fails acceptance.
+  Give an explicit absence reason when the operation has no such source
+  context instead of reusing another case's fields.
 - Assess each observed decorator surface, including bound methods, nested
   distinct operations and finite sync/async iteration when present. Name the
-  selected SDK `@log` function/span type, or the exact unsupported contract and
-  application-owned function-decorator SDK creator fallback. Preserve real
+  selected SDK `@log` function and `span_type` for each operation, or the exact
+  unsupported contract and application-owned function-decorator SDK creator
+  fallback. Preserve real
   nesting without adding duplicate operations; dispatch support alone does
   not prove required fields, safe capture, lifecycle or the selected sink.
 - Bind normal local log acceptance to the consumed launch profile's
@@ -460,6 +466,13 @@ not close a missing child requirement:
   opt-out. A plan names these concrete settings and assertions while marking
   execution unproven; SDK `@log` spans or exporter configuration alone do not
   supply the native LogRecord receipt.
+
+When supplied dependency compatibility facts are sufficient to decide,
+select the newest compatible candidate in the plan and explain each rejected
+newer candidate using the actual runtime, peer, API and lock constraints.
+Do not defer that supplied-case decision to implementation. Keep fictional
+policy selections and dated captured versions distinct from a new live
+package lookup, actual installation and future shipped defaults.
 
 Reconcile every GenAI audit gap to a required instrumentation result:
 

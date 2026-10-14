@@ -51,23 +51,29 @@ compatibility proof or force an application/runtime upgrade to copy a snippet.
 Record exact resolved releases, metadata/source receipts, and probe results in
 run evidence; keep skill guidance independent of a particular release.
 
+Apply the exact candidate specs checked during preflight, or the already
+resolved lockfile. Do not resolve a mutable registry tag again at installation.
+Replace each release placeholder below with its task-time resolved value before
+running the command; respect existing manifest constraints and verify the
+resulting installed graph/APIs. Preserve the resulting lockfile.
+
 ```bash
-npm install @opentelemetry/sdk-node \
-  @opentelemetry/api \
-  @opentelemetry/exporter-trace-otlp-http \
-  @opentelemetry/exporter-metrics-otlp-http \
-  @opentelemetry/exporter-logs-otlp-proto \
-  @opentelemetry/sdk-metrics \
-  @opentelemetry/sdk-logs \
-  @opentelemetry/instrumentation-http \
-  @opentelemetry/resources \
-  @opentelemetry/semantic-conventions
+npm install '@opentelemetry/sdk-node@<resolved-node-sdk-release>' \
+  '@opentelemetry/api@<resolved-api-release>' \
+  '@opentelemetry/exporter-trace-otlp-http@<resolved-trace-exporter-release>' \
+  '@opentelemetry/exporter-metrics-otlp-http@<resolved-metric-exporter-release>' \
+  '@opentelemetry/exporter-logs-otlp-proto@<resolved-log-exporter-release>' \
+  '@opentelemetry/sdk-metrics@<resolved-metric-sdk-release>' \
+  '@opentelemetry/sdk-logs@<resolved-log-sdk-release>' \
+  '@opentelemetry/instrumentation-http@<resolved-http-bridge-release>' \
+  '@opentelemetry/resources@<resolved-resources-release>' \
+  '@opentelemetry/semantic-conventions@<resolved-semconv-release>'
 ```
 
 Add detected framework/client packages explicitly. For Express, also install:
 
 ```bash
-npm install @opentelemetry/instrumentation-express
+npm install '@opentelemetry/instrumentation-express@<resolved-express-bridge-release>'
 ```
 
 Do not rely on `@opentelemetry/auto-instrumentations-node` alone when the
@@ -82,19 +88,20 @@ its `engines`, `peerDependencies`, log-sending API, and duplicate-ownership
 behavior before adding it:
 
 ```bash
-npm install @opentelemetry/instrumentation-console
+npm install '@opentelemetry/instrumentation-console@<resolved-console-bridge-release>'
 ```
 
-Use that unpinned install only after resolver preflight confirms it selects the
-compatible candidate under the project's constraints, then preserve the
-resolved lockfile. If no supported release fits, do not force an
-application/toolchain upgrade; report `unsupported-stack` with the inspected
+Install the exact resolved compatible bridge candidate, then preserve the
+resolved lockfile and inspect the installed API. If no supported release fits,
+do not force an application/toolchain upgrade; report `unsupported-stack` with the inspected
 runtime/API prerequisite and leave the original console sink active.
 
 For Pino install `@opentelemetry/instrumentation-pino`. For Winston install
 both `@opentelemetry/instrumentation-winston` and
 `@opentelemetry/winston-transport` because the instrumentation uses that
-transport for log sending.
+transport for log sending. Install each with its own preflight-resolved exact
+release spec, preserving existing constraints; do not use an unversioned or
+`@latest` command after checking another candidate.
 
 ---
 

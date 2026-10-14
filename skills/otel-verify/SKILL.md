@@ -571,9 +571,18 @@ definitions, actual arguments/results and retrieval content when applicable.
 SDK-created spans are not automatic proof; empty placeholders, omitted
 applicable content and wrong schema/value mappings fail required coverage.
 Before finalizing, reconcile every requested case and source-known request
-control with its report evidence. Record the actual value, applicability,
-result and proof; generic policy does not assess a supplied parameter,
-dependency selection or signal record. Include exact source URLs and provided
+control with its report evidence. Inventory controls at their actual request
+call sites, then compare each attribute's expected safe source value with the
+captured value or absence. Record applicability, result and proof. Naming a
+missing control without its known source value does not complete this
+comparison; a similarly named tool-result field is not a request control.
+Use supplied SDK source and probe facts to decide that captured package's
+capability or failure concretely now. Separate dispatch, captured fields,
+lifecycle/protocol and sink results from unexecuted application/wire proof.
+Do not replace available observed facts with hypothetical future compatibility
+or a generic instruction to assess the decorator later. Generic policy does
+not assess a supplied parameter, dependency selection or signal record.
+Include exact source URLs and provided
 revision/date/hash receipts rather than only naming an input artifact.
 Supplemental source or captured cases may use accurate Markdown, JSON or linked
 equivalent evidence; preserve canonical JSON contracts separately and never
