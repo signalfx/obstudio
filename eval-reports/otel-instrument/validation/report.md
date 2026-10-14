@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261014T111531830190Z |
+| Run ID | 20261014T122006464419Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -53,6 +53,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/fastapi-celery/qual/instrument | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/instrument.json | 0 | 5 | 0 |
 | python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/runtime/instrument.json | 0 | 0 | 1 |
 | python/flask-basic/qual/instrument | python/flask-basic | 3 | evals/python/flask-basic/eval/qual/instrument.json | 0 | 12 | 0 |
+| python/flask-basic/qual/local-log-launcher-policy | python/flask-basic | 1 | evals/python/flask-basic/eval/qual/local-log-launcher-policy.json | 0 | 6 | 0 |
 | python/flask-basic/runtime/instrument | python/flask-basic | 1 | evals/python/flask-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
 | python/galileo-agent-demo/qual/instrument | python/galileo-agent-demo | 2 | evals/python/galileo-agent-demo/eval/qual/instrument.json | 0 | 6 | 0 |
 | python/mcp-ai-tool-demo/qual/instrument | python/mcp-ai-tool-demo | 1 | evals/python/mcp-ai-tool-demo/eval/qual/instrument.json | 0 | 7 | 0 |

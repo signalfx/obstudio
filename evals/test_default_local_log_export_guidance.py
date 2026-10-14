@@ -8,6 +8,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 import warnings
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -307,11 +308,21 @@ def test_language_guides_reject_generic_cloud_header_inheritance() -> None:
         for term in (
             "OTEL_EXPORTER_OTLP_HEADERS",
             "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
-            "move generic OTLP headers to trace/metric signal variables",
             "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
             "select the official exporter matching",
         ):
             assert term in guide, f"{filename} is missing {term!r}"
+        remediation = (
+            "keep local logs headers empty; scope cloud credentials to traces/metrics"
+            if filename == "python.md"
+            else "move generic OTLP headers to trace/metric signal variables"
+        )
+        assert remediation in guide, f"{filename} is missing {remediation!r}"
+        if filename == "python.md":
+            assert (
+                "local OTLP log export skipped; check receiver, protocol and header configuration"
+                in guide
+            )
 
     java = _normalized(LANGUAGES / "java.md")
     assert "Move a direct-cloud `OTEL_EXPORTER_OTLP_ENDPOINT`" in java
@@ -323,10 +334,8 @@ def test_language_guides_inherit_compatible_generic_nondefault_receiver() -> Non
     node = _read(LANGUAGES / "node.md")
     java = _read(LANGUAGES / "java.md")
 
-    assert 'logs_endpoint="${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}"' in python
-    assert 'generic_endpoint="${OTEL_EXPORTER_OTLP_ENDPOINT:-}"' in python
-    assert '*/v1/traces) generic_http_base=' in python
-    assert 'logs_endpoint="${generic_http_base%/}/v1/logs"' in python
+    assert 'generic._replace(path=path.rstrip("/") + "/v1/logs")' in python
+    assert 'urlunsplit(resolved)' in python
     assert "If a generic receiver supplied the local URL during\npreflight" in node
     assert "localLogsEndpointFromGeneric" not in node
     assert 'elif [ -n "$generic_endpoint" ]; then' in java
@@ -377,11 +386,11 @@ def test_shell_wrappers_only_add_local_log_configuration_for_otlp() -> None:
     python = _read(LANGUAGES / "python.md")
     java = _read(LANGUAGES / "java.md")
 
-    assert 'if [ "$OTEL_LOGS_EXPORTER" = otlp ]; then' in python
+    assert 'if [ "$logs_exporter" = otlp ]; then' in python
     assert "every other explicit\noperator-owned exporter bypass" in python
-    assert 'if [ "$OTEL_LOGS_EXPORTER" = none ]; then' in python
+    assert 'if [ "$logs_exporter" = none ]; then' in python
     python_none_branch = python.split(
-        'if [ "$OTEL_LOGS_EXPORTER" = none ]; then',
+        'if [ "$logs_exporter" = none ]; then',
         1,
     )[1].split("fi", 1)[0]
     assert "export OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION=false" in python_none_branch
@@ -450,6 +459,163 @@ printf 'AUTO=%s\\n' "${OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION-<unset>}"
     assert opted_out.stdout == "AUTO=false\n"
 
 
+def _python_cli_launcher(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
+    launcher = tmp_path / "otel-entrypoint.sh"
+    _write_executable(launcher, _fenced_code_after(
+        LANGUAGES / "python.md", "## Auto-Instrumentation (CLI Wrapper)", "bash"
+    ))
+    subprocess.run(["/bin/sh", "-n", launcher], check=True)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    (fake_bin / "python").symlink_to(sys.executable)
+    _write_executable(fake_bin / "opentelemetry-instrument", f"#!{sys.executable}\n" + """
+import json
+import os
+import sys
+
+args = sys.argv[1:]
+options = {}
+index = 0
+while index < len(args) and args[index] in {
+    "--logs_exporter", "--service_name", "--exporter_otlp_endpoint",
+    "--exporter_otlp_protocol", "--resource_attributes",
+}:
+    options[args[index]] = args[index + 1]
+    index += 2
+app = args[index:]
+print(json.dumps({
+    "options": options, "app": app,
+    "env": {key: value for key, value in os.environ.items() if key.startswith("OTEL_")},
+}), flush=True)
+os.execvpe(app[0], app, os.environ)
+""")
+    app = tmp_path / "app.py"
+    app.write_text("""
+import json
+import os
+import sys
+
+print(json.dumps({"app_argv": sys.argv[1:], "original_sink": "application stdout"}), flush=True)
+sys.exit(int(os.environ.get("TEST_APP_EXIT", "0")))
+""", encoding="utf-8")
+    return launcher, app, {"PATH": str(fake_bin)}
+
+
+_PYTHON_CLI_TRACE_METRIC_SETTINGS = {
+    "OTEL_SERVICE_NAME": "python-cli-test",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55318/collector/v1/traces",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "https://trace.invalid/v1/traces",
+    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "https://metric.invalid/v1/metrics",
+    "OTEL_EXPORTER_OTLP_TRACES_HEADERS": "Authorization=synthetic-trace-secret",
+    "OTEL_EXPORTER_OTLP_METRICS_HEADERS": "X-Token=synthetic-metric-secret",
+}
+
+
+def _run_python_cli(tmp_path, config, *, exit_code=0):
+    launcher, app, base_env = _python_cli_launcher(tmp_path)
+    app_args = ["two words", "quoted 'value'", "$NOT_EXPANDED", "*"]
+    result = subprocess.run(
+        [launcher, "python", str(app), *app_args],
+        env={**base_env, **config, "TEST_APP_EXIT": str(exit_code)},
+        text=True, capture_output=True,
+    )
+    assert result.returncode == exit_code, result.stderr
+    instrument, application = [json.loads(line) for line in result.stdout.splitlines()]
+    assert instrument["app"] == ["python", str(app), *app_args]
+    assert application == {"app_argv": app_args, "original_sink": "application stdout"}
+    return result, instrument
+
+
+@pytest.mark.parametrize("conflict", [
+    {"OTEL_EXPORTER_OTLP_HEADERS": "Authorization=synthetic-header-secret"},
+    {"OTEL_EXPORTER_OTLP_LOGS_HEADERS": "X-Token=synthetic-header-secret"},
+    {"OTEL_EXPORTER_OTLP_HEADERS": "generic-secret", "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "logs-secret"},
+    {"OTEL_EXPORTER_OTLP_ENDPOINT": "https://cloud.invalid:4318"},
+    {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://cloud.invalid:4318"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "https://localhost:4318/v1/logs"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://cloud.invalid:4318/v1/logs"},
+    {"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "unsupported"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://user:synthetic-url-secret@localhost:4318/v1/logs"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:4318/v1/logs?token=synthetic-url-secret"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:4318/v1/logs#synthetic-url-secret"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:4318/v1/logs?"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:4318/v1/logs#"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:invalid/v1/logs"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:0/v1/logs"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://[::1/v1/logs"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:4318/not-logs"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:4318/a b/v1/logs"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:4318/v1/logs\n"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "\n"},
+    {"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "grpc", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:4317/v1/logs"},
+])
+def test_python_cli_log_conflicts_preserve_app_trace_metric_and_profile(
+    tmp_path, conflict,
+) -> None:
+    config = {
+        **_PYTHON_CLI_TRACE_METRIC_SETTINGS,
+        "OTEL_LOGS_EXPORTER": "otlp",
+        "OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION": "true",
+        **conflict,
+    }
+    result, instrument = _run_python_cli(tmp_path, config, exit_code=37)
+    assert instrument["options"]["--logs_exporter"] == "none"
+    assert instrument["options"]["--exporter_otlp_endpoint"] == config["OTEL_EXPORTER_OTLP_ENDPOINT"]
+    assert instrument["options"]["--exporter_otlp_protocol"] == config["OTEL_EXPORTER_OTLP_PROTOCOL"]
+    assert instrument["options"]["--service_name"] == "python-cli-test"
+    assert instrument["env"] == {**config, "OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION": "false"}
+    assert result.stderr == "local OTLP log export skipped; check receiver, protocol and header configuration\n"
+    assert "secret" not in result.stderr and "http" not in result.stderr
+
+
+@pytest.mark.parametrize("config,endpoint,protocol", [
+    ({}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
+    ({"OTEL_EXPORTER_OTLP_HEADERS": "  ", "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "\t \r\n"}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55318/collector/v1/traces"}, "http://localhost:55318/collector/v1/logs", "http/protobuf"),
+    (_PYTHON_CLI_TRACE_METRIC_SETTINGS, "http://127.0.0.1:55318/collector/v1/logs", "http/protobuf"),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel-collector:55318/collector"}, "http://otel-collector:55318/collector/v1/logs", "http/protobuf"),
+    ({"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://[::1]:55444/v1/logs"}, "http://[::1]:55444/v1/logs", "http/protobuf"),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "https://trace.invalid", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55444/v1/logs"}, "http://localhost:55444/v1/logs", "http/protobuf"),
+    ({"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55317"}, "http://localhost:55317", "grpc"),
+    ({"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55317", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "http/protobuf", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55444/v1/logs"}, "http://localhost:55444/v1/logs", "http/protobuf"),
+    ({"OTEL_LOGS_EXPORTER": "  OTLP  "}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
+])
+def test_python_cli_normal_local_logs_keep_checked_transport_and_app(
+    tmp_path, config, endpoint, protocol,
+) -> None:
+    result, instrument = _run_python_cli(tmp_path, config, exit_code=19)
+    assert instrument["options"]["--logs_exporter"] == "otlp"
+    assert instrument["env"]["OTEL_LOGS_EXPORTER"] == config.get("OTEL_LOGS_EXPORTER", "otlp")
+    assert instrument["env"]["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] == endpoint
+    assert instrument["env"]["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] == protocol
+    for name, value in config.items():
+        assert instrument["env"][name] == value
+    assert "OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION" not in instrument["env"]
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize("exporter", ["none", "console", "custom", "otlp,console"])
+def test_python_cli_operator_exporters_bypass_added_local_log_validation(
+    tmp_path, exporter,
+) -> None:
+    config = {
+        **_PYTHON_CLI_TRACE_METRIC_SETTINGS,
+        "OTEL_LOGS_EXPORTER": exporter,
+        "OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION": "true",
+        "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=synthetic-operator-secret",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "https://operator.invalid/logs",
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "operator-protocol",
+    }
+    result, instrument = _run_python_cli(tmp_path, config, exit_code=23)
+    assert instrument["options"]["--logs_exporter"] == exporter
+    expected = dict(config)
+    if exporter == "none":
+        expected["OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION"] = "false"
+    assert instrument["env"] == expected
+    assert result.stderr == ""
+
+
 def test_python_cli_preserves_resolved_nondefault_receiver_ports(
     tmp_path: Path,
 ) -> None:
@@ -466,6 +632,7 @@ def test_python_cli_preserves_resolved_nondefault_receiver_ports(
 
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
+    (fake_bin / "python").symlink_to(sys.executable)
     _write_executable(
         fake_bin / "opentelemetry-instrument",
         """#!/bin/sh

@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261014T111531830190Z",
+    "run_id": "20261014T122006464419Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -610,6 +610,22 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/flask-basic/qual/local-log-launcher-policy",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "python-local-log-launcher-policy"
+      ],
+      "definition_path": "evals/python/flask-basic/eval/qual/local-log-launcher-policy.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
       "id": "python/flask-basic/runtime/instrument",
       "case": "python/flask-basic",
       "language": "python",
@@ -709,16 +725,16 @@
     }
   ],
   "summary": {
-    "eval_count": 42,
-    "case_count": 56,
-    "prompt_count": 56,
+    "eval_count": 43,
+    "case_count": 57,
+    "prompt_count": 57,
     "sanity_check_count": 0,
-    "rubric_check_count": 330,
+    "rubric_check_count": 336,
     "runtime_check_count": 9
   },
   "source": {
     "digest_version": 4,
-    "digest": "f351bbd6cd61befc4f663cda26e4890812822456a1a8228a39c8f9e334fab425",
+    "digest": "d59fa9ea9e3b7c139d8ab5f05598bd189f319ae3c6614a306912377814331913",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -736,7 +752,7 @@
       "skills/otel-instrument/references/languages/go.md": "62ba4d47f1685230a1eec2ce6929c9b3c9f3b8228f62af729367a1db45fa4d5d",
       "skills/otel-instrument/references/languages/java.md": "b35913ebfd94b8e56673c0db2c9deccf61c08770e7975306d839eb9eebb5e1d4",
       "skills/otel-instrument/references/languages/node.md": "3e86dadec6b8ebf1e6c344c7528772e08d8ec25706bd6b6962edfa37f407c63c",
-      "skills/otel-instrument/references/languages/python.md": "b0fcee39c21d1b4c71348c777336b8b917ef39a306ff0c6a8abebc2b4ecc9542",
+      "skills/otel-instrument/references/languages/python.md": "d8ffc96d962c1ddbe85acce44f1781de6bfe264adf9b4917479b7a2ac71e2f76",
       "skills/otel-instrument/references/project-runtime-validation.md": "cdbac8880d21bf8b47c7865c8ef21648e7701ca3c6dceb512d666281815ccc38",
       "skills/otel-instrument/references/signal-mapping-guide.md": "83a5e52a01a1c5b98530a3f7b320b410d364e2799a400b25a155ee1db780efed",
       "skills/otel-instrument/scripts/observe_report.py": "687f9801e563eb4ad4410eafce10b8bba7191601d654c3c5cb3360baa3dd08af",
@@ -1151,6 +1167,8 @@
       "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
       "evals/python/flask-basic/eval/qual/instrument.json": "ab95eaf1e80a5f8567f1e0e5a18a6a19d39bd5af1d787eeca20b416bb0f4e6a8",
       "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f",
+      "evals/python/flask-basic/eval/inputs/python-cli-launcher-policy-cases.json": "63dad2814d1e6b0c9020c898c32ab743079ec77e896633bd5b5bb69ce706c27a",
+      "evals/python/flask-basic/eval/qual/local-log-launcher-policy.json": "e5ae5bf6f37b840d917e352d4dcfacec9e0d676988d381a498656923cc3ec0bd",
       "evals/python/flask-basic/eval/runtime/App.Dockerfile": "d0fe3f537e8365ac5c554006235e38b164269aa9a47d3b0d5d7da0cdf77847fa",
       "evals/python/flask-basic/eval/runtime/docker-compose.yml": "1510434bc37a88be357a94dcc021c11e1a4189e075aa9038ee39c9c2e9983103",
       "evals/python/flask-basic/eval/runtime/instrument.json": "c771d69ff92406b905e82cea6fbaee4d5720dd38038bb7423dab589bcdaf78b9",
@@ -1578,6 +1596,15 @@
         "prompt_id": "runtime-preserving",
         "eval_kind": "rubric",
         "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/local-log-launcher-policy.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "python-local-log-launcher-policy",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/python-cli-launcher-policy-cases.json"
+        ]
       },
       {
         "definition_path": "evals/python/flask-basic/eval/runtime/instrument.json",

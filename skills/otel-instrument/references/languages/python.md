@@ -125,53 +125,105 @@ not permission to persist `none` as the normal configuration.
 set -eu
 
 logs_exporter="${OTEL_LOGS_EXPORTER:-}"
-if [ -z "$logs_exporter" ]; then
-  logs_exporter=otlp
-  export OTEL_LOGS_EXPORTER="$logs_exporter"
-fi
-if [ "$OTEL_LOGS_EXPORTER" = otlp ]; then
-  generic_protocol="${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}"
-  logs_protocol="${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL:-$generic_protocol}"
-  case "$logs_protocol" in
-    http/protobuf) fallback_local_logs_endpoint=http://127.0.0.1:4318/v1/logs ;;
-    grpc) fallback_local_logs_endpoint=http://127.0.0.1:4317 ;;
-    *) echo "unsupported local OTLP logs protocol" >&2; exit 1 ;;
-  esac
-  logs_endpoint="${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}"
-  generic_endpoint="${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
-  if [ -z "$logs_endpoint" ] && [ -n "$generic_endpoint" ] && \
-     [ "$logs_protocol" = "$generic_protocol" ]; then
-    # A signal-specific endpoint wins. Otherwise inherit a compatible local
-    # OTLP/HTTP base and preserve its configured port and path. Instrumentation
-    # preflight materializes a signal endpoint for HTTPS/cloud or otherwise
-    # ambiguous generic destinations instead of treating them as local.
-    case "$logs_protocol:$generic_endpoint" in
-      http/protobuf:http://*)
-        generic_http_base="${generic_endpoint%/}"
-        case "$generic_http_base" in
-          */v1/traces) generic_http_base="${generic_http_base%/v1/traces}" ;;
-          */v1/metrics) generic_http_base="${generic_http_base%/v1/metrics}" ;;
-          */v1/logs) generic_http_base="${generic_http_base%/v1/logs}" ;;
-        esac
-        logs_endpoint="${generic_http_base%/}/v1/logs" ;;
-      grpc:http://*) logs_endpoint="$generic_endpoint" ;;
-    esac
+logs_exporter="${logs_exporter#"${logs_exporter%%[![:space:]]*}"}"
+logs_exporter="${logs_exporter%"${logs_exporter##*[![:space:]]}"}"
+case "$logs_exporter" in
+  '') logs_exporter=otlp; export OTEL_LOGS_EXPORTER=otlp ;;
+  [oO][tT][lL][pP]) logs_exporter=otlp ;;
+  [nN][oO][nN][eE]) logs_exporter=none ;;
+  *) logs_exporter="${OTEL_LOGS_EXPORTER}" ;;
+esac
+effective_logs_exporter="$logs_exporter"
+if [ "$logs_exporter" = otlp ]; then
+  # Use the selected project Python. Validate before the CLI constructs any
+  # local log exporter; never print endpoint/header values on failure.
+  if logs_configuration="$(python - <<'PY_LOGS'
+import os
+import sys
+from urllib.parse import urlsplit, urlunsplit
+
+# Retain only receiver names confirmed in preflight; otel-collector matches
+# the Compose example below. Replace it for a different service topology.
+local_hosts = {"127.0.0.1", "localhost", "::1", "otel-collector"}
+
+
+def local_endpoint(raw, protocol, *, signal=False):
+    if any(ord(char) < 32 or ord(char) == 127 for char in raw):
+        raise ValueError("control character")
+    value = raw.strip()
+    if any(char.isspace() for char in value):
+        raise ValueError("whitespace")
+    parsed = urlsplit(value)
+    port = parsed.port  # Validate numeric port syntax and range.
+    if (parsed.scheme != "http" or parsed.hostname not in local_hosts
+            or parsed.username is not None or parsed.password is not None
+            or "?" in value or "#" in value
+            or (port is not None and not 1 <= port <= 65535)):
+        raise ValueError("non-local or ambiguous endpoint")
+    if protocol == "grpc" and parsed.path not in ("", "/"):
+        raise ValueError("gRPC endpoint path")
+    if signal and protocol == "http/protobuf" and not parsed.path.endswith("/v1/logs"):
+        raise ValueError("HTTP logs signal path")
+    return parsed
+
+
+try:
+    if any(os.environ.get(name, "").strip() for name in (
+            "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS")):
+        raise ValueError("local log headers")
+    generic_protocol = os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf").strip().lower()
+    logs_protocol = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", generic_protocol).strip().lower()
+    if logs_protocol not in ("http/protobuf", "grpc"):
+        raise ValueError("unsupported logs protocol")
+    logs_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "")
+    generic_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+    if any(ord(char) < 32 or ord(char) == 127 for char in logs_endpoint):
+        raise ValueError("control character")
+    if logs_endpoint.strip():
+        resolved = local_endpoint(logs_endpoint, logs_protocol, signal=True)
+    else:
+        generic = None
+        if any(ord(char) < 32 or ord(char) == 127 for char in generic_endpoint):
+            raise ValueError("control character")
+        if generic_endpoint.strip():
+            generic = local_endpoint(generic_endpoint, generic_protocol)
+        if generic is not None and logs_protocol == generic_protocol:
+            if logs_protocol == "http/protobuf":
+                path = generic.path.rstrip("/")
+                for suffix in ("/v1/traces", "/v1/metrics", "/v1/logs"):
+                    if path.endswith(suffix):
+                        path = path[:-len(suffix)]
+                        break
+                generic = generic._replace(path=path.rstrip("/") + "/v1/logs")
+            resolved = generic
+        else:
+            fallback = ("http://127.0.0.1:4318/v1/logs"
+                        if logs_protocol == "http/protobuf" else "http://127.0.0.1:4317")
+            resolved = local_endpoint(fallback, logs_protocol, signal=True)
+    print(logs_protocol + " " + urlunsplit(resolved))
+except Exception:
+    sys.exit(1)
+PY_LOGS
+)"; then
+    logs_protocol="${logs_configuration%% *}"
+    logs_endpoint="${logs_configuration#* }"
+    export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL="$logs_protocol"
+    export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="$logs_endpoint"
+  else
+    # This invocation skips only the added CLI log path. Preserve the intended
+    # profile and all trace/metric/header settings; do not persist an opt-out.
+    printf '%s\n' 'local OTLP log export skipped; check receiver, protocol and header configuration' >&2
+    effective_logs_exporter=none
+    export OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION=false
   fi
-  export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL="$logs_protocol"
-  # Instrumentation preflight writes the resolved receiver into this standard
-  # OTel variable. The literal is only the no-discovery host fallback.
-  export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="${logs_endpoint:-$fallback_local_logs_endpoint}"
-  if [ -n "${OTEL_EXPORTER_OTLP_HEADERS:-}" ]; then
-    echo "move generic OTLP headers to trace/metric signal variables and remove the generic value" >&2
-    exit 1
-  fi
 fi
-if [ "$OTEL_LOGS_EXPORTER" = none ]; then
+if [ "$logs_exporter" = none ]; then
   # Ensure the explicit opt-out cannot inherit the zero-code default bridge.
   export OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION=false
 fi
 
 exec opentelemetry-instrument \
+  --logs_exporter "$effective_logs_exporter" \
   --service_name "${OTEL_SERVICE_NAME:-my-service}" \
   --exporter_otlp_endpoint "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4318}" \
   --exporter_otlp_protocol "${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}" \
