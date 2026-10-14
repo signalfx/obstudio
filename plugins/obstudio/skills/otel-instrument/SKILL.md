@@ -435,13 +435,18 @@ schema/redaction policy and test. State exact lifecycle/parent/duplicate and
 auxiliary timeout/cancel proof. Copying an old Required Signals subset or
 writing only 'SDK logger/schema helpers' does not satisfy a reviewable plan.
 
-For a GenAI plan or report with supplied cases or captures, first inventory
-their distinct source boundaries, case identities and probe-only operations.
-Use that inventory to write a concrete decision and acceptance assertion for
-each case before finalizing. Reconcile the inventory against the completed
-report; do not replace an individual decision with a grouped category, general
-SDK preference or future checklist. A correct parent row does not close a
-missing child requirement:
+For a GenAI plan or report with supplied cases or captures, build a case ledger
+before drafting the assessment. Give each distinct source boundary, case and
+probe-only operation an addressable entry with these joined facts:
+
+| Case and actual operation | Available source/probe values or exact absence | Chosen public producer/API and applicable `span_type` | Concrete acceptance assertions | Source/capture/proposed/executed proof and remaining gap |
+|---|---|---|---|---|
+
+Equivalent prose or grouped sections are fine when each child operation has
+its own decision and assertions. Reconcile every ledger entry against the
+completed report; a category, parent row or promise to check later does not
+close an unassessed child. Keep unavailable facts explicit rather than
+inventing arguments, metadata, native node IDs/counts or execution:
 
 - List source-backed owning agent, conversation and tool metadata on each
   tool's own span, with its actual safe source value or absence reason. Assert
@@ -449,23 +454,33 @@ missing child requirement:
   a parent-only negative assertion; parent-only correlation fails acceptance.
   Give an explicit absence reason when the operation has no such source
   context instead of reusing another case's fields.
-- Assess each observed decorator surface, including bound methods, nested
-  distinct operations and finite sync/async iteration when present. Name the
-  selected SDK `@log` function and `span_type` for each operation, or the exact
+- Include decorator surfaces represented only in probe observations: bound
+  methods, nested distinct operations, sync/async functions and finite
+  sync/async iteration, send/asend and cancellation when supplied. Name the
+  selected SDK `@log` function and applicable `span_type`, or the exact
   unsupported contract and application-owned function-decorator SDK creator
-  fallback. Preserve real
-  nesting without adding duplicate operations; dispatch support alone does
-  not prove required fields, safe capture, lifecycle or the selected sink.
-- Bind normal local log acceptance to the consumed launch profile's
-  `OTEL_LOGS_EXPORTER=otlp`, resolved same-namespace logs endpoint and protocol.
-  Require separate local receipts for a span, metric datapoints and a bounded,
-  redacted application LogRecord with body, severity, the same service resource
-  and trace/span correlation. Preserve stdout/file sinks and owned flush and
-  shutdown; keep logs out of cloud forwarding. Distinguish supplied synthetic
-  receipts from actual application proof and preserve an explicit operator
-  opt-out. A plan names these concrete settings and assertions while marking
-  execution unproven; SDK `@log` spans or exporter configuration alone do not
-  supply the native LogRecord receipt.
+  fallback for each. Assert actual known arguments/results, receiver capture,
+  distinct-operation counts/parentage, yielded values or re-raised errors at
+  their own boundary. Separate a planned assertion from captured proof when
+  the probe lacks receiver/arguments, native nodes or terminal OTel fields.
+  Preserve nesting and business/protocol behavior without duplicate wrappers;
+  dispatch support alone does not prove fields, privacy, lifecycle or sink.
+- Give normal local logs their own acceptance entry, joined to the consumed
+  profile's `OTEL_LOGS_EXPORTER=otlp`, resolved same-namespace logs endpoint and
+  matching protocol. Name the planned or captured bounded/redacted body,
+  severity, shared service resource and trace/span IDs matching the owning
+  span, alongside separate span and metric-datapoint receipts. Assert one
+  native LogRecord per application log call, retention of the actual original
+  stdout/file sinks, owned log-provider/bridge drain and close, and local-only
+  routing with no cloud log forwarding. SDK `@log` spans, stdout correlation
+  and exporter settings alone do not supply this application LogRecord proof.
+- Assess explicit log opt-out and misconfiguration separately from normal
+  acceptance. Honor an operator opt-out and assert zero OTLP LogRecords while
+  retaining original local sinks. An unsupported protocol, conflicting route
+  or failed log path remains an explicit log gap; preserve unrelated trace,
+  metric and original logging paths. A plan states concrete settings/assertions
+  and marks execution unproven; a synthetic receipt never closes application
+  runtime proof, and an opt-out test never closes the normal default path.
 
 When supplied dependency compatibility facts are sufficient to decide,
 select the newest compatible candidate in the plan and explain each rejected
@@ -473,6 +488,13 @@ newer candidate using the actual runtime, peer, API and lock constraints.
 Do not defer that supplied-case decision to implementation. Keep fictional
 policy selections and dated captured versions distinct from a new live
 package lookup, actual installation and future shipped defaults.
+When actual SDK/exporter/bridge metadata or a project solver result is absent,
+record those components as unresolved with the missing evidence; do not invent
+an actual compatible graph from historical probe versions. Before authorized
+dependency application, resolve the coherent graph and bind installation to
+its exact checked specs or lockfile, preserving constraints and checking the
+installed graph/APIs. Never apply unresolved placeholders or re-resolve a
+floating latest tag after checking a different candidate.
 
 Reconcile every GenAI audit gap to a required instrumentation result:
 
@@ -1327,7 +1349,8 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   immutability patterns, or existing code constructs new copies instead of
   mutating.
   Use the app's idiomatic copy/replacement API: Python `dataclasses.replace`,
-  `attrs.evolve`, pydantic `model_copy(update=...)` or v1 `copy(update=...)`;
+  `attrs.evolve`, pydantic `model_copy(update=...)` or `copy(update=...)` as
+  supported by the installed carrier API;
   Java records, builders, or copy constructors; TypeScript object spread,
   explicit `Readonly<T>` replacements, or `structuredClone` only for plain-data
   carriers and never for live OTel `Context` or `Span` handles; Go value copies

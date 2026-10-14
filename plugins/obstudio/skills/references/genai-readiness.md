@@ -432,8 +432,9 @@ mutate the carrier in place. Treat a carrier as immutable/frozen when source
 evidence shows frozen or readonly declarations, record/value types, no mutation
 API, framework request immutability patterns, or existing code constructs new
 copies instead of mutating. Use an idiomatic copy/replacement API such as Python
-`dataclasses.replace`, `attrs.evolve`, pydantic `model_copy(update=...)` or v1
-`copy(update=...)`; Java records, builders, or copy constructors; TypeScript
+`dataclasses.replace`, `attrs.evolve`, pydantic `model_copy(update=...)` or
+`copy(update=...)` as supported by the installed carrier API; Java records,
+builders, or copy constructors; TypeScript
 object spread, explicit `Readonly<T>` replacements, or `structuredClone` only
 for plain-data carriers and never for live OTel `Context` or `Span` handles; Go
 value copies with explicit field replacement; or the framework's request

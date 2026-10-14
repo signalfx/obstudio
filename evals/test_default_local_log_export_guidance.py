@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
 import shlex
 import subprocess
+import warnings
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -100,6 +105,87 @@ def test_python_log_boundary_conflict_never_aborts_application_startup() -> None
     assert "tracer_provider = TracerProvider" in setup
     assert "meter_provider = MeterProvider" in setup
     assert "must not abort application startup" in _normalized(guide)
+
+
+def _python_local_log_helpers(exporter):
+    setup = _fenced_code_after(
+        LANGUAGES / "python.md", "**File**: `otel_setup.py`", "python"
+    )
+    helpers = {
+        "_local_http_endpoint", "_skip_local_logs",
+        "_http_logs_endpoint_from_base", "_use_default_local_log_export",
+        "_local_log_exporter",
+    }
+    constants = {"FALLBACK_LOCAL_OTLP_LOGS_ENDPOINT", "LOCAL_OTLP_HOSTS"}
+    nodes = [
+        node for node in ast.parse(setup).body
+        if (isinstance(node, ast.FunctionDef) and node.name in helpers)
+        or (isinstance(node, ast.Assign) and all(
+            isinstance(target, ast.Name) and target.id in constants
+            for target in node.targets
+        ))
+    ]
+    namespace = {
+        "os": os, "warnings": warnings, "urlsplit": urlsplit,
+        "urlunsplit": urlunsplit, "OTLPLogExporter": exporter,
+    }
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(LANGUAGES / "python.md"), "exec"), namespace)
+    return namespace
+
+
+@pytest.mark.parametrize("header_names", [
+    ("OTEL_EXPORTER_OTLP_HEADERS",),
+    ("OTEL_EXPORTER_OTLP_LOGS_HEADERS",),
+    ("OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS"),
+])
+def test_python_local_logs_reject_headers_before_exporter_construction(
+    monkeypatch, header_names,
+) -> None:
+    calls = []
+    helpers = _python_local_log_helpers(lambda **kwargs: calls.append(kwargs))
+    for name in tuple(os.environ):
+        if name.startswith("OTEL_"):
+            monkeypatch.delenv(name)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "http://127.0.0.1:55444/v1/logs")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "https://trace.invalid/v1/traces")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "https://metric.invalid/v1/metrics")
+    for name in header_names:
+        monkeypatch.setenv(name, "Authorization=synthetic-test-value")
+    before = dict(os.environ)
+
+    with pytest.warns(RuntimeWarning, match="local OTLP logs disabled.*headers"):
+        assert helpers["_local_log_exporter"]() is None
+
+    assert calls == []
+    assert dict(os.environ) == before
+
+
+@pytest.mark.parametrize("headers", [None, "  "])
+def test_python_local_logs_preserve_normal_nondefault_receiver(
+    monkeypatch, headers,
+) -> None:
+    calls = []
+    exporter = object()
+
+    def create_exporter(**kwargs):
+        calls.append(kwargs)
+        return exporter
+
+    helpers = _python_local_log_helpers(create_exporter)
+    for name in tuple(os.environ):
+        if name.startswith("OTEL_"):
+            monkeypatch.delenv(name)
+    monkeypatch.setenv("OTEL_LOGS_EXPORTER", "otlp")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:55444/collector/v1/traces")
+    if headers is not None:
+        for name in ("OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS"):
+            monkeypatch.setenv(name, headers)
+    before = dict(os.environ)
+
+    assert helpers["_use_default_local_log_export"]() is True
+    assert helpers["_local_log_exporter"]() is exporter
+    assert calls == [{"endpoint": "http://localhost:55444/collector/v1/logs"}]
+    assert dict(os.environ) == before
 
 
 def test_audit_selects_missing_supported_local_logs_by_default() -> None:
@@ -450,18 +536,136 @@ def test_python_logging_trace_injection_requires_installed_capability() -> None:
     assert "it is not a supported `LoggingInstrumentor` option" not in python
 
 
+def _fixed_library_release_lines(source: str) -> list[tuple[int, str]]:
+    library_context = re.compile(
+        r"\b(?:SDK|library|package|dependency|instrumentation|OpenTelemetry|"
+        r"OTel|Galileo(?:-core)?|Splunk[-_ ]AO|pydantic|LoggingHandler|"
+        r"LoggingInstrumentor|Python|Node(?:\.js)?|Java(?: agent)?|Go toolchain)\b",
+        re.IGNORECASE,
+    )
+    release = re.compile(
+        r"(?<![\w.])(?:v?\d+(?:\.\d+)+(?:\.[xX*])?|"
+        r"v?\d+\.[xX*]|v\d+|\d+\+)"
+        r"(?:[-.]?(?:a|b|rc|alpha|beta|dev|post)\.?\d+)?"
+        r"(?:[+-][A-Za-z0-9.-]+)?(?![\w.])"
+    )
+    full_release = re.compile(r"(?<![\w.])v?\d+\.\d+\.\d+(?![\w.])")
+    dependency_recipe = re.compile(
+        r"\b(?:pip(?:3)?|uv pip|npm|pnpm|yarn) (?:install|add)\b|"
+        r"\bgo get\b|[\w./-]+(?:==|>=|<=|~=|@v?)[0-9]"
+    )
+    offenders = []
+    in_frontmatter = source.startswith("---\n")
+    previous = ""
+    for number, line in enumerate(source.splitlines(), 1):
+        if in_frontmatter:
+            if number > 1 and line.strip() == "---":
+                in_frontmatter = False
+            continue  # Only leading skill metadata is exempt.
+        candidate = re.sub(
+            r"\b(?:\d{1,3}\.){3}\d{1,3}\b",
+            lambda match: "<ip>" if all(int(part) <= 255 for part in match[0].split(".")) else match[0],
+            line,
+        )
+        candidate = re.sub(
+            r"service\.version[\"'`]*\s*[:=]\s*[\"'`]?[^\s,}\"'`]+",
+            "service.version=<app>",
+            candidate,
+        )
+        candidate = re.sub(
+            r"\b(?:gpt|qwen|llama|claude|gemini)[\w:.+-]*|"
+            r"\baws-sdk-go-v\d+\b|"
+            r"\bschema(?:[-_ ](?:version|v))?[=: ]*v?\d+(?:/v?\d+)?|"
+            r"\bschemaVersion[\"'`:= ]+\d+|"
+            r"/v\d+/(?:[\w<>{}-]+/?)+|/semconv/v\d+\.[xX*]\b",
+            "<id>",
+            candidate,
+            flags=re.IGNORECASE,
+        )
+        context = " ".join((previous, candidate))
+        contextual_release = bool(
+            (library_context.search(context) or dependency_recipe.search(candidate))
+            and (
+                release.search(candidate)
+                or re.search(r"\b(?:version|release|major)\s*[=: ]*\d+\b", candidate, re.IGNORECASE)
+                or re.search(library_context.pattern + r"\s+\d+\b", candidate, re.IGNORECASE)
+            )
+        )
+        if full_release.search(candidate) or contextual_release:
+            offenders.append((number, line))
+        previous = candidate
+    return offenders
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "SDK LoggingHandler only as a pre-1.40 compatibility path",
+        "SDK LoggingHandler only for a pinned pre-1.40 compatibility path",
+        "SDK v1.40 supports this API",
+        "SDK v0.64b0 supports this API",
+        "SDK v2.x supports this API",
+        "opentelemetry-sdk==1.40",
+        "opentelemetry-sdk>=1.40.0rc1",
+        "npm install new-library@1.40.0-rc.1",
+        "go get example.invalid/library@v1.40.0-beta.2",
+        "Java agent 2.x defaults to http/protobuf",
+        "pydantic model_copy(update=...) or v1\ncopy(update=...)",
+        "pydantic\nv1 copy(update=...)",
+        "SDK release 2 uses this API",
+        "Pydantic 1 supports this API",
+        "Node.js 22+ is required by this dependency recipe",
+        "Python >=3.11 is required by this package",
+        "---\nversion: 0.1.2\n---\nSDK\nversion: 1.40",
+        "Unowned hardcoded SDK example:\n1.40.0",
+    ],
+)
+def test_fixed_library_release_detector_rejects_short_and_prerelease_recipes(
+    source: str,
+) -> None:
+    assert _fixed_library_release_lines(source), source
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "---\nname: otel-audit\nmetadata:\n  version: 0.1.2\n---\nCapability guidance",
+        "OTel SDK exports to http://127.0.0.1:4318/v1/logs",
+        'OTel resource {"service.version": "1.2.3"}',
+        "OTel resource service.version=1.2.3",
+        "P99 static threshold 1.0 seconds",
+        "3.0 stddev and clear_num_stddev=2.5",
+        "gen_ai.request.temperature=0.2",
+        "schema-v1/v2 remains compatible",
+        "A selection is schema\nv2, or schema v3 with an AO resource target",
+        "OTel schema version 2 uses these fields",
+        'OTel {"schemaVersion": 1}',
+        "GET /v2/detector",
+        "@opentelemetry/instrumentation-redis-4",
+        "go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws",
+        "OpenTelemetryTransportV3",
+        "Never import go.opentelemetry.io/otel/semconv/v1.x",
+        "OTel emits chat gpt-5.5",
+        "Use 1000 ms export interval and 500 ms timeout",
+        "HTTP 5xx and OTEL-001 finding IDs",
+        'version = "~> 9.0" in a separate Terraform provider template',
+    ],
+)
+def test_fixed_library_release_detector_preserves_non_library_numbers(
+    source: str,
+) -> None:
+    assert not _fixed_library_release_lines(source), source
+
+
 def test_shipped_guidance_has_no_fixed_library_release_recipes() -> None:
-    release_number = re.compile(r"(?<![\w.])v?\d+\.\d+\.\d+(?:[a-z]\d+)?(?![\w.])")
     offenders = []
     for path in SKILLS.rglob("*.md"):
         if "tests" in path.relative_to(SKILLS).parts:
             continue
-        for number, line in enumerate(_read(path).splitlines(), 1):
-            if re.match(r"\s*version:\s*\S+", line):
-                continue  # Skill metadata is not a library dependency recipe.
-            app_resource = re.sub(r"service\.version[\"`:= ]+\S+", "service.version", line)
-            if release_number.search(app_resource):
-                offenders.append(f"{path.relative_to(SKILLS)}:{number}: {line}")
+        offenders.extend(
+            f"{path.relative_to(SKILLS)}:{number}: {line}"
+            for number, line in _fixed_library_release_lines(_read(path))
+        )
     assert not offenders, "Fixed library release recipes: " + "\n".join(offenders)
 
 

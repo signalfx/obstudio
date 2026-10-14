@@ -211,6 +211,12 @@ Inspect the repo before running anything:
 - If GenAI readiness is in scope, include workflow, agent, LLM call, tool
   execution, retrieval/memory, eval when present, token usage, model/provider
   attributes, duplicate-span prevention, and correct parent/child topology.
+  For supplied source/probe cases, start a ledger before drafting the report:
+  each case's actual operation, chosen creator/type and sink, safe source
+  values/bounds, known capture/lifecycle/field support or failure, and exact
+  source/probe receipt. Decide support from the available evidence now; keep
+  unexecuted app/export acceptance separate. Group cases only when their
+  distinct constraints and decisions remain explicit.
 - Map every affected source module to a compile, typecheck, syntax, or import
   gate. Use changed files and handoff evidence to classify failures as
   `instrumentation-introduced`, `pre-existing`, `environment`, or `unknown`.
@@ -577,11 +583,19 @@ captured value or absence. Record applicability, result and proof. Naming a
 missing control without its known source value does not complete this
 comparison; a similarly named tool-result field is not a request control.
 Use supplied SDK source and probe facts to decide that captured package's
-capability or failure concretely now. Separate dispatch, captured fields,
-lifecycle/protocol and sink results from unexecuted application/wire proof.
-Do not replace available observed facts with hypothetical future compatibility
-or a generic instruction to assess the decorator later. Generic policy does
-not assess a supplied parameter, dependency selection or signal record.
+capability or failure concretely now for each function. Reconcile its ledger
+decision with the report: SDK decorator/type, exact justified application-owned
+decorator fallback, or preserved producer. Separate dispatch, captured fields,
+lifecycle/protocol and normal versus custom sink support from unexecuted
+application/wire proof. A conditional "when supported" or hypothetical future
+compatibility does not decide a source/probe case with available facts.
+For supplied native signal examples, compare each signal's endpoint/protocol/path
+and available record values with its contract. Assess log body, severity,
+resource, logger scope and trace/span ID presence separately from an actual
+match to an owning span. Record supported fields and missing evidence even
+when runtime delivery is unproven; a synthetic record is not receiver or cloud
+receipt. Generic policy does not assess a supplied parameter, dependency
+selection or signal record.
 Include exact source URLs and provided
 revision/date/hash receipts rather than only naming an input artifact.
 Supplemental source or captured cases may use accurate Markdown, JSON or linked

@@ -270,7 +270,8 @@ Record the metric name and source file with line number.
 
 - OTel log bridge or SDK log packages
   (`opentelemetry-instrumentation-logging` for current Python releases, with
-  the SDK `LoggingHandler` only as a pre-1.40 compatibility path;
+  the SDK `LoggingHandler` only when the installed bridge/API capability
+  requires that compatibility path;
   `@opentelemetry/instrumentation-console`,
   `@opentelemetry/instrumentation-winston`, or
   `@opentelemetry/instrumentation-pino` for Node.js; the Java agent's detected
@@ -646,8 +647,9 @@ source evidence shows frozen or readonly declarations, record/value types, no
 mutation API, framework request immutability patterns, or existing code
 constructs new copies instead of mutating.
 Accept app-idiomatic copy/replacement proof such as Python
-`dataclasses.replace`, `attrs.evolve`, pydantic `model_copy(update=...)` or v1
-`copy(update=...)`; Java records, builders, or copy constructors; TypeScript
+`dataclasses.replace`, `attrs.evolve`, pydantic `model_copy(update=...)` or
+`copy(update=...)` as supported by the installed carrier API; Java records,
+builders, or copy constructors; TypeScript
 object spread, explicit `Readonly<T>` replacements, or `structuredClone` only
 for plain-data carriers and never for live OTel `Context` or `Span` handles; Go
 value copies with explicit field replacement; or the framework's request
@@ -1645,7 +1647,7 @@ instrumentation") without that package name is incomplete.
 | `grpcio` | `opentelemetry-instrumentation-grpc` | spans |
 | `kafka-python` / `confluent-kafka` | `opentelemetry-instrumentation-kafka-python` / `opentelemetry-instrumentation-confluent-kafka` | spans |
 | `boto3` / `botocore` | `opentelemetry-instrumentation-botocore` | spans |
-| `logging` (stdlib) | `opentelemetry-instrumentation-logging`; SDK `LoggingHandler` only for a pinned pre-1.40 compatibility path | logs |
+| `logging` (stdlib) | `opentelemetry-instrumentation-logging`; SDK `LoggingHandler` only when the installed bridge/API capability requires that compatibility path | logs |
 
 ### Node.js
 

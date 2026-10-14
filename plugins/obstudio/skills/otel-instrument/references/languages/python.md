@@ -342,11 +342,13 @@ def _local_log_exporter():
             "select the official exporter matching the configured logs protocol"
         )
 
-    # Reject generic headers even when logs headers are present: SDKs may merge
-    # both sources and leak a cloud credential into the local log request.
-    if os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip():
+    # Exporters may read both header variables when constructor headers are
+    # omitted. Reject either source before constructing this local exporter.
+    if any(os.environ.get(name, "").strip() for name in (
+        "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS"
+    )):
         return _skip_local_logs(
-            "move generic OTLP headers to trace/metric signal variables"
+            "keep local logs headers empty; scope cloud credentials to traces/metrics"
         )
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
     if endpoint and not _local_http_endpoint(endpoint):
