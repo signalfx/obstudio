@@ -506,6 +506,18 @@ native operation and its wire record. Attribute presence or sentinel absence
 alone does not prove useful, equal input/output or distinguish null from no
 produced result.
 
+Use one capability table per function in existing report evidence, with rows
+for argument/result conversion, privacy/bounds, model usage/finish mapping,
+active business-call context, iteration/close/cancel, kind/initial attributes,
+and sink/lifecycle. Mark each row Supported, Limited, Not proven or N/A and
+cite its source/probe fact; generic future tests do not replace observed facts.
+Decode serialized probe payloads and normalize captured/emitted span IDs
+(hex, UUID or protobuf base64) before comparing the current business-call
+span to that operation and its parent. If the captured current span is the
+parent instead of the leaf, record that limitation explicitly; completed
+child parentage cannot establish active leaf context. For supplied model
+responses, name known usage/finish fields that the native mapping omits.
+
 Manual public scopes are for a source-proven non-function or external lifetime,
 not a substitute for decorating a fresh function boundary. `@contextmanager`
 on a scope factory, stdlib logging and an export-only processor are not SDK
@@ -517,6 +529,11 @@ Audit records this same decision as a proposed pattern and concrete probe
 acceptance in existing `required_fix`/evidence/acceptance fields; it inspects
 available source/receipts but does not install packages, run probes or contact
 cloud. Missing capability evidence remains proposed/Not proven. Instrumentation
+planning may mark a function Not configured/Partial when a checked documented
+public creator candidate has an exact unresolved contract. Name the proposed
+decorator attachment, blocked capability and required proof; this completes
+the source assessment without authorizing edits or claiming creator support.
+For implementation, instrumentation
 must resolve the applicable decision before changing that function. Verification
 fails a missing decision or newly added manual function scope without a proven
 exception, even when emitted attributes are correct; unavailable source or

@@ -58,6 +58,12 @@ without an installed SDK does not justify silently changing the fresh default.
 Apply its mandatory per-function producer decision gate to every fresh or
 newly uncovered Python GenAI source function, including model/tool/retrieval
 functions and async-generator agents. Reconcile the named function/type and
+each applicable control-flow branch before assigning kind or usage rules:
+networked inference requires CLIENT, actual in-process inference uses its
+appropriate kind, and a deterministic demo/rule-engine branch is N/A for real
+model inference usage and remote CLIENT acceptance. Keep these conditions in
+the per-function evidence; a function name does not establish inference.
+Reconcile the
 native public source/probe assessment with the actual SDK `@log` or justified
 application-owned function decorator. A missing decision or newly added manual
 function scope without a proven exception is Fail/Partial even with correct

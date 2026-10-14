@@ -116,6 +116,11 @@ def test_native_probe_preserves_real_negative_and_positive_capture_facts():
         context = next(item for item in probe["contexts_during_business_call"]
                        if item["operation"] == operation)
         assert context["span_id"] == current["span_id"]
+        native = model if operation == "safe-model" else next(
+            span for span in spans if span["name"] == "retrieval safe-retriever")
+        assert context["span_id"] == base64.b64decode(native["parentSpanId"]).hex()
+        assert context["span_id"] != base64.b64decode(native["spanId"]).hex()
+        assert context["trace_id"] == base64.b64decode(native["traceId"]).hex()
 
 
 def test_field_good_candidates_differ_in_function_producer_evidence():

@@ -7,13 +7,13 @@
     "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "otel-instrument",
-    "run_id": "20261014T121918193746Z",
-    "agent_model": "gpt-5.5",
-    "judge_model": "gpt-5.5",
+    "run_id": "20261014T172500267724Z",
+    "agent_model": "gpt-6-sol",
+    "judge_model": "-",
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "config_path": "evals/codex-evals.toml"
+    "config_path": "evals/codex-evals.model-override.toml"
   },
   "summary": {
     "eval_count": 1,
@@ -22,10 +22,10 @@
     "with_skill": {
       "prompt_count": 2,
       "command_count": 2,
-      "duration_seconds": 27.22,
-      "agent_duration_seconds": 27.152,
-      "tokens": 191516,
-      "agent_tokens": 191516,
+      "duration_seconds": 16.866,
+      "agent_duration_seconds": 16.82,
+      "tokens": 184245,
+      "agent_tokens": 184245,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 2,
         "selected_record_count": 2,
-        "input_tokens": 190876,
-        "cached_input_tokens": 109056,
+        "input_tokens": 184051,
+        "cached_input_tokens": 106752,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 640,
-        "reasoning_output_tokens": 468,
+        "output_tokens": 194,
+        "reasoning_output_tokens": 89,
         "provider_total_tokens": null,
-        "derived_total_tokens": 191516,
-        "effective_total_tokens": 191516,
+        "derived_total_tokens": 184245,
+        "effective_total_tokens": 184245,
         "coverage": {
           "record_count": 2,
           "modeled_count": 2,
@@ -80,10 +80,10 @@
       "with_skill": {
         "prompt_count": 2,
         "command_count": 2,
-        "duration_seconds": 27.22,
-        "agent_duration_seconds": 27.152,
-        "tokens": 191516,
-        "agent_tokens": 191516,
+        "duration_seconds": 16.866,
+        "agent_duration_seconds": 16.82,
+        "tokens": 184245,
+        "agent_tokens": 184245,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -91,14 +91,14 @@
           "observed": true,
           "usage_record_count": 2,
           "selected_record_count": 2,
-          "input_tokens": 190876,
-          "cached_input_tokens": 109056,
+          "input_tokens": 184051,
+          "cached_input_tokens": 106752,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 640,
-          "reasoning_output_tokens": 468,
+          "output_tokens": 194,
+          "reasoning_output_tokens": 89,
           "provider_total_tokens": null,
-          "derived_total_tokens": 191516,
-          "effective_total_tokens": 191516,
+          "derived_total_tokens": 184245,
+          "effective_total_tokens": 184245,
           "coverage": {
             "record_count": 2,
             "modeled_count": 2,
@@ -125,25 +125,25 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20261014T121918193746Z/results/sanity/skill-smoke/sanity-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20261014T121918193746Z/results/sanity/skill-smoke/sanity-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20261014T121918193746Z/results/sanity/skill-smoke/sanity-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20261014T172500267724Z/results/sanity/skill-smoke/sanity-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20261014T172500267724Z/results/sanity/skill-smoke/sanity-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20261014T172500267724Z/results/sanity/skill-smoke/sanity-instrument/with_baseline.json"
       }
     }
   ],
   "failures": [],
   "source": {
     "digest_version": 4,
-    "digest": "f7b36440c38b3d306844a5084c881c21f3dc0231f6be1ce91b487ec04e016acf",
+    "digest": "ec7ed716974d9863398db2a74e2c00f3df89123c2992168ceb5977f94a166d14",
     "eval_kinds": [
       "sanity"
     ],
     "evaluator_semantics_version": 1,
     "files": {
-      "evals/codex-evals.toml": "c0b019453c76a5b6d8692346f984ea91af04ca91331aa333b56d7a717b7b07c7",
+      "evals/codex-evals.model-override.toml": "c7970ebc775726a79f5263ebfcbc51a22c3ef4122083d2554d47db96064e30af",
       "evals/sanity/skill-smoke/eval/sanity/instrument.json": "79b5c1da09ad32b8f941a0445a79a528ce2de76ff4c81738263b4fa04cd2d1c9",
       "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9",
-      "skills/otel-instrument/SKILL.md": "a2ccb1e2ab4a4921f328036e5b02aa81e2594d0cbff6a0a146f6fc7f337dd130",
+      "skills/otel-instrument/SKILL.md": "c623d19cc55dce262dcd2091e06248c6d9fd9fcb819973b58ef7e540ff3de6f7",
       "skills/otel-instrument/references/json-approval-handoff.md": "826c227489a30d4aa605ee3adfe37c292b64cb71d8fea6ac659a2ae10a33c3ac",
       "skills/otel-instrument/references/languages/go.md": "62ba4d47f1685230a1eec2ce6929c9b3c9f3b8228f62af729367a1db45fa4d5d",
       "skills/otel-instrument/references/languages/java.md": "b35913ebfd94b8e56673c0db2c9deccf61c08770e7975306d839eb9eebb5e1d4",
@@ -167,7 +167,7 @@
       "skills/references/report-flow-contract.md": "be4af921d9faf71ca9c206a91ba091db5d8bc878dc87ab6b844bc39cc455eb0e",
       "skills/references/scripts/observe_report.py": "dc6d5048a117595bd658e7f4ff7f91e11cd512693ee0e37d09080578574e4325",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
-      "skills/references/splunk-agent-observability.md": "95d546a66cee6dbd2b7cd9a7cc93c35a7a635d6da85a884651266876180abdf3",
+      "skills/references/splunk-agent-observability.md": "3df5131ea3e15314369f49089d1683cf656fac8259d3155933d46f85ab4d0c50",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "39e6e35f16272b4f33f202b03dd13823284d4067fb50ebba48fb80bb67f4ce16"
@@ -198,6 +198,6 @@
         "eval_inputs": []
       }
     ],
-    "config_path": "evals/codex-evals.toml"
+    "config_path": "evals/codex-evals.model-override.toml"
   }
 }
