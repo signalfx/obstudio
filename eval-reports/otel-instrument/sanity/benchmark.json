@@ -9,7 +9,7 @@
     "skill": "otel-instrument",
     "run_id": "20261014T200302308418Z",
     "agent_model": "gpt-6-sol",
-    "judge_model": "gpt-6-sol",
+    "judge_model": "-",
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",

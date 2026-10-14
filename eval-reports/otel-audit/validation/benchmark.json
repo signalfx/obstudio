@@ -11,7 +11,7 @@
     "run_id": "20261014T195726426486Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
-    "judge_model": "gpt-5.5",
+    "judge_model": "",
     "agent_backend": "codex",
     "agent_timeout": "1200",
     "judge_timeout": "900",

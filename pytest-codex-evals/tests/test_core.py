@@ -63,6 +63,7 @@ from pytest_codex_evals.report import (
     evaluator_semantics_version,
     format_tokens,
     kind_report_metadata,
+    report_metadata,
     legacy_shared_reference_consumers,
     normalize_rubric_score,
     render_reports_for_run_root,
@@ -3348,6 +3349,8 @@ def test_judge_usage_is_rendered_only_in_rubric_report(tmp_path: Path):
         ("rubric", "", "", "-"),
         ("sanity", "actor-override", "", "-"),
         ("runtime", "actor-override", "", "-"),
+        ("sanity", "actor-override", "configured-judge", "-"),
+        ("runtime", "actor-override", "configured-judge", "-"),
     ],
 )
 def test_legacy_report_records_effective_judge_without_changing_raw_run(
@@ -3400,6 +3403,37 @@ def test_rubric_report_resolves_judge_model_for_each_metadata_source(tmp_path: P
     )
 
     assert metadata["judge_model"] == "actor-b, explicit-judge"
+
+
+def test_disabled_rubric_report_does_not_claim_configured_judge(tmp_path: Path):
+    metadata = kind_report_metadata(
+        "sample-skill", tmp_path, "rubric",
+        [{"agent_model": "actor", "judge_model": "configured-judge", "rubric_enabled": False}],
+    )
+
+    assert metadata["judge_model"] == "-"
+
+
+@pytest.mark.parametrize(
+    ("mode", "kind", "enabled", "expected"),
+    [
+        ("validation", "rubric", True, ""),
+        ("with_skill", "validation", True, ""),
+        ("with_skill", "sanity", True, ""),
+        ("with_skill", "runtime", True, ""),
+        ("with_skill", "standard", False, ""),
+        ("with_skill", "rubric", True, "configured-judge"),
+    ],
+)
+def test_legacy_report_metadata_hides_inactive_judge_without_mutating_input(
+    tmp_path: Path, mode: str, kind: str, enabled: bool, expected: str
+):
+    original = {"eval_kind": kind, "judge_model": "configured-judge", "rubric_enabled": enabled}
+
+    metadata = report_metadata("sample-skill", mode, tmp_path, original)
+
+    assert metadata["judge_model"] == expected
+    assert original == {"eval_kind": kind, "judge_model": "configured-judge", "rubric_enabled": enabled}
 
 
 def test_runtime_report_uses_runtime_template_only(tmp_path: Path):

@@ -115,13 +115,13 @@ def test_eval_json_files_validate_without_running_codex(pytester: pytest.Pyteste
 @pytest.mark.parametrize(
     ("configured_agent", "configured_judge", "override", "expected_agent", "expected_judge"),
     [
-        ("configured-actor", "", "cli-actor", "cli-actor", "cli-actor"),
-        ("configured-actor", "", "", "configured-actor", "configured-actor"),
-        ("configured-actor", "explicit-judge", "cli-actor", "cli-actor", "explicit-judge"),
+        ("configured-actor", "", "cli-actor", "cli-actor", ""),
+        ("configured-actor", "", "", "configured-actor", ""),
+        ("configured-actor", "explicit-judge", "cli-actor", "cli-actor", ""),
         ("", "", "", "", ""),
     ],
 )
-def test_run_metadata_records_effective_judge_model(
+def test_validation_metadata_does_not_claim_a_judge_model(
     pytester: pytest.Pytester,
     configured_agent: str,
     configured_judge: str,
@@ -147,6 +147,51 @@ def test_run_metadata_records_effective_judge_model(
     metadata = json.loads(raw_runs[0].read_text(encoding="utf-8"))["metadata"]
     assert metadata["agent_model"] == expected_agent
     assert metadata["judge_model"] == expected_judge
+
+
+@pytest.mark.parametrize(
+    ("kind", "mode", "judge", "enabled", "disabled_cli", "expected"),
+    [
+        ("rubric", "with_skill", "", True, False, "cli-actor"),
+        ("rubric", "with_skill", "explicit-judge", True, False, "explicit-judge"),
+        ("standard", "with_skill", "", True, False, "cli-actor"),
+        ("rubric", "with_skill", "explicit-judge", True, True, ""),
+        ("standard", "with_skill", "explicit-judge", False, False, ""),
+        ("sanity", "with_skill", "explicit-judge", True, False, ""),
+        ("runtime", "with_skill", "explicit-judge", True, False, ""),
+        ("validation", "validation", "explicit-judge", True, False, ""),
+        ("rubric", "validation", "explicit-judge", True, False, ""),
+    ],
+)
+def test_judge_metadata_requires_a_rubric_capable_run(
+    pytester: pytest.Pytester,
+    kind: str,
+    mode: str,
+    judge: str,
+    enabled: bool,
+    disabled_cli: bool,
+    expected: str,
+):
+    pytester.makefile(
+        ".toml",
+        **{"codex-evals": (
+            f'[models]\nagent = "configured-actor"\njudge = "{judge}"\n'
+            f'[rubric]\nenabled = {str(enabled).lower()}\n'
+        )},
+    )
+    pytester.makepyfile(test_metadata=f'''
+        from pytest_codex_evals.plugin import run_metadata
+
+        def test_metadata(pytestconfig):
+            metadata = run_metadata(pytestconfig, pytestconfig.rootpath, "sample-skill", {mode!r})
+            assert metadata["agent_model"] == "cli-actor"
+            assert metadata["judge_model"] == {expected!r}
+            assert metadata["rubric_enabled"] is {bool(expected)!r}
+    ''')
+    args = ["test_metadata.py", "--codex-eval-kind", kind, "--model", "cli-actor"]
+    if disabled_cli:
+        args.append("--no-rubric")
+    pytester.runpytest(*args).assert_outcomes(passed=1)
 
 
 def test_validation_scope_tracks_pytest_deselect(pytester: pytest.Pytester):
