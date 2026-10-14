@@ -505,7 +505,7 @@ def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) 
         "repo_root": str(repo_root),
         "config_path": display_path(path, repo_root) if path else "",
         "agent_model": agent_model(config) or "",
-        "judge_model": judge_model(config) or "",
+        "judge_model": judge_model(config) or agent_model(config) or "",
         "agent_backend": backend.name,
         "agent_timeout": str(agent_timeout(config)),
         "judge_timeout": str(judge_timeout(config)),

@@ -112,6 +112,43 @@ def test_eval_json_files_validate_without_running_codex(pytester: pytest.Pyteste
     assert not (pytester.path / "eval-reports" / "sample-skill" / "validation" / "report.md").exists()
 
 
+@pytest.mark.parametrize(
+    ("configured_agent", "configured_judge", "override", "expected_agent", "expected_judge"),
+    [
+        ("configured-actor", "", "cli-actor", "cli-actor", "cli-actor"),
+        ("configured-actor", "", "", "configured-actor", "configured-actor"),
+        ("configured-actor", "explicit-judge", "cli-actor", "cli-actor", "explicit-judge"),
+        ("", "", "", "", ""),
+    ],
+)
+def test_run_metadata_records_effective_judge_model(
+    pytester: pytest.Pytester,
+    configured_agent: str,
+    configured_judge: str,
+    override: str,
+    expected_agent: str,
+    expected_judge: str,
+):
+    write_eval_repo(pytester)
+    config = pytester.path / "codex-evals.toml"
+    config.write_text(
+        f'[models]\nagent = "{configured_agent}"\njudge = "{configured_judge}"\n',
+        encoding="utf-8",
+    )
+    args = ["--skill", str(pytester.path / "skills" / "sample-skill")]
+    if override:
+        args.extend(["--model", override])
+
+    result = pytester.runpytest(*args)
+
+    result.assert_outcomes(passed=2)
+    raw_runs = list(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/validation.json"))
+    assert len(raw_runs) == 1
+    metadata = json.loads(raw_runs[0].read_text(encoding="utf-8"))["metadata"]
+    assert metadata["agent_model"] == expected_agent
+    assert metadata["judge_model"] == expected_judge
+
+
 def test_validation_scope_tracks_pytest_deselect(pytester: pytest.Pytester):
     write_eval_repo(pytester)
     skill_dir = pytester.path / "skills" / "sample-skill"

@@ -9,7 +9,7 @@
 | Skill | otel-verify |
 | Run ID | 20261014T172421664258Z |
 | Agent model | gpt-6-sol |
-| Judge model | - |
+| Judge model | gpt-6-sol |
 | Rubric enabled | True |
 | Workers | 1 |
 | Config | evals/codex-evals.model-override.toml |

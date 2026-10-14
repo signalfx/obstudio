@@ -9,7 +9,7 @@
 | Skill | otel-instrument |
 | Run ID | 20261014T171343355283Z |
 | Agent model | gpt-6-sol |
-| Judge model | - |
+| Judge model | gpt-6-sol |
 | Rubric enabled | True |
 | Workers | 1 |
 | Config | evals/codex-evals.model-override.toml |
