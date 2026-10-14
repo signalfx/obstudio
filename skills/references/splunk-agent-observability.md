@@ -4,6 +4,8 @@ Use this reference when the user asks whether a GenAI or agent application can
 populate Splunk Agent Observability, when an audit finds existing Agent
 Observability routing or resource configuration, or when a selected finding
 has `finding_group: splunk-agent-observability`.
+Also use it when a fresh agent's selected default producer is Splunk AO, even
+before the SDK is installed or configured.
 
 ## One Findings Ledger
 
@@ -37,6 +39,16 @@ Create an AO finding only when repository, deployment, supplied product, or
 validated API evidence establishes both a concrete gap and a safe action. Do
 not turn the Agent Observability navigation into a generic checklist and do not
 claim that spans create Agent Observability resources.
+
+A fresh default Splunk AO producer establishes intended AO instrumentation.
+Inspect that runtime's actual launch profile and author separate source-backed
+project binding, dedicated Agent Stream binding and routing findings where
+missing, with `ao_target_scope: resource-routing`. Keep incidental product
+adoption in `fix all`; an explicit AO target/routing request uses `default`.
+Missing imports or credentials do not erase the intended-runtime assessment.
+Disclose proposed service-derived names and offer optional supplied selectors
+and reuse-only behavior. Do not infer global resource absence or create resources
+during audit. Ordinary GenAI spans stay untagged in the same findings ledger.
 
 Appropriate AO findings include source-backed work for an existing or intended:
 
@@ -443,6 +455,40 @@ operations and cannot repair data never captured. Preserve business return
 values, exceptions and external call arguments/order exactly; keep telemetry
 carriers out of business outputs. `Projects`/`AgentStreams` APIs configure
 resources and do not create GenAI operation spans.
+
+### Public Schema Span Helpers
+
+Before treating a logger's missing sink hook as an operation-wide blocker,
+inspect the documented
+[`start_splunk_ao_span`](https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/start-splunk-ao-span)
+alternative and its chosen-version source in `src/splunk_ao/otel.py`. This is
+SDK span creation, unlike `add_splunk_ao_span_processor`. The public helper
+accepts a schema record and yields the current writable OTel `Span`; it needs
+no private logger sink injection. Record the exact schema/import, installed
+version and provider/export registration used by the real application.
+
+For supported `AgentSpan`, `LlmSpan`, `ToolSpan` and `RetrieverSpan` operations,
+sanitize source values before constructing the schema record, then fill missing
+attributes on that yielded span through `Span.set_attribute`/`set_attributes`.
+Keep one SDK-created operation, its actual context, errors and business outcome.
+The checked 0.5.0 helper writes SDK-derived attributes on context exit, so
+inspect the final emitted span for overwrites rather than assuming earlier
+setters survive. Bind the helper to the actual registered provider, configure
+the supported AO processor/exporter where selected, and prove owned flush and
+shutdown. An unrelated provider or unregistered local provider proves no export.
+
+Check support independently for each operation. A local 0.5.0 probe with
+`galileo-core==4.5.0` and OTel `1.45.1` exercised same-span tool message setters,
+truthful successful-null `output.value`, no-result errors and parent context.
+It also emitted `INTERNAL` for `LlmSpan` with no public kind argument: that does
+not close a separate-process model's `CLIENT` requirement. Recheck the selected
+version; never invent a kind parameter, mutate SDK internals or claim full
+coverage from the helper name. Keep exact unsupported fields/kinds Partial and
+do not make independently supported agent/tool/retrieval work depend on a
+logger-only sink prerequisite. Source/probe capability remains distinct from
+application integration, schema-valid wire export, resource binding and cloud
+receipt. Existing valid producers are preserved rather than migrated to this
+alternative.
 
 ### Same SDK Span Content Enrichment
 

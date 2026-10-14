@@ -1,0 +1,128 @@
+{
+  "kind": "installed-public-sdk-helper-audit-snapshot",
+  "scope": "Supplied independent installed-SDK source and in-memory OTel capture. These are not app.py operations or new consuming-agent execution, and provide no application, actual model, OTLP receiver, API provisioning, gateway or cloud receipt.",
+  "captured_on": "2026-10-13",
+  "versions": {
+    "splunk-ao": "0.5.0",
+    "galileo-core": "4.5.0",
+    "opentelemetry-sdk": "1.45.1"
+  },
+  "public_documentation_url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/start-splunk-ao-span",
+  "documentation_read_on": "2026-10-13",
+  "installed_source": {
+    "package": "splunk-ao",
+    "version": "0.5.0",
+    "path": "splunk_ao/otel.py",
+    "sha256": "af33b590d48f3abddf032664d76d95c9ff9eb7993941c63e179cae6eb07ce10f",
+    "helper_name": "start_splunk_ao_span",
+    "helper_source": "@contextmanager\ndef start_splunk_ao_span(splunk_ao_span: SplunkAOSpan) -> Generator[trace.Span, Any, None]:\n    tracer_provider = _TRACE_PROVIDER_CONTEXT_VAR.get()\n    if tracer_provider is None:\n        tracer_provider = trace.get_tracer_provider()\n        _TRACE_PROVIDER_CONTEXT_VAR.set(cast(TracerProvider, tracer_provider))\n    tracer = tracer_provider.get_tracer(\"splunk-ao-tracer\")\n    is_conversation_root = not trace.get_current_span().get_span_context().is_valid and isinstance(\n        splunk_ao_span, WorkflowSpan | AgentSpan\n    )\n    session_id = get_effective_session_id()\n    with tracer.start_as_current_span(splunk_ao_span.name) as span:\n        try:\n            yield span\n        finally:\n            try:\n                attributes = build_span_attributes(splunk_ao_span, session_id)\n                if is_conversation_root:\n                    attributes[GEN_AI_CONVERSATION_ROOT] = True\n                for key, value in attributes.items():\n                    span.set_attribute(key, value)\n            except Exception:\n                logger.warning(\"Failed to finalize Splunk AO span attributes\", exc_info=True)\n",
+    "source_basis": "Exact installed splunk-ao 0.5.0 package file; not a claim that source equals future main."
+  },
+  "capture_producer": {
+    "path": "probe_sdk_helper.py",
+    "sha256": "3ad6e1585a26503b262e4726988e146f0452036ca8bc5ee8c46491224259929d",
+    "source": "\"\"\"Isolated real-SDK probe; no application change, model or cloud call.\"\"\"\nimport importlib.metadata\nimport json\n\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import SimpleSpanProcessor\nfrom opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter\nfrom galileo_core.schemas.logging.span import AgentSpan, LlmSpan, ToolSpan, RetrieverSpan\nfrom galileo_core.schemas.shared.document import Document\nfrom splunk_ao.otel import start_splunk_ao_span\n\n\ndef message(role, value):\n    return json.dumps([{\"role\": role, \"parts\": [{\"type\": \"text\", \"content\": json.dumps(value)}]}])\n\n\nexporter = InMemorySpanExporter()\nprovider = TracerProvider()\nprovider.add_span_processor(SimpleSpanProcessor(exporter))\ntrace.set_tracer_provider(provider)\n\nagent = AgentSpan(name=\"invoke_agent Incident Desk\", input=\"Check checkout\", output=\"Fixture checked\")\nwith start_splunk_ao_span(agent) as parent:\n    parent.set_attribute(\"gen_ai.provider.name\", \"ollama\")\n    for name, result, failed in [(\"health\", {\"status\": \"degraded\"}, False), (\"incident\", None, False), (\"dependency\", None, True)]:\n        args = {\"service\": \"checkout\"}\n        record = ToolSpan(name=name, input=json.dumps(args), output=json.dumps(result) if result is not None else None)\n        try:\n            with start_splunk_ao_span(record) as span:\n                span.update_name(\"execute_tool \" + name)\n                span.set_attribute(\"gen_ai.input.messages\", message(\"user\", args))\n                if failed:\n                    span.set_attribute(\"error.type\", \"RuntimeError\")\n                    raise RuntimeError(\"Synthetic dependency failure\")\n                span.set_attribute(\"gen_ai.output.messages\", message(\"assistant\", result))\n                if result is None:\n                    span.set_attribute(\"output.value\", \"null\")\n        except RuntimeError:\n            pass\n    retrieval = RetrieverSpan(name=\"retrieve checkout docs\", input=\"checkout\", output=[Document(content=\"Synthetic checkout guide\")])\n    with start_splunk_ao_span(retrieval) as span:\n        span.set_attribute(\"gen_ai.input.messages\", message(\"user\", \"checkout\"))\n        span.set_attribute(\"gen_ai.output.messages\", message(\"assistant\", [{\"content\": \"Synthetic checkout guide\"}]))\n    model = LlmSpan(name=\"chat qwen3:8b\", input=[{\"role\": \"user\", \"content\": \"Check checkout\"}], output={\"role\": \"assistant\", \"content\": \"Fixture checked\"}, model=\"qwen3:8b\")\n    with start_splunk_ao_span(model) as span:\n        span.set_attribute(\"gen_ai.provider.name\", \"ollama\")\n        span.set_attribute(\"gen_ai.request.stream\", False)\n\nspans = exporter.get_finished_spans()\nassert len(spans) == 6\nparent_span = next(s for s in spans if s.name.startswith(\"invoke_agent\"))\nfor span in spans:\n    if span is not parent_span:\n        assert span.context.trace_id == parent_span.context.trace_id\n        assert span.parent.span_id == parent_span.context.span_id\n    if span.name.startswith(\"execute_tool\"):\n        assert \"gen_ai.input.messages\" in span.attributes\n        if span.name.endswith(\"dependency\"):\n            assert span.status.status_code.name == \"ERROR\"\n            assert span.attributes[\"error.type\"] == \"RuntimeError\"\n            assert \"gen_ai.output.messages\" not in span.attributes\n            assert \"gen_ai.tool.call.result\" not in span.attributes\n        else:\n            assert \"gen_ai.output.messages\" in span.attributes\n            if span.name.endswith(\"incident\"):\n                assert span.attributes[\"output.value\"] == \"null\"\n                assert \"gen_ai.tool.call.result\" not in span.attributes\nresult = {\n    \"proof_scope\": \"installed SDK helper with standard in-memory OTel export; no live application, model or cloud\",\n    \"versions\": {p: importlib.metadata.version(p) for p in [\"splunk-ao\", \"galileo-core\", \"opentelemetry-sdk\"]},\n    \"pass\": [\"SDK-created spans\", \"same-span writable tool message mappings\", \"successful null using OpenInference output.value\", \"no produced result on failure\", \"parent/context preserved\"],\n    \"remaining\": [\"start_splunk_ao_span emits INTERNAL for LlmSpan; separate-process Ollama requires CLIENT\", \"fresh app integration and actual OTLP wire not exercised\"],\n    \"spans\": [{\"name\": s.name, \"trace_id\": format(s.context.trace_id, \"032x\"), \"span_id\": format(s.context.span_id, \"016x\"), \"parent_id\": format(s.parent.span_id, \"016x\") if s.parent else None, \"kind\": s.kind.name, \"status\": s.status.status_code.name, \"attributes\": dict(s.attributes)} for s in spans],\n}\nwith open(\"sdk-helper-probe.json\", \"w\") as f:\n    json.dump(result, f, indent=2)\nprovider.shutdown()\nprint(json.dumps({\"versions\": result[\"versions\"], \"pass\": result[\"pass\"], \"remaining\": result[\"remaining\"]}, indent=2))\n"
+  },
+  "capture": {
+    "proof_scope": "installed SDK helper with standard in-memory OTel export; no live application, model or cloud",
+    "spans": [
+      {
+        "name": "execute_tool health",
+        "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+        "span_id": "fb298e36f026e829",
+        "parent_id": "fc30d8c150b0d93b",
+        "kind": "INTERNAL",
+        "status": "UNSET",
+        "attributes": {
+          "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"{\\\"service\\\": \\\"checkout\\\"}\"}]}]",
+          "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"{\\\"status\\\": \\\"degraded\\\"}\"}]}]",
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "health",
+          "gen_ai.tool.call.arguments": "{\"service\":\"checkout\"}",
+          "gen_ai.tool.call.result": "{\"status\":\"degraded\"}"
+        }
+      },
+      {
+        "name": "execute_tool incident",
+        "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+        "span_id": "0688be9de2d51eef",
+        "parent_id": "fc30d8c150b0d93b",
+        "kind": "INTERNAL",
+        "status": "UNSET",
+        "attributes": {
+          "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"{\\\"service\\\": \\\"checkout\\\"}\"}]}]",
+          "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"null\"}]}]",
+          "output.value": "null",
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "incident",
+          "gen_ai.tool.call.arguments": "{\"service\":\"checkout\"}"
+        }
+      },
+      {
+        "name": "execute_tool dependency",
+        "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+        "span_id": "835df0469ea92ede",
+        "parent_id": "fc30d8c150b0d93b",
+        "kind": "INTERNAL",
+        "status": "ERROR",
+        "attributes": {
+          "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"{\\\"service\\\": \\\"checkout\\\"}\"}]}]",
+          "error.type": "RuntimeError",
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "dependency",
+          "gen_ai.tool.call.arguments": "{\"service\":\"checkout\"}"
+        }
+      },
+      {
+        "name": "retrieve checkout docs",
+        "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+        "span_id": "ac61b3b83b5ff10f",
+        "parent_id": "fc30d8c150b0d93b",
+        "kind": "INTERNAL",
+        "status": "UNSET",
+        "attributes": {
+          "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"\\\"checkout\\\"\"}]}]",
+          "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"[{\\\"content\\\": \\\"Synthetic checkout guide\\\"}]\"}]}]",
+          "gen_ai.operation.name": "retrieval",
+          "gen_ai.retrieval.query.text": "checkout",
+          "gen_ai.retrieval.documents": "[{\"content\":\"Synthetic checkout guide\",\"metadata\":{}}]",
+          "splunk_ao.retrieval.documents.count": 1,
+          "db.operation": "search"
+        }
+      },
+      {
+        "name": "chat qwen3:8b",
+        "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+        "span_id": "5ab124b1528c32b1",
+        "parent_id": "fc30d8c150b0d93b",
+        "kind": "INTERNAL",
+        "status": "UNSET",
+        "attributes": {
+          "gen_ai.provider.name": "ollama",
+          "gen_ai.request.stream": false,
+          "gen_ai.operation.name": "chat",
+          "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"Check checkout\",\"type\":\"text\"}],\"role\":\"user\"}]",
+          "gen_ai.output.messages": "[{\"finish_reason\":\"unknown\",\"parts\":[{\"content\":\"Fixture checked\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+          "gen_ai.request.model": "qwen3:8b"
+        }
+      },
+      {
+        "name": "invoke_agent Incident Desk",
+        "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+        "span_id": "fc30d8c150b0d93b",
+        "parent_id": null,
+        "kind": "INTERNAL",
+        "status": "UNSET",
+        "attributes": {
+          "gen_ai.provider.name": "ollama",
+          "gen_ai.operation.name": "invoke_agent",
+          "gen_ai.agent.name": "invoke_agent Incident Desk",
+          "splunk_ao.agent.type": "default",
+          "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"Check checkout\",\"type\":\"text\"}],\"role\":\"user\"}]",
+          "gen_ai.output.messages": "[{\"finish_reason\":\"unknown\",\"parts\":[{\"content\":\"Fixture checked\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+          "gen_ai.conversation_root": true
+        }
+      }
+    ]
+  }
+}

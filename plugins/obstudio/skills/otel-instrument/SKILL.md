@@ -1286,7 +1286,7 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Put aggregate selected-trace GenAI attributes on the workflow span or
   most specific owning GenAI span, not on a generic HTTP root span or generic server span.
   This includes `gen_ai.usage.input_tokens`,
-  `gen_ai.usage.output_tokens`, `gen_ai.usage.total_tokens`,
+  `gen_ai.usage.output_tokens`, an application/vendor-owned derived total,
   `assistant.llm.calls`, and `assistant.tool.calls`. The HTTP root can remain
   the server entrypoint, but it should not become the evidence for a GenAI flow
   card unless it is explicitly instrumented as the workflow span.
@@ -1303,10 +1303,15 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   memory, evaluation, or fanout data is available, also set safe span attributes
   on the most specific GenAI span and aggregate to the workflow span when
   useful: `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`,
-  `gen_ai.usage.total_tokens`, `gen_ai.request.model`,
+  an application/vendor-owned derived total, `gen_ai.request.model`,
   `gen_ai.response.model`, service-owned LLM/tool call counts, stable
   `gen_ai.tool.name`, memory operation names, evaluation names/labels, and
   low-cardinality `error.type`.
+- Reconcile newly added `gen_ai.*` attributes with the current official
+  registry. Do not introduce `gen_ai.usage.total_tokens` when it is not
+  published there; a useful derived total belongs in an application/vendor
+  namespace with actual/estimated count provenance. Preserve a proven existing
+  consumer alias as legacy rather than requiring it on fresh spans.
 - For assistant, agent, or streaming workflows, instrument first non-ping event
   or first chunk latency, timeout, cancellation, disconnect, close reason
   family, and send/write failure. Normalize timeout classes such as

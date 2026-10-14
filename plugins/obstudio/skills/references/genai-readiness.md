@@ -37,6 +37,9 @@ of `splunk-agent-observability.md` before authoring the audit finding or code.
 The fresh-app default does not require a separate SDK-choice question. Record
 the intended SDK API and installed-version support in the selected finding.
 `add_splunk_ao_span_processor` is export-only and cannot satisfy this choice.
+For that fresh default, assess intended AO project/Agent Stream/routing through
+the shared AO reference even when no SDK import exists. Keep product findings
+separate from ordinary GenAI findings and respect selected adoption scope.
 If no supported SDK path exists for the detected language/framework, name the
 exact prerequisite and keep the surface partial; do not silently substitute a
 complete handwritten OTel GenAI implementation. Explicit user choices override
@@ -134,11 +137,12 @@ package version; a repository URL or revision alone is not example evidence.
 Distinguish an API inspected in SDK source from a method actually exercised by
 that example: the logger basic example illustrates trace/LLM/conclude, while
 `flush`, `terminate` and unexercised creators need their own signature/source
-receipt. For a custom fresh Python agent, use the named-method table and
-**Same SDK Span Content Enrichment** recipe in
-`splunk-agent-observability.md`: e.g. `add_agent_span` at the actual agent,
-`add_llm_span` at each model request and `add_tool_span` at each tool. Identify
-`SplunkAOLogger`, proposed or installed version, and exact example revision;
+receipt. For a custom fresh Python agent, compare the named-method table,
+**Public Schema Span Helpers** and **Same SDK Span Content Enrichment** in
+`splunk-agent-observability.md`: e.g. supported `add_agent_span` at the actual
+agent, `add_llm_span` at each model request and `add_tool_span` at each tool,
+or the documented schema helper at a boundary it supports. Identify the
+selected SDK creator, proposed or installed version, and exact example revision;
 a proposed version checked against latest examples is not proof of installed
 or emitted support.
 For a native field gap, name the safe SDK carrier and the exact same-span
@@ -149,6 +153,11 @@ parent; it does not create operation spans. Source-only plans may propose this
 concrete path while keeping registration, installed support and emissions
 unproven. Audit binds that path or the precise blocker in the owning finding;
 verification checks actual identity/value/safety evidence, not the API name.
+Before declaring a logger hook prerequisite external, assess the shared AO
+reference's Public Schema Span Helpers against each real operation. A supported
+yielded-span setter is an actionable same-span path; keep its finalizer, provider
+binding and exact unsupported fields/kinds explicit. A logger-only limitation
+must not block independent operations that another supported SDK creator covers.
 Record INTERNAL for an in-process agent/tool, CLIENT for a separate-process
 model, and their actual parents. A `start_trace`/`conclude` envelope is not an
 emitted workflow; `add_workflow_span` applies only to a real composed workflow.
@@ -221,7 +230,7 @@ span-level attributes when the service can observe the value.
 | LLM/chat card | Span `chat {model}` or another GenAI inference operation with `gen_ai.operation.name=chat`, `gen_ai.provider.name`, `gen_ai.request.model`, and `gen_ai.response.model` when known |
 | Tool card | Span `execute_tool {tool}` with `gen_ai.operation.name=execute_tool` and stable `gen_ai.tool.name` |
 | Retrieval card | Span `retrieval {source}` with `gen_ai.operation.name=retrieval` and a low-cardinality data source attribute |
-| Tokens summary | `gen_ai.client.token.usage` metric with `gen_ai.token.type`; also set `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, and `gen_ai.usage.total_tokens` on the chat span or workflow span when available |
+| Tokens summary | `gen_ai.client.token.usage` metric with `gen_ai.token.type`; also set available `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` on the owning GenAI span; a derived total uses an application/vendor-owned attribute |
 | LLM/tool call counts | Service-owned per-workflow attributes or metrics such as `assistant.llm.calls` and `assistant.tool.calls`, plus child spans when possible |
 | Error badges | Span status ERROR plus low-cardinality `error.type` |
 | Streaming timeout explanation | First event/chunk latency, stream close reason family, timeout/cancel/disconnect events, and workflow ERROR with `error.type=first_event_timeout` or another stable class |
@@ -232,11 +241,18 @@ acceptance criteria in addition to detector metrics.
 
 Do not put selected-trace aggregate GenAI usage on a generic HTTP root span or
 generic server span. Attributes such as `gen_ai.usage.input_tokens`,
-`gen_ai.usage.output_tokens`, `gen_ai.usage.total_tokens`,
+`gen_ai.usage.output_tokens`, an application/vendor-owned derived total,
 `assistant.llm.calls`, and `assistant.tool.calls` belong on the workflow span or
 the most specific owning GenAI span. A root HTTP span may wrap the whole request,
 but it should not become a GenAI flow card unless it is explicitly the workflow
 span with `gen_ai.operation.name=invoke_workflow`.
+
+Check proposed attributes against the current official registry. Do not add
+`gen_ai.usage.total_tokens` as an OTel semantic attribute when it is absent from
+that registry. If a total is useful, use an application/vendor-owned field such
+as `assistant.usage.total_tokens`, identify its calculation and distinguish
+actual provider counts from estimates. Preserve and label a proven existing
+legacy alias required by a consumer; do not require that alias on fresh spans.
 
 Workflow names must preserve the application's stable business workflow
 identity. Prefer existing constants, handler names, telemetry event names,
@@ -324,8 +340,9 @@ Required proof for each app-owned model-call surface:
   plus `gen_ai.provider.name`, `gen_ai.request.model` when the requested model
   is known, and `gen_ai.response.model` when the response model is known.
 - Provider usage is recorded on the inference span when available:
-  `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, and
-  `gen_ai.usage.total_tokens`; aggregate to the workflow span only as a
+  `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens`; any derived
+  total follows the application/vendor namespace rule above. Aggregate to
+  the owning agent/workflow span only as a
   summary, not as a replacement for the inference span.
 - Errors, cancellations, provider timeouts, rate limits, and stream-close
   failures set span error status, record the exception when available, and set
