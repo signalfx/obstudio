@@ -1,0 +1,173 @@
+{
+  "kind": "python-cli-launcher-synthetic-interface-cases",
+  "scope": "Independent synthetic process-environment inputs for execution of the exact shipped Python CLI-wrapper shell against a fake instrumentor and harmless fake app. No app instrumentation, installed SDK/API, receiver, cloud, authentication or real credential proof.",
+  "fixture_receipts": {
+    "app.py": {
+      "path": "app.py",
+      "sha256": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c"
+    },
+    "pyproject.toml": {
+      "path": "pyproject.toml",
+      "sha256": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f"
+    },
+    "Makefile": {
+      "path": "Makefile",
+      "sha256": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe"
+    }
+  },
+  "source_selection": {
+    "loaded_guide_suffix": "otel-instrument/references/languages/python.md",
+    "heading": "## Auto-Instrumentation (CLI Wrapper)",
+    "fence_language": "bash",
+    "selection": "First bash fence after the heading, including the shebang through the final exec command. Copy it byte-for-byte; no corrected/reimplemented guard logic in the extracted shell or fake instrumentor."
+  },
+  "common_environment": {
+    "OTEL_SERVICE_NAME": "python-cli-policy-eval",
+    "OTEL_TRACES_EXPORTER": "otlp",
+    "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "https://trace-route.invalid/v1/traces",
+    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "https://metric-route.invalid/v1/metrics",
+    "OTEL_EXPORTER_OTLP_TRACES_HEADERS": "x-trace=synthetic-trace-only",
+    "OTEL_EXPORTER_OTLP_METRICS_HEADERS": "x-metric=synthetic-metric-only",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55328/collector/v1/traces",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+    "OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION": "true"
+  },
+  "original_app_arguments": [
+    "--message",
+    "value with spaces",
+    "--literal",
+    "$not_a_substitution",
+    "--empty",
+    ""
+  ],
+  "original_sink_markers": {
+    "stdout": "synthetic original stdout sink preserved",
+    "stderr": "synthetic original stderr sink preserved"
+  },
+  "cases": [
+    {
+      "id": "normal-http-absent-exporter",
+      "environment": {},
+      "app_exit_code": 0
+    },
+    {
+      "id": "normal-http-empty-headers",
+      "environment": {
+        "OTEL_EXPORTER_OTLP_HEADERS": "",
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS": ""
+      },
+      "app_exit_code": 0
+    },
+    {
+      "id": "normal-signal-local-http",
+      "environment": {
+        "OTEL_LOGS_EXPORTER": "otlp",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:55329/v1/logs",
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "http/protobuf"
+      },
+      "app_exit_code": 0
+    },
+    {
+      "id": "normal-local-grpc",
+      "environment": {
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55327"
+      },
+      "app_exit_code": 0
+    },
+    {
+      "id": "normal-independent-log-http",
+      "environment": {
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55327",
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "http/protobuf",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:55329/v1/logs"
+      },
+      "app_exit_code": 0
+    },
+    {
+      "id": "conflict-generic-header",
+      "environment": {
+        "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=synthetic-generic-auth-sentinel"
+      },
+      "app_exit_code": 7
+    },
+    {
+      "id": "conflict-log-header",
+      "environment": {
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "Authorization=synthetic-log-auth-sentinel"
+      },
+      "app_exit_code": 7
+    },
+    {
+      "id": "conflict-both-headers",
+      "environment": {
+        "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=synthetic-generic-auth-sentinel",
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "Authorization=synthetic-log-auth-sentinel",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:55329/v1/logs"
+      },
+      "app_exit_code": 7
+    },
+    {
+      "id": "conflict-generic-nonlocal",
+      "environment": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "https://trace-route.invalid/otlp"
+      },
+      "app_exit_code": 7
+    },
+    {
+      "id": "conflict-log-nonlocal",
+      "environment": {
+        "OTEL_LOGS_EXPORTER": "otlp",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "https://log-route.invalid/v1/logs"
+      },
+      "app_exit_code": 7
+    },
+    {
+      "id": "conflict-log-protocol",
+      "environment": {
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "unsupported-fixture-protocol",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:55329/v1/logs"
+      },
+      "app_exit_code": 7
+    },
+    {
+      "id": "explicit-none-operator-branch",
+      "environment": {
+        "OTEL_LOGS_EXPORTER": "none",
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "unsupported-fixture-protocol",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "https://log-route.invalid/v1/logs",
+        "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=synthetic-generic-auth-sentinel",
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "Authorization=synthetic-log-auth-sentinel"
+      },
+      "app_exit_code": 7
+    },
+    {
+      "id": "explicit-other-operator-branch",
+      "environment": {
+        "OTEL_LOGS_EXPORTER": "console",
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "unsupported-fixture-protocol",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "https://log-route.invalid/v1/logs",
+        "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=synthetic-generic-auth-sentinel",
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "Authorization=synthetic-log-auth-sentinel",
+        "OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION": "operator-owned-value"
+      },
+      "app_exit_code": 7
+    }
+  ],
+  "synthetic_auth_sentinels": [
+    "synthetic-generic-auth-sentinel",
+    "synthetic-log-auth-sentinel"
+  ],
+  "normal_profile": {
+    "path": ".observe/cli-launcher/normal.env",
+    "values": {
+      "OTEL_LOGS_EXPORTER": "otlp",
+      "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "http/protobuf",
+      "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:55329/v1/logs"
+    }
+  },
+  "environment_isolation": "Construct each child environment from a small PATH/Python execution allowlist and the provided synthetic common/environment dictionaries; do not inherit unrelated real process OTEL/auth/cloud configuration. Parent environment and input files must remain unchanged.",
+  "fake_instrumentor_contract": "A local executable named opentelemetry-instrument on a temporary leading PATH records original argv and relevant child synthetic OTEL environment, parses/records every documented value-taking launcher flag including --logs_exporter when present, then invokes the remaining original fake-app command/argv once and returns its exit code. Record CLI overrides separately from environment so the documented CLI-over-environment selection can be evaluated; do not change the app environment or invent observed settings. It never validates, repairs or independently suppresses log policy, constructs any SDK/exporter/bridge, sends network traffic, or substitutes observations with expected case results."
+}

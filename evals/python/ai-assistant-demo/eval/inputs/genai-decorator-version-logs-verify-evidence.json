@@ -1,0 +1,609 @@
+{
+  "kind": "independent-decorator-version-logs-policy-cases-with-dated-source-and-isolated-native-sdk-probe",
+  "scope": "Independent synthetic source/policy counterexamples plus explicitly dated official-source and isolated native SDK capture evidence. No cases are app.py/demo-chat-agent execution, received OTLP, Studio acceptance or cloud evidence. Concrete dependency versions are historical receipts, not future installation recipes or proof of newest compatible project resolution.",
+  "sdk_source_receipt": {
+    "status": "dated official source and independently measured native SDK capture; no application or OTel export execution",
+    "captured_at": "2026-10-14T07:28:15.668655+00:00",
+    "receipt_sha256": "139eaddbe3680a9d66540e43509c1a9784ddc8a0100e2a1724fd64fd121105b8",
+    "main_resolution": {
+      "splunk/splunk-ao-python": {
+        "revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+        "commit_date": "2026-10-12T19:18:12Z",
+        "resolution_method": "authenticated gh API commits/main",
+        "url": "https://github.com/splunk/splunk-ao-python/commit/b5f226e947e1861b5687ee85b39474fe9d63df57"
+      },
+      "rungalileo/galileo-python": {
+        "revision": "7aadc4ddc8333f2e95d1fb0b79a01a49b37ad4a3",
+        "commit_date": "2026-10-09T17:07:43Z",
+        "resolution_method": "authenticated gh API commits/main",
+        "url": "https://github.com/rungalileo/galileo-python/commit/7aadc4ddc8333f2e95d1fb0b79a01a49b37ad4a3"
+      }
+    },
+    "official_docs": [
+      {
+        "url": "https://agent-observability-docs.splunk.com/sdk-api/logging/log-decorator/log-decorator",
+        "read_on": "2026-10-14"
+      },
+      {
+        "url": "https://docs.galileo.ai/sdk-api/logging/log-decorator/log-decorator",
+        "read_on": "2026-10-14"
+      },
+      {
+        "url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/start-splunk-ao-span",
+        "read_on": "2026-10-14"
+      },
+      {
+        "url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+        "read_on": "2026-10-14"
+      },
+      {
+        "url": "https://docs.galileo.ai/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+        "read_on": "2026-10-14"
+      }
+    ],
+    "published_release_metadata": {
+      "galileo": {
+        "url": "https://pypi.org/pypi/galileo/json",
+        "captured_at": "2026-10-14T07:13:01.409583+00:00",
+        "version": "2.6.0",
+        "requires_python": "<3.15,>=3.10"
+      },
+      "opentelemetry-sdk": {
+        "url": "https://pypi.org/pypi/opentelemetry-sdk/json",
+        "captured_at": "2026-10-14T07:13:01.687204+00:00",
+        "version": "1.45.1",
+        "requires_python": ">=3.10"
+      },
+      "splunk-ao": {
+        "url": "https://pypi.org/pypi/splunk-ao/json",
+        "captured_at": "2026-10-14T07:13:01.224556+00:00",
+        "version": "0.5.0",
+        "requires_python": "<3.15,>=3.11"
+      }
+    },
+    "dependency_scope": "Published metadata and installed probe versions are distinct from a project solver result. Resolve newest compatible again at future task time; preserve upstream package requirements and project locks. No actual demo dependency resolution is proved here.",
+    "source_receipts": [
+      {
+        "path": "src/splunk_ao/decorator.py",
+        "url": "https://raw.githubusercontent.com/splunk/splunk-ao-python/b5f226e947e1861b5687ee85b39474fe9d63df57/src/splunk_ao/decorator.py",
+        "resolved_revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+        "captured_at": "2026-10-14T07:13:55.908355+00:00",
+        "sha256": "9039873365cd7e4d37b5c37c576c537450c7ad073a537d52954d190889477160",
+        "bytes": 56090
+      },
+      {
+        "repository": "splunk/splunk-ao-python",
+        "path": "src/splunk_ao/deployment.py",
+        "url": "https://raw.githubusercontent.com/splunk/splunk-ao-python/b5f226e947e1861b5687ee85b39474fe9d63df57/src/splunk_ao/deployment.py",
+        "resolved_revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+        "captured_at": "2026-10-14T07:19:44.523399+00:00",
+        "sha256": "af298425baa28b763187492eaaf9e20d8e9d253318aee2c191874f77d47db731",
+        "bytes": 5842
+      },
+      {
+        "repository": "splunk/splunk-ao-python",
+        "path": "src/splunk_ao/exporter/standalone.py",
+        "url": "https://raw.githubusercontent.com/splunk/splunk-ao-python/b5f226e947e1861b5687ee85b39474fe9d63df57/src/splunk_ao/exporter/standalone.py",
+        "resolved_revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+        "captured_at": "2026-10-14T07:19:44.520762+00:00",
+        "sha256": "06ed4b4cafb68869a797443c4bf1b42ee2503ca9e72ab6b09145e2e122458d29",
+        "bytes": 1370
+      },
+      {
+        "repository": "splunk/splunk-ao-python",
+        "path": "src/splunk_ao/converter/attribute_mapping.py",
+        "url": "https://raw.githubusercontent.com/splunk/splunk-ao-python/b5f226e947e1861b5687ee85b39474fe9d63df57/src/splunk_ao/converter/attribute_mapping.py",
+        "resolved_revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+        "captured_at": "2026-10-14T07:19:44.568117+00:00",
+        "sha256": "b778f26b14f8e54a6c36deac9f903a438a4b1b4e8bac9fd407ed2e4a49fc1953",
+        "bytes": 25782
+      },
+      {
+        "repository": "rungalileo/galileo-python",
+        "path": "src/galileo/decorator.py",
+        "url": "https://raw.githubusercontent.com/rungalileo/galileo-python/7aadc4ddc8333f2e95d1fb0b79a01a49b37ad4a3/src/galileo/decorator.py",
+        "resolved_revision": "7aadc4ddc8333f2e95d1fb0b79a01a49b37ad4a3",
+        "captured_at": "2026-10-14T07:19:44.607172+00:00",
+        "sha256": "876486030645d0aa651ec7049259ea132ac41570dd6c05d5f698546827de2314",
+        "bytes": 50533
+      }
+    ],
+    "source_findings": [
+      {
+        "file": "src/splunk_ao/decorator.py",
+        "lines": [
+          296,
+          354
+        ],
+        "fact": "Public sync/coroutine/sync-generator/async-generator dispatch accepts all five operation types; choose explicit type. Syntax support alone is insufficient."
+      },
+      {
+        "file": "src/splunk_ao/decorator.py",
+        "lines": [
+          413,
+          475
+        ],
+        "fact": "Successful business values unchanged; errors including BaseException cancellation reraised/finalized."
+      },
+      {
+        "file": "src/splunk_ao/decorator.py",
+        "lines": [
+          538,
+          680
+        ],
+        "fact": "self/cls excluded, but mapped input overwritten with bound arguments and variadic positional zip loses arguments. Mapped redacted input is not raw suppression."
+      },
+      {
+        "file": "src/splunk_ao/decorator.py",
+        "lines": [
+          797,
+          814
+        ],
+        "fact": "Agent/workflow forwards input/name/agent_type/created_at, not arbitrary mapped metadata."
+      },
+      {
+        "file": "src/splunk_ao/decorator.py",
+        "lines": [
+          895,
+          906
+        ],
+        "fact": "Error finalizer empty output overrides produced generator partial capture."
+      },
+      {
+        "file": "src/splunk_ao/decorator.py",
+        "lines": [
+          1010,
+          1025
+        ],
+        "fact": "Successful null output becomes empty; redacted_output companion does not suppress original."
+      },
+      {
+        "file": "src/splunk_ao/decorator.py",
+        "lines": [
+          1112,
+          1187
+        ],
+        "fact": "Sync/async wrappers accumulate every yield and use plain iteration, not protocol delegation. Sync GeneratorExit closes source; arbitrary send/throw/asend/athrow/lifecycle support needs separate proof."
+      },
+      {
+        "file": "src/splunk_ao/logger/logger.py",
+        "lines": [
+          236,
+          296
+        ],
+        "fact": "Public ingestion_hook receives native batches and bypasses credentials/backend/OTel sink initialization; incompatible distributed mode. Direct _sink is private."
+      },
+      {
+        "file": "src/splunk_ao/decorator.py",
+        "lines": [
+          1190,
+          1420
+        ],
+        "fact": "One-off logger lookup accepts hook but wrapper/default init has no persistent hook/provider/exporter registration. Hook instance is separate cache entry, not default logger."
+      },
+      {
+        "file": "src/splunk_ao/logger/logger.py",
+        "lines": [
+          350,
+          357
+        ],
+        "fact": "Ordinary logger owns configured standalone/O11y sink; global app tracer provider does not bind it."
+      },
+      {
+        "file": "src/splunk_ao/deployment.py",
+        "lines": [
+          151,
+          154
+        ],
+        "fact": "Public standalone endpoint API_URL-or-console base plus /otel/v1/traces."
+      },
+      {
+        "file": "src/splunk_ao/exporter/standalone.py",
+        "lines": [
+          18,
+          43
+        ],
+        "fact": "SDK auth and project/stream name/ID routing supported; actual resolved resources and receiver acceptance still need proof."
+      },
+      {
+        "file": "src/splunk_ao/converter/attribute_mapping.py",
+        "lines": [
+          438,
+          573
+        ],
+        "fact": "Tool converter has operation/name/arguments/result/call-ID but omits tool input/output messages and available agent/description; tool dispatch does not fill generic messages later."
+      },
+      {
+        "repository": "rungalileo/galileo-python",
+        "file": "src/galileo/decorator.py",
+        "lines": [
+          502,
+          532
+        ],
+        "fact": "Galileo mapped-input overwrite also source-visible; its async error implementation differs. Preserve existing producer and prove selected Galileo runtime independently."
+      }
+    ],
+    "studio_source_receipts": [
+      {
+        "path": "observer/cmd/obstudio/main.go",
+        "line": 221,
+        "fact": "Registers POST /otel/v1/traces using receiver HTTPHandler."
+      },
+      {
+        "path": "observer/internal/otlp/httphandler.go",
+        "lines": [
+          43,
+          46
+        ],
+        "fact": "AO ingest alias requires resolved ProjectID; receiver/resource routing must be validated separately."
+      },
+      {
+        "path": "observer/internal/api/ao_gateway_auth_test.go",
+        "lines": [
+          333,
+          347
+        ],
+        "fact": "Existing SDK gateway compatibility test checks ordinary protobuf endpoint, local-gateway SDK auth marker and resolved project/stream headers. Source read only; not executed in this research."
+      }
+    ],
+    "local_probe": {
+      "exit_code": 0,
+      "source_sha256": "f4eac3389e0fda5e9846d2e2843ddb01d8cfc8981ab91737bf6034776e8dfec6",
+      "output_sha256": "5088aadb0f4c47a138a1c14ea15bfc11293a4439ea4d8663ca9a1f0fe4559e0b",
+      "installed_versions": {
+        "splunk-ao": "0.5.0",
+        "galileo-core": "4.5.0",
+        "opentelemetry-sdk": "1.45.1"
+      },
+      "installed_source_sha256": "9039873365cd7e4d37b5c37c576c537450c7ad073a537d52954d190889477160",
+      "installed_decorator_matches_fresh_main": true,
+      "observations": {
+        "mapped_input_return": "safe result",
+        "method_result": 5,
+        "successful_null_result": null,
+        "variadic_result": 6,
+        "nested_result": "synthetic answer",
+        "finite_generator": [
+          "first",
+          "second"
+        ],
+        "send_protocol": [
+          "ready",
+          "received:None"
+        ],
+        "failed_generator_first": "produced partial answer",
+        "failed_generator_exception": "synthetic stream failure",
+        "async_result": 8,
+        "async_generator": [
+          "async first",
+          "async second"
+        ],
+        "asend_protocol": [
+          "async ready",
+          "received:None"
+        ],
+        "cancel_exception": "synthetic cancellation"
+      },
+      "plumbing_limit": "The application subclass overrides a public-named logger getter solely for isolated capture through documented public ingestion_hook. This is not claimed as documented production default @log logger/sink registration or real OTel emission.",
+      "scope": "Credential-free isolated native-batch capture via application subclass public-named logger getter and public ingestion_hook; default @log registration, native OTel, application and cloud not exercised."
+    },
+    "selected_native_sdk_operation_nodes": [
+      {
+        "type": "tool",
+        "name": "mapped_input",
+        "input": "{\"text\": \"SYNTHETIC_RAW_SENTINEL\"}",
+        "output": "safe result",
+        "status_code": null,
+        "model": null,
+        "temperature": null
+      },
+      {
+        "type": "tool",
+        "name": "successful_null",
+        "input": "{}",
+        "output": "",
+        "status_code": null,
+        "model": null,
+        "temperature": null
+      },
+      {
+        "type": "tool",
+        "name": "variadic",
+        "input": "{\"values\": 1}",
+        "output": "6",
+        "status_code": null,
+        "model": null,
+        "temperature": null
+      },
+      {
+        "type": "llm",
+        "name": "failed_generator",
+        "input": [
+          {
+            "content": "{}",
+            "role": "user",
+            "tool_call_id": null,
+            "tool_calls": null
+          }
+        ],
+        "output": {
+          "content": "",
+          "role": "assistant",
+          "tool_call_id": null,
+          "tool_calls": null
+        },
+        "status_code": 500,
+        "model": "synthetic-model",
+        "temperature": null
+      }
+    ],
+    "normal_sdk_sink_scope": "Ordinary public standalone SDK configuration owns its sink and derives API_URL plus /otel/v1/traces with AO project/stream routing. An application global OTel provider alone does not bind it. Missing documented custom sink registration must not become a blanket claim that SDK @log cannot route to Studio. This source fact does not prove startup, resolved resource headers or receipt. That SDK sink exports spans; native application logs need a separate LogRecord provider/handler/export path.",
+    "not_proven": [
+      "Default SDK decorator to live Studio receiver or cloud delivery was not executed.",
+      "Attribute-dependent sampler/on_start capability is not established by completed logger records.",
+      "A documented persistent default-decorator ingestion-hook or public OTel sink replacement API was not found in the inspected signature/source; that does not rule out all SDK alternatives.",
+      "Nested parallel behavior, full generator throw/athrow delegation, Galileo installed-runtime behavior, current complete semantic/wire contracts and every model wrapper were not independently executed."
+    ]
+  },
+  "function_cases": [
+    {
+      "id": "safe-sync-tool",
+      "source": "def health(service):\n    if service not in (\"checkout\", \"inventory\"):\n        raise ValueError(\"unknown service\")\n    return {\"service\": service, \"status\": \"healthy\"}\n",
+      "operation": "execute_tool",
+      "bound_input": {
+        "service": "checkout"
+      },
+      "output": {
+        "service": "checkout",
+        "status": "healthy"
+      },
+      "existing_producer": null,
+      "capture_contract": "Only allowlisted synthetic service and fixed status; no raw secret/user content in this supplied operation.",
+      "expected": "Assess supported public function decorator first. If chosen-source capture, fields, lifecycle and selected sink support this case, default to @log tool; helper/manual spans need an exact source-backed limitation, not generic preference. Syntax support alone is not a full app/export pass."
+    },
+    {
+      "id": "safe-async-agent",
+      "source": "async def agent_turn(question):\n    return \"Synthetic bounded answer\"\n",
+      "operation": "invoke_agent",
+      "bound_input": {
+        "question": "Synthetic service check"
+      },
+      "output": "Synthetic bounded answer",
+      "existing_producer": null,
+      "capture_contract": "Supplied synthetic safe strings below declared caps, finite coroutine; standalone agent has no separate workflow boundary.",
+      "expected": "Assess supported public async agent decorator first, same-operation metadata/parent/outcome/content. Do not automatically select workflow or use helper merely because enrichment may be needed. Exact public-sink/capture gap remains separate if present in chosen source."
+    },
+    {
+      "id": "safe-sync-retriever",
+      "source": "def retrieve(query):\n    return [{\"id\": \"synthetic-doc\", \"content\": \"Synthetic guide\"}]\n",
+      "operation": "retrieval",
+      "bound_input": {
+        "query": "Synthetic service check"
+      },
+      "output": [
+        {
+          "id": "synthetic-doc",
+          "content": "Synthetic guide"
+        }
+      ],
+      "existing_producer": null,
+      "capture_contract": "Only synthetic bounded query/document; ordinary database/history functions are not automatically retrieval.",
+      "expected": "Assess supported public retriever decorator first and exact retrieval query/doc/CLIENT/parent fields; do not pass from decorator name alone or introduce a duplicate helper."
+    },
+    {
+      "id": "finite-yielding-agent",
+      "source": "async def agent_events():\n    for text in (\"Synthetic step\", \"Synthetic answer\"):\n        yield {\"event\":\"message\", \"text\":text}\n",
+      "operation": "invoke_agent",
+      "consumer": "async-for to normal exhaustion only; no asend/athrow protocol",
+      "source_bound": {
+        "yield_count": 2,
+        "content_bytes_per_yield": 128
+      },
+      "existing_producer": null,
+      "capture_contract": "Two finite safe outputs; inspect selected decorator dispatch, whole-operation end/error/cancel and bounded collection rather than blanket-reject generators.",
+      "expected": "A source-supported finite async-generator decorator is considered first, with aggregate size and normal-exhaustion/lifecycle proof. Actual support or missing capture/selected sink is checked per constraint; no claim based only on a generator dispatcher branch."
+    },
+    {
+      "id": "unsafe-raw-argument-companion",
+      "source": "async def private_question(question):\n    return await existing_agent(question)\n",
+      "bound_input": {
+        "question": "api_key=SYNTHETIC_SECRET_SENTINEL"
+      },
+      "proposed_capture": {
+        "redacted_input": "[REDACTED]",
+        "raw_question_still_bound": true
+      },
+      "expected": "Fail raw pre-SDK capture if selected decorator binds original question regardless of redacted companion/input override. Preserve business input; identify public source-side suppression/transformation if supported or use an application-owned function decorator invoking the public SDK helper with sanitized bounded telemetry only. No post-export rewrite or companion field proves native privacy; do not claim the synthetic source question ran.",
+      "source_proof": "The independent native SDK mapped_input operation in sdk_source_receipt retained SYNTHETIC_RAW_SENTINEL despite a mapper; the source overwrites mapped input with all bound arguments. This is separate from the supplied question case, not execution of that function."
+    },
+    {
+      "id": "unbounded-generator-protocol",
+      "source": "def interactive_events():\n    value = yield \"ready\"\n    while True:\n        value = yield use_source_value(value)\n",
+      "consumer": "send/throw/close; potentially unbounded user content",
+      "source_bound": null,
+      "expected": "Do not call generator syntax support sufficient. Check collection bounds and send/throw/early-close semantics; disclose measured send/asend loss and source-unbounded collection separately from unexecuted throw/athrow. Use only an exact safe nonduplicate application-owned function decorator fallback preserving original business generator behavior, parent lifetime and bounded telemetry.",
+      "source_proof": "The isolated native probe measured send/asend user values replaced by None; chosen source collects every yield. throw/athrow and arbitrary application close/cancel behavior were not executed."
+    },
+    {
+      "id": "owned-model-wrapper",
+      "source": "async def ask(messages):\n    return await sdk_wrapped_model.chat(messages)\n",
+      "existing_producer": {
+        "owner": "existing supported SDK model wrapper",
+        "logical_operation": "chat",
+        "node_count_per_call": 1,
+        "provider_and_sink": "already configured; declared source case, no live evidence"
+      },
+      "proposed_additional_decorator": "@log around same logical ask/model call",
+      "expected": "Preserve the owned model producer; no second decorator/helper node for the same call. Decorator-first for uncovered functions is not authority to duplicate existing wrapper/framework model instrumentation."
+    },
+    {
+      "id": "custom-application-provider-sink-requirement",
+      "selected_function": "safe-sync-tool",
+      "source_constraint": "This independent operation requires an application-owned ReadableSpan processor chain and selected custom exporter, rather than the normal SDK-owned standalone sink. The proposed workaround injects private _sink. Inspect the actual public signatures/cache behavior in the dated receipt.",
+      "expected": "Disclose the exact unsupported custom provider/sink-binding path and use an application-owned function decorator around the supported public SDK helper if that satisfies this source contract. Do not edit private SDK sinks or confuse a one-off public native-batch ingestion_hook probe with documented default @log registration. Ordinary standalone SDK routing to Studio is source-supported and is not ruled out by this custom-provider requirement; actual OTLP/resource acceptance remains unproven."
+    },
+    {
+      "id": "successful-null-native-capture",
+      "kind": "actual isolated native SDK observation, not synthetic OTel export",
+      "probe_operation": "successful_null",
+      "business_result": null,
+      "captured_native_tool_output": "",
+      "expected": "Flag successful-null content fidelity: business return is correctly preserved but native empty output does not prove truthful null tool result/messages. Distinguish successful null from failure/no result and preserve the original return. Prefer only a source-supported direct decorator repair or exact app-owned function decorator/public-helper fallback; do not invent an empty completion or call this OTLP evidence."
+    },
+    {
+      "id": "variadic-native-capture",
+      "kind": "actual isolated native SDK observation, not execution of app.py",
+      "probe_operation": "variadic",
+      "original_business_arguments": [
+        1,
+        2,
+        3
+      ],
+      "business_result": 6,
+      "captured_native_tool_input": {
+        "values": 1
+      },
+      "expected": "Flag capture of only the first variadic value despite correct original business return. Use full source argument binding for bounded safe telemetry in a supported public decorator or app-owned function decorator fallback without changing invocation arguments, adding duplicate nodes or claiming all SDK decorators fail."
+    },
+    {
+      "id": "error-after-produced-partial-native-capture",
+      "kind": "actual isolated native SDK observation, not received model response or OTel export",
+      "probe_operation": "failed_generator",
+      "business_first_yield": "produced partial answer",
+      "business_exception": "synthetic stream failure",
+      "captured_native_llm_output": "",
+      "captured_native_status_code": 500,
+      "expected": "Flag loss of genuinely produced partial content in the error finalizer while preserving the reraised error. Do not erase received partial output or invent an empty successful answer. Apply only exact public support or a lifecycle-safe bounded app-owned function decorator fallback on that same operation; no observed finish-reason/usage/OTLP schema is inferred from this native SDK record."
+    }
+  ],
+  "version_policy_cases": [
+    {
+      "id": "hardcoded-future-guide-pin",
+      "kind": "synthetic proposed guidance text, not shipped change or latest version claim",
+      "proposed_guidance": "Install example-genai-sdk==1.0 and example-otel-sdk==2.0 for every future app.",
+      "project_runtime": "Python3.12; existing dependency constraints/lockfile available",
+      "expected": "Reject hardcoded library release versions in general shipped guidance. Dynamically resolve newest compatible release, inspect selected-version APIs and record resolved versions in run receipt/dependency lock. Do not rewrite unrelated user constraints."
+    },
+    {
+      "id": "synthetic-compatible-resolution",
+      "kind": "synthetic fictional-package compatibility facts, not live Splunk/PyPI receipt",
+      "package": "example-genai-sdk",
+      "runtime": "Python3.12",
+      "candidate_facts": [
+        {
+          "version": "1.0",
+          "requires_python": ">=3.11",
+          "compatible": true
+        },
+        {
+          "version": "1.1",
+          "requires_python": ">=3.11",
+          "compatible": true
+        },
+        {
+          "version": "2.0",
+          "requires_python": ">=3.13",
+          "compatible": false
+        }
+      ],
+      "selected_version": "1.1",
+      "resolution_receipt": {
+        "status": "synthetic field example",
+        "source": "supplied fictional compatibility matrix",
+        "runtime_constraints_recorded": true,
+        "selection_reason": "Newest compatible candidate; no runtime upgrade authorized"
+      },
+      "expected": "Accept the scoped selection/compatibility reasoning and concrete receipt, not a live installation claim. Choosing largest version2.0 would violate runtime; repeating1.0 merely from guidance is wrong. Actual future SDK selection still needs its own latest compatible resolution."
+    },
+    {
+      "id": "dated-versioned-capture",
+      "source": "genai-sdk-helper-evidence.json / installed probe version receipt",
+      "expected": "Retain exact historical captured version/revision/date as evidence without relabeling it newest now or forcing that release in shipped guidance. Recorded selected version and lockfile are valid; a fixed future guide default is distinct."
+    }
+  ],
+  "studio_signal_cases": [
+    {
+      "id": "spans-and-metrics-unasked-logs-none",
+      "scope": "Synthetic source configuration and packet inventory",
+      "operator_requested_log_optout": false,
+      "profile": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
+        "OTEL_LOGS_EXPORTER": "none"
+      },
+      "source_signals": {
+        "ordinary_application_logger_present": true,
+        "sdk_log_decorator_creates_genai_span": true
+      },
+      "synthetic_receiver_records": {
+        "traces": {
+          "path": "/v1/traces",
+          "count": 2
+        },
+        "metrics": {
+          "path": "/v1/metrics",
+          "count": 1
+        },
+        "logs": {
+          "path": "/v1/logs",
+          "count": 0
+        }
+      },
+      "expected": "Fail normal log coverage/default: unasked none is not valid merely traces/metrics or SDK @log GenAI spans exist. Configure native app LogRecord/provider/export with normal discovered Studio routing and correlation, preserving console sinks and safe body/attributes."
+    },
+    {
+      "id": "three-native-signal-records",
+      "scope": "Synthetic field/transport packet example, not a receiver/runtime capture",
+      "operator_requested_log_optout": false,
+      "profile": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/v1/logs",
+        "OTEL_LOGS_EXPORTER": "otlp"
+      },
+      "synthetic_receiver_records": {
+        "traces": {
+          "path": "/v1/traces",
+          "records": [
+            {
+              "service.name": "synthetic-agent",
+              "span.name": "invoke_agent synthetic"
+            }
+          ]
+        },
+        "metrics": {
+          "path": "/v1/metrics",
+          "records": [
+            {
+              "service.name": "synthetic-agent",
+              "name": "synthetic.turn.count",
+              "value": 1
+            }
+          ]
+        },
+        "logs": {
+          "path": "/v1/logs",
+          "records": [
+            {
+              "service.name": "synthetic-agent",
+              "body": "synthetic_turn_completed",
+              "severity_text": "INFO",
+              "trace_id": "11111111111111111111111111111111",
+              "span_id": "1111111111111111",
+              "scope": "application-logger"
+            }
+          ]
+        }
+      },
+      "expected": "Recognize separate native signal types/routes and applicable safe correlated app LogRecord fields; SDK @log span is not this record. Synthetic fields give only contract-level support, not actual app startup/Studio/live cloud receipt. Require fresh evidence from real app and normal exporter for actual default path."
+    },
+    {
+      "id": "explicit-user-log-optout",
+      "scope": "Synthetic operator-owned preference",
+      "operator_requested_log_optout": true,
+      "operator_instruction": "Disable log export; retain traces and metrics.",
+      "profile": {
+        "OTEL_LOGS_EXPORTER": "none"
+      },
+      "expected": "Preserve explicit opt-out and report intentional log-export N/A with user provenance; do not override it or claim logs were emitted. This exception does not justify an unasked none default elsewhere."
+    }
+  ]
+}

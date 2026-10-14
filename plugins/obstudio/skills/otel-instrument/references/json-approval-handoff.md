@@ -78,6 +78,16 @@ Before any application-code, dependency, runtime-config, or test edit:
 
    Use the exact requested IDs. Let the tool add dependencies and preserve
    audit order. Do not hand-edit or merge selections.
+   When the user supplies an AO target, add `--ao-project <name>` (or
+   `--ao-project-id <id>`) and `--ao-agent-stream <name>` (or
+   `--ao-agent-stream-id <id>`). Add `--ao-reuse-only` only when requested.
+   These inputs persist as the optional schema-v3 `ao_target` and are bound by
+   `selection_sha256`; they do not add AO work outside the selected IDs. Use
+   the saved target unchanged during adoption unless the current user request
+   explicitly replaces it. Older schema-v1/v2 selections remain valid. If
+   selected provisioning needs the audit's proposed target because no input
+   or application binding exists, materialize those disclosed names through
+   `select` with the same requested IDs and decision answers before editing.
 4a. For a bare or broad instrumentation request with no saved scope, create the
     selection from every currently eligible executable finding:
 
@@ -189,8 +199,9 @@ Write `.observe/otel-instrumentation.json` with this shape:
 Copy `audit_id` and `audit_sha256` from the selection. Compute
 `selection_sha256` from the exact normalized selection returned by the shared
 validator, including `requested_ids`, dependency-closed `approved_ids`,
-`decision_answers`, and approval metadata. A changed answer invalidates older
-instrumentation even when the executable IDs remain unchanged. Use only `Pass`,
+`decision_answers`, any schema-v3 `ao_target`, and approval metadata. A changed
+answer invalidates older instrumentation even when the executable IDs remain
+unchanged. A changed AO target also invalidates older instrumentation. Use only `Pass`,
 `Partial`, `Fail`, or `Blocked` for instrumentation `meta.result`; represent
 skipped, not-run, or unavailable verification as `Partial` with affected
 findings left `not_proven`, `not_configured`, or `deferred`; do not emit

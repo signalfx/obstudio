@@ -496,6 +496,7 @@ def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) 
     path = config_path(config)
     workers = getattr(config.option, "numprocesses", None) or 1
     backend = get_backend(config)
+    grading_enabled = mode != "validation" and rubric_enabled(config)
     return {
         "mode": mode,
         "eval_kind": eval_kind(config) if mode != "validation" else "validation",
@@ -505,11 +506,11 @@ def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) 
         "repo_root": str(repo_root),
         "config_path": display_path(path, repo_root) if path else "",
         "agent_model": agent_model(config) or "",
-        "judge_model": judge_model(config) or "",
+        "judge_model": (judge_model(config) or agent_model(config) or "") if grading_enabled else "",
         "agent_backend": backend.name,
         "agent_timeout": str(agent_timeout(config)),
         "judge_timeout": str(judge_timeout(config)),
-        "rubric_enabled": rubric_enabled(config),
+        "rubric_enabled": grading_enabled,
         "runtime_enabled": runtime_enabled(config),
         "workers": str(workers),
     }

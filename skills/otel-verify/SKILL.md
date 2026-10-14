@@ -31,6 +31,51 @@ export target. When selected or bound findings use
 `finding_group: splunk-agent-observability`, or the repository contains a
 `splunk_ao` dependency/import, also read
 `../references/splunk-agent-observability.md`.
+When the selected scope or application owns GenAI operations, also read
+`../references/genai-readiness.md` and apply its GenAI Instrumentation Selection
+and Required GenAI Coverage Profile. Verify the chosen producer's span creation
+separately from export-only setup; preserve and verify the canonical existing
+OTel/Galileo producer when present. Applicable content/vendor fields are
+required acceptance even when OTel publishes them as Opt-In.
+For fixture-only GenAI reviews, report unknown capture configuration as
+`Not proven`. For each producer and exporter, name a pre-SDK redaction/schema
+hook and give concrete proposed UTF-8 byte/message/part limits, or an acceptance
+test against documented configured limits. Require useful schema-valid content,
+truthful truncation/gap handling and credential/token/email sentinel absence from
+native records, attributes/events and wire as applicable. Keep proposed settings
+and unrun acceptance tests separate from observed configuration or emission.
+For fresh or export-only GenAI scenarios using the Splunk AO default or an
+explicit Splunk AO choice, also read
+`../references/splunk-agent-observability.md` and its Decorator Selection plus
+Fresh Agent SDK Instrumentation mapping, even with no `splunk_ao` import or selected
+AO resource finding. Select a supported Splunk AO creator for that path where
+it meets the contract; assess the reference's per-operation public OTel
+compatibility exception for source-proven incompatible SDK boundaries. An
+explicit user choice of another supported producer overrides the default;
+verify that chosen canonical producer and its required coverage. Record
+creator symbols, actual boundary,
+installed or proposed source-verified version and exact example/revision;
+separate that prospective choice from actual emitted-span proof. A fixture
+without an installed SDK does not justify silently changing the fresh default.
+Apply its mandatory per-function producer decision gate to every fresh or
+newly uncovered Python GenAI source function, including model/tool/retrieval
+functions and async-generator agents. Reconcile the named function/type and
+each applicable control-flow branch before assigning kind or usage rules:
+networked inference requires CLIENT, actual in-process inference uses its
+appropriate kind, and a deterministic demo/rule-engine branch is N/A for real
+model inference usage and remote CLIENT acceptance. Keep these conditions in
+the per-function evidence; a function name does not establish inference.
+Reconcile the
+native public source/probe assessment with the actual SDK `@log` or justified
+application-owned function decorator. A missing decision or newly added manual
+function scope without a proven exception is Fail/Partial even with correct
+span attributes; `@contextmanager` on a scope factory is not that function
+decorator or SDK `@log`. An incompatible capture, generator protocol, lifecycle,
+creation-time or sink contract requires exact evidence and a supported fallback.
+Verify actual business values, stream behavior and one node per operation, not merely
+the presence of an annotation. Preserve framework/provider-owned operations
+without a duplicate decorator span and keep all remaining field gaps visible.
+
 
 ## Contract
 
@@ -180,6 +225,12 @@ Inspect the repo before running anything:
 - If GenAI readiness is in scope, include workflow, agent, LLM call, tool
   execution, retrieval/memory, eval when present, token usage, model/provider
   attributes, duplicate-span prevention, and correct parent/child topology.
+  For supplied source/probe cases, start a ledger before drafting the report:
+  each case's actual operation, chosen creator/type and sink, safe source
+  values/bounds, known capture/lifecycle/field support or failure, and exact
+  source/probe receipt. Decide support from the available evidence now; keep
+  unexecuted app/export acceptance separate. Group cases only when their
+  distinct constraints and decisions remain explicit.
 - Map every affected source module to a compile, typecheck, syntax, or import
   gate. Use changed files and handoff evidence to classify failures as
   `instrumentation-introduced`, `pre-existing`, `environment`, or `unknown`.
@@ -432,6 +483,17 @@ not an instrumentation failure.
   the matching receiver: gRPC commonly uses `4317`; HTTP/protobuf commonly
   uses `4318/v1/<signal>`. Do not treat successful traces as evidence that the
   metrics exporter is valid.
+- For the default Studio pipeline, verify the consumed launch profile has
+  `OTEL_LOGS_EXPORTER=otlp` and that application LogRecords arrive in Studio
+  alongside the actual trace spans and metric datapoints. A generated `none`
+  setting without an explicit user/operator opt-out does not satisfy default
+  log acceptance. SDK `@log` GenAI spans and stdout correlation do not prove
+  log export. Keep intentional opt-out tests separate from the normal launch.
+- Verify dependency compatibility using the actual installed/locked packages
+  and current official metadata/APIs; record exact resolved versions and
+  source dates in run evidence. Skills contain no fixed library release
+  recipes. Do not upgrade the application during read-only verification or
+  claim a newer proposed compatible set was installed or executed.
 - Assert effective resource attributes from collector data, including
   `service.name`, environment, and version. Source-level merge logic alone does
   not prove operator-provided values survive provider construction.
@@ -457,14 +519,127 @@ For selected Splunk Agent Observability work, verify four outcomes separately:
 - the selected application routing mode is configured and exercised; and
 - a fresh application trace is observed in the intended project and stream.
 
-Local Studio visibility proves receiver delivery only. In gateway mode also
-prove that Studio uses its active connection/realm, supplies upstream auth,
+For selected resource provisioning, inspect the configured `ao_target` and
+exercise the application's provisioning step with credential-free SDK fakes.
+Prove both-existing causes zero creates, both-missing and mixed resources are
+resolved or created in the intended project, and a repeated run reuses the
+same IDs. Exercise duplicate/conflict recovery by exact scoped relookup,
+ambiguous and wrong-project resources, unresolved explicit IDs, and lookup or
+creation permission/server failures. Failures must leave ordinary OTel active
+and must not trigger alternate names or blind repeat creates. Lookup-only code
+does not prove the missing-resource branch. Record reused/created resources
+separately from attempted or blocked provisioning and fresh cloud receipt;
+verify mode must not provision live resources merely to produce evidence.
+
+For each selected resource, inventory lookup and creation as separate paths.
+Exercise 401, 403, timeout, and 5xx failures for project lookup, Agent Stream
+lookup, project creation, and Agent Stream creation wherever the actual
+runtime supports that operation; an unsupported creation branch must be
+reported as missing rather than tested through a replacement implementation.
+Inspect call counts and sink initialization to prove failure isolation. Reconcile
+the actual loaded profile and runtime-native selectors with standard
+`SPLUNK_AO_PROJECT(_ID)` and `SPLUNK_AO_AGENT_STREAM(_ID)` settings, then test
+non-default and conflicting values to establish which selectors the source
+consumes and their precedence. Do not assume standard SDK variables control a
+runtime that passes its own resource names explicitly. Prove explicit-ID
+plumbing when supported, or state the source-backed name-only limitation;
+passing an ID string to a name lookup does not prove ID support.
+
+Local Studio visibility proves receiver delivery only. For Python SDK gateway
+mode, verify its actual profile loader and env generator deliver populated
+`SPLUNK_AO_API_URL`, `SPLUNK_AO_CONSOLE_URL`, and
+`SPLUNK_AO_API_KEY=local-gateway` to the provisioning process through a
+credential-free SDK boundary. Compare with the discovered API base, including
+non-default ports; an unused sample, pass-through allowlist, or blank generated
+assignment is `Not configured`. Keep verify read-only for application/env
+files and report the missing fields instead of repairing them. Preserve
+explicit direct-cloud mode and do not require this trio for an unselected or
+direct-cloud AO path. For other languages, verify the runtime's actual supported
+gateway endpoint, authentication, resource selectors and consumed profile;
+absence of Python SDK variables alone is not `Not configured`. Keep source
+configuration, runtime receipt and fresh cloud visibility separate. Separately
+prove that Studio uses its active
+connection/realm, supplies upstream auth,
 preserves per-request resource bindings without cross-application leakage, and
 handles unavailable or changed connections honestly. Application cloud
 credentials are not a prerequisite for this mode. A missing Studio connection
 or required resource permission may block live product proof without blocking
 credential-free configuration, provider-reuse, lifecycle, content-safety, and
 duplicate-span tests.
+
+Apply the per-tool vendor content contract in
+`../references/genai-readiness.md` per actual tool span ID. Arguments/results
+alone or messages on its parent/model do not satisfy the tool's message fields.
+For the GenAI path, check arguments against both `gen_ai.tool.call.arguments`
+and schema-valid `gen_ai.input.messages`, and produced results against both
+`gen_ai.tool.call.result` and `gen_ai.output.messages`. A supported
+OpenInference `input.value`/`output.value` path is an explicit alternative,
+not a reason to silently pass missing content. Compare the same sanitized
+source values, correlation and configured limits; missing, malformed or
+mismatched mappings are individual failures. For error/cancel/timeout without
+a produced result, require error/lifecycle evidence and an exact absent-output
+reason, never a fabricated successful output. A fixture-only pass remains
+structural proof; SDK-created spans still need actual runtime capture.
+
+For selected GenAI spans, reconcile current OTel docs/schemas and both vendor
+integration guides before scoring. Inventory every operation and field with
+official level, vendor requirement, skill acceptance, applicability, actual
+source value, original/AO/exported value and proof. Check span kind/name,
+provider/model, parameters, response/finish reasons, usage, streaming,
+conversation/tool-call IDs, input/output messages, effective instructions/tool
+definitions, actual arguments/results and retrieval content when applicable.
+SDK-created spans are not automatic proof; empty placeholders, omitted
+applicable content and wrong schema/value mappings fail required coverage.
+For a compatibility exception, verify the actual public OTel function creator,
+initial kind/request fields, active context, retained provider and configured
+or selected export paths;
+never count its processor as SDK span creation. After a repair, reconcile all
+normal report sections with current creator/kind/output evidence. A stale SDK
+label or repaired failure left in an older section is a report inconsistency.
+Before finalizing, reconcile every requested case and source-known request
+control with its report evidence. Inventory controls at their actual request
+call sites, then compare each attribute's expected safe source value with the
+captured value or absence. Record applicability, result and proof. Naming a
+missing control without its known source value does not complete this
+comparison; a similarly named tool-result field is not a request control.
+Use supplied SDK source and probe facts to decide that captured package's
+capability or failure concretely now for each function. Reconcile its ledger
+decision with the report: SDK decorator/type, exact justified application-owned
+decorator fallback, or preserved producer. Separate dispatch, captured fields,
+lifecycle/protocol and normal versus custom sink support from unexecuted
+application/wire proof. A conditional "when supported" or hypothetical future
+compatibility does not decide a source/probe case with available facts.
+For supplied native signal examples, compare each signal's endpoint/protocol/path
+and available record values with its contract. Assess log body, severity,
+resource, logger scope and trace/span ID presence separately from an actual
+match to an owning span. Record supported fields and missing evidence even
+when runtime delivery is unproven; a synthetic record is not receiver or cloud
+receipt. Generic policy does not assess a supplied parameter, dependency
+selection or signal record.
+Include exact source URLs and provided
+revision/date/hash receipts rather than only naming an input artifact.
+Supplemental source or captured cases may use accurate Markdown, JSON or linked
+equivalent evidence; preserve canonical JSON contracts separately and never
+invent live findings for fixtures. State an omitted or unavailable check
+explicitly instead of silently dropping the case or field.
+An explicit restricted-content scenario can pass its safety assertion while
+remaining partial for the full profile. Never fabricate successful output for
+failed operations or duplicate system-role content in separate instructions.
+Execute success plus stream-error/timeout/cancel cases at actual SDK/application
+boundaries; auxiliary suggestions/title/subagent calls are operations too.
+Prove one canonical producer, correct parent context and no unfinished spans.
+Check existing SDK partial-rejection/export-health diagnostics and distinguish
+receiver receipt, accepted batch, source/cloud inventory and product visibility.
+No trace complete flag substitutes for per-field or per-source-span proof.
+When verifying producer-selection scenarios, publish a separate row for each
+runtime: current canonical creator/provider/exporter, intended preserved or
+fresh SDK path, named supported API and matching official example/version
+evidence or exact unavailable prerequisite. Do not leave a generic 'SDK or
+another producer' statement. Publish real conversation/tool-call correlation
+as per-field results too: a known missing call ID is a gap, an unavailable
+session ID is unproven/N/A according to current applicability, and neither is
+silently invented. Keep prospective configuration distinct from observed
+app-code span creation and fixture-only structural evidence.
 
 Run Splunk Observability Studio validation when the user requests it, but classify each finding
 before using it as an application result:
@@ -596,6 +771,15 @@ needed to substantiate the result or explain gaps.>
 
 Report requirements:
 
+- For GenAI, include all three **Required GenAI Report Evidence** tables from
+  `../references/genai-readiness.md` in the requested review/report. Even a
+  captured-fixture review must map fresh-agent boundaries to exact actual or
+  proposed creators: supported SDK methods or the justified per-operation
+  public OTel exception. Record chosen package/public API source and applicable
+  example revision, preserve existing creators, assess ordinary
+  helpers as GenAI N/A, and include explicit cancellation/teardown evidence
+  rows. Missing runtime evidence is Not proven; generic SDK recommendations
+  cannot substitute for the producer receipt or lifecycle assessment.
 - Follow `../references/report-flow-contract.md`. The first screen must let a
   reader answer what changed, whether it was tested, whether it works, what
   proves it, and why anything remains unproven.

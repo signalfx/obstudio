@@ -1,0 +1,414 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "python-fresh-genai-default-fixture",
+    "service_name": "python-ai-assistant-demo",
+    "commit": "fixture",
+    "language": "python",
+    "framework": "fastapi",
+    "date": "2026-10-12",
+    "status": "Partial",
+    "genai_ownership_detected": true
+  },
+  "summary": [
+    "The app-owned assistant lifecycle has no OpenTelemetry GenAI spans or bounded token, tool, retrieval, and stream telemetry."
+  ],
+  "flow": "audit -> select -> instrument -> verify",
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "FastAPI service without OpenTelemetry dependencies",
+      "source": "pyproject.toml"
+    },
+    {
+      "check": "Entry point",
+      "finding": "App-owned assistant, provider, tool, and streaming lifecycle",
+      "source": "app.py:58"
+    },
+    {
+      "check": "Route source",
+      "finding": "Chat, stream, feedback, and health routes",
+      "source": "app.py:126"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Python 3.11 FastAPI application",
+      "source": "pyproject.toml"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "app.py:58-187"
+    },
+    {
+      "check": "search_docs retrieval applicability",
+      "finding": "app.py run_tool returns fixed match count/score; it consumes no search input and returns no document objects. Tool input/result content remains applicable, but query/documents or a separate retrieval span are not established.",
+      "source": "app.py:58-76"
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/health"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/stream"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/streams"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/feedback"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/feedback/export"
+    }
+  ],
+  "signal_flow": {
+    "component_flow_map": "Assistant lifecycle\nFastAPI routes [SOURCE-COVERED] -> build_turn [GAP: Assistant GenAI lifecycle] -> run_tool search_docs [GAP: Assistant GenAI lifecycle] -> call_provider [SOURCE-COVERED]\n\nAgent Observability deployment\nproject resource [GAP: Agent Observability project resource] -> Agent Stream resource [GAP: Dedicated Agent Stream resource] -> configured API/ingest endpoint [GAP: Agent Observability runtime routing]"
+  },
+  "current_instrumentation": {
+    "spans": [],
+    "metrics": [],
+    "logs": [],
+    "incident_readiness": []
+  },
+  "genai_readiness": [
+    {
+      "surface": "Assistant GenAI lifecycle",
+      "status": "missing",
+      "evidence": "app.py:58-187",
+      "required_signals": "One source-backed invoke_agent build_turn orchestration; an invoke_workflow parent only when real workflow composition satisfies the current official applicability rule; chat demo-gpt-4o-mini model and execute_tool search_docs/lookup_customer operations under their owning agent; correct INTERNAL workflow/agent/tool and CLIENT model kinds, gen_ai.operation.name and known stable identities. Fresh GenAI creation uses a supported version of Splunk AO logger/schema/decorator APIs or matching framework integration, with current official SDK example provenance; processor-only setup is insufficient. Existing OTel/Galileo producers and export paths remain in place with only gaps enriched. Bounded, redacted gen_ai.input.messages and gen_ai.output.messages with current OTel typed-parts schemas on successful workflow, agent, model and tool operations; real tool arguments/results plus vendor input/output message mappings; real known model/provider/finish/token values and approved opaque conversation/tool-call correlation. Preserve OTel published Opt-In levels separately from this required acceptance profile. No fabricated output or usage for failure/timeout/cancellation; genuinely unavailable metadata is explicitly unproven or not applicable. gen_ai.client.token.usage metric with gen_ai.token.type; assistant.stream.active metric.",
+      "owner": "App-owned: app.py:58-187",
+      "acceptance_criteria": "One source-backed invoke_agent build_turn orchestration; an invoke_workflow parent only when real workflow composition satisfies the current official applicability rule; chat demo-gpt-4o-mini model and execute_tool search_docs/lookup_customer operations under their owning agent; correct INTERNAL workflow/agent/tool and CLIENT model kinds, gen_ai.operation.name and known stable identities. Fresh GenAI creation uses a supported version of Splunk AO logger/schema/decorator APIs or matching framework integration, with current official SDK example provenance; processor-only setup is insufficient. Existing OTel/Galileo producers and export paths remain in place with only gaps enriched. Bounded, redacted gen_ai.input.messages and gen_ai.output.messages with current OTel typed-parts schemas on successful workflow, agent, model and tool operations; real tool arguments/results plus vendor input/output message mappings; real known model/provider/finish/token values and approved opaque conversation/tool-call correlation. Preserve OTel published Opt-In levels separately from this required acceptance profile. No fabricated output or usage for failure/timeout/cancellation; genuinely unavailable metadata is explicitly unproven or not applicable. Actual configured/offered tool definitions and request parameters are captured only where source supplies them; embedded system-role chat messages are not duplicated as separate instructions. Token and active-stream metrics use bounded dimensions, never content or opaque IDs. All spans close on normal completion, provider/tool errors, timeout, streaming cancellation and teardown; independent auxiliary model operations receive separate lifecycle proof when present.",
+      "impact": "Operators cannot localize model, tool, token-pressure, or streaming failures in the assistant lifecycle."
+    }
+  ],
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "title": "Emit the live agent GenAI lifecycle",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Assistant GenAI lifecycle",
+      "gap": "The app-owned assistant, provider, tool, token, and streaming lifecycle emits no OpenTelemetry GenAI telemetry.",
+      "impact": "Model and tool failures, token pressure, and stream concurrency cannot be localized from telemetry.",
+      "product_outcome": "The trace waterfall and metric explorer show one bounded app-owned assistant lifecycle.",
+      "required_fix": "One source-backed invoke_agent build_turn orchestration; an invoke_workflow parent only when real workflow composition satisfies the current official applicability rule; chat demo-gpt-4o-mini model and execute_tool search_docs/lookup_customer operations under their owning agent; correct INTERNAL workflow/agent/tool and CLIENT model kinds, gen_ai.operation.name and known stable identities. Fresh GenAI creation uses a supported version of Splunk AO logger/schema/decorator APIs or matching framework integration, with current official SDK example provenance; processor-only setup is insufficient. Existing OTel/Galileo producers and export paths remain in place with only gaps enriched. Bounded, redacted gen_ai.input.messages and gen_ai.output.messages with current OTel typed-parts schemas on successful workflow, agent, model and tool operations; real tool arguments/results plus vendor input/output message mappings; real known model/provider/finish/token values and approved opaque conversation/tool-call correlation. Preserve OTel published Opt-In levels separately from this required acceptance profile. No fabricated output or usage for failure/timeout/cancellation; genuinely unavailable metadata is explicitly unproven or not applicable.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "genai.turn.lifecycle"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "app.py:58-187"
+      ],
+      "acceptance_criteria": [
+        "One source-backed invoke_agent build_turn orchestration; an invoke_workflow parent only when real workflow composition satisfies the current official applicability rule; chat demo-gpt-4o-mini model and execute_tool search_docs/lookup_customer operations under their owning agent; correct INTERNAL workflow/agent/tool and CLIENT model kinds, gen_ai.operation.name and known stable identities. Fresh GenAI creation uses a supported version of Splunk AO logger/schema/decorator APIs or matching framework integration, with current official SDK example provenance; processor-only setup is insufficient. Existing OTel/Galileo producers and export paths remain in place with only gaps enriched. Bounded, redacted gen_ai.input.messages and gen_ai.output.messages with current OTel typed-parts schemas on successful workflow, agent, model and tool operations; real tool arguments/results plus vendor input/output message mappings; real known model/provider/finish/token values and approved opaque conversation/tool-call correlation. Preserve OTel published Opt-In levels separately from this required acceptance profile. No fabricated output or usage for failure/timeout/cancellation; genuinely unavailable metadata is explicitly unproven or not applicable. Actual configured/offered tool definitions and request parameters are captured only where source supplies them; embedded system-role chat messages are not duplicated as separate instructions. Token and active-stream metrics use bounded dimensions, never content or opaque IDs. All spans close on normal completion, provider/tool errors, timeout, streaming cancellation and teardown; independent auxiliary model operations receive separate lifecycle proof when present."
+      ],
+      "constraints": [
+        "Required content is bounded and redacted before export. Never emit credentials, sensitive user/tenant identity or hidden reasoning. Preserve approved opaque conversation/tool-call identifiers on spans, never metric dimensions.",
+        "Preserve any existing GenAI producer and fill its gaps without duplicate operations. Evaluation-only SDK setup is not a live-agent producer.",
+        "Known source availability controls applicability: app.py exposes provider/model, tool names, prompt/results, finish reason and estimated token usage. It does not expose temperature, top_p, response provider ID, separate instructions, a provider tool schema or tool-call ID. Do not invent these; analyze separately the additional concrete values in supplied producer scenarios.",
+        "Latest OTel invoke_workflow requires a coordinated workflow, not a standalone agent or hidden runner. app.py build_turn is one standalone orchestration boundary without a separate graph or auxiliary model phase: do not invent an official workflow solely to create a UI card. Record vendor SDK trace grouping separately; apply workflow acceptance only where the supplied concrete producer scenarios show real workflow composition."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "span",
+          "name": "invoke_workflow {actual workflow} only where applicable; SDK vendor trace grouping assessed separately",
+          "attributes": [
+            "gen_ai.operation.name=invoke_workflow only for a real composed workflow",
+            "gen_ai.workflow.name=actual available workflow identity",
+            "gen_ai.input.messages=current typed-parts JSON after bounded source redaction",
+            "gen_ai.output.messages=current typed-parts JSON for actual success only",
+            "gen_ai.conversation.id=approved opaque ID when available"
+          ],
+          "product_view": "Published OTel invoke_workflow operation/name/kind and workflow.name where workflow applicability is met; preserve vendor grouping separately when source is only a standalone agent invocation."
+        },
+        {
+          "type": "span",
+          "name": "invoke_agent build_turn",
+          "attributes": [
+            "gen_ai.operation.name=invoke_agent",
+            "gen_ai.agent.name=build_turn (stable source function identity, no generic invented assistant label)",
+            "gen_ai.provider.name=demo-provider (vendor expectation for INTERNAL agent)",
+            "gen_ai.input.messages=current typed-parts JSON after bounded source redaction",
+            "gen_ai.output.messages=current typed-parts JSON for actual success only",
+            "gen_ai.conversation.id=approved opaque ID when available"
+          ],
+          "product_view": "App-owned agent trace waterfall"
+        },
+        {
+          "type": "span",
+          "name": "chat demo-gpt-4o-mini",
+          "attributes": [
+            "gen_ai.operation.name=chat",
+            "gen_ai.provider.name=demo-provider",
+            "gen_ai.request.model=demo-gpt-4o-mini",
+            "gen_ai.response.finish_reasons=actual provider finish reason",
+            "gen_ai.usage.input_tokens=known source estimate with documented provenance",
+            "gen_ai.usage.output_tokens=known source estimate with documented provenance",
+            "gen_ai.input.messages=current typed-parts JSON after bounded source redaction",
+            "gen_ai.output.messages=current typed-parts JSON for actual success only",
+            "gen_ai.conversation.id=approved opaque ID when available"
+          ],
+          "product_view": "App-owned CLIENT model-call trace waterfall"
+        },
+        {
+          "type": "span",
+          "name": "execute_tool search_docs",
+          "attributes": [
+            "gen_ai.operation.name=execute_tool",
+            "gen_ai.tool.name=search_docs",
+            "gen_ai.tool.call.arguments=bounded redacted actual input",
+            "gen_ai.tool.call.result=bounded redacted actual successful result",
+            "gen_ai.tool.call.id=actual approved opaque ID only when supplied",
+            "gen_ai.input.messages=current typed-parts JSON after bounded source redaction",
+            "gen_ai.output.messages=current typed-parts JSON for actual success only",
+            "gen_ai.conversation.id=approved opaque ID when available"
+          ],
+          "product_view": "Single INTERNAL tool operation with required vendor message mapping"
+        },
+        {
+          "type": "span",
+          "name": "execute_tool lookup_customer",
+          "attributes": [
+            "gen_ai.operation.name=execute_tool",
+            "gen_ai.tool.name=lookup_customer",
+            "gen_ai.tool.call.arguments=bounded redacted actual input",
+            "gen_ai.tool.call.result=bounded redacted actual successful result",
+            "gen_ai.tool.call.id=actual approved opaque ID only when supplied",
+            "gen_ai.input.messages=current typed-parts JSON after bounded source redaction",
+            "gen_ai.output.messages=current typed-parts JSON for actual success only",
+            "gen_ai.conversation.id=approved opaque ID when available"
+          ],
+          "product_view": "Single INTERNAL tool operation with required vendor message mapping"
+        },
+        {
+          "type": "metric",
+          "name": "gen_ai.client.token.usage",
+          "attributes": [
+            "gen_ai.token.type"
+          ],
+          "product_view": "Bounded token usage chart"
+        },
+        {
+          "type": "metric",
+          "name": "assistant.stream.active",
+          "attributes": [],
+          "product_view": "Active stream chart"
+        }
+      ],
+      "follow_up_actions": [
+        "Inspect the app-owned GenAI trace waterfall and chart the bounded token and active-stream metrics."
+      ]
+    },
+    {
+      "id": "AO-001",
+      "finding_group": "splunk-agent-observability",
+      "title": "Resolve the Agent Observability project",
+      "severity": "high",
+      "priority": "required",
+      "effort": "small",
+      "status": "proposed",
+      "area": "Agent Observability project resource",
+      "gap": "The deployment has no resolved Agent Observability project resource or project identifier.",
+      "impact": "Agent traces have no verified project destination.",
+      "product_outcome": "An existing or authorized newly created project resource is available as the trace destination.",
+      "required_fix": "Resolve an existing project resource and its identifier, or create one through the configured supported Agent Observability SDK/API endpoint when authorized; never invent an identifier. A compatible local gateway delegates the normal resource request using its active Studio cloud connection, without an application cloud token. Preserve an optional operator project name or ID, verify an ID without creating a replacement, and use a stable service-derived name when none is supplied. Reuse an exact existing project; attempt creation of a selected named project only after definitive absence. Recover a duplicate-create race by bounded exact relookup; auth, ambiguous lookup, transport errors, and 5xx are blockers rather than absence. When optional report resource inputs are blank, use the application loaded SPLUNK_AO_PROJECT_ID or SPLUNK_AO_PROJECT before selecting a default. If neither exists, add proposed Project name python-ai-assistant-demo to the actual loaded env/config profile, preserving existing unrelated and OTel settings. Explicit selected targets must update the effective launch profile before provisioning; no selected AO finding means no resource creation.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "ao.resources.resolve_or_create",
+        "ao.env.profile"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "pyproject.toml"
+      ],
+      "acceptance_criteria": [
+        "The selected project identifier resolves to a real Agent Observability project; if access is unavailable, record the exact authorization blocker.",
+        "An existing selected project is reused with no create call; a definitively missing named project is created once; repeated runs and duplicate-create races converge on the same exact project ID. A missing supplied ID, ambiguous match, or failed lookup does not trigger creation."
+      ],
+      "constraints": [
+        "Do not fabricate a project or identifier, and keep access tokens in operator-owned secret storage."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "agent-observability.project-resource",
+          "attributes": [],
+          "product_view": "Agent Observability project resource"
+        }
+      ],
+      "follow_up_actions": [
+        "Confirm the resolved project exists through the selected API endpoint before configuring its runtime export."
+      ]
+    },
+    {
+      "id": "AO-002",
+      "finding_group": "splunk-agent-observability",
+      "title": "Resolve a dedicated Agent Stream",
+      "severity": "high",
+      "priority": "required",
+      "effort": "small",
+      "status": "proposed",
+      "area": "Dedicated Agent Stream resource",
+      "gap": "The target project has no resolved dedicated Agent Stream resource or identifier for this application.",
+      "impact": "The application has no verified stream destination and its traces can mix with unrelated agents.",
+      "product_outcome": "A dedicated Agent Stream exists in the resolved project and can be selected as the trace destination.",
+      "required_fix": "Resolve an existing dedicated Agent Stream resource in the selected project, or create one through the configured supported Agent Observability SDK/API endpoint when authorized; never invent an identifier or configure a global Studio stream destination. Preserve an optional operator stream name or ID and verify project ownership before binding. Reuse an exact stream within the resolved project, create only a definitively missing selected named stream, and recover a duplicate-create conflict only through bounded exact lookup in that same project. A stream in another project and failed or ambiguous lookups are explicit blockers. When optional report inputs are blank, preserve the application loaded SPLUNK_AO_AGENT_STREAM_ID or SPLUNK_AO_AGENT_STREAM. If neither exists, add proposed Agent Stream name python-ai-assistant-demo-live to the actual loaded env/config profile. Load the profile with the project runner supported env-file mechanism or an existing supported loader, not an invented dotenv parser; verify that provisioning and the real launch consume the same effective selectors.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "ao.resources.resolve_or_create",
+        "ao.env.profile"
+      ],
+      "dependencies": [
+        "AO-001"
+      ],
+      "evidence": [
+        "pyproject.toml"
+      ],
+      "acceptance_criteria": [
+        "The selected Agent Stream identifier resolves to a real stream in the selected project; if access is unavailable, record the exact authorization blocker.",
+        "When both resources exist, neither is created. When the project exists and the selected named stream is missing, only that stream is created. When both named resources are missing, the project is created before its stream. Duplicate conflicts converge through exact relookup; mismatched stream ownership, 401/403, transport failures, and 5xx never trigger speculative creation."
+      ],
+      "constraints": [
+        "Do not fabricate a stream or identifier, and keep access tokens out of tracked files."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "agent-observability.agent-stream-resource",
+          "attributes": [],
+          "product_view": "Dedicated Agent Stream resource"
+        }
+      ],
+      "follow_up_actions": [
+        "Confirm the resolved stream belongs to the selected project before configuring per-request runtime routing."
+      ]
+    },
+    {
+      "id": "AO-003",
+      "finding_group": "splunk-agent-observability",
+      "title": "Persist supported Agent Observability runtime routing",
+      "severity": "high",
+      "priority": "required",
+      "effort": "small",
+      "status": "proposed",
+      "area": "Agent Observability runtime routing",
+      "gap": "The application deployment has no durable supported API/ingest endpoint configuration and per-request binding for its resolved project and Agent Stream.",
+      "impact": "Traces can remain unassigned, mix with other applications, or be mistaken for cloud Agent Observability delivery after only local or APM receipt.",
+      "product_outcome": "The deployed application uses ordinary supported SDK/API calls and OTLP export to its selected project and dedicated Agent Stream through the selected gateway or explicit direct-cloud endpoint.",
+      "required_fix": "Persist supported SDK API/console/auth configuration and the matching ingest endpoint for the installed version. Preserve explicit operator destinations and direct-cloud mode; a compatible Studio gateway is optional and its absence does not block source work or credential-free resolver tests. Keep cloud realm/token server-side in gateway mode and bind the project/Agent Stream on each request/export, without a Studio-specific application adapter, startup discovery, or global destination registration.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "genai.turn.lifecycle",
+        "ao.runtime.routing",
+        "ao.env.profile"
+      ],
+      "dependencies": [
+        "OTEL-001",
+        "AO-001",
+        "AO-002"
+      ],
+      "evidence": [
+        "pyproject.toml"
+      ],
+      "acceptance_criteria": [
+        "Normal SDK/API resource calls and the exporter exercise the selected endpoint mode. Gateway mode derives upstream realm/auth from the active Studio connection with no application cloud token; explicit direct-cloud mode remains valid.",
+        "Two application streams preserve distinct project/stream bindings per request without cross-application leakage or changing a global AO destination. Unavailable or changed gateway connections are reported without silent destination switches or reuse of old-organization IDs.",
+        "A fresh application trace is visible in the selected cloud Agent Stream. Local receipt, resource API success, upstream ingest acknowledgement, or ordinary APM visibility alone leaves cloud AO delivery Not proven.",
+        "Configured endpoints and project/Agent Stream identifiers remain operator-overridable; cloud secrets are not committed and gateway local credentials are not represented as cloud credentials.",
+        "Blank optional resource fields use existing app env selectors or audit-disclosed stable defaults in the real loaded profile. Explicit selected targets update that effective profile before resource resolution; unrelated settings and OTel configuration remain intact. A safe example profile alone is insufficient if the launch never loads the actual settings."
+      ],
+      "constraints": [
+        "Use only supported normal SDK configuration and documented routing headers or attributes; preserve selected operator endpoints and managed dependencies/lockfiles.",
+        "Do not patch SDK vendors, mix incompatible endpoint and realm modes, discover Studio endpoints at app startup, or introduce an application-specific gateway API. A selected gateway is an honest runtime availability dependency."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "agent-observability.runtime-routing",
+          "attributes": [],
+          "product_view": "Configured Agent Observability trace export"
+        }
+      ],
+      "follow_up_actions": [
+        "Exercise ordinary resource calls and fresh trace export using the configured endpoint mode, then confirm the exact fresh interaction in its intended cloud project and Agent Stream. Keep configuration, gateway receipt/forwarding, and cloud visibility evidence separate."
+      ]
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "python.local",
+        "surface": "python-ai-assistant-demo service",
+        "config_evidence": "pyproject.toml",
+        "runner": "python -m pytest",
+        "scope": "service",
+        "prerequisites": "installed project dependencies"
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "genai.turn.lifecycle",
+        "trigger": "POST /v1/chat with bounded input and the registered search_docs and lookup_customer tools",
+        "entrypoint": "app.py:93",
+        "expected_signals": "One source-backed invoke_agent build_turn orchestration; an invoke_workflow parent only when real workflow composition satisfies the current official applicability rule; chat demo-gpt-4o-mini model and execute_tool search_docs/lookup_customer operations under their owning agent; correct INTERNAL workflow/agent/tool and CLIENT model kinds, gen_ai.operation.name and known stable identities. Fresh GenAI creation uses a supported version of Splunk AO logger/schema/decorator APIs or matching framework integration, with current official SDK example provenance; processor-only setup is insufficient. Existing OTel/Galileo producers and export paths remain in place with only gaps enriched. Bounded, redacted gen_ai.input.messages and gen_ai.output.messages with current OTel typed-parts schemas on successful workflow, agent, model and tool operations; real tool arguments/results plus vendor input/output message mappings; real known model/provider/finish/token values and approved opaque conversation/tool-call correlation. Preserve OTel published Opt-In levels separately from this required acceptance profile. No fabricated output or usage for failure/timeout/cancellation; genuinely unavailable metadata is explicitly unproven or not applicable. gen_ai.client.token.usage and assistant.stream.active metrics.",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "One source-backed invoke_agent build_turn orchestration; an invoke_workflow parent only when real workflow composition satisfies the current official applicability rule; chat demo-gpt-4o-mini model and execute_tool search_docs/lookup_customer operations under their owning agent; correct INTERNAL workflow/agent/tool and CLIENT model kinds, gen_ai.operation.name and known stable identities. Fresh GenAI creation uses a supported version of Splunk AO logger/schema/decorator APIs or matching framework integration, with current official SDK example provenance; processor-only setup is insufficient. Existing OTel/Galileo producers and export paths remain in place with only gaps enriched. Bounded, redacted gen_ai.input.messages and gen_ai.output.messages with current OTel typed-parts schemas on successful workflow, agent, model and tool operations; real tool arguments/results plus vendor input/output message mappings; real known model/provider/finish/token values and approved opaque conversation/tool-call correlation. Preserve OTel published Opt-In levels separately from this required acceptance profile. No fabricated output or usage for failure/timeout/cancellation; genuinely unavailable metadata is explicitly unproven or not applicable. Actual configured/offered tool definitions and request parameters are captured only where source supplies them; embedded system-role chat messages are not duplicated as separate instructions. Token and active-stream metrics use bounded dimensions, never content or opaque IDs. All spans close on normal completion, provider/tool errors, timeout, streaming cancellation and teardown; independent auxiliary model operations receive separate lifecycle proof when present.",
+        "environments": [
+          "python.local"
+        ]
+      },
+      {
+        "id": "ao.runtime.routing",
+        "trigger": "Use normal SDK calls to resolve the authorized project and two distinct dedicated Agent Streams, then export a fresh bounded application interaction to each through the selected gateway or explicit direct-cloud endpoint",
+        "entrypoint": "app.py:93",
+        "expected_signals": "Supported project/stream API calls, completed bounded app-owned spans, per-request project/stream headers, and the exact fresh interactions in their intended cloud Agent Streams",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "The ordinary installed SDK and exporter target the persisted non-default API/ingest endpoints without an app-specific adapter or startup discovery. Gateway mode uses active Studio realm/auth with no app cloud token and no global AO binding; two streams remain isolated. Report unavailable or changed connection behavior honestly and do not reuse old-organization IDs silently. Resource resolution, local receipt, and upstream forwarding are separate outcomes; local ACK is not cloud visibility. Without exact fresh interactions in the intended cloud streams, cloud delivery remains Not proven while credential-free configuration/lifecycle proof can still pass.",
+        "environments": [
+          "python.local"
+        ]
+      },
+      {
+        "id": "ao.resources.resolve_or_create",
+        "trigger": "Execute the selected live application resource resolver through fake supported SDK/network boundaries for both existing, both missing, existing project with missing stream, explicit IDs, repeated runs, duplicate-create races, ambiguous identities, mismatched stream ownership, and lookup/create auth or outage failures",
+        "entrypoint": "app.py:93",
+        "expected_signals": "Exact project and project-scoped stream lookups, minimal ordered create calls for conclusively missing named resources, bounded conflict relookup, verified resource IDs, and continued independent application OpenTelemetry behavior when AO resource setup is blocked",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Assertions execute the actual application resolver and inspect call order/counts, ID and ownership binding, and repeated-run state. Both-existing has zero creates; both-missing creates one project then one stream; mixed state creates only the missing stream. Races relookup the exact identity and converge; supplied IDs are never recreated; wrong ownership, ambiguity, 401/403, transport errors, and 5xx do not become absence. Report fake configuration proof separately from actual resource reuse/creation attempts and fresh cloud Agent Stream receipt; a failed AO setup leaves unrelated OTel usable without a half-bound AO sink.",
+        "environments": [
+          "python.local"
+        ]
+      },
+      {
+        "id": "ao.env.profile",
+        "trigger": "Execute the real project runner and env-to-resource-resolution boundary using a private nonsecret profile for blank report/CLI target fields with existing names or IDs, missing or mixed selectors, explicit selected target override, reuse-only, and no selected AO resource work",
+        "entrypoint": "Makefile:dev; selected app resource setup",
+        "expected_signals": "Supported runtime profile loading; stable missing defaults python-ai-assistant-demo and python-ai-assistant-demo-live; preserved user/OTel env settings; matching effective provisioning/runtime identities; fake lookup/create calls only for selected missing named resources",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "The actual supported runner/env-file or existing loader consumes the saved profile before SDK initialization; no ad hoc dotenv parser is introduced. Existing env names/IDs survive blank report inputs, missing selectors get disclosed stable defaults, explicit targets replace conflicting effective selectors, and IDs remain lookup-only. Fake SDK call assertions prove zero creation when resources exist, reuse-only is selected, or AO resource work is unselected. Gateway/API absence does not block profile implementation or local fake proof; real cloud resource and fresh stream receipt remain unproven.",
+        "environments": [
+          "python.local"
+        ]
+      }
+    ]
+  },
+  "anti_patterns": [],
+  "recommendation": [
+    "Select OTEL-001 and run $otel-instrument, then verify the source-backed GenAI lifecycle. search_docs is a constant-returning demo tool with no actual query/documents or separate retrieval boundary; do not invent retrieval telemetry."
+  ]
+}

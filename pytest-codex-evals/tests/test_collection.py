@@ -112,6 +112,88 @@ def test_eval_json_files_validate_without_running_codex(pytester: pytest.Pyteste
     assert not (pytester.path / "eval-reports" / "sample-skill" / "validation" / "report.md").exists()
 
 
+@pytest.mark.parametrize(
+    ("configured_agent", "configured_judge", "override", "expected_agent", "expected_judge"),
+    [
+        ("configured-actor", "", "cli-actor", "cli-actor", ""),
+        ("configured-actor", "", "", "configured-actor", ""),
+        ("configured-actor", "explicit-judge", "cli-actor", "cli-actor", ""),
+        ("", "", "", "", ""),
+    ],
+)
+def test_validation_metadata_does_not_claim_a_judge_model(
+    pytester: pytest.Pytester,
+    configured_agent: str,
+    configured_judge: str,
+    override: str,
+    expected_agent: str,
+    expected_judge: str,
+):
+    write_eval_repo(pytester)
+    config = pytester.path / "codex-evals.toml"
+    config.write_text(
+        f'[models]\nagent = "{configured_agent}"\njudge = "{configured_judge}"\n',
+        encoding="utf-8",
+    )
+    args = ["--skill", str(pytester.path / "skills" / "sample-skill")]
+    if override:
+        args.extend(["--model", override])
+
+    result = pytester.runpytest(*args)
+
+    result.assert_outcomes(passed=2)
+    raw_runs = list(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/validation.json"))
+    assert len(raw_runs) == 1
+    metadata = json.loads(raw_runs[0].read_text(encoding="utf-8"))["metadata"]
+    assert metadata["agent_model"] == expected_agent
+    assert metadata["judge_model"] == expected_judge
+
+
+@pytest.mark.parametrize(
+    ("kind", "mode", "judge", "enabled", "disabled_cli", "expected"),
+    [
+        ("rubric", "with_skill", "", True, False, "cli-actor"),
+        ("rubric", "with_skill", "explicit-judge", True, False, "explicit-judge"),
+        ("standard", "with_skill", "", True, False, "cli-actor"),
+        ("rubric", "with_skill", "explicit-judge", True, True, ""),
+        ("standard", "with_skill", "explicit-judge", False, False, ""),
+        ("sanity", "with_skill", "explicit-judge", True, False, ""),
+        ("runtime", "with_skill", "explicit-judge", True, False, ""),
+        ("validation", "validation", "explicit-judge", True, False, ""),
+        ("rubric", "validation", "explicit-judge", True, False, ""),
+    ],
+)
+def test_judge_metadata_requires_a_rubric_capable_run(
+    pytester: pytest.Pytester,
+    kind: str,
+    mode: str,
+    judge: str,
+    enabled: bool,
+    disabled_cli: bool,
+    expected: str,
+):
+    pytester.makefile(
+        ".toml",
+        **{"codex-evals": (
+            f'[models]\nagent = "configured-actor"\njudge = "{judge}"\n'
+            f'[rubric]\nenabled = {str(enabled).lower()}\n'
+        )},
+    )
+    pytester.makepyfile(test_metadata=f'''
+        from pytest_codex_evals.plugin import run_metadata
+
+        def test_metadata(pytestconfig):
+            metadata = run_metadata(pytestconfig, pytestconfig.rootpath, "sample-skill", {mode!r})
+            assert metadata["agent_model"] == "cli-actor"
+            assert metadata["judge_model"] == {expected!r}
+            assert metadata["rubric_enabled"] is {bool(expected)!r}
+    ''')
+    args = ["test_metadata.py", "--codex-eval-kind", kind, "--model", "cli-actor"]
+    if disabled_cli:
+        args.append("--no-rubric")
+    pytester.runpytest(*args).assert_outcomes(passed=1)
+
+
 def test_validation_scope_tracks_pytest_deselect(pytester: pytest.Pytester):
     write_eval_repo(pytester)
     skill_dir = pytester.path / "skills" / "sample-skill"

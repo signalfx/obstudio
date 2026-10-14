@@ -32,20 +32,38 @@ detected in the codebase. Only install what the project actually uses.
 
 ## Dependencies
 
+Resolve the latest compatible published packages at task time, using the
+project's selected Python runtime, dependency constraints, and lockfile. Check
+`Requires-Python`, `Requires-Dist`, and the resolved SDK/exporter/instrumentor
+APIs together; do not override an operator constraint or upgrade the runtime
+just to copy an example. Record exact resolved releases, metadata/source
+receipts, and the compatibility probe in run evidence, not as fixed skill
+defaults. Retain a compatible locked setup when its ownership and APIs are
+already proven.
+
+Apply the checked candidate set through the project resolver and lockfile, or
+use exact resolved release specs for every added package. Replace the release
+placeholders below with task-time values before running the command; preserve
+operator constraints and verify the installed graph/APIs. Do not re-resolve a
+floating latest tag after checking another candidate.
+
 ```bash
-pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+pip install \
+  'opentelemetry-api==<resolved-api-release>' \
+  'opentelemetry-sdk==<resolved-sdk-release>' \
+  'opentelemetry-exporter-otlp==<resolved-exporter-release>'
 ```
 
 Or in `requirements.txt`:
 ```
-opentelemetry-api
-opentelemetry-sdk
-opentelemetry-exporter-otlp
-opentelemetry-instrumentation-flask      # if Flask
-opentelemetry-instrumentation-fastapi    # if FastAPI
-opentelemetry-instrumentation-django     # if Django
-opentelemetry-instrumentation-requests   # if using requests
-opentelemetry-instrumentation-sqlalchemy # if using SQLAlchemy
+opentelemetry-api==<resolved-api-release>
+opentelemetry-sdk==<resolved-sdk-release>
+opentelemetry-exporter-otlp==<resolved-exporter-release>
+opentelemetry-instrumentation-flask==<resolved-flask-bridge-release>      # if Flask
+opentelemetry-instrumentation-fastapi==<resolved-fastapi-bridge-release>    # if FastAPI
+opentelemetry-instrumentation-django==<resolved-django-bridge-release>     # if Django
+opentelemetry-instrumentation-requests==<resolved-requests-bridge-release>   # if using requests
+opentelemetry-instrumentation-sqlalchemy==<resolved-sqlalchemy-bridge-release> # if using SQLAlchemy
 ```
 
 Use `opentelemetry-distro` and `opentelemetry-bootstrap -a install` only as an
@@ -53,11 +71,11 @@ additional convenience when the project explicitly wants broad CLI
 auto-discovery. For code changes, keep the explicit `opentelemetry-api` and
 `opentelemetry-sdk` dependencies in the project manifest and wire a setup file.
 
-Install the official stdlib bridge. OpenTelemetry Python 1.40.0 and later moved
-automatic handler ownership from the SDK to this instrumentation package:
+Install the official stdlib bridge when the resolved instrumentation package
+owns the stdlib-to-OTel handler:
 
 ```bash
-pip install opentelemetry-instrumentation-logging
+pip install 'opentelemetry-instrumentation-logging==<resolved-logging-bridge-release>'
 ```
 
 ```python
@@ -70,24 +88,25 @@ LoggingInstrumentor().instrument(
 )
 ```
 
-The instrumentor installs the stdlib-to-OTel handler by default and protects it
-across later `basicConfig`, `dictConfig`, and `fileConfig` calls without
-replacing the application's console/file handlers. On
-`opentelemetry-instrumentation-logging` 0.64b0+ (paired with Python OTel
-1.43.0+), pass `inject_trace_context=True` to add `otelTraceID`, `otelSpanID`,
-`otelTraceSampled`, and `otelServiceName` to the original stdlib `LogRecord`
-without changing its format. Keep `set_logging_format=False` to preserve the
-existing stdout/file format. For an older locked instrumentation version, omit
-the unsupported `inject_trace_context` argument; the OTLP handler still derives
-correlation from the current OTel context independently. If the older
+Inspect the resolved instrumentor's documentation/source and run a bounded
+probe before using this example: establish whether it installs and guards the
+handler across later `basicConfig`, `dictConfig`, and `fileConfig` calls while
+preserving the application's console/file handlers. Pass
+`inject_trace_context=True` only when that API supports it, to add
+`otelTraceID`, `otelSpanID`, `otelTraceSampled`, and `otelServiceName` to the
+original stdlib `LogRecord` without changing its format. Keep
+`set_logging_format=False` to preserve the existing stdout/file format. When
+the resolved API lacks that capability, omit the unsupported
+`inject_trace_context` argument; prove that the OTLP handler derives
+correlation from current OTel context independently. If the retained
 stdout/file formatter itself must consume those fields, use
 `OTEL_PYTHON_LOG_CORRELATION=true` or `set_logging_format=True` and update an
 already-created formatter explicitly. That older option also asks
 `logging.basicConfig` to install the OTel format, which may be a no-op when
-handlers already exist and does not enable OTLP export. For a project pinned
-before Python OTel 1.40.0, inspect the installed APIs and retain the older SDK
-`LoggingHandler` compatibility path rather than upgrading dependencies solely
-to copy this example.
+handlers already exist and does not enable OTLP export. If the constrained SDK
+instead owns the supported `LoggingHandler` path, retain and test that path;
+do not install a second handler or upgrade dependencies solely to copy the
+instrumentor example.
 
 ---
 
@@ -95,58 +114,116 @@ to copy this example.
 
 Reuse the current app command and wrap it with the OTel auto-instrumentation agent. Do not introduce Docker just for observability.
 
+The normal generated profile and launch command enable `OTEL_LOGS_EXPORTER=otlp`
+and route application logs to the resolved local Studio receiver. Use `none`
+only for an explicit user opt-out, preserving its provenance; an unavailable
+bridge, conflict, or failed verification is a reported incomplete log path,
+not permission to persist `none` as the normal configuration.
+
 ```bash
 #!/bin/sh
 set -eu
 
 logs_exporter="${OTEL_LOGS_EXPORTER:-}"
-if [ -z "$logs_exporter" ]; then
-  logs_exporter=otlp
-  export OTEL_LOGS_EXPORTER="$logs_exporter"
-fi
-if [ "$OTEL_LOGS_EXPORTER" = otlp ]; then
-  generic_protocol="${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}"
-  logs_protocol="${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL:-$generic_protocol}"
-  case "$logs_protocol" in
-    http/protobuf) fallback_local_logs_endpoint=http://127.0.0.1:4318/v1/logs ;;
-    grpc) fallback_local_logs_endpoint=http://127.0.0.1:4317 ;;
-    *) echo "unsupported local OTLP logs protocol" >&2; exit 1 ;;
-  esac
-  logs_endpoint="${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}"
-  generic_endpoint="${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
-  if [ -z "$logs_endpoint" ] && [ -n "$generic_endpoint" ] && \
-     [ "$logs_protocol" = "$generic_protocol" ]; then
-    # A signal-specific endpoint wins. Otherwise inherit a compatible local
-    # OTLP/HTTP base and preserve its configured port and path. Instrumentation
-    # preflight materializes a signal endpoint for HTTPS/cloud or otherwise
-    # ambiguous generic destinations instead of treating them as local.
-    case "$logs_protocol:$generic_endpoint" in
-      http/protobuf:http://*)
-        generic_http_base="${generic_endpoint%/}"
-        case "$generic_http_base" in
-          */v1/traces) generic_http_base="${generic_http_base%/v1/traces}" ;;
-          */v1/metrics) generic_http_base="${generic_http_base%/v1/metrics}" ;;
-          */v1/logs) generic_http_base="${generic_http_base%/v1/logs}" ;;
-        esac
-        logs_endpoint="${generic_http_base%/}/v1/logs" ;;
-      grpc:http://*) logs_endpoint="$generic_endpoint" ;;
-    esac
+logs_exporter="${logs_exporter#"${logs_exporter%%[![:space:]]*}"}"
+logs_exporter="${logs_exporter%"${logs_exporter##*[![:space:]]}"}"
+case "$logs_exporter" in
+  '') logs_exporter=otlp; export OTEL_LOGS_EXPORTER=otlp ;;
+  [oO][tT][lL][pP]) logs_exporter=otlp ;;
+  [nN][oO][nN][eE]) logs_exporter=none ;;
+  *) logs_exporter="${OTEL_LOGS_EXPORTER}" ;;
+esac
+effective_logs_exporter="$logs_exporter"
+if [ "$logs_exporter" = otlp ]; then
+  # Use the selected project Python. Validate before the CLI constructs any
+  # local log exporter; never print endpoint/header values on failure.
+  if logs_configuration="$(python - <<'PY_LOGS'
+import os
+import sys
+from urllib.parse import urlsplit, urlunsplit
+
+# Retain only receiver names confirmed in preflight; otel-collector matches
+# the Compose example below. Replace it for a different service topology.
+local_hosts = {"127.0.0.1", "localhost", "::1", "otel-collector"}
+
+
+def local_endpoint(raw, protocol, *, signal=False):
+    if any(ord(char) < 32 or ord(char) == 127 for char in raw):
+        raise ValueError("control character")
+    value = raw.strip()
+    if any(char.isspace() for char in value):
+        raise ValueError("whitespace")
+    parsed = urlsplit(value)
+    port = parsed.port  # Validate numeric port syntax and range.
+    if (parsed.scheme != "http" or parsed.hostname not in local_hosts
+            or parsed.username is not None or parsed.password is not None
+            or "?" in value or "#" in value
+            or (port is not None and not 1 <= port <= 65535)):
+        raise ValueError("non-local or ambiguous endpoint")
+    if protocol == "grpc" and parsed.path not in ("", "/"):
+        raise ValueError("gRPC endpoint path")
+    if signal and protocol == "http/protobuf" and not parsed.path.endswith("/v1/logs"):
+        raise ValueError("HTTP logs signal path")
+    return parsed
+
+
+try:
+    if any(os.environ.get(name, "").strip() for name in (
+            "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS")):
+        raise ValueError("local log headers")
+    generic_protocol = os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf").strip().lower()
+    logs_protocol = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", generic_protocol).strip().lower()
+    if logs_protocol not in ("http/protobuf", "grpc"):
+        raise ValueError("unsupported logs protocol")
+    logs_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "")
+    generic_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+    if any(ord(char) < 32 or ord(char) == 127 for char in logs_endpoint):
+        raise ValueError("control character")
+    if logs_endpoint.strip():
+        resolved = local_endpoint(logs_endpoint, logs_protocol, signal=True)
+    else:
+        generic = None
+        if any(ord(char) < 32 or ord(char) == 127 for char in generic_endpoint):
+            raise ValueError("control character")
+        if generic_endpoint.strip():
+            generic = local_endpoint(generic_endpoint, generic_protocol)
+        if generic is not None and logs_protocol == generic_protocol:
+            if logs_protocol == "http/protobuf":
+                path = generic.path.rstrip("/")
+                for suffix in ("/v1/traces", "/v1/metrics", "/v1/logs"):
+                    if path.endswith(suffix):
+                        path = path[:-len(suffix)]
+                        break
+                generic = generic._replace(path=path.rstrip("/") + "/v1/logs")
+            resolved = generic
+        else:
+            fallback = ("http://127.0.0.1:4318/v1/logs"
+                        if logs_protocol == "http/protobuf" else "http://127.0.0.1:4317")
+            resolved = local_endpoint(fallback, logs_protocol, signal=True)
+    print(logs_protocol + " " + urlunsplit(resolved))
+except Exception:
+    sys.exit(1)
+PY_LOGS
+)"; then
+    logs_protocol="${logs_configuration%% *}"
+    logs_endpoint="${logs_configuration#* }"
+    export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL="$logs_protocol"
+    export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="$logs_endpoint"
+  else
+    # This invocation skips only the added CLI log path. Preserve the intended
+    # profile and all trace/metric/header settings; do not persist an opt-out.
+    printf '%s\n' 'local OTLP log export skipped; check receiver, protocol and header configuration' >&2
+    effective_logs_exporter=none
+    export OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION=false
   fi
-  export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL="$logs_protocol"
-  # Instrumentation preflight writes the resolved receiver into this standard
-  # OTel variable. The literal is only the no-discovery host fallback.
-  export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="${logs_endpoint:-$fallback_local_logs_endpoint}"
-  if [ -n "${OTEL_EXPORTER_OTLP_HEADERS:-}" ]; then
-    echo "move generic OTLP headers to trace/metric signal variables and remove the generic value" >&2
-    exit 1
-  fi
 fi
-if [ "$OTEL_LOGS_EXPORTER" = none ]; then
+if [ "$logs_exporter" = none ]; then
   # Ensure the explicit opt-out cannot inherit the zero-code default bridge.
   export OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION=false
 fi
 
 exec opentelemetry-instrument \
+  --logs_exporter "$effective_logs_exporter" \
   --service_name "${OTEL_SERVICE_NAME:-my-service}" \
   --exporter_otlp_endpoint "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4318}" \
   --exporter_otlp_protocol "${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}" \
@@ -317,11 +394,13 @@ def _local_log_exporter():
             "select the official exporter matching the configured logs protocol"
         )
 
-    # Reject generic headers even when logs headers are present: SDKs may merge
-    # both sources and leak a cloud credential into the local log request.
-    if os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip():
+    # Exporters may read both header variables when constructor headers are
+    # omitted. Reject either source before constructing this local exporter.
+    if any(os.environ.get(name, "").strip() for name in (
+        "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS"
+    )):
         return _skip_local_logs(
-            "move generic OTLP headers to trace/metric signal variables"
+            "keep local logs headers empty; scope cloud credentials to traces/metrics"
         )
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
     if endpoint and not _local_http_endpoint(endpoint):
@@ -452,11 +531,12 @@ provider or signal handler during reloads or per worker request.
 `LoggingInstrumentor` is the current stdlib-to-OTel bridge. Its handler is an
 additional path, and its guarded configuration wrappers let later application
 logging setup proceed before reattaching the OTel handler. Do not use
-`logging.basicConfig(force=True)`. On 0.64b0+/1.43.0+,
+`logging.basicConfig(force=True)`. Check the resolved instrumentor's API and
+handler ownership before copying the setup. When supported,
 `inject_trace_context=True` injects the OTel fields without changing the
-existing text format; `set_logging_format=False` preserves that format. On an
-older locked version, omit the unsupported injection argument. The OTLP handler
-still derives correlation from current context; use
+existing text format; `set_logging_format=False` preserves that format. If the
+constrained API lacks it, omit the unsupported injection argument and prove
+that the OTLP handler still derives correlation from current context; use
 `OTEL_PYTHON_LOG_CORRELATION=true`/`set_logging_format=True` only when the older
 stdout/file formatter must receive those fields, and update an already-created
 formatter explicitly because `basicConfig` may not replace it.

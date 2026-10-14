@@ -75,6 +75,26 @@ Scan the repository to determine language, framework, and existing instrumentati
   Follow its GenAI Semconv Source Contract before scoring GenAI coverage:
   reconcile detected AI surfaces with official semconv docs when available,
   record live-or-snapshot provenance, and build a semconv closure matrix.
+  Apply GenAI Instrumentation Selection and the Required GenAI Coverage
+  Profile: a fresh agent defaults to Splunk AO span creation, while an
+  existing OTel/Galileo producer is preserved and enriched. Read
+  `../references/splunk-agent-observability.md` for fresh-agent SDK APIs and
+  current official examples even when no SDK import exists yet. Before
+  prescribing any creator for fresh or uncovered Python GenAI functions,
+  complete its mandatory per-function producer decision gate for every actual
+  agent/model/tool/retrieval function. Keep native SDK `@log` versus justified
+  application-owned function-decorator choices consistent across findings;
+  record proposed patterns and probe acceptance without executing them.
+  In correlation proposals, keep absent optional IDs absent. Distinguish a
+  source-backed application execution ID from a provider-supplied tool-call ID;
+  do not propose telemetry-only IDs or retrofit them into an earlier provider
+  response to make a join pass. Include
+  the intended Splunk AO runtime in the AO assessment below when that default
+  producer is selected; absence of an installed SDK does not exclude its
+  source-backed project, Agent Stream, or routing configuration gaps. Include
+  applicable redacted inputs/outputs and vendor fields in executable findings,
+  acceptance and expected telemetry; published Opt-In does not make them
+  optional for this profile. Record the actual producer and field availability.
   When GenAI incidents, postmortems, alerts, tickets, or failure examples are
   part of the request, use GenAI incident-evidence mode and map each failure
   as `incident class -> failure mechanism -> repo/service owner -> code surface ->`
@@ -259,7 +279,8 @@ Record the metric name and source file with line number.
 
 - OTel log bridge or SDK log packages
   (`opentelemetry-instrumentation-logging` for current Python releases, with
-  the SDK `LoggingHandler` only as a pre-1.40 compatibility path;
+  the SDK `LoggingHandler` only when the installed bridge/API capability
+  requires that compatibility path;
   `@opentelemetry/instrumentation-console`,
   `@opentelemetry/instrumentation-winston`, or
   `@opentelemetry/instrumentation-pino` for Node.js; the Java agent's detected
@@ -323,6 +344,13 @@ proof.
   `OTEL_LOGS_EXPORTER=none` producing no OTLP record. When cloud trace/metric
   export or forwarding exists, also prove the application record remains
   visible in local Splunk Observability Studio without any cloud log path.
+- Require the normal generated launch profile to set
+  `OTEL_LOGS_EXPORTER=otlp`, the resolved local Studio logs endpoint and its
+  matching protocol alongside trace and metric settings. An absent logs bridge
+  or an unrequested generated `none` setting is a log coverage gap, even when
+  traces and metrics work. Keep a real explicit user/operator logs opt-out as
+  separate scope; do not recommend `none` as the normal launch default. SDK
+  `@log` spans and stdout correlation are not received OTLP LogRecords.
 - For local OTLP export, include at least one scenario using a discovered or
   fixture-provided non-default receiver port. Its acceptance criteria must
   prove the exact endpoint/protocol/path tuple and that application startup
@@ -448,6 +476,14 @@ Classify these rows before creating findings:
   capture mode do not close source-backed content coverage. If safe emission
   is not feasible, retain the unresolved finding and name the blocker instead
   of marking it covered.
+  Assess successful null results separately from calls that produced no result.
+  When the verified tool schema cannot represent null in
+  `gen_ai.tool.call.result`, recognize a truthful captured OpenInference
+  `output.value="null"` as the supported alternative. Require removal of a
+  schema-invalid native result and retain the remaining same-tool-span content
+  requirements. A failed call with no result must not gain successful output.
+  Supplied helper captures establish that case's capability, not live app or
+  exporter coverage; bind unproved application behavior to a local scenario.
   Require evidence of the actual value crossing its owning boundary before
   classifying a content attribute as applicable: a tool name or handler source
   is not a model-bound `gen_ai.tool.definitions` payload. A prompt passed to
@@ -517,6 +553,12 @@ evidence is one canonical GenAI span source per logical operation. A
 representative trace must show one GenAI node per logical operation, expected
 LLM and tool counts, stable model/tool names, correct workflow/agent parent
 shape, and no wrapper-only spans counted as GenAI work.
+Classify each orchestration boundary from source before choosing its operation.
+Do not require both `invoke_workflow` and `invoke_agent` for one standalone
+agent invocation merely because it calls models or tools. A separate workflow
+requires evidence of an application-defined coordinated process at its own
+boundary; HTTP/SSE wrappers and internal runner details do not establish one.
+Bind each proposed orchestration node to that distinct source operation.
 For Python with Splunk AO, make that inventory explicit. Search for
 `from splunk_ao import log`, `@log`, `span_type="tool"`,
 `span_type="retriever"`, `SplunkAOLogger`, `SplunkAOCallback`, supported model
@@ -614,8 +656,9 @@ source evidence shows frozen or readonly declarations, record/value types, no
 mutation API, framework request immutability patterns, or existing code
 constructs new copies instead of mutating.
 Accept app-idiomatic copy/replacement proof such as Python
-`dataclasses.replace`, `attrs.evolve`, pydantic `model_copy(update=...)` or v1
-`copy(update=...)`; Java records, builders, or copy constructors; TypeScript
+`dataclasses.replace`, `attrs.evolve`, pydantic `model_copy(update=...)` or
+`copy(update=...)` as supported by the installed carrier API; Java records,
+builders, or copy constructors; TypeScript
 object spread, explicit `Readonly<T>` replacements, or `structuredClone` only
 for plain-data carriers and never for live OTel `Context` or `Span` handles; Go
 value copies with explicit field replacement; or the framework's request
@@ -628,7 +671,8 @@ passed downstream and the original immutable input remains unchanged; Python
 tests should guard against `FrozenInstanceError` where frozen dataclasses or
 models exist. Audit aggregate placement separately: if
 `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`,
-`gen_ai.usage.total_tokens`, `assistant.llm.calls`, or `assistant.tool.calls`
+an application/vendor-owned derived total, `assistant.llm.calls`, or
+`assistant.tool.calls`
 are written only to a generic HTTP root span, report misplaced aggregate GenAI
 attributes and require moving them to the workflow span or most specific owning GenAI span.
 A generic HTTP root span should not be the evidence for a GenAI flow card unless
@@ -672,13 +716,47 @@ Do not collapse a partial GenAI gap into `covered` because one metric or span
 exists. The GenAI Readiness surface row is the source of truth for deciding
 whether a selectable `$otel-instrument` finding is warranted.
 
+Before handoff, apply the per-tool vendor content contract in
+`../references/genai-readiness.md` to every actual tool boundary. For the GenAI
+path, list `gen_ai.tool.call.arguments` plus `gen_ai.input.messages` for its
+arguments, and `gen_ai.tool.call.result` plus `gen_ai.output.messages` for any
+produced result, on that tool's canonical `expected_telemetry`. Bind missing
+mappings in `required_fix`, acceptance and its verification scenario; preserve
+an explicitly supported OpenInference alternative when that producer uses it.
+Parent/model messages and an arguments/results-only tool span do not cover
+these fields. Correct a canonical omission before rendering or handoff rather
+than leaving the requirement only in supplemental prose.
+
+Make each selected GenAI contract concrete and consistent across readiness
+`required_signals`, finding `required_fix`, `expected_telemetry`, acceptance and
+verification scenarios. Name the actual existing producer or the proposed SDK
+creation API and matching official example path/revision/version, not only
+'logger/schema helpers'. Enumerate applicable input/output message fields,
+instructions/tool definitions, arguments/results, known parameters/response/
+usage/stream fields and opaque correlation. Include the vendor-required agent
+provider and tool input/output message mappings separately from their official
+OTel levels. Require current typed-parts schema/value/redaction proof and actual
+success/error/cancel parentage with no duplicate nodes; a generic 'GenAI
+semconv' requirement cannot stand in for missing field acceptance.
+
+For each producer path, place the concrete capture policy in the canonical
+finding and acceptance scenario: preserve a known stricter policy, otherwise
+propose redacted capture with 16 messages, 64 parts per message and 8192 UTF-8
+bytes per content attribute. Name the actual or proposed file/function hook
+that sanitizes before SDK capture and every export sink. Unknown existing
+settings stay unproven; a proposed policy must still specify those limits,
+valid typed-parts truncation and native-record/OTLP sentinel-absence tests.
+Do not let a supplemental statement of 'bounded/redacted' replace this
+selected finding contract.
+
 Compute each GenAI surface independently. Generic HTTP/database/runtime or
 infrastructure metrics do not improve a GenAI surface status unless they
 satisfy that row's required workflow, model, tool, token, memory, evaluation,
 or AI-path signals. Use `missing` when none of the required GenAI signals
 exists, even if unrelated OTel metrics are source-active.
 
-**Splunk AO Runtime Coverage Contract** -- when AO is detected or requested,
+**Splunk AO Runtime Coverage Contract** -- when AO is detected, requested, or
+selected as the default producer for a fresh agent,
 assess every in-scope GenAI runtime independently before writing findings.
 Enumerate interactive/API, worker, and evaluation/test entry points from the
 source scan. For each, record runtime-specific canonical `genai_readiness`
@@ -711,10 +789,15 @@ When the user explicitly requests Agent Observability coverage, deployment,
 or routing, use `instrument_mode: default` for safe, source-backed AO project,
 Agent Stream, and live-routing gaps in that requested scope. Do not leave
 those requested gaps in `fix all` merely because no cloud credentials are
-present during a read-only audit. Keep incidental AO adoption in `fix all`.
+present during a read-only audit. Keep incidental AO adoption, including a fresh
+default SDK choice without an explicit product-target request, in `fix all`.
+Still author its source-backed project, Agent Stream and runtime-routing
+findings; a missing SDK import does not exclude that assessment.
 Missing secret
 values alone are not code defects or external blockers. Do not impose AO
-adoption on repositories with neither AO evidence nor a user AO request.
+adoption on repositories with neither existing/intended AO instrumentation nor
+a user AO request. A fresh default Splunk AO producer is intended instrumentation,
+not evidence that any cloud resource already exists or is globally absent.
 Keep missing ordinary workflow/model/tool OTel signals untagged and separate;
 content capture and lifecycle findings require their own source-backed gaps.
 
@@ -746,12 +829,22 @@ them as AO findings.
 Before `finalize-audit`, apply this AO acceptance gate to each live-routing
 finding, not only to a generic provider finding:
 
-1. Name the selected destination. The available Splunk Observability Studio
-   cloud-compatible gateway is the default local candidate; preserve any
-   explicit operator or direct-cloud endpoint. Cite the actual endpoint and
+1. Name the selected destination. Preserve any configured supported AO API
+   and direct-cloud endpoint. When AO destination settings are absent, prefer
+   an available Splunk Observability Studio cloud-compatible gateway as the
+   default local route. Its availability is a delivery prerequisite for that
+   route; source instrumentation, imports, and local tests do not depend on
+   the gateway. Cite the actual endpoint and
    availability evidence only when discovered. If no gateway or live target
    was inspected, say `unverified` and do not invent a host or port.
-2. State the installed AO SDK's project/Agent Stream API endpoint and
+   For Python Studio gateway mode, inspect populated `SPLUNK_AO_API_URL`,
+   `SPLUNK_AO_CONSOLE_URL`, and the public `SPLUNK_AO_API_KEY=local-gateway`
+   marker in the actual loaded profile and any generated env, not only key
+   allowlists or examples. Missing values require a selected configuration
+   fix and a profile-to-process acceptance scenario; audit does not write the
+   env file. Missing application cloud credentials do not establish that this
+   gateway path is unavailable.
+2. State the installed AO SDK's project/Agent Stream API endpoint, SDK
    auth configuration and per-request trace-route compatibility as separate
    `supported`, `unsupported` with the exact missing contract, or `unverified`
    with the exact unavailable package/runtime evidence decisions in canonical
@@ -793,7 +886,11 @@ belong in their owning selectable OTel findings without an AO finding group.
 For a source-backed project/Agent Stream/routing gap that can be closed by
 application or deployment configuration, author selectable project configuration
 and selectable Agent Stream configuration findings with executable modes and
-their dependency edges. A target ID or credential may be supplied at the
+their dependency edges. Set `ao_target_scope: resource-routing` on these
+resource and runtime-routing configuration findings; do not mark AO callback
+content boundaries or unrelated configuration as resource-target eligible.
+Preserve the shared reference's unmarked legacy resource/routing findings.
+A target ID or credential may be supplied at the
 selected instrumentation/deployment step; missing audit-time credentials alone do not make an AO finding external.
 When all three gaps exist, create separate selectable AO findings for project, Agent Stream, and runtime routing
 rather than collapsing them into one card. The Agent Stream depends on project;
@@ -803,10 +900,42 @@ finding scoped to its own resource, and a routing finding scoped to durable
 application/deployment configuration. A user can then select a downstream
 finding and see its distinct prerequisites auto-included. Do not split a
 single already-working resource just to increase the finding count.
+Apply the shared AO reference's Project And Agent Stream Inputs and Idempotent
+Resource Provisioning contracts to these findings. State explicitly that
+instrumentation resolves existing resources and creates missing selected,
+named resources, rather than weakening the fix to "configure existing names."
+Offer optional resource-name inputs and reuse-only behavior in the audit
+selection view, with existing configured IDs/names or clearly labeled stable
+service-derived suggestions. Keep these values in the bound selection's
+`ao_target`, not in an unvalidated report note. Bind the shared provisioning
+contract to canonical resource acceptance and mapped scenarios: reuse both
+existing resources without creates; create conclusively missing selected names
+in project-before-stream order; handle mixed state and repeated-run reuse;
+recover duplicate conflicts and uncertain create outcomes with bounded exact
+relookup; treat supplied IDs as lookup-only with no create on an unresolved ID;
+validate ownership and stream/project association; and never treat auth,
+transport, or 5xx failures as absence. Failure must not suppress ordinary OTel.
+The routing scenario must prove the named launch profile is loaded before SDK
+import/initialization, not just that an env file contains the right keys.
+A read-only audit
+does not create resources or claim that an unqueried resource is absent.
+For the resource plan, inventory the actual application launch profile and
+its supported loader. Record native selector aliases and whether that exact
+runtime consumes the standard SDK selectors `SPLUNK_AO_PROJECT` /
+`SPLUNK_AO_PROJECT_ID` and `SPLUNK_AO_AGENT_STREAM` /
+`SPLUNK_AO_AGENT_STREAM_ID`; evaluation-only selectors do not establish a live
+application binding. Explain blank-input fallback in the canonical report:
+preserve each existing configured selector independently, and disclose a
+stable service-derived name for each missing resource. Name the profile and
+runner that instrumentation should update/load, with user-supplied selection
+values taking precedence. Record missing or unsupported profile wiring as a
+gap. Audit remains read-only for env files and cloud resources.
 Distinguish ordinary local OTLP receipt from AO resource and delivery evidence.
-An available cloud-compatible Studio gateway is the default local destination,
-not an automatic direct-routing defect. Assess normal SDK resource calls,
-supported per-request project/stream binding, gateway compatibility, and cloud
+When AO destination settings are absent, an available cloud-compatible Studio
+gateway is the default local destination. Its absence must not block source
+instrumentation or credential-free tests. An existing direct-cloud route
+remains valid. Assess normal SDK resource calls, supported per-request
+project/stream binding, gateway compatibility, and cloud
 receipt separately. Preserve explicit operator/direct-cloud destinations.
 Do not propose a Studio-specific application adapter or global route
 registration. If the SDK or gateway cannot implement the standard API/ingest
@@ -903,6 +1032,88 @@ For partially instrumented Go services, explicitly check and report:
 - missing `MeterProvider`, missing `service.name`, and missing provider shutdown/flush
 
 ### Step 3 -- Report
+
+Library selection guidance must remain release-neutral. Assess current official
+package metadata and the project's runtime, peer, SDK/exporter/bridge and lock
+constraints; name the latest compatible proposed set or the preserved installed
+set and its reason in the report. Exact resolved release numbers belong in
+dated run evidence, not fixed skill recipes. A latest-example lookup is not
+proof that independently chosen latest packages work together.
+
+For GenAI, populate all three **Required GenAI Report Evidence** tables from
+`../references/genai-readiness.md` before handoff. Keep field-level official
+Opt-In provenance in the canonical evidence, not only a supplemental summary.
+Assess supplied auxiliary timeout/cancel facts and actual opaque IDs even when
+the main application has no matching auxiliary phase; distinguish source
+scenarios instead of dropping their evidence.
+Before finalizing, reconcile a source-operation ledger against every proposed
+node in canonical readiness, findings, expected telemetry, acceptance scenarios
+and flow. Record the source function/call site and operation for each node.
+One agent turn coordinating models/tools is one orchestration boundary; propose
+both workflow and agent nodes only when distinct source operations and their
+call relationship establish both. A report title, README description or SDK
+trace envelope does not establish another application boundary. Correct every
+canonical occurrence of an unsupported node, not only the supplemental prose.
+
+Audit separately supplied source cases with the same field-level care. For each
+available agent/tool context field, record the exact attribute, actual safe
+value and source, owning operation, official requirement level, profile
+acceptance and remaining proof. Include configured agent description, the
+fixed-single-model versus dynamic-model condition, and the tool's own agent
+name, safe conversation ID and offered description. A generic 'metadata is
+available' statement or parent-only field does not assess these values. Keep
+nonlive cases supplemental and source-unavailable fields explicit; never copy
+their values into live findings without matching application source.
+
+When the task requests assessment of independent supplied source, capture or
+compatibility cases, inventory those cases before synthesis. Reconcile each
+requested case individually: its scope, actual boundaries/owners, available
+field values and status, creator/route decision and remaining proof, or the
+exact reason a requirement is not applicable. A container-level summary does
+not close its separate cases. For candidate compatibility matrices, state the
+chosen candidate, satisfied constraints and why alternatives are rejected;
+disclaiming live installation alone does not assess the selection. Check the
+finished receipt against the inventory before handoff. Keep nonlive evidence
+separate and do not invent cases from reference examples or expand the task's
+audit domains.
+
+For each inspected creator, record its version/file/symbol and actual start
+arguments, which attributes/kind reach the sampler and `on_start`, and which
+fields are applied later or during finalization. When source establishes a
+name-only helper with no public initial kind/attributes argument, state that
+concrete capability limit rather than a conditional 'if unsupported'. Identify
+the supported hook or remaining creation-boundary test needed. Finished-span
+setters/exporter enrichment do not prove earlier sampling inputs; source
+inspection does not prove a runtime sampler result. Keep this scoped limit
+separate from independently supported content and operation coverage.
+Reconcile every newly proposed `gen_ai.*` attribute with the inspected official
+registry and preserve the vendor/legacy provenance of existing fields. Do not
+invent a reserved semantic attribute such as `gen_ai.usage.total_tokens` when
+the current registry defines only the applicable input/output counts. A useful
+derived total belongs in an application/vendor-owned namespace with its
+calculation identified; do not remove a proven existing consumer alias merely
+because it is not an official attribute.
+
+For each GenAI runtime, write a concrete producer receipt before finalizing:
+`runtime -> preserved/proposed creator symbols and source boundary -> installed
+version or explicitly proposed source-verified version -> exact official example
+path/revision/date -> inspected API support -> actual/prospective proof ->
+remaining`. Apply Decorator Selection for each custom Python function: name
+SDK `@log`, its actual `span_type`/function and public capture/sink support where
+compatible. For a precise SDK decorator limitation, name the application-owned
+function decorator and documented creator it invokes once at that boundary.
+Complete the mandatory per-function decision before prescribing lower-level
+methods or schema helpers; the same pattern/probe acceptance applies to model,
+tool and retrieval functions as to the agent. A manual context-manager scope
+does not satisfy a fresh function's decorator pattern. Use the lower-level
+method table only inside a justified function-decorator fallback or for a
+source-proven non-function lifetime. Check the current official example and
+matching APIs; record the resolved example revision and chosen compatible
+packages in the report. This is a plan, not installed or runtime proof.
+Keep the receipt in canonical evidence and the applicable finding's
+`required_fix`/acceptance. A general SDK citation or 'logger/schema helpers'
+without named symbols/example/version is incomplete; correct that report
+before downstream handoff. Existing producers remain preserved.
 
 Write two audit artifacts inside the scanned service root (create the
 `.observe/` directory if it does not exist):
@@ -1290,7 +1501,8 @@ manual user copy step. It records explicit requests, executable dependency
 closure, and `decision_answers`.
 `decision_answers` is separate from `requested_ids` and `approved_ids`: it is
 a canonical-audit-order list of `finding_id`/`option_id` entries and never
-contains executable scope; a selection carrying `decision_answers` is schema v2.
+contains executable scope; a selection carrying `decision_answers` is schema
+v2, or schema v3 when it also binds an AO resource target.
 Preserve the machine schema names `requested_ids` and
 `approved_ids` for compatibility, but do not present `approved_ids` as human
 approval: it is the dependency-closed executable selection. A manual
@@ -1448,7 +1660,7 @@ instrumentation") without that package name is incomplete.
 | `grpcio` | `opentelemetry-instrumentation-grpc` | spans |
 | `kafka-python` / `confluent-kafka` | `opentelemetry-instrumentation-kafka-python` / `opentelemetry-instrumentation-confluent-kafka` | spans |
 | `boto3` / `botocore` | `opentelemetry-instrumentation-botocore` | spans |
-| `logging` (stdlib) | `opentelemetry-instrumentation-logging`; SDK `LoggingHandler` only for a pinned pre-1.40 compatibility path | logs |
+| `logging` (stdlib) | `opentelemetry-instrumentation-logging`; SDK `LoggingHandler` only when the installed bridge/API capability requires that compatibility path | logs |
 
 ### Node.js
 
@@ -1463,12 +1675,12 @@ instrumentation") without that package name is incomplete.
 | `mysql2` | `@opentelemetry/instrumentation-mysql2` | spans |
 | `mongodb` | `@opentelemetry/instrumentation-mongodb` | spans |
 | `ioredis` | `@opentelemetry/instrumentation-ioredis` | spans |
-| `redis` (node-redis v4+) | `@opentelemetry/instrumentation-redis-4` | spans |
+| `redis` (node-redis) | `@opentelemetry/instrumentation-redis-4` when its current support metadata matches the detected client | spans |
 | `@grpc/grpc-js` | `@opentelemetry/instrumentation-grpc` | spans |
 | `kafkajs` | `@opentelemetry/instrumentation-kafkajs` | spans |
 | `graphql` | `@opentelemetry/instrumentation-graphql` | spans |
 | `aws-sdk` / `@aws-sdk/*` | `@opentelemetry/instrumentation-aws-sdk` | spans |
-| `console.*` | `@opentelemetry/instrumentation-console` 0.3.0 when Node is `^18.19.0 || >=20.6.0` and `@opentelemetry/api >=1.9.1` | logs |
+| `console.*` | latest compatible `@opentelemetry/instrumentation-console`, after checking current engines, peers and installed APIs | logs |
 | `winston` | `@opentelemetry/instrumentation-winston` + `@opentelemetry/winston-transport` | logs |
 | `pino` | `@opentelemetry/instrumentation-pino` | logs |
 

@@ -1,0 +1,393 @@
+{
+  "kind": "fictional-go-module-policy-and-log-routing-cases",
+  "scope": "Every candidate version, compatibility/API fact, hypothetical lock and preflight receiver below is invented policy input for this plan-only eval. These are not published module metadata, real registry/source receipts, installed APIs, checked go.sum hashes or runtime/Studio captures. Actual kvstore source remains a separate baseline. Exact versions in this fixture are not shipped skill defaults.",
+  "actual_fixture_context": {
+    "go_mod_path": "go.mod",
+    "module": "kvstore",
+    "go_directive": "1.22",
+    "toolchain_directive": "absent",
+    "existing_otel_modules": "none",
+    "go_sum": "absent in supplied fixture",
+    "entrypoint": "cmd/kvstore-server/main.go",
+    "start_command": "go run ./cmd/kvstore-server -addr :8080 -data-dir ./data -capacity 1024",
+    "logger_sources": [
+      {
+        "path": "cmd/kvstore-server/main.go",
+        "facts": "Store receives log.Default(); startup and errors use standard log; after successful server shutdown slog.Warn emits runtime shutdown completed."
+      },
+      {
+        "path": "kvstore/http.go",
+        "facts": "Successful PUT emits slog.WarnContext(r.Context(), runtime request completed, operation, put) before HTTP202. Existing handler is stdlib ServeMux; no grpc/Gin/chi/OpenTelemetry dependency or GenAI operation."
+      }
+    ]
+  },
+  "fictional_resolution_case": {
+    "id": "newest-compatible-go-graph",
+    "metadata_source": "complete hypothetical module candidate table supplied by operator; not proxy.golang.org or Go command output",
+    "scenario_preflight": "hypothetical-preflight-A",
+    "runtime": {
+      "selected_local_toolchain": "go1.22.8",
+      "go_directive": "1.22",
+      "toolchain_directive": "absent",
+      "GOTOOLCHAIN": "local",
+      "authorized_toolchain_upgrade": false
+    },
+    "operator_constraints": {
+      "api_and_trace_metric_sdk_maximum": "v1.101.0",
+      "all_modules": "stable supplied releases only; preserve go/toolchain directives; no runtime upgrade; all ten listed modules needed for proposed HTTP/runtime trace/metric/log baseline"
+    },
+    "module_requirements_interpretation": "Each requires entry is the minimum module version in that candidate go.mod; apply Go minimal version selection to the complete hypothetical closure. All requirements under review are listed; no other module/toolchain constraints exist in this fictional case. API compatibility facts below apply only to the supplied candidates.",
+    "modules": {
+      "go.opentelemetry.io/otel": [
+        {
+          "version": "v1.100.0",
+          "go_directive": "1.22",
+          "requires": {}
+        },
+        {
+          "version": "v1.101.0",
+          "go_directive": "1.22",
+          "requires": {}
+        },
+        {
+          "version": "v1.102.0",
+          "go_directive": "1.23",
+          "requires": {}
+        }
+      ],
+      "go.opentelemetry.io/otel/sdk": [
+        {
+          "version": "v1.100.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel": "v1.100.0"
+          }
+        },
+        {
+          "version": "v1.101.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel": "v1.101.0"
+          }
+        },
+        {
+          "version": "v1.102.0",
+          "go_directive": "1.23",
+          "requires": {
+            "go.opentelemetry.io/otel": "v1.102.0"
+          }
+        }
+      ],
+      "go.opentelemetry.io/otel/log": [
+        {
+          "version": "v0.50.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel": "v1.100.0"
+          }
+        },
+        {
+          "version": "v0.51.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel": "v1.101.0"
+          }
+        },
+        {
+          "version": "v0.52.0",
+          "go_directive": "1.23",
+          "requires": {
+            "go.opentelemetry.io/otel": "v1.102.0"
+          }
+        }
+      ],
+      "go.opentelemetry.io/otel/sdk/log": [
+        {
+          "version": "v0.50.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel/log": "v0.50.0",
+            "go.opentelemetry.io/otel/sdk": "v1.100.0"
+          }
+        },
+        {
+          "version": "v0.51.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel/log": "v0.51.0",
+            "go.opentelemetry.io/otel/sdk": "v1.101.0"
+          }
+        },
+        {
+          "version": "v0.52.0",
+          "go_directive": "1.23",
+          "requires": {
+            "go.opentelemetry.io/otel/log": "v0.52.0",
+            "go.opentelemetry.io/otel/sdk": "v1.102.0"
+          }
+        }
+      ],
+      "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp": [
+        {
+          "version": "v0.51.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel/sdk/log": "v0.50.0"
+          }
+        },
+        {
+          "version": "v0.52.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel/sdk/log": "v0.51.0"
+          }
+        },
+        {
+          "version": "v0.53.0",
+          "go_directive": "1.23",
+          "requires": {
+            "go.opentelemetry.io/otel/sdk/log": "v0.52.0"
+          }
+        }
+      ],
+      "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp": [
+        {
+          "version": "v1.100.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel/sdk": "v1.100.0"
+          }
+        },
+        {
+          "version": "v1.101.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel/sdk": "v1.101.0"
+          }
+        },
+        {
+          "version": "v1.102.0",
+          "go_directive": "1.23",
+          "requires": {
+            "go.opentelemetry.io/otel/sdk": "v1.102.0"
+          }
+        }
+      ],
+      "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp": [
+        {
+          "version": "v1.100.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel/sdk": "v1.100.0"
+          }
+        },
+        {
+          "version": "v1.101.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel/sdk": "v1.101.0"
+          }
+        },
+        {
+          "version": "v1.102.0",
+          "go_directive": "1.23",
+          "requires": {
+            "go.opentelemetry.io/otel/sdk": "v1.102.0"
+          }
+        }
+      ],
+      "go.opentelemetry.io/contrib/bridges/otelslog": [
+        {
+          "version": "v0.40.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel/log": "v0.50.0",
+            "go.opentelemetry.io/otel/sdk/log": "v0.50.0"
+          }
+        },
+        {
+          "version": "v0.41.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel/log": "v0.51.0",
+            "go.opentelemetry.io/otel/sdk/log": "v0.51.0"
+          }
+        },
+        {
+          "version": "v0.42.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel/log": "v0.52.0",
+            "go.opentelemetry.io/otel/sdk/log": "v0.52.0"
+          }
+        },
+        {
+          "version": "v0.43.0",
+          "go_directive": "1.23",
+          "requires": {
+            "go.opentelemetry.io/otel/log": "v0.52.0",
+            "go.opentelemetry.io/otel/sdk/log": "v0.52.0"
+          }
+        }
+      ],
+      "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp": [
+        {
+          "version": "v0.60.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel": "v1.100.0",
+            "go.opentelemetry.io/otel/sdk": "v1.100.0"
+          }
+        },
+        {
+          "version": "v0.61.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel": "v1.101.0",
+            "go.opentelemetry.io/otel/sdk": "v1.101.0"
+          }
+        },
+        {
+          "version": "v0.62.0",
+          "go_directive": "1.23",
+          "requires": {
+            "go.opentelemetry.io/otel": "v1.102.0",
+            "go.opentelemetry.io/otel/sdk": "v1.102.0"
+          }
+        }
+      ],
+      "go.opentelemetry.io/contrib/instrumentation/runtime": [
+        {
+          "version": "v0.30.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel": "v1.100.0",
+            "go.opentelemetry.io/otel/sdk": "v1.100.0"
+          }
+        },
+        {
+          "version": "v0.31.0",
+          "go_directive": "1.22",
+          "requires": {
+            "go.opentelemetry.io/otel": "v1.101.0",
+            "go.opentelemetry.io/otel/sdk": "v1.101.0"
+          }
+        },
+        {
+          "version": "v0.32.0",
+          "go_directive": "1.23",
+          "requires": {
+            "go.opentelemetry.io/otel": "v1.102.0",
+            "go.opentelemetry.io/otel/sdk": "v1.102.0"
+          }
+        }
+      ]
+    },
+    "public_api_facts": {
+      "all_runtime_compatible_candidates": "The indicated old and selected-runtime candidate APIs satisfy the required public signatures; the newer candidates do not remove APIs but their direct/transitive runtime constraints still govern selection.",
+      "log_api_and_sdk": "sdklog.NewLoggerProvider with WithResource and WithProcessor; sdklog.NewBatchProcessor(exporter); LoggerProvider.Shutdown(ctx) drains batch once. log API global.SetLoggerProvider exists in supplied candidates.",
+      "slog_bridge": "otelslog.NewHandler(scope, otelslog.WithLoggerProvider(lp)) implements slog.Handler and carries the supplied context trace/span IDs into native LogRecords. A fanout retains a snapshot of the existing standard log writer/prefix/flags; slog.SetDefault can route standard log into this single handler, so snapshot first to avoid recursion/duplicate export.",
+      "http_log_exporter": "otlploghttp.New(ctx, WithEndpointURL(exactURL), WithHeaders(emptyMap)) supports http/protobuf and the complete /v1/logs URL. This selected exporter has no grpc transport; switching only an env protocol to grpc cannot make it a grpc exporter.",
+      "trace_metric_exporters": "otlptracehttp.New and otlpmetrichttp.New accept the independent configured trace/metric HTTP routes. sdktrace.WithBatcher and sdkmetric.WithReader(NewPeriodicReader) share the same service resource.",
+      "http_runtime": "otelhttp.NewHandler(api.Handler(), server) supplies request context plus bounded HTTP trace/metric signals; runtime.Start uses the selected meter provider. No grpc middleware is required by actual source."
+    },
+    "later_mutable_latest_counterexample": {
+      "id": "post-preflight-latest-changes",
+      "kind": "hypothetical later registry change; not observed publication",
+      "new_slog_bridge": {
+        "version": "v0.44.0",
+        "go_directive": "1.24",
+        "requires": {
+          "go.opentelemetry.io/otel/log": "v0.52.0",
+          "go.opentelemetry.io/otel/sdk/log": "v0.52.0"
+        }
+      },
+      "constraint": "Operator has not authorized runtime or lock changes after preflight; the plan must apply the exact previously checked graph rather than another latest lookup."
+    }
+  },
+  "fictional_locked_case": {
+    "id": "operator-owned-compatible-lock",
+    "scope": "Separate hypothetical already-instrumented Go deployment; this is not a claim that actual kvstore has go.sum or an OTel pipeline.",
+    "go_directive": "1.22",
+    "toolchain_directive": "absent",
+    "local_toolchain": "go1.22.8",
+    "locked_modules": {
+      "go.opentelemetry.io/otel": "v1.100.0",
+      "go.opentelemetry.io/otel/sdk": "v1.100.0",
+      "go.opentelemetry.io/otel/log": "v0.50.0",
+      "go.opentelemetry.io/otel/sdk/log": "v0.50.0",
+      "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp": "v0.51.0",
+      "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp": "v1.100.0",
+      "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp": "v1.100.0",
+      "go.opentelemetry.io/contrib/bridges/otelslog": "v0.40.0",
+      "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp": "v0.60.0",
+      "go.opentelemetry.io/contrib/instrumentation/runtime": "v0.30.0"
+    },
+    "operator_instruction": "Retain this compatible locked module graph and its existing one-producer trace/metric/log pipelines; no telemetry dependency upgrade requested.",
+    "compatibility_facts": "The supplied locked graph satisfies every minimum requirement, selected runtime and public API facts in its matching old-candidate rows. Existing log export uses one otelslog bridge/provider and the same local profile; this is fictional source/compatibility evidence, not executed capture."
+  },
+  "fictional_log_cases": [
+    {
+      "id": "normal-default-local-logs",
+      "scope": "Hypothetical discovered host-runtime receiver/profile; no server was contacted.",
+      "approved_local_logs_endpoint": "http://127.0.0.1:55318/v1/logs",
+      "initial_profile": {
+        "OTEL_SERVICE_NAME": "go-kvstore",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55318",
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"
+      },
+      "operator_log_optout": false,
+      "future_source_backed_acceptance": {
+        "request_trigger": "successful PUT /kv/synthetic-key with synthetic safe bytes",
+        "log_body": "runtime request completed",
+        "severity_text": "WARN",
+        "attribute": {
+          "operation": "put"
+        },
+        "service_name": "go-kvstore",
+        "correlation": "nonzero trace/span IDs matching its own active HTTP request span; do not fabricate values before execution",
+        "original_sink": "retain actual original standard log writer/prefix/flags and existing slog output; no new file sink assumed",
+        "shutdown_body": "runtime shutdown completed",
+        "shutdown_severity": "WARN",
+        "shutdown_correlation": "Outside an active span, absent/zero trace/span IDs are valid; do not borrow the earlier request IDs.",
+        "privacy": "Do not export key, raw value, dynamic data-dir/path, raw error/config text or credentials; bounded fixed body and operation only.",
+        "drain": "Stop/drain server and owned store work, emit final shutdown warning while log provider is alive, then shut down owned trace/metric/log providers exactly once."
+      },
+      "initially_absent_settings": [
+        "OTEL_LOGS_EXPORTER",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
+        "OTEL_EXPORTER_OTLP_HEADERS",
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS"
+      ]
+    },
+    {
+      "id": "explicit-operator-optout",
+      "operator_instruction": "Disable OTLP application log export; preserve traces, metrics and the original local logger sink.",
+      "profile_override": {
+        "OTEL_LOGS_EXPORTER": "none"
+      },
+      "log_scope": "No added local LoggerProvider/bridge; zero OTLP LogRecords, retain original request/shutdown warnings."
+    },
+    {
+      "id": "wrong-local-port",
+      "normal_profile_override": {
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:55319/v1/logs"
+      },
+      "fact": "Different port from approved55318 even though loopback; trace/metric routes remain approved55318."
+    },
+    {
+      "id": "mismatched-log-protocol",
+      "normal_profile_override": {
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "grpc"
+      },
+      "fact": "Only HTTP/protobuf log exporter is in the supplied checked graph; no compatible grpc exporter metadata is supplied."
+    },
+    {
+      "id": "log-constructor-failure",
+      "normal_profile_override": {},
+      "injected_failure": "otlploghttp.New returns a hypothetical constructor error with configuration text",
+      "fact": "The log exporter failed before its provider/bridge installation; trace/metric providers and original logger are already usable. Diagnostic must not expose raw error/config text."
+    }
+  ]
+}

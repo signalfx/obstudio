@@ -636,7 +636,7 @@ The literal ports below are conventional fallbacks, not equality gates.
 |----------|---------|---------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318` | Common OTLP endpoint only when it is local or collector-owned; preserve a configured non-default port and never leave a direct-cloud value for logs to inherit |
 | `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the agent-owned local log path, even when logs headers are set |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` for Java agent 2.x | Common protocol when using port 4318 |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` for the local baseline, after checking selected agent support | Common protocol when using port 4318 |
 | `OTEL_LOGS_EXPORTER` | `otlp` only when absent and the logs endpoint is absent or preflight-classified local | `none` disables agent log export; any other explicit value is preserved |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the local baseline | Signal-specific log transport |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local Splunk Observability Studio application-log destination |

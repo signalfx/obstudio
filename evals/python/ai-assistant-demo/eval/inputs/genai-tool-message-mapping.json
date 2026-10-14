@@ -1,0 +1,628 @@
+{
+  "schema_version": 1,
+  "scope": "Independent constructed synthetic tool-span captures with explicitly supplied safe call observations. These are not traces from app.py, executed SDK/application evidence, exported wire capture or live cloud proof. Classify each actual_call and owning tool_span_id independently.",
+  "source_values": {
+    "source_snapshot": "async def lookup_weather(arguments):\n    if injected_failure:\n        raise WeatherUnavailable('Weather lookup unavailable')\n    return supplied_result\n",
+    "observation_basis": "Safe arguments and outcomes are supplied per case to exercise same-tool-span content mapping. No source snapshot is executed; injected_failure and supplied_result denote controlled synthetic outcomes."
+  },
+  "source_provenance": {
+    "semantic_snapshot": {
+      "path": "eval/inputs/genai-semconv-source-snapshot.json",
+      "sha256": "37dcf51de2138b706b7272c32e4215d280a94790b3d4bb454000ef66ef24e3ae",
+      "repository": "https://github.com/open-telemetry/semantic-conventions-genai",
+      "resolved_revision": "5293effb97f18ddb0602da884dadee6119d67679",
+      "captured_at_utc": "2026-10-13T06:56:26.057696+00:00",
+      "schemas": [
+        "model/gen-ai/gen-ai-input-messages.json",
+        "model/gen-ai/gen-ai-output-messages.json",
+        "model/gen-ai/gen-ai-tool-call-arguments.json",
+        "model/gen-ai/gen-ai-tool-call-result.json"
+      ]
+    },
+    "vendor_mapping": [
+      {
+        "url": "https://docs.galileo.ai/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+        "checked_at_utc": "2026-10-13T06:56:26.057696+00:00",
+        "mapping": [
+          "execute_tool operation; tool name",
+          "call ID recommended",
+          "arguments plus input message mapping; result plus output message mapping, or OpenInference values"
+        ]
+      },
+      {
+        "url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+        "checked_at_utc": "2026-10-13T06:56:26.057696+00:00",
+        "mapping": [
+          "execute_tool operation; tool name",
+          "call ID recommended",
+          "arguments plus input message mapping; result plus output message mapping, or OpenInference values"
+        ]
+      }
+    ],
+    "sdk_source_snapshot": "eval/inputs/genai-sdk-source-snapshot.json",
+    "freshness_limit": "Dated supplied snapshots; no new network lookup, installed SDK support or runtime success is established."
+  },
+  "content_policy": {
+    "safe_observed_values": true,
+    "max_messages": 16,
+    "max_parts_per_message": 64,
+    "max_utf8_bytes_per_attribute": 8192,
+    "excluded_content": [
+      "credentials",
+      "tokens",
+      "email addresses",
+      "hidden reasoning"
+    ],
+    "scope": "Concrete synthetic capture policy for these cases only; do not infer installed application policy from it."
+  },
+  "assessment_rules": {
+    "ownership": "Only the identified canonical tool span can satisfy its content mapping. Parent/model/sibling/duplicate wrapper content is not evidence for that span.",
+    "mapping": "Actual arguments require dedicated arguments plus input messages; actually produced output requires dedicated result plus output messages, or a supported native OpenInference value mapping on that same span. Validate schema and exact safe source values, not just nonempty fields.",
+    "null": "produced_result is independent of result truthiness; successful null/false/zero/empty output is a produced result. The successful-null case documents the dedicated object-only result-schema limit and preserves null through supported native OpenInference and a schema-valid typed response.",
+    "failure": "A genuine error before output has ERROR status, actual error.type, ended lifecycle and an explicit no-result reason; do not fabricate a successful result or model finish reason.",
+    "format": "Structured GenAI and OpenInference values are JSON strings as emitted OTel attribute values. Parse before validating. No model finish_reason is supplied for tool output."
+  },
+  "cases": [
+    {
+      "case_id": "arguments-result-only",
+      "evidence_kind": "constructed-synthetic-capture",
+      "actual_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-call-0001",
+        "arguments": {
+          "location": "Paris"
+        },
+        "outcome": "success",
+        "produced_result": true,
+        "result": {
+          "temperature": 18
+        }
+      },
+      "tool_span_id": "0000000000000003",
+      "spans": [
+        {
+          "trace_id": "00000000000000000000000000000001",
+          "span_id": "0000000000000002",
+          "parent_span_id": null,
+          "name": "invoke_agent weather_agent",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.provider.name": "fixture-provider"
+          }
+        },
+        {
+          "trace_id": "00000000000000000000000000000001",
+          "span_id": "0000000000000003",
+          "parent_span_id": "0000000000000002",
+          "name": "execute_tool lookup_weather",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookup_weather",
+            "gen_ai.tool.call.id": "safe-call-0001",
+            "gen_ai.tool.call.arguments": "{\"location\":\"Paris\"}",
+            "gen_ai.tool.call.result": "{\"temperature\":18}"
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "parent-messages-only",
+      "evidence_kind": "constructed-synthetic-capture",
+      "actual_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-call-0002",
+        "arguments": {
+          "location": "Paris"
+        },
+        "outcome": "success",
+        "produced_result": true,
+        "result": {
+          "temperature": 18
+        }
+      },
+      "tool_span_id": "0000000000000005",
+      "spans": [
+        {
+          "trace_id": "00000000000000000000000000000002",
+          "span_id": "0000000000000004",
+          "parent_span_id": null,
+          "name": "invoke_agent weather_agent",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.provider.name": "fixture-provider",
+            "gen_ai.input.messages": "[{\"parts\":[{\"arguments\":{\"location\":\"Paris\"},\"id\":\"safe-call-0002\",\"name\":\"lookup_weather\",\"type\":\"tool_call\"}],\"role\":\"assistant\"}]",
+            "gen_ai.output.messages": "[{\"parts\":[{\"id\":\"safe-call-0002\",\"response\":{\"temperature\":18},\"type\":\"tool_call_response\"}],\"role\":\"tool\"}]"
+          }
+        },
+        {
+          "trace_id": "00000000000000000000000000000002",
+          "span_id": "0000000000000005",
+          "parent_span_id": "0000000000000004",
+          "name": "execute_tool lookup_weather",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookup_weather",
+            "gen_ai.tool.call.id": "safe-call-0002",
+            "gen_ai.tool.call.arguments": "{\"location\":\"Paris\"}",
+            "gen_ai.tool.call.result": "{\"temperature\":18}"
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "complete-genai-tool-messages",
+      "evidence_kind": "constructed-synthetic-capture",
+      "actual_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-call-0003",
+        "arguments": {
+          "location": "Paris"
+        },
+        "outcome": "success",
+        "produced_result": true,
+        "result": {
+          "temperature": 18
+        }
+      },
+      "tool_span_id": "0000000000000007",
+      "spans": [
+        {
+          "trace_id": "00000000000000000000000000000003",
+          "span_id": "0000000000000006",
+          "parent_span_id": null,
+          "name": "invoke_agent weather_agent",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.provider.name": "fixture-provider"
+          }
+        },
+        {
+          "trace_id": "00000000000000000000000000000003",
+          "span_id": "0000000000000007",
+          "parent_span_id": "0000000000000006",
+          "name": "execute_tool lookup_weather",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookup_weather",
+            "gen_ai.tool.call.id": "safe-call-0003",
+            "gen_ai.tool.call.arguments": "{\"location\":\"Paris\"}",
+            "gen_ai.tool.call.result": "{\"temperature\":18}",
+            "gen_ai.input.messages": "[{\"parts\":[{\"arguments\":{\"location\":\"Paris\"},\"id\":\"safe-call-0003\",\"name\":\"lookup_weather\",\"type\":\"tool_call\"}],\"role\":\"assistant\"}]",
+            "gen_ai.output.messages": "[{\"parts\":[{\"id\":\"safe-call-0003\",\"response\":{\"temperature\":18},\"type\":\"tool_call_response\"}],\"role\":\"tool\"}]"
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "malformed-input-messages",
+      "evidence_kind": "constructed-synthetic-capture",
+      "actual_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-call-0004",
+        "arguments": {
+          "location": "Paris"
+        },
+        "outcome": "success",
+        "produced_result": true,
+        "result": {
+          "temperature": 18
+        }
+      },
+      "tool_span_id": "0000000000000009",
+      "spans": [
+        {
+          "trace_id": "00000000000000000000000000000004",
+          "span_id": "0000000000000008",
+          "parent_span_id": null,
+          "name": "invoke_agent weather_agent",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.provider.name": "fixture-provider"
+          }
+        },
+        {
+          "trace_id": "00000000000000000000000000000004",
+          "span_id": "0000000000000009",
+          "parent_span_id": "0000000000000008",
+          "name": "execute_tool lookup_weather",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookup_weather",
+            "gen_ai.tool.call.id": "safe-call-0004",
+            "gen_ai.tool.call.arguments": "{\"location\":\"Paris\"}",
+            "gen_ai.tool.call.result": "{\"temperature\":18}",
+            "gen_ai.input.messages": "[{\"content\":{\"arguments\":{\"location\":\"Paris\"},\"tool\":\"lookup_weather\"},\"role\":\"assistant\"}]",
+            "gen_ai.output.messages": "[{\"parts\":[{\"id\":\"safe-call-0004\",\"response\":{\"temperature\":18},\"type\":\"tool_call_response\"}],\"role\":\"tool\"}]"
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "mismatched-mapped-values",
+      "evidence_kind": "constructed-synthetic-capture",
+      "actual_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-call-0005",
+        "arguments": {
+          "location": "Paris"
+        },
+        "outcome": "success",
+        "produced_result": true,
+        "result": {
+          "temperature": 18
+        }
+      },
+      "tool_span_id": "000000000000000b",
+      "spans": [
+        {
+          "trace_id": "00000000000000000000000000000005",
+          "span_id": "000000000000000a",
+          "parent_span_id": null,
+          "name": "invoke_agent weather_agent",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.provider.name": "fixture-provider"
+          }
+        },
+        {
+          "trace_id": "00000000000000000000000000000005",
+          "span_id": "000000000000000b",
+          "parent_span_id": "000000000000000a",
+          "name": "execute_tool lookup_weather",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookup_weather",
+            "gen_ai.tool.call.id": "safe-call-0005",
+            "gen_ai.tool.call.arguments": "{\"location\":\"Paris\"}",
+            "gen_ai.tool.call.result": "{\"temperature\":18}",
+            "gen_ai.input.messages": "[{\"parts\":[{\"arguments\":{\"location\":\"Berlin\"},\"id\":\"safe-call-0005\",\"name\":\"lookup_weather\",\"type\":\"tool_call\"}],\"role\":\"assistant\"}]",
+            "gen_ai.output.messages": "[{\"parts\":[{\"id\":\"safe-call-0005\",\"response\":{\"temperature\":33},\"type\":\"tool_call_response\"}],\"role\":\"tool\"}]"
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "mismatched-tool-call-id",
+      "evidence_kind": "constructed-synthetic-capture",
+      "actual_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-call-0006",
+        "arguments": {
+          "location": "Paris"
+        },
+        "outcome": "success",
+        "produced_result": true,
+        "result": {
+          "temperature": 18
+        }
+      },
+      "tool_span_id": "000000000000000d",
+      "spans": [
+        {
+          "trace_id": "00000000000000000000000000000006",
+          "span_id": "000000000000000c",
+          "parent_span_id": null,
+          "name": "invoke_agent weather_agent",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.provider.name": "fixture-provider"
+          }
+        },
+        {
+          "trace_id": "00000000000000000000000000000006",
+          "span_id": "000000000000000d",
+          "parent_span_id": "000000000000000c",
+          "name": "execute_tool lookup_weather",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookup_weather",
+            "gen_ai.tool.call.id": "safe-call-0006",
+            "gen_ai.tool.call.arguments": "{\"location\":\"Paris\"}",
+            "gen_ai.tool.call.result": "{\"temperature\":18}",
+            "gen_ai.input.messages": "[{\"parts\":[{\"arguments\":{\"location\":\"Paris\"},\"id\":\"safe-call-other\",\"name\":\"lookup_weather\",\"type\":\"tool_call\"}],\"role\":\"assistant\"}]",
+            "gen_ai.output.messages": "[{\"parts\":[{\"id\":\"safe-call-other\",\"response\":{\"temperature\":18},\"type\":\"tool_call_response\"}],\"role\":\"tool\"}]"
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "complete-openinference-mapping",
+      "evidence_kind": "constructed-synthetic-capture",
+      "actual_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-call-0007",
+        "arguments": {
+          "location": "Paris"
+        },
+        "outcome": "success",
+        "produced_result": true,
+        "result": {
+          "temperature": 18
+        }
+      },
+      "tool_span_id": "000000000000000f",
+      "spans": [
+        {
+          "trace_id": "00000000000000000000000000000007",
+          "span_id": "000000000000000e",
+          "parent_span_id": null,
+          "name": "invoke_agent weather_agent",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.provider.name": "fixture-provider"
+          }
+        },
+        {
+          "trace_id": "00000000000000000000000000000007",
+          "span_id": "000000000000000f",
+          "parent_span_id": "000000000000000e",
+          "name": "execute_tool lookup_weather",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookup_weather",
+            "gen_ai.tool.call.id": "safe-call-0007",
+            "gen_ai.tool.call.arguments": "{\"location\":\"Paris\"}",
+            "gen_ai.tool.call.result": "{\"temperature\":18}",
+            "openinference.span.kind": "TOOL",
+            "input.mime_type": "application/json",
+            "input.value": "{\"location\":\"Paris\"}",
+            "output.mime_type": "application/json",
+            "output.value": "{\"temperature\":18}"
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "error-no-produced-result",
+      "evidence_kind": "constructed-synthetic-capture",
+      "actual_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-call-0008",
+        "arguments": {
+          "location": "Paris"
+        },
+        "outcome": "error",
+        "produced_result": false,
+        "error_type": "WeatherUnavailable"
+      },
+      "tool_span_id": "0000000000000011",
+      "spans": [
+        {
+          "trace_id": "00000000000000000000000000000008",
+          "span_id": "0000000000000010",
+          "parent_span_id": null,
+          "name": "invoke_agent weather_agent",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.provider.name": "fixture-provider"
+          }
+        },
+        {
+          "trace_id": "00000000000000000000000000000008",
+          "span_id": "0000000000000011",
+          "parent_span_id": "0000000000000010",
+          "name": "execute_tool lookup_weather",
+          "kind": "INTERNAL",
+          "status": "ERROR",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookup_weather",
+            "gen_ai.tool.call.id": "safe-call-0008",
+            "gen_ai.tool.call.arguments": "{\"location\":\"Paris\"}",
+            "error.type": "WeatherUnavailable",
+            "gen_ai.input.messages": "[{\"parts\":[{\"arguments\":{\"location\":\"Paris\"},\"id\":\"safe-call-0008\",\"name\":\"lookup_weather\",\"type\":\"tool_call\"}],\"role\":\"assistant\"}]"
+          }
+        }
+      ],
+      "output_applicability": {
+        "reason": "The tool raised WeatherUnavailable before producing a result; no successful output exists to map.",
+        "produced_result": false
+      }
+    },
+    {
+      "case_id": "safe-success-missing-output-mapping",
+      "evidence_kind": "constructed-synthetic-capture",
+      "actual_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-call-0009",
+        "arguments": {
+          "location": "Paris"
+        },
+        "outcome": "success",
+        "produced_result": true,
+        "result": {
+          "temperature": 18
+        }
+      },
+      "tool_span_id": "0000000000000013",
+      "spans": [
+        {
+          "trace_id": "00000000000000000000000000000009",
+          "span_id": "0000000000000012",
+          "parent_span_id": null,
+          "name": "invoke_agent weather_agent",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.provider.name": "fixture-provider"
+          }
+        },
+        {
+          "trace_id": "00000000000000000000000000000009",
+          "span_id": "0000000000000013",
+          "parent_span_id": "0000000000000012",
+          "name": "execute_tool lookup_weather",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookup_weather",
+            "gen_ai.tool.call.id": "safe-call-0009",
+            "gen_ai.tool.call.arguments": "{\"location\":\"Paris\"}",
+            "gen_ai.tool.call.result": "{\"temperature\":18}",
+            "gen_ai.input.messages": "[{\"parts\":[{\"arguments\":{\"location\":\"Paris\"},\"id\":\"safe-call-0009\",\"name\":\"lookup_weather\",\"type\":\"tool_call\"}],\"role\":\"assistant\"}]"
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "error-fabricated-success-output",
+      "evidence_kind": "constructed-synthetic-capture",
+      "actual_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-call-0010",
+        "arguments": {
+          "location": "Paris"
+        },
+        "outcome": "error",
+        "produced_result": false,
+        "error_type": "WeatherUnavailable"
+      },
+      "tool_span_id": "0000000000000015",
+      "spans": [
+        {
+          "trace_id": "0000000000000000000000000000000a",
+          "span_id": "0000000000000014",
+          "parent_span_id": null,
+          "name": "invoke_agent weather_agent",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.provider.name": "fixture-provider"
+          }
+        },
+        {
+          "trace_id": "0000000000000000000000000000000a",
+          "span_id": "0000000000000015",
+          "parent_span_id": "0000000000000014",
+          "name": "execute_tool lookup_weather",
+          "kind": "INTERNAL",
+          "status": "ERROR",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookup_weather",
+            "gen_ai.tool.call.id": "safe-call-0010",
+            "gen_ai.tool.call.arguments": "{\"location\":\"Paris\"}",
+            "gen_ai.tool.call.result": "{\"temperature\":18}",
+            "gen_ai.input.messages": "[{\"parts\":[{\"arguments\":{\"location\":\"Paris\"},\"id\":\"safe-call-0010\",\"name\":\"lookup_weather\",\"type\":\"tool_call\"}],\"role\":\"assistant\"}]",
+            "gen_ai.output.messages": "[{\"parts\":[{\"id\":\"safe-call-0010\",\"response\":{\"temperature\":18},\"type\":\"tool_call_response\"}],\"role\":\"tool\"}]",
+            "error.type": "WeatherUnavailable"
+          }
+        }
+      ],
+      "output_applicability": {
+        "reason": "WeatherUnavailable was raised before producing a result; emitted successful output is not source-backed.",
+        "produced_result": false
+      }
+    },
+    {
+      "case_id": "successful-null-result",
+      "evidence_kind": "constructed-synthetic-capture",
+      "actual_call": {
+        "tool_name": "lookup_weather",
+        "call_id": "safe-call-0011",
+        "arguments": {
+          "location": "Paris"
+        },
+        "outcome": "success",
+        "produced_result": true,
+        "result": null
+      },
+      "tool_span_id": "0000000000000017",
+      "spans": [
+        {
+          "trace_id": "0000000000000000000000000000000b",
+          "span_id": "0000000000000016",
+          "parent_span_id": null,
+          "name": "invoke_agent weather_agent",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.provider.name": "fixture-provider"
+          }
+        },
+        {
+          "trace_id": "0000000000000000000000000000000b",
+          "span_id": "0000000000000017",
+          "parent_span_id": "0000000000000016",
+          "name": "execute_tool lookup_weather",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "ended": true,
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "lookup_weather",
+            "gen_ai.tool.call.id": "safe-call-0011",
+            "gen_ai.tool.call.arguments": "{\"location\":\"Paris\"}",
+            "gen_ai.input.messages": "[{\"parts\":[{\"arguments\":{\"location\":\"Paris\"},\"id\":\"safe-call-0011\",\"name\":\"lookup_weather\",\"type\":\"tool_call\"}],\"role\":\"assistant\"}]",
+            "gen_ai.output.messages": "[{\"parts\":[{\"id\":\"safe-call-0011\",\"response\":null,\"type\":\"tool_call_response\"}],\"role\":\"tool\"}]",
+            "openinference.span.kind": "TOOL",
+            "input.mime_type": "application/json",
+            "input.value": "{\"location\":\"Paris\"}",
+            "output.mime_type": "application/json",
+            "output.value": "null"
+          }
+        }
+      ],
+      "schema_limit": {
+        "path": "model/gen-ai/gen-ai-tool-call-result.json",
+        "observed_constraint": "type: object",
+        "decision": "A native successful null is preserved through the supplied supported OpenInference output.value JSON null and typed tool_call_response response:null. Do not fabricate an object or claim null satisfies the dedicated object-only result schema. Native support is a fixture assumption, not SDK runtime proof."
+      }
+    }
+  ]
+}

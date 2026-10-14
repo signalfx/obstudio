@@ -1,0 +1,402 @@
+{
+  "kind": "installed-public-sdk-helper-audit-snapshot",
+  "scope": "Supplied independent installed-SDK source and in-memory OTel capture. These are not app.py operations or new consuming-agent execution, and provide no application, actual model, OTLP receiver, API provisioning, gateway or cloud receipt.",
+  "captured_on": "2026-10-13",
+  "versions": {
+    "splunk-ao": "0.5.0",
+    "galileo-core": "4.5.0",
+    "opentelemetry-sdk": "1.45.1"
+  },
+  "public_documentation_url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/start-splunk-ao-span",
+  "documentation_read_on": "2026-10-13",
+  "installed_source": {
+    "package": "splunk-ao",
+    "version": "0.5.0",
+    "path": "splunk_ao/otel.py",
+    "sha256": "af33b590d48f3abddf032664d76d95c9ff9eb7993941c63e179cae6eb07ce10f",
+    "helper_name": "start_splunk_ao_span",
+    "helper_source": "@contextmanager\ndef start_splunk_ao_span(splunk_ao_span: SplunkAOSpan) -> Generator[trace.Span, Any, None]:\n    tracer_provider = _TRACE_PROVIDER_CONTEXT_VAR.get()\n    if tracer_provider is None:\n        tracer_provider = trace.get_tracer_provider()\n        _TRACE_PROVIDER_CONTEXT_VAR.set(cast(TracerProvider, tracer_provider))\n    tracer = tracer_provider.get_tracer(\"splunk-ao-tracer\")\n    is_conversation_root = not trace.get_current_span().get_span_context().is_valid and isinstance(\n        splunk_ao_span, WorkflowSpan | AgentSpan\n    )\n    session_id = get_effective_session_id()\n    with tracer.start_as_current_span(splunk_ao_span.name) as span:\n        try:\n            yield span\n        finally:\n            try:\n                attributes = build_span_attributes(splunk_ao_span, session_id)\n                if is_conversation_root:\n                    attributes[GEN_AI_CONVERSATION_ROOT] = True\n                for key, value in attributes.items():\n                    span.set_attribute(key, value)\n            except Exception:\n                logger.warning(\"Failed to finalize Splunk AO span attributes\", exc_info=True)\n",
+    "source_basis": "Exact installed splunk-ao 0.5.0 package file; not a claim that source equals future main."
+  },
+  "capture_producer": {
+    "path": "probe_sdk_helper.py",
+    "sha256": "3ad6e1585a26503b262e4726988e146f0452036ca8bc5ee8c46491224259929d",
+    "source": "\"\"\"Isolated real-SDK probe; no application change, model or cloud call.\"\"\"\nimport importlib.metadata\nimport json\n\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import SimpleSpanProcessor\nfrom opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter\nfrom galileo_core.schemas.logging.span import AgentSpan, LlmSpan, ToolSpan, RetrieverSpan\nfrom galileo_core.schemas.shared.document import Document\nfrom splunk_ao.otel import start_splunk_ao_span\n\n\ndef message(role, value):\n    return json.dumps([{\"role\": role, \"parts\": [{\"type\": \"text\", \"content\": json.dumps(value)}]}])\n\n\nexporter = InMemorySpanExporter()\nprovider = TracerProvider()\nprovider.add_span_processor(SimpleSpanProcessor(exporter))\ntrace.set_tracer_provider(provider)\n\nagent = AgentSpan(name=\"invoke_agent Incident Desk\", input=\"Check checkout\", output=\"Fixture checked\")\nwith start_splunk_ao_span(agent) as parent:\n    parent.set_attribute(\"gen_ai.provider.name\", \"ollama\")\n    for name, result, failed in [(\"health\", {\"status\": \"degraded\"}, False), (\"incident\", None, False), (\"dependency\", None, True)]:\n        args = {\"service\": \"checkout\"}\n        record = ToolSpan(name=name, input=json.dumps(args), output=json.dumps(result) if result is not None else None)\n        try:\n            with start_splunk_ao_span(record) as span:\n                span.update_name(\"execute_tool \" + name)\n                span.set_attribute(\"gen_ai.input.messages\", message(\"user\", args))\n                if failed:\n                    span.set_attribute(\"error.type\", \"RuntimeError\")\n                    raise RuntimeError(\"Synthetic dependency failure\")\n                span.set_attribute(\"gen_ai.output.messages\", message(\"assistant\", result))\n                if result is None:\n                    span.set_attribute(\"output.value\", \"null\")\n        except RuntimeError:\n            pass\n    retrieval = RetrieverSpan(name=\"retrieve checkout docs\", input=\"checkout\", output=[Document(content=\"Synthetic checkout guide\")])\n    with start_splunk_ao_span(retrieval) as span:\n        span.set_attribute(\"gen_ai.input.messages\", message(\"user\", \"checkout\"))\n        span.set_attribute(\"gen_ai.output.messages\", message(\"assistant\", [{\"content\": \"Synthetic checkout guide\"}]))\n    model = LlmSpan(name=\"chat qwen3:8b\", input=[{\"role\": \"user\", \"content\": \"Check checkout\"}], output={\"role\": \"assistant\", \"content\": \"Fixture checked\"}, model=\"qwen3:8b\")\n    with start_splunk_ao_span(model) as span:\n        span.set_attribute(\"gen_ai.provider.name\", \"ollama\")\n        span.set_attribute(\"gen_ai.request.stream\", False)\n\nspans = exporter.get_finished_spans()\nassert len(spans) == 6\nparent_span = next(s for s in spans if s.name.startswith(\"invoke_agent\"))\nfor span in spans:\n    if span is not parent_span:\n        assert span.context.trace_id == parent_span.context.trace_id\n        assert span.parent.span_id == parent_span.context.span_id\n    if span.name.startswith(\"execute_tool\"):\n        assert \"gen_ai.input.messages\" in span.attributes\n        if span.name.endswith(\"dependency\"):\n            assert span.status.status_code.name == \"ERROR\"\n            assert span.attributes[\"error.type\"] == \"RuntimeError\"\n            assert \"gen_ai.output.messages\" not in span.attributes\n            assert \"gen_ai.tool.call.result\" not in span.attributes\n        else:\n            assert \"gen_ai.output.messages\" in span.attributes\n            if span.name.endswith(\"incident\"):\n                assert span.attributes[\"output.value\"] == \"null\"\n                assert \"gen_ai.tool.call.result\" not in span.attributes\nresult = {\n    \"proof_scope\": \"installed SDK helper with standard in-memory OTel export; no live application, model or cloud\",\n    \"versions\": {p: importlib.metadata.version(p) for p in [\"splunk-ao\", \"galileo-core\", \"opentelemetry-sdk\"]},\n    \"pass\": [\"SDK-created spans\", \"same-span writable tool message mappings\", \"successful null using OpenInference output.value\", \"no produced result on failure\", \"parent/context preserved\"],\n    \"remaining\": [\"start_splunk_ao_span emits INTERNAL for LlmSpan; separate-process Ollama requires CLIENT\", \"fresh app integration and actual OTLP wire not exercised\"],\n    \"spans\": [{\"name\": s.name, \"trace_id\": format(s.context.trace_id, \"032x\"), \"span_id\": format(s.context.span_id, \"016x\"), \"parent_id\": format(s.parent.span_id, \"016x\") if s.parent else None, \"kind\": s.kind.name, \"status\": s.status.status_code.name, \"attributes\": dict(s.attributes)} for s in spans],\n}\nwith open(\"sdk-helper-probe.json\", \"w\") as f:\n    json.dump(result, f, indent=2)\nprovider.shutdown()\nprint(json.dumps({\"versions\": result[\"versions\"], \"pass\": result[\"pass\"], \"remaining\": result[\"remaining\"]}, indent=2))\n"
+  },
+  "capture": {
+    "proof_scope": "installed SDK helper with standard in-memory OTel export; no live application, model or cloud",
+    "spans": [
+      {
+        "name": "execute_tool health",
+        "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+        "span_id": "fb298e36f026e829",
+        "parent_id": "fc30d8c150b0d93b",
+        "kind": "INTERNAL",
+        "status": "UNSET",
+        "attributes": {
+          "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"{\\\"service\\\": \\\"checkout\\\"}\"}]}]",
+          "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"{\\\"status\\\": \\\"degraded\\\"}\"}]}]",
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "health",
+          "gen_ai.tool.call.arguments": "{\"service\":\"checkout\"}",
+          "gen_ai.tool.call.result": "{\"status\":\"degraded\"}"
+        }
+      },
+      {
+        "name": "execute_tool incident",
+        "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+        "span_id": "0688be9de2d51eef",
+        "parent_id": "fc30d8c150b0d93b",
+        "kind": "INTERNAL",
+        "status": "UNSET",
+        "attributes": {
+          "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"{\\\"service\\\": \\\"checkout\\\"}\"}]}]",
+          "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"null\"}]}]",
+          "output.value": "null",
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "incident",
+          "gen_ai.tool.call.arguments": "{\"service\":\"checkout\"}"
+        }
+      },
+      {
+        "name": "execute_tool dependency",
+        "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+        "span_id": "835df0469ea92ede",
+        "parent_id": "fc30d8c150b0d93b",
+        "kind": "INTERNAL",
+        "status": "ERROR",
+        "attributes": {
+          "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"{\\\"service\\\": \\\"checkout\\\"}\"}]}]",
+          "error.type": "RuntimeError",
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "dependency",
+          "gen_ai.tool.call.arguments": "{\"service\":\"checkout\"}"
+        }
+      },
+      {
+        "name": "retrieve checkout docs",
+        "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+        "span_id": "ac61b3b83b5ff10f",
+        "parent_id": "fc30d8c150b0d93b",
+        "kind": "INTERNAL",
+        "status": "UNSET",
+        "attributes": {
+          "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"\\\"checkout\\\"\"}]}]",
+          "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"[{\\\"content\\\": \\\"Synthetic checkout guide\\\"}]\"}]}]",
+          "gen_ai.operation.name": "retrieval",
+          "gen_ai.retrieval.query.text": "checkout",
+          "gen_ai.retrieval.documents": "[{\"content\":\"Synthetic checkout guide\",\"metadata\":{}}]",
+          "splunk_ao.retrieval.documents.count": 1,
+          "db.operation": "search"
+        }
+      },
+      {
+        "name": "chat qwen3:8b",
+        "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+        "span_id": "5ab124b1528c32b1",
+        "parent_id": "fc30d8c150b0d93b",
+        "kind": "INTERNAL",
+        "status": "UNSET",
+        "attributes": {
+          "gen_ai.provider.name": "ollama",
+          "gen_ai.request.stream": false,
+          "gen_ai.operation.name": "chat",
+          "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"Check checkout\",\"type\":\"text\"}],\"role\":\"user\"}]",
+          "gen_ai.output.messages": "[{\"finish_reason\":\"unknown\",\"parts\":[{\"content\":\"Fixture checked\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+          "gen_ai.request.model": "qwen3:8b"
+        }
+      },
+      {
+        "name": "invoke_agent Incident Desk",
+        "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+        "span_id": "fc30d8c150b0d93b",
+        "parent_id": null,
+        "kind": "INTERNAL",
+        "status": "UNSET",
+        "attributes": {
+          "gen_ai.provider.name": "ollama",
+          "gen_ai.operation.name": "invoke_agent",
+          "gen_ai.agent.name": "invoke_agent Incident Desk",
+          "splunk_ao.agent.type": "default",
+          "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"Check checkout\",\"type\":\"text\"}],\"role\":\"user\"}]",
+          "gen_ai.output.messages": "[{\"finish_reason\":\"unknown\",\"parts\":[{\"content\":\"Fixture checked\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+          "gen_ai.conversation_root": true
+        }
+      }
+    ]
+  },
+  "operation_metadata_primary_sources": [
+    {
+      "path": "docs/gen-ai/gen-ai-spans.md",
+      "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/4e8a2812139b2a999d959e3650e24dfc64e21943/docs/gen-ai/gen-ai-spans.md",
+      "resolved_revision": "4e8a2812139b2a999d959e3650e24dfc64e21943",
+      "captured_at": "2026-10-14T05:57:10.168295+00:00",
+      "full_source_sha256": "af0b7501177452a5fb929e09a42d791631511a0544f2c71e1a008ff177bcebf0",
+      "excerpts": [
+        {
+          "start_line": 739,
+          "end_line": 794,
+          "source": "### Execute tool span\n\n<!-- weaver .registry.spans[] | select(.type == \"gen_ai.execute_tool.internal\") -->\n<!-- NOTE: THIS TEXT IS AUTOGENERATED. DO NOT EDIT BY HAND. -->\n<!-- see templates/registry/markdown/snippet.md.j2 -->\n<!-- prettier-ignore-start -->\n\n**Status:** ![Development](https://img.shields.io/badge/-development-blue)\n\nDescribes tool execution span.\n\n`gen_ai.operation.name` SHOULD be `execute_tool`.\n\nGenAI instrumentations that can instrument tool execution calls SHOULD do so,\nunless another instrumentation can reliably cover all supported tool types.\nMCP tool executions may also be traced by the\n[corresponding MCP instrumentation](/docs/gen-ai/mcp.md#client).\n\nTools are often executed directly by application code. Application developers\nare encouraged to follow this semantic convention for tools invoked by their\nown code and to manually instrument any tool calls that automatic\ninstrumentations do not cover.\n\nSome tools are specialized, such as [Agent Skills](https://agentskills.io)\nthat agentic frameworks expose as tools. Instrumentations SHOULD distinguish\ngeneric tools from specialized ones using framework-specific tool names or\nother heuristics and record the applicable\n[refinement](/docs/gen-ai/gen-ai-agent-spans.md#execute-tool-span).\nThey SHOULD NOT record two different spans for one call.\n\n**Span name** SHOULD be `execute_tool {gen_ai.tool.name}`.\n\n**Span kind** SHOULD be `INTERNAL`.\n\n**Span status** SHOULD follow the [Recording Errors](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/general/recording-errors.md) document.\n\n**Entity Associations** The span SHOULD be associated with one of the following entities:\n\n- [`gen_ai.main_agent`](/docs/registry/entities/gen-ai.md#gen-ai-main-agent)\n\n**Requirement level:** [Recommended](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/general/signal-requirement-level.md).\n\n**Attributes:**\n\n| Key | Stability | [Requirement Level](https://opentelemetry.io/docs/specs/semconv/general/attribute-requirement-level/) | Value Type | Description | Example Values |\n| --- | --- | --- | --- | --- | --- |\n| [`gen_ai.operation.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | string | The name of the operation being performed. [1] | `chat`; `generate_content`; `text_completion` |\n| [`gen_ai.tool.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | string | Name of the tool utilized by the agent. | `Flights` |\n| [`error.type`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/error.md) | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | `Conditionally Required` If the operation ended in an error. | string | Describes a class of error the operation ended with. [2] | `timeout`; `java.net.UnknownHostException`; `server_certificate_invalid`; `500` |\n| [`gen_ai.agent.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` When applicable. | string | The human-readable name of the agent executing the tool. | `Math Tutor`; `Fiction Writer` |\n| [`gen_ai.conversation.id`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If available. | string | The unique identifier for a conversation (session, thread), used to store and correlate messages within this conversation. [3] | `conv_5j66UpCpwteGg4YSxUnt7lPY` |\n| [`gen_ai.tool.call.id`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` If available. | string | The tool call identifier. | `call_mszuSIzqtI65i1wAUOE8w5H4` |\n| [`gen_ai.tool.description`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` If available. | string | The tool description. [4] | `Multiply two numbers` |\n| [`gen_ai.tool.type`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` If available. | string | Type of the tool utilized by the agent [5] | `function`; `extension`; `datastore` |\n| [`gen_ai.tool.call.arguments`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Opt-In` | any | Parameters passed to the tool call. [6] | {<br>&nbsp;&nbsp;&nbsp;&nbsp;\"location\": \"San Francisco?\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"date\": \"2025-10-01\"<br>} |\n| [`gen_ai.tool.call.result`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Opt-In` | any | The result returned by the tool call (if any and if execution was successful). [7] | {<br>&nbsp;&nbsp;\"temperature_range\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;\"high\": 75,<br>&nbsp;&nbsp;&nbsp;&nbsp;\"low\": 60<br>&nbsp;&nbsp;},<br>&nbsp;&nbsp;\"conditions\": \"sunny\"<br>} |\n"
+        },
+        {
+          "start_line": 802,
+          "end_line": 830,
+          "source": "**[3] `gen_ai.conversation.id`:** Instrumentations SHOULD populate conversation id when they have an identifier\nfor the conversation readily available for a given operation, for example:\n\n- when the client framework being instrumented manages conversation history\n(see [LlamaIndex chat store](https://docs.llamaindex.ai/en/stable/module_guides/storing/chat_stores/),\n[LangChain `session_id`](https://reference.langchain.com/python/langchain-core/runnables/history/RunnableWithMessageHistory),\nand [Google ADK sessions](https://adk.dev/sessions/session))\n- when instrumenting GenAI client libraries that maintain a conversation on the backend\n(see [AWS Bedrock agent sessions](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-session-state.html),\n[OpenAI Assistant threads](https://platform.openai.com/docs/api-reference/threads))\n\nWhen no identifier for the conversation is available, instrumentations SHOULD NOT\npopulate conversation id. For example, a new UUID, a trace identifier, or a hash\nof request content SHOULD NOT be used as a fallback value.\n\nApplication developers that manage conversation history MAY add conversation id to GenAI and other\nspans or logs using custom span or log record processors or hooks provided by instrumentation\nlibraries.\n\n**[4] `gen_ai.tool.description`:**\n\n> [!WARNING]\n> This attribute may contain sensitive information.\n\n**[5] `gen_ai.tool.type`:** Extension: A tool executed on the agent-side to directly call external APIs, bridging the gap between the agent and real-world systems.\n  Agent-side operations involve actions that are performed by the agent on the server or within the agent's controlled environment.\nFunction: A tool executed on the client-side, where the agent generates parameters for a predefined function, and the client executes the logic.\n  Client-side operations are actions taken on the user's end or within the client application.\nDatastore: A tool used by the agent to access and query structured or unstructured external data for retrieval-augmented tasks or knowledge updates.\n"
+        },
+        {
+          "start_line": 858,
+          "end_line": 864,
+          "source": "The following attributes can be important for making sampling decisions\nand SHOULD be provided **at span creation time** (if provided at all):\n\n* [`gen_ai.agent.name`](/docs/registry/attributes/gen-ai.md)\n* [`gen_ai.operation.name`](/docs/registry/attributes/gen-ai.md)\n* [`gen_ai.tool.name`](/docs/registry/attributes/gen-ai.md)\n* [`gen_ai.tool.type`](/docs/registry/attributes/gen-ai.md)\n"
+        }
+      ],
+      "scope": "Exact pinned primary-source excerpts. Full source hash verified against supplied complete receipt. These are dated official requirements, not application or SDK execution proof."
+    },
+    {
+      "path": "docs/gen-ai/gen-ai-agent-spans.md",
+      "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/4e8a2812139b2a999d959e3650e24dfc64e21943/docs/gen-ai/gen-ai-agent-spans.md",
+      "resolved_revision": "4e8a2812139b2a999d959e3650e24dfc64e21943",
+      "captured_at": "2026-10-14T05:57:10.168295+00:00",
+      "full_source_sha256": "018ffd339be99c7e56ddba7265dd3095ca0735ddf680d28f96036043641384f4",
+      "excerpts": [
+        {
+          "start_line": 545,
+          "end_line": 590,
+          "source": "### Invoke agent internal span\n\n<!-- weaver .registry.spans[] | select(.type == \"gen_ai.invoke_agent.internal\") -->\n<!-- NOTE: THIS TEXT IS AUTOGENERATED. DO NOT EDIT BY HAND. -->\n<!-- see templates/registry/markdown/snippet.md.j2 -->\n<!-- prettier-ignore-start -->\n\n**Status:** ![Development](https://img.shields.io/badge/-development-blue)\n\nDescribes GenAI agent invocation within the same process.\n\nThe `gen_ai.operation.name` SHOULD be `invoke_agent`.\n\nExamples: LangChain agents, CrewAI agents.\n\n**Span name** SHOULD be `invoke_agent {gen_ai.agent.name}` if `gen_ai.agent.name` is readily available.\nWhen `gen_ai.agent.name` is not available, it SHOULD be `invoke_agent`.\nSemantic conventions for individual GenAI systems and frameworks MAY specify different span name format.\n\n**Span kind** SHOULD be `INTERNAL`.\n\n**Span status** SHOULD follow the [Recording Errors](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/general/recording-errors.md) document.\n\n**Entity Associations** The span SHOULD be associated with one of the following entities:\n\n- [`gen_ai.main_agent`](/docs/registry/entities/gen-ai.md#gen-ai-main-agent)\n\n**Requirement level:** [Recommended](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/general/signal-requirement-level.md).\n\n**Attributes:**\n\n| Key | Stability | [Requirement Level](https://opentelemetry.io/docs/specs/semconv/general/attribute-requirement-level/) | Value Type | Description | Example Values |\n| --- | --- | --- | --- | --- | --- |\n| [`gen_ai.operation.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | string | The name of the operation being performed. [1] | `chat`; `generate_content`; `text_completion` |\n| [`error.type`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/error.md) | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | `Conditionally Required` If the operation ended in an error. | string | Describes a class of error the operation ended with. [2] | `timeout`; `java.net.UnknownHostException`; `server_certificate_invalid`; `500` |\n| [`gen_ai.agent.description`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` When available. | string | The free-form description of the invoked GenAI agent. | `Helps with math problems`; `Generates fiction stories` |\n| [`gen_ai.agent.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` When available. | string | The human-readable name of the invoked GenAI agent. | `Math Tutor`; `Fiction Writer` |\n| [`gen_ai.conversation.id`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [3] | string | The unique identifier for a conversation (session, thread), used to store and correlate messages within this conversation. [4] | `conv_5j66UpCpwteGg4YSxUnt7lPY` |\n| [`gen_ai.data_source.id`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If applicable. | string | The data source identifier. [5] | `H7STPQYOND` |\n| [`gen_ai.output.type`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [6] | string | Represents the content type requested by the client. [7] | `text`; `json`; `image` |\n| [`gen_ai.request.choice.count`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If available, in the request, and !=1. | int | The target number of candidate completions to return. | `3` |\n| [`gen_ai.request.seed`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If applicable and if the request includes a seed. | int | Requests with same seed value more likely to return same result. | `100` |\n| [`gen_ai.request.frequency_penalty`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` | double | The frequency penalty setting for the GenAI request. | `0.1` |\n| [`gen_ai.request.max_tokens`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` | int | The maximum number of tokens the model generates for a request. | `100` |\n| [`gen_ai.request.model`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` If applicable. | string | The name of the GenAI model configured for the agent. [8] | `gpt-4` |\n| [`gen_ai.request.presence_penalty`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` | double | The presence penalty setting for the GenAI request. | `0.1` |\n"
+        },
+        {
+          "start_line": 746,
+          "end_line": 751,
+          "source": "The following attributes can be important for making sampling decisions\nand SHOULD be provided **at span creation time** (if provided at all):\n\n* [`gen_ai.agent.name`](/docs/registry/attributes/gen-ai.md)\n* [`gen_ai.operation.name`](/docs/registry/attributes/gen-ai.md)\n* [`gen_ai.request.model`](/docs/registry/attributes/gen-ai.md)\n"
+        },
+        {
+          "start_line": 636,
+          "end_line": 639,
+          "source": "\n**[8] `gen_ai.request.model`:** This attribute SHOULD be populated if and only if the instrumented library allows to set only a single model per agent. It SHOULD NOT be populated for agents that support multiple models or dynamic selection.\n\n**[9] `gen_ai.response.finish_reasons`:** Values correspond to generations in the same order as the returned\n"
+        }
+      ],
+      "scope": "Exact pinned primary-source excerpts. Full source hash verified against supplied complete receipt. These are dated official requirements, not application or SDK execution proof."
+    },
+    {
+      "path": "docs/gen-ai/client-inference.md",
+      "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/4e8a2812139b2a999d959e3650e24dfc64e21943/docs/gen-ai/client-inference.md",
+      "resolved_revision": "4e8a2812139b2a999d959e3650e24dfc64e21943",
+      "captured_at": "2026-10-14T05:57:10.168295+00:00",
+      "full_source_sha256": "d66935733da1edd048cfa3b90d081f8d81b6961b62a69dafa15c1c5ad03b9c5b",
+      "excerpts": [
+        {
+          "start_line": 64,
+          "end_line": 83,
+          "source": "**Requirement level:** [Recommended](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/general/signal-requirement-level.md).\n\n**Attributes:**\n\n| Key | Stability | [Requirement Level](https://opentelemetry.io/docs/specs/semconv/general/attribute-requirement-level/) | Value Type | Description | Example Values |\n| --- | --- | --- | --- | --- | --- |\n| [`gen_ai.operation.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | string | The name of the operation being performed. [1] | `chat`; `generate_content`; `text_completion` |\n| [`gen_ai.provider.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | string | The Generative AI provider as identified by the client or server instrumentation. [2] | `openai`; `gcp.gen_ai`; `gcp.vertex_ai` |\n| [`error.type`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/error.md) | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | `Conditionally Required` If the operation ended in an error. | string | Describes a class of error the operation ended with. [3] | `timeout`; `java.net.UnknownHostException`; `server_certificate_invalid`; `500` |\n| [`gen_ai.conversation.id`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [4] | string | The unique identifier for a conversation (session, thread), used to store and correlate messages within this conversation. [5] | `conv_5j66UpCpwteGg4YSxUnt7lPY` |\n| [`gen_ai.output.type`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [6] | string | Represents the content type requested by the client. [7] | `text`; `json`; `image` |\n| [`gen_ai.prompt.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` when a named prompt template is used | string | The name of the prompt that uniquely identifies it. | `analyze-code` |\n| [`gen_ai.prompt.version`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [8] | string | The version of the prompt template used. [9] | `1.0.0`; `2025-05-01`; `prod`; `v2` |\n| [`gen_ai.request.choice.count`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If available, in the request, and !=1. | int | The target number of candidate completions to return. | `3` |\n| [`gen_ai.request.model`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If available. | string | The name of the GenAI model a request is being made to. [10] | `gpt-4` |\n| [`gen_ai.request.seed`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If applicable and if the request includes a seed. | int | Requests with same seed value more likely to return same result. | `100` |\n| [`gen_ai.request.stream`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [11] | boolean | Indicates whether the GenAI request was made in streaming mode. | |\n| [`gen_ai.request.top_k`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If applicable. | int | The top-K sampling setting for the GenAI request: restricts token generation at each step to the K most likely next tokens. [12] | `40` |\n| [`server.port`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/server.md) | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | `Conditionally Required` If `server.address` is set. | int | GenAI server port. [13] | `80`; `8080`; `443` |\n| [`gen_ai.conversation.compacted`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` when available | boolean | Indicates whether the effective conversation context used for this operation is a compacted view of a prior conversation. [14] | `true` |\n"
+        },
+        {
+          "start_line": 346,
+          "end_line": 358,
+          "source": "\nThe following attributes can be important for making sampling decisions\nand SHOULD be provided **at span creation time** (if provided at all):\n\n* [`gen_ai.operation.name`](/docs/registry/attributes/gen-ai.md)\n* [`gen_ai.provider.name`](/docs/registry/attributes/gen-ai.md)\n* [`gen_ai.request.model`](/docs/registry/attributes/gen-ai.md)\n* [`server.address`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/server.md)\n* [`server.port`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/server.md)\n\n---\n\n`error.type` has the following list of well-known values. If one of them applies, then the respective value MUST be used; otherwise, a custom value MAY be used.\n"
+        }
+      ],
+      "scope": "Exact pinned primary-source excerpts. Full source hash verified against supplied complete receipt. These are dated official requirements, not application or SDK execution proof."
+    }
+  ],
+  "synthetic_operation_source_cases": {
+    "scope": "Separate synthetic source-only cases. Their context, tool metadata and call flow are not app.py or the earlier installed SDK/in-memory capture. No application, model, SDK, sampler, exporter, resource or cloud execution was performed for these source cases.",
+    "known_context": {
+      "source_path": "synthetic/known_agent_tool_context.py",
+      "source": "import json\nfrom dataclasses import dataclass\nfrom galileo_core.schemas.logging.span import AgentSpan, ToolSpan, LlmSpan\nfrom splunk_ao.otel import start_splunk_ao_span\n\n@dataclass(frozen=True)\nclass TurnContext:\n    conversation_id: str\n\n@dataclass(frozen=True)\nclass FixedAgentConfig:\n    name: str = \"Incident Desk\"\n    description: str = \"Read synthetic health and summarize with one configured model.\"\n    model: str = \"qwen3:8b\"\n    provider: str = \"ollama\"\n\n# One fixed agent configuration; the public turn API has no model choice.\nFIXED_AGENT = FixedAgentConfig()\n\nTOOLS = {\n    \"get_service_health\": {\n        \"type\": \"function\",\n        \"description\": \"Read synthetic health for the named service.\",\n    }\n}\n\nasync def get_service_health(service):\n    return {\"service\": service, \"status\": \"degraded\", \"error_rate\": 0.038}\n\nasync def execute_tool(context, tool_name, arguments):\n    definition = TOOLS[tool_name]\n    record = ToolSpan(name=tool_name, input=json.dumps(arguments))\n    with start_splunk_ao_span(record) as span:\n        span.set_attribute(\"gen_ai.tool.type\", definition[\"type\"])\n        result = await get_service_health(**arguments)\n        record.output = json.dumps(result)\n        return result\n\nasync def agent_turn(context, question, client):\n    record = AgentSpan(name=FIXED_AGENT.name, input=question)\n    with start_splunk_ao_span(record) as span:\n        span.set_attribute(\"gen_ai.provider.name\", FIXED_AGENT.provider)\n        result = await execute_tool(context, \"get_service_health\", {\"service\": \"checkout\"})\n        model_record = LlmSpan(name=\"chat \" + FIXED_AGENT.model, model=FIXED_AGENT.model,\n                               input=[{\"role\": \"user\", \"content\": question}])\n        with start_splunk_ao_span(model_record) as model_span:\n            model_span.set_attribute(\"gen_ai.provider.name\", FIXED_AGENT.provider)\n            reply = await client.chat(model=FIXED_AGENT.model,\n                                      messages=[{\"role\": \"user\", \"content\": question}])\n            model_record.output = reply\n        record.output = reply\n        return {\"result\": result, \"answer\": reply}\n\n# The caller supplies this non-sensitive opaque conversation binding for the\n# synthetic source case; it is not a trace ID or a user/session identity.\ncontext = TurnContext(conversation_id=\"conv_demo_approved_72fbd8\")\n# agent_turn(context, \"Check checkout\", a_separate_process_model_client)\n",
+      "conversation_binding_scope": "This supplied conversation_id is approved opaque GenAI correlation at the calling boundary and may be retained on spans. It is not approved for metric labels.",
+      "source_sha256": "e3f2597fd1c750d9aa7598a85d225bf265109af97bbe94a65293f5c109aa71c8"
+    },
+    "unavailable_context": {
+      "source_path": "synthetic/unbound_tool_context.py",
+      "source": "async def invoke_unbound_tool(arguments, handler):\n    return await handler(arguments)\n",
+      "scope": "No configured agent identity, model, supplied conversation binding or tool description exists in this separate source. Do not reuse values from the known_context case.",
+      "source_sha256": "53c92348fe25080dcc3283ddbcbc8588ef4ddf381202e0ddf92b512a6adcd36e"
+    },
+    "dynamic_model_context": {
+      "source_path": "synthetic/dynamic_model_agent.py",
+      "scope": "Separate source-only agent with a supported per-turn model choice; no fixed single agent model. Neither app.py nor the installed helper capture is represented by this source.",
+      "source": "from galileo_core.schemas.logging.span import AgentSpan, LlmSpan\nfrom splunk_ao.otel import start_splunk_ao_span\n\nALLOWED_MODELS = (\"qwen3:8b\", \"gpt-oss:20b\")\n\nasync def dynamic_agent_turn(question, requested_model, client):\n    if requested_model not in ALLOWED_MODELS:\n        raise ValueError(\"unsupported model\")\n    agent_record = AgentSpan(name=\"Model Router\", input=question)\n    with start_splunk_ao_span(agent_record) as agent_span:\n        agent_span.set_attribute(\"gen_ai.provider.name\", \"ollama\")\n        model_record = LlmSpan(name=\"chat \" + requested_model, model=requested_model,\n                               input=[{\"role\": \"user\", \"content\": question}])\n        with start_splunk_ao_span(model_record) as model_span:\n            model_span.set_attribute(\"gen_ai.provider.name\", \"ollama\")\n            reply = await client.chat(model=requested_model,\n                                      messages=[{\"role\": \"user\", \"content\": question}])\n            model_record.output = reply\n        agent_record.output = reply\n        return reply\n",
+      "source_sha256": "d0b8f1852efbea7c5b09f74150d528dd96347eecf2b75ce8d6021be1a7e247fe"
+    },
+    "distinct_workflow_agent_context": {
+      "source_path": "synthetic/distinct_incident_workflow.py",
+      "scope": "Separate source-only coordinated workflow with its own run boundary, an agent invoke boundary and their explicit call relationship. Not app.py and not installed-helper capture. No source case was executed.",
+      "source": "import json\nfrom dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass WorkflowContext:\n    conversation_id: str\n\nasync def collect_service_health(service):\n    return {\"service\": service, \"status\": \"degraded\"}\n\nclass SummaryAgent:\n    name = \"Summary Agent\"\n    description = \"Summarize collected synthetic service health.\"\n    model = \"qwen3:8b\"\n\n    async def invoke(self, context, question, health, client):\n        reply = await client.chat(\n            model=self.model,\n            messages=[{\"role\": \"user\", \"content\": question},\n                      {\"role\": \"user\", \"content\": json.dumps(health)}],\n        )\n        return reply\n\nclass IncidentTriageWorkflow:\n    name = \"Incident triage\"\n    steps = (\"collect_service_health\", \"summarize_agent\", \"finalize_report\")\n\n    def __init__(self):\n        self.summary_agent = SummaryAgent()\n\n    async def run(self, context, question, service, client):\n        health = await collect_service_health(service)\n        summary = await self.summary_agent.invoke(context, question, health, client)\n        return {\"service\": service, \"health\": health, \"summary\": summary}\n\ncontext = WorkflowContext(conversation_id=\"conv_demo_workflow_94ead5\")\n# IncidentTriageWorkflow().run(context, \"Summarize checkout\", \"checkout\", client)\n",
+      "source_sha256": "06b494890ae2d3402716a102d18800fd12fbabf7b736a9e19a1016386dab6c77"
+    },
+    "distinct_tool_metadata_context": {
+      "source_path": "synthetic/distinct_tool_metadata_context.py",
+      "scope": "Separate source-only context with one status_turn orchestration boundary and two actual execute_tool calls. Not app.py, SDK capture, model invocation, retrieval, workflow or received OTLP. No case was executed.",
+      "source": "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass AgentContext:\n    agent_name: str = \"Status Desk\"\n    conversation_id: str = \"conv_status_approved_46c2\"\n\nTOOL_DEFINITIONS = {\n    \"read_health\": {\"type\": \"function\", \"description\": \"Read synthetic service health.\"},\n    \"read_queue\": {\"type\": \"function\", \"description\": \"Read synthetic pending queue depth.\"},\n}\n\nasync def read_health(service):\n    return {\"service\": service, \"status\": \"healthy\"}\n\nasync def read_queue(service):\n    return {\"service\": service, \"depth\": 2}\n\nHANDLERS = {\"read_health\": read_health, \"read_queue\": read_queue}\n\nasync def execute_tool(context, tool_name, arguments):\n    definition = TOOL_DEFINITIONS[tool_name]\n    return await HANDLERS[tool_name](**arguments)\n\nasync def status_turn(context, question):\n    health = await execute_tool(context, \"read_health\", {\"service\": \"checkout\"})\n    queue = await execute_tool(context, \"read_queue\", {\"service\": \"checkout\"})\n    return {\"health\": health, \"queue\": queue}\n\n# Source-only caller binding, approved opaque span correlation, not metric labels.\ncontext = AgentContext()\n",
+      "source_sha256": "614405bcfee96c5807a6e9f18fe22c993dfbdfe49922101173a8ee4f3987149b",
+      "offered_tool_metadata": [
+        {
+          "call_name": "read_health",
+          "gen_ai.agent.name": "Status Desk",
+          "gen_ai.conversation.id": "conv_status_approved_46c2",
+          "gen_ai.tool.description": "Read synthetic service health.",
+          "gen_ai.tool.type": "function"
+        },
+        {
+          "call_name": "read_queue",
+          "gen_ai.agent.name": "Status Desk",
+          "gen_ai.conversation.id": "conv_status_approved_46c2",
+          "gen_ai.tool.description": "Read synthetic pending queue depth.",
+          "gen_ai.tool.type": "function"
+        }
+      ],
+      "source_unavailable": [
+        "configured agent description",
+        "model/provider call",
+        "fixed agent model"
+      ],
+      "primary_requirements": "Use existing operation_metadata_primary_sources exact pinned tool attribute levels. These safe values are source-only and must be assessed independently on each owning execute_tool call; a container description or one shared description cannot close both."
+    }
+  },
+  "synthetic_field_acceptance_contract": {
+    "scope": "Source-backed acceptance for the separately supplied synthetic known_context; these values are not app.py or SDK-capture facts. Levels are pinned official operation requirements, separate from this profile's known-value acceptance.",
+    "fields": [
+      {
+        "owning_operation": "invoke_agent",
+        "attribute": "gen_ai.agent.name",
+        "actual_safe_source_value": "Incident Desk",
+        "source_property": "FixedAgentConfig.name",
+        "official_requirement": "Conditionally Required when available",
+        "official_path": "docs/gen-ai/gen-ai-agent-spans.md",
+        "official_line": 581,
+        "profile_acceptance": "Explicitly assess known applicable value on its owning operation; parent-only fields do not close the tool. Report proposed/source-only proof separately from actual runtime."
+      },
+      {
+        "owning_operation": "invoke_agent",
+        "attribute": "gen_ai.agent.description",
+        "actual_safe_source_value": "Read synthetic health and summarize with one configured model.",
+        "source_property": "FixedAgentConfig.description",
+        "official_requirement": "Conditionally Required when available",
+        "official_path": "docs/gen-ai/gen-ai-agent-spans.md",
+        "official_line": 580,
+        "profile_acceptance": "Explicitly assess known applicable value on its owning operation; parent-only fields do not close the tool. Report proposed/source-only proof separately from actual runtime."
+      },
+      {
+        "owning_operation": "invoke_agent",
+        "attribute": "gen_ai.request.model",
+        "actual_safe_source_value": "qwen3:8b",
+        "source_property": "FIXED_AGENT.model used by the one-model turn API",
+        "official_requirement": "Recommended if applicable; fixed single-model condition only",
+        "official_path": "docs/gen-ai/gen-ai-agent-spans.md",
+        "official_line": 589,
+        "profile_acceptance": "Explicitly assess known applicable value on its owning operation; parent-only fields do not close the tool. Report proposed/source-only proof separately from actual runtime."
+      },
+      {
+        "owning_operation": "execute_tool",
+        "attribute": "gen_ai.agent.name",
+        "actual_safe_source_value": "Incident Desk",
+        "source_property": "active FIXED_AGENT.name at execute_tool caller",
+        "official_requirement": "Conditionally Required when applicable",
+        "official_path": "docs/gen-ai/gen-ai-spans.md",
+        "official_line": 788,
+        "profile_acceptance": "Explicitly assess known applicable value on its owning operation; parent-only fields do not close the tool. Report proposed/source-only proof separately from actual runtime."
+      },
+      {
+        "owning_operation": "execute_tool",
+        "attribute": "gen_ai.conversation.id",
+        "actual_safe_source_value": "conv_demo_approved_72fbd8",
+        "source_property": "TurnContext.conversation_id passed to execute_tool",
+        "official_requirement": "Conditionally Required if available",
+        "official_path": "docs/gen-ai/gen-ai-spans.md",
+        "official_line": 789,
+        "profile_acceptance": "Explicitly assess known applicable value on its owning operation; parent-only fields do not close the tool. Report proposed/source-only proof separately from actual runtime."
+      },
+      {
+        "owning_operation": "execute_tool",
+        "attribute": "gen_ai.tool.description",
+        "actual_safe_source_value": "Read synthetic health for the named service.",
+        "source_property": "TOOLS[tool_name].description at execute_tool",
+        "official_requirement": "Recommended if available",
+        "official_path": "docs/gen-ai/gen-ai-spans.md",
+        "official_line": 791,
+        "profile_acceptance": "Explicitly assess known applicable value on its owning operation; parent-only fields do not close the tool. Report proposed/source-only proof separately from actual runtime."
+      }
+    ],
+    "dynamic_model_condition": {
+      "official_path": "docs/gen-ai/gen-ai-agent-spans.md",
+      "official_line": 637,
+      "acceptance": "A multi-model/dynamic agent must not get reserved agent gen_ai.request.model from a default or one selected request. Its actual inference request still has the chosen model; custom context may be separately labeled."
+    },
+    "unavailable_context_acceptance": "Do not copy any known_context value into unavailable_context, guess a configured description from README/prompt/function purpose, or put opaque conversation IDs in metric dimensions."
+  },
+  "creator_stage_source_acceptance": {
+    "scope": "Source-derived receipt plus acceptance requirements, not an executed sampler/on_start capture or a claim that application integration/export is complete.",
+    "creator": {
+      "package": "splunk-ao",
+      "version": "0.5.0",
+      "source_path": "splunk_ao/otel.py",
+      "symbol": "start_splunk_ao_span",
+      "source_sha256": "af33b590d48f3abddf032664d76d95c9ff9eb7993941c63e179cae6eb07ce10f"
+    },
+    "source_stage_facts": [
+      {
+        "stage": "initial creation",
+        "source_expression": "tracer.start_as_current_span(splunk_ao_span.name)",
+        "positional_arguments": [
+          "splunk_ao_span.name"
+        ],
+        "keyword_arguments": {},
+        "scope": "This helper itself passes no semantic initial attributes or explicit kind; arbitrary custom provider effects are not executed/proven by this receipt."
+      },
+      {
+        "stage": "body",
+        "source_expression": "yield span",
+        "scope": "Public span setters are available after creation, so they can populate finished fields but do not establish earlier sampling/on_start inputs."
+      },
+      {
+        "stage": "finally",
+        "source_expression": "attributes = build_span_attributes(splunk_ao_span, session_id); span.set_attribute(key, value)",
+        "scope": "Schema-derived attributes are applied during finalization after the yield."
+      }
+    ],
+    "public_signature_fact": "start_splunk_ao_span(splunk_ao_span) has no public kind or attributes argument in the supplied installed0.5 source.",
+    "acceptance": "Record the concrete source-stage limitation for each applicable operation, and bind a verified supported initial-creation hook or remaining runtime boundary test. Compare head sampler/on_start observations with finished/exported attributes/kind; final export success or wire normalization does not repair earlier creation metadata. Keep supported same-span content/null capabilities distinct, and do not invent parameters, patch SDK internals or create duplicate nodes. Existing AlwaysOn success is not disproved by an unexecuted per-attribute sampling capability check."
+  },
+  "synthetic_audit_compatibility_context": {
+    "scope": "Separate fictional package candidate facts for read-only reasoning; not actual SDK releases, package registry, installation or app runtime. No candidate was executed.",
+    "package": "example-capture-sdk",
+    "operator_constraints": {
+      "python": "selected existing runtime",
+      "sdk_api": "existing supported peer API",
+      "required_capture_capability": "bounded source-side content transformation"
+    },
+    "published_candidates_oldest_to_newest": [
+      {
+        "candidate": "release-a",
+        "runtime_compatible": true,
+        "peer_compatible": true,
+        "required_capture_api": true
+      },
+      {
+        "candidate": "release-b",
+        "runtime_compatible": true,
+        "peer_compatible": true,
+        "required_capture_api": true
+      },
+      {
+        "candidate": "release-c",
+        "runtime_compatible": true,
+        "peer_compatible": false,
+        "required_capture_api": true
+      },
+      {
+        "candidate": "release-d",
+        "runtime_compatible": true,
+        "peer_compatible": true,
+        "required_capture_api": false
+      },
+      {
+        "candidate": "release-e",
+        "runtime_compatible": false,
+        "peer_compatible": true,
+        "required_capture_api": true
+      }
+    ],
+    "existing_release_recipe": "release-a",
+    "required_assessment": "Select the newest candidate satisfying all supplied runtime, peer and required-API constraints, state per-candidate exclusions and separate this scoped choice from real current SDK metadata/API evidence; preserve operator constraints. Do not choose an incompatible largest candidate or copy the oldest recipe."
+  }
+}

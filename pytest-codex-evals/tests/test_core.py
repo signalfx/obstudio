@@ -62,6 +62,8 @@ from pytest_codex_evals.report import (
     compact_token_count,
     evaluator_semantics_version,
     format_tokens,
+    kind_report_metadata,
+    report_metadata,
     legacy_shared_reference_consumers,
     normalize_rubric_score,
     render_reports_for_run_root,
@@ -3337,6 +3339,101 @@ def test_judge_usage_is_rendered_only_in_rubric_report(tmp_path: Path):
     assert "## Judge Token Usage" not in reports["sanity"]
     assert "## Agent Token Usage" in reports["rubric"]
     assert "## Judge Token Usage" in reports["rubric"]
+
+
+@pytest.mark.parametrize(
+    ("kind", "actor", "judge", "expected"),
+    [
+        ("rubric", "actor-override", "", "actor-override"),
+        ("rubric", "actor-override", "explicit-judge", "explicit-judge"),
+        ("rubric", "", "", "-"),
+        ("sanity", "actor-override", "", "-"),
+        ("runtime", "actor-override", "", "-"),
+        ("sanity", "actor-override", "configured-judge", "-"),
+        ("runtime", "actor-override", "configured-judge", "-"),
+    ],
+)
+def test_legacy_report_records_effective_judge_without_changing_raw_run(
+    tmp_path: Path, kind: str, actor: str, judge: str, expected: str
+):
+    run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
+    grade = GradeResult(
+        checks=[GradeCheckResult(id="check", description="check", passed=True)]
+    )
+    rubric_path = tmp_path / "rubric_grade.json"
+    rubric_path.write_text(
+        json.dumps({"overall_pass": True, "score": 100, "checks": []}),
+        encoding="utf-8",
+    )
+    result = case_result(
+        side_result("with_skill", grade, rubric_grade_path=str(rubric_path)), None
+    )
+    write_session_results([
+        {
+            "mode": "with_skill",
+            "eval_kind": kind,
+            "repo_root": tmp_path,
+            "run_root": run_root,
+            "skill": "sample-skill",
+            "metadata": {"agent_model": actor, "judge_model": judge},
+            "results": [result],
+        }
+    ])
+    raw_path = run_root / "runs" / f"{kind}-with_skill.json"
+    original_raw = raw_path.read_bytes()
+
+    report_path, benchmark_path = render_reports_for_run_root(run_root, kind)
+
+    benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    assert benchmark["metadata"]["judge_model"] == expected
+    if kind == "rubric":
+        assert f"| Judge model | {expected} |" in report_path.read_text(encoding="utf-8")
+    assert raw_path.read_bytes() == original_raw
+
+
+def test_rubric_report_resolves_judge_model_for_each_metadata_source(tmp_path: Path):
+    metadata = kind_report_metadata(
+        "sample-skill",
+        tmp_path,
+        "rubric",
+        [
+            {"agent_model": "actor-a", "judge_model": "explicit-judge"},
+            {"agent_model": "actor-b", "judge_model": ""},
+        ],
+    )
+
+    assert metadata["judge_model"] == "actor-b, explicit-judge"
+
+
+def test_disabled_rubric_report_does_not_claim_configured_judge(tmp_path: Path):
+    metadata = kind_report_metadata(
+        "sample-skill", tmp_path, "rubric",
+        [{"agent_model": "actor", "judge_model": "configured-judge", "rubric_enabled": False}],
+    )
+
+    assert metadata["judge_model"] == "-"
+
+
+@pytest.mark.parametrize(
+    ("mode", "kind", "enabled", "expected"),
+    [
+        ("validation", "rubric", True, ""),
+        ("with_skill", "validation", True, ""),
+        ("with_skill", "sanity", True, ""),
+        ("with_skill", "runtime", True, ""),
+        ("with_skill", "standard", False, ""),
+        ("with_skill", "rubric", True, "configured-judge"),
+    ],
+)
+def test_legacy_report_metadata_hides_inactive_judge_without_mutating_input(
+    tmp_path: Path, mode: str, kind: str, enabled: bool, expected: str
+):
+    original = {"eval_kind": kind, "judge_model": "configured-judge", "rubric_enabled": enabled}
+
+    metadata = report_metadata("sample-skill", mode, tmp_path, original)
+
+    assert metadata["judge_model"] == expected
+    assert original == {"eval_kind": kind, "judge_model": "configured-judge", "rubric_enabled": enabled}
 
 
 def test_runtime_report_uses_runtime_template_only(tmp_path: Path):

@@ -1,0 +1,684 @@
+{
+  "kind": "fresh-ao-selected-implementation-planning-snapshot",
+  "scope": "Separate source/configuration planning case, not the actual app.py and not app/model/cloud runtime proof. All source/profile snapshots are read-only; no resource requests or executable instrumentation are authorized in this plan task.",
+  "fresh_source": {
+    "service_name": "incident-desk",
+    "existing_genai_instrumentation": null,
+    "source_snapshot": "import json\n\nasync def lookup_incident(incident_id, incident_store):\n    return incident_store.get(incident_id)\n\nasync def retrieve_documents(query, document_store):\n    return [doc for doc in document_store if query.lower() in doc[\"content\"].lower()]\n\nasync def turn(messages, ollama_client, incident_store, document_store):\n    incident = await lookup_incident(\"INC-SYNTHETIC\", incident_store)\n    documents = await retrieve_documents(\"checkout\", document_store)\n    return await ollama_client.chat(messages=messages, temperature=0.2, stream=False)\n",
+    "boundary_facts": {
+      "agent": "turn is an application-owned single agent invocation; no separate composed workflow exists",
+      "tool": "lookup_incident has actual incident_id input and a produced object or successful None output; its raised failures produce no result",
+      "retrieval": "retrieve_documents consumes an actual query and returns matching document objects; no extra execute_tool boundary encloses it in this snapshot",
+      "model": "ollama_client sends chat to a separate local Ollama process; successful response supplies message, model and prompt_eval_count/eval_count; failed requests supply no successful output or token counts"
+    },
+    "entrypoint_snapshot": "from dotenv import load_dotenv\nload_dotenv(\".local/live.env\")\n# application imports and SDK initialization follow profile loading\n",
+    "profile_path": ".local/live.env",
+    "base_profile_snapshot": "OTEL_SERVICE_NAME=incident-desk\nOTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:55318\nAPPLICATION_KEEP_SETTING=preserve-me\n"
+  },
+  "selection_cases": [
+    {
+      "id": "selected-ao-defaults",
+      "selected_finding_ids": [
+        "OTEL-001",
+        "AO-001",
+        "AO-002",
+        "AO-003"
+      ],
+      "optional_report_fields": {},
+      "effective_resource_environment": {},
+      "create_if_missing": true
+    },
+    {
+      "id": "selected-ao-env-reuse-only",
+      "selected_finding_ids": [
+        "OTEL-001",
+        "AO-001",
+        "AO-002",
+        "AO-003"
+      ],
+      "optional_report_fields": {},
+      "effective_resource_environment": {
+        "SPLUNK_AO_PROJECT": "existing-project",
+        "SPLUNK_AO_AGENT_STREAM": "existing-live-stream"
+      },
+      "create_if_missing": false
+    },
+    {
+      "id": "selected-ao-explicit-names",
+      "selected_finding_ids": [
+        "OTEL-001",
+        "AO-001",
+        "AO-002",
+        "AO-003"
+      ],
+      "optional_report_fields": {
+        "project_name": "selected-project",
+        "agent_stream_name": "selected-live-stream"
+      },
+      "effective_resource_environment": {
+        "SPLUNK_AO_PROJECT": "old-project",
+        "SPLUNK_AO_AGENT_STREAM": "old-stream"
+      },
+      "create_if_missing": true
+    },
+    {
+      "id": "selected-ao-explicit-ids",
+      "selected_finding_ids": [
+        "OTEL-001",
+        "AO-001",
+        "AO-002",
+        "AO-003"
+      ],
+      "optional_report_fields": {
+        "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
+        "agent_stream_id": "87abe6cc-c350-401f-9d09-b33955b02742"
+      },
+      "effective_resource_environment": {},
+      "create_if_missing": true
+    },
+    {
+      "id": "unselected-ao",
+      "selected_finding_ids": [
+        "OTEL-001"
+      ],
+      "optional_report_fields": {},
+      "effective_resource_environment": {},
+      "create_if_missing": true
+    }
+  ],
+  "selected_routing_context": {
+    "mode": "studio-gateway",
+    "sdk_compatible_api_url": "http://127.0.0.1:55300",
+    "console_url": "http://127.0.0.1:55300",
+    "sdk_api_key_marker": "local-gateway",
+    "otlp_http_url": "http://127.0.0.1:55318",
+    "proof_scope": "Operator-declared endpoint/configuration contract only; no running gateway or cloud credentials are supplied. Implementation and local test planning do not depend on gateway availability. Existing explicit direct-cloud settings in other cases must be preserved."
+  },
+  "resource_lookup_scenarios": [
+    "both exact resources exist",
+    "selected project and stream names are definitively missing",
+    "project exists but selected stream name is missing",
+    "two creators race and create returns duplicate conflict",
+    "explicit ID is missing",
+    "stream ID belongs to another project",
+    "lookup is ambiguous",
+    "lookup fails with authentication or network/server error"
+  ],
+  "helper_probe": {
+    "kind": "installed-sdk-isolated-in-memory-probe",
+    "captured_for": "2026-10-13 fresh-demo skill investigation",
+    "source_file": "probe_sdk_helper.py",
+    "source_sha256": "3ad6e1585a26503b262e4726988e146f0452036ca8bc5ee8c46491224259929d",
+    "source_snapshot": "\"\"\"Isolated real-SDK probe; no application change, model or cloud call.\"\"\"\nimport importlib.metadata\nimport json\n\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import SimpleSpanProcessor\nfrom opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter\nfrom galileo_core.schemas.logging.span import AgentSpan, LlmSpan, ToolSpan, RetrieverSpan\nfrom galileo_core.schemas.shared.document import Document\nfrom splunk_ao.otel import start_splunk_ao_span\n\n\ndef message(role, value):\n    return json.dumps([{\"role\": role, \"parts\": [{\"type\": \"text\", \"content\": json.dumps(value)}]}])\n\n\nexporter = InMemorySpanExporter()\nprovider = TracerProvider()\nprovider.add_span_processor(SimpleSpanProcessor(exporter))\ntrace.set_tracer_provider(provider)\n\nagent = AgentSpan(name=\"invoke_agent Incident Desk\", input=\"Check checkout\", output=\"Fixture checked\")\nwith start_splunk_ao_span(agent) as parent:\n    parent.set_attribute(\"gen_ai.provider.name\", \"ollama\")\n    for name, result, failed in [(\"health\", {\"status\": \"degraded\"}, False), (\"incident\", None, False), (\"dependency\", None, True)]:\n        args = {\"service\": \"checkout\"}\n        record = ToolSpan(name=name, input=json.dumps(args), output=json.dumps(result) if result is not None else None)\n        try:\n            with start_splunk_ao_span(record) as span:\n                span.update_name(\"execute_tool \" + name)\n                span.set_attribute(\"gen_ai.input.messages\", message(\"user\", args))\n                if failed:\n                    span.set_attribute(\"error.type\", \"RuntimeError\")\n                    raise RuntimeError(\"Synthetic dependency failure\")\n                span.set_attribute(\"gen_ai.output.messages\", message(\"assistant\", result))\n                if result is None:\n                    span.set_attribute(\"output.value\", \"null\")\n        except RuntimeError:\n            pass\n    retrieval = RetrieverSpan(name=\"retrieve checkout docs\", input=\"checkout\", output=[Document(content=\"Synthetic checkout guide\")])\n    with start_splunk_ao_span(retrieval) as span:\n        span.set_attribute(\"gen_ai.input.messages\", message(\"user\", \"checkout\"))\n        span.set_attribute(\"gen_ai.output.messages\", message(\"assistant\", [{\"content\": \"Synthetic checkout guide\"}]))\n    model = LlmSpan(name=\"chat qwen3:8b\", input=[{\"role\": \"user\", \"content\": \"Check checkout\"}], output={\"role\": \"assistant\", \"content\": \"Fixture checked\"}, model=\"qwen3:8b\")\n    with start_splunk_ao_span(model) as span:\n        span.set_attribute(\"gen_ai.provider.name\", \"ollama\")\n        span.set_attribute(\"gen_ai.request.stream\", False)\n\nspans = exporter.get_finished_spans()\nassert len(spans) == 6\nparent_span = next(s for s in spans if s.name.startswith(\"invoke_agent\"))\nfor span in spans:\n    if span is not parent_span:\n        assert span.context.trace_id == parent_span.context.trace_id\n        assert span.parent.span_id == parent_span.context.span_id\n    if span.name.startswith(\"execute_tool\"):\n        assert \"gen_ai.input.messages\" in span.attributes\n        if span.name.endswith(\"dependency\"):\n            assert span.status.status_code.name == \"ERROR\"\n            assert span.attributes[\"error.type\"] == \"RuntimeError\"\n            assert \"gen_ai.output.messages\" not in span.attributes\n            assert \"gen_ai.tool.call.result\" not in span.attributes\n        else:\n            assert \"gen_ai.output.messages\" in span.attributes\n            if span.name.endswith(\"incident\"):\n                assert span.attributes[\"output.value\"] == \"null\"\n                assert \"gen_ai.tool.call.result\" not in span.attributes\nresult = {\n    \"proof_scope\": \"installed SDK helper with standard in-memory OTel export; no live application, model or cloud\",\n    \"versions\": {p: importlib.metadata.version(p) for p in [\"splunk-ao\", \"galileo-core\", \"opentelemetry-sdk\"]},\n    \"pass\": [\"SDK-created spans\", \"same-span writable tool message mappings\", \"successful null using OpenInference output.value\", \"no produced result on failure\", \"parent/context preserved\"],\n    \"remaining\": [\"start_splunk_ao_span emits INTERNAL for LlmSpan; separate-process Ollama requires CLIENT\", \"fresh app integration and actual OTLP wire not exercised\"],\n    \"spans\": [{\"name\": s.name, \"trace_id\": format(s.context.trace_id, \"032x\"), \"span_id\": format(s.context.span_id, \"016x\"), \"parent_id\": format(s.parent.span_id, \"016x\") if s.parent else None, \"kind\": s.kind.name, \"status\": s.status.status_code.name, \"attributes\": dict(s.attributes)} for s in spans],\n}\nwith open(\"sdk-helper-probe.json\", \"w\") as f:\n    json.dump(result, f, indent=2)\nprovider.shutdown()\nprint(json.dumps({\"versions\": result[\"versions\"], \"pass\": result[\"pass\"], \"remaining\": result[\"remaining\"]}, indent=2))\n",
+    "evidence": {
+      "proof_scope": "installed SDK helper with standard in-memory OTel export; no live application, model or cloud",
+      "versions": {
+        "splunk-ao": "0.5.0",
+        "galileo-core": "4.5.0",
+        "opentelemetry-sdk": "1.45.1"
+      },
+      "pass": [
+        "SDK-created spans",
+        "same-span writable tool message mappings",
+        "successful null using OpenInference output.value",
+        "no produced result on failure",
+        "parent/context preserved"
+      ],
+      "remaining": [
+        "start_splunk_ao_span emits INTERNAL for LlmSpan; separate-process Ollama requires CLIENT",
+        "fresh app integration and actual OTLP wire not exercised"
+      ],
+      "spans": [
+        {
+          "name": "execute_tool health",
+          "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+          "span_id": "fb298e36f026e829",
+          "parent_id": "fc30d8c150b0d93b",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "attributes": {
+            "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"{\\\"service\\\": \\\"checkout\\\"}\"}]}]",
+            "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"{\\\"status\\\": \\\"degraded\\\"}\"}]}]",
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "health",
+            "gen_ai.tool.call.arguments": "{\"service\":\"checkout\"}",
+            "gen_ai.tool.call.result": "{\"status\":\"degraded\"}"
+          }
+        },
+        {
+          "name": "execute_tool incident",
+          "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+          "span_id": "0688be9de2d51eef",
+          "parent_id": "fc30d8c150b0d93b",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "attributes": {
+            "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"{\\\"service\\\": \\\"checkout\\\"}\"}]}]",
+            "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"null\"}]}]",
+            "output.value": "null",
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "incident",
+            "gen_ai.tool.call.arguments": "{\"service\":\"checkout\"}"
+          }
+        },
+        {
+          "name": "execute_tool dependency",
+          "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+          "span_id": "835df0469ea92ede",
+          "parent_id": "fc30d8c150b0d93b",
+          "kind": "INTERNAL",
+          "status": "ERROR",
+          "attributes": {
+            "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"{\\\"service\\\": \\\"checkout\\\"}\"}]}]",
+            "error.type": "RuntimeError",
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "dependency",
+            "gen_ai.tool.call.arguments": "{\"service\":\"checkout\"}"
+          }
+        },
+        {
+          "name": "retrieve checkout docs",
+          "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+          "span_id": "ac61b3b83b5ff10f",
+          "parent_id": "fc30d8c150b0d93b",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "attributes": {
+            "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"\\\"checkout\\\"\"}]}]",
+            "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"[{\\\"content\\\": \\\"Synthetic checkout guide\\\"}]\"}]}]",
+            "gen_ai.operation.name": "retrieval",
+            "gen_ai.retrieval.query.text": "checkout",
+            "gen_ai.retrieval.documents": "[{\"content\":\"Synthetic checkout guide\",\"metadata\":{}}]",
+            "splunk_ao.retrieval.documents.count": 1,
+            "db.operation": "search"
+          }
+        },
+        {
+          "name": "chat qwen3:8b",
+          "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+          "span_id": "5ab124b1528c32b1",
+          "parent_id": "fc30d8c150b0d93b",
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "attributes": {
+            "gen_ai.provider.name": "ollama",
+            "gen_ai.request.stream": false,
+            "gen_ai.operation.name": "chat",
+            "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"Check checkout\",\"type\":\"text\"}],\"role\":\"user\"}]",
+            "gen_ai.output.messages": "[{\"finish_reason\":\"unknown\",\"parts\":[{\"content\":\"Fixture checked\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+            "gen_ai.request.model": "qwen3:8b"
+          }
+        },
+        {
+          "name": "invoke_agent Incident Desk",
+          "trace_id": "e69e28cf5cc8bc92756987f8afe23350",
+          "span_id": "fc30d8c150b0d93b",
+          "parent_id": null,
+          "kind": "INTERNAL",
+          "status": "UNSET",
+          "attributes": {
+            "gen_ai.provider.name": "ollama",
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.agent.name": "invoke_agent Incident Desk",
+            "splunk_ao.agent.type": "default",
+            "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"Check checkout\",\"type\":\"text\"}],\"role\":\"user\"}]",
+            "gen_ai.output.messages": "[{\"finish_reason\":\"unknown\",\"parts\":[{\"content\":\"Fixture checked\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+            "gen_ai.conversation_root": true
+          }
+        }
+      ]
+    },
+    "assessment_boundary": "Installed helper proof is distinct from the dated official-main logger example and from application integration. The public helper yielded SDK-created writable same-operation spans in a standard OTel provider, including tool input/output messages, successful null represented by OpenInference output.value, failure with no produced result, and preserved parent context. This does not prove a registered production Splunk AO export sink, app integration or remote model CLIENT kind. Do not declare the logger-only missing enrichment sink to be a universal SDK blocker, or claim the helper closes unsupported kinds, routing or lifecycle acceptance.",
+    "public_api_provenance": {
+      "document_url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/start-splunk-ao-span",
+      "document_accessed_for": "2026-10-13 fresh-demo skill investigation",
+      "public_import": "from splunk_ao.otel import start_splunk_ao_span",
+      "signature": "start_splunk_ao_span(splunk_ao_span: SplunkAOSpan) -> Generator[trace.Span, Any, None]",
+      "package_source_path": "splunk_ao/otel.py",
+      "package_source_sha256": "af33b590d48f3abddf032664d76d95c9ff9eb7993941c63e179cae6eb07ce10f",
+      "package_function_source_snapshot": "@contextmanager\ndef start_splunk_ao_span(splunk_ao_span: SplunkAOSpan) -> Generator[trace.Span, Any, None]:\n    tracer_provider = _TRACE_PROVIDER_CONTEXT_VAR.get()\n    if tracer_provider is None:\n        tracer_provider = trace.get_tracer_provider()\n        _TRACE_PROVIDER_CONTEXT_VAR.set(cast(TracerProvider, tracer_provider))\n    tracer = tracer_provider.get_tracer(\"splunk-ao-tracer\")\n    is_conversation_root = not trace.get_current_span().get_span_context().is_valid and isinstance(\n        splunk_ao_span, WorkflowSpan | AgentSpan\n    )\n    session_id = get_effective_session_id()\n    with tracer.start_as_current_span(splunk_ao_span.name) as span:\n        try:\n            yield span\n        finally:\n            try:\n                attributes = build_span_attributes(splunk_ao_span, session_id)\n                if is_conversation_root:\n                    attributes[GEN_AI_CONVERSATION_ROOT] = True\n                for key, value in attributes.items():\n                    span.set_attribute(key, value)\n            except Exception:\n                logger.warning(\"Failed to finalize Splunk AO span attributes\", exc_info=True)\n",
+      "documentation_scope": "The public helper yields a writable OpenTelemetry Span; its installed function has no public kind argument and derives schema attributes in its finally block before span end. This is a different API from SplunkAOLogger and its private sink."
+    }
+  },
+  "usage_registry_reconciliation": {
+    "scope": "Separate source/configuration counterexamples for usage-attribute planning. These snapshots do not change app.py or incident-desk operation counts, and are not live model/receiver/cloud evidence. Keep the earlier dated docs/schema snapshots separate from this independently captured full registry source.",
+    "official_registry_receipt": {
+      "repository": "https://github.com/open-telemetry/semantic-conventions-genai",
+      "resolved_revision": "4e8a2812139b2a999d959e3650e24dfc64e21943",
+      "commit_date": "2026-10-13T17:42:20Z",
+      "captured_at": "2026-10-14T05:25:59.073174+00:00",
+      "path": "docs/registry/attributes/gen-ai.md",
+      "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/4e8a2812139b2a999d959e3650e24dfc64e21943/docs/registry/attributes/gen-ai.md",
+      "sha256": "6f06e93a049b7cb05fd345330ed536adbea944e12d035f2d8ba8e75bed6ac0ec",
+      "source": "<!-- NOTE: THIS FILE IS AUTOGENERATED. DO NOT EDIT BY HAND. -->\n<!-- see templates/registry/markdown/attribute_namespace.md.j2 -->\n\n# Gen AI\n\n**Attributes:**\n\n| Key | Stability | Value Type | Description | Example Values |\n| --- | --- | --- | --- | --- |\n| <a id=\"gen-ai-agent-description\" href=\"#gen-ai-agent-description\">`gen_ai.agent.description`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Free-form description of the GenAI agent provided by the application. | `Helps with math problems`; `Generates fiction stories` |\n| <a id=\"gen-ai-agent-id\" href=\"#gen-ai-agent-id\">`gen_ai.agent.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The unique and stable identifier of the GenAI hosted agent resource. [1] | `asst_5j66UpCpwteGg4YSxUnt7lPY`; `arn:aws:bedrock:us-east-1:123:agent/42`; `urn:agent:projects-123:projects:123:locations:us-east1:aiplatform:reasoningEngines:456` |\n| <a id=\"gen-ai-agent-name\" href=\"#gen-ai-agent-name\">`gen_ai.agent.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Human-readable name of the GenAI agent provided by the application. | `Math Tutor`; `Fiction Writer` |\n| <a id=\"gen-ai-agent-version\" href=\"#gen-ai-agent-version\">`gen_ai.agent.version`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The version of the GenAI agent. | `1.0.0`; `2025-05-01` |\n| <a id=\"gen-ai-conversation-compacted\" href=\"#gen-ai-conversation-compacted\">`gen_ai.conversation.compacted`</a> | ![Development](https://img.shields.io/badge/-development-blue) | boolean | Indicates whether the effective conversation context used for this operation is a compacted view of a prior conversation. [2] | `true` |\n| <a id=\"gen-ai-conversation-id\" href=\"#gen-ai-conversation-id\">`gen_ai.conversation.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The unique identifier for a conversation (session, thread), used to store and correlate messages within this conversation. [3] | `conv_5j66UpCpwteGg4YSxUnt7lPY` |\n| <a id=\"gen-ai-data-source-id\" href=\"#gen-ai-data-source-id\">`gen_ai.data_source.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The data source identifier. [4] | `H7STPQYOND` |\n| <a id=\"gen-ai-embeddings-dimension-count\" href=\"#gen-ai-embeddings-dimension-count\">`gen_ai.embeddings.dimension.count`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of dimensions the resulting output embeddings should have. | `512`; `1024` |\n| <a id=\"gen-ai-evaluation-explanation\" href=\"#gen-ai-evaluation-explanation\">`gen_ai.evaluation.explanation`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | A free-form explanation for the assigned score provided by the evaluator. | `The response is factually accurate but lacks sufficient detail to fully address the question.` |\n| <a id=\"gen-ai-evaluation-name\" href=\"#gen-ai-evaluation-name\">`gen_ai.evaluation.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the evaluation metric used for the GenAI response. | `Relevance`; `IntentResolution` |\n| <a id=\"gen-ai-evaluation-score-label\" href=\"#gen-ai-evaluation-score-label\">`gen_ai.evaluation.score.label`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Human readable label for evaluation. [5] | `relevant`; `not_relevant`; `correct`; `incorrect`; `pass`; `fail` |\n| <a id=\"gen-ai-evaluation-score-value\" href=\"#gen-ai-evaluation-score-value\">`gen_ai.evaluation.score.value`</a> | ![Development](https://img.shields.io/badge/-development-blue) | double | The evaluation score returned by the evaluator. | `4.0` |\n| <a id=\"gen-ai-input-messages\" href=\"#gen-ai-input-messages\">`gen_ai.input.messages`</a> | ![Development](https://img.shields.io/badge/-development-blue) | any | The chat history provided to the model as an input. [6] | [<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"role\": \"user\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"parts\": [<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"text\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"content\": \"Weather in Paris?\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;&nbsp;&nbsp;]<br>&nbsp;&nbsp;},<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"role\": \"assistant\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"parts\": [<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"tool_call\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"id\": \"call_VSPygqKTWdrhaFErNvMV18Yl\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"name\": \"get_weather\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"arguments\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"location\": \"Paris\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;&nbsp;&nbsp;]<br>&nbsp;&nbsp;},<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"role\": \"tool\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"parts\": [<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"tool_call_response\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"id\": \"call_VSPygqKTWdrhaFErNvMV18Yl\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"response\": \"rainy, 57\u00b0F\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;&nbsp;&nbsp;]<br>&nbsp;&nbsp;}<br>] |\n| <a id=\"gen-ai-main-agent-description\" href=\"#gen-ai-main-agent-description\">`gen_ai.main_agent.description`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The free-form description of the top-level Generative AI agent in the process. [7] | `Helps with math problems`; `Generates fiction stories` |\n| <a id=\"gen-ai-main-agent-id\" href=\"#gen-ai-main-agent-id\">`gen_ai.main_agent.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The unique and stable identifier of the top-level Generative AI agent in the process [8] | `asst_5j66UpCpwteGg4YSxUnt7lPY`; `arn:aws:bedrock:us-east-1:123:agent/42`; `urn:agent:projects-123:projects:123:locations:us-east1:aiplatform:reasoningEngines:456` |\n| <a id=\"gen-ai-main-agent-name\" href=\"#gen-ai-main-agent-name\">`gen_ai.main_agent.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The human-readable name of the top-level Generative AI agent in the process. [9] | `Math Tutor`; `Fiction Writer` |\n| <a id=\"gen-ai-memory-query-text\" href=\"#gen-ai-memory-query-text\">`gen_ai.memory.query.text`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The search query used to retrieve memories. [10] | `user dietary preferences`; `past flight bookings` |\n| <a id=\"gen-ai-memory-record-count\" href=\"#gen-ai-memory-record-count\">`gen_ai.memory.record.count`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of memory records relevant to the operation. [11] | `3` |\n| <a id=\"gen-ai-memory-record-id\" href=\"#gen-ai-memory-record-id\">`gen_ai.memory.record.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The unique identifier of the memory record. | `mem_5j66UpCpwteGg4YSxUnt7lPY` |\n| <a id=\"gen-ai-memory-records\" href=\"#gen-ai-memory-records\">`gen_ai.memory.records`</a> | ![Development](https://img.shields.io/badge/-development-blue) | any | The memory records stored or retrieved in a memory operation. [12] | [<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"content\": \"User prefers dark mode\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"id\": \"mem_123\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"score\": 0.95<br>&nbsp;&nbsp;},<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"content\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"preference\": \"vegetarian meals\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"confidence\": 0.9<br>&nbsp;&nbsp;&nbsp;&nbsp;},<br>&nbsp;&nbsp;&nbsp;&nbsp;\"metadata\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"source\": \"profile\"<br>&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;}<br>] |\n| <a id=\"gen-ai-memory-store-id\" href=\"#gen-ai-memory-store-id\">`gen_ai.memory.store.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The unique identifier of the memory store. [13] | `ms_abc123`; `user-preferences-store` |\n| <a id=\"gen-ai-operation-name\" href=\"#gen-ai-operation-name\">`gen_ai.operation.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the operation being performed. [14] | `chat`; `generate_content`; `text_completion` |\n| <a id=\"gen-ai-output-messages\" href=\"#gen-ai-output-messages\">`gen_ai.output.messages`</a> | ![Development](https://img.shields.io/badge/-development-blue) | any | Messages returned by the model where each message represents a specific model response (choice, candidate). [15] | [<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"role\": \"assistant\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"parts\": [<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"text\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"content\": \"The weather in Paris is currently rainy with a temperature of 57\u00b0F.\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;&nbsp;&nbsp;]<br>&nbsp;&nbsp;}<br>] |\n| <a id=\"gen-ai-output-type\" href=\"#gen-ai-output-type\">`gen_ai.output.type`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Represents the content type requested by the client. [16] | `text`; `json`; `image` |\n| <a id=\"gen-ai-prompt-name\" href=\"#gen-ai-prompt-name\">`gen_ai.prompt.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the prompt that uniquely identifies it. | `analyze-code` |\n| <a id=\"gen-ai-prompt-variable\" href=\"#gen-ai-prompt-variable\">`gen_ai.prompt.variable`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The variables supplied to the prompt template, the `<key>` being the variable name, the value being the variable value. [17] | `Alice`; `French` |\n| <a id=\"gen-ai-prompt-version\" href=\"#gen-ai-prompt-version\">`gen_ai.prompt.version`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The version of the prompt template used. [18] | `1.0.0`; `2025-05-01`; `prod`; `v2` |\n| <a id=\"gen-ai-provider-name\" href=\"#gen-ai-provider-name\">`gen_ai.provider.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The Generative AI provider as identified by the client or server instrumentation. [19] | `openai`; `gcp.gen_ai`; `gcp.vertex_ai` |\n| <a id=\"gen-ai-request-choice-count\" href=\"#gen-ai-request-choice-count\">`gen_ai.request.choice.count`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The target number of candidate completions to return. | `3` |\n| <a id=\"gen-ai-request-encoding-formats\" href=\"#gen-ai-request-encoding-formats\">`gen_ai.request.encoding_formats`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string[] | The encoding formats requested in an embeddings operation, if specified. [20] | `[\"base64\"]`; `[\"float\", \"binary\"]` |\n| <a id=\"gen-ai-request-frequency-penalty\" href=\"#gen-ai-request-frequency-penalty\">`gen_ai.request.frequency_penalty`</a> | ![Development](https://img.shields.io/badge/-development-blue) | double | The frequency penalty setting for the GenAI request. | `0.1` |\n| <a id=\"gen-ai-request-max-tokens\" href=\"#gen-ai-request-max-tokens\">`gen_ai.request.max_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The maximum number of tokens the model generates for a request. | `100` |\n| <a id=\"gen-ai-request-model\" href=\"#gen-ai-request-model\">`gen_ai.request.model`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the GenAI model a request is being made to. | `gpt-4` |\n| <a id=\"gen-ai-request-presence-penalty\" href=\"#gen-ai-request-presence-penalty\">`gen_ai.request.presence_penalty`</a> | ![Development](https://img.shields.io/badge/-development-blue) | double | The presence penalty setting for the GenAI request. | `0.1` |\n| <a id=\"gen-ai-request-previous-response-id\" href=\"#gen-ai-request-previous-response-id\">`gen_ai.request.previous_response.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The unique identifier of a previous response or interaction used to provide context for the current operation. [21] | `resp_0123456789aBCdef`; `interaction-123` |\n| <a id=\"gen-ai-request-reasoning-level\" href=\"#gen-ai-request-reasoning-level\">`gen_ai.request.reasoning.level`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The reasoning or thinking effort level requested for a GenAI model. [22] | `low`; `medium`; `high` |\n| <a id=\"gen-ai-request-seed\" href=\"#gen-ai-request-seed\">`gen_ai.request.seed`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | Requests with same seed value more likely to return same result. | `100` |\n| <a id=\"gen-ai-request-stop-sequences\" href=\"#gen-ai-request-stop-sequences\">`gen_ai.request.stop_sequences`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string[] | List of sequences that the model will use to stop generating further tokens. | `[\"forest\", \"lived\"]` |\n| <a id=\"gen-ai-request-stream\" href=\"#gen-ai-request-stream\">`gen_ai.request.stream`</a> | ![Development](https://img.shields.io/badge/-development-blue) | boolean | Indicates whether the GenAI request was made in streaming mode. | |\n| <a id=\"gen-ai-request-stream-cursor\" href=\"#gen-ai-request-stream-cursor\">`gen_ai.request.stream_cursor`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The cursor identifying the last streamed event already received, used to resume a streamed response from that position. [23] | `42`; `event-abc123` |\n| <a id=\"gen-ai-request-temperature\" href=\"#gen-ai-request-temperature\">`gen_ai.request.temperature`</a> | ![Development](https://img.shields.io/badge/-development-blue) | double | The temperature setting for the GenAI request. | `0.0` |\n| <a id=\"gen-ai-request-top-k\" href=\"#gen-ai-request-top-k\">`gen_ai.request.top_k`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The top-K sampling setting for the GenAI request: restricts token generation at each step to the K most likely next tokens. [24] | `40` |\n| <a id=\"gen-ai-request-top-p\" href=\"#gen-ai-request-top-p\">`gen_ai.request.top_p`</a> | ![Development](https://img.shields.io/badge/-development-blue) | double | The top_p sampling setting for the GenAI request. | `1.0` |\n| <a id=\"gen-ai-response-finish-reasons\" href=\"#gen-ai-response-finish-reasons\">`gen_ai.response.finish_reasons`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string[] | Array of reasons the model stopped generating tokens, corresponding to each generation received. [25] | `[\"stop\"]`; `[\"stop\", \"length\"]`; `[\"stop\", \"length\", \"error\"]` |\n| <a id=\"gen-ai-response-id\" href=\"#gen-ai-response-id\">`gen_ai.response.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The unique identifier for the completion. | `chatcmpl-123` |\n| <a id=\"gen-ai-response-model\" href=\"#gen-ai-response-model\">`gen_ai.response.model`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the model that generated the response. | `gpt-4-0613` |\n| <a id=\"gen-ai-response-status\" href=\"#gen-ai-response-status\">`gen_ai.response.status`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The lifecycle status of a generated response, as reported by the provider when the response is fetched or polled. [26] | `completed`; `in_progress` |\n| <a id=\"gen-ai-response-time-to-first-chunk\" href=\"#gen-ai-response-time-to-first-chunk\">`gen_ai.response.time_to_first_chunk`</a> | ![Development](https://img.shields.io/badge/-development-blue) | double | Time to first chunk in a streaming response, measured from request issuance, in seconds. The value is measured from when the client issues the generation request to when the first chunk is received in the response stream. | `0.5`; `1.2` |\n| <a id=\"gen-ai-retrieval-documents\" href=\"#gen-ai-retrieval-documents\">`gen_ai.retrieval.documents`</a> | ![Development](https://img.shields.io/badge/-development-blue) | any | The documents retrieved. [27] | [<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"id\": \"doc_123\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"score\": 0.95<br>&nbsp;&nbsp;},<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"id\": \"doc_456\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"score\": 0.87<br>&nbsp;&nbsp;},<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"id\": \"doc_789\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"score\": 0.82<br>&nbsp;&nbsp;}<br>] |\n| <a id=\"gen-ai-retrieval-query-text\" href=\"#gen-ai-retrieval-query-text\">`gen_ai.retrieval.query.text`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The query text used for retrieval. [28] | `What is the capital of France?`; `weather in Paris` |\n| <a id=\"gen-ai-retrieval-top-k\" href=\"#gen-ai-retrieval-top-k\">`gen_ai.retrieval.top_k`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The maximum number of documents the retriever was asked to return for the query (also known as `k`, `limit`, or `max_num_results`). | `5` |\n| <a id=\"gen-ai-skill-description\" href=\"#gen-ai-skill-description\">`gen_ai.skill.description`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The [description of the Agent Skill](https://agentskills.io/specification#skill-md-format). [29] | `Review a changelist against the team's review policy.` |\n| <a id=\"gen-ai-skill-name\" href=\"#gen-ai-skill-name\">`gen_ai.skill.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The name of the [Agent Skill](https://agentskills.io/specification#skill-md-format). | `code-review`; `pdf-processing` |\n| <a id=\"gen-ai-skill-resource-name\" href=\"#gen-ai-skill-resource-name\">`gen_ai.skill.resource.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The skill-relative name of the resource (script, reference, or asset) being accessed or executed. | `references/review_policy.md`; `assets/report_template.html` |\n| <a id=\"gen-ai-skill-source-uri\" href=\"#gen-ai-skill-source-uri\">`gen_ai.skill.source.uri`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The source URI for loading the skill. [30] | `https://skills.example.com/code-review`; `gs://example-skills/code-review`; `file:///opt/skills/code-review` |\n| <a id=\"gen-ai-system-instructions\" href=\"#gen-ai-system-instructions\">`gen_ai.system_instructions`</a> | ![Development](https://img.shields.io/badge/-development-blue) | any | The system message or instructions provided to the GenAI model separately from the chat history. [31] | [<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"text\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"content\": \"You are an Agent that greet users, always use greetings tool to respond\"<br>&nbsp;&nbsp;}<br>]; [<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"text\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"content\": \"You are a language translator.\"<br>&nbsp;&nbsp;},<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"text\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"content\": \"Your mission is to translate text in English to French.\"<br>&nbsp;&nbsp;}<br>] |\n| <a id=\"gen-ai-token-modality\" href=\"#gen-ai-token-modality\">`gen_ai.token.modality`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The modality of the tokens being counted. [32] | `text`; `image`; `audio` |\n| <a id=\"gen-ai-tool-call-arguments\" href=\"#gen-ai-tool-call-arguments\">`gen_ai.tool.call.arguments`</a> | ![Development](https://img.shields.io/badge/-development-blue) | any | Parameters passed to the tool call. [33] | {<br>&nbsp;&nbsp;&nbsp;&nbsp;\"location\": \"San Francisco?\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"date\": \"2025-10-01\"<br>} |\n| <a id=\"gen-ai-tool-call-id\" href=\"#gen-ai-tool-call-id\">`gen_ai.tool.call.id`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The tool call identifier. | `call_mszuSIzqtI65i1wAUOE8w5H4` |\n| <a id=\"gen-ai-tool-call-result\" href=\"#gen-ai-tool-call-result\">`gen_ai.tool.call.result`</a> | ![Development](https://img.shields.io/badge/-development-blue) | any | The result returned by the tool call (if any and if execution was successful). [34] | {<br>&nbsp;&nbsp;\"temperature_range\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;\"high\": 75,<br>&nbsp;&nbsp;&nbsp;&nbsp;\"low\": 60<br>&nbsp;&nbsp;},<br>&nbsp;&nbsp;\"conditions\": \"sunny\"<br>} |\n| <a id=\"gen-ai-tool-definitions\" href=\"#gen-ai-tool-definitions\">`gen_ai.tool.definitions`</a> | ![Development](https://img.shields.io/badge/-development-blue) | any | The list of tool definitions available to the GenAI agent or model. [35] | [<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"function\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"name\": \"get_current_weather\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"description\": \"Get the current weather in a given location\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"parameters\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"object\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"properties\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"location\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"string\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"description\": \"The city and state, e.g. San Francisco, CA\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;},<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"unit\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"string\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"enum\": [<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"celsius\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"fahrenheit\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;]<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;},<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"required\": [<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"location\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"unit\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;]<br>&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;}<br>] |\n| <a id=\"gen-ai-tool-description\" href=\"#gen-ai-tool-description\">`gen_ai.tool.description`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | The tool description. [36] | `Multiply two numbers` |\n| <a id=\"gen-ai-tool-name\" href=\"#gen-ai-tool-name\">`gen_ai.tool.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Name of the tool utilized by the agent. | `Flights` |\n| <a id=\"gen-ai-tool-type\" href=\"#gen-ai-tool-type\">`gen_ai.tool.type`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Type of the tool utilized by the agent [37] | `function`; `extension`; `datastore` |\n| <a id=\"gen-ai-usage-audio-cache-read-input-tokens\" href=\"#gen-ai-usage-audio-cache-read-input-tokens\">`gen_ai.usage.audio.cache_read.input_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of audio input tokens served from a provider-managed cache. [38] | `60` |\n| <a id=\"gen-ai-usage-audio-input-tokens\" href=\"#gen-ai-usage-audio-input-tokens\">`gen_ai.usage.audio.input_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of audio input tokens. [39] | `120` |\n| <a id=\"gen-ai-usage-audio-output-tokens\" href=\"#gen-ai-usage-audio-output-tokens\">`gen_ai.usage.audio.output_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of audio output tokens. [40] | `240` |\n| <a id=\"gen-ai-usage-cache-read-input-tokens\" href=\"#gen-ai-usage-cache-read-input-tokens\">`gen_ai.usage.cache_read.input_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of input tokens served from a provider-managed cache. [41] | `50` |\n| <a id=\"gen-ai-usage-cache-write-input-tokens\" href=\"#gen-ai-usage-cache-write-input-tokens\">`gen_ai.usage.cache_write.input_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of input tokens written to a provider-managed cache. [42] | `25` |\n| <a id=\"gen-ai-usage-image-cache-read-input-tokens\" href=\"#gen-ai-usage-image-cache-read-input-tokens\">`gen_ai.usage.image.cache_read.input_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of image input tokens served from a provider-managed cache. [43] | `128` |\n| <a id=\"gen-ai-usage-image-input-tokens\" href=\"#gen-ai-usage-image-input-tokens\">`gen_ai.usage.image.input_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of image input tokens. [44] | `258` |\n| <a id=\"gen-ai-usage-image-output-tokens\" href=\"#gen-ai-usage-image-output-tokens\">`gen_ai.usage.image.output_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of image output tokens. [45] | `1290` |\n| <a id=\"gen-ai-usage-input-tokens\" href=\"#gen-ai-usage-input-tokens\">`gen_ai.usage.input_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of tokens used in the GenAI input (prompt). [46] | `100` |\n| <a id=\"gen-ai-usage-output-tokens\" href=\"#gen-ai-usage-output-tokens\">`gen_ai.usage.output_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of tokens used in the GenAI response (completion). [47] | `180` |\n| <a id=\"gen-ai-usage-reasoning-output-tokens\" href=\"#gen-ai-usage-reasoning-output-tokens\">`gen_ai.usage.reasoning.output_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of output tokens used for reasoning (e.g. chain-of-thought, extended thinking). [48] | `50` |\n| <a id=\"gen-ai-usage-text-cache-read-input-tokens\" href=\"#gen-ai-usage-text-cache-read-input-tokens\">`gen_ai.usage.text.cache_read.input_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of text input tokens served from a provider-managed cache. [49] | `40` |\n| <a id=\"gen-ai-usage-text-input-tokens\" href=\"#gen-ai-usage-text-input-tokens\">`gen_ai.usage.text.input_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of text input tokens. [50] | `100` |\n| <a id=\"gen-ai-usage-text-output-tokens\" href=\"#gen-ai-usage-text-output-tokens\">`gen_ai.usage.text.output_tokens`</a> | ![Development](https://img.shields.io/badge/-development-blue) | int | The number of text output tokens. [51] | `180` |\n| <a id=\"gen-ai-workflow-name\" href=\"#gen-ai-workflow-name\">`gen_ai.workflow.name`</a> | ![Development](https://img.shields.io/badge/-development-blue) | string | Human-readable name of the GenAI workflow provided by the application. [52] | `multi_agent_rag`; `customer_support_pipeline` |\n\n\n**[1] `gen_ai.agent.id`:** For hosted agents, this SHOULD be the provider-assigned stable identifier of the agent resource such as [AWS Bedrock agent ARN](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent_Agent.html) or [GCP Agent Registry identifier](https://docs.cloud.google.com/agent-registry/concepts#agent-identifier).\nIt's NOT RECOMMENDED to record in-memory agent instance ids on this attribute due to their transient nature.\n\n**[2] `gen_ai.conversation.compacted`:** This attribute is a positive indicator of context compaction. Instrumentations\nSHOULD set it to `true` only when they can reliably determine that context\ncompaction was applied. Instrumentations SHOULD NOT set it to `false`; they\nSHOULD leave it unset otherwise.\n\n**[3] `gen_ai.conversation.id`:** Instrumentations SHOULD populate conversation id when they have an identifier\nfor the conversation readily available for a given operation, for example:\n\n- when the client framework being instrumented manages conversation history\n(see [LlamaIndex chat store](https://docs.llamaindex.ai/en/stable/module_guides/storing/chat_stores/),\n[LangChain `session_id`](https://reference.langchain.com/python/langchain-core/runnables/history/RunnableWithMessageHistory),\nand [Google ADK sessions](https://adk.dev/sessions/session))\n- when instrumenting GenAI client libraries that maintain a conversation on the backend\n(see [AWS Bedrock agent sessions](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-session-state.html),\n[OpenAI Assistant threads](https://platform.openai.com/docs/api-reference/threads))\n\nWhen no identifier for the conversation is available, instrumentations SHOULD NOT\npopulate conversation id. For example, a new UUID, a trace identifier, or a hash\nof request content SHOULD NOT be used as a fallback value.\n\nApplication developers that manage conversation history MAY add conversation id to GenAI and other\nspans or logs using custom span or log record processors or hooks provided by instrumentation\nlibraries.\n\n**[4] `gen_ai.data_source.id`:** Data sources are used by AI agents and RAG applications to store grounding data. A data source may be an external database, object store, document collection, website, or any other storage system used by the GenAI agent or application. The `gen_ai.data_source.id` SHOULD match the identifier used by the GenAI system rather than a name specific to the external storage, such as a database or object store. Semantic conventions referencing `gen_ai.data_source.id` MAY also leverage additional attributes, such as `db.*`, to further identify and describe the data source.\n\n**[5] `gen_ai.evaluation.score.label`:** This attribute provides a human-readable interpretation of the evaluation score produced by an evaluator. For example, a score value of 1 could mean \"relevant\" in one evaluation system and \"not relevant\" in another, depending on the scoring range and evaluator. The label SHOULD have low cardinality. Possible values depend on the evaluation metric and evaluator used; implementations SHOULD document the possible values.\n\n**[6] `gen_ai.input.messages`:** Messages MUST be provided in the order they were sent to the model.\nInstrumentations MAY provide a way for users to filter or truncate\ninput messages.\n\n> [!Warning]\n> This attribute is likely to contain sensitive information including user/PII data.\n\nSee [Recording content on attributes](/docs/gen-ai/gen-ai-spans.md#recording-content-on-attributes)\nsection for more details.\n\nInstrumentations MUST follow [JSON schema](/model/gen-ai/gen-ai-input-messages.json).\n\nWhen the attribute is recorded on events, it MUST be recorded in structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format is not supported and SHOULD be recorded in structured form otherwise.\n\n**[7] `gen_ai.main_agent.description`:** In Agent-to-Agent (A2A) communication, this maps to the `description` property declared in the Agent Card.\n\n**[8] `gen_ai.main_agent.id`:** For main agents, this SHOULD be the provider-assigned stable identifier of the agent resource such as [AWS Bedrock agent ARN](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent_Agent.html) or [GCP Agent Registry identifier](https://docs.cloud.google.com/agent-registry/concepts#agent-identifier).\nInstrumentation MUST NOT generate `gen_ai.main_agent.id` from an in-memory or process-local identifier. If no stable identifier is available, the agent entity is not emitted, and instrumentation continues to report `gen_ai.agent.name` at the span level when relevant.\n\n**[9] `gen_ai.main_agent.name`:** In Agent-to-Agent (A2A) communication, this maps to the `name` property declared in the Agent Card.\n\n**[10] `gen_ai.memory.query.text`:** Instrumentations SHOULD NOT capture this attribute by default. Capture SHOULD be gated\nby an explicit user opt-in, for example `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`.\n\n> [!Warning]\n> This attribute may contain sensitive information.\n\n**[11] `gen_ai.memory.record.count`:** For `search_memory` operations, this is the number of memory records returned by the operation. For `create_memory` operations, this is the number of memory records the operation attempted to create. For `update_memory` operations, this is the number of memory records the operation attempted to modify. For `upsert_memory` operations, this is the number of memory records the operation attempted to create or update. For `delete_memory` operations, this is the number of memory records the operation attempted to delete.\n\n**[12] `gen_ai.memory.records`:** Instrumentations SHOULD NOT capture this attribute by default. Capture SHOULD be gated\nby an explicit user opt-in, for example `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`.\n\n> [!Warning]\n> This attribute may contain sensitive information including user/PII data.\n\nInstrumentations MUST follow [JSON schema](/model/gen-ai/gen-ai-memory-records.json).\n\nWhen the attribute is recorded on events, it MUST be recorded in structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format is not supported and SHOULD be recorded in structured form otherwise.\n\n**[13] `gen_ai.memory.store.id`:** Semantic conventions for individual components SHOULD document what `gen_ai.memory.store.id` maps to within the implementation.\n\n**[14] `gen_ai.operation.name`:** If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.\n\n**[15] `gen_ai.output.messages`:** Each message represents a single output choice/candidate generated by\nthe model. Each message corresponds to exactly one generation\n(choice/candidate) and vice versa - one choice cannot be split across\nmultiple messages or one message cannot contain parts from multiple choices.\n\nInstrumentations MAY provide a way for users to filter or truncate\noutput messages. `gen_ai.response.finish_reasons` remains aligned with the\ngenerations returned by the provider, not with a filtered or truncated\n`gen_ai.output.messages` value.\n\nWhen an operation ends in an error, this attribute SHOULD only be set\nwhen the operation produced output, including partial streamed output.\nInstrumentation SHOULD NOT synthesize output content for a failed\noperation.\n\n> [!Warning]\n> This attribute is likely to contain sensitive information including user/PII data.\n\nSee [Recording content on attributes](/docs/gen-ai/gen-ai-spans.md#recording-content-on-attributes)\nsection for more details.\n\nInstrumentations MUST follow [JSON schema](/model/gen-ai/gen-ai-output-messages.json).\n\nWhen the attribute is recorded on events, it MUST be recorded in structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format is not supported and SHOULD be recorded in structured form otherwise.\n\n**[16] `gen_ai.output.type`:** This attribute SHOULD be used when the client requests output of a specific type. The model may return zero or more outputs of this type.\nThis attribute specifies the output modality and not the actual output format. For example, if an image is requested, the actual output could be a URL pointing to an image file.\nAdditional output format details may be recorded in the future in the `gen_ai.output.{type}.*` attributes.\n\n**[17] `gen_ai.prompt.variable`:** Prompt templates are parameterized with variables that are filled in\nat runtime. This attribute records the variable values passed to the\ntemplate. The attribute name defines the variable name, and the\nattribute value is the variable value serialized as a string.\n\nExamples:\n\n- A variable `user_name` with value `Alice` SHOULD be recorded as\n  the `gen_ai.prompt.variable.user_name` attribute with value `\"Alice\"`.\n- A variable `language` with value `French` SHOULD be recorded as\n  the `gen_ai.prompt.variable.language` attribute with value `\"French\"`.\n\n> [!Warning]\n> This attribute may contain sensitive information.\n\n**[18] `gen_ai.prompt.version`:** The version string can follow any versioning scheme chosen by the\napplication (e.g., SemVer, date-based, or platform-specific tags).\nWhen a prompt management system is in use, this SHOULD match the\nversion identifier used by that system.\n\n**[19] `gen_ai.provider.name`:** Semantic conventions for individual GenAI operations SHOULD clarify which\nkinds of providers (e.g. inference, embeddings, retrieval, memory, hosted\nagent providers) apply when it is not clear from context.\n\nThe attribute SHOULD be set based on the instrumentation's best knowledge\nand may differ from the actual upstream provider. For example, a client SDK\nmay be configured against a proxy or hosting platform that transparently\nrelays requests to a different provider.\n\nThe `gen_ai.provider.name` attribute acts as a discriminator that\nidentifies the GenAI telemetry format flavor specific to that provider\nwithin GenAI semantic conventions.\nIt SHOULD be set consistently with provider-specific attributes and signals.\nFor example, GenAI spans, metrics, and events related to AWS Bedrock\nshould have the `gen_ai.provider.name` set to `aws.bedrock` and include\napplicable `aws.bedrock.*` attributes and are not expected to include\n`openai.*` attributes.\n\n**[20] `gen_ai.request.encoding_formats`:** In some GenAI systems the encoding formats are called embedding types. Also, some GenAI systems only accept a single format per request.\n\n**[21] `gen_ai.request.previous_response.id`:** Instrumentations SHOULD populate this attribute when the request references a previous response or interaction identifier to continue a conversation or pass prior context.\nFor example, `previous_response_id` in [OpenAI Responses API](https://developers.openai.com/api/docs/guides/conversation-state#passing-context-from-the-previous-response)\nor `previous_interaction_id` in [Google GenAI Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview).\n\n**[22] `gen_ai.request.reasoning.level`:** The value SHOULD be the exact string value sent to the provider.\nSemantic conventions for individual providers SHOULD document which input parameter maps to this attribute.\n\n**[23] `gen_ai.request.stream_cursor`:** Instrumentations SHOULD populate this attribute when a request resumes a streamed response from a prior position, for example when fetching a stored response with streaming enabled.\nFor example, `starting_after` in the [OpenAI Responses API](https://developers.openai.com/api/docs/guides/background#streaming-a-background-response)\nor `last_event_id` in the [Google GenAI Interactions API](https://ai.google.dev/api/interactions-api).\n\n**[24] `gen_ai.request.top_k`:** This is a decoding/sampling parameter (e.g., Anthropic `top_k`, Cohere `k`, Google `topK`), not an output-shaping parameter. In particular, OpenAI's `top_logprobs` controls how many per-token log-probabilities are returned in the response and does not change generation; it MUST NOT be reported as `gen_ai.request.top_k`.\n\n**[25] `gen_ai.response.finish_reasons`:** Values correspond to generations in the same order as the returned\nchoices/candidates.\n\nEach position SHOULD contain the finish reason for the corresponding\nchoice/candidate. If a finish reason was expected but not received, for\nexample because generation failed, was cancelled, or a stream ended before\nthe final event, instrumentations SHOULD report `error` for that position\ninstead of omitting it.\n\n`error` indicates that the generation ended abnormally, whether reported\nby the provider or inferred by the instrumentation.\n\n**[26] `gen_ai.response.status`:** This attribute captures the lifecycle state of a (possibly background or long-running) generation, such as whether it is queued, still running, or has reached a terminal state. It is distinct from `gen_ai.response.finish_reasons`, which describes why the model stopped once it began producing output.\nThe value SHOULD be the provider's response status mapped onto the closest member of this enum or a provider-specific value when none of these apply. Semantic conventions for individual GenAI providers SHOULD document how their status values map to this attribute.\n\n**[27] `gen_ai.retrieval.documents`:** Each document object SHOULD contain the following properties when available:\n`id` (string): A unique identifier for the document, `score` (double): The relevance score of the document\n\nInstrumentations MUST follow [JSON schema](/model/gen-ai/gen-ai-retrieval-documents.json).\n\nWhen the attribute is recorded on events, it MUST be recorded in structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format is not supported and SHOULD be recorded in structured form otherwise.\n\n**[28] `gen_ai.retrieval.query.text`:**\n\n> [!Warning]\n> This attribute may contain sensitive information.\n\n**[29] `gen_ai.skill.description`:**\n\n> [!WARNING]\n> This attribute may contain sensitive information.\n\n**[30] `gen_ai.skill.source.uri`:** This SHOULD identify the skill source, not a temporary location where the\nskill was materialized for execution.\n\n> [!WARNING]\n> This attribute may contain sensitive information.\n\nSensitive URI components, such as user information and access tokens in query\nparameters, SHOULD be scrubbed when instrumentations can identify them.\n\n**[31] `gen_ai.system_instructions`:** This attribute SHOULD be used when the corresponding provider or API\nallows to provide system instructions or messages separately from the\nchat history.\n\nInstructions that are part of the chat history SHOULD be recorded in\n`gen_ai.input.messages` attribute instead.\n\nInstrumentations MAY provide a way for users to filter or truncate\nsystem instructions.\n\n> [!Warning]\n> This attribute may contain sensitive information.\n\nSee [Recording content on attributes](/docs/gen-ai/gen-ai-spans.md#recording-content-on-attributes)\nsection for more details.\n\nInstrumentations MUST follow [JSON schema](/model/gen-ai/gen-ai-system-instructions.json).\n\nWhen the attribute is recorded on events, it MUST be recorded in structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format is not supported and SHOULD be recorded in structured form otherwise.\n\n**[32] `gen_ai.token.modality`:** When the provider does not break usage down by modality and the modality cannot be reliably determined, instrumentations SHOULD report the tokens under the `unknown` modality.\n\n**[33] `gen_ai.tool.call.arguments`:**\n\n> [!WARNING]\n> This attribute may contain sensitive information.\n\nIt's expected to be an object - in case a serialized string is available\nto the instrumentation, the instrumentation SHOULD do the best effort to\ndeserialize it to an object.\n\nInstrumentations MUST follow [JSON schema](/model/gen-ai/gen-ai-tool-call-arguments.json).\n\nWhen the attribute is recorded on events, it MUST be recorded in structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format is not supported and SHOULD be recorded in structured form otherwise.\n\n**[34] `gen_ai.tool.call.result`:**\n\n> [!WARNING]\n> This attribute may contain sensitive information.\n\nIt's expected to be an object - in case a serialized string is available\nto the instrumentation, the instrumentation SHOULD do the best effort to\ndeserialize it to an object.\n\nInstrumentations MUST follow [JSON schema](/model/gen-ai/gen-ai-tool-call-result.json).\n\nWhen the attribute is recorded on events, it MUST be recorded in structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format is not supported and SHOULD be recorded in structured form otherwise.\n\n**[35] `gen_ai.tool.definitions`:**\n\n> [!WARNING]\n> This attribute may contain sensitive information.\n\nSince this attribute could be large, it's NOT RECOMMENDED to populate\nnon-required properties by default. Instrumentations MAY provide a way\nto enable populating optional properties.\n\nInstrumentations MUST follow [JSON schema](/model/gen-ai/gen-ai-tool-definitions.json).\n\nWhen the attribute is recorded on events, it MUST be recorded in structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format is not supported and SHOULD be recorded in structured form otherwise.\n\n**[36] `gen_ai.tool.description`:**\n\n> [!WARNING]\n> This attribute may contain sensitive information.\n\n**[37] `gen_ai.tool.type`:** Extension: A tool executed on the agent-side to directly call external APIs, bridging the gap between the agent and real-world systems.\n  Agent-side operations involve actions that are performed by the agent on the server or within the agent's controlled environment.\nFunction: A tool executed on the client-side, where the agent generates parameters for a predefined function, and the client executes the logic.\n  Client-side operations are actions taken on the user's end or within the client application.\nDatastore: A tool used by the agent to access and query structured or unstructured external data for retrieval-augmented tasks or knowledge updates.\n\n**[38] `gen_ai.usage.audio.cache_read.input_tokens`:** The value SHOULD be included in `gen_ai.usage.cache_read.input_tokens` and in `gen_ai.usage.audio.input_tokens`.\n\n**[39] `gen_ai.usage.audio.input_tokens`:** The value SHOULD be included in `gen_ai.usage.input_tokens`.\n\n**[40] `gen_ai.usage.audio.output_tokens`:** The value SHOULD be included in `gen_ai.usage.output_tokens`.\n\n**[41] `gen_ai.usage.cache_read.input_tokens`:** The value SHOULD be included in `gen_ai.usage.input_tokens`.\n\n**[42] `gen_ai.usage.cache_write.input_tokens`:** The value SHOULD be included in `gen_ai.usage.input_tokens`.\n\n**[43] `gen_ai.usage.image.cache_read.input_tokens`:** The value SHOULD be included in `gen_ai.usage.cache_read.input_tokens` and in `gen_ai.usage.image.input_tokens`.\n\n**[44] `gen_ai.usage.image.input_tokens`:** The value SHOULD be included in `gen_ai.usage.input_tokens`.\n\n**[45] `gen_ai.usage.image.output_tokens`:** The value SHOULD be included in `gen_ai.usage.output_tokens`.\n\n**[46] `gen_ai.usage.input_tokens`:** This value SHOULD include all types of input tokens, including cached tokens.\nInstrumentations SHOULD make a best effort to populate this value, using a total\nprovided by the provider when available or, depending on the provider API,\nby summing different token types parsed from the provider output.\n\nWhen the provider reports both billed token counts and model-consumed\ntoken counts (for example, Cohere exposes both `usage.billed_units` and\n`usage.tokens`), instrumentations SHOULD report the billed count so the\nvalue matches the units the customer is charged for.\n\nDetailed usage attributes are subsets of total and aggregate counts. For example,\nif a request has 100 text tokens (40 cached) and 200 image tokens:\n- `gen_ai.usage.input_tokens`: 300\n- `gen_ai.usage.cache_read.input_tokens`: 40\n- `gen_ai.usage.text.input_tokens`: 100\n- `gen_ai.usage.text.cache_read.input_tokens`: 40\n- `gen_ai.usage.image.input_tokens`: 200\n\n**[47] `gen_ai.usage.output_tokens`:** When the provider reports both billed token counts and model-consumed\ntoken counts (for example, Cohere exposes both `usage.billed_units` and\n`usage.tokens`), instrumentations SHOULD report the billed count so the\nvalue matches the units the customer is charged for.\n\n**[48] `gen_ai.usage.reasoning.output_tokens`:** The value SHOULD be included in `gen_ai.usage.output_tokens`.\n\n**[49] `gen_ai.usage.text.cache_read.input_tokens`:** The value SHOULD be included in `gen_ai.usage.cache_read.input_tokens` and in `gen_ai.usage.text.input_tokens`.\n\n**[50] `gen_ai.usage.text.input_tokens`:** The value SHOULD be included in `gen_ai.usage.input_tokens`.\n\n**[51] `gen_ai.usage.text.output_tokens`:** The value SHOULD be included in `gen_ai.usage.output_tokens`.\n\n**[52] `gen_ai.workflow.name`:** The workflow name is usually a static, application-unique identifier defined\nin a framework-specific way.\n\nFor example, it can be the name of the first chain in LangChain,\nthe name of the crew in CrewAI, or the entry point agent in ADK or\nOpenAI Agents when no explicit workflow name is provided.\n\nThis attribute MUST have low cardinality. It is NOT RECOMMENDED to use\ninstrumentation-time constants or names of types representing the workflow,\nsuch as \"StateGraph\". When no meaningful, low-cardinality workflow name is\navailable for a given framework, this attribute MUST NOT be captured by default.\n\nSemantic conventions for individual Generative AI frameworks SHOULD document\nwhat `gen_ai.workflow.name` means in the context of that framework.\n\n---\n\n`gen_ai.operation.name` has the following list of well-known values. If one of them applies, then the respective value MUST be used; otherwise, a custom value MAY be used.\n\n| Value | Description | Stability |\n| --- | --- | --- |\n| `chat` | Chat completion operation such as [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `create_agent` | Create GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |\n| `create_memory` | Create new memory records | ![Development](https://img.shields.io/badge/-development-blue) |\n| `create_memory_store` | Create or initialize a memory store | ![Development](https://img.shields.io/badge/-development-blue) |\n| `delete_memory` | Delete memory records | ![Development](https://img.shields.io/badge/-development-blue) |\n| `delete_memory_store` | Delete or deprovision a memory store | ![Development](https://img.shields.io/badge/-development-blue) |\n| `embeddings` | Embeddings operation such as [OpenAI Create embeddings API](https://platform.openai.com/docs/api-reference/embeddings/create) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `execute_tool` | Execute a tool | ![Development](https://img.shields.io/badge/-development-blue) |\n| `fetch_response` | Fetch a previously generated model response by its identifier, without performing inference, such as [OpenAI Get a model response](https://platform.openai.com/docs/api-reference/responses/get) [53] | ![Development](https://img.shields.io/badge/-development-blue) |\n| `generate_content` | Multimodal content generation operation such as [Gemini Generate Content](https://ai.google.dev/api/generate-content) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `invoke_agent` | Invoke GenAI agent | ![Development](https://img.shields.io/badge/-development-blue) |\n| `invoke_workflow` | Invoke GenAI workflow | ![Development](https://img.shields.io/badge/-development-blue) |\n| `plan` | Agent planning or task decomposition phase | ![Development](https://img.shields.io/badge/-development-blue) |\n| `retrieval` | Retrieval operation such as [OpenAI Search Vector Store API](https://platform.openai.com/docs/api-reference/vector-stores/search) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `search_memory` | Search/query memories from a memory store | ![Development](https://img.shields.io/badge/-development-blue) |\n| `text_completion` | Text completions operation such as [OpenAI Completions API (Legacy)](https://platform.openai.com/docs/api-reference/completions) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `update_memory` | Update existing memory records | ![Development](https://img.shields.io/badge/-development-blue) |\n| `upsert_memory` | Create or update memory records without the caller choosing which | ![Development](https://img.shields.io/badge/-development-blue) |\n\n**[53]:** Instrumentations SHOULD NOT report token usage (as attributes or metrics) for this operation.\n\n---\n\n`gen_ai.output.type` has the following list of well-known values. If one of them applies, then the respective value MUST be used; otherwise, a custom value MAY be used.\n\n| Value | Description | Stability |\n| --- | --- | --- |\n| `image` | Image | ![Development](https://img.shields.io/badge/-development-blue) |\n| `json` | JSON object with known or unknown schema | ![Development](https://img.shields.io/badge/-development-blue) |\n| `speech` | Speech | ![Development](https://img.shields.io/badge/-development-blue) |\n| `text` | Plain text | ![Development](https://img.shields.io/badge/-development-blue) |\n\n---\n\n`gen_ai.provider.name` has the following list of well-known values. If one of them applies, then the respective value MUST be used; otherwise, a custom value MAY be used.\n\n| Value | Description | Stability |\n| --- | --- | --- |\n| `anthropic` | [Anthropic](https://www.anthropic.com/) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `aws.bedrock` | [AWS Bedrock](https://aws.amazon.com/bedrock) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `azure.ai.inference` | Azure AI Inference | ![Development](https://img.shields.io/badge/-development-blue) |\n| `azure.ai.openai` | [Azure OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/overview) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `cohere` | [Cohere](https://cohere.com/) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `deepseek` | [DeepSeek](https://www.deepseek.com/) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `gcp.gemini` | [Gemini](https://cloud.google.com/products/gemini) [54] | ![Development](https://img.shields.io/badge/-development-blue) |\n| `gcp.gen_ai` | Any Google generative AI endpoint [55] | ![Development](https://img.shields.io/badge/-development-blue) |\n| `gcp.vertex_ai` | [Vertex AI](https://cloud.google.com/vertex-ai) [56] | ![Development](https://img.shields.io/badge/-development-blue) |\n| `groq` | [Groq](https://groq.com/) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `ibm.watsonx.ai` | [IBM Watsonx AI](https://www.ibm.com/products/watsonx-ai) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `mistral_ai` | [Mistral AI](https://mistral.ai/) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `moonshot_ai` | [Moonshot AI](https://www.moonshot.ai/) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `openai` | [OpenAI](https://openai.com/) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `perplexity` | [Perplexity](https://www.perplexity.ai/) | ![Development](https://img.shields.io/badge/-development-blue) |\n| `x_ai` | [xAI](https://x.ai/) | ![Development](https://img.shields.io/badge/-development-blue) |\n\n**[54]:** Used when accessing the 'generativelanguage.googleapis.com' endpoint. Also known as the AI Studio API.\n\n**[55]:** May be used when specific backend is unknown.\n\n**[56]:** Used when accessing the 'aiplatform.googleapis.com' endpoint.\n\n---\n\n`gen_ai.response.status` has the following list of well-known values. If one of them applies, then the respective value MUST be used; otherwise, a custom value MAY be used.\n\n| Value | Description | Stability |\n| --- | --- | --- |\n| `cancelled` | The response generation was cancelled before it completed. | ![Development](https://img.shields.io/badge/-development-blue) |\n| `completed` | The response finished generating successfully. | ![Development](https://img.shields.io/badge/-development-blue) |\n| `failed` | The response generation failed with an error. | ![Development](https://img.shields.io/badge/-development-blue) |\n| `in_progress` | The response is still being generated, for example a background or streamed response that has not finished. | ![Development](https://img.shields.io/badge/-development-blue) |\n| `incomplete` | The response stopped before generation completed, for example because a token limit or content filter was reached. | ![Development](https://img.shields.io/badge/-development-blue) |\n| `queued` | The response has been accepted by the provider but generation has not started yet. | ![Development](https://img.shields.io/badge/-development-blue) |\n\n---\n\n`gen_ai.token.modality` has the following list of well-known values. If one of them applies, then the respective value MUST be used; otherwise, a custom value MAY be used.\n\n| Value | Description | Stability |\n| --- | --- | --- |\n| `audio` | Audio tokens. | ![Development](https://img.shields.io/badge/-development-blue) |\n| `image` | Image tokens. | ![Development](https://img.shields.io/badge/-development-blue) |\n| `text` | Text tokens. | ![Development](https://img.shields.io/badge/-development-blue) |\n| `unknown` | The modality is not known. | ![Development](https://img.shields.io/badge/-development-blue) |\n",
+      "absent_attribute": "gen_ai.usage.total_tokens",
+      "known_attributes": [
+        "gen_ai.usage.input_tokens",
+        "gen_ai.usage.output_tokens"
+      ]
+    },
+    "fresh_usage_case": {
+      "existing_genai_producer": null,
+      "source_snapshot": "async def complete(messages, client):\n    response = await client.chat(messages=messages)\n    input_tokens = response[\"prompt_eval_count\"]\n    output_tokens = response[\"eval_count\"]\n    total = input_tokens + output_tokens\n    return response, input_tokens, output_tokens, total\n",
+      "provider_response_fixture": {
+        "model": "local-demo",
+        "message": {
+          "role": "assistant",
+          "content": "Fixture response"
+        },
+        "prompt_eval_count": 17,
+        "eval_count": 5
+      },
+      "count_provenance": "Synthetic provider-response fixture: the case supplies reported counts17/5 rather than text-size estimates. It does not establish real model execution. The total22 is computed by the source, not a separately reported provider field.",
+      "proposed_new_attribute_candidate": {
+        "gen_ai.usage.input_tokens": 17,
+        "gen_ai.usage.output_tokens": 5,
+        "gen_ai.usage.total_tokens": 22
+      },
+      "existing_consumer_for_total_alias": null
+    },
+    "legacy_usage_case": {
+      "existing_genai_producer": "application-owned OTel spans using an existing provider/export pipeline",
+      "source_snapshot": "async def complete(messages, client, tracer):\n    with tracer.start_as_current_span(\"chat local-demo\") as span:\n        response = await client.chat(messages=messages)\n        span.set_attribute(\"gen_ai.usage.input_tokens\", response[\"prompt_eval_count\"])\n        span.set_attribute(\"gen_ai.usage.output_tokens\", response[\"eval_count\"])\n        span.set_attribute(\"gen_ai.usage.total_tokens\", response[\"prompt_eval_count\"] + response[\"eval_count\"])\n        return response\n",
+      "consumer_source_snapshot": "def existing_token_summary(readable_span):\n    return int(readable_span.attributes[\"gen_ai.usage.total_tokens\"])\n",
+      "consumer_proof_scope": "The supplied existing local consumer explicitly reads the exact legacy alias. Preserve that contract and its current producer/export path; this does not establish that the alias is a published OTel semantic attribute or required by any unrelated consumer.",
+      "provider_response_fixture": {
+        "prompt_eval_count": 17,
+        "eval_count": 5
+      }
+    },
+    "planning_focus": "Assess the proposed fresh candidate against the full dated official registry, give a concrete useful application/vendor-owned total with calculation/count provenance, and preserve the proven existing legacy consumer alias separately. Registry absence is not permission to fabricate a standardized field, drop known input/output counts or break the existing consumer."
+  },
+  "operation_metadata_reconciliation": {
+    "scope": "Separate plan-only source/counterexample cases. Known/dynamic/unbound source cases and finished-view examples are synthetic. The independently supplied installed SDK creation probe is captured real in-memory sampler/on_start/finish evidence only, not app.py integration, a model request, attribute-dependent DROP, AO exporter, OTLP delivery, resource creation or cloud proof. Preserve all prior source/example/registry receipts unchanged.",
+    "official_primary_sources": [
+      {
+        "repository": "open-telemetry/semantic-conventions-genai",
+        "resolved_revision": "4e8a2812139b2a999d959e3650e24dfc64e21943",
+        "path": "docs/gen-ai/gen-ai-agent-spans.md",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/4e8a2812139b2a999d959e3650e24dfc64e21943/docs/gen-ai/gen-ai-agent-spans.md",
+        "captured_at": "2026-10-14T05:57:10.168295+00:00",
+        "full_source_sha256": "018ffd339be99c7e56ddba7265dd3095ca0735ddf680d28f96036043641384f4",
+        "excerpts": [
+          {
+            "first_line": 545,
+            "last_line": 611,
+            "text": "### Invoke agent internal span\n\n<!-- weaver .registry.spans[] | select(.type == \"gen_ai.invoke_agent.internal\") -->\n<!-- NOTE: THIS TEXT IS AUTOGENERATED. DO NOT EDIT BY HAND. -->\n<!-- see templates/registry/markdown/snippet.md.j2 -->\n<!-- prettier-ignore-start -->\n\n**Status:** ![Development](https://img.shields.io/badge/-development-blue)\n\nDescribes GenAI agent invocation within the same process.\n\nThe `gen_ai.operation.name` SHOULD be `invoke_agent`.\n\nExamples: LangChain agents, CrewAI agents.\n\n**Span name** SHOULD be `invoke_agent {gen_ai.agent.name}` if `gen_ai.agent.name` is readily available.\nWhen `gen_ai.agent.name` is not available, it SHOULD be `invoke_agent`.\nSemantic conventions for individual GenAI systems and frameworks MAY specify different span name format.\n\n**Span kind** SHOULD be `INTERNAL`.\n\n**Span status** SHOULD follow the [Recording Errors](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/general/recording-errors.md) document.\n\n**Entity Associations** The span SHOULD be associated with one of the following entities:\n\n- [`gen_ai.main_agent`](/docs/registry/entities/gen-ai.md#gen-ai-main-agent)\n\n**Requirement level:** [Recommended](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/general/signal-requirement-level.md).\n\n**Attributes:**\n\n| Key | Stability | [Requirement Level](https://opentelemetry.io/docs/specs/semconv/general/attribute-requirement-level/) | Value Type | Description | Example Values |\n| --- | --- | --- | --- | --- | --- |\n| [`gen_ai.operation.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | string | The name of the operation being performed. [1] | `chat`; `generate_content`; `text_completion` |\n| [`error.type`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/error.md) | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | `Conditionally Required` If the operation ended in an error. | string | Describes a class of error the operation ended with. [2] | `timeout`; `java.net.UnknownHostException`; `server_certificate_invalid`; `500` |\n| [`gen_ai.agent.description`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` When available. | string | The free-form description of the invoked GenAI agent. | `Helps with math problems`; `Generates fiction stories` |\n| [`gen_ai.agent.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` When available. | string | The human-readable name of the invoked GenAI agent. | `Math Tutor`; `Fiction Writer` |\n| [`gen_ai.conversation.id`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [3] | string | The unique identifier for a conversation (session, thread), used to store and correlate messages within this conversation. [4] | `conv_5j66UpCpwteGg4YSxUnt7lPY` |\n| [`gen_ai.data_source.id`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If applicable. | string | The data source identifier. [5] | `H7STPQYOND` |\n| [`gen_ai.output.type`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` [6] | string | Represents the content type requested by the client. [7] | `text`; `json`; `image` |\n| [`gen_ai.request.choice.count`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If available, in the request, and !=1. | int | The target number of candidate completions to return. | `3` |\n| [`gen_ai.request.seed`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If applicable and if the request includes a seed. | int | Requests with same seed value more likely to return same result. | `100` |\n| [`gen_ai.request.frequency_penalty`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` | double | The frequency penalty setting for the GenAI request. | `0.1` |\n| [`gen_ai.request.max_tokens`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` | int | The maximum number of tokens the model generates for a request. | `100` |\n| [`gen_ai.request.model`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` If applicable. | string | The name of the GenAI model configured for the agent. [8] | `gpt-4` |\n| [`gen_ai.request.presence_penalty`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` | double | The presence penalty setting for the GenAI request. | `0.1` |\n| [`gen_ai.request.stop_sequences`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` | string[] | List of sequences that the model will use to stop generating further tokens. | `[\"forest\", \"lived\"]` |\n| [`gen_ai.request.temperature`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` | double | The temperature setting for the GenAI request. | `0.0` |\n| [`gen_ai.request.top_p`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` | double | The top_p sampling setting for the GenAI request. | `1.0` |\n| [`gen_ai.response.finish_reasons`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` | string[] | Array of reasons the model stopped generating tokens, corresponding to each generation received. [9] | `[\"stop\"]`; `[\"stop\", \"length\"]`; `[\"stop\", \"length\", \"error\"]` |\n| [`gen_ai.usage.input_tokens`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` | int | The number of tokens used in the GenAI input (prompt). [10] | `100` |\n| [`gen_ai.usage.output_tokens`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` | int | The number of tokens used in the GenAI response (completion). [11] | `180` |\n| [`gen_ai.input.messages`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Opt-In` | any | The chat history provided to the model as an input. [12] | [<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"role\": \"user\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"parts\": [<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"text\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"content\": \"Weather in Paris?\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;&nbsp;&nbsp;]<br>&nbsp;&nbsp;},<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"role\": \"assistant\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"parts\": [<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"tool_call\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"id\": \"call_VSPygqKTWdrhaFErNvMV18Yl\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"name\": \"get_weather\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"arguments\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"location\": \"Paris\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;&nbsp;&nbsp;]<br>&nbsp;&nbsp;},<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"role\": \"tool\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"parts\": [<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"tool_call_response\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"id\": \"call_VSPygqKTWdrhaFErNvMV18Yl\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"response\": \"rainy, 57\u00b0F\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;&nbsp;&nbsp;]<br>&nbsp;&nbsp;}<br>] |\n| [`gen_ai.output.messages`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Opt-In` | any | Messages returned by the model where each message represents a specific model response (choice, candidate). [13] | [<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"role\": \"assistant\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"parts\": [<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"text\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"content\": \"The weather in Paris is currently rainy with a temperature of 57\u00b0F.\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;&nbsp;&nbsp;]<br>&nbsp;&nbsp;}<br>] |\n| [`gen_ai.system_instructions`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Opt-In` | any | The system message or instructions provided to the GenAI model separately from the chat history. [14] | [<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"text\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"content\": \"You are an Agent that greet users, always use greetings tool to respond\"<br>&nbsp;&nbsp;}<br>]; [<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"text\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"content\": \"You are a language translator.\"<br>&nbsp;&nbsp;},<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"text\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"content\": \"Your mission is to translate text in English to French.\"<br>&nbsp;&nbsp;}<br>] |\n| [`gen_ai.tool.definitions`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Opt-In` | any | The list of tool definitions available to the GenAI agent or model. [15] | [<br>&nbsp;&nbsp;{<br>&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"function\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"name\": \"get_current_weather\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"description\": \"Get the current weather in a given location\",<br>&nbsp;&nbsp;&nbsp;&nbsp;\"parameters\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"object\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"properties\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"location\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"string\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"description\": \"The city and state, e.g. San Francisco, CA\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;},<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"unit\": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"type\": \"string\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"enum\": [<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"celsius\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"fahrenheit\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;]<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;},<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"required\": [<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"location\",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\"unit\"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;]<br>&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;}<br>] |\n\n**[1] `gen_ai.operation.name`:** If one of the predefined values applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic conventions for specific GenAI system and use system-specific name in the instrumentation. If a different name is not documented, instrumentation libraries SHOULD use applicable predefined value.\n\n**[2] `error.type`:** The `error.type` SHOULD match the error code returned by the Generative AI provider or the client library,\nthe canonical name of exception that occurred, or another low-cardinality error identifier.\nInstrumentations SHOULD document the list of errors they report.\n\n**[3] `gen_ai.conversation.id`:** If and only if the instrumented library has one readily available, or the user application provides one through OpenTelemetry context or library-specific mechanisms.\n\n**[4] `gen_ai.conversation.id`:** Instrumentations SHOULD populate conversation id when they have an identifier\nfor the conversation readily available for a given operation, for example:"
+          },
+          {
+            "first_line": 637,
+            "last_line": 637,
+            "text": "**[8] `gen_ai.request.model`:** This attribute SHOULD be populated if and only if the instrumented library allows to set only a single model per agent. It SHOULD NOT be populated for agents that support multiple models or dynamic selection."
+          },
+          {
+            "first_line": 639,
+            "last_line": 649,
+            "text": "**[9] `gen_ai.response.finish_reasons`:** Values correspond to generations in the same order as the returned\nchoices/candidates.\n\nEach position SHOULD contain the finish reason for the corresponding\nchoice/candidate. If a finish reason was expected but not received, for\nexample because generation failed, was cancelled, or a stream ended before\nthe final event, instrumentations SHOULD report `error` for that position\ninstead of omitting it.\n\n`error` indicates that the generation ended abnormally, whether reported\nby the provider or inferred by the instrumentation."
+          }
+        ],
+        "proof_scope": "Freshly fetched immutable official document; selected positive requirement excerpts, not whole-registry absence proof or application runtime.",
+        "receipt_source": "genai-context-creation-receipt.json: independently hash-matched complete immutable source receipt"
+      },
+      {
+        "repository": "open-telemetry/semantic-conventions-genai",
+        "resolved_revision": "4e8a2812139b2a999d959e3650e24dfc64e21943",
+        "path": "docs/gen-ai/gen-ai-spans.md",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/4e8a2812139b2a999d959e3650e24dfc64e21943/docs/gen-ai/gen-ai-spans.md",
+        "captured_at": "2026-10-14T05:57:10.168295+00:00",
+        "full_source_sha256": "af0b7501177452a5fb929e09a42d791631511a0544f2c71e1a008ff177bcebf0",
+        "excerpts": [
+          {
+            "first_line": 777,
+            "last_line": 791,
+            "text": "- [`gen_ai.main_agent`](/docs/registry/entities/gen-ai.md#gen-ai-main-agent)\n\n**Requirement level:** [Recommended](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/general/signal-requirement-level.md).\n\n**Attributes:**\n\n| Key | Stability | [Requirement Level](https://opentelemetry.io/docs/specs/semconv/general/attribute-requirement-level/) | Value Type | Description | Example Values |\n| --- | --- | --- | --- | --- | --- |\n| [`gen_ai.operation.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | string | The name of the operation being performed. [1] | `chat`; `generate_content`; `text_completion` |\n| [`gen_ai.tool.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Required` | string | Name of the tool utilized by the agent. | `Flights` |\n| [`error.type`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/error.md) | ![Stable](https://img.shields.io/badge/-stable-lightgreen) | `Conditionally Required` If the operation ended in an error. | string | Describes a class of error the operation ended with. [2] | `timeout`; `java.net.UnknownHostException`; `server_certificate_invalid`; `500` |\n| [`gen_ai.agent.name`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` When applicable. | string | The human-readable name of the agent executing the tool. | `Math Tutor`; `Fiction Writer` |\n| [`gen_ai.conversation.id`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Conditionally Required` If available. | string | The unique identifier for a conversation (session, thread), used to store and correlate messages within this conversation. [3] | `conv_5j66UpCpwteGg4YSxUnt7lPY` |\n| [`gen_ai.tool.call.id`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` If available. | string | The tool call identifier. | `call_mszuSIzqtI65i1wAUOE8w5H4` |\n| [`gen_ai.tool.description`](/docs/registry/attributes/gen-ai.md) | ![Development](https://img.shields.io/badge/-development-blue) | `Recommended` If available. | string | The tool description. [4] | `Multiply two numbers` |"
+          }
+        ],
+        "proof_scope": "Freshly fetched immutable official document; selected positive requirement excerpts, not whole-registry absence proof or application runtime.",
+        "receipt_source": "genai-context-creation-receipt.json: independently hash-matched complete immutable source receipt"
+      },
+      {
+        "repository": "open-telemetry/semantic-conventions-genai",
+        "resolved_revision": "4e8a2812139b2a999d959e3650e24dfc64e21943",
+        "path": "docs/gen-ai/client-inference.md",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/4e8a2812139b2a999d959e3650e24dfc64e21943/docs/gen-ai/client-inference.md",
+        "captured_at": "2026-10-14T05:57:10.168295+00:00",
+        "full_source_sha256": "d66935733da1edd048cfa3b90d081f8d81b6961b62a69dafa15c1c5ad03b9c5b",
+        "excerpts": [
+          {
+            "first_line": 347,
+            "last_line": 354,
+            "text": "The following attributes can be important for making sampling decisions\nand SHOULD be provided **at span creation time** (if provided at all):\n\n* [`gen_ai.operation.name`](/docs/registry/attributes/gen-ai.md)\n* [`gen_ai.provider.name`](/docs/registry/attributes/gen-ai.md)\n* [`gen_ai.request.model`](/docs/registry/attributes/gen-ai.md)\n* [`server.address`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/server.md)\n* [`server.port`](https://github.com/open-telemetry/semantic-conventions/blob/v1.44.0/docs/registry/attributes/server.md)"
+          },
+          {
+            "first_line": 197,
+            "last_line": 207,
+            "text": "**[18] `gen_ai.response.finish_reasons`:** Values correspond to generations in the same order as the returned\nchoices/candidates.\n\nEach position SHOULD contain the finish reason for the corresponding\nchoice/candidate. If a finish reason was expected but not received, for\nexample because generation failed, was cancelled, or a stream ended before\nthe final event, instrumentations SHOULD report `error` for that position\ninstead of omitting it.\n\n`error` indicates that the generation ended abnormally, whether reported\nby the provider or inferred by the instrumentation."
+          }
+        ],
+        "proof_scope": "Freshly fetched immutable official document; selected positive requirement excerpts, not whole-registry absence proof or application runtime.",
+        "receipt_source": "genai-context-creation-receipt.json: independently hash-matched complete immutable source receipt"
+      }
+    ],
+    "source_cases": {
+      "scope": "Separate synthetic source-only cases. Their context, tool metadata and call flow are not app.py or the earlier installed SDK/in-memory capture. No application, model, SDK, sampler, exporter, resource or cloud execution was performed for these source cases.",
+      "known_context": {
+        "source_path": "synthetic/known_agent_tool_context.py",
+        "source": "import json\nfrom dataclasses import dataclass\nfrom galileo_core.schemas.logging.span import AgentSpan, ToolSpan, LlmSpan\nfrom splunk_ao.otel import start_splunk_ao_span\n\n@dataclass(frozen=True)\nclass TurnContext:\n    conversation_id: str\n\n@dataclass(frozen=True)\nclass FixedAgentConfig:\n    name: str = \"Incident Desk\"\n    description: str = \"Read synthetic health and summarize with one configured model.\"\n    model: str = \"qwen3:8b\"\n    provider: str = \"ollama\"\n\n# One fixed agent configuration; the public turn API has no model choice.\nFIXED_AGENT = FixedAgentConfig()\n\nTOOLS = {\n    \"get_service_health\": {\n        \"type\": \"function\",\n        \"description\": \"Read synthetic health for the named service.\",\n    }\n}\n\nasync def get_service_health(service):\n    return {\"service\": service, \"status\": \"degraded\", \"error_rate\": 0.038}\n\nasync def execute_tool(context, tool_name, arguments):\n    definition = TOOLS[tool_name]\n    record = ToolSpan(name=tool_name, input=json.dumps(arguments))\n    with start_splunk_ao_span(record) as span:\n        span.set_attribute(\"gen_ai.tool.type\", definition[\"type\"])\n        result = await get_service_health(**arguments)\n        record.output = json.dumps(result)\n        return result\n\nasync def agent_turn(context, question, client):\n    record = AgentSpan(name=FIXED_AGENT.name, input=question)\n    with start_splunk_ao_span(record) as span:\n        span.set_attribute(\"gen_ai.provider.name\", FIXED_AGENT.provider)\n        result = await execute_tool(context, \"get_service_health\", {\"service\": \"checkout\"})\n        model_record = LlmSpan(name=\"chat \" + FIXED_AGENT.model, model=FIXED_AGENT.model,\n                               input=[{\"role\": \"user\", \"content\": question}])\n        with start_splunk_ao_span(model_record) as model_span:\n            model_span.set_attribute(\"gen_ai.provider.name\", FIXED_AGENT.provider)\n            reply = await client.chat(model=FIXED_AGENT.model,\n                                      messages=[{\"role\": \"user\", \"content\": question}])\n            model_record.output = reply\n        record.output = reply\n        return {\"result\": result, \"answer\": reply}\n\n# The caller supplies this non-sensitive opaque conversation binding for the\n# synthetic source case; it is not a trace ID or a user/session identity.\ncontext = TurnContext(conversation_id=\"conv_demo_approved_72fbd8\")\n# agent_turn(context, \"Check checkout\", a_separate_process_model_client)\n",
+        "conversation_binding_scope": "This supplied conversation_id is approved opaque GenAI correlation at the calling boundary and may be retained on spans. It is not approved for metric labels.",
+        "source_sha256": "e3f2597fd1c750d9aa7598a85d225bf265109af97bbe94a65293f5c109aa71c8"
+      },
+      "unavailable_context": {
+        "source_path": "synthetic/unbound_tool_context.py",
+        "source": "async def invoke_unbound_tool(arguments, handler):\n    return await handler(arguments)\n",
+        "scope": "No configured agent identity, model, supplied conversation binding or tool description exists in this separate source. Do not reuse values from the known_context case.",
+        "source_sha256": "53c92348fe25080dcc3283ddbcbc8588ef4ddf381202e0ddf92b512a6adcd36e"
+      },
+      "dynamic_model_context": {
+        "source_path": "synthetic/dynamic_model_agent.py",
+        "scope": "Separate source-only agent with a supported per-turn model choice; no fixed single agent model. Neither app.py nor the installed helper capture is represented by this source.",
+        "source": "from galileo_core.schemas.logging.span import AgentSpan, LlmSpan\nfrom splunk_ao.otel import start_splunk_ao_span\n\nALLOWED_MODELS = (\"qwen3:8b\", \"gpt-oss:20b\")\n\nasync def dynamic_agent_turn(question, requested_model, client):\n    if requested_model not in ALLOWED_MODELS:\n        raise ValueError(\"unsupported model\")\n    agent_record = AgentSpan(name=\"Model Router\", input=question)\n    with start_splunk_ao_span(agent_record) as agent_span:\n        agent_span.set_attribute(\"gen_ai.provider.name\", \"ollama\")\n        model_record = LlmSpan(name=\"chat \" + requested_model, model=requested_model,\n                               input=[{\"role\": \"user\", \"content\": question}])\n        with start_splunk_ao_span(model_record) as model_span:\n            model_span.set_attribute(\"gen_ai.provider.name\", \"ollama\")\n            reply = await client.chat(model=requested_model,\n                                      messages=[{\"role\": \"user\", \"content\": question}])\n            model_record.output = reply\n        agent_record.output = reply\n        return reply\n",
+        "source_sha256": "d0b8f1852efbea7c5b09f74150d528dd96347eecf2b75ce8d6021be1a7e247fe"
+      }
+    },
+    "creation_time_cases": [
+      {
+        "id": "helper-final-view-is-not-creation-proof",
+        "selected_producer": "splunk_ao.otel.start_splunk_ao_span, installed0.5.0 source above",
+        "source_sequence": "with start_splunk_ao_span(schema) as span:\n    span.set_attributes(initial_attributes)\n# A standard public exporter adapter supplies the completed exported CLIENT view.\n",
+        "source_derived_creation_capability": {
+          "kind": "INTERNAL",
+          "attributes": {},
+          "known_fields_set_after_start": {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "ollama",
+            "gen_ai.request.model": "qwen3:8b",
+            "server.address": "127.0.0.1",
+            "server.port": 11434
+          }
+        },
+        "synthetic_completed_exported_view": {
+          "kind": "CLIENT",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "ollama",
+            "gen_ai.request.model": "qwen3:8b",
+            "server.address": "127.0.0.1",
+            "server.port": 11434
+          },
+          "identity_preserved": true
+        },
+        "sampling_context": {
+          "mode": "attribute-dependent head sampler or on_start observer",
+          "needs_initial_attributes": [
+            "gen_ai.operation.name",
+            "gen_ai.provider.name",
+            "gen_ai.request.model"
+          ]
+        }
+      },
+      {
+        "id": "helper-always-on-has-same-disclosed-limit",
+        "selected_producer": "same installed public helper",
+        "source_derived_creation_capability": {
+          "kind": "INTERNAL",
+          "attributes": {}
+        },
+        "synthetic_completed_exported_view": {
+          "kind": "CLIENT",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "ollama",
+            "gen_ai.request.model": "qwen3:8b",
+            "server.address": "127.0.0.1",
+            "server.port": 11434
+          }
+        },
+        "sampling_context": {
+          "mode": "AlwaysOn with no attribute-dependent head sampler",
+          "attribute_dependent_consumer_present": false
+        }
+      },
+      {
+        "id": "preserved-existing-otel-creator-start-support",
+        "selected_producer": "Independent already-valid existing standard OTel creator source case; no Splunk helper claim",
+        "source_snapshot": "with tracer.start_as_current_span(\"chat qwen3:8b\", kind=SpanKind.CLIENT, attributes=initial_attributes) as span:\n    response = await call_existing_model()\n",
+        "synthetic_creation_view": {
+          "kind": "CLIENT",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "ollama",
+            "gen_ai.request.model": "qwen3:8b",
+            "server.address": "127.0.0.1",
+            "server.port": 11434
+          }
+        },
+        "synthetic_completed_exported_view": {
+          "kind": "CLIENT",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "ollama",
+            "gen_ai.request.model": "qwen3:8b",
+            "server.address": "127.0.0.1",
+            "server.port": 11434
+          }
+        }
+      }
+    ],
+    "captured_creation_probe": {
+      "kind": "captured-installed-sdk-creation-probe",
+      "source_path": "sdk-creation-capability-probe.py",
+      "source_sha256": "ae756d8017a7976c6aa169e4b3117cbfcb63ff39ce5fcd8707ea17de329a4393",
+      "source_snapshot": "\"\"\"Credential-free SDK creation capability probe; no app, model or network.\"\"\"\nimport importlib.metadata\nimport json\nfrom pathlib import Path\n\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import SpanProcessor, TracerProvider\nfrom opentelemetry.sdk.trace.export import SimpleSpanProcessor\nfrom opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter\nfrom opentelemetry.sdk.trace.sampling import Decision, Sampler, SamplingResult\nfrom opentelemetry.trace import SpanKind\nfrom galileo_core.schemas.logging.span import LlmSpan\nfrom splunk_ao.otel import start_splunk_ao_span\n\ninitial = {\n    \"gen_ai.operation.name\": \"chat\",\n    \"gen_ai.provider.name\": \"ollama\",\n    \"gen_ai.request.model\": \"qwen3:8b\",\n    \"server.address\": \"127.0.0.1\",\n    \"server.port\": 11434,\n}\nsamples, starts = [], []\n\n\nclass RecordingSampler(Sampler):\n    def should_sample(self, parent_context, trace_id, name, kind=SpanKind.INTERNAL,\n                      attributes=None, links=None, trace_state=None):\n        samples.append({\"name\": name, \"kind\": kind.name,\n                        \"attributes\": dict(attributes or {})})\n        return SamplingResult(Decision.RECORD_AND_SAMPLE,\n                              attributes=dict(attributes or {}))\n\n    def get_description(self):\n        return \"RecordingAlwaysOn\"\n\n\nclass RecordingStarts(SpanProcessor):\n    def on_start(self, span, parent_context=None):\n        starts.append({\"name\": span.name, \"kind\": span.kind.name,\n                       \"attributes\": dict(span.attributes or {})})\n\n    def on_end(self, span):\n        pass\n\n    def shutdown(self):\n        pass\n\n    def force_flush(self, timeout_millis=30000):\n        return True\n\n\nexporter = InMemorySpanExporter()\nprovider = TracerProvider(sampler=RecordingSampler())\nprovider.add_span_processor(RecordingStarts())\nprovider.add_span_processor(SimpleSpanProcessor(exporter))\ntrace.set_tracer_provider(provider)\nrecord = LlmSpan(name=\"chat helper-probe\", model=\"qwen3:8b\",\n                 input=[{\"role\": \"user\", \"content\": \"Synthetic check\"}],\n                 output={\"role\": \"assistant\", \"content\": \"Synthetic answer\"})\nwith start_splunk_ao_span(record) as span:\n    span.set_attributes(initial)\ntracer = provider.get_tracer(\"creation-control\")\nwith tracer.start_as_current_span(\"chat standard-otel-control\",\n                                  kind=SpanKind.CLIENT, attributes=initial):\n    pass\nprovider.force_flush()\nfinished = [{\"name\": span.name, \"kind\": span.kind.name,\n             \"attributes\": dict(span.attributes or {}),\n             \"trace_id\": format(span.context.trace_id, \"032x\"),\n             \"span_id\": format(span.context.span_id, \"016x\")}\n            for span in exporter.get_finished_spans()]\nassert len(samples) == len(starts) == len(finished) == 2\nassert samples[0][\"kind\"] == starts[0][\"kind\"] == finished[0][\"kind\"] == \"INTERNAL\"\nassert samples[0][\"attributes\"] == starts[0][\"attributes\"] == {}\nassert all(finished[0][\"attributes\"][key] == value for key, value in initial.items())\nassert samples[1][\"kind\"] == starts[1][\"kind\"] == \"CLIENT\"\nassert samples[1][\"attributes\"] == starts[1][\"attributes\"] == initial\nreceipt = {\n    \"proof_scope\": \"Installed public SDK helper + standard OTel in-memory export. RecordingAlwaysOn observes should_sample and on_start inputs; no attribute-dependent DROP policy, model/app, OTLP wire, AO exporter, resources or cloud execution.\",\n    \"versions\": {p: importlib.metadata.version(p)\n                 for p in [\"splunk-ao\", \"galileo-core\", \"opentelemetry-sdk\"]},\n    \"sampling_inputs\": samples, \"on_start_records\": starts,\n    \"finished_records\": finished,\n    \"pass\": [\"helper creation INTERNAL with empty attributes\",\n             \"helper same-span setters present at finish\",\n             \"existing public OTel control supplies CLIENT and initial attributes\"],\n}\nPath(__file__).with_suffix(\".json\").write_text(json.dumps(receipt, indent=2) + \"\\n\")\nprovider.shutdown()\nprint(json.dumps({\"versions\": receipt[\"versions\"], \"pass\": receipt[\"pass\"]}))\n",
+      "receipt": {
+        "proof_scope": "Installed public SDK helper + standard OTel in-memory export. RecordingAlwaysOn observes should_sample and on_start inputs; no attribute-dependent DROP policy, model/app, OTLP wire, AO exporter, resources or cloud execution.",
+        "versions": {
+          "splunk-ao": "0.5.0",
+          "galileo-core": "4.5.0",
+          "opentelemetry-sdk": "1.45.1"
+        },
+        "sampling_inputs": [
+          {
+            "name": "chat helper-probe",
+            "kind": "INTERNAL",
+            "attributes": {}
+          },
+          {
+            "name": "chat standard-otel-control",
+            "kind": "CLIENT",
+            "attributes": {
+              "gen_ai.operation.name": "chat",
+              "gen_ai.provider.name": "ollama",
+              "gen_ai.request.model": "qwen3:8b",
+              "server.address": "127.0.0.1",
+              "server.port": 11434
+            }
+          }
+        ],
+        "on_start_records": [
+          {
+            "name": "chat helper-probe",
+            "kind": "INTERNAL",
+            "attributes": {}
+          },
+          {
+            "name": "chat standard-otel-control",
+            "kind": "CLIENT",
+            "attributes": {
+              "gen_ai.operation.name": "chat",
+              "gen_ai.provider.name": "ollama",
+              "gen_ai.request.model": "qwen3:8b",
+              "server.address": "127.0.0.1",
+              "server.port": 11434
+            }
+          }
+        ],
+        "finished_records": [
+          {
+            "name": "chat helper-probe",
+            "kind": "INTERNAL",
+            "attributes": {
+              "gen_ai.provider.name": "ollama",
+              "server.address": "127.0.0.1",
+              "server.port": 11434,
+              "gen_ai.operation.name": "chat",
+              "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"Synthetic check\",\"type\":\"text\"}],\"role\":\"user\"}]",
+              "gen_ai.output.messages": "[{\"finish_reason\":\"unknown\",\"parts\":[{\"content\":\"Synthetic answer\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+              "gen_ai.request.model": "qwen3:8b"
+            },
+            "trace_id": "dbb716d1edec61b09c4f3d4513d630db",
+            "span_id": "a9b4c4993d004f00"
+          },
+          {
+            "name": "chat standard-otel-control",
+            "kind": "CLIENT",
+            "attributes": {
+              "gen_ai.operation.name": "chat",
+              "gen_ai.provider.name": "ollama",
+              "gen_ai.request.model": "qwen3:8b",
+              "server.address": "127.0.0.1",
+              "server.port": 11434
+            },
+            "trace_id": "c15cdbb5cce12a01a791fced83a86a26",
+            "span_id": "7eb1d4b189b90e38"
+          }
+        ],
+        "pass": [
+          "helper creation INTERNAL with empty attributes",
+          "helper same-span setters present at finish",
+          "existing public OTel control supplies CLIENT and initial attributes"
+        ]
+      },
+      "limitations": "Real should_sample and on_start inputs with a RecordingAlwaysOn sampler, plus completed in-memory records. It does not execute an attribute-dependent dropping policy or an exporter changing the helper to CLIENT; the completed CLIENT view above is explicitly synthetic. No application, model, network or cloud."
+    },
+    "finish_reason_cases": [
+      {
+        "id": "known-one-generation-error-reason-missing",
+        "source_context": {
+          "protocol": "Independent synthetic single-message model API",
+          "expected_generation_slots": [
+            0
+          ],
+          "source_snapshot": "EXPECTED_GENERATIONS = 1\n# This public provider contract returns one assistant message and its finish reason.\n"
+        },
+        "captured_field_examples": {
+          "name": "chat one-message-model",
+          "kind": "CLIENT",
+          "status": "ERROR",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "synthetic-provider",
+            "gen_ai.request.model": "one-message-model",
+            "gen_ai.request.stream": false,
+            "error.type": "timeout"
+          }
+        }
+      },
+      {
+        "id": "known-one-generation-error-reason-present",
+        "source_context": {
+          "protocol": "same independent single-message provider contract",
+          "expected_generation_slots": [
+            0
+          ]
+        },
+        "captured_field_examples": {
+          "name": "chat one-message-model",
+          "kind": "CLIENT",
+          "status": "ERROR",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "synthetic-provider",
+            "gen_ai.request.model": "one-message-model",
+            "gen_ai.request.stream": false,
+            "error.type": "timeout",
+            "gen_ai.response.finish_reasons": [
+              "error"
+            ]
+          }
+        }
+      },
+      {
+        "id": "unknown-generation-contract-no-invented-slot",
+        "source_context": {
+          "protocol": null,
+          "expected_generation_slots": null,
+          "source_reason": "This supplied arbitrary transport error has no model-specific choice/candidate count, contract, returned generation or received finish reason."
+        },
+        "captured_field_examples": {
+          "name": "chat unknown-provider-model",
+          "kind": "CLIENT",
+          "status": "ERROR",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "synthetic-provider",
+            "gen_ai.request.model": "unknown-model",
+            "error.type": "provider_http_error"
+          }
+        }
+      },
+      {
+        "id": "known-multiple-generations-preserve-position-and-partial-output",
+        "source_context": {
+          "expected_generation_slots": [
+            0,
+            1
+          ],
+          "request_choice_count": 2,
+          "received_generations": [
+            {
+              "index": 0,
+              "finish_reason": "stop",
+              "output": "First synthetic answer"
+            },
+            {
+              "index": 1,
+              "finish_reason": null,
+              "partial_output": "Partial synthetic answer"
+            }
+          ]
+        },
+        "captured_field_examples": {
+          "name": "chat multi-message-model",
+          "kind": "CLIENT",
+          "status": "ERROR",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": "synthetic-provider",
+            "gen_ai.request.model": "multi-message-model",
+            "gen_ai.request.choice.count": 2,
+            "gen_ai.request.stream": true,
+            "error.type": "cancelled",
+            "gen_ai.response.finish_reasons": [
+              "stop",
+              "error"
+            ],
+            "gen_ai.output.messages": "[{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"First synthetic answer\"}]},{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"Partial synthetic answer\"}]}]"
+          }
+        }
+      },
+      {
+        "id": "known-success-response-and-output-message-fields",
+        "scope": "Separate synthetic source/field example, not an actual model call or app.py output.",
+        "source_context": {
+          "source_path": "synthetic/single_response_success.py",
+          "source_snapshot": "response = {\"model\": \"qwen3:8b\", \"done_reason\": \"stop\", \"message\": {\"role\": \"assistant\", \"content\": \"Synthetic checked answer\"}}\n# This single-message provider response has no choice index field.\n",
+          "response": {
+            "model": "qwen3:8b",
+            "done_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "Synthetic checked answer"
+            }
+          },
+          "source_choice_index": null
+        },
+        "candidate_span_fields": {
+          "gen_ai.response.finish_reasons": [
+            "stop"
+          ],
+          "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"Synthetic checked answer\"}], \"finish_reason\": \"unknown\", \"choice_index\": 0}]"
+        }
+      }
+    ]
+  }
+}

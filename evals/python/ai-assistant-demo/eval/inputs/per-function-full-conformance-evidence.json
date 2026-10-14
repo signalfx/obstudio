@@ -1,0 +1,383 @@
+{
+  "kind": "full-model-conformance-source-evidence",
+  "scope": "Separate later repair snapshot and synthetic operator scenario. Original7932ce33 source and historical13-span probe in per-function-decorator-gate-evidence.json remain unchanged. Source excerpts are immutable facts for this assessment, not a current dependency installation, executed repair, live request or future version prescription.",
+  "operator_request": "Make the model instrumentation fully conformant and verify it. Preserve the SDK-first default and working agent/tool/retrieval producers, but finish the selected model repair when a documented supported public path can satisfy the required contract; an available repair left Partial is not completion.",
+  "selected_model_contract": {
+    "scope": "Networked Ollama branch of agent.call_model and its existing instrument_model_call decorator; deterministic demo branch has no remote inference or measured model usage requirement.",
+    "creation": "One model operation per actual attempted call, CLIENT for networked inference, safe request operation/provider/model and actual known request controls available to sampler/on_start; model is current during business call so nested HTTP attaches to it.",
+    "content": "Useful schema-valid redacted input/output including tool call and response identity, names, arguments and produced responses; preserve original business messages/results/exception/cancellation. SDK records and every exporter must exclude raw secrets and hidden reasoning.",
+    "no_response": "No model output/completion or response usage/finish may be fabricated when no valid model response was produced; failure/cancellation still records truthful error and ends once.",
+    "delivery": "Use the registered application-owned provider and its existing local OTLP and conditional AO export arrangement; keep all other producer/export paths. Source assessment alone does not prove runtime, resource resolution or cloud delivery."
+  },
+  "later_source_snapshot": {
+    "source_scope": "Pre-repair function/decorator excerpts from a later instrumented copy of the original demo, not the original uninstrumented7932ce33 functions.",
+    "model_function": {
+      "path": "agent.py",
+      "file_sha256": "0504b06c23775708d6dac155993391c534517b2e8923bbc55467d8fbcc015b2d",
+      "line_start": 61,
+      "line_end": 75,
+      "source_excerpt": "@instrument_model_call\nasync def call_model(messages, provider, model, scenario):\n    if scenario == \"model_failure\":\n        raise RuntimeError(\"Simulated model provider failure\")\n    if provider == \"demo\":\n        return {\"message\": offline_response(messages), \"model\": \"offline-rule-engine\", \"done_reason\": \"stop\"}\n    base_url = os.getenv(\"OLLAMA_BASE_URL\", \"http://127.0.0.1:11434\").rstrip(\"/\")\n    async with httpx.AsyncClient(timeout=120) as client:\n        response = await client.post(base_url + \"/api/chat\", json={\n            \"model\": model, \"messages\": messages, \"tools\": TOOL_DEFINITIONS,\n            \"stream\": False, \"think\": False, \"keep_alive\": \"10m\",\n            \"options\": {\"temperature\": 0.2, \"num_predict\": 512, \"num_ctx\": 8192},\n        })\n        response.raise_for_status()\n        return response.json()\n",
+      "excerpt_sha256": "fbd374e55a77554d1835ce3d248cf4a43f98e952d6bc115c0694fe1c51f136c2"
+    },
+    "model_decorator": {
+      "path": "agent_telemetry.py",
+      "file_sha256": "bfce14b804a8e81ba10b0c750f6f224878eeb42cba97f213b5dc5be324c1ada6",
+      "line_start": 169,
+      "line_end": 216,
+      "source_excerpt": "def instrument_model_call(fn):\n    @wraps(fn)\n    async def wrapper(messages, provider, model, scenario):\n        from tools import TOOL_DEFINITIONS\n        selected_model = model if provider == \"ollama\" else \"offline-rule-engine\"\n        schema = LlmSpan(name=\"chat\", input=safe_messages(messages), model=selected_model,\n                         output=Message(role=MessageRole.assistant, content=\"\"), tools=TOOL_DEFINITIONS if provider == \"ollama\" else None)\n        if provider == \"ollama\":\n            schema.temperature = 0.2\n        started = time.perf_counter()\n        error_type = None\n        with start_splunk_ao_span(schema) as span:\n            if len(messages) > _MAX_MESSAGES or any(m.content.startswith('{\"truncated\":true') for m in schema.input):\n                span.set_attribute(\"assistant.capture.truncated\", True)\n            span.set_attribute(\"gen_ai.provider.name\", provider)\n            span.set_attribute(\"gen_ai.request.stream\", False)\n            if provider == \"ollama\":\n                span.set_attribute(\"gen_ai.request.max_tokens\", 512)\n                span.set_attribute(\"assistant.request.num_ctx\", 8192)\n            try:\n                response = await fn(messages, provider, model, scenario)\n                answer = response.get(\"message\", {})\n                schema.output = Message(role=MessageRole.assistant, content=safe_json(answer) if answer.get(\"tool_calls\") else safe_text(answer.get(\"content\", \"\")))\n                response_model = response.get(\"model\")\n                if response_model:\n                    span.set_attribute(\"gen_ai.response.model\", response_model)\n                schema.finish_reason = response.get(\"done_reason\")\n                inp, out = response.get(\"prompt_eval_count\"), response.get(\"eval_count\")\n                schema.metrics = LlmMetrics(num_input_tokens=inp if isinstance(inp, int) else None,\n                                             num_output_tokens=out if isinstance(out, int) else None)\n                dims = {\"gen_ai.operation.name\": \"chat\", \"gen_ai.provider.name\": provider, \"gen_ai.request.model\": selected_model}\n                if response_model:\n                    dims[\"gen_ai.response.model\"] = response_model\n                for kind, count in ((\"input\", inp), (\"output\", out)):\n                    if isinstance(count, int):\n                        _token_usage.record(count, {**dims, \"gen_ai.token.type\": kind})\n                return response\n            except BaseException as exc:\n                _error(span, schema, exc)\n                error_type = type(exc).__name__\n                raise\n            finally:\n                dimensions = {\"gen_ai.operation.name\": \"chat\", \"gen_ai.provider.name\": provider,\n                              \"gen_ai.request.model\": selected_model}\n                if error_type:\n                    dimensions[\"error.type\"] = error_type\n                _model_duration.record(time.perf_counter() - started, dimensions)\n    return wrapper\n",
+      "excerpt_sha256": "edaf28ce6f2fb25a36a6ac62a0bb29630f0700c6e8c1564dbafed3d9223d46a4"
+    },
+    "existing_message_adapter": {
+      "path": "agent_telemetry.py",
+      "file_sha256": "bfce14b804a8e81ba10b0c750f6f224878eeb42cba97f213b5dc5be324c1ada6",
+      "line_start": 62,
+      "line_end": 77,
+      "source_excerpt": "def safe_messages(messages):\n    rows = []\n    for item in list(messages)[-_MAX_MESSAGES:]:\n        role = item.get(\"role\", \"user\") if isinstance(item, dict) else \"user\"\n        if role not in {m.value for m in MessageRole}:\n            role = \"user\"\n        content = item.get(\"content\", \"\") if isinstance(item, dict) else item\n        if isinstance(item, dict) and item.get(\"tool_calls\"):\n            content = {\"content\": content, \"tool_calls\": item[\"tool_calls\"]}\n        captured = safe_json(content) if isinstance(content, dict | list) else safe_text(content)\n        if len(captured.encode(\"utf-8\")) > _MAX_MESSAGE_BYTES:\n            captured = json.dumps({\"truncated\": True,\n                                   \"summary\": captured.encode(\"utf-8\")[:230].decode(\"utf-8\", errors=\"ignore\")},\n                                  ensure_ascii=False, separators=(\",\", \":\"))\n        rows.append(Message(role=MessageRole(role), content=captured))\n    return rows\n",
+      "excerpt_sha256": "bfb0c4cde7d4a00731e17b08d9cec1d4823540d30ffe396c3b106bf12344f7e0"
+    },
+    "preserved_sdk_operations": [
+      {
+        "function": "agent.run_agent",
+        "decorator": "instrument_agent_turn",
+        "creator": "start_splunk_ao_span(AgentSpan)"
+      },
+      {
+        "function": "tools.execute_tool",
+        "decorator": "instrument_tool_call",
+        "creator": "start_splunk_ao_span(ToolSpan)"
+      },
+      {
+        "function": "tools.retrieve_documents",
+        "decorator": "instrument_retrieval",
+        "creator": "start_splunk_ao_span(RetrieverSpan)"
+      }
+    ],
+    "provider_scope": "One application-owned global OTel provider is already registered; its local OTLP path and conditional AO processor are separate from operation creation. Live AO resource/API success is not supplied."
+  },
+  "sdk_source": {
+    "helper": {
+      "path": "splunk_ao/otel.py",
+      "file_sha256": "af33b590d48f3abddf032664d76d95c9ff9eb7993941c63e179cae6eb07ce10f",
+      "line_start": 317,
+      "line_end": 339,
+      "source_excerpt": "@contextmanager\ndef start_splunk_ao_span(splunk_ao_span: SplunkAOSpan) -> Generator[trace.Span, Any, None]:\n    tracer_provider = _TRACE_PROVIDER_CONTEXT_VAR.get()\n    if tracer_provider is None:\n        tracer_provider = trace.get_tracer_provider()\n        _TRACE_PROVIDER_CONTEXT_VAR.set(cast(TracerProvider, tracer_provider))\n    tracer = tracer_provider.get_tracer(\"splunk-ao-tracer\")\n    is_conversation_root = not trace.get_current_span().get_span_context().is_valid and isinstance(\n        splunk_ao_span, WorkflowSpan | AgentSpan\n    )\n    session_id = get_effective_session_id()\n    with tracer.start_as_current_span(splunk_ao_span.name) as span:\n        try:\n            yield span\n        finally:\n            try:\n                attributes = build_span_attributes(splunk_ao_span, session_id)\n                if is_conversation_root:\n                    attributes[GEN_AI_CONVERSATION_ROOT] = True\n                for key, value in attributes.items():\n                    span.set_attribute(key, value)\n            except Exception:\n                logger.warning(\"Failed to finalize Splunk AO span attributes\", exc_info=True)\n",
+      "excerpt_sha256": "d5f06845217eb9f1e2f1c9a315500fe6e2f39af9d89c484c3f668652a1d1d777",
+      "git_blob_sha": "d1155c141ad142f0f297b78c98a91f9fbdebf248",
+      "official_source": "https://github.com/splunk/splunk-ao-python/blob/main/src/splunk_ao/otel.py"
+    },
+    "llm_output_field": {
+      "path": "galileo_core/schemas/logging/span.py",
+      "file_sha256": "fe31a4428ec3b09310461a430d624afd1da6fd5928e26c51358d34ef8cfecd69",
+      "line_start": 95,
+      "line_end": 107,
+      "source_excerpt": "class LlmSpan(BaseSpan):\n    type: Literal[StepType.llm] = Field(default=StepType.llm, description=BaseStep.model_fields[\"type\"].description)\n    input: Sequence[Message] = Field(\n        default_factory=list, validate_default=True, description=BaseStep.model_fields[\"input\"].description\n    )\n    redacted_input: Optional[Sequence[Message]] = Field(\n        default=None, description=BaseStep.model_fields[\"redacted_input\"].description\n    )\n    output: Message = Field(\n        default_factory=lambda: Message(content=\"\", role=MessageRole.assistant),\n        validate_default=True,\n        description=BaseStep.model_fields[\"output\"].description,\n    )\n",
+      "excerpt_sha256": "29f6bff0b66562cd91d3bda913a9c9bb78944ccacbad3dbc0e3166df1bf2aefa"
+    },
+    "llm_output_conversion": {
+      "path": "galileo_core/schemas/logging/span.py",
+      "file_sha256": "fe31a4428ec3b09310461a430d624afd1da6fd5928e26c51358d34ef8cfecd69",
+      "line_start": 165,
+      "line_end": 174,
+      "source_excerpt": "    @classmethod\n    def _convert_output_to_message(cls, value: LlmSpanAllowedOutputType) -> Message:\n        \"\"\"Helper method to convert various output types into a standardized Message object.\"\"\"\n        if isinstance(value, Message):\n            return value\n        if isinstance(value, str):\n            return Message(role=MessageRole.assistant, content=value)\n        if isinstance(value, Dict):\n            return cls._convert_dict_to_message(value=value, default_role=MessageRole.assistant)\n        raise ValueError(\"LLM span output must be a Message, a string, or a dict.\")\n",
+      "excerpt_sha256": "fcb5e10689393cc2a3567e6a714445fe7084418faba5afe1e5b551d269c32311"
+    },
+    "llm_output_validator": {
+      "path": "galileo_core/schemas/logging/span.py",
+      "file_sha256": "fe31a4428ec3b09310461a430d624afd1da6fd5928e26c51358d34ef8cfecd69",
+      "line_start": 188,
+      "line_end": 191,
+      "source_excerpt": "    @field_validator(\"output\", mode=\"before\")\n    def convert_output(cls, value: LlmSpanAllowedOutputType) -> Message:\n        \"\"\"Converts various output types into a standardized Message object.\"\"\"\n        return cls._convert_output_to_message(value)\n",
+      "excerpt_sha256": "bf3b0c324e72dec041f9bc9bd1d511774fb8cc46c1918e8947a734c65ca68339"
+    },
+    "llm_attribute_conversion": {
+      "path": "splunk_ao/converter/attribute_mapping.py",
+      "file_sha256": "b778f26b14f8e54a6c36deac9f903a438a4b1b4e8bac9fd407ed2e4a49fc1953",
+      "line_start": 375,
+      "line_end": 381,
+      "source_excerpt": "def set_llm_attributes(attrs: MutableMapping[str, AttributeValue], span: LlmSpan) -> None:\n    \"\"\"Map LLM request, response, content, and metric fields.\"\"\"\n    _set_operation(attrs, StepType.llm)\n    attrs[\"gen_ai.input.messages\"] = _input_messages(span.input)\n    attrs[\"gen_ai.output.messages\"] = _output_messages(span.output, span.finish_reason)\n    _set_if_present(attrs, \"gen_ai.request.model\", span.model)\n    _set_if_present(attrs, \"gen_ai.request.temperature\", span.temperature)\n",
+      "excerpt_sha256": "966e147d57f9870fdd6421777735658bda21c84d2e6e3e0f08413d88cf16ed56"
+    },
+    "capture_note": "The earlier independent native @log source/probe in the historical packet remains available; these helper/schema excerpts do not establish that every possible future SDK API has the same limitations."
+  },
+  "public_otel_source": {
+    "url": "https://opentelemetry.io/docs/languages/python/instrumentation/",
+    "tracer_start_span_signature": {
+      "path": "opentelemetry/trace/__init__.py",
+      "file_sha256": "395e280f8dc25cb5ffa8fdea946b00d3c76423c76ee239bdccaecad151317f78",
+      "line_start": 274,
+      "line_end": 287,
+      "source_excerpt": "    @abstractmethod\n    def start_span(\n        self,\n        name: str,\n        context: Context | None = None,\n        kind: SpanKind = SpanKind.INTERNAL,\n        attributes: types.Attributes = None,\n        links: _Links = None,\n        start_time: int | None = None,\n        record_exception: bool = True,\n        set_status_on_exception: bool = True,\n    ) -> \"Span\":\n        \"\"\"Starts a span.\n\n",
+      "excerpt_sha256": "fb630202d2928e8e6d6f9d84def3dff51dd5fff49450f925263a19fb59f866e5"
+    },
+    "tracer_start_as_current_span_signature": {
+      "path": "opentelemetry/trace/__init__.py",
+      "file_sha256": "395e280f8dc25cb5ffa8fdea946b00d3c76423c76ee239bdccaecad151317f78",
+      "line_start": 328,
+      "line_end": 349,
+      "source_excerpt": "    @_agnosticcontextmanager\n    @abstractmethod\n    def start_as_current_span(\n        self,\n        name: str,\n        context: Context | None = None,\n        kind: SpanKind = SpanKind.INTERNAL,\n        attributes: types.Attributes = None,\n        links: _Links = None,\n        start_time: int | None = None,\n        record_exception: bool = True,\n        set_status_on_exception: bool = True,\n        end_on_exit: bool = True,\n    ) -> Iterator[\"Span\"]:\n        \"\"\"Context manager for creating a new span and set it\n        as the current span in this tracer's context.\n\n        Exiting the context manager will call the span's end method,\n        as well as return the current span to its previous value by\n        returning to the previous context.\n\n        Example::\n",
+      "excerpt_sha256": "deafa0a384d3e5f8ffdf6c8739d0c4cb57f84d9a9a6f4526d98706c229a2cee5"
+    },
+    "proof_scope": "Public installed Tracer interface source only. No concrete repaired decorator, sampler probe, runtime, wire or compatibility claim is supplied."
+  },
+  "message_schema_excerpts": {
+    "input": {
+      "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/main/model/gen-ai/gen-ai-input-messages.json",
+      "file_sha256": "034fcd8c87f1e013f3a5a5018503210e2bee4d2499c361823b96e906d40a50ad",
+      "definitions": {
+        "ToolCallRequestPart": {
+          "additionalProperties": true,
+          "description": "Represents a tool call requested by the model.",
+          "properties": {
+            "type": {
+              "const": "tool_call",
+              "description": "The type of the content captured in this part.",
+              "title": "Type",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Unique identifier for the tool call.",
+              "title": "Id"
+            },
+            "name": {
+              "description": "Name of the tool.",
+              "title": "Name",
+              "type": "string"
+            },
+            "arguments": {
+              "default": null,
+              "description": "Arguments for the tool call.",
+              "title": "Arguments"
+            }
+          },
+          "required": [
+            "type",
+            "name"
+          ],
+          "title": "ToolCallRequestPart",
+          "type": "object"
+        },
+        "ToolCallResponsePart": {
+          "additionalProperties": true,
+          "description": "Represents a tool call result sent to the model or a built-in tool call outcome and details.",
+          "properties": {
+            "type": {
+              "const": "tool_call_response",
+              "description": "The type of the content captured in this part.",
+              "title": "Type",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Unique tool call identifier.",
+              "title": "Id"
+            },
+            "response": {
+              "description": "Tool call response.",
+              "title": "Response"
+            }
+          },
+          "required": [
+            "type",
+            "response"
+          ],
+          "title": "ToolCallResponsePart",
+          "type": "object"
+        }
+      }
+    },
+    "output": {
+      "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/main/model/gen-ai/gen-ai-output-messages.json",
+      "file_sha256": "cb1e0296de9a5c15237f4e49af2f13e1409ffc9a671f89767da20ad986f37461",
+      "definitions": {
+        "ToolCallRequestPart": {
+          "additionalProperties": true,
+          "description": "Represents a tool call requested by the model.",
+          "properties": {
+            "type": {
+              "const": "tool_call",
+              "description": "The type of the content captured in this part.",
+              "title": "Type",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Unique identifier for the tool call.",
+              "title": "Id"
+            },
+            "name": {
+              "description": "Name of the tool.",
+              "title": "Name",
+              "type": "string"
+            },
+            "arguments": {
+              "default": null,
+              "description": "Arguments for the tool call.",
+              "title": "Arguments"
+            }
+          },
+          "required": [
+            "type",
+            "name"
+          ],
+          "title": "ToolCallRequestPart",
+          "type": "object"
+        },
+        "ToolCallResponsePart": {
+          "additionalProperties": true,
+          "description": "Represents a tool call result sent to the model or a built-in tool call outcome and details.",
+          "properties": {
+            "type": {
+              "const": "tool_call_response",
+              "description": "The type of the content captured in this part.",
+              "title": "Type",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Unique tool call identifier.",
+              "title": "Id"
+            },
+            "response": {
+              "description": "Tool call response.",
+              "title": "Response"
+            }
+          },
+          "required": [
+            "type",
+            "response"
+          ],
+          "title": "ToolCallResponsePart",
+          "type": "object"
+        }
+      }
+    }
+  },
+  "synthetic_business_values": {
+    "system_message": {
+      "role": "system",
+      "content": "You are Incident Desk. Diagnose service incidents using available tools."
+    },
+    "user_message": {
+      "role": "user",
+      "content": "Check inventory health before proposing a change."
+    },
+    "tool_request_response": {
+      "model": "local-model",
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "health-call-7",
+            "function": {
+              "name": "get_service_health",
+              "arguments": {
+                "service": "inventory",
+                "api_key": "RAW_STRICT_ARGUMENT_SENTINEL"
+              }
+            }
+          }
+        ]
+      },
+      "done_reason": "tool_calls",
+      "prompt_eval_count": 17,
+      "eval_count": 4
+    },
+    "tool_history_message": {
+      "role": "tool",
+      "tool_call_id": "health-call-7",
+      "name": "get_service_health",
+      "content": "{\"healthy\":true,\"api_key\":\"RAW_STRICT_RESULT_SENTINEL\"}"
+    },
+    "final_response": {
+      "model": "local-model",
+      "message": {
+        "role": "assistant",
+        "content": "Inventory is healthy.",
+        "thinking": "RAW_STRICT_HIDDEN_REASONING_SENTINEL"
+      },
+      "done_reason": "stop",
+      "prompt_eval_count": 31,
+      "eval_count": 8
+    },
+    "failure_scenarios": [
+      {
+        "name": "provider_failure",
+        "exception": "RuntimeError",
+        "stage": "before_valid_response"
+      },
+      {
+        "name": "http_timeout",
+        "exception": "ReadTimeout",
+        "stage": "before_valid_response"
+      },
+      {
+        "name": "http_500",
+        "exception": "HTTPStatusError",
+        "stage": "before_valid_response"
+      },
+      {
+        "name": "invalid_response",
+        "body": {
+          "message": null
+        },
+        "stage": "before_valid_response"
+      },
+      {
+        "name": "cancelled",
+        "exception": "CancelledError",
+        "stage": "before_valid_response"
+      }
+    ],
+    "demo_branch": {
+      "provider": "demo",
+      "response": {
+        "message": {
+          "role": "assistant",
+          "content": "Local deterministic response."
+        },
+        "model": "offline-rule-engine",
+        "done_reason": "stop"
+      }
+    }
+  },
+  "unavailable": [
+    "Task-time newest-compatible dependency resolution and official example revision after this snapshot",
+    "Actual repaired function implementation, sanitizer/bounded typed adapter and sampler/on_start observations",
+    "Actual application tests, native/wire records, receiver and cloud resource receipt"
+  ],
+  "assessment_boundary": "Read the supplied source and values, propose/verify the required repair and precise acceptance, and keep all unexecuted runtime/delivery claims Not run/Not proven. Do not turn source assessment into claimed application Pass."
+}

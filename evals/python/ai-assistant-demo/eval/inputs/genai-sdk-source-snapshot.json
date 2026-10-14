@@ -1,0 +1,83 @@
+{
+  "kind": "public-official-sdk-source-snapshot",
+  "scope": "Deterministic offline eval evidence. Main was resolved at captured_at_utc; this dated snapshot does not establish that main remains latest during a future run. Record snapshot provenance and mark a newer live lookup unavailable/unverified when networking is restricted. Do not execute downloaded source or claim installed runtime support from source evidence.",
+  "repository": "https://github.com/splunk/splunk-ao-python",
+  "requested_ref": "main",
+  "resolved_revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+  "commit_date": "2026-10-12T19:18:12Z",
+  "captured_at_utc": "2026-10-13T06:51:01.162988+00:00",
+  "declared_main_package_version": "0.5.0",
+  "files": [
+    {
+      "path": "examples/logging-samples/splunk-ao-logger/basic-example.py",
+      "url": "https://github.com/splunk/splunk-ao-python/blob/b5f226e947e1861b5687ee85b39474fe9d63df57/examples/logging-samples/splunk-ao-logger/basic-example.py",
+      "sha256": "1e746706227363ed88e60c6cb813e470b1381a940ca07abfe7ee6fa89a63a900",
+      "bytes": 1016,
+      "source_snapshot": "from splunk_ao import SplunkAOLogger\nfrom splunk_ao.config import SplunkAOConfig  # For displaying the log stream URL\n\n# Load environment variables from .env file\nfrom dotenv import load_dotenv\n\nload_dotenv()\n\n# Create a logger instance\nlogger = SplunkAOLogger()\n\n# Start a session\nsession_id = logger.start_session(name=\"Test session\")\n\n# Start a new trace\ntrace = logger.start_trace(\"Say this is a test\")\n\n# Add an LLM span to the trace\nlogger.add_llm_span(\n    input=\"Say this is a test\",\n    output=\"Hello, this is a test\",\n    model=\"gpt-4o\",\n    num_input_tokens=10,\n    num_output_tokens=3,\n    total_tokens=13,\n    duration_ns=1000,\n)\n\n# Conclude the trace with the final output\nlogger.conclude(output=\"Hello, this is a test\", duration_ns=1000)\n\n\n# Show link to Splunk AO log stream\nconfig = SplunkAOConfig.get()\nproject_url = f\"{config.console_url}project/{logger.project_id}\"\nlog_stream_url = f\"{project_url}/log-streams/{logger.agent_stream_id}\"\n\nprint(\"\ud83d\ude80 Splunk AO Log Stream:\")\nprint(log_stream_url)\n"
+    },
+    {
+      "path": "examples/agent/langchain-agent/main.py",
+      "url": "https://github.com/splunk/splunk-ao-python/blob/b5f226e947e1861b5687ee85b39474fe9d63df57/examples/agent/langchain-agent/main.py",
+      "sha256": "d0c33e3e731330f717ebb044d44945167296db8c6c1fe0095267a38a8f38c142",
+      "bytes": 1014,
+      "source_snapshot": "from dotenv import load_dotenv\nfrom langchain.agents import initialize_agent\nfrom langchain.agents.agent_types import AgentType\nfrom langchain_openai import ChatOpenAI\nfrom langchain.tools import tool\nfrom splunk_ao import splunk_ao_context\nfrom splunk_ao.handlers.langchain import SplunkAOCallback\n\n# Load environment variables (e.g., API keys)\nload_dotenv()\n\n\n# Define a tool for the agent to use\n@tool\ndef greet(name: str) -> str:\n    \"\"\"Say hello to someone.\"\"\"\n    return f\"Hello, {name}! \ud83d\udc4b\"\n\n\n# Use the Splunk AO context manager to specify project and log stream\nwith splunk_ao_context(project=\"langchain-docs\", agent_stream=\"my_log_stream\"):\n    agent = initialize_agent(\n        tools=[greet],\n        llm=ChatOpenAI(model=\"gpt-4\", temperature=0.7, callbacks=[SplunkAOCallback()]),\n        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,\n        verbose=True,\n    )\n\n    if __name__ == \"__main__\":\n        result = agent.invoke({\"input\": \"Say hello to Erin\"})\n        print(f\"\\nAgent Response:\\n{result}\")\n"
+    },
+    {
+      "path": "examples/agent/langchain-middleware/main.py",
+      "url": "https://github.com/splunk/splunk-ao-python/blob/b5f226e947e1861b5687ee85b39474fe9d63df57/examples/agent/langchain-middleware/main.py",
+      "sha256": "cd0995cf6cb8b8ea183e4dfc2a3f7710c4e6fc287152643219b45c0dbf70c14e",
+      "bytes": 2972,
+      "source_snapshot": "import json\nimport os\n\nfrom dotenv import load_dotenv\nfrom splunk_ao import splunk_ao_context\nfrom splunk_ao.handlers.langchain.middleware import SplunkAOMiddleware\nfrom langchain.agents.factory import create_agent\nfrom langchain.tools import tool\nfrom langchain_core.messages import HumanMessage\nfrom langchain_openai import ChatOpenAI\n\n# Load environment variables (e.g., API keys)\nload_dotenv()\n\n# Initialize the OpenAI chat model that the agent will use for reasoning\nmodel = ChatOpenAI(\n    name=\"gpt-5\",\n    api_key=os.getenv(\"OPENAI_API_KEY\"),  # type: ignore\n)\n\n\n# Define a tool that allows the agent to get weather information\n# The @tool decorator converts this function into a LangChain tool that the agent can use\n@tool\ndef get_weather(location: str, unit: str = \"fahrenheit\") -> str:\n    \"\"\"Get the current weather for a given location.\"\"\"\n    # In a real application, this would call a weather API\n    # For demonstration, we return mock data\n    return json.dumps({\"location\": location, \"temperature\": 72, \"unit\": unit})\n\n\n# Define a tool that allows the agent to get stock price information\n@tool\ndef get_stock_price(symbol: str) -> str:\n    \"\"\"Get the current stock price for a given ticker symbol.\"\"\"\n    # Mock stock prices for demonstration\n    prices = {\"AAPL\": 178.50, \"GOOGL\": 141.25, \"MSFT\": 378.90, \"AMZN\": 153.40}\n    price = prices.get(symbol.upper(), 100.00)\n    return json.dumps({\"symbol\": symbol.upper(), \"price\": price, \"currency\": \"USD\"})\n\n\ndef main() -> None:\n    # Use the Splunk AO context manager to specify project and log stream\n    # All traces created within this context will be associated with this project\n    with splunk_ao_context(project=os.getenv(\"SPLUNK_AO_PROJECT\", \"langchain-middleware\"), agent_stream=os.getenv(\"SPLUNK_AO_AGENT_STREAM\", \"agent_execution\")):\n        # Create an agent with SplunkAOMiddleware for automatic logging\n        # SplunkAOMiddleware automatically captures:\n        # - Agent lifecycle events (start/completion)\n        # - Model calls (prompts, responses, metadata)\n        # - Tool calls (function names, arguments, outputs)\n        agent = create_agent(\n            model,  # The LLM the agent uses for reasoning\n            tools=[get_weather, get_stock_price],  # Available tools\n            middleware=[SplunkAOMiddleware()],  # Add SplunkAOMiddleware for automatic logging\n        )\n\n        # Invoke the agent with a question that requires using both tools\n        # The agent will:\n        # 1. Understand it needs weather info for San Francisco\n        # 2. Call the get_weather tool\n        # 3. Understand it needs Apple's stock price\n        # 4. Call the get_stock_price tool\n        # 5. Synthesize the results into a coherent response\n        result = agent.invoke({\"messages\": [HumanMessage(content=\"What's the weather like in San Francisco and what's the current stock price of Apple?\")]})\n        print(f\"\\nAgent Response:\\n{result}\")\n\n\nif __name__ == \"__main__\":\n    main()\n"
+    },
+    {
+      "path": "src/splunk_ao/logger/logger.py",
+      "url": "https://github.com/splunk/splunk-ao-python/blob/b5f226e947e1861b5687ee85b39474fe9d63df57/src/splunk_ao/logger/logger.py",
+      "sha256": "1831b9843bbdb195bbf85bb90bb76918a3e8784b87922493daddbd25b402264c",
+      "bytes": 98488
+    },
+    {
+      "path": "pyproject.toml",
+      "url": "https://github.com/splunk/splunk-ao-python/blob/b5f226e947e1861b5687ee85b39474fe9d63df57/pyproject.toml",
+      "sha256": "6dc37ccdf42dad9ad9ffc31de0839c63e73b7cd500d27739d68004b19b32f509",
+      "bytes": 15419
+    }
+  ],
+  "logger_api_source_signatures": {
+    "start_trace": {
+      "arguments": "self, input: str | TextOrContentBlocks | dict | list[dict[str, Any]], redacted_input: str | TextOrContentBlocks | dict | list[dict[str, Any]] | None=None, name: str | None=None, duration_ns: int | None=None, created_at: datetime | None=None, metadata: dict[str, MetadataValue] | None=None, tags: list[str] | None=None, dataset_input: str | None=None, dataset_output: str | None=None, dataset_metadata: dict[str, MetadataValue] | None=None, external_id: str | None=None",
+      "returns": "LoggedTrace"
+    },
+    "add_llm_span": {
+      "arguments": "self, input: LlmSpanAllowedInputType, output: LlmSpanAllowedOutputType, model: str | None, redacted_input: LlmSpanAllowedInputType | None=None, redacted_output: LlmSpanAllowedOutputType | None=None, tools: list[dict] | None=None, name: str | None=None, created_at: datetime | None=None, duration_ns: int | None=None, metadata: dict[str, MetadataValue] | None=None, tags: list[str] | None=None, num_input_tokens: int | None=None, num_output_tokens: int | None=None, total_tokens: int | None=None, temperature: float | None=None, status_code: int | None=None, time_to_first_token_ns: int | None=None, image_input_tokens: int | None=None, audio_input_tokens: int | None=None, audio_output_tokens: int | None=None, image_output_tokens: int | None=None, step_number: int | None=None, events: list[Event] | None=None, finish_reason: str | None=None",
+      "returns": "LlmSpan"
+    },
+    "add_retriever_span": {
+      "arguments": "self, input: str, output: RetrieverSpanAllowedOutputType, redacted_input: str | None=None, redacted_output: RetrieverSpanAllowedOutputType=None, name: str | None=None, duration_ns: int | None=None, created_at: datetime | None=None, metadata: dict[str, MetadataValue] | None=None, tags: list[str] | None=None, status_code: int | None=None, step_number: int | None=None",
+      "returns": "RetrieverSpan"
+    },
+    "add_tool_span": {
+      "arguments": "self, input: str, redacted_input: str | None=None, output: str | None=None, redacted_output: str | None=None, name: str | None=None, duration_ns: int | None=None, created_at: datetime | None=None, metadata: dict[str, MetadataValue] | None=None, tags: list[str] | None=None, status_code: int | None=None, tool_call_id: str | None=None, step_number: int | None=None",
+      "returns": "ToolSpan"
+    },
+    "add_workflow_span": {
+      "arguments": "self, input: str, redacted_input: str | None=None, output: str | None=None, redacted_output: str | None=None, name: str | None=None, duration_ns: int | None=None, created_at: datetime | None=None, metadata: dict[str, MetadataValue] | None=None, tags: list[str] | None=None, step_number: int | None=None, status_code: int | None=None",
+      "returns": "LoggedWorkflowSpan"
+    },
+    "add_agent_span": {
+      "arguments": "self, input: str, redacted_input: str | None=None, output: str | None=None, redacted_output: str | None=None, name: str | None=None, duration_ns: int | None=None, created_at: datetime | None=None, metadata: dict[str, MetadataValue] | None=None, tags: list[str] | None=None, agent_type: AgentType | None=None, step_number: int | None=None, status_code: int | None=None",
+      "returns": "LoggedAgentSpan"
+    },
+    "conclude": {
+      "arguments": "self, output: IngestOutputType | None=None, redacted_output: IngestOutputType | None=None, duration_ns: int | None=None, status_code: int | None=None, conclude_all: bool=False",
+      "returns": "StepWithChildSpans | None"
+    },
+    "flush": {
+      "arguments": "self, on_error: Callable[[Exception], None] | None=None",
+      "returns": "None"
+    },
+    "terminate": {
+      "arguments": "self",
+      "returns": "None"
+    }
+  }
+}

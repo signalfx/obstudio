@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "kind": "otel-instrumentation",
+  "audit_id": "python-ai-assistant-ao-resource-verify-fixture",
+  "audit_sha256": "sha256:4586dd208f9f68ecf4090dcda26da334b3770b9d5a843b3960524792d093dfb3",
+  "selection_sha256": "sha256:fab507736de619a6af968f3249cf6914d8b3ec2ff6ce099d6809d471245355a0",
+  "meta": {
+    "service_name": "python-ai-assistant-offline-evaluation",
+    "date": "2026-10-12",
+    "result": "Partial"
+  },
+  "findings": [
+    {
+      "id": "AO-001",
+      "status": "not_proven",
+      "changes": [
+        "Proof-only snapshot of existing eval_runner.py project get-only and Agent Stream get-or-create behavior; no correction or real resource creation is claimed."
+      ],
+      "telemetry_changes": [],
+      "tests": [],
+      "evidence": [
+        "eval_runner.py",
+        "eval/inputs/ao-resource-verification-evidence.txt"
+      ],
+      "follow_up_actions": [
+        "Execute the fake SDK app-code matrix before treating this resource behavior as working."
+      ],
+      "resolved_commit": "fixture"
+    },
+    {
+      "id": "AO-002",
+      "status": "not_proven",
+      "changes": [
+        "Proof-only snapshot of existing eval_runner.py project get-only and Agent Stream get-or-create behavior; no correction or real resource creation is claimed."
+      ],
+      "telemetry_changes": [],
+      "tests": [],
+      "evidence": [
+        "eval_runner.py",
+        "eval/inputs/ao-resource-verification-evidence.txt"
+      ],
+      "follow_up_actions": [
+        "Execute the fake SDK app-code matrix before treating this resource behavior as working."
+      ],
+      "resolved_commit": "fixture"
+    }
+  ],
+  "next_steps": [
+    "Run read-only resource-path verification; real resource and fresh stream receipt proof require a separate configured target."
+  ]
+}

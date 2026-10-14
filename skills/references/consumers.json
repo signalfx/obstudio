@@ -9,7 +9,8 @@
   ],
   "genai-readiness.md": [
     "otel-audit",
-    "otel-instrument"
+    "otel-instrument",
+    "otel-verify"
   ],
   "incident-readiness.md": [
     "otel-audit",

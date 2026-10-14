@@ -111,28 +111,46 @@ Combined with route-aware span names:
 
 ## Dependencies
 
-Resolve versions against the existing `go` directive and locked OTel modules
-before editing `go.mod`. Bridge modules are independently versioned and their
-latest release can require a newer Go toolchain. Never use an unversioned
-`go get` that changes the project's `go` or `toolchain` directive. For example,
-a Go 1.22-compatible set is:
+Resolve the latest compatible published release for each module at task time
+against the existing `go`/`toolchain` directives, operator constraints, and
+locked module graph before editing `go.mod`. Bridge, SDK, and exporter modules
+are independently released; do not assume their release numbers match. Check
+each candidate's `go.mod` runtime/dependency requirements and actual public
+APIs, including the selected bridge, logger provider, batching, and exporter
+protocol. Inspect the current module metadata without an automatic toolchain
+upgrade, for example:
 
 ```bash
-go get go.opentelemetry.io/otel@v1.35.0 \
-  go.opentelemetry.io/otel/sdk@v1.35.0 \
-  go.opentelemetry.io/otel/sdk/log@v0.11.0 \
-  go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp@v0.11.0 \
-  go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp@v1.35.0 \
-  go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp@v1.35.0 \
-  go.opentelemetry.io/contrib/bridges/otelslog@v0.10.0 \
-  go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.60.0 \
-  go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc@v0.60.0
+GOTOOLCHAIN=local go list -m -versions go.opentelemetry.io/contrib/bridges/otelslog
+GOTOOLCHAIN=local go list -m -json go.opentelemetry.io/contrib/bridges/otelslog@latest
 ```
 
-Use that set only when it is compatible with the project's existing module
-graph; otherwise select a mutually compatible published set and record the
-evidence. If no official bridge release supports the selected Go toolchain and
-SDK, report `unsupported-stack` instead of upgrading the toolchain implicitly.
+Repeat for the required SDK/exporter/instrumentation modules. A latest lookup
+is discovery, not proof that the candidate supports the selected toolchain or
+module graph. If the newest candidate conflicts, resolve the newest compatible
+published candidate within the existing constraints. Substitute the separately
+resolved releases in the install command; the placeholders below are not
+literal module versions:
+
+```bash
+GOTOOLCHAIN=local go get \
+  'go.opentelemetry.io/otel@<resolved-api-release>' \
+  'go.opentelemetry.io/otel/sdk@<resolved-sdk-release>' \
+  'go.opentelemetry.io/otel/sdk/log@<resolved-log-sdk-release>' \
+  'go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp@<resolved-log-exporter-release>' \
+  'go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp@<resolved-trace-exporter-release>' \
+  'go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp@<resolved-metric-exporter-release>' \
+  'go.opentelemetry.io/contrib/bridges/otelslog@<resolved-slog-bridge-release>' \
+  'go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@<resolved-http-bridge-release>' \
+  'go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc@<resolved-grpc-bridge-release>'
+```
+
+Test resolution in an isolated copy of the module first and inspect its
+`go.mod`/`go.sum` diff. Never let `go get` silently change the project's `go` or
+`toolchain` directive. Record exact resolved releases, inspected source/metadata
+receipts, and the compatibility probe in run evidence only. If no official
+bridge release supports the selected toolchain and SDK, report
+`unsupported-stack` rather than upgrading the toolchain implicitly.
 
 The example below assumes the application uses `log/slog` (and the standard
 `log` package routed through the default slog logger) and therefore installs
@@ -145,6 +163,12 @@ bridge with another hook or exporter that sends the same record.
 ---
 
 ## SDK Initialization
+
+The normal generated profile and launch command enable `OTEL_LOGS_EXPORTER=otlp`
+and route application logs to the resolved local Studio receiver. Persist
+`none` only for an explicit user opt-out, preserving its provenance. A
+logs-only compatibility or configuration failure is a reported incomplete log
+path; it must not silently become the normal disabled-log configuration.
 
 Create a dedicated file for OTel setup that returns a shutdown function.
 Call it early in `main()`.

@@ -1,0 +1,25 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "resource-selector-failures",
+      "eval_inputs": [
+        "eval/inputs/ao-resource-audit.json",
+        "eval/inputs/ao-resource-selection.json",
+        "eval/inputs/ao-resource-instrumentation.json",
+        "eval/inputs/ao-resource-verification-evidence.txt"
+      ],
+      "task": "Perform only a supplemental read-only resource-selector and failure-matrix verification of ./service/eval_runner.py. Copy the supplied ao-resource audit/selection/instrumentation packet to matching canonical names under ./service/.observe and validate its exact bindings. Execute actual run_evaluation with standard-library fake Projects, AgentStreams, and a no-op fake logger. Inventory native SPLUNK_AO_EVAL_PROJECT/SPLUNK_AO_EVAL_STREAM versus standard SPLUNK_AO_PROJECT(_ID)/SPLUNK_AO_AGENT_STREAM(_ID) selectors; test native non-default values, standard-only values, conflicting native/standard values, and omitted values, then document the actual names/IDs passed to SDK calls and source precedence. Explicitly prove ID support or report its source-backed limitation without passing an ID as a name. Independently inject 401, 403, timeout, and 5xx at project lookup, stream lookup, and stream creation. The current source has no project-create branch: report it missing and record zero project-create attempts; do not invent that branch or test a replacement implementation. Capture per-case call counts, propagation, zero speculative writes after failed lookups, project identity preservation, and zero logger initialization on failed resource setup. Use provisioned project-compatible Python, temporary harnesses, and no dependency downloads, gateway, services, model calls, cloud calls, or application/env edits. Leave the separate logger fault/lifecycle scenario Not run or Not proven in canonical verification because this supplement does not exercise it. Produce durable supplemental evidence and truthful bound verification/reader output without claiming full packet closure or cloud receipt."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect actual eval_runner.py, the supplied canonical packet, temporary fake-boundary harnesses, and durable per-case resource/selector evidence and verification reader output.",
+    "Read ./last_message.md and ./grade.json."
+  ],
+  "rubric": [
+    "Executes actual run_evaluation with credential-free fakes and records native non-default, standard-only, conflicting native/standard, and omitted env cases. Evidence and reader explain that SPLUNK_AO_EVAL_PROJECT/SPLUNK_AO_EVAL_STREAM are explicit source-owned selectors, their defaults apply when omitted, and standard project/stream name or ID settings do not override those explicit names in this runtime. Reports the name-only ID limitation with actual call arguments and source evidence; an ID passed as a name is not ID validation.",
+    "Executes a complete per-resource/per-phase matrix: separate 401, 403, timeout, and 5xx cases for project lookup, Agent Stream lookup, and Agent Stream creation. Reports project creation as an absent source branch with zero attempts rather than inventing project-create fault success. Durable evidence identifies resource, operation, failure, ordered calls/create counts, and logger initialization per case; a project lookup auth case cannot substitute for stream lookup auth, nor a stream lookup outage for project lookup or stream-create outage.",
+    "Asserts failed lookups do not trigger creation, setup failures propagate before logger initialization, stream-create failures preserve the already resolved project and do not repeatedly create or fabricate alternate IDs, and standard/native env probing leaves the real profile and application source unchanged. Uses a temporary standard-library harness with no gateway, dependency downloads, services, provider/cloud calls, or replacement runtime resolver.",
+    "Preserves supplied audit/selection/instrumentation bindings and selected resource scope, keeps the unexecuted logger lifecycle scenario Not run/Not proven, and reports current unsupported project creation, ID plumbing, or failed isolation accurately. Fake resource checks do not prove actual cloud resources or fresh Agent Stream receipt; supplemental results never claim complete selected-packet closure."
+  ]
+}

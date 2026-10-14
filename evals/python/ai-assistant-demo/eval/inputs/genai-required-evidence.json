@@ -1,0 +1,126 @@
+{
+  "scope": "Synthetic captured-telemetry fixtures only; no claim that app.py emitted them.",
+  "missing_content": {
+    "spans": [
+      {
+        "span_id": "1111111111111111",
+        "parent_span_id": null,
+        "name": "invoke_workflow support_turn",
+        "kind": "INTERNAL",
+        "attributes": {
+          "gen_ai.operation.name": "invoke_workflow",
+          "gen_ai.workflow.name": "support_turn"
+        },
+        "ended": true,
+        "status": "UNSET"
+      },
+      {
+        "span_id": "2222222222222222",
+        "parent_span_id": "1111111111111111",
+        "name": "invoke_agent support_agent",
+        "kind": "INTERNAL",
+        "attributes": {
+          "gen_ai.operation.name": "invoke_agent",
+          "gen_ai.agent.name": "support_agent"
+        },
+        "ended": true,
+        "status": "UNSET"
+      },
+      {
+        "span_id": "3333333333333333",
+        "parent_span_id": "2222222222222222",
+        "name": "chat local-demo",
+        "kind": "INTERNAL",
+        "attributes": {
+          "gen_ai.operation.name": "chat",
+          "gen_ai.provider.name": "ollama",
+          "gen_ai.request.model": "local-demo"
+        },
+        "ended": true,
+        "status": "UNSET"
+      },
+      {
+        "span_id": "4444444444444444",
+        "parent_span_id": "2222222222222222",
+        "name": "execute_tool lookup_weather",
+        "kind": "INTERNAL",
+        "attributes": {
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "lookup_weather"
+        },
+        "ended": true,
+        "status": "UNSET"
+      },
+      {
+        "span_id": "5555555555555555",
+        "parent_span_id": "2222222222222222",
+        "name": "chat local-demo",
+        "kind": "INTERNAL",
+        "attributes": {
+          "gen_ai.operation.name": "chat",
+          "gen_ai.provider.name": "ollama",
+          "gen_ai.request.model": "local-demo"
+        },
+        "ended": true,
+        "status": "UNSET"
+      }
+    ],
+    "cloud_is_complete": true,
+    "otlp_response": {
+      "http_status": 200,
+      "partialSuccess": {
+        "rejectedSpans": 1,
+        "errorMessage": "fixture rejection"
+      }
+    }
+  },
+  "malformed_content": {
+    "span_id": "3333333333333333",
+    "attributes": {
+      "gen_ai.input.messages": "[{\"role\": \"user\", \"content\": \"Check the weather\"}]",
+      "gen_ai.output.messages": "[{\"role\": \"assistant\", \"content\": \"\"}]"
+    }
+  },
+  "source_facts": {
+    "model": "Local Ollama HTTP client, separate process, streamed request; actual temperature0.2, messages and output available.",
+    "agent": "In-process support_agent; configured separate system instructions and offered tool definitions available.",
+    "tool": "Actual call ID safe-call-1, callable type, description, arguments {location: Paris} and result {temperature:18} available.",
+    "model_history": "System-role message is embedded in Chat Completions history, not a separate provider instructions parameter.",
+    "auxiliary": "Suggestions model HTTP request timed out after main agent completion; no ended inference/error span was captured. No output was produced.",
+    "other_spans": "HTTP/ASGI helpers and authorization SELECT have no GenAI operation; backend workflow labels are not proof of AI workflows/retrieval."
+  },
+  "safe_model_content_example": {
+    "input": [
+      {
+        "role": "system",
+        "parts": [
+          {
+            "type": "text",
+            "content": "Answer briefly."
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "parts": [
+          {
+            "type": "text",
+            "content": "Check the weather in Paris."
+          }
+        ]
+      }
+    ],
+    "output": [
+      {
+        "role": "assistant",
+        "parts": [
+          {
+            "type": "text",
+            "content": "It is18degrees."
+          }
+        ]
+      }
+    ]
+  },
+  "verification_limit": "No captured actual SDK execution or current cloud delivery; structural fixtures cannot close application runtime verification."
+}

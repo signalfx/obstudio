@@ -1,0 +1,29 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "gateway-env-verification",
+      "eval_inputs": [
+        "eval/inputs/ao-gateway-context.json",
+        "eval/inputs/ao-gateway-real.env",
+        "eval/inputs/ao-gateway-example.env",
+        "eval/inputs/ao-gateway-launcher.sh",
+        "eval/inputs/ao-gateway-env-generator.py",
+        "eval/inputs/ao-resource-audit.json",
+        "eval/inputs/ao-resource-selection.json",
+        "eval/inputs/ao-resource-instrumentation.json"
+      ],
+      "task": "Perform only supplemental read-only verification of the operator-supplied AO gateway profile/launcher/generator boundary in ./service. Copy the supplied ao-resource audit/selection/instrumentation packet into matching canonical .observe names and validate its bindings; keep its selected resource findings and existing incomplete resource/lifecycle outcomes intact. The known SDK-compatible selected gateway in ao-gateway-context.json advertises API http://127.0.0.1:55300 and OTLP http://127.0.0.1:55318. Inspect the supplied real.env (blank SDK triplet), populated but unused example, generator pass-through, and source-before-exec launcher as snapshots of the context's declared .local paths. Use the actual supplied launcher with temporary AO_ENV_FILE variants and a credential-free fake SDK boundary to capture process configuration before normal SDK resource calls: blank real profile with populated unused example, missing triplet, fully populated gateway profile, generated profile with empty ambient triplet, explicit direct-cloud profile, and selected gateway unavailable. Run the supplied generator only with an output under .observe/tmp; do not modify the generator or any input/source/profile/example. Each variant must clear competing ambient SDK variables first and prove actual child-process values, not merely search source or echo a template. Keep no selected AO work read-only. Classify the original blank/profile-generator path as Not configured or Not Working; a successful temporary populated-profile path proves only local profile loading and fake SDK configuration. Make no resource/cloud/model calls, dependency downloads, service startup, endpoint discovery, or app/env repairs. Write durable supplemental per-case evidence and truthful bound verification/reader output; do not claim that temporary variants repaired deployed configuration, that existing get-only resource code now creates projects, or that local fake proof establishes transport or cloud visibility."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect all unchanged supplied gateway snapshots and canonical resource packet, temporary real-launcher/fake-SDK harnesses and per-case effective-field evidence, and bound supplemental verification plus reader output. Check that temporary populated variants are not represented as deployed repairs or cloud evidence.",
+    "Read ./last_message.md and ./grade.json."
+  ],
+  "rubric": [
+    "Reads and preserves the supplied real profile, unused example, generator, launcher, context, application source, and audit/selection/instrumentation binding. Correctly locates the original omission in blank populated-value generation, not a launcher that sources before exec, and does not silently repair source or deployed profiles during verification.",
+    "Executes the actual supplied launcher with temporary explicit profile variants and captures SDK configuration at fake client construction before normal resource calls. Tests blank real profile plus populated unused template, missing triplet, correctly populated gateway, and actual generator output with absent ambient SDK values; clears competing ambient SDK fields. Blank/template-only/generator-pass-through cases fail configuration acceptance, while loaded API_URL/CONSOLE_URL=http://127.0.0.1:55300 and API_KEY=local-gateway pass local configuration proof. Source-name/string assertions or direct os.environ seeding without the loader do not pass.",
+    "Preserves non-default API55300 separately from OTel55318 and records OTel plus APPLICATION_KEEP_SETTING preservation. Verifies explicit direct-cloud values remain valid without forcing the marker or mixing O11y realm/token and endpoint/API-key modes, and reports selected unavailable gateway as a live delivery prerequisite rather than proving cloud authentication or requiring an application cloud token. No startup discovery or unselected configuration mutation occurs.",
+    "Writes durable per-case child-process/fake SDK evidence and exact commands/results, accurately labels original deployed profile Not configured/Not Working and temporary populated-profile result as local config proof only, and keeps real SDK transport, actual resource creation, routed export, and fresh cloud Agent Stream visibility Not proven. Does not promote known existing resource/lifecycle gaps to Pass or claim supplemental configuration proof closes the full supplied packet."
+  ]
+}

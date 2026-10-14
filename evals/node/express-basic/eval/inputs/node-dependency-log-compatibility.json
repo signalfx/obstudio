@@ -1,0 +1,623 @@
+{
+  "case_id": "node-express-dependency-log-compatibility",
+  "provenance": {
+    "generated_at_utc": "2026-10-14",
+    "evidence_kind": "fictional complete dependency/runtime/API/configuration policy matrix; not a registry response, installed package, executed probe or received telemetry",
+    "scope": "Only actual_fixture_source facts below describe app.js/package.json. All selected runtime, operator lock, package releases/engines/peers/API receipts and log/config cases are independently fictional.",
+    "registry_model": "The packages map exhaustively lists candidates for this offline fictional registry. Empty dependency/peer maps mean no other dependencies/peers in this toy model. Named NodeSDK integration peers are fictional compatibility contracts for the checked graph, not claims about real published package metadata.",
+    "future_real_task": "Real installation requires current official npm metadata/resolution and installed source/API/import/behavior verification; these fictional APIs/versions cannot be installed or asserted real/latest from this case."
+  },
+  "actual_fixture_source": {
+    "files": {
+      "app.js": {
+        "sha256": "e21a658ea62dd0aba6890cb8514a37eb08d10282ae078165473371db042934b5"
+      },
+      "package.json": {
+        "sha256": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9"
+      }
+    },
+    "package_name": "node-express-basic",
+    "type": "module",
+    "dev_script": "node app.js",
+    "manifest_dependencies": {
+      "express": "^5.1.0"
+    },
+    "logging_boundary": "app.js POST /tasks calls console.warn(\"runtime request completed\") before HTTP201 response; shutdown logs console.warn(\"runtime shutdown completed\").",
+    "startup": "Express imported before app creation; new preload is a proposal, not already loaded instrumentation.",
+    "missing_source_evidence": [
+      "No OpenTelemetry dependency/provider/exporter/bridge in actual source.",
+      "No engines/runtime selection or package-lock.json committed in this actual fixture.",
+      "No actual discovered Studio receiver, installed API/source, native signal or runtime proof."
+    ]
+  },
+  "fictional_operator_context": {
+    "runtime": {
+      "node": "20.11.1",
+      "npm": "10.2.4",
+      "allowed_node": ">=20.11.0 <21.0.0",
+      "runtime_upgrade_authorized": false
+    },
+    "manifest_overlay": {
+      "@opentelemetry/api": ">=1.9.0 <1.10.0",
+      "express": "^5.1.0"
+    },
+    "existing_lock_projection": {
+      "express": {
+        "version": "5.1.0",
+        "integrity": "fictional-existing-express-integrity-must-be-preserved"
+      },
+      "@opentelemetry/api": {
+        "version": "1.9.0",
+        "integrity": "fictional-existing-api-integrity-must-be-preserved"
+      }
+    },
+    "lock_policy": "Operator freezes Express5.1.0 and OTel API1.9.0. Existing runtime/manifest/scripts/locked entries stay untouched; only chosen coherent OTel additions may be proposed. The overlay is supplied policy evidence only; do not create this lock/profile in actual service.",
+    "preflight_approved_local_receiver": {
+      "http_base": "http://127.0.0.1:55618/collector",
+      "logs_endpoint": "http://127.0.0.1:55618/collector/v1/logs",
+      "protocol": "http/protobuf",
+      "evidence": "fictional classified-local preflight receipt; no running Studio/discovery or network receipt"
+    },
+    "application_log_owner": "Existing console sink only; no Pino/Winston/manual log transport in this source or overlay."
+  },
+  "packages": {
+    "@opentelemetry/api": [
+      {
+        "version": "1.9.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {},
+        "dependencies": {},
+        "inspected_public_api": {
+          "ownership": "operator-frozen identity; no second API installation"
+        }
+      },
+      {
+        "version": "1.9.1",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {},
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "1.10.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {},
+        "dependencies": {},
+        "inspected_public_api": {}
+      }
+    ],
+    "@opentelemetry/sdk-node": [
+      {
+        "version": "0.89.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0",
+          "@opentelemetry/exporter-trace-otlp-http": ">=0.89.0 <0.90.0",
+          "@opentelemetry/exporter-metrics-otlp-http": ">=0.89.0 <0.90.0",
+          "@opentelemetry/exporter-logs-otlp-proto": ">=0.89.0 <0.90.0",
+          "@opentelemetry/sdk-metrics": ">=1.1.0 <1.2.0",
+          "@opentelemetry/sdk-logs": ">=1.1.0 <1.2.0",
+          "@opentelemetry/instrumentation-http": ">=0.89.0 <0.90.0",
+          "@opentelemetry/resources": ">=1.1.0 <1.2.0",
+          "@opentelemetry/semantic-conventions": ">=1.1.0 <1.2.0",
+          "@opentelemetry/instrumentation-express": ">=0.89.0 <0.90.0",
+          "@opentelemetry/instrumentation-console": ">=0.4.0 <0.5.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "NodeSDK": "older compatible coherent graph; APIs not needed for selected plan"
+        }
+      },
+      {
+        "version": "0.90.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0",
+          "@opentelemetry/exporter-trace-otlp-http": ">=0.90.0 <0.91.0",
+          "@opentelemetry/exporter-metrics-otlp-http": ">=0.90.0 <0.91.0",
+          "@opentelemetry/exporter-logs-otlp-proto": ">=0.90.0 <0.91.0",
+          "@opentelemetry/sdk-metrics": ">=1.2.0 <1.3.0",
+          "@opentelemetry/sdk-logs": ">=1.2.0 <1.3.0",
+          "@opentelemetry/instrumentation-http": ">=0.90.0 <0.91.0",
+          "@opentelemetry/resources": ">=1.2.0 <1.3.0",
+          "@opentelemetry/semantic-conventions": ">=1.2.0 <1.3.0",
+          "@opentelemetry/instrumentation-express": ">=0.90.0 <0.91.0",
+          "@opentelemetry/instrumentation-console": ">=0.5.0 <0.6.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "NodeSDK": "constructor({traceExporter,metricReader,resource,instrumentations,logRecordProcessors?}); start() synchronous; omitted logRecordProcessors with absent OTEL_LOGS_EXPORTER auto-creates OTLP logs; explicit [] changes provider ownership; pre-start log options constructor may throw; retry start after partial registration unsupported; shutdown() Promise flushes all owned signals"
+        }
+      },
+      {
+        "version": "0.91.0",
+        "engines": {
+          "node": ">=22.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0",
+          "@opentelemetry/exporter-trace-otlp-http": ">=0.91.0 <0.92.0",
+          "@opentelemetry/exporter-metrics-otlp-http": ">=0.91.0 <0.92.0",
+          "@opentelemetry/exporter-logs-otlp-proto": ">=0.91.0 <0.92.0",
+          "@opentelemetry/sdk-metrics": ">=1.3.0 <1.4.0",
+          "@opentelemetry/sdk-logs": ">=1.3.0 <1.4.0",
+          "@opentelemetry/instrumentation-http": ">=0.91.0 <0.92.0",
+          "@opentelemetry/resources": ">=1.3.0 <1.4.0",
+          "@opentelemetry/semantic-conventions": ">=1.3.0 <1.4.0",
+          "@opentelemetry/instrumentation-express": ">=0.91.0 <0.92.0",
+          "@opentelemetry/instrumentation-console": ">=0.6.0 <0.7.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "0.92.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.10.0 <2.0.0",
+          "@opentelemetry/exporter-trace-otlp-http": ">=0.91.0 <0.92.0",
+          "@opentelemetry/exporter-metrics-otlp-http": ">=0.91.0 <0.92.0",
+          "@opentelemetry/exporter-logs-otlp-proto": ">=0.91.0 <0.92.0",
+          "@opentelemetry/sdk-metrics": ">=1.3.0 <1.4.0",
+          "@opentelemetry/sdk-logs": ">=1.3.0 <1.4.0",
+          "@opentelemetry/instrumentation-http": ">=0.91.0 <0.92.0",
+          "@opentelemetry/resources": ">=1.3.0 <1.4.0",
+          "@opentelemetry/semantic-conventions": ">=1.3.0 <1.4.0",
+          "@opentelemetry/instrumentation-express": ">=0.91.0 <0.92.0",
+          "@opentelemetry/instrumentation-console": ">=0.6.0 <0.7.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      }
+    ],
+    "@opentelemetry/exporter-trace-otlp-http": [
+      {
+        "version": "0.89.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "0.90.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "OTLPTraceExporter": "constructor({url?}); HTTP/protobuf trace signal; signal-specific endpoint/header ownership"
+        }
+      },
+      {
+        "version": "0.91.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      }
+    ],
+    "@opentelemetry/exporter-metrics-otlp-http": [
+      {
+        "version": "0.89.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "0.90.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "OTLPMetricExporter": "constructor({url?}); HTTP/protobuf metric signal"
+        }
+      },
+      {
+        "version": "0.91.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      }
+    ],
+    "@opentelemetry/exporter-logs-otlp-proto": [
+      {
+        "version": "0.89.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "0.90.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "OTLPLogExporter": "constructor({url}); HTTP/protobuf native LogRecords; reads generic and logs-specific env headers even with explicit URL"
+        }
+      },
+      {
+        "version": "0.91.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      }
+    ],
+    "@opentelemetry/sdk-metrics": [
+      {
+        "version": "1.1.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "1.2.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "PeriodicExportingMetricReader": "constructor({exporter,exportIntervalMillis,exportTimeoutMillis}); timeout <= interval"
+        }
+      },
+      {
+        "version": "1.3.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      }
+    ],
+    "@opentelemetry/sdk-logs": [
+      {
+        "version": "1.1.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "1.2.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "BatchLogRecordProcessor": "constructor(exporter); selected candidate does NOT accept an options object {exporter}; shutdown flushes owned log batches"
+        }
+      },
+      {
+        "version": "1.3.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "BatchLogRecordProcessor": "constructor({exporter}); this candidate belongs to newer incompatible NodeSDK graph"
+        }
+      }
+    ],
+    "@opentelemetry/instrumentation-http": [
+      {
+        "version": "0.89.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "0.90.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "HttpInstrumentation": "supports request/server instrumentation before Express import"
+        }
+      },
+      {
+        "version": "0.91.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      }
+    ],
+    "@opentelemetry/resources": [
+      {
+        "version": "1.1.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "1.2.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "resourceFromAttributes": "supported; shares service.name across signal providers"
+        }
+      },
+      {
+        "version": "1.3.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      }
+    ],
+    "@opentelemetry/semantic-conventions": [
+      {
+        "version": "1.1.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "1.2.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "role": "required peer in this fictional checked graph; no requirement to copy versioned schema constants into application attrs"
+        }
+      },
+      {
+        "version": "1.3.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      }
+    ],
+    "@opentelemetry/instrumentation-express": [
+      {
+        "version": "0.89.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "0.90.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "ExpressInstrumentation": "supports locked Express5.1.0; requires HTTP bridge registration before Express"
+        }
+      },
+      {
+        "version": "0.91.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      }
+    ],
+    "@opentelemetry/instrumentation-console": [
+      {
+        "version": "0.4.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "0.5.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {
+          "ConsoleInstrumentation": "supports console LogRecord sending plus active trace/span context and provider resource; preserves original console sink; no other bridge/transport owns console in this case"
+        }
+      },
+      {
+        "version": "0.6.0",
+        "engines": {
+          "node": ">=22.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.9.0 <1.10.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      },
+      {
+        "version": "0.7.0",
+        "engines": {
+          "node": ">=20.0.0 <21.0.0"
+        },
+        "peerDependencies": {
+          "@opentelemetry/api": ">=1.10.0 <2.0.0"
+        },
+        "dependencies": {},
+        "inspected_public_api": {}
+      }
+    ]
+  },
+  "preflight_to_apply_race": {
+    "after_checked_selection": "Fictional registry latest tag changes to sdk-node0.99.0, whose engines require Node>=24.0.0 and API>=2.0.0.",
+    "required_response": "Retain exactly the previously checked candidate specs/lock graph; do not rerun mutable latest at application, overwrite locked entries, upgrade Node/API or claim installation. A real metadata/source change would need a new explicit compatible preflight, never silent tag substitution."
+  },
+  "log_policy_cases": [
+    {
+      "id": "normal-default",
+      "provided_env": {},
+      "user_optout": false,
+      "required_plan": "Persist OTEL_LOGS_EXPORTER=otlp in proposed normal profile; all three native signals to approved local receiver. Exactly one supported ConsoleInstrumentation and one selected-API BatchLogRecordProcessor(exporter), with resource/correlation and original sink preserved. No runtime export claimed."
+    },
+    {
+      "id": "explicit-optout",
+      "provided_env": {
+        "OTEL_LOGS_EXPORTER": "none"
+      },
+      "user_optout": true,
+      "required_plan": "Intentional log-export N/A for this separate case; omit local bridge and logRecordProcessors option entirely, not []; preserve console and trace/metric setup. This is not actual app/operator state or the default profile."
+    },
+    {
+      "id": "generic-header-conflict",
+      "provided_env": {
+        "OTEL_LOGS_EXPORTER": "otlp",
+        "OTEL_EXPORTER_OTLP_HEADERS": "fictional-nonempty-credential-marker"
+      },
+      "required_plan": "Skip only added local logs before exporter construction; value-free diagnostic, preserve source console/traces/metrics/environment, normal log profile still intended. Require future separate negative proof; no cloud headers copied to local logs."
+    },
+    {
+      "id": "signal-header-conflict",
+      "provided_env": {
+        "OTEL_LOGS_EXPORTER": "otlp",
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "fictional-nonempty-credential-marker"
+      },
+      "required_plan": "Independent logs-header fault with same isolation/ownership/privacy obligations as generic-header case."
+    },
+    {
+      "id": "late-constructor-failure",
+      "provided_env": {
+        "OTEL_LOGS_EXPORTER": "otlp"
+      },
+      "injected_failure": "Selected optional log-enabled NodeSDK constructor throws before start; base constructor succeeds. This is a hypothetical future test, not an executed observation.",
+      "required_plan": "Guard the pre-start log-enabled SDK constructor, then build base trace/metric SDK. Because selected omitted-log-options API auto-exports logs, temporarily suppress only this skipped path at synchronous start and restore exact original env in finally. No production/profile none default or retry after partial global start; logs remain incomplete."
+    }
+  ],
+  "future_real_acceptance": {
+    "source_request": "Actual app POST /tasks warning must produce exactly one stored native OTLP LogRecord with body runtime request completed, WARN severity, service.name node-express-basic, nonzero trace/span IDs matching that actual request span, while original console still outputs once.",
+    "signal_receipts": "Require independent actual Studio trace, metric and LogRecord receipt, full approved route/protocol and partial-success acceptance; a plan, stdout or SDK configuration is not packet/receiver proof.",
+    "lifecycle": "Proposed pre-import ESM setup must keep Express routes/entrypoint intact. Integrate with actual existing server.close shutdown ownership: stop intake, bounded drain, final logs then once-only SDK flush; do not add competing signal handlers, lose final warning or claim the current unmodified app already flushes SDK.",
+    "not_executed": [
+      "No npm metadata fetch/install/resolver or actual API probe",
+      "No actual profile or package/lock/app changes",
+      "No app/model/receiver/UI/cloud run"
+    ]
+  }
+}

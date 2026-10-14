@@ -14,12 +14,259 @@ model/prompt/tool-schema compatibility, evaluation quality regressions, unsafe
 content capture, memory/context degradation, cost spikes, and AI-path capacity
 or state pressure.
 
-Use OpenTelemetry GenAI semantic conventions first. Add custom attributes only
+Use OpenTelemetry GenAI semantic conventions for the emitted signals. Add custom attributes only
 for service-owned workflow context when no OTel convention exists. Keep this
 reference scoped to AI pathways. Generic app surfaces such as streams, jobs,
 synthetic/canary checks, startup/deployment compatibility, input complexity,
 capacity, and release context belong here only when source evidence shows they
 exercise, carry, or block an AI workflow.
+
+## GenAI Instrumentation Selection
+
+Choose the span producer from the application's actual runtime, separately from
+its export destination:
+
+| Runtime evidence | Default instrumentation path |
+|---|---|
+| Existing OTel GenAI library, Galileo integration, framework bridge, or application GenAI spans | Preserve the current producer and provider; fill only uncovered operations, attributes, content, context, metrics, and lifecycle through supported hooks. Do not migrate to Splunk AO merely to export there. |
+| Existing Splunk AO span creation | Preserve it and fill its version-specific gaps without duplicate operation spans. |
+| Fresh agent application without GenAI span creation | Use Splunk AO instrumentation by default: preserve matching supported framework/provider ownership and use SDK `@log` for supported uncovered function boundaries. If its exact contract cannot meet requirements, assess the supported SDK creator and then the source-proven per-operation public OTel exception below; document the chosen function decorator and creator. A generic OTel provider, HTTP spans, or an evaluation-only SDK import does not make the live agent instrumented. |
+
+For a fresh Python agent, read the **Fresh Agent SDK Instrumentation** section
+of `splunk-agent-observability.md` before authoring the audit finding or code.
+The fresh-app default does not require a separate SDK-choice question. Record
+the intended SDK API and installed-version support in the selected finding.
+`add_splunk_ao_span_processor` is export-only and cannot satisfy this choice.
+For that fresh default, assess intended AO project/Agent Stream/routing through
+the shared AO reference even when no SDK import exists. Keep product findings
+separate from ordinary GenAI findings and respect selected adoption scope.
+If a checked SDK path cannot meet an operation's required semantics, apply the
+per-operation compatibility exception in `splunk-agent-observability.md`: a
+named application-owned function decorator may use a supported public OTel
+creator for that exact boundary while preserving the provider, selected AO
+export and supported SDK creators elsewhere. Label its producer as application
+OTel. This requires concrete SDK source/probe limits and a complete safe field,
+context and lifecycle mapping; it does not authorize a whole-app rewrite.
+If no supported repair exists, name the exact prerequisite and keep the surface
+partial. Explicit user choices override the default. Existing valid producers
+remain the default for already instrumented operations.
+
+For every new or repaired function hook, assess the decorator pattern first.
+Use SDK `@log` wherever the chosen release supports the actual function and
+required safe content, semantics, lifecycle and export path. This includes
+ordinary sync/async functions, methods, serial nested calls and bounded plain
+sync/async iteration; async generators alone are not a reason to avoid it.
+Do not decorate an operation already captured by a framework/provider wrapper.
+When SDK `@log` has a concrete incompatible contract, keep the function decorator
+pattern through an application-owned decorator invoking the documented chosen
+creator for that same operation. Manual scopes remain appropriate for genuine
+non-function or externally managed lifetimes. Preserve existing valid producers
+and explicit supported choices; do not rewrite working instrumentation merely
+to change its syntax.
+
+Resolve the latest compatible published library release set at task time from
+official metadata and the project resolver, checking runtime, peers, APIs and
+existing constraints together. This applies to every library, including SDKs,
+schema packages, framework integrations, bridges and exporters. Fixed release
+numbers and historical version thresholds do not belong in skill recipes.
+Record exact chosen versions, source/date and compatibility probes in each run
+report; an existing constrained compatible set may be retained with its reason.
+
+## Required GenAI Coverage Profile
+
+For GenAI audit, instrumentation, and verification, require applicable,
+observable semantic attributes and content as acceptance criteria. Consult the
+current official OTel conventions and schemas, plus
+[Galileo's integration recommendations](https://docs.galileo.ai/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations)
+and
+[Splunk AO's integration recommendations](https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations).
+OTel's published `Opt-In` level remains accurate provenance; it is not a reason
+to omit an applicable field or pass metadata-only instrumentation under this
+profile. Record `official level -> vendor requirement -> skill acceptance ->
+applicability/source value -> emitted -> proven -> remaining` per operation.
+
+Require actual, bounded, redacted input/output messages for workflow, agent,
+and model operations; actual tool arguments/results and the vendor's tool
+message mappings or supported OpenInference equivalents; retrieval query and
+document output when the application really retrieves AI context. Require
+effective system instructions, actual offered tool definitions, real prompt
+variables, request parameters, response identity/finish reasons, usage,
+streaming flags/timing, and opaque conversation/tool-call correlation where
+applicable and observable. Do not invent unavailable values, provider defaults,
+identifiers, prompt variables, token counts, or successful output for failures.
+Model system-role messages embedded in chat history belong in input messages;
+separate system instructions apply only when the API supplies them separately.
+
+The vendor agent tables additionally require provider identity, and their tool
+tables call for message mappings alongside arguments/results. Preserve these
+as vendor compatibility checks when the latest OTel operation table differs.
+For each applicable `execute_tool` span, reconcile the actual call arguments
+and terminal result with this vendor content contract:
+
+| Tool value | GenAI mapping on the same tool span | Supported OpenInference alternative |
+|---|---|---|
+| Redacted actual arguments | `gen_ai.tool.call.arguments` and `gen_ai.input.messages` | `input.value` |
+| Redacted actual result, when produced | `gen_ai.tool.call.result` and `gen_ai.output.messages` | `output.value` |
+
+Arguments/results alone leave the vendor message mapping missing. Messages on
+an agent, model, parent, sibling, event on another span, or duplicate wrapper
+cannot close a tool's fields. Use current typed-parts schemas and a supported
+serialization of those same sanitized arguments/results, not unrelated chat
+history or placeholders. Preserve source types/structure where supported,
+actual safe call identity, configured limits and truthful truncation/gap reasons.
+Track whether a result was produced separately from its value: a successful
+`null`, `false`, zero or empty collection is still an actual result and must
+retain its truthful mapping. An error/cancel/timeout with no produced result
+must record error status/type and an explicit output applicability reason;
+never synthesize successful output.
+
+Audit must put each missing applicable field in the owning canonical finding's
+`required_fix`, per-tool `expected_telemetry`, acceptance and verification
+scenario, then check those fields before handoff. Instrumentation must inspect
+what the chosen SDK or preserved producer actually emits and fill missing
+mappings through supported same-span application hooks from pre-SDK sanitized
+values. SDK installation, creator method names or exporter setup prove no field.
+Verification must match by the tool span's trace/span ID, validate each mapping
+against the observed sanitized arguments/result and current schema, and report
+missing, malformed or mismatched fields individually. Restricted capture of an
+otherwise available value remains partial with a reason, even when its safety test passes. Source-unavailable output on a failed
+operation is N/A only with the corresponding lifecycle and no-result evidence.
+
+Use current OTel typed-parts schemas rather than copying older vendor
+role/content examples. Do not convert HTTP, database authorization, ASGI, or
+setup helpers into GenAI workflows/retrievers because a backend labels them
+`workflow`. Unsupported SDK mapping is an enrichment gap, not an automatic pass.
+An explicit user-selected restricted content scope stays restricted, but missing
+required fields remain partial against this profile; do not export forbidden
+content or declare full coverage. Do not let an old blanket no-content/no-ID
+audit constraint silently override a newer user requirement; refresh and bind
+the selected scope before implementation.
+
+## Required GenAI Report Evidence
+
+Every GenAI audit, implementation plan/report and verification review must
+include the following three compact tables. This also applies to supplemental
+fixture reviews and plan-only tasks. Populate them from the actual source and
+captured evidence; general promises or citations do not replace the rows.
+In canonical flow, keep the assessments in canonical evidence and the relevant
+finding/acceptance fields; supplemental Markdown/JSON must agree with them.
+
+**Operation and producer receipt**
+
+| Operation and actual source boundary | Exact creator or preserved hook | Kind and parent | Version and example/source revision | Source-to-safe content hook | Proof and remaining gap |
+|---|---|---|---|---|---|
+
+Give each real agent, model, tool, applicable workflow/retrieval and auxiliary
+model call its own row. Join the named API to the boundary in that row. Record
+the concrete official example filename/path as well as its revision/date and
+package version; a repository URL or revision alone is not example evidence.
+Distinguish an API inspected in SDK source from a method actually exercised by
+that example: the logger basic example illustrates trace/LLM/conclude, while
+`flush`, `terminate` and unexercised creators need their own signature/source
+receipt. For a custom fresh Python agent, compare the named-method table,
+**Public Schema Span Helpers** and **Same SDK Span Content Enrichment** in
+`splunk-agent-observability.md`: e.g. supported `add_agent_span` at the actual
+agent, `add_llm_span` at each model request and `add_tool_span` at each tool,
+or the documented schema helper at a boundary it supports. Identify the
+selected SDK creator, proposed or installed version, and exact example revision;
+a proposed version checked against latest examples is not proof of installed
+or emitted support.
+For a native field gap, name the safe SDK carrier and the exact same-span
+application hook, selected sink/exporter registration and version proof. A
+generic future hook promise is Partial. The checked Python exporter adapter
+uses `SpanExporter.export` and a `ReadableSpan` view with original context and
+parent; it does not create operation spans. Source-only plans may propose this
+concrete path while keeping registration, installed support and emissions
+unproven. Audit binds that path or the precise blocker in the owning finding;
+verification checks actual identity/value/safety evidence, not the API name.
+Before declaring a logger hook prerequisite external, assess the shared AO
+reference's Public Schema Span Helpers against each real operation. A supported
+yielded-span setter is an actionable same-span path; keep its finalizer, provider
+binding and exact unsupported fields/kinds explicit. A logger-only limitation
+must not block independent operations that another supported SDK creator covers.
+Record INTERNAL for an in-process agent/tool, CLIENT for a separate-process
+model, and their actual parents. A `start_trace`/`conclude` envelope is not an
+emitted workflow; `add_workflow_span` applies only to a real composed workflow.
+For an existing producer, name the original creator and same-span enrichment
+hook rather than selecting a new SDK. Add explicit GenAI **N/A** rows for
+ordinary HTTP/ASGI/auth/SQL/setup helpers present in source or supplied facts.
+
+**Field acceptance and provenance**
+
+| Operation and field | Official OTel level | Galileo/Splunk AO expectation | Required profile acceptance | Actual source value or absence | Capture API/schema/redaction | Emitted/proven or remaining |
+|---|---|---|---|---|---|---|
+
+Use separate rows for input messages, output messages, separate instructions,
+offered tool definitions, arguments/results and vendor tool input/output
+message wrappers. Include provider/model identity, known request parameters,
+response/finish/usage/stream fields and supplied opaque correlation IDs.
+Write the published level explicitly: e.g. messages, instructions and tool
+definitions are OTel **Opt-In**, but applicable safe content is **required by
+this profile**. Record vendor INTERNAL-agent provider and tool-message
+requirements separately. Do not relabel OTel's standard or omit provenance
+from the canonical audit. Use current typed-parts schemas; unavailable values
+and failed successful outputs are absent with a reason, not invented. Preserve
+safe source-provided conversation/tool-call IDs as span-only correlation when
+the bound capture contract permits them; do not add an unnecessary approval
+question or silently drop them. Keep IDs out of metrics and span names.
+For each tool execution, explicitly assess `gen_ai.agent.name` from the active
+owning agent, `gen_ai.conversation.id` from the available safe conversation
+context, and `gen_ai.tool.description` from the actual tool definition. Parent
+attributes do not supply these fields on the tool's own span. For agent
+invocations, apply the inspected model applicability footnote: populate
+`gen_ai.request.model` for a known fixed single-model agent, not an agent that
+permits multiple models or dynamic selection. Keep the actual requested model
+on its inference span; a service-owned selected-model field may describe
+dynamic agent context. An unused demo-mode argument is not model evidence.
+Assess a configured `gen_ai.agent.description` when available; do not invent
+agent metadata by paraphrasing a system prompt or README.
+Bind applicable missing fields to the owning finding and span assertions, with
+source-backed reasons where unavailable. Preserve the inspected official
+conditional/recommended levels separately from this profile's required known
+field acceptance; do not invent an agent ID, model or conversation.
+
+Specify concrete capture settings and where they are applied before every
+exporter. Preserve an existing stricter policy; otherwise propose/implement
+`redacted`, at most 16 messages, 64 parts per message and 8192 UTF-8 bytes per content
+attribute. Redact credentials, tokens, email and identified sensitive source
+fields before the SDK receives them. Bound text parts before serialization so
+JSON stays valid; preserve useful safe content and mark truncation with an
+application attribute. If structured data cannot fit safely, record that gap
+rather than export malformed JSON or a placeholder. These are adjustable
+application limits, not OTel-prescribed limits. Plan-only reports must give
+numeric proposed settings and hooks; fixture-only reviews mark configuration
+unproven and give the precise acceptance test. Require a sentinel-absence test
+over native records, attributes/events and wire payload as applicable.
+
+**Lifecycle and delivery evidence**
+
+| Operation/scenario | Success/error/timeout/cancel terminal behavior | Parent/context and duplicate rule | Flush/close/terminate evidence | Captured proof or missing test |
+|---|---|---|---|---|
+
+Assess main and independent auxiliary calls separately, even when the main
+turn or cloud UI says complete. Include explicit timeout, cancellation and
+process-teardown rows; use source-backed N/A where an operation does not exist.
+If a supplied auxiliary request timed out without an ended inference/error
+span, report that exact missing lifecycle rather than passing ended main
+spans. Assess context cleanup and exactly one node per actual operation.
+Captured fixtures cannot prove application cleanup/SDK execution; absent
+teardown/cancel evidence remains Not proven with a concrete test. Assess OTLP
+partial-success rejection separately from HTTP200 or cloud completeness.
+Preserve finish-reason positions for known expected generations. If a reason
+was expected but absent after failure, cancellation or abnormal stream end,
+record `error` for that known position while keeping unproduced output absent.
+Do not invent generation slots when their count is unknown.
+Assess creation-time sampling context separately from completed-span content.
+When the inspected conventions recommend operation/provider/model/server or
+other fields at creation, inspect the selected creator's arguments and the
+actual sampler/`on_start` inputs. Later setters or exporter views cannot change
+an earlier sampling decision. Record SDK limits and any affected configured
+sampling behavior without inventing a new API or equating wire enrichment with
+creation-time support; an always-on policy does not demonstrate attribute-based
+sampling compatibility.
+Before finalizing, reconcile all source operations/known fields against these
+tables and correct missing rows. Do not claim full coverage from a score or
+summary when any applicable requirement remains missing.
 
 ## Splunk Observability Studio GenAI Trace UI Contract
 
@@ -36,7 +283,7 @@ span-level attributes when the service can observe the value.
 | LLM/chat card | Span `chat {model}` or another GenAI inference operation with `gen_ai.operation.name=chat`, `gen_ai.provider.name`, `gen_ai.request.model`, and `gen_ai.response.model` when known |
 | Tool card | Span `execute_tool {tool}` with `gen_ai.operation.name=execute_tool` and stable `gen_ai.tool.name` |
 | Retrieval card | Span `retrieval {source}` with `gen_ai.operation.name=retrieval` and a low-cardinality data source attribute |
-| Tokens summary | `gen_ai.client.token.usage` metric with `gen_ai.token.type`; also set `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, and `gen_ai.usage.total_tokens` on the chat span or workflow span when available |
+| Tokens summary | `gen_ai.client.token.usage` metric with `gen_ai.token.type`; also set available `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` on the owning GenAI span; a derived total uses an application/vendor-owned attribute |
 | LLM/tool call counts | Service-owned per-workflow attributes or metrics such as `assistant.llm.calls` and `assistant.tool.calls`, plus child spans when possible |
 | Error badges | Span status ERROR plus low-cardinality `error.type` |
 | Streaming timeout explanation | First event/chunk latency, stream close reason family, timeout/cancel/disconnect events, and workflow ERROR with `error.type=first_event_timeout` or another stable class |
@@ -47,11 +294,18 @@ acceptance criteria in addition to detector metrics.
 
 Do not put selected-trace aggregate GenAI usage on a generic HTTP root span or
 generic server span. Attributes such as `gen_ai.usage.input_tokens`,
-`gen_ai.usage.output_tokens`, `gen_ai.usage.total_tokens`,
+`gen_ai.usage.output_tokens`, an application/vendor-owned derived total,
 `assistant.llm.calls`, and `assistant.tool.calls` belong on the workflow span or
 the most specific owning GenAI span. A root HTTP span may wrap the whole request,
 but it should not become a GenAI flow card unless it is explicitly the workflow
 span with `gen_ai.operation.name=invoke_workflow`.
+
+Check proposed attributes against the current official registry. Do not add
+`gen_ai.usage.total_tokens` as an OTel semantic attribute when it is absent from
+that registry. If a total is useful, use an application/vendor-owned field such
+as `assistant.usage.total_tokens`, identify its calculation and distinguish
+actual provider counts from estimates. Preserve and label a proven existing
+legacy alias required by a consumer; do not require that alias on fresh spans.
 
 Workflow names must preserve the application's stable business workflow
 identity. Prefer existing constants, handler names, telemetry event names,
@@ -139,8 +393,9 @@ Required proof for each app-owned model-call surface:
   plus `gen_ai.provider.name`, `gen_ai.request.model` when the requested model
   is known, and `gen_ai.response.model` when the response model is known.
 - Provider usage is recorded on the inference span when available:
-  `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, and
-  `gen_ai.usage.total_tokens`; aggregate to the workflow span only as a
+  `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens`; any derived
+  total follows the application/vendor namespace rule above. Aggregate to
+  the owning agent/workflow span only as a
   summary, not as a replacement for the inference span.
 - Errors, cancellations, provider timeouts, rate limits, and stream-close
   failures set span error status, record the exception when available, and set
@@ -182,8 +437,9 @@ mutate the carrier in place. Treat a carrier as immutable/frozen when source
 evidence shows frozen or readonly declarations, record/value types, no mutation
 API, framework request immutability patterns, or existing code constructs new
 copies instead of mutating. Use an idiomatic copy/replacement API such as Python
-`dataclasses.replace`, `attrs.evolve`, pydantic `model_copy(update=...)` or v1
-`copy(update=...)`; Java records, builders, or copy constructors; TypeScript
+`dataclasses.replace`, `attrs.evolve`, pydantic `model_copy(update=...)` or
+`copy(update=...)` as supported by the installed carrier API; Java records,
+builders, or copy constructors; TypeScript
 object spread, explicit `Readonly<T>` replacements, or `structuredClone` only
 for plain-data carriers and never for live OTel `Context` or `Span` handles; Go
 value copies with explicit field replacement; or the framework's request
@@ -247,6 +503,12 @@ Record provenance in audit and instrument output:
 Build a semconv closure matrix before declaring coverage:
 `surface -> official operation -> required attrs -> recommended attrs ->
 metrics/events -> implemented -> proven existing -> remaining`.
+
+Apply the Required GenAI Coverage Profile and record both vendor sources and
+the matching SDK example/API provenance. Classify each detected runtime using
+GenAI Instrumentation Selection before choosing its canonical producer. An
+SDK package, exporter success, complete trace flag, or span count is not proof
+that required fields/content are emitted correctly.
 
 Do not claim current semconv coverage unless every detected GenAI surface is
 implemented, proven existing, or explicitly marked unavailable with owner and
@@ -458,28 +720,37 @@ Metrics-only coverage does not satisfy selected-trace eval visibility.
 
 ## Content Capture Governance Contract
 
-Semconv supports prompt, response, system instruction, retrieval document, and
-tool definition/argument content through attributes such as
+Semconv publishes prompt, response, system instruction, retrieval document, and
+tool definition/argument content as Opt-In attributes such as
 `gen_ai.input.messages`, `gen_ai.output.messages`, `gen_ai.system_instructions`,
 `gen_ai.retrieval.documents`, `gen_ai.retrieval.query.text`,
 `gen_ai.tool.definitions`, `gen_ai.tool.call.arguments`, and
-`gen_ai.tool.call.result`. These fields are sensitive.
+`gen_ai.tool.call.result`. These fields are
+sensitive.
 
 For each model, retrieval, or tool surface that owns one of these values, audit
 whether the corresponding attribute is emitted. Include missing applicable
 attributes in that surface's existing `required_signals`, finding
 `expected_telemetry`, and verification scenario; do not create a separate
 finding for every attribute or hide them as governance-only context. Do not
-propose attributes for content the application cannot observe. Record capture
-mode as `disabled`, `metadata-only`, `redacted`, or `full-content` and name the
-storage destination and retention/access owner when known.
+propose attributes for content the application cannot observe.
 
 When an existing GenAI finding containing these attributes is selected,
 implement the exact listed attributes without a second content-capture
 approval or runtime enablement step. Redact and truncate before recording,
-follow the official structured schema, and prove trace/log correlation. If a
-listed field cannot be emitted safely, keep the selected finding unresolved
-and name the exact blocker instead of exporting unfiltered content. Never
+follow the official structured schema, and prove trace/log correlation.
+
+Audit content capture as `disabled`, `metadata-only`, `redacted`, or
+`full-content`. This skill's required profile defaults to useful redacted
+content capture, not disabled or metadata-only capture. Populate the real
+capture configuration and redaction/truncation hook before SDK construction;
+prove the SDK supports that mode. Require a storage destination,
+retention/access owner, and trace/log correlation evidence. Redact credentials,
+sensitive identity and hidden reasoning before any configured exporter sees
+them; preserve ordered messages, typed parts, tool-call identity and valid JSON
+under limits. A companion redacted field does not remove its original. If a
+capture restriction or SDK limitation prevents useful safe content, report the
+exact missing acceptance instead of substituting empty placeholders. Never
 put raw content, identifiers, retrieved documents, URLs, tool arguments, memory
 records, or evaluation explanations in metric names, metric dimensions, detector
 group-bys, or span names.
@@ -492,7 +763,12 @@ TraceLoop/OpenLLMetry, ADOT, provider SDK hooks, or MCP instrumentation. Treat a
 bridge as covered only when it is configured to emit OTel-compatible GenAI
 semconv spans/events/metrics, the emitted signal names are proven, and the
 privacy/content settings are understood. Otherwise add missing app-owned signals
-around the owned workflow boundaries and owner-map the bridge/platform gaps.
+around the owned workflow boundaries of an existing producer and owner-map its
+bridge/platform gaps. For a fresh agent, use the default Splunk AO creation
+path from GenAI Instrumentation Selection instead of taking this existing-bridge
+gap-filling clause as permission to build a new custom producer.
+The source-proven per-operation compatibility exception above remains available
+when both applicable SDK creation paths cannot meet the selected contract.
 
 ### Existing Vendor SDK Preservation
 
@@ -503,10 +779,11 @@ spans through wrappers or callbacks, or does both. A processor/exporter does not
 by itself prove that workflow, model, tool, retrieval, streaming, memory, or
 evaluation operations are instrumented.
 
-Preserve the existing supported integration by default. Close ordinary
-application-owned gaps with official OpenTelemetry spans, metrics, events,
-resource attributes, and lifecycle handling at the owning application call
-sites. Keep those gaps as ordinary OTel findings even when the existing vendor
+Preserve the existing supported integration by default. Fill required GenAI
+fields/content on its canonical spans through documented application hooks or
+configuration. Close uncovered application-owned operations with compatible
+OpenTelemetry spans, metrics, events, resource attributes, and lifecycle
+handling at the owning application call sites. Keep those gaps as ordinary OTel findings even when the existing vendor
 processor exports the resulting signals. Do not require a switch to another
 vendor SDK merely because the target product can also consume that SDK.
 
@@ -665,9 +942,9 @@ cost-degraded, and token-pressure impact.
 - Do not capture raw prompts, completions, tool arguments, retrieved documents,
   raw URLs, headers, tokens, secrets, user identifiers, or tenant identifiers by
   default.
-- For selected GenAI findings requiring content attributes, redact and truncate captured values,
-  follow the official schema, and keep them out of metric dimensions. Treat
-  `gen_ai.input.messages`,
+- The required GenAI profile captures applicable content through configured
+  redaction and limits; do not make it an optional completion criterion. Keep
+  it out of metric dimensions. Treat `gen_ai.input.messages`,
   `gen_ai.output.messages`, `gen_ai.system_instructions`,
   `gen_ai.retrieval.documents`, `gen_ai.retrieval.query.text`,
   `gen_ai.tool.definitions`, `gen_ai.tool.call.arguments`,

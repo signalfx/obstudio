@@ -1277,7 +1277,12 @@ def collect_kind_failures(results: list[CaseResult], kind: str, mode: str) -> li
 def kind_report_metadata(skill: str, run_root: Path, kind: str, metadata_sources: list[dict[str, Any]]) -> dict[str, Any]:
     modes = sorted({str(meta.get("mode") or "-") for meta in metadata_sources if meta.get("mode")}) or ["-"]
     agent_models = sorted({str(meta.get("agent_model") or "-") for meta in metadata_sources if meta.get("agent_model")}) or ["-"]
-    judge_models = sorted({str(meta.get("judge_model") or "-") for meta in metadata_sources if meta.get("judge_model")}) or ["-"]
+    judge_models = sorted({
+        str(meta.get("judge_model") or meta.get("agent_model"))
+        for meta in metadata_sources
+        if kind == "rubric" and meta.get("rubric_enabled") is not False
+        and (meta.get("judge_model") or meta.get("agent_model"))
+    }) or ["-"]
     config_paths = sorted({str(meta.get("config_path") or "-") for meta in metadata_sources if meta.get("config_path")}) or ["-"]
     return {
         "mode": ", ".join(modes),
@@ -1286,7 +1291,7 @@ def kind_report_metadata(skill: str, run_root: Path, kind: str, metadata_sources
         "run_id": run_root.name,
         "agent_model": ", ".join(agent_models),
         "judge_model": ", ".join(judge_models),
-        "rubric_enabled": any(bool(meta.get("rubric_enabled")) for meta in metadata_sources),
+        "rubric_enabled": kind == "rubric" and any(bool(meta.get("rubric_enabled")) for meta in metadata_sources),
         "runtime_enabled": any(bool(meta.get("runtime_enabled")) for meta in metadata_sources),
         "workers": ", ".join(sorted({str(meta.get("workers") or "-") for meta in metadata_sources if meta.get("workers")})) or "-",
         "config_path": ", ".join(config_paths),
@@ -2035,6 +2040,11 @@ def report_metadata(
     normalized.setdefault("runtime_enabled", "-")
     normalized.setdefault("workers", "-")
     normalized.setdefault("config_path", "-")
+    if mode == "validation" or normalized["eval_kind"] in {"validation", "sanity", "runtime"}:
+        normalized["judge_model"] = ""
+        normalized["rubric_enabled"] = False
+    elif normalized["rubric_enabled"] is False:
+        normalized["judge_model"] = ""
     return normalized
 
 

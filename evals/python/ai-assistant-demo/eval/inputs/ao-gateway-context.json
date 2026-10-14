@@ -1,0 +1,35 @@
+{
+  "kind": "ao-gateway-configuration-snapshot",
+  "selected_mode": "studio-gateway",
+  "sdk_contract": {
+    "package": "splunk-ao",
+    "version": "0.4.0",
+    "api_url_variable": "SPLUNK_AO_API_URL",
+    "console_url_variable": "SPLUNK_AO_CONSOLE_URL",
+    "api_key_variable": "SPLUNK_AO_API_KEY",
+    "studio_public_compatibility_marker": "local-gateway",
+    "note": "The SDK consumes API_KEY as configuration; Studio recognizes the public marker. This is not a cloud token."
+  },
+  "advertised_endpoints": {
+    "api": "http://127.0.0.1:55300",
+    "otlpHttp": "http://127.0.0.1:55318",
+    "otlpGrpc": "127.0.0.1:55317"
+  },
+  "runtime_snapshot": {
+    "profile": ".local/real.env",
+    "profile_input": "eval/inputs/ao-gateway-real.env",
+    "safe_example": ".local/real.env.example",
+    "example_input": "eval/inputs/ao-gateway-example.env",
+    "launcher": ".local/run-ao-setup.sh",
+    "launcher_input": "eval/inputs/ao-gateway-launcher.sh",
+    "generator": ".local/write-ao-env.py",
+    "generator_input": "eval/inputs/ao-gateway-env-generator.py",
+    "loading": "The launcher sources AO_ENV_FILE, defaulting to .local/real.env, before exec. The example file is not sourced. Generator allow-list entries alone are not populated configuration."
+  },
+  "resource_target": {
+    "project_name": "python-ai-assistant-demo",
+    "agent_stream_name": "python-ai-assistant-demo-live",
+    "create_if_missing": true
+  },
+  "scope": "Operator-supplied local setup/profile boundary. SDK and Studio compatibility are known configuration inputs, not live transport evidence. No Studio process, credentials, cloud, model, service startup, dependency installation, or endpoint discovery is requested."
+}

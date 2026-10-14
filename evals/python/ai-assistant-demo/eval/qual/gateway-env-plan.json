@@ -1,0 +1,26 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "gateway-env-plan",
+      "eval_inputs": [
+        "eval/inputs/ao-gateway-context.json",
+        "eval/inputs/ao-gateway-real.env",
+        "eval/inputs/ao-gateway-example.env",
+        "eval/inputs/ao-gateway-launcher.sh",
+        "eval/inputs/ao-gateway-env-generator.py"
+      ],
+      "task": "Audit only the AO gateway configuration/profile boundary in ./service using the operator-supplied ao-gateway-context.json and its launcher, generator, real.env, and unused example snapshots under eval/inputs. The context explicitly selects a known SDK-compatible Studio gateway at API http://127.0.0.1:55300 and OTLP http://127.0.0.1:55318; no live discovery or transport probe is needed. Treat runtime_snapshot paths as the operator's intended setup entrypoint/profile mapping and cite the supplied source snapshots; distinguish this setup command from the unchanged live FastAPI and offline evaluation entrypoints. The actual profile has blank AO API_URL/CONSOLE_URL/API_KEY while the unused example is populated; the generator merely copies ambient variables. Keep all source, profiles, examples, dependencies, and tests unchanged. Plan which exact actual profile, generator, and launcher selected instrumentation must update, the supported SDK triplet and loading order before normal resource calls, and how to preserve explicit direct-cloud or unselected configuration. Write only canonical .observe audit artifacts and reader output, with selectable configuration findings and bounded credential-free profile/SDK acceptance scenarios. Do not perform resource calls, install dependencies, start services, or broaden into full GenAI instrumentation."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect the supplied gateway context, actual-profile snapshot, unused example, launcher, generator, canonical .observe audit JSON, and rendered audit HTML. Compare input files with originals for read-only preservation.",
+    "Read ./last_message.md and ./grade.json."
+  ],
+  "rubric": [
+    "Identifies the concrete first-run gap from both profile and generator source: SPLUNK_AO_API_URL, SPLUNK_AO_CONSOLE_URL, and SPLUNK_AO_API_KEY are blank in the actual profile despite populated unused example and generator allow-list entries. Does not report the gateway configured or accuse the source-before-exec launcher of discarding populated values.",
+    "Names .local/real.env, .local/write-ao-env.py, and .local/run-ao-setup.sh as the supplied operator setup boundary, cites their input snapshots, and plans populated values API_URL=http://127.0.0.1:55300, CONSOLE_URL=http://127.0.0.1:55300, API_KEY=local-gateway before SDK initialization or resource resolution. Distinguishes API55300 from OTLP55318 and does not guess port3000, use the OTLP address as API_URL, or add application startup discovery.",
+    "Produces source-backed selectable AO configuration findings with acceptance proving the actual generated profile and loaded child process, not just example contents or pass-through names. Gateway mode uses the Studio marker without requesting application cloud credentials or mixing O11y realm/token mode; explicit direct-cloud configuration and unselected AO scope are preserved. Plans failure isolation and no cloud visibility claim from local fake configuration proof.",
+    "Writes and validates canonical audit JSON before rendering self-contained HTML, stays read-only for source/profile/generator/runtime configuration and cloud resources, and keeps the independently owned live and offline evaluation entrypoints outside this bounded setup audit."
+  ]
+}

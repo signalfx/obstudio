@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import hashlib
 import json
 from pathlib import Path
 
@@ -307,9 +309,14 @@ def test_current_audit_and_selection_versions_are_explicit() -> None:
     assert audit_input["schema_version"] == 2
     assert "Write new audits as schema v2" in audit
     assert "OVERLAY_SCHEMA_VERSION = 1" in report_tool
-    assert "CURRENT_SELECTION_SCHEMA_VERSION = 2" in report_tool
+    assert "DECISION_SELECTION_SCHEMA_VERSION = 2" in report_tool
+    assert "CURRENT_SELECTION_SCHEMA_VERSION = 3" in report_tool
+    assert "SUPPORTED_SELECTION_SCHEMA_VERSIONS = {1, 2, CURRENT_SELECTION_SCHEMA_VERSION}" in report_tool
     assert "CURRENT_AUDIT_SCHEMA_VERSION = 2" in report_tool
     assert "a selection carrying `decision_answers` is schema v2" in audit_normalized
+    report_tests = _read(ROOT / "skills/references/tests/test_observe_report.py")
+    assert "def test_ao_target_preserves_legacy_selection_shape_and_decisions" in report_tests
+    assert "def test_selection_v3_ao_target_normalization_and_digest_binding" in report_tests
 
 
 def test_representative_evals_require_canonical_artifacts_and_scope() -> None:
@@ -400,3 +407,202 @@ def test_human_html_uses_generated_trace_without_raw_correlation_ids() -> None:
         assert "raw trace IDs or span IDs" in text
         assert "the generated trace" in text
         assert "canonical" in text
+
+
+def test_shared_ao_target_binding_contract_is_explicit_for_every_consumer() -> None:
+    flow = " ".join(_read(REPORT_FLOW).split())
+    verification = flow.split("## Verification Report Contract", 1)[1]
+    ownership = flow.split("## Document Ownership", 1)[1].split("## Human HTML Usage Flow", 1)[0]
+
+    for term in (
+        "any optional schema-v3 `ao_target`",
+        "Changing an answer or AO target invalidates older instrumentation",
+        "Preserve legacy schema-v1/v2 and targetless selection shapes and digests",
+        "an absent `ao_target` stays absent",
+        "exactly one Project name or ID and exactly one Agent Stream name or ID",
+        "{create_if_missing: false}",
+        "Reject partial selector pairs",
+        "never change `requested_ids` or dependency-closed `approved_ids`",
+    ):
+        assert term in flow
+    assert "optional schema-v3 `ao_target`" in ownership
+    assert "changed decision answer, AO target" in verification
+    assert "even when the selected finding IDs remain unchanged" in verification
+    assert "`instrumentation_sha256`" in verification
+    consumers = json.loads(_read(ROOT / "skills/references/consumers.json"))
+    assert consumers["report-flow-contract.md"] == [
+        "otel-audit", "otel-instrument", "otel-verify", "splunk-configure",
+    ]
+    assert _read(REPORT_FLOW) == _read(ROOT / "plugins/obstudio/skills/references/report-flow-contract.md")
+
+
+def test_ao_target_handoff_evals_review_actual_snapshot_without_runtime_claims() -> None:
+    fixture = ROOT / "evals/python/ai-assistant-demo/eval/inputs/ao-target-handoff-validator-snapshot.json"
+    snapshot = json.loads(_read(fixture))
+    resource_audit = json.loads(_read(fixture.parent / "ao-resource-audit.json"))
+    readiness = resource_audit["genai_readiness"][0]
+    runner = ast.parse(_read(ROOT / "evals/python/ai-assistant-demo/eval_runner.py"))
+    logger_calls = {
+        node.func.attr for node in ast.walk(runner)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name) and node.func.value.id == "logger"
+    }
+    assert {"start_trace", "add_llm_span", "conclude", "flush", "terminate"} <= logger_calls
+    assert "add_workflow_span" not in logger_calls
+    assert readiness["status"] == "partial"
+    assert "Trace envelope" in readiness["required_signals"]
+    assert "workflow" in readiness["acceptance_criteria"]
+    assert "unproven" in readiness["acceptance_criteria"]
+    assert snapshot["normalized_audit"]["genai_readiness"] == resource_audit["genai_readiness"]
+    assert snapshot["producer"]["source"] == "skills/references/scripts/observe_report.py"
+    assert snapshot["producer"]["source_sha256"] == "sha256:" + hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
+    cases = {case["case"]: case for case in snapshot["selection_cases"]}
+    for name in ("legacy-v1-no-target", "legacy-v2-no-target", "schema-v3-no-target"):
+        assert cases[name]["outcome"] == "accepted"
+        assert "ao_target" not in cases[name]["normalized_selection"]
+    legacy_instrumentation = json.loads(_read(fixture.parent / "ao-resource-instrumentation.json"))
+    assert cases["legacy-v1-no-target"]["selection_sha256"] == legacy_instrumentation["selection_sha256"]
+    a, b = cases["schema-v3-names-a"], cases["schema-v3-names-b"]
+    for ids in ("requested_ids", "approved_ids"):
+        assert a["normalized_selection"][ids] == b["normalized_selection"][ids]
+    assert a["selection_sha256"] != b["selection_sha256"]
+    assert cases["schema-v3-policy-only-reuse"]["normalized_selection"]["ao_target"] == {"create_if_missing": False}
+    assert cases["schema-v3-partial-selector"]["outcome"] == "rejected"
+    for name in ("schema-v3-ids", "schema-v3-project-name-stream-id", "schema-v3-project-id-stream-name"):
+        assert cases[name]["outcome"] == "accepted"
+    bindings = snapshot["instrumentation_bindings"]
+    assert bindings["names-a"]["instrumentation_sha256"] != bindings["names-b"]["instrumentation_sha256"]
+    checks = {check["case"]: check for check in snapshot["binding_checks"]}
+    assert checks["instrumentation-a-with-selection-a"]["outcome"] == "accepted"
+    assert checks["stale-instrumentation-a-with-selection-b"]["error"] == "instrumentation.selection_sha256 does not match selection"
+    assert checks["verification-a-with-instrumentation-a"]["outcome"] == "accepted"
+    assert checks["stale-verification-a-with-instrumentation-b"]["error"] == "verify.instrumentation_sha256 does not match instrumentation"
+    assert snapshot["normalized_verification_names_a"]["meta"]["result"] == "Not run"
+    roles = {
+        "audit": ("otel-audit", "proposed names"),
+        "instrument": ("otel-instrument", "effective-profile precedence"),
+        "verify": ("otel-verify", "Rejects cached verification"),
+        "configure": ("splunk-configure", "metric readiness, detector coverage"),
+    }
+    for role, (skill, role_requirement) in roles.items():
+        packet = json.loads(_read(ROOT / f"evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-{role}.json"))
+        assert packet["skill"] == skill
+        assert len(packet["rubric"]) == (3 if role == "configure" else 4)
+        assert role_requirement in packet["rubric"][2]
+        if role != "configure":
+            assert "aria-invalid" in packet["rubric"][3]
+            assert "valid peer" in packet["rubric"][3]
+        expected_inputs = {"eval/inputs/ao-target-handoff-validator-snapshot.json"}
+        if role != "configure":
+            expected_inputs.add("eval/inputs/ao-selector-field-validity-snapshot.json")
+        inputs = packet["prompts"][0]["eval_inputs"]
+        assert set(inputs) == expected_inputs
+        assert len(inputs) == len(expected_inputs)
+        task = packet["prompts"][0]["task"]
+        for phrase in (
+            "Read-only supplemental AO target handoff contract review",
+            ("Review the supplied snapshot only" if role == "configure"
+             else "Review the supplied snapshots only"),
+            "do not invoke a new normalizer",
+            "Write only ./service/.observe/ao-target-handoff-review.json and .md",
+            "supplied canonical-validator evidence rather than engine execution",
+        ):
+            assert phrase.lower() in task.lower()
+        assert "No resource creation" in snapshot["proof_limits"][2]
+
+
+def test_ao_target_handoff_ui_snapshot_records_bound_field_validity() -> None:
+    inputs = ROOT / "evals/python/ai-assistant-demo/eval/inputs"
+    ui = json.loads(_read(inputs / "ao-selector-field-validity-snapshot.json"))
+    validator = json.loads(_read(inputs / "ao-target-handoff-validator-snapshot.json"))
+    assert ui["schema_version"] == 1
+    assert ui["kind"] == "ao-selector-field-validity-browser-snapshot"
+    assert ui["outcome"] == "pass"
+    assert ui["producer"]["engine_sha256"] == hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
+    assert ui["producer"]["audit_fixture_sha256"] == hashlib.sha256(
+        (inputs / "ao-resource-audit.json").read_bytes()
+    ).hexdigest()
+    assert ui["fixture"]["normalized_audit_sha256"] == validator["audit_sha256"]
+    assert ui["fixture"]["requested_finding_ids"] == ["AO-002"]
+    assert ui["fixture"]["approved_finding_ids"] == ["AO-001", "AO-002"]
+    assert ui["fixture"]["unselected_finding_ids"] == ["OTEL-001"]
+    assert ui["scope_unchanged"]["initial"] == ui["scope_unchanged"]["final"] == {
+        "requested": ui["fixture"]["requested_finding_ids"],
+        "selected": ui["fixture"]["approved_finding_ids"],
+    }
+    assert ui["case_encoding"]["aria_invalid_order"] == ["project", "agent_stream"]
+    assert {(case["resource"], case["selector"]) for case in ui["cases"]} == {
+        (resource, selector)
+        for resource in ("project", "agent_stream") for selector in ("name", "id")
+    }
+    count = 0
+    for case in ui["cases"]:
+        seen = set()
+        for values in case["rows"]:
+            assert len(values) == len(ui["case_encoding"]["columns"])
+            row = dict(zip(ui["case_encoding"]["columns"], values))
+            seen.add(row["scenario_id"])
+            assert row["expected_aria_invalid"] == row["actual_aria_invalid"]
+            assert row["expected_command_blocked"] is row["actual_command_blocked"]
+            count += 1
+        assert seen == set(ui["scenario_definitions"])
+        assert len(case["rows"]) == len(seen)
+    assert count == ui["field_matrix_case_count"]
+    assert ui["case_count"] == count + len(ui["viewports"]) + 1
+
+
+def test_ao_target_scope_snapshots_preserve_resource_and_content_boundary() -> None:
+    inputs = ROOT / "evals/python/ai-assistant-demo/eval/inputs"
+    validator = json.loads(_read(inputs / "ao-target-handoff-validator-snapshot.json"))
+    cases = {case["case"]: case for case in validator["ao_target_scope_cases"]}
+    assert len(cases) == len(validator["ao_target_scope_cases"]) == 14
+    assert validator["producer"]["source_sha256"] == "sha256:" + hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
+    assert cases["actual-callback-targetless"]["outcome"] == "accepted"
+    assert cases["actual-callback-targetless"]["eligible_ids"] == []
+    for name in ("actual-callback-target-pair-rejected", "actual-callback-policy-only-rejected",
+                 "callback-ao-id-target-pair-rejected", "resource-unselected-otel-target-rejected",
+                 "unmarked-unknown-route-rejected"):
+        assert cases[name]["outcome"] == "rejected"
+        assert "requires a selected Agent Observability resource or routing finding" in cases[name]["error"]
+    marked = cases["explicit-marked-route-accepted"]
+    assert marked["outcome"] == "accepted"
+    assert marked["eligible_ids"] == ["AO-002"]
+    assert any(finding.get("ao_target_scope") == "resource-routing" for finding in marked["finding_classification"])
+    legacy_names = ("project", "agent-stream", "project-resource", "agent-stream-resource",
+                    "runtime-routing", "splunk-ao-routing")
+    for name in legacy_names:
+        case = cases["legacy-agent-observability." + name + "-accepted"]
+        assert case["outcome"] == "accepted"
+        assert case["eligible_ids"] == ["AO-001", "AO-002"]
+        assert all("ao_target_scope" not in finding for finding in case["finding_classification"])
+    preserved = cases["targetless-fixture-digest-preserved"]
+    selection = json.loads(_read(inputs / "ao-resource-selection.json"))
+    assert preserved["legacy_normalized_audit_unchanged"] is True
+    assert preserved["legacy_audit_sha256"] == selection["audit_sha256"] == validator["audit_sha256"]
+    assert preserved["legacy_selection_sha256"] == json.loads(_read(inputs / "ao-resource-instrumentation.json"))["selection_sha256"]
+    for role in ("audit", "instrument", "verify", "configure"):
+        packet = json.loads(_read(ROOT / f"evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-{role}.json"))
+        assert "ao_target_scope_cases" in packet["prompts"][0]["task"]
+        assert "resource-routing" in packet["rubric"][0]
+        assert "callback" in packet["rubric"][0]
+        criterion = packet["rubric"][0].lower()
+        assert "marker" in criterion and ("absent" in criterion or "omitted" in criterion)
+    ui = json.loads(_read(inputs / "ao-selector-field-validity-snapshot.json"))
+    gate = ui["ao_target_scope_gate"]
+    assert gate["producer_engine_sha256"] == hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
+    assert len(gate["cases"]) == 4
+    for case in gate["cases"]:
+        assert case["outcome"] == "pass"
+        assert case["actual"]["controls_visible"] is case["expected_controls_visible"]
+        assert case["actual"]["command_has_ao_target_flags"] is case["expected_controls_visible"]
+    browser = {case["case"]: case for case in gate["cases"]}
+    assert browser["actual-callback-content-OTEL001"]["actual"]["controls_present"] is False
+    hidden = browser["unselected-resource-findings-with-retained-values"]
+    assert hidden["actual"]["controls_hidden"] is True
+    assert hidden["actual"]["controls_inert"] is True
+    assert hidden["retained_field_values_unchanged"] is True
+    assert browser["reselected-resource-recovers-retained-values"]["retained_field_values_unchanged"] is True
+    assert len(gate["canonical_selection_cases"]) == 4
+    for case in gate["canonical_selection_cases"]:
+        assert case["outcome"] == "pass"
+        assert case["actual_outcome"] == case["expected_outcome"]

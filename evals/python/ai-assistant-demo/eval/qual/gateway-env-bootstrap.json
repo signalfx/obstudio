@@ -1,0 +1,28 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "gateway-env-bootstrap",
+      "eval_inputs": [
+        "eval/inputs/ao-gateway-context.json",
+        "eval/inputs/ao-gateway-real.env",
+        "eval/inputs/ao-gateway-example.env",
+        "eval/inputs/ao-gateway-launcher.sh",
+        "eval/inputs/ao-gateway-env-generator.py",
+        "eval/inputs/otel-audit.json"
+      ],
+      "task": "Implement only the selected AO resource setup configuration boundary in ./service. Copy supplied otel-audit.json into .observe/otel-audit.json, validate it, and request AO-002 through the bundled selection flow so AO-001 is its sole executable prerequisite; no live trace routing or GenAI producers are selected. Stage the supplied gateway context snapshots at their runtime_snapshot paths: .local/real.env, .local/real.env.example, .local/run-ao-setup.sh, and .local/write-ao-env.py. The operator explicitly selects known SDK-compatible Studio gateway API http://127.0.0.1:55300, distinct from preserved OTLP http://127.0.0.1:55318. Fix the real profile and generator so supported SPLUNK_AO_API_URL, SPLUNK_AO_CONSOLE_URL, and SPLUNK_AO_API_KEY=local-gateway are populated and survive the existing shell source-before-exec launcher before the bundled resolve_ao_resources.py or equivalent supported SDK bootstrap initializes. An allow-list or unused template alone is insufficient. Use the provisioned project-compatible Python and actual profile loader with standard-library fake SDK clients; do not sync or install dependencies, invent a dotenv parser, start services, discover endpoints, or contact Studio/cloud/models. Execute profile-to-helper fake capture for initially blank/missing triplet, populated gateway, both-missing named resources followed by repeated reuse, explicit direct-cloud settings, and no selected AO work. The capture must inspect effective SDK endpoint/auth fields before resource calls, fake call counts and returned IDs, and preservation of OTel plus APPLICATION_KEEP_SETTING=preserve-me. Keep explicit direct-cloud configuration unchanged, do not mix endpoint/API-key mode with realm/O11y-token mode, and never replace a selected cloud route silently. Produce bound selection/instrumentation/verification artifacts and separate reader reports; real SDK transport, real resource creation, AO exporter routing, and cloud visibility remain Not proven under this task."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect staged .local profile/example/launcher/generator, actual runnable resource bootstrap, temporary or focused SDK fake tests with captured process fields and call counts, bound canonical .observe artifacts, and reader reports. Compare live app.py and eval_runner.py with originals for scope preservation.",
+    "Read ./last_message.md and ./grade.json."
+  ],
+  "rubric": [
+    "Preserves requested AO-002 with prerequisite AO-001 only and uses bundled canonical validation/selection/report flow. Implements resource setup without adding live trace routing, GenAI producers, service startup, dependency downloads, cloud calls, or unrelated application edits.",
+    "Populates .local/real.env with API_URL=http://127.0.0.1:55300, CONSOLE_URL=http://127.0.0.1:55300, and API_KEY=local-gateway before SDK initialization, updates the actual env generator so regenerated selected gateway profiles remain populated, and keeps the safe example aligned. Preserves the selected non-default API address separately from OTLP55318, OTel settings, APPLICATION_KEEP_SETTING, and resource selectors. Merely copying variable names or updating an unused template fails.",
+    "Executes the actual .local/run-ao-setup.sh profile loader and bundled resource helper or source-verified equivalent with injected SDK fakes. Captures the three effective SDK fields at client construction before lookups and proves blank/missing input is repaired, populated gateway configuration is loaded without startup discovery, and both-missing resource creation followed by repeated reuse has expected call counts and stable IDs. A harness that directly seeds only os.environ without exercising the written profile/launcher/generator is insufficient.",
+    "Exercises explicit direct-cloud and unselected-AO variants through the real profile/config boundary, preserving their endpoint/auth/destination settings rather than adding local-gateway or forcing gateway availability. Gateway settings do not coexist with O11y realm/token mode; resource resolution failure does not suppress ordinary OTel. No real cloud token is requested or exposed.",
+    "Records actual profile, generator, launcher, bootstrap paths and exact executed commands/results in bound artifacts and reader output. Distinguishes successful fake configuration and fake resource creation from installed SDK transport, real cloud resource creation, AO routed export, and fresh cloud stream visibility; those unavailable remote outcomes remain Not proven rather than claiming Pass."
+  ]
+}

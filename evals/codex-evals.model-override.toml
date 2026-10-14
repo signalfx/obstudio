@@ -1,0 +1,13 @@
+# Use MODEL=<account-supported model> for both actor and rubric judge.
+# Omitting a separate judge model lets it follow the actor override.
+[run]
+mode = "with_skill"
+
+[rubric]
+enabled = true
+
+[runtime]
+enabled = false
+
+[agent]
+extra_args = ["--config", 'model_reasoning_effort="high"']

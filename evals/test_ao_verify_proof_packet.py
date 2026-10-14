@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import runpy
 import shutil
 import subprocess
 import sys
@@ -113,3 +114,143 @@ def test_local_ack_cannot_be_promoted_to_pass(tmp_path: Path) -> None:
     )
     assert result.returncode != 0
     assert "Pass requires every finding to be working" in result.stderr
+
+
+def test_reuse_policy_digest_comparison_isolates_only_target(tmp_path: Path) -> None:
+    packet_paths = [
+        FIXTURE / "ao-resource-audit.json",
+        FIXTURE / "ao-resource-selection.json",
+        FIXTURE / "ao-resource-instrumentation.json",
+    ]
+    original_bytes = {path: path.read_bytes() for path in packet_paths}
+    original_selection = json.loads(original_bytes[packet_paths[1]])
+    assert original_selection["requested_ids"] == ["AO-001", "AO-002"]
+
+    engine = runpy.run_path(str(ROOT / "skills/references/scripts/observe_report.py"))
+    audit = engine["normalize_audit_report"](json.loads(original_bytes[packet_paths[0]]))
+    raw_paths = [tmp_path / "no-policy.raw.json", tmp_path / "reuse.raw.json"]
+    for output, policy_flags in zip(raw_paths, [(), ("--ao-reuse-only",)]):
+        selected = _run(
+            "select", str(packet_paths[0]), "--ids", "AO-002",
+            *policy_flags, "-o", str(output),
+        )
+        assert selected.returncode == 0, selected.stderr
+    raw_packets = [json.loads(path.read_text(encoding="utf-8")) for path in raw_paths]
+    assert [packet["schema_version"] for packet in raw_packets] == [1, 3]
+    raw_before = [path.read_bytes() for path in raw_paths]
+
+    no_policy, reuse = [
+        engine["normalize_selection"]({**packet, "schema_version": 3}, audit)
+        for packet in raw_packets
+    ]
+    for index, packet in enumerate((no_policy, reuse)):
+        (tmp_path / f"paired-{index}.v3.json").write_text(
+            json.dumps(packet, indent=2) + "\n", encoding="utf-8",
+        )
+        assert packet["requested_ids"] == ["AO-002"]
+        assert packet["approved_ids"] == ["AO-001", "AO-002"]
+        assert packet["schema_version"] == 3
+        assert packet["decision_answers"] == []
+        assert packet["approved_by"] is None
+        assert packet["approved_at"] is None
+    assert "ao_target" not in no_policy
+    assert reuse["ao_target"] == {"create_if_missing": False}
+    reuse_without_target = dict(reuse)
+    del reuse_without_target["ao_target"]
+    assert reuse_without_target == no_policy
+    assert engine["selection_digest"](no_policy) != engine["selection_digest"](reuse)
+    assert [path.read_bytes() for path in raw_paths] == raw_before
+    assert {path: path.read_bytes() for path in packet_paths} == original_bytes
+
+
+def test_reuse_policy_requires_resource_routing_configuration(tmp_path: Path) -> None:
+    audit_path = FIXTURE / "ao-resource-audit.json"
+    original_bytes = audit_path.read_bytes()
+    engine = runpy.run_path(str(ROOT / "skills/references/scripts/observe_report.py"))
+    legacy = engine["normalize_audit_report"](json.loads(original_bytes))
+    assert engine["ao_target_eligible_finding_ids"](legacy) == ["AO-001", "AO-002"]
+
+    callback_path = ROOT / "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json"
+    callback_bytes = callback_path.read_bytes()
+    callback_report = engine["normalize_audit_report"](json.loads(callback_bytes))
+    assert engine["ao_target_eligible_finding_ids"](callback_report) == []
+    assert all("ao_target_scope" not in row for row in callback_report["findings"])
+    callback_copy = tmp_path / "actual-callback-unchanged.json"
+    callback_copy.write_bytes(callback_bytes)
+    callback_selection_path = tmp_path / "actual-callback-targetless.json"
+    callback_selected = _run(
+        "select", str(callback_copy), "--ids", "OTEL-001",
+        "-o", str(callback_selection_path),
+    )
+    assert callback_selected.returncode == 0, callback_selected.stderr
+    callback_selection = engine["normalize_selection"](
+        json.loads(callback_selection_path.read_text(encoding="utf-8")), callback_report,
+    )
+    assert "ao_target" not in callback_selection
+    assert 'id="ao-target-controls"' not in engine["render_html"](callback_report, callback_selection)
+    for target_flags in (
+        ("--ao-reuse-only",),
+        ("--ao-project", "review-project", "--ao-agent-stream", "review-agent"),
+    ):
+        output = tmp_path / f"actual-callback-{len(target_flags)}-target.json"
+        targeted = _run(
+            "select", str(callback_copy), "--ids", "OTEL-001",
+            *target_flags, "-o", str(output),
+        )
+        assert targeted.returncode != 0
+        assert "requires a selected Agent Observability resource or routing finding" in targeted.stderr
+        assert not output.exists()
+    assert callback_copy.read_bytes() == callback_bytes
+    assert callback_path.read_bytes() == callback_bytes
+
+    for marked in (False, True):
+        scratch = json.loads(original_bytes)
+        for finding in scratch["findings"]:
+            if finding["id"] in {"AO-001", "AO-002"}:
+                finding.pop("ao_target_scope", None)
+                for telemetry in finding["expected_telemetry"]:
+                    if telemetry["type"] == "configuration":
+                        telemetry["name"] = (
+                            "custom.project-routing" if finding["id"] == "AO-001"
+                            else "custom.agent-stream-routing"
+                        )
+                if marked:
+                    finding["ao_target_scope"] = "resource-routing"
+        report = engine["normalize_audit_report"](scratch)
+        scratch_path = tmp_path / f"custom-routing-{marked}.json"
+        scratch_path.write_text(json.dumps(report), encoding="utf-8")
+        selection_path = tmp_path / f"custom-routing-{marked}-selection.json"
+        targetless = _run(
+            "select", str(scratch_path), "--ids", "AO-002",
+            "-o", str(selection_path),
+        )
+        assert targetless.returncode == 0, targetless.stderr
+        selection = engine["normalize_selection"](
+            json.loads(selection_path.read_text(encoding="utf-8")), report,
+        )
+        assert "ao_target" not in selection
+        expected_ids = ["AO-001", "AO-002"] if marked else []
+        assert engine["ao_target_eligible_finding_ids"](report) == expected_ids
+        rendered = engine["render_html"](report, selection)
+        data_line = next(line for line in rendered.splitlines() if line.startswith("const DATA = "))
+        data = json.loads(data_line.removeprefix("const DATA = ").removesuffix(";"))
+        assert data["ao_target_eligible_finding_ids"] == expected_ids
+        assert ('id="ao-target-controls"' in rendered) is marked
+
+        for target_flags in (
+            ("--ao-reuse-only",),
+            ("--ao-project", "review-project", "--ao-agent-stream", "review-agent"),
+        ):
+            output = tmp_path / f"custom-routing-{marked}-{len(target_flags)}-target.json"
+            targeted = _run(
+                "select", str(scratch_path), "--ids", "AO-002",
+                *target_flags, "-o", str(output),
+            )
+            if marked:
+                assert targeted.returncode == 0, targeted.stderr
+                assert "ao_target" in json.loads(output.read_text(encoding="utf-8"))
+            else:
+                assert targeted.returncode != 0
+                assert "requires a selected Agent Observability resource or routing finding" in targeted.stderr
+                assert not output.exists()
+    assert audit_path.read_bytes() == original_bytes
