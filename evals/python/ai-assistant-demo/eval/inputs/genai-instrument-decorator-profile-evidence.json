@@ -1,0 +1,2629 @@
+{
+  "kind": "extracted-instrument-decorator-profile-evidence",
+  "provenance": [
+    {
+      "original_file": "eval/inputs/genai-decorator-version-logs-verify-evidence.json",
+      "original_sha256": "72375fd49c904a7780cb49d2b412625b8b57d415eaeabd7ee1eb42a71f314d44",
+      "subsections": [
+        "kind",
+        "scope",
+        "sdk_source_receipt",
+        "function_cases",
+        "version_policy_cases",
+        "studio_signal_cases"
+      ],
+      "extraction": "Retained source/capture/proposed-candidate facts and dated provenance; evaluation answers excluded. This extract is not new execution or a live latest lookup."
+    },
+    {
+      "original_file": "eval/inputs/genai-sdk-source-snapshot.json",
+      "original_sha256": "9d4bb13d28c1892c96cf069f65fe129674e4dc5c86b21adb3823a82b2a378ef6",
+      "subsections": [
+        "kind",
+        "scope",
+        "repository",
+        "requested_ref",
+        "resolved_revision",
+        "commit_date",
+        "captured_at_utc",
+        "declared_main_package_version",
+        "files",
+        "logger_api_source_signatures"
+      ],
+      "extraction": "Retained source/capture/proposed-candidate facts and dated provenance; evaluation answers excluded. This extract is not new execution or a live latest lookup."
+    },
+    {
+      "original_file": "eval/inputs/genai-fresh-ao-instrument-cases.json",
+      "original_sha256": "6688054b7a4a5fc606988259a3810fb2da4001ae891675c71a5ded4dfb9372a0",
+      "subsections": [
+        "helper_probe.public_api_provenance"
+      ],
+      "extraction": "Retained source/capture/proposed-candidate facts and dated provenance; evaluation answers excluded. This extract is not new execution or a live latest lookup."
+    },
+    {
+      "original_file": "eval/inputs/genai-semconv-source-snapshot.json",
+      "original_sha256": "37dcf51de2138b706b7272c32e4215d280a94790b3d4bb454000ef66ef24e3ae",
+      "subsections": [
+        "kind",
+        "scope",
+        "otel",
+        "vendor_sources"
+      ],
+      "extraction": "Retained source/capture/proposed-candidate facts and dated provenance; evaluation answers excluded. This extract is not new execution or a live latest lookup."
+    }
+  ],
+  "decorator_profile": {
+    "kind": "independent-decorator-version-logs-policy-cases-with-dated-source-and-isolated-native-sdk-probe",
+    "scope": "Independent synthetic source/policy counterexamples plus explicitly dated official-source and isolated native SDK capture evidence. No cases are app.py/demo-chat-agent execution, received OTLP, Studio acceptance or cloud evidence. Concrete dependency versions are historical receipts, not future installation recipes or proof of newest compatible project resolution.",
+    "sdk_source_receipt": {
+      "status": "dated official source and independently measured native SDK capture; no application or OTel export execution",
+      "captured_at": "2026-10-14T07:28:15.668655+00:00",
+      "receipt_sha256": "139eaddbe3680a9d66540e43509c1a9784ddc8a0100e2a1724fd64fd121105b8",
+      "main_resolution": {
+        "splunk/splunk-ao-python": {
+          "revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+          "commit_date": "2026-10-12T19:18:12Z",
+          "resolution_method": "authenticated gh API commits/main",
+          "url": "https://github.com/splunk/splunk-ao-python/commit/b5f226e947e1861b5687ee85b39474fe9d63df57"
+        },
+        "rungalileo/galileo-python": {
+          "revision": "7aadc4ddc8333f2e95d1fb0b79a01a49b37ad4a3",
+          "commit_date": "2026-10-09T17:07:43Z",
+          "resolution_method": "authenticated gh API commits/main",
+          "url": "https://github.com/rungalileo/galileo-python/commit/7aadc4ddc8333f2e95d1fb0b79a01a49b37ad4a3"
+        }
+      },
+      "official_docs": [
+        {
+          "url": "https://agent-observability-docs.splunk.com/sdk-api/logging/log-decorator/log-decorator",
+          "read_on": "2026-10-14"
+        },
+        {
+          "url": "https://docs.galileo.ai/sdk-api/logging/log-decorator/log-decorator",
+          "read_on": "2026-10-14"
+        },
+        {
+          "url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/start-splunk-ao-span",
+          "read_on": "2026-10-14"
+        },
+        {
+          "url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+          "read_on": "2026-10-14"
+        },
+        {
+          "url": "https://docs.galileo.ai/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+          "read_on": "2026-10-14"
+        }
+      ],
+      "published_release_metadata": {
+        "galileo": {
+          "url": "https://pypi.org/pypi/galileo/json",
+          "captured_at": "2026-10-14T07:13:01.409583+00:00",
+          "version": "2.6.0",
+          "requires_python": "<3.15,>=3.10"
+        },
+        "opentelemetry-sdk": {
+          "url": "https://pypi.org/pypi/opentelemetry-sdk/json",
+          "captured_at": "2026-10-14T07:13:01.687204+00:00",
+          "version": "1.45.1",
+          "requires_python": ">=3.10"
+        },
+        "splunk-ao": {
+          "url": "https://pypi.org/pypi/splunk-ao/json",
+          "captured_at": "2026-10-14T07:13:01.224556+00:00",
+          "version": "0.5.0",
+          "requires_python": "<3.15,>=3.11"
+        }
+      },
+      "dependency_scope": "Published metadata and installed probe versions are distinct from a project solver result. Resolve newest compatible again at future task time; preserve upstream package requirements and project locks. No actual demo dependency resolution is proved here.",
+      "source_receipts": [
+        {
+          "path": "src/splunk_ao/decorator.py",
+          "url": "https://raw.githubusercontent.com/splunk/splunk-ao-python/b5f226e947e1861b5687ee85b39474fe9d63df57/src/splunk_ao/decorator.py",
+          "resolved_revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+          "captured_at": "2026-10-14T07:13:55.908355+00:00",
+          "sha256": "9039873365cd7e4d37b5c37c576c537450c7ad073a537d52954d190889477160",
+          "bytes": 56090
+        },
+        {
+          "repository": "splunk/splunk-ao-python",
+          "path": "src/splunk_ao/deployment.py",
+          "url": "https://raw.githubusercontent.com/splunk/splunk-ao-python/b5f226e947e1861b5687ee85b39474fe9d63df57/src/splunk_ao/deployment.py",
+          "resolved_revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+          "captured_at": "2026-10-14T07:19:44.523399+00:00",
+          "sha256": "af298425baa28b763187492eaaf9e20d8e9d253318aee2c191874f77d47db731",
+          "bytes": 5842
+        },
+        {
+          "repository": "splunk/splunk-ao-python",
+          "path": "src/splunk_ao/exporter/standalone.py",
+          "url": "https://raw.githubusercontent.com/splunk/splunk-ao-python/b5f226e947e1861b5687ee85b39474fe9d63df57/src/splunk_ao/exporter/standalone.py",
+          "resolved_revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+          "captured_at": "2026-10-14T07:19:44.520762+00:00",
+          "sha256": "06ed4b4cafb68869a797443c4bf1b42ee2503ca9e72ab6b09145e2e122458d29",
+          "bytes": 1370
+        },
+        {
+          "repository": "splunk/splunk-ao-python",
+          "path": "src/splunk_ao/converter/attribute_mapping.py",
+          "url": "https://raw.githubusercontent.com/splunk/splunk-ao-python/b5f226e947e1861b5687ee85b39474fe9d63df57/src/splunk_ao/converter/attribute_mapping.py",
+          "resolved_revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+          "captured_at": "2026-10-14T07:19:44.568117+00:00",
+          "sha256": "b778f26b14f8e54a6c36deac9f903a438a4b1b4e8bac9fd407ed2e4a49fc1953",
+          "bytes": 25782
+        },
+        {
+          "repository": "rungalileo/galileo-python",
+          "path": "src/galileo/decorator.py",
+          "url": "https://raw.githubusercontent.com/rungalileo/galileo-python/7aadc4ddc8333f2e95d1fb0b79a01a49b37ad4a3/src/galileo/decorator.py",
+          "resolved_revision": "7aadc4ddc8333f2e95d1fb0b79a01a49b37ad4a3",
+          "captured_at": "2026-10-14T07:19:44.607172+00:00",
+          "sha256": "876486030645d0aa651ec7049259ea132ac41570dd6c05d5f698546827de2314",
+          "bytes": 50533
+        }
+      ],
+      "source_findings": [
+        {
+          "file": "src/splunk_ao/decorator.py",
+          "lines": [
+            296,
+            354
+          ],
+          "fact": "Public sync/coroutine/sync-generator/async-generator dispatch accepts all five operation types; choose explicit type. Syntax support alone is insufficient."
+        },
+        {
+          "file": "src/splunk_ao/decorator.py",
+          "lines": [
+            413,
+            475
+          ],
+          "fact": "Successful business values unchanged; errors including BaseException cancellation reraised/finalized."
+        },
+        {
+          "file": "src/splunk_ao/decorator.py",
+          "lines": [
+            538,
+            680
+          ],
+          "fact": "self/cls excluded, but mapped input overwritten with bound arguments and variadic positional zip loses arguments. Mapped redacted input is not raw suppression."
+        },
+        {
+          "file": "src/splunk_ao/decorator.py",
+          "lines": [
+            797,
+            814
+          ],
+          "fact": "Agent/workflow forwards input/name/agent_type/created_at, not arbitrary mapped metadata."
+        },
+        {
+          "file": "src/splunk_ao/decorator.py",
+          "lines": [
+            895,
+            906
+          ],
+          "fact": "Error finalizer empty output overrides produced generator partial capture."
+        },
+        {
+          "file": "src/splunk_ao/decorator.py",
+          "lines": [
+            1010,
+            1025
+          ],
+          "fact": "Successful null output becomes empty; redacted_output companion does not suppress original."
+        },
+        {
+          "file": "src/splunk_ao/decorator.py",
+          "lines": [
+            1112,
+            1187
+          ],
+          "fact": "Sync/async wrappers accumulate every yield and use plain iteration, not protocol delegation. Sync GeneratorExit closes source; arbitrary send/throw/asend/athrow/lifecycle support needs separate proof."
+        },
+        {
+          "file": "src/splunk_ao/logger/logger.py",
+          "lines": [
+            236,
+            296
+          ],
+          "fact": "Public ingestion_hook receives native batches and bypasses credentials/backend/OTel sink initialization; incompatible distributed mode. Direct _sink is private."
+        },
+        {
+          "file": "src/splunk_ao/decorator.py",
+          "lines": [
+            1190,
+            1420
+          ],
+          "fact": "One-off logger lookup accepts hook but wrapper/default init has no persistent hook/provider/exporter registration. Hook instance is separate cache entry, not default logger."
+        },
+        {
+          "file": "src/splunk_ao/logger/logger.py",
+          "lines": [
+            350,
+            357
+          ],
+          "fact": "Ordinary logger owns configured standalone/O11y sink; global app tracer provider does not bind it."
+        },
+        {
+          "file": "src/splunk_ao/deployment.py",
+          "lines": [
+            151,
+            154
+          ],
+          "fact": "Public standalone endpoint API_URL-or-console base plus /otel/v1/traces."
+        },
+        {
+          "file": "src/splunk_ao/exporter/standalone.py",
+          "lines": [
+            18,
+            43
+          ],
+          "fact": "SDK auth and project/stream name/ID routing supported; actual resolved resources and receiver acceptance still need proof."
+        },
+        {
+          "file": "src/splunk_ao/converter/attribute_mapping.py",
+          "lines": [
+            438,
+            573
+          ],
+          "fact": "Tool converter has operation/name/arguments/result/call-ID but omits tool input/output messages and available agent/description; tool dispatch does not fill generic messages later."
+        },
+        {
+          "repository": "rungalileo/galileo-python",
+          "file": "src/galileo/decorator.py",
+          "lines": [
+            502,
+            532
+          ],
+          "fact": "Galileo mapped-input overwrite also source-visible; its async error implementation differs. Preserve existing producer and prove selected Galileo runtime independently."
+        }
+      ],
+      "studio_source_receipts": [
+        {
+          "path": "observer/cmd/obstudio/main.go",
+          "line": 221,
+          "fact": "Registers POST /otel/v1/traces using receiver HTTPHandler."
+        },
+        {
+          "path": "observer/internal/otlp/httphandler.go",
+          "lines": [
+            43,
+            46
+          ],
+          "fact": "AO ingest alias requires resolved ProjectID; receiver/resource routing must be validated separately."
+        },
+        {
+          "path": "observer/internal/api/ao_gateway_auth_test.go",
+          "lines": [
+            333,
+            347
+          ],
+          "fact": "Existing SDK gateway compatibility test checks ordinary protobuf endpoint, local-gateway SDK auth marker and resolved project/stream headers. Source read only; not executed in this research."
+        }
+      ],
+      "local_probe": {
+        "exit_code": 0,
+        "source_sha256": "f4eac3389e0fda5e9846d2e2843ddb01d8cfc8981ab91737bf6034776e8dfec6",
+        "output_sha256": "5088aadb0f4c47a138a1c14ea15bfc11293a4439ea4d8663ca9a1f0fe4559e0b",
+        "installed_versions": {
+          "splunk-ao": "0.5.0",
+          "galileo-core": "4.5.0",
+          "opentelemetry-sdk": "1.45.1"
+        },
+        "installed_source_sha256": "9039873365cd7e4d37b5c37c576c537450c7ad073a537d52954d190889477160",
+        "installed_decorator_matches_fresh_main": true,
+        "observations": {
+          "mapped_input_return": "safe result",
+          "method_result": 5,
+          "successful_null_result": null,
+          "variadic_result": 6,
+          "nested_result": "synthetic answer",
+          "finite_generator": [
+            "first",
+            "second"
+          ],
+          "send_protocol": [
+            "ready",
+            "received:None"
+          ],
+          "failed_generator_first": "produced partial answer",
+          "failed_generator_exception": "synthetic stream failure",
+          "async_result": 8,
+          "async_generator": [
+            "async first",
+            "async second"
+          ],
+          "asend_protocol": [
+            "async ready",
+            "received:None"
+          ],
+          "cancel_exception": "synthetic cancellation"
+        },
+        "plumbing_limit": "The application subclass overrides a public-named logger getter solely for isolated capture through documented public ingestion_hook. This is not claimed as documented production default @log logger/sink registration or real OTel emission.",
+        "scope": "Credential-free isolated native-batch capture via application subclass public-named logger getter and public ingestion_hook; default @log registration, native OTel, application and cloud not exercised."
+      },
+      "selected_native_sdk_operation_nodes": [
+        {
+          "type": "tool",
+          "name": "mapped_input",
+          "input": "{\"text\": \"SYNTHETIC_RAW_SENTINEL\"}",
+          "output": "safe result",
+          "status_code": null,
+          "model": null,
+          "temperature": null
+        },
+        {
+          "type": "tool",
+          "name": "successful_null",
+          "input": "{}",
+          "output": "",
+          "status_code": null,
+          "model": null,
+          "temperature": null
+        },
+        {
+          "type": "tool",
+          "name": "variadic",
+          "input": "{\"values\": 1}",
+          "output": "6",
+          "status_code": null,
+          "model": null,
+          "temperature": null
+        },
+        {
+          "type": "llm",
+          "name": "failed_generator",
+          "input": [
+            {
+              "content": "{}",
+              "role": "user",
+              "tool_call_id": null,
+              "tool_calls": null
+            }
+          ],
+          "output": {
+            "content": "",
+            "role": "assistant",
+            "tool_call_id": null,
+            "tool_calls": null
+          },
+          "status_code": 500,
+          "model": "synthetic-model",
+          "temperature": null
+        }
+      ],
+      "normal_sdk_sink_scope": "Ordinary public standalone SDK configuration owns its sink and derives API_URL plus /otel/v1/traces with AO project/stream routing. An application global OTel provider alone does not bind it. Missing documented custom sink registration must not become a blanket claim that SDK @log cannot route to Studio. This source fact does not prove startup, resolved resource headers or receipt. That SDK sink exports spans; native application logs need a separate LogRecord provider/handler/export path.",
+      "not_proven": [
+        "Default SDK decorator to live Studio receiver or cloud delivery was not executed.",
+        "Attribute-dependent sampler/on_start capability is not established by completed logger records.",
+        "A documented persistent default-decorator ingestion-hook or public OTel sink replacement API was not found in the inspected signature/source; that does not rule out all SDK alternatives.",
+        "Nested parallel behavior, full generator throw/athrow delegation, Galileo installed-runtime behavior, current complete semantic/wire contracts and every model wrapper were not independently executed."
+      ]
+    },
+    "function_cases": [
+      {
+        "id": "safe-sync-tool",
+        "source": "def health(service):\n    if service not in (\"checkout\", \"inventory\"):\n        raise ValueError(\"unknown service\")\n    return {\"service\": service, \"status\": \"healthy\"}\n",
+        "operation": "execute_tool",
+        "bound_input": {
+          "service": "checkout"
+        },
+        "output": {
+          "service": "checkout",
+          "status": "healthy"
+        },
+        "existing_producer": null,
+        "capture_contract": "Only allowlisted synthetic service and fixed status; no raw secret/user content in this supplied operation."
+      },
+      {
+        "id": "safe-async-agent",
+        "source": "async def agent_turn(question):\n    return \"Synthetic bounded answer\"\n",
+        "operation": "invoke_agent",
+        "bound_input": {
+          "question": "Synthetic service check"
+        },
+        "output": "Synthetic bounded answer",
+        "existing_producer": null,
+        "capture_contract": "Supplied synthetic safe strings below declared caps, finite coroutine; standalone agent has no separate workflow boundary."
+      },
+      {
+        "id": "safe-sync-retriever",
+        "source": "def retrieve(query):\n    return [{\"id\": \"synthetic-doc\", \"content\": \"Synthetic guide\"}]\n",
+        "operation": "retrieval",
+        "bound_input": {
+          "query": "Synthetic service check"
+        },
+        "output": [
+          {
+            "id": "synthetic-doc",
+            "content": "Synthetic guide"
+          }
+        ],
+        "existing_producer": null,
+        "capture_contract": "Only synthetic bounded query/document; ordinary database/history functions are not automatically retrieval."
+      },
+      {
+        "id": "finite-yielding-agent",
+        "source": "async def agent_events():\n    for text in (\"Synthetic step\", \"Synthetic answer\"):\n        yield {\"event\":\"message\", \"text\":text}\n",
+        "operation": "invoke_agent",
+        "consumer": "async-for to normal exhaustion only; no asend/athrow protocol",
+        "source_bound": {
+          "yield_count": 2,
+          "content_bytes_per_yield": 128
+        },
+        "existing_producer": null,
+        "capture_contract": "Two finite safe outputs; inspect selected decorator dispatch, whole-operation end/error/cancel and bounded collection rather than blanket-reject generators."
+      },
+      {
+        "id": "unsafe-raw-argument-companion",
+        "source": "async def private_question(question):\n    return await existing_agent(question)\n",
+        "bound_input": {
+          "question": "api_key=SYNTHETIC_SECRET_SENTINEL"
+        },
+        "proposed_capture": {
+          "redacted_input": "[REDACTED]",
+          "raw_question_still_bound": true
+        },
+        "source_proof": "The independent native SDK mapped_input operation in sdk_source_receipt retained SYNTHETIC_RAW_SENTINEL despite a mapper; the source overwrites mapped input with all bound arguments. This is separate from the supplied question case, not execution of that function."
+      },
+      {
+        "id": "unbounded-generator-protocol",
+        "source": "def interactive_events():\n    value = yield \"ready\"\n    while True:\n        value = yield use_source_value(value)\n",
+        "consumer": "send/throw/close; potentially unbounded user content",
+        "source_bound": null,
+        "source_proof": "The isolated native probe measured send/asend user values replaced by None; chosen source collects every yield. throw/athrow and arbitrary application close/cancel behavior were not executed."
+      },
+      {
+        "id": "owned-model-wrapper",
+        "source": "async def ask(messages):\n    return await sdk_wrapped_model.chat(messages)\n",
+        "existing_producer": {
+          "owner": "existing supported SDK model wrapper",
+          "logical_operation": "chat",
+          "node_count_per_call": 1,
+          "provider_and_sink": "already configured; declared source case, no live evidence"
+        },
+        "proposed_additional_decorator": "@log around same logical ask/model call"
+      },
+      {
+        "id": "custom-application-provider-sink-requirement",
+        "selected_function": "safe-sync-tool",
+        "source_constraint": "This independent operation requires an application-owned ReadableSpan processor chain and selected custom exporter, rather than the normal SDK-owned standalone sink. The proposed workaround injects private _sink. Inspect the actual public signatures/cache behavior in the dated receipt."
+      },
+      {
+        "id": "successful-null-native-capture",
+        "kind": "actual isolated native SDK observation, not synthetic OTel export",
+        "probe_operation": "successful_null",
+        "business_result": null,
+        "captured_native_tool_output": ""
+      },
+      {
+        "id": "variadic-native-capture",
+        "kind": "actual isolated native SDK observation, not execution of app.py",
+        "probe_operation": "variadic",
+        "original_business_arguments": [
+          1,
+          2,
+          3
+        ],
+        "business_result": 6,
+        "captured_native_tool_input": {
+          "values": 1
+        }
+      },
+      {
+        "id": "error-after-produced-partial-native-capture",
+        "kind": "actual isolated native SDK observation, not received model response or OTel export",
+        "probe_operation": "failed_generator",
+        "business_first_yield": "produced partial answer",
+        "business_exception": "synthetic stream failure",
+        "captured_native_llm_output": "",
+        "captured_native_status_code": 500
+      }
+    ],
+    "version_policy_cases": [
+      {
+        "id": "hardcoded-future-guide-pin",
+        "kind": "synthetic proposed guidance text, not shipped change or latest version claim",
+        "proposed_guidance": "Install example-genai-sdk==1.0 and example-otel-sdk==2.0 for every future app.",
+        "project_runtime": "Python3.12; existing dependency constraints/lockfile available"
+      },
+      {
+        "id": "synthetic-compatible-resolution",
+        "kind": "synthetic fictional-package compatibility facts, not live Splunk/PyPI receipt",
+        "package": "example-genai-sdk",
+        "runtime": "Python3.12",
+        "candidate_facts": [
+          {
+            "version": "1.0",
+            "requires_python": ">=3.11",
+            "compatible": true
+          },
+          {
+            "version": "1.1",
+            "requires_python": ">=3.11",
+            "compatible": true
+          },
+          {
+            "version": "2.0",
+            "requires_python": ">=3.13",
+            "compatible": false
+          }
+        ]
+      },
+      {
+        "id": "dated-versioned-capture",
+        "source": "genai-sdk-helper-evidence.json / installed probe version receipt"
+      }
+    ],
+    "studio_signal_cases": [
+      {
+        "id": "spans-and-metrics-unasked-logs-none",
+        "scope": "Synthetic source configuration and packet inventory",
+        "operator_requested_log_optout": false,
+        "profile": {
+          "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
+          "OTEL_LOGS_EXPORTER": "none"
+        },
+        "source_signals": {
+          "ordinary_application_logger_present": true,
+          "sdk_log_decorator_creates_genai_span": true
+        },
+        "synthetic_receiver_records": {
+          "traces": {
+            "path": "/v1/traces",
+            "count": 2
+          },
+          "metrics": {
+            "path": "/v1/metrics",
+            "count": 1
+          },
+          "logs": {
+            "path": "/v1/logs",
+            "count": 0
+          }
+        }
+      },
+      {
+        "id": "three-native-signal-records",
+        "scope": "Synthetic field/transport packet example, not a receiver/runtime capture",
+        "operator_requested_log_optout": false,
+        "profile": {
+          "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
+          "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/v1/logs",
+          "OTEL_LOGS_EXPORTER": "otlp"
+        },
+        "synthetic_receiver_records": {
+          "traces": {
+            "path": "/v1/traces",
+            "records": [
+              {
+                "service.name": "synthetic-agent",
+                "span.name": "invoke_agent synthetic"
+              }
+            ]
+          },
+          "metrics": {
+            "path": "/v1/metrics",
+            "records": [
+              {
+                "service.name": "synthetic-agent",
+                "name": "synthetic.turn.count",
+                "value": 1
+              }
+            ]
+          },
+          "logs": {
+            "path": "/v1/logs",
+            "records": [
+              {
+                "service.name": "synthetic-agent",
+                "body": "synthetic_turn_completed",
+                "severity_text": "INFO",
+                "trace_id": "11111111111111111111111111111111",
+                "span_id": "1111111111111111",
+                "scope": "application-logger"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "explicit-user-log-optout",
+        "scope": "Synthetic operator-owned preference",
+        "operator_requested_log_optout": true,
+        "operator_instruction": "Disable log export; retain traces and metrics.",
+        "profile": {
+          "OTEL_LOGS_EXPORTER": "none"
+        }
+      }
+    ]
+  },
+  "official_sdk_examples": {
+    "kind": "public-official-sdk-source-snapshot",
+    "scope": "Deterministic offline eval evidence. Main was resolved at captured_at_utc; this dated snapshot does not establish that main remains latest during a future run. Record snapshot provenance and mark a newer live lookup unavailable/unverified when networking is restricted. Do not execute downloaded source or claim installed runtime support from source evidence.",
+    "repository": "https://github.com/splunk/splunk-ao-python",
+    "requested_ref": "main",
+    "resolved_revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+    "commit_date": "2026-10-12T19:18:12Z",
+    "captured_at_utc": "2026-10-13T06:51:01.162988+00:00",
+    "declared_main_package_version": "0.5.0",
+    "files": [
+      {
+        "path": "examples/logging-samples/splunk-ao-logger/basic-example.py",
+        "url": "https://github.com/splunk/splunk-ao-python/blob/b5f226e947e1861b5687ee85b39474fe9d63df57/examples/logging-samples/splunk-ao-logger/basic-example.py",
+        "sha256": "1e746706227363ed88e60c6cb813e470b1381a940ca07abfe7ee6fa89a63a900",
+        "bytes": 1016,
+        "source_snapshot": "from splunk_ao import SplunkAOLogger\nfrom splunk_ao.config import SplunkAOConfig  # For displaying the log stream URL\n\n# Load environment variables from .env file\nfrom dotenv import load_dotenv\n\nload_dotenv()\n\n# Create a logger instance\nlogger = SplunkAOLogger()\n\n# Start a session\nsession_id = logger.start_session(name=\"Test session\")\n\n# Start a new trace\ntrace = logger.start_trace(\"Say this is a test\")\n\n# Add an LLM span to the trace\nlogger.add_llm_span(\n    input=\"Say this is a test\",\n    output=\"Hello, this is a test\",\n    model=\"gpt-4o\",\n    num_input_tokens=10,\n    num_output_tokens=3,\n    total_tokens=13,\n    duration_ns=1000,\n)\n\n# Conclude the trace with the final output\nlogger.conclude(output=\"Hello, this is a test\", duration_ns=1000)\n\n\n# Show link to Splunk AO log stream\nconfig = SplunkAOConfig.get()\nproject_url = f\"{config.console_url}project/{logger.project_id}\"\nlog_stream_url = f\"{project_url}/log-streams/{logger.agent_stream_id}\"\n\nprint(\"\ud83d\ude80 Splunk AO Log Stream:\")\nprint(log_stream_url)\n"
+      },
+      {
+        "path": "examples/agent/langchain-agent/main.py",
+        "url": "https://github.com/splunk/splunk-ao-python/blob/b5f226e947e1861b5687ee85b39474fe9d63df57/examples/agent/langchain-agent/main.py",
+        "sha256": "d0c33e3e731330f717ebb044d44945167296db8c6c1fe0095267a38a8f38c142",
+        "bytes": 1014,
+        "source_snapshot": "from dotenv import load_dotenv\nfrom langchain.agents import initialize_agent\nfrom langchain.agents.agent_types import AgentType\nfrom langchain_openai import ChatOpenAI\nfrom langchain.tools import tool\nfrom splunk_ao import splunk_ao_context\nfrom splunk_ao.handlers.langchain import SplunkAOCallback\n\n# Load environment variables (e.g., API keys)\nload_dotenv()\n\n\n# Define a tool for the agent to use\n@tool\ndef greet(name: str) -> str:\n    \"\"\"Say hello to someone.\"\"\"\n    return f\"Hello, {name}! \ud83d\udc4b\"\n\n\n# Use the Splunk AO context manager to specify project and log stream\nwith splunk_ao_context(project=\"langchain-docs\", agent_stream=\"my_log_stream\"):\n    agent = initialize_agent(\n        tools=[greet],\n        llm=ChatOpenAI(model=\"gpt-4\", temperature=0.7, callbacks=[SplunkAOCallback()]),\n        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,\n        verbose=True,\n    )\n\n    if __name__ == \"__main__\":\n        result = agent.invoke({\"input\": \"Say hello to Erin\"})\n        print(f\"\\nAgent Response:\\n{result}\")\n"
+      },
+      {
+        "path": "examples/agent/langchain-middleware/main.py",
+        "url": "https://github.com/splunk/splunk-ao-python/blob/b5f226e947e1861b5687ee85b39474fe9d63df57/examples/agent/langchain-middleware/main.py",
+        "sha256": "cd0995cf6cb8b8ea183e4dfc2a3f7710c4e6fc287152643219b45c0dbf70c14e",
+        "bytes": 2972,
+        "source_snapshot": "import json\nimport os\n\nfrom dotenv import load_dotenv\nfrom splunk_ao import splunk_ao_context\nfrom splunk_ao.handlers.langchain.middleware import SplunkAOMiddleware\nfrom langchain.agents.factory import create_agent\nfrom langchain.tools import tool\nfrom langchain_core.messages import HumanMessage\nfrom langchain_openai import ChatOpenAI\n\n# Load environment variables (e.g., API keys)\nload_dotenv()\n\n# Initialize the OpenAI chat model that the agent will use for reasoning\nmodel = ChatOpenAI(\n    name=\"gpt-5\",\n    api_key=os.getenv(\"OPENAI_API_KEY\"),  # type: ignore\n)\n\n\n# Define a tool that allows the agent to get weather information\n# The @tool decorator converts this function into a LangChain tool that the agent can use\n@tool\ndef get_weather(location: str, unit: str = \"fahrenheit\") -> str:\n    \"\"\"Get the current weather for a given location.\"\"\"\n    # In a real application, this would call a weather API\n    # For demonstration, we return mock data\n    return json.dumps({\"location\": location, \"temperature\": 72, \"unit\": unit})\n\n\n# Define a tool that allows the agent to get stock price information\n@tool\ndef get_stock_price(symbol: str) -> str:\n    \"\"\"Get the current stock price for a given ticker symbol.\"\"\"\n    # Mock stock prices for demonstration\n    prices = {\"AAPL\": 178.50, \"GOOGL\": 141.25, \"MSFT\": 378.90, \"AMZN\": 153.40}\n    price = prices.get(symbol.upper(), 100.00)\n    return json.dumps({\"symbol\": symbol.upper(), \"price\": price, \"currency\": \"USD\"})\n\n\ndef main() -> None:\n    # Use the Splunk AO context manager to specify project and log stream\n    # All traces created within this context will be associated with this project\n    with splunk_ao_context(project=os.getenv(\"SPLUNK_AO_PROJECT\", \"langchain-middleware\"), agent_stream=os.getenv(\"SPLUNK_AO_AGENT_STREAM\", \"agent_execution\")):\n        # Create an agent with SplunkAOMiddleware for automatic logging\n        # SplunkAOMiddleware automatically captures:\n        # - Agent lifecycle events (start/completion)\n        # - Model calls (prompts, responses, metadata)\n        # - Tool calls (function names, arguments, outputs)\n        agent = create_agent(\n            model,  # The LLM the agent uses for reasoning\n            tools=[get_weather, get_stock_price],  # Available tools\n            middleware=[SplunkAOMiddleware()],  # Add SplunkAOMiddleware for automatic logging\n        )\n\n        # Invoke the agent with a question that requires using both tools\n        # The agent will:\n        # 1. Understand it needs weather info for San Francisco\n        # 2. Call the get_weather tool\n        # 3. Understand it needs Apple's stock price\n        # 4. Call the get_stock_price tool\n        # 5. Synthesize the results into a coherent response\n        result = agent.invoke({\"messages\": [HumanMessage(content=\"What's the weather like in San Francisco and what's the current stock price of Apple?\")]})\n        print(f\"\\nAgent Response:\\n{result}\")\n\n\nif __name__ == \"__main__\":\n    main()\n"
+      },
+      {
+        "path": "src/splunk_ao/logger/logger.py",
+        "url": "https://github.com/splunk/splunk-ao-python/blob/b5f226e947e1861b5687ee85b39474fe9d63df57/src/splunk_ao/logger/logger.py",
+        "sha256": "1831b9843bbdb195bbf85bb90bb76918a3e8784b87922493daddbd25b402264c",
+        "bytes": 98488
+      },
+      {
+        "path": "pyproject.toml",
+        "url": "https://github.com/splunk/splunk-ao-python/blob/b5f226e947e1861b5687ee85b39474fe9d63df57/pyproject.toml",
+        "sha256": "6dc37ccdf42dad9ad9ffc31de0839c63e73b7cd500d27739d68004b19b32f509",
+        "bytes": 15419
+      }
+    ],
+    "logger_api_source_signatures": {
+      "start_trace": {
+        "arguments": "self, input: str | TextOrContentBlocks | dict | list[dict[str, Any]], redacted_input: str | TextOrContentBlocks | dict | list[dict[str, Any]] | None=None, name: str | None=None, duration_ns: int | None=None, created_at: datetime | None=None, metadata: dict[str, MetadataValue] | None=None, tags: list[str] | None=None, dataset_input: str | None=None, dataset_output: str | None=None, dataset_metadata: dict[str, MetadataValue] | None=None, external_id: str | None=None",
+        "returns": "LoggedTrace"
+      },
+      "add_llm_span": {
+        "arguments": "self, input: LlmSpanAllowedInputType, output: LlmSpanAllowedOutputType, model: str | None, redacted_input: LlmSpanAllowedInputType | None=None, redacted_output: LlmSpanAllowedOutputType | None=None, tools: list[dict] | None=None, name: str | None=None, created_at: datetime | None=None, duration_ns: int | None=None, metadata: dict[str, MetadataValue] | None=None, tags: list[str] | None=None, num_input_tokens: int | None=None, num_output_tokens: int | None=None, total_tokens: int | None=None, temperature: float | None=None, status_code: int | None=None, time_to_first_token_ns: int | None=None, image_input_tokens: int | None=None, audio_input_tokens: int | None=None, audio_output_tokens: int | None=None, image_output_tokens: int | None=None, step_number: int | None=None, events: list[Event] | None=None, finish_reason: str | None=None",
+        "returns": "LlmSpan"
+      },
+      "add_retriever_span": {
+        "arguments": "self, input: str, output: RetrieverSpanAllowedOutputType, redacted_input: str | None=None, redacted_output: RetrieverSpanAllowedOutputType=None, name: str | None=None, duration_ns: int | None=None, created_at: datetime | None=None, metadata: dict[str, MetadataValue] | None=None, tags: list[str] | None=None, status_code: int | None=None, step_number: int | None=None",
+        "returns": "RetrieverSpan"
+      },
+      "add_tool_span": {
+        "arguments": "self, input: str, redacted_input: str | None=None, output: str | None=None, redacted_output: str | None=None, name: str | None=None, duration_ns: int | None=None, created_at: datetime | None=None, metadata: dict[str, MetadataValue] | None=None, tags: list[str] | None=None, status_code: int | None=None, tool_call_id: str | None=None, step_number: int | None=None",
+        "returns": "ToolSpan"
+      },
+      "add_workflow_span": {
+        "arguments": "self, input: str, redacted_input: str | None=None, output: str | None=None, redacted_output: str | None=None, name: str | None=None, duration_ns: int | None=None, created_at: datetime | None=None, metadata: dict[str, MetadataValue] | None=None, tags: list[str] | None=None, step_number: int | None=None, status_code: int | None=None",
+        "returns": "LoggedWorkflowSpan"
+      },
+      "add_agent_span": {
+        "arguments": "self, input: str, redacted_input: str | None=None, output: str | None=None, redacted_output: str | None=None, name: str | None=None, duration_ns: int | None=None, created_at: datetime | None=None, metadata: dict[str, MetadataValue] | None=None, tags: list[str] | None=None, agent_type: AgentType | None=None, step_number: int | None=None, status_code: int | None=None",
+        "returns": "LoggedAgentSpan"
+      },
+      "conclude": {
+        "arguments": "self, output: IngestOutputType | None=None, redacted_output: IngestOutputType | None=None, duration_ns: int | None=None, status_code: int | None=None, conclude_all: bool=False",
+        "returns": "StepWithChildSpans | None"
+      },
+      "flush": {
+        "arguments": "self, on_error: Callable[[Exception], None] | None=None",
+        "returns": "None"
+      },
+      "terminate": {
+        "arguments": "self",
+        "returns": "None"
+      }
+    }
+  },
+  "helper_public_api": {
+    "document_url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/start-splunk-ao-span",
+    "document_accessed_for": "2026-10-13 fresh-demo skill investigation",
+    "public_import": "from splunk_ao.otel import start_splunk_ao_span",
+    "signature": "start_splunk_ao_span(splunk_ao_span: SplunkAOSpan) -> Generator[trace.Span, Any, None]",
+    "package_source_path": "splunk_ao/otel.py",
+    "package_source_sha256": "af33b590d48f3abddf032664d76d95c9ff9eb7993941c63e179cae6eb07ce10f",
+    "package_function_source_snapshot": "@contextmanager\ndef start_splunk_ao_span(splunk_ao_span: SplunkAOSpan) -> Generator[trace.Span, Any, None]:\n    tracer_provider = _TRACE_PROVIDER_CONTEXT_VAR.get()\n    if tracer_provider is None:\n        tracer_provider = trace.get_tracer_provider()\n        _TRACE_PROVIDER_CONTEXT_VAR.set(cast(TracerProvider, tracer_provider))\n    tracer = tracer_provider.get_tracer(\"splunk-ao-tracer\")\n    is_conversation_root = not trace.get_current_span().get_span_context().is_valid and isinstance(\n        splunk_ao_span, WorkflowSpan | AgentSpan\n    )\n    session_id = get_effective_session_id()\n    with tracer.start_as_current_span(splunk_ao_span.name) as span:\n        try:\n            yield span\n        finally:\n            try:\n                attributes = build_span_attributes(splunk_ao_span, session_id)\n                if is_conversation_root:\n                    attributes[GEN_AI_CONVERSATION_ROOT] = True\n                for key, value in attributes.items():\n                    span.set_attribute(key, value)\n            except Exception:\n                logger.warning(\"Failed to finalize Splunk AO span attributes\", exc_info=True)\n",
+    "documentation_scope": "The public helper yields a writable OpenTelemetry Span; its installed function has no public kind argument and derives schema attributes in its finally block before span end. This is a different API from SplunkAOLogger and its private sink."
+  },
+  "official_conventions": {
+    "kind": "public-official-genai-source-snapshot",
+    "scope": "Dated offline eval evidence, not proof that main remains latest during future runs. Record snapshot provenance and mark a newer live lookup unavailable/unverified when network is restricted. Source evidence does not establish emitted/runtime configuration.",
+    "otel": {
+      "repository": "https://github.com/open-telemetry/semantic-conventions-genai",
+      "requested_ref": "main",
+      "resolved_revision": "5293effb97f18ddb0602da884dadee6119d67679",
+      "commit_date": "2026-10-12T19:05:02Z",
+      "captured_at_utc": "2026-10-13T06:56:26.057696+00:00",
+      "files": [
+        {
+          "path": "docs/gen-ai/gen-ai-agent-spans.md",
+          "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/docs/gen-ai/gen-ai-agent-spans.md",
+          "sha256": "018ffd339be99c7e56ddba7265dd3095ca0735ddf680d28f96036043641384f4",
+          "bytes": 146984
+        },
+        {
+          "path": "docs/gen-ai/client-inference.md",
+          "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/docs/gen-ai/client-inference.md",
+          "sha256": "d66935733da1edd048cfa3b90d081f8d81b6961b62a69dafa15c1c5ad03b9c5b",
+          "bytes": 116267
+        },
+        {
+          "path": "model/gen-ai/gen-ai-input-messages.json",
+          "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-input-messages.json",
+          "sha256": "034fcd8c87f1e013f3a5a5018503210e2bee4d2499c361823b96e906d40a50ad",
+          "bytes": 20355
+        },
+        {
+          "path": "model/gen-ai/gen-ai-output-messages.json",
+          "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-output-messages.json",
+          "sha256": "cb1e0296de9a5c15237f4e49af2f13e1409ffc9a671f89767da20ad986f37461",
+          "bytes": 21615
+        },
+        {
+          "path": "model/gen-ai/gen-ai-tool-call-arguments.json",
+          "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-tool-call-arguments.json",
+          "sha256": "73607a8e8d9e84393475ef460108c59dbb9e1d2ddc0d0177fce6f735a62367ea",
+          "bytes": 171
+        },
+        {
+          "path": "model/gen-ai/gen-ai-tool-call-result.json",
+          "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-tool-call-result.json",
+          "sha256": "44eb4a93b05eea7da14489f1d253814c6429772d1fe869f8f6fc1749d7593412",
+          "bytes": 168
+        },
+        {
+          "path": "model/gen-ai/gen-ai-tool-definitions.json",
+          "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-tool-definitions.json",
+          "sha256": "023501e9835139703d4b475c86d3d6b6b11dee2ccc08ea6c8ab48d173b89aa80",
+          "bytes": 3227
+        },
+        {
+          "path": "docs/gen-ai/gen-ai-spans.md",
+          "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/docs/gen-ai/gen-ai-spans.md",
+          "sha256": "af0b7501177452a5fb929e09a42d791631511a0544f2c71e1a008ff177bcebf0",
+          "bytes": 84003
+        }
+      ],
+      "attribute_requirement_rows": [
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.operation.name",
+          "official_level": "Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.provider.name",
+          "official_level": "Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "error.type",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.agent.description",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.agent.id",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.agent.name",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.agent.version",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.conversation.id",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.data_source.id",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.output.type",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.request.choice.count",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.request.seed",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "server.port",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.request.frequency_penalty",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.request.max_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.request.model",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.request.presence_penalty",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.request.previous_response.id",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.request.stop_sequences",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.request.temperature",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.request.top_p",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.response.finish_reasons",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.audio.cache_read.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.audio.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.audio.output_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.cache_read.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.cache_write.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.image.cache_read.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.image.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.image.output_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.output_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.text.cache_read.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.text.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.usage.text.output_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "server.address",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.input.messages",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.output.messages",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.system_instructions",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent client span",
+          "attribute": "gen_ai.tool.definitions",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.operation.name",
+          "official_level": "Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "error.type",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.agent.description",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.agent.name",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.conversation.id",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.data_source.id",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.output.type",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.request.choice.count",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.request.seed",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.request.frequency_penalty",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.request.max_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.request.model",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.request.presence_penalty",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.request.stop_sequences",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.request.temperature",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.request.top_p",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.response.finish_reasons",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.usage.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.usage.output_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.input.messages",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.output.messages",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.system_instructions",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke agent internal span",
+          "attribute": "gen_ai.tool.definitions",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke workflow span",
+          "attribute": "gen_ai.operation.name",
+          "official_level": "Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke workflow span",
+          "attribute": "error.type",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke workflow span",
+          "attribute": "gen_ai.conversation.id",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke workflow span",
+          "attribute": "gen_ai.workflow.name",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke workflow span",
+          "attribute": "gen_ai.input.messages",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-agent-spans.md",
+          "section": "Invoke workflow span",
+          "attribute": "gen_ai.output.messages",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.operation.name",
+          "official_level": "Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.provider.name",
+          "official_level": "Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "error.type",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.conversation.id",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.output.type",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.prompt.name",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.prompt.version",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.choice.count",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.model",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.seed",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.stream",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.top_k",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "server.port",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.conversation.compacted",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.frequency_penalty",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.max_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.presence_penalty",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.previous_response.id",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.reasoning.level",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.stop_sequences",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.temperature",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.request.top_p",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.response.finish_reasons",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.response.id",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.response.model",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.response.time_to_first_chunk",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.audio.cache_read.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.audio.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.audio.output_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.cache_read.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.cache_write.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.image.cache_read.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.image.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.image.output_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.output_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.reasoning.output_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.text.cache_read.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.text.input_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.usage.text.output_tokens",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "server.address",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.input.messages",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.output.messages",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.prompt.variable",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.system_instructions",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/client-inference.md",
+          "section": "Span: `gen_ai.client.inference`",
+          "attribute": "gen_ai.tool.definitions",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Retrievals",
+          "attribute": "gen_ai.operation.name",
+          "official_level": "Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Retrievals",
+          "attribute": "error.type",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Retrievals",
+          "attribute": "gen_ai.data_source.id",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Retrievals",
+          "attribute": "gen_ai.provider.name",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Retrievals",
+          "attribute": "gen_ai.request.model",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Retrievals",
+          "attribute": "server.port",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Retrievals",
+          "attribute": "gen_ai.retrieval.top_k",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Retrievals",
+          "attribute": "server.address",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Retrievals",
+          "attribute": "gen_ai.retrieval.documents",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Retrievals",
+          "attribute": "gen_ai.retrieval.query.text",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Execute tool span",
+          "attribute": "gen_ai.operation.name",
+          "official_level": "Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Execute tool span",
+          "attribute": "gen_ai.tool.name",
+          "official_level": "Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Execute tool span",
+          "attribute": "error.type",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Execute tool span",
+          "attribute": "gen_ai.agent.name",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Execute tool span",
+          "attribute": "gen_ai.conversation.id",
+          "official_level": "Conditionally Required"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Execute tool span",
+          "attribute": "gen_ai.tool.call.id",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Execute tool span",
+          "attribute": "gen_ai.tool.description",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Execute tool span",
+          "attribute": "gen_ai.tool.type",
+          "official_level": "Recommended"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Execute tool span",
+          "attribute": "gen_ai.tool.call.arguments",
+          "official_level": "Opt-In"
+        },
+        {
+          "document": "docs/gen-ai/gen-ai-spans.md",
+          "section": "Execute tool span",
+          "attribute": "gen_ai.tool.call.result",
+          "official_level": "Opt-In"
+        }
+      ],
+      "structured_schemas": {
+        "model/gen-ai/gen-ai-input-messages.json": {
+          "$defs": {
+            "BlobPart": {
+              "properties": {
+                "type": {
+                  "const": "blob",
+                  "type": "string"
+                },
+                "mime_type": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "modality": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Modality"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "content": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "modality",
+                "content"
+              ],
+              "type": "object"
+            },
+            "ChatMessage": {
+              "additionalProperties": true,
+              "properties": {
+                "role": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Role"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "parts": {
+                  "items": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TextPart"
+                      },
+                      {
+                        "$ref": "#/$defs/ToolCallRequestPart"
+                      },
+                      {
+                        "$ref": "#/$defs/ToolCallResponsePart"
+                      },
+                      {
+                        "$ref": "#/$defs/ServerToolCallPart"
+                      },
+                      {
+                        "$ref": "#/$defs/ServerToolCallResponsePart"
+                      },
+                      {
+                        "$ref": "#/$defs/BlobPart"
+                      },
+                      {
+                        "$ref": "#/$defs/FilePart"
+                      },
+                      {
+                        "$ref": "#/$defs/UriPart"
+                      },
+                      {
+                        "$ref": "#/$defs/ReasoningPart"
+                      },
+                      {
+                        "$ref": "#/$defs/CompactionPart"
+                      },
+                      {
+                        "$ref": "#/$defs/GenericPart"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "name": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "role",
+                "parts"
+              ],
+              "type": "object"
+            },
+            "CompactionPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "compaction",
+                  "type": "string"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "content": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            "FilePart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "file",
+                  "type": "string"
+                },
+                "mime_type": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "modality": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Modality"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "file_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "modality",
+                "file_id"
+              ],
+              "type": "object"
+            },
+            "GenericPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            "GenericServerToolCall": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            "GenericServerToolCallResponse": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            "Modality": {
+              "enum": [
+                "image",
+                "video",
+                "audio",
+                "document"
+              ],
+              "type": "string"
+            },
+            "ReasoningPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "reasoning",
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "content"
+              ],
+              "type": "object"
+            },
+            "Role": {
+              "enum": [
+                "system",
+                "user",
+                "assistant",
+                "tool"
+              ],
+              "type": "string"
+            },
+            "ServerToolCallPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "server_tool_call",
+                  "type": "string"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "name": {
+                  "type": "string"
+                },
+                "server_tool_call": {
+                  "$ref": "#/$defs/GenericServerToolCall"
+                }
+              },
+              "required": [
+                "type",
+                "name",
+                "server_tool_call"
+              ],
+              "type": "object"
+            },
+            "ServerToolCallResponsePart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "server_tool_call_response",
+                  "type": "string"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "server_tool_call_response": {
+                  "$ref": "#/$defs/GenericServerToolCallResponse"
+                }
+              },
+              "required": [
+                "type",
+                "server_tool_call_response"
+              ],
+              "type": "object"
+            },
+            "TextPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "text",
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "content"
+              ],
+              "type": "object"
+            },
+            "ToolCallRequestPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "tool_call",
+                  "type": "string"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "default": null
+                }
+              },
+              "required": [
+                "type",
+                "name"
+              ],
+              "type": "object"
+            },
+            "ToolCallResponsePart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "tool_call_response",
+                  "type": "string"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "response": {}
+              },
+              "required": [
+                "type",
+                "response"
+              ],
+              "type": "object"
+            },
+            "UriPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "uri",
+                  "type": "string"
+                },
+                "mime_type": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "modality": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Modality"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "uri": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "modality",
+                "uri"
+              ],
+              "type": "object"
+            }
+          },
+          "items": {
+            "$ref": "#/$defs/ChatMessage"
+          },
+          "type": "array"
+        },
+        "model/gen-ai/gen-ai-output-messages.json": {
+          "$defs": {
+            "BlobPart": {
+              "properties": {
+                "type": {
+                  "const": "blob",
+                  "type": "string"
+                },
+                "mime_type": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "modality": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Modality"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "content": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "modality",
+                "content"
+              ],
+              "type": "object"
+            },
+            "CompactionPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "compaction",
+                  "type": "string"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "content": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            "FilePart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "file",
+                  "type": "string"
+                },
+                "mime_type": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "modality": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Modality"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "file_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "modality",
+                "file_id"
+              ],
+              "type": "object"
+            },
+            "FinishReason": {
+              "enum": [
+                "stop",
+                "length",
+                "content_filter",
+                "tool_call",
+                "compaction",
+                "error"
+              ],
+              "type": "string"
+            },
+            "GenericPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            "GenericServerToolCall": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            "GenericServerToolCallResponse": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            "Modality": {
+              "enum": [
+                "image",
+                "video",
+                "audio",
+                "document"
+              ],
+              "type": "string"
+            },
+            "OutputMessage": {
+              "additionalProperties": true,
+              "properties": {
+                "role": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Role"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "parts": {
+                  "items": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TextPart"
+                      },
+                      {
+                        "$ref": "#/$defs/ToolCallRequestPart"
+                      },
+                      {
+                        "$ref": "#/$defs/ToolCallResponsePart"
+                      },
+                      {
+                        "$ref": "#/$defs/ServerToolCallPart"
+                      },
+                      {
+                        "$ref": "#/$defs/ServerToolCallResponsePart"
+                      },
+                      {
+                        "$ref": "#/$defs/BlobPart"
+                      },
+                      {
+                        "$ref": "#/$defs/FilePart"
+                      },
+                      {
+                        "$ref": "#/$defs/UriPart"
+                      },
+                      {
+                        "$ref": "#/$defs/ReasoningPart"
+                      },
+                      {
+                        "$ref": "#/$defs/CompactionPart"
+                      },
+                      {
+                        "$ref": "#/$defs/GenericPart"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "name": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "finish_reason": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/FinishReason"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "deprecated": true
+                }
+              },
+              "required": [
+                "role",
+                "parts"
+              ],
+              "type": "object"
+            },
+            "ReasoningPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "reasoning",
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "content"
+              ],
+              "type": "object"
+            },
+            "Role": {
+              "enum": [
+                "system",
+                "user",
+                "assistant",
+                "tool"
+              ],
+              "type": "string"
+            },
+            "ServerToolCallPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "server_tool_call",
+                  "type": "string"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "name": {
+                  "type": "string"
+                },
+                "server_tool_call": {
+                  "$ref": "#/$defs/GenericServerToolCall"
+                }
+              },
+              "required": [
+                "type",
+                "name",
+                "server_tool_call"
+              ],
+              "type": "object"
+            },
+            "ServerToolCallResponsePart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "server_tool_call_response",
+                  "type": "string"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "server_tool_call_response": {
+                  "$ref": "#/$defs/GenericServerToolCallResponse"
+                }
+              },
+              "required": [
+                "type",
+                "server_tool_call_response"
+              ],
+              "type": "object"
+            },
+            "TextPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "text",
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "content"
+              ],
+              "type": "object"
+            },
+            "ToolCallRequestPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "tool_call",
+                  "type": "string"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "name": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "default": null
+                }
+              },
+              "required": [
+                "type",
+                "name"
+              ],
+              "type": "object"
+            },
+            "ToolCallResponsePart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "tool_call_response",
+                  "type": "string"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "response": {}
+              },
+              "required": [
+                "type",
+                "response"
+              ],
+              "type": "object"
+            },
+            "UriPart": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "uri",
+                  "type": "string"
+                },
+                "mime_type": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "modality": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Modality"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "uri": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "modality",
+                "uri"
+              ],
+              "type": "object"
+            }
+          },
+          "items": {
+            "$ref": "#/$defs/OutputMessage"
+          },
+          "type": "array"
+        },
+        "model/gen-ai/gen-ai-tool-call-arguments.json": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "model/gen-ai/gen-ai-tool-call-result.json": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "model/gen-ai/gen-ai-tool-definitions.json": {
+          "$defs": {
+            "FunctionToolDefinition": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "const": "function",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "parameters": {
+                  "anyOf": [
+                    {
+                      "$ref": "http://json-schema.org/draft-07/schema#"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "type",
+                "name"
+              ],
+              "type": "object"
+            },
+            "GenericToolDefinition": {
+              "additionalProperties": true,
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "name"
+              ],
+              "type": "object"
+            }
+          },
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/FunctionToolDefinition"
+              },
+              {
+                "$ref": "#/$defs/GenericToolDefinition"
+              }
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "schema_extract": "Validation structure retained; descriptive prose/examples omitted. Full source hashes and URLs above."
+    },
+    "vendor_sources": [
+      {
+        "url": "https://docs.galileo.ai/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+        "checked_at_utc": "2026-10-13T06:56:26.057696+00:00",
+        "paraphrased_requirements": {
+          "agent": [
+            "operation and provider identity",
+            "operation-derived span name; CLIENT remote or INTERNAL in-process",
+            "actual input/output via GenAI messages or OpenInference values"
+          ],
+          "model": [
+            "operation and provider; request model conditionally required",
+            "actual input/output via supported GenAI/OpenInference mapping"
+          ],
+          "tool": [
+            "execute_tool operation; tool name",
+            "call ID recommended",
+            "arguments plus input message mapping; result plus output message mapping, or OpenInference values"
+          ],
+          "errors": [
+            "error.type and ERROR status"
+          ],
+          "delivery": [
+            "Check partialSuccess rejection even with HTTP 200"
+          ],
+          "schema_note": "Assess current typed-parts schemas separately from older vendor examples."
+        }
+      },
+      {
+        "url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+        "checked_at_utc": "2026-10-13T06:56:26.057696+00:00",
+        "paraphrased_requirements": {
+          "agent": [
+            "operation and provider identity",
+            "operation-derived span name; CLIENT remote or INTERNAL in-process",
+            "actual input/output via GenAI messages or OpenInference values"
+          ],
+          "model": [
+            "operation and provider; request model conditionally required",
+            "actual input/output via supported GenAI/OpenInference mapping"
+          ],
+          "tool": [
+            "execute_tool operation; tool name",
+            "call ID recommended",
+            "arguments plus input message mapping; result plus output message mapping, or OpenInference values"
+          ],
+          "errors": [
+            "error.type and ERROR status"
+          ],
+          "delivery": [
+            "Check partialSuccess rejection even with HTTP 200"
+          ],
+          "schema_note": "Assess current typed-parts schemas separately from older vendor examples."
+        }
+      }
+    ]
+  }
+}

@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261014T085555232498Z",
+    "run_id": "20261014T111531830190Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -118,6 +118,22 @@
       "sanity_check_count": 0,
       "rubric_check_count": 0,
       "runtime_check_count": 1
+    },
+    {
+      "id": "go/kvstore/qual/dependency-log-compatibility",
+      "case": "go/kvstore",
+      "language": "go",
+      "service": "kvstore",
+      "prompt_count": 1,
+      "prompts": [
+        "dependency-log-compatibility-plan"
+      ],
+      "definition_path": "evals/go/kvstore/eval/qual/dependency-log-compatibility.json",
+      "eval_dir": "evals/go/kvstore",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
     },
     {
       "id": "go/kvstore/qual/incident-readiness",
@@ -270,6 +286,38 @@
       "runtime_check_count": 0
     },
     {
+      "id": "java/springboot-basic/qual/logging-compatible-plan",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "java-compatible-log-plan"
+      ],
+      "definition_path": "evals/java/springboot-basic/eval/qual/logging-compatible-plan.json",
+      "eval_dir": "evals/java/springboot-basic",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "node/express-basic/qual/dependency-log-compatibility",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "dependency-log-compatibility"
+      ],
+      "definition_path": "evals/node/express-basic/eval/qual/dependency-log-compatibility.json",
+      "eval_dir": "evals/node/express-basic",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
       "id": "node/express-basic/qual/instrument",
       "case": "node/express-basic",
       "language": "node",
@@ -351,6 +399,38 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/ai-assistant-demo/qual/genai-instrument-decorator-profile",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "genai-instrument-decorator-profile"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/genai-instrument-decorator-profile.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/genai-instrument-operation-contract",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "genai-instrument-operation-contract"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/genai-instrument-operation-contract.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 4,
+      "runtime_check_count": 0
+    },
+    {
       "id": "python/ai-assistant-demo/qual/genai-sdk-default-instrument",
       "case": "python/ai-assistant-demo",
       "language": "python",
@@ -363,7 +443,7 @@
       "eval_dir": "evals/python/ai-assistant-demo",
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
-      "rubric_check_count": 13,
+      "rubric_check_count": 8,
       "runtime_check_count": 0
     },
     {
@@ -629,16 +709,16 @@
     }
   ],
   "summary": {
-    "eval_count": 37,
-    "case_count": 51,
-    "prompt_count": 51,
+    "eval_count": 42,
+    "case_count": 56,
+    "prompt_count": 56,
     "sanity_check_count": 0,
-    "rubric_check_count": 307,
+    "rubric_check_count": 330,
     "runtime_check_count": 9
   },
   "source": {
     "digest_version": 4,
-    "digest": "a7af971518bc98265aeef9f593402f9288a413d6e5cc74a98ecc0283615b3372",
+    "digest": "f351bbd6cd61befc4f663cda26e4890812822456a1a8228a39c8f9e334fab425",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -651,12 +731,12 @@
       "evals/go/chi-basic/eval/qual/benchmark-instrument.json": "ca365bb19d97128b41e3e89b17ed52d73e360a49e42cdb0ed5c87d68c90728e0",
       "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
-      "skills/otel-instrument/SKILL.md": "c50507c2335a2f6a795e019a1c32453c6aeb6b0b009e176a4571423dade9818d",
+      "skills/otel-instrument/SKILL.md": "a2ccb1e2ab4a4921f328036e5b02aa81e2594d0cbff6a0a146f6fc7f337dd130",
       "skills/otel-instrument/references/json-approval-handoff.md": "826c227489a30d4aa605ee3adfe37c292b64cb71d8fea6ac659a2ae10a33c3ac",
       "skills/otel-instrument/references/languages/go.md": "62ba4d47f1685230a1eec2ce6929c9b3c9f3b8228f62af729367a1db45fa4d5d",
-      "skills/otel-instrument/references/languages/java.md": "1f24f81386f3ac39b2f20386489b676760ad898d7b5d767a0f332ada29976eee",
+      "skills/otel-instrument/references/languages/java.md": "b35913ebfd94b8e56673c0db2c9deccf61c08770e7975306d839eb9eebb5e1d4",
       "skills/otel-instrument/references/languages/node.md": "3e86dadec6b8ebf1e6c344c7528772e08d8ec25706bd6b6962edfa37f407c63c",
-      "skills/otel-instrument/references/languages/python.md": "01918a0a00a6907e2891f3d0a7316e247271779c7e28e1ee339e569c3f018ebe",
+      "skills/otel-instrument/references/languages/python.md": "b0fcee39c21d1b4c71348c777336b8b917ef39a306ff0c6a8abebc2b4ecc9542",
       "skills/otel-instrument/references/project-runtime-validation.md": "cdbac8880d21bf8b47c7865c8ef21648e7701ca3c6dceb512d666281815ccc38",
       "skills/otel-instrument/references/signal-mapping-guide.md": "83a5e52a01a1c5b98530a3f7b320b410d364e2799a400b25a155ee1db780efed",
       "skills/otel-instrument/scripts/observe_report.py": "687f9801e563eb4ad4410eafce10b8bba7191601d654c3c5cb3360baa3dd08af",
@@ -668,7 +748,7 @@
       "skills/references/consumers.json": "abb97d53704c51d5a49a3de02505f8b1bba0fc13c51b7913b9cf0d186040aa19",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
-      "skills/references/genai-readiness.md": "1d7fd7a9efd8323ebd5e1c30ee7c0acf17ccacec4456b2b962291fb7e866b479",
+      "skills/references/genai-readiness.md": "2bc79e9418e4404441401026a1f656550bdcd4877416c89c97f0ded3df38f09e",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "701585b31eb131702194e4619f5a1054615e1c11c5071af5e2dd22d40232cdd6",
@@ -892,11 +972,11 @@
       "skills/connect-splunk-observability-cloud/agents/openai.yaml": "206b920092a097ec7ab0f92b97d457a6e794bdddcc7f2def837955ff8a756407",
       "skills/create-splunk-free-account/SKILL.md": "1ea265ff983db6013c15f96e008b35d83c68eb8b7d041d0bf3660dfbb877d53b",
       "skills/create-splunk-free-account/agents/openai.yaml": "7767ebaee1f22c7cc76c22ff75676dcaf24e02821939b7229cc80a8b66e0a237",
-      "skills/otel-audit/SKILL.md": "5db94058ef665baaa893f6b16de93de2bc2bc0eb3ae439ffd1ba34882f977312",
+      "skills/otel-audit/SKILL.md": "f70d1487dfe5d99249d34a40fc0cd70faa89e024e762dde01048e154d389b323",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
       "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
       "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
-      "skills/otel-verify/SKILL.md": "a53ea6edcddb2b6e88835d7659846aa55fd90f82e14e5e788fd22f8d3ddc2915",
+      "skills/otel-verify/SKILL.md": "3dc79cd695c473cfbfacefc4f012b6a0a9495882bbe712d2cd0e4ddbc593935f",
       "skills/otel-verify/references/app-code-test-authoring.md": "d535a0acb3d123ee01eb5b39c3247378b4900f4977672021022dd0fe3885f91f",
       "skills/otel-verify/references/explorer-witness.md": "ee76d5856b1c0858a6bcb22e4c9c4526ddf550f2ae3122ea01ea21d505b8931a",
       "skills/otel-verify/references/json-approval-handoff.md": "e8c258074665349efecdc5d7e9b25fd0ab6217e3cdc40ae21a434c2c5d11f763",
@@ -930,13 +1010,15 @@
       "evals/go/kvstore/Makefile": "557b16aa60d316634e43c3650f02c06305ddcc006e07ded16bee7452cabe9fa7",
       "evals/go/kvstore/README.md": "c2a26d0c47d09fd3a3c1c0bce2bea508429a58df8788048724619621dcb15ac2",
       "evals/go/kvstore/cmd/kvstore-server/main.go": "1596386f423b0b52f043025469fa182d95db9bc4ddeb0c6f1c64e1c6c85c4524",
-      "evals/go/kvstore/eval/qual/incident-readiness.json": "9951aa3266bb0d23a23cecae29511ea33703bea50d904564dbaad0e48996fa3a",
+      "evals/go/kvstore/eval/inputs/go-dependency-log-policy-cases.json": "5c08e9ad028ca5100c14a45245e61e2d63e75685bd13a042f83cc8d8c7645018",
+      "evals/go/kvstore/eval/qual/dependency-log-compatibility.json": "250197223fb69d262cfcd2cadeac66775d3efb13ad922754bf47071a4fc8c04f",
       "evals/go/kvstore/go.mod": "c1c4cd5d7467d1ac3c999f0a424f6b7d38bfa368f826f77ff5b1d1836c935d3e",
       "evals/go/kvstore/kvstore/http.go": "697458d084a0ed413c78c75f7dfcbd3fa13d13704a78e9d7dd609cf817bd9f5c",
       "evals/go/kvstore/kvstore/http_test.go": "a12102b9726850b60830d36f924446b2c0044b893319e6d184d1daf25355ac3d",
       "evals/go/kvstore/kvstore/store.go": "eb8c09d0220e8816f3f6bb8a6fae9c86c44823048065ed12cf56cf9f6e6b98fd",
       "evals/go/kvstore/kvstore/store_test.go": "23532aff7f33ce9ce0937e10b915c0b3e136b6382c98c16aada5fcf711b0c96b",
       "evals/go/kvstore/spec.md": "4eb0f6f554cb707e1a3290b6b76a1f5e74af5100d2938fb2734e079798d29c7a",
+      "evals/go/kvstore/eval/qual/incident-readiness.json": "9951aa3266bb0d23a23cecae29511ea33703bea50d904564dbaad0e48996fa3a",
       "evals/go/kvstore/eval/qual/instrument.json": "cdd020b41bd3c44616d3d2e183b946363cdb5c5db83c2a62821f3944f04b7e1d",
       "evals/go/kvstore/eval/runtime/App.Dockerfile": "a5fd8ddcda7b4d4aa9345c8b1f906ed8455a7e6b542731dd41ffad176f573d43",
       "evals/go/kvstore/eval/runtime/docker-compose.yml": "bfc44bfc0cce60c2f5b0c9cdb05e1194c5b541c508776e6b63aa71be69129076",
@@ -994,9 +1076,13 @@
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "a32f9883586bd13b5ecf6f015f587b25ac696a55423398a01e3fe1619f9020fa",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "2aeefcee33840914b4118f0b6615205c37ae50ecf5cb774c32a6f5d9431f62c5",
       "evals/java/springboot-basic/src/main/resources/application.properties": "80bbb064ac6230150fdb6db61f2ce53248fbf798026e4828c3cb5d4c5f9998fd",
+      "evals/java/springboot-basic/eval/inputs/java-compatible-logging-candidates.json": "6bee5f8959ff583cfa8b03922f5afbc59175a7f8aedf880241a13ce0b5c1d9c6",
+      "evals/java/springboot-basic/eval/qual/logging-compatible-plan.json": "2a82993aadd1a7859203250a38f5d8e757fb5459093b61a1d2bcab1917911144",
       "evals/node/express-basic/app.js": "e21a658ea62dd0aba6890cb8514a37eb08d10282ae078165473371db042934b5",
-      "evals/node/express-basic/eval/qual/instrument.json": "46fab66154d62f2637d1b6d0afd7cd4b8a8956334be5295215083ae1797bb38f",
+      "evals/node/express-basic/eval/inputs/node-dependency-log-compatibility.json": "70258b66c554ec94a86b6b95999cf6925801600d4919e204acfdffa6794a9a06",
+      "evals/node/express-basic/eval/qual/dependency-log-compatibility.json": "d9035a652949610dfea27f1af8270fe68ab72142fbcb588e9fcd81fb57e7fd5e",
       "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
+      "evals/node/express-basic/eval/qual/instrument.json": "46fab66154d62f2637d1b6d0afd7cd4b8a8956334be5295215083ae1797bb38f",
       "evals/node/express-basic/eval/runtime/App.Dockerfile": "5e44b534e2e8d8c4a7dfe088043d91bd96a606ae1e826566b0010d2ad984c07a",
       "evals/node/express-basic/eval/runtime/docker-compose.yml": "4a40788e01f11bd028fcb2d25d09d29899cc91278298f66a846c957fa2e07510",
       "evals/node/express-basic/eval/runtime/instrument.json": "0d75513d55d5e0b55e4545e7ed3e27a319d3e48f54a3f969a0e9db425e71ee8f",
@@ -1019,14 +1105,17 @@
       "evals/python/ai-assistant-demo/eval/inputs/ao-gateway-real.env": "77fa562a2a56806e25387cca70f918ba0c6f538cf3481b9790808cbc4a90273f",
       "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json": "0aa217a1410c384a8afda2ab7608e19c93bb9e5ae5483a87e5bec66e8bf5ea1d",
       "evals/python/ai-assistant-demo/eval/qual/gateway-env-bootstrap.json": "f4e90a07ddfe086064fa81c3dae1992e5de240632fe61ca3cc215b79727e44be",
-      "evals/python/ai-assistant-demo/eval/inputs/genai-decorator-version-logs-verify-evidence.json": "72375fd49c904a7780cb49d2b412625b8b57d415eaeabd7ee1eb42a71f314d44",
       "evals/python/ai-assistant-demo/eval/inputs/genai-default-audit.json": "a9eb87f3275253e6b73f90a91a645573022201633c8bb13f87362fd450d62a2e",
+      "evals/python/ai-assistant-demo/eval/inputs/genai-instrument-decorator-profile-evidence.json": "09f68e5321a2e6aa0ebbd9e2e7c941ead64a021ea457504270c972b167626097",
+      "evals/python/ai-assistant-demo/eval/qual/genai-instrument-decorator-profile.json": "d0ca6cf9bd7792059ab2c75184568a35e0a5bc31b4c7e4387c141a656f758c29",
+      "evals/python/ai-assistant-demo/eval/inputs/genai-instrument-operation-evidence.json": "14150168d7bee5b52c71dc0a9e9667e0915035aa39ac2bae1cc1a39241da90c0",
+      "evals/python/ai-assistant-demo/eval/qual/genai-instrument-operation-contract.json": "f4b9613ec6db1a08e997dfdd02008395a0a169751aae535938354b80f95e9929",
       "evals/python/ai-assistant-demo/eval/inputs/genai-default-scenarios.json": "4a8d08e43b2517b6b241a0ce8e78674981e6ecce22d16ce8b5d5772964cb5d49",
-      "evals/python/ai-assistant-demo/eval/inputs/genai-fresh-ao-instrument-cases.json": "6688054b7a4a5fc606988259a3810fb2da4001ae891675c71a5ded4dfb9372a0",
+      "evals/python/ai-assistant-demo/eval/inputs/genai-instrument-core-evidence.json": "40c2b6364a36f2933e8eb1ecb91c24799e38b28ba1e52bb4a462df69a101ce5a",
       "evals/python/ai-assistant-demo/eval/inputs/genai-required-evidence.json": "b0b3e76d7a66065b4a8d83e77cf207497221e738ba9852447eb441a9c7793c2d",
       "evals/python/ai-assistant-demo/eval/inputs/genai-sdk-source-snapshot.json": "9d4bb13d28c1892c96cf069f65fe129674e4dc5c86b21adb3823a82b2a378ef6",
       "evals/python/ai-assistant-demo/eval/inputs/genai-semconv-source-snapshot.json": "37dcf51de2138b706b7272c32e4215d280a94790b3d4bb454000ef66ef24e3ae",
-      "evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json": "d746139321c6563ce5e924def5b37d63f98f41cc8cefad415e99853ae237a058",
+      "evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json": "54a7b88e41c4dd0bfe1dae2c6aa02a37f75b1be82363cfa94155ff6ca87d5dde",
       "evals/python/ai-assistant-demo/eval/inputs/python-preflight-requirements.txt": "183d09c4770496a4564b9a7d89e29c2111cbb6a940205174792b889aa1cb9271",
       "evals/python/ai-assistant-demo/eval/qual/instrument.json": "555f79e3f19a9b6feaee1568454a71123be91d92c49cf1c91b900769b1d875b7",
       "evals/python/ai-assistant-demo/eval/inputs/ao-resource-env-profile.env": "5cc9cd5c5c8c2369da4b9a89bbee28767b0cc8fcd7a67cc362f8d7e32798dbd6",
@@ -1060,7 +1149,7 @@
       "evals/python/fastapi-celery/eval/runtime/run-traffic.sh": "dc4f502650d699e6bb819e2f86165c9e075586d9c089f71af8ba9a322565e245",
       "evals/python/flask-basic/Makefile": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe",
       "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
-      "evals/python/flask-basic/eval/qual/instrument.json": "0de8f2e8810b864649ffc68e75cc0c464d482b5d0a70ddb9c4b374ec949e408b",
+      "evals/python/flask-basic/eval/qual/instrument.json": "ab95eaf1e80a5f8567f1e0e5a18a6a19d39bd5af1d787eeca20b416bb0f4e6a8",
       "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f",
       "evals/python/flask-basic/eval/runtime/App.Dockerfile": "d0fe3f537e8365ac5c554006235e38b164269aa9a47d3b0d5d7da0cdf77847fa",
       "evals/python/flask-basic/eval/runtime/docker-compose.yml": "1510434bc37a88be357a94dcc021c11e1a4189e075aa9038ee39c9c2e9983103",
@@ -1168,6 +1257,15 @@
         "eval_inputs": []
       },
       {
+        "definition_path": "evals/go/kvstore/eval/qual/dependency-log-compatibility.json",
+        "fixture_dir": "evals/go/kvstore",
+        "prompt_id": "dependency-log-compatibility-plan",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/go-dependency-log-policy-cases.json"
+        ]
+      },
+      {
         "definition_path": "evals/go/kvstore/eval/qual/incident-readiness.json",
         "fixture_dir": "evals/go/kvstore",
         "prompt_id": "mttd",
@@ -1273,6 +1371,24 @@
         "eval_inputs": []
       },
       {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-compatible-plan.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "java-compatible-log-plan",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/java-compatible-logging-candidates.json"
+        ]
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/dependency-log-compatibility.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "dependency-log-compatibility",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/node-dependency-log-compatibility.json"
+        ]
+      },
+      {
         "definition_path": "evals/node/express-basic/eval/qual/instrument.json",
         "fixture_dir": "evals/node/express-basic",
         "prompt_id": "direct",
@@ -1327,6 +1443,26 @@
         ]
       },
       {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/genai-instrument-decorator-profile.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "genai-instrument-decorator-profile",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/genai-default-audit.json",
+          "eval/inputs/genai-instrument-decorator-profile-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/genai-instrument-operation-contract.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "genai-instrument-operation-contract",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/genai-default-audit.json",
+          "eval/inputs/genai-instrument-operation-evidence.json"
+        ]
+      },
+      {
         "definition_path": "evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json",
         "fixture_dir": "evals/python/ai-assistant-demo",
         "prompt_id": "genai-sdk-default-instrument",
@@ -1337,8 +1473,7 @@
           "eval/inputs/genai-required-evidence.json",
           "eval/inputs/genai-sdk-source-snapshot.json",
           "eval/inputs/genai-semconv-source-snapshot.json",
-          "eval/inputs/genai-fresh-ao-instrument-cases.json",
-          "eval/inputs/genai-decorator-version-logs-verify-evidence.json"
+          "eval/inputs/genai-instrument-core-evidence.json"
         ]
       },
       {

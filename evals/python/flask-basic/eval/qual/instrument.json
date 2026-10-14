@@ -18,7 +18,9 @@
     "Inspect ./service for resulting files when present.",
     "Read ./last_message.md for the agent final response.",
     "Read ./grade.json for run guard checks.",
-    "Inspect .observe instrumentation/verification artifacts, generated profiles and launch scripts, dependency manifests/lockfiles, compatibility probes, and any local Studio query receipt. Distinguish installed-source or in-memory proof from actual OTLP receiver evidence; a planned query, successful exporter construction, or passing HTTP request alone does not prove a stored LogRecord."
+    "Inspect .observe instrumentation/verification artifacts, generated profiles and launch scripts, dependency manifests/lockfiles, compatibility probes, and any local Studio query receipt. Distinguish installed-source or in-memory proof from actual OTLP receiver evidence; a planned query, successful exporter construction, or passing HTTP request alone does not prove a stored LogRecord.",
+    "For receiver precedence, inspect the actor initial effective OTEL environment and the selected receiver query before generated files. Explicit signal-specific then compatible generic operator endpoints take precedence over separate advertised/discovered listeners. A different visible local Studio PID/port alone is not a configured selected nondefault endpoint and must not force overriding an explicit selected receiver. Still fail an actual selected/configured nondefault endpoint that is lost, and require real stored records on the selected route; this clarification does not waive endpoint or receiver proof.",
+    "Return exactly one check for each of the twelve rubric criteria in order, with IDs rubric-1 through rubric-12. Do not omit, merge or renumber independent criteria. Judge only completed evidence; no new application, install or network execution is requested."
   ],
   "rubric": [
     "Initializes the SDK once in a separate file.",

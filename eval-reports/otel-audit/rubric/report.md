@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-audit |
-| Run ID | 20261014T060709621901Z |
+| Run ID | 20261014T113442652329Z-aggregate |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,27 +18,29 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/genai-sdk-default-audit | python/ai-assistant-demo | 1 | 70% (7/10), avg score 80 | 4.7M | 25.9m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/audit-focused-decorator-logs | python/ai-assistant-demo | 1 | 100% (3/3), avg score 94 | 1.7M | 11.1m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/audit-focused-metadata | python/ai-assistant-demo | 1 | 100% (4/4), avg score 92 | 2.0M | 13.2m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/genai-sdk-default-audit | python/ai-assistant-demo | 1 | 100% (9/9), avg score 92 | 4.0M | 15.9m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/genai-sdk-default-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 4628582 | 4319616 | 0 | 36471 | 4499 | unknown | 4665053 |
+| with_skill | python/ai-assistant-demo/qual/audit-focused-decorator-logs | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1663388 | 1531648 | 0 | 27058 | 7404 | unknown | 1690446 |
+| with_skill | python/ai-assistant-demo/qual/audit-focused-metadata | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 2004581 | 1867648 | 0 | 31142 | 8969 | unknown | 2035723 |
+| with_skill | python/ai-assistant-demo/qual/genai-sdk-default-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 3966004 | 3776000 | 0 | 34206 | 7862 | unknown | 4000210 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/genai-sdk-default-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1404353 | 1263744 | 0 | 13756 | 4600 | unknown | 1418109 |
+| with_skill | python/ai-assistant-demo/qual/audit-focused-decorator-logs | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 315287 | 265600 | 0 | 6978 | 3582 | unknown | 322265 |
+| with_skill | python/ai-assistant-demo/qual/audit-focused-metadata | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 388800 | 333952 | 0 | 9411 | 5560 | unknown | 398211 |
+| with_skill | python/ai-assistant-demo/qual/genai-sdk-default-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1383535 | 1251328 | 0 | 13864 | 7335 | unknown | 1397399 |
 
 ## Rubric Failures
 
-| Mode | Service | Side | Prompt | Result | Evidence |
-|---|---|---|---|---|---|
-| with_skill | python/ai-assistant-demo | with_skill | genai-sdk-default-audit | rubric:rubric-8 FAIL | OTEL-003 required_fix and expected_telemetry create both invoke_workflow and invoke_agent around build_turn; app.py only has build_turn/run_tool/call_provider. OTEL-006 constraints prohibit gen_ai.usage.total_tokens and use assistant.usage.total_tokens as custom. |
-| with_skill | python/ai-assistant-demo | with_skill | genai-sdk-default-audit | rubric:rubric-9 FAIL | genai-default-scenarios.md known_context row mentions qwen3:8b, conv_demo_approved_72fbd8, fixed-agent request.model and tool description/type, but lacks the configured agent description value and a per-field/value/level mapping. |
-| with_skill | python/ai-assistant-demo | with_skill | genai-sdk-default-audit | rubric:rubric-10 FAIL | genai-default-scenarios.md says helper sets many attributes on exit and sampler/on_start proof is not established; OTEL-003/OTEL-009 mention creation-time sampling partial. No report artifact cites start_as_current_span(splunk_ao_span.name) or the finally-time build_span_attributes path explicitly. |
+No rubric failures.
 
 ## Result JSON
 

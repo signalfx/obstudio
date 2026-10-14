@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261014T085555232498Z |
+| Run ID | 20261014T111531830190Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -23,6 +23,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | go/chi-basic/runtime/instrument | go/chi-basic | 1 | evals/go/chi-basic/eval/runtime/instrument.json | 0 | 0 | 1 |
 | go/chi-partial/qual/instrument | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/instrument.json | 0 | 6 | 0 |
 | go/chi-partial/runtime/instrument | go/chi-partial | 1 | evals/go/chi-partial/eval/runtime/instrument.json | 0 | 0 | 1 |
+| go/kvstore/qual/dependency-log-compatibility | go/kvstore | 1 | evals/go/kvstore/eval/qual/dependency-log-compatibility.json | 0 | 6 | 0 |
 | go/kvstore/qual/incident-readiness | go/kvstore | 1 | evals/go/kvstore/eval/qual/incident-readiness.json | 0 | 6 | 0 |
 | go/kvstore/qual/instrument | go/kvstore | 2 | evals/go/kvstore/eval/qual/instrument.json | 0 | 11 | 0 |
 | go/kvstore/runtime/instrument | go/kvstore | 1 | evals/go/kvstore/eval/runtime/instrument.json | 0 | 0 | 2 |
@@ -32,12 +33,16 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/kafka-streams/qual/incident-readiness | java/kafka-streams | 1 | evals/java/kafka-streams/eval/qual/incident-readiness.json | 0 | 6 | 0 |
 | java/kafka-streams/qual/instrument | java/kafka-streams | 2 | evals/java/kafka-streams/eval/qual/instrument.json | 0 | 6 | 0 |
 | java/springboot-basic/qual/instrument | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/instrument.json | 0 | 10 | 0 |
+| java/springboot-basic/qual/logging-compatible-plan | java/springboot-basic | 1 | evals/java/springboot-basic/eval/qual/logging-compatible-plan.json | 0 | 6 | 0 |
+| node/express-basic/qual/dependency-log-compatibility | node/express-basic | 1 | evals/node/express-basic/eval/qual/dependency-log-compatibility.json | 0 | 6 | 0 |
 | node/express-basic/qual/instrument | node/express-basic | 2 | evals/node/express-basic/eval/qual/instrument.json | 0 | 10 | 0 |
 | node/express-basic/runtime/instrument | node/express-basic | 1 | evals/node/express-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
 | python/ai-assistant-demo/qual/ao-target-handoff-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-instrument.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/content-coverage-instrument.json | 0 | 6 | 0 |
 | python/ai-assistant-demo/qual/gateway-env-bootstrap | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/gateway-env-bootstrap.json | 0 | 5 | 0 |
-| python/ai-assistant-demo/qual/genai-sdk-default-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json | 0 | 13 | 0 |
+| python/ai-assistant-demo/qual/genai-instrument-decorator-profile | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-instrument-decorator-profile.json | 0 | 6 | 0 |
+| python/ai-assistant-demo/qual/genai-instrument-operation-contract | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-instrument-operation-contract.json | 0 | 4 | 0 |
+| python/ai-assistant-demo/qual/genai-sdk-default-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/instrument.json | 0 | 14 | 0 |
 | python/ai-assistant-demo/qual/resource-env-bootstrap | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/resource-env-bootstrap.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/resource-sdk-errors | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/resource-sdk-errors.json | 0 | 5 | 0 |
