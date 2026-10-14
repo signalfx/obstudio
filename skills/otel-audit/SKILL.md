@@ -84,7 +84,11 @@ Scan the repository to determine language, framework, and existing instrumentati
   complete its mandatory per-function producer decision gate for every actual
   agent/model/tool/retrieval function. Keep native SDK `@log` versus justified
   application-owned function-decorator choices consistent across findings;
-  record proposed patterns and probe acceptance without executing them. Include
+  record proposed patterns and probe acceptance without executing them.
+  In correlation proposals, keep absent optional IDs absent. Distinguish a
+  source-backed application execution ID from a provider-supplied tool-call ID;
+  do not propose telemetry-only IDs or retrofit them into an earlier provider
+  response to make a join pass. Include
   the intended Splunk AO runtime in the AO assessment below when that default
   producer is selected; absence of an installed SDK does not exclude its
   source-backed project, Agent Stream, or routing configuration gaps. Include

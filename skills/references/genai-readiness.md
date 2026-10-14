@@ -30,7 +30,7 @@ its export destination:
 |---|---|
 | Existing OTel GenAI library, Galileo integration, framework bridge, or application GenAI spans | Preserve the current producer and provider; fill only uncovered operations, attributes, content, context, metrics, and lifecycle through supported hooks. Do not migrate to Splunk AO merely to export there. |
 | Existing Splunk AO span creation | Preserve it and fill its version-specific gaps without duplicate operation spans. |
-| Fresh agent application without GenAI span creation | Use Splunk AO instrumentation by default: preserve matching supported framework/provider ownership and use SDK `@log` for supported uncovered function boundaries. If its exact capture, lifecycle or sink contract cannot meet requirements, use an application-owned function decorator around the supported SDK creator; document that fallback. A generic OTel provider, HTTP spans, or an evaluation-only SDK import does not make the live agent instrumented. |
+| Fresh agent application without GenAI span creation | Use Splunk AO instrumentation by default: preserve matching supported framework/provider ownership and use SDK `@log` for supported uncovered function boundaries. If its exact contract cannot meet requirements, assess the supported SDK creator and then the source-proven per-operation public OTel exception below; document the chosen function decorator and creator. A generic OTel provider, HTTP spans, or an evaluation-only SDK import does not make the live agent instrumented. |
 
 For a fresh Python agent, read the **Fresh Agent SDK Instrumentation** section
 of `splunk-agent-observability.md` before authoring the audit finding or code.
@@ -40,11 +40,16 @@ the intended SDK API and installed-version support in the selected finding.
 For that fresh default, assess intended AO project/Agent Stream/routing through
 the shared AO reference even when no SDK import exists. Keep product findings
 separate from ordinary GenAI findings and respect selected adoption scope.
-If no supported SDK path exists for the detected language/framework, name the
-exact prerequisite and keep the surface partial; do not silently substitute a
-complete handwritten OTel GenAI implementation. Explicit user choices override
-the default. Existing integrations remain the default for already instrumented
-operations, even when they need enrichment.
+If a checked SDK path cannot meet an operation's required semantics, apply the
+per-operation compatibility exception in `splunk-agent-observability.md`: a
+named application-owned function decorator may use a supported public OTel
+creator for that exact boundary while preserving the provider, selected AO
+export and supported SDK creators elsewhere. Label its producer as application
+OTel. This requires concrete SDK source/probe limits and a complete safe field,
+context and lifecycle mapping; it does not authorize a whole-app rewrite.
+If no supported repair exists, name the exact prerequisite and keep the surface
+partial. Explicit user choices override the default. Existing valid producers
+remain the default for already instrumented operations.
 
 For every new or repaired function hook, assess the decorator pattern first.
 Use SDK `@log` wherever the chosen release supports the actual function and
@@ -762,6 +767,8 @@ around the owned workflow boundaries of an existing producer and owner-map its
 bridge/platform gaps. For a fresh agent, use the default Splunk AO creation
 path from GenAI Instrumentation Selection instead of taking this existing-bridge
 gap-filling clause as permission to build a new custom producer.
+The source-proven per-operation compatibility exception above remains available
+when both applicable SDK creation paths cannot meet the selected contract.
 
 ### Existing Vendor SDK Preservation
 

@@ -48,7 +48,9 @@ For fresh or export-only GenAI scenarios using the Splunk AO default or an
 explicit Splunk AO choice, also read
 `../references/splunk-agent-observability.md` and its Decorator Selection plus
 Fresh Agent SDK Instrumentation mapping, even with no `splunk_ao` import or selected
-AO resource finding. Select a supported Splunk AO creator for that path. An
+AO resource finding. Select a supported Splunk AO creator for that path where
+it meets the contract; assess the reference's per-operation public OTel
+compatibility exception for source-proven incompatible SDK boundaries. An
 explicit user choice of another supported producer overrides the default;
 verify that chosen canonical producer and its required coverage. Record
 creator symbols, actual boundary,
@@ -588,6 +590,12 @@ conversation/tool-call IDs, input/output messages, effective instructions/tool
 definitions, actual arguments/results and retrieval content when applicable.
 SDK-created spans are not automatic proof; empty placeholders, omitted
 applicable content and wrong schema/value mappings fail required coverage.
+For a compatibility exception, verify the actual public OTel function creator,
+initial kind/request fields, active context, retained provider and configured
+or selected export paths;
+never count its processor as SDK span creation. After a repair, reconcile all
+normal report sections with current creator/kind/output evidence. A stale SDK
+label or repaired failure left in an older section is a report inconsistency.
 Before finalizing, reconcile every requested case and source-known request
 control with its report evidence. Inventory controls at their actual request
 call sites, then compare each attribute's expected safe source value with the
@@ -765,8 +773,10 @@ Report requirements:
 
 - For GenAI, include all three **Required GenAI Report Evidence** tables from
   `../references/genai-readiness.md` in the requested review/report. Even a
-  captured-fixture review must map fresh-agent boundaries to exact proposed SDK
-  methods/version/example revision, preserve existing creators, assess ordinary
+  captured-fixture review must map fresh-agent boundaries to exact actual or
+  proposed creators: supported SDK methods or the justified per-operation
+  public OTel exception. Record chosen package/public API source and applicable
+  example revision, preserve existing creators, assess ordinary
   helpers as GenAI N/A, and include explicit cancellation/teardown evidence
   rows. Missing runtime evidence is Not proven; generic SDK recommendations
   cannot substitute for the producer receipt or lifecycle assessment.

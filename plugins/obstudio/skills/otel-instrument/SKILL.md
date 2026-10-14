@@ -27,6 +27,12 @@ and follow the Instrumentation Contract plus Reader-First Report Order. When
 `.observe/otel-audit.json` exists, also read
 `./references/json-approval-handoff.md` before editing; it owns canonical
 selection, instrumentation JSON, and human HTML. The technical Markdown report contract is defined inline below.
+On an incremental run, read the existing bound `.observe/otel-verify.json`
+before editing or regenerating reports. Carry each selected failed scenario
+and its evidence into the repair plan; rerun its actual check after repair
+before replacing that failure with a passing result. Older passing probes for
+other assertions do not supersede it. `validate-flow` proves artifact shape
+and binding, not semantic correctness or successful verification.
 When any selected finding uses
 `finding_group: splunk-agent-observability`, or the repository contains a
 `splunk_ao` dependency/import, also read
@@ -228,8 +234,9 @@ Markdown reports.
   Apply GenAI Instrumentation Selection and the Required GenAI Coverage
   Profile. Read `../references/splunk-agent-observability.md` for a fresh
   agent even without an existing SDK import: default to supported Splunk AO
-  span creators/framework integration, not an export-only processor or a new
-  handwritten GenAI producer. Preserve an existing OTel/Galileo producer and
+  span creators/framework integration; use the shared per-operation public
+  OTel exception only for source-proven incompatible SDK boundaries. An
+  export-only processor is not a creator. Preserve an existing OTel/Galileo producer and
   fill only its gaps. Applicable safe content/vendor fields are required
   acceptance; a published Opt-In label or metadata-only span is not closure.
 - When GenAI incidents, postmortems, tickets, alerts, or failure examples are
@@ -1158,7 +1165,9 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     Decorator Selection before choosing helpers: use SDK `@log` for every
     supported uncovered function scenario, or an application-owned function
     decorator invoking the documented chosen creator for an exact SDK decorator
-    contract limitation. Preserve supported framework/provider ownership without a
+    contract limitation. If both SDK choices cannot meet required semantics,
+    assess the shared per-operation public OTel compatibility exception before
+    accepting a known-invalid helper. Preserve supported framework/provider ownership without a
     duplicate decorator span. Inspect current examples and chosen compatible
     APIs; an evaluation-only SDK import or HTTP provider is not existing
     live-agent GenAI instrumentation.
@@ -1735,6 +1744,17 @@ After the implementation gate, invoke or apply the `$otel-verify` workflow
 unless the user explicitly opts out or a concrete prerequisite blocks it. The
 instrumentation goal is not done until code viability is known and verification
 has run, been explicitly skipped by the user, or is documented as blocked.
+When verification observes a semantic failure introduced by this implementation,
+repair the selected source mapping/creator and rerun the affected scenarios
+before handoff. Apply the shared per-operation public OTel compatibility
+exception when checked SDK creators cannot satisfy the contract; do not keep a
+known-invalid helper solely to retain its SDK label. Preserve all other valid
+producers and regenerate the normal bound reports after repair. If the user
+requires verification Pass, unresolved failures or selected cloud/resource
+proof remain an incomplete gate: do not drop selected findings, relabel local
+receipts as cloud proof, or publish the proposed PR update before that gate.
+An exact external permission/runtime blocker remains visible while independent
+implementation and credential-free checks continue.
 If `$otel-verify` is not exposed as a separate skill invocation in the current
 session, read the adjacent `../otel-verify/SKILL.md` and apply that bundled
 workflow directly. If an isolated skill environment does not expose that

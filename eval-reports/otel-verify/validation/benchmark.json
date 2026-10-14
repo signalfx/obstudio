@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261014T172459084187Z",
+    "run_id": "20261014T194129140530Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -192,7 +192,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "dd6bfb67b27f699630a9052cd3ce2965720f81365869f3d964ee19a6de51940e",
+    "digest": "9637809f452d8d83e47bcbfa9dc9b065014e05552e04e5b54aead8c739e394d2",
     "eval_kinds": [
       "rubric"
     ],
@@ -207,7 +207,7 @@
       "evals/go/chi-basic/eval/qual/verify.json": "225a5744d2a38aeaadcb3003221d2f2e9f5d960fc05d12636eab5241afcce5d2",
       "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
-      "skills/otel-verify/SKILL.md": "3079f851749f2cf45041c0f9750d47400e0542b226b40b32e7ff6e0256340459",
+      "skills/otel-verify/SKILL.md": "0cc49bac9cb8a185b79b03f3f988f73a50c165d8b6d462f91b0934044b2a22f8",
       "skills/otel-verify/references/app-code-test-authoring.md": "d535a0acb3d123ee01eb5b39c3247378b4900f4977672021022dd0fe3885f91f",
       "skills/otel-verify/references/explorer-witness.md": "ee76d5856b1c0858a6bcb22e4c9c4526ddf550f2ae3122ea01ea21d505b8931a",
       "skills/otel-verify/references/json-approval-handoff.md": "e8c258074665349efecdc5d7e9b25fd0ab6217e3cdc40ae21a434c2c5d11f763",
@@ -220,14 +220,14 @@
       "skills/references/consumers.json": "abb97d53704c51d5a49a3de02505f8b1bba0fc13c51b7913b9cf0d186040aa19",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
-      "skills/references/genai-readiness.md": "2bc79e9418e4404441401026a1f656550bdcd4877416c89c97f0ded3df38f09e",
+      "skills/references/genai-readiness.md": "a6bf30b3b3405109f36d7e897ce558b3c1bda52b8cc0aad2f89d0c69ce76986c",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "701585b31eb131702194e4619f5a1054615e1c11c5071af5e2dd22d40232cdd6",
       "skills/references/report-flow-contract.md": "be4af921d9faf71ca9c206a91ba091db5d8bc878dc87ab6b844bc39cc455eb0e",
       "skills/references/scripts/observe_report.py": "dc6d5048a117595bd658e7f4ff7f91e11cd512693ee0e37d09080578574e4325",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
-      "skills/references/splunk-agent-observability.md": "3df5131ea3e15314369f49089d1683cf656fac8259d3155933d46f85ab4d0c50",
+      "skills/references/splunk-agent-observability.md": "40642ab8bffadb93a5575f73f9562cc03e595009f3ee9173e867d05502a58681",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "39e6e35f16272b4f33f202b03dd13823284d4067fb50ebba48fb80bb67f4ce16",
@@ -260,7 +260,8 @@
       "evals/python/ai-assistant-demo/eval/inputs/genai-usage-namespace-verify-evidence.json": "973b266667512deecea1995086c69a761c5b2d5a910e53b2944071bd352f3f0a",
       "evals/python/ai-assistant-demo/eval/qual/genai-sdk-required-verify.json": "618d6f9942966572f9462d0f27bd3ee1efa9bb8526cfa61cf8bc307f1e135957",
       "evals/python/ai-assistant-demo/eval/inputs/per-function-decorator-gate-evidence.json": "41035bf4c5da5f4090b7b644034e99262946ff534399b134900b8192b2d43008",
-      "evals/python/ai-assistant-demo/eval/qual/per-function-decorator-verify.json": "5e8f62e20d34b9d40d6c4553bd52756ff9d95b365c47794748aebd32dde0470f",
+      "evals/python/ai-assistant-demo/eval/inputs/per-function-full-conformance-evidence.json": "91554741a0c7e810eb204883b2a529ea80225fc091d26f86698a0389ea83c0ab",
+      "evals/python/ai-assistant-demo/eval/qual/per-function-decorator-verify.json": "54c72034faf881e675aafdc3bac0980354dddc4b969a1494ca5b66296edfc286",
       "evals/python/ai-assistant-demo/eval/inputs/ao-resource-verification-evidence.txt": "8f935bbdebb073f4037a76e8d84e0881e98376b4e0a123f270953dac80f9063d",
       "evals/python/ai-assistant-demo/eval/qual/resource-selector-failures.json": "630135f49ec0d4334185aa8778f56f1ed24ca1372be34f50b0b2c45154f9efcd",
       "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json": "0aa217a1410c384a8afda2ab7608e19c93bb9e5ae5483a87e5bec66e8bf5ea1d",
@@ -348,7 +349,8 @@
         "prompt_id": "per-function-decorator-verify",
         "eval_kind": "rubric",
         "eval_inputs": [
-          "eval/inputs/per-function-decorator-gate-evidence.json"
+          "eval/inputs/per-function-decorator-gate-evidence.json",
+          "eval/inputs/per-function-full-conformance-evidence.json"
         ]
       },
       {

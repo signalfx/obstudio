@@ -500,6 +500,12 @@ Selection.
    wrapper separately from the creator it calls. A generic promise to add an
    application-owned decorator does not identify the chosen function pattern.
 
+If both the applicable native integration and documented SDK creator fail a
+required contract, use the narrow public OTel compatibility exception below
+instead of knowingly emitting invalid semantics from the same helper. A
+source-only plan can select that supported pattern while leaving its runtime
+proof unexecuted. Do not confuse a missing probe with a proven SDK limitation.
+
 For either pattern, define assertions comparing the final sanitized content to
 the actual source arguments, produced results and partial output on that same
 native operation and its wire record. Attribute presence or sentinel absence
@@ -511,6 +517,13 @@ for argument/result conversion, privacy/bounds, model usage/finish mapping,
 active business-call context, iteration/close/cancel, kind/initial attributes,
 and sink/lifecycle. Mark each row Supported, Limited, Not proven or N/A and
 cite its source/probe fact; generic future tests do not replace observed facts.
+Keep observed native/helper behavior separate from the proposed producer's
+acceptance. Compare actual captured input/result shapes and conversions with
+the consumed source values, including input binding, flattening and empty
+metadata. A bound-arguments object serialized as query text differs from the
+query string consumed by retrieval. Proposing a better mapping does not make
+the existing wire behavior unknown; faithful decoded shape and field provenance
+are sufficient without duplicating every serialized literal.
 Decode serialized probe payloads and normalize captured/emitted span IDs
 (hex, UUID or protobuf base64) before comparing the current business-call
 span to that operation and its parent. If the captured current span is the
@@ -612,12 +625,72 @@ SDK, schema and OTel packages. Probe same-span tool messages, truthful successfu
 null `output.value`, no-result errors and parent context. If an `LlmSpan` emits
 `INTERNAL`, that does not close a separate-process model's `CLIENT` requirement.
 Never invent a kind parameter, mutate SDK internals or claim full coverage from
-the helper name. Keep exact unsupported fields/kinds Partial and
+the helper name. First assess the compatibility exception below; keep exact
+unsupported fields/kinds Partial when no supported repair is available, and
 do not make independently supported agent/tool/retrieval work depend on a
 logger-only sink prerequisite. Source/probe capability remains distinct from
 application integration, schema-valid wire export, resource binding and cloud
 receipt. Existing valid producers are preserved rather than migrated to this
 alternative.
+
+### Per-Operation Public OTel Compatibility Exception
+
+Keep Splunk AO creation as the default where it meets the selected contract.
+When current source/probes show that the applicable SDK integration and public
+helper cannot meet a required kind, creation-time field, truthful content or
+lifecycle contract, a named application-owned function decorator may create
+that one operation through the documented public OTel API. Record the exact
+failed SDK capability and chosen OTel signature. Reuse the existing registered
+provider and configured export paths, preserving any existing or selected AO
+processor/exporter. Retain SDK creators on supported boundaries and emit one
+operation per real call. Label the creator as application OTel and report its
+actual export path separately; an AO processor is not its creator. Do not
+replace an already valid OTel/Galileo/framework producer or use an absent
+gateway as a reason for this exception.
+
+For a remote model, supply CLIENT and safe known request attributes when
+creating the span, then keep it current around the actual provider call so
+transport spans are its children. Prove the initial kind/fields with a sampler
+or `on_start` observation as well as final serialized OTLP. A completed-span
+adapter, late setter or private SDK mutation cannot repair creation-time kind.
+
+Check the selected carrier/finalizer before implementation. A nonnullable
+output field with an empty-message default cannot represent an unproduced
+response merely by leaving the default untouched. Emit output only after a
+real valid response or partial result exists; preserve true successful null
+separately. Map model tool requests to typed `tool_call` parts and tool replies
+to `tool_call_response` parts, retaining available IDs, names and sanitized
+arguments/results. JSON text containing the provider's tool-call object is not
+that structured mapping. Validate actual input/output attributes against the
+current official message schemas and compare their useful content with source
+values on the same span. Also validate every known part against its concrete
+type definition: a permissive union or valid JSON alone can accept malformed
+typed parts. Use the checked schema's actual fields (for example, a tool-call
+response carries `response`, not a text part's `content`). Prove that an
+available tool-call ID joins the model request, executing tool and response in
+the next model input; do not drop or independently rewrite that identity.
+Record schema provenance and per-payload/type validation results in evidence.
+Source-only plans specify those validators and call-ID join assertions as
+future acceptance, with their execution marked Not run.
+Validate the provider response at the actual call boundary before recording
+response content, usage or successful completion; a parser failure after the
+decorator returns must not leave a successful inference span. Re-raise provider
+failures and preserve business values; do not fabricate output to satisfy a
+vendor requirement.
+
+After a producer repair, regenerate the normal instrumentation JSON, Markdown,
+HTML and bound verification artifacts from current source/proof. Reconcile the
+operation's creator, kind, field ownership, counts and remaining gaps throughout
+the reports. Appending a correction while earlier sections still claim SDK
+creation, a repaired failure or missing kind leaves the report inconsistent.
+Keep cloud receipt and live resource/lifecycle proof separate from local and
+credential-free compatibility tests.
+Source-only repair plans must carry this closure into future acceptance: apply
+the authorized instrumentation, verify it, and if selected checks fail, route
+repairs through instrumentation and rerun focused verification until Pass or an
+exact blocker. Rebuild the normal reports from that producer and evidence.
+Audit and verification remain read-only for application code; planning this
+conditional loop neither executes it nor requires an initial failed run.
 
 ### Same SDK Span Content Enrichment
 
