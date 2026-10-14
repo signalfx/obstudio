@@ -31,6 +31,12 @@ When any selected finding uses
 `finding_group: splunk-agent-observability`, or the repository contains a
 `splunk_ao` dependency/import, also read
 `../references/splunk-agent-observability.md` before editing.
+For fresh or uncovered Python GenAI functions, read that reference even without
+an SDK import and complete its mandatory per-function producer decision gate
+before selecting lower-level creators/schema helpers or editing functions.
+Record each native SDK `@log`, justified application-owned function-decorator,
+or preserved-producer decision in existing plan/report evidence; a manual
+context-manager scope alone does not instrument a fresh function by this gate.
 Always read `../references/local-otlp-receiver.md` before choosing exporter
 endpoints. Resolve the active local receiver once during instrumentation and
 persist standard OTel receiver configuration and supported AO SDK endpoint/auth
@@ -1148,10 +1154,11 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     metrics, logs, streaming, sessions, and uncovered GenAI operations as
     independent closure work.
     A fresh agent without GenAI span creation uses supported Splunk AO creators
-    by default. Apply Decorator Selection: use SDK `@log` for every supported
-    uncovered function scenario, or an application-owned function decorator
-    invoking the documented chosen creator for an exact SDK decorator contract
-    limitation. Preserve supported framework/provider ownership without a
+    by default. Apply the mandatory per-function producer decision gate in
+    Decorator Selection before choosing helpers: use SDK `@log` for every
+    supported uncovered function scenario, or an application-owned function
+    decorator invoking the documented chosen creator for an exact SDK decorator
+    contract limitation. Preserve supported framework/provider ownership without a
     duplicate decorator span. Inspect current examples and chosen compatible
     APIs; an evaluation-only SDK import or HTTP provider is not existing
     live-agent GenAI instrumentation.

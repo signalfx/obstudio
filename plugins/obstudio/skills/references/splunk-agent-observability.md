@@ -426,8 +426,10 @@ example. If current examples cannot be retrieved, report that prerequisite
 and the snapshot actually used; do not claim a fresh check.
 
 For a custom Python agent without a matching framework integration, choose the
-supported decorator pattern first as described below. The following lower-level
-method mapping is a fallback capability checklist, not a pinned release recipe.
+supported decorator pattern first through the mandatory per-function producer
+decision gate below. Complete that gate before selecting schema constructors
+or a lower-level creator. The following lower-level method mapping is a fallback
+capability checklist, not a pinned release recipe.
 Current official examples and the chosen compatible package's inspected APIs
 govern implementation. Record any decorator limitation that requires a fallback
 and keep installed/runtime support unproven until checked.
@@ -464,6 +466,48 @@ For supported function scenarios, use the decorator pattern when adding or
 repairing hooks. Prefer SDK `@log` at the uncovered operation boundary after
 checking current [decorator documentation](https://agent-observability-docs.splunk.com/sdk-api/logging/log-decorator/log-decorator),
 chosen package source and public configuration. Keep existing valid producers.
+
+**Mandatory per-function producer decision gate.** Before edits for fresh or
+uncovered Python GenAI operations, record a decision for every actual source
+function in the existing producer receipts and finding/result evidence. Apply
+the SDK choice below when Splunk AO is selected or is the fresh default;
+preserve explicit alternative producer choices under GenAI Instrumentation
+Selection.
+
+1. Name its source file, qualified function, actual operation/`span_type`, and
+   sync, coroutine or generator shape. Identify any valid pre-existing
+   producer and preserve that ownership without another operation node.
+2. Assess native SDK `@log` for that function using the chosen compatible
+   package's public source and available isolated probe evidence: input/result
+   capture and source-side privacy bounds, required fields, used iteration
+   protocol, partial output, early close/cancellation, creation-time kind and
+   attributes, and actual sink/registration/lifecycle support. Dispatch support
+   alone does not prove these contracts. An async-generator agent is supported
+   in principle; check its actual bounds and close/cancel behavior rather than
+   rejecting it by shape.
+3. Choose native SDK `@log` when those applicable contracts are supported.
+   Otherwise state the exact incompatible field, privacy, protocol,
+   creation-time or sink fact and choose a named application-owned **function
+   decorator** invoking a documented supported creator once at that same
+   boundary. Preserve the business invocation/iteration protocol and required
+   mappings; a schema constructor or inline manual scope is not this decision.
+
+Manual public scopes are for a source-proven non-function or external lifetime,
+not a substitute for decorating a fresh function boundary. `@contextmanager`
+on a scope factory, stdlib logging and an export-only processor are not SDK
+`@log` or evidence that the business function is decorated. Judge the actual
+invocation wrapper and ownership, not a literal annotation search. Keep a
+proven pre-existing producer instead of adding a duplicate decorator.
+
+Audit records this same decision as a proposed pattern and concrete probe
+acceptance in existing `required_fix`/evidence/acceptance fields; it inspects
+available source/receipts but does not install packages, run probes or contact
+cloud. Missing capability evidence remains proposed/Not proven. Instrumentation
+must resolve the applicable decision before changing that function. Verification
+fails a missing decision or newly added manual function scope without a proven
+exception, even when emitted attributes are correct; unavailable source or
+runtime proof keeps the affected acceptance Partial rather than implying
+native or fallback compliance.
 
 | Actual function scenario | Preferred pattern and required checks |
 |---|---|

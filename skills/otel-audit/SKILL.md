@@ -79,7 +79,12 @@ Scan the repository to determine language, framework, and existing instrumentati
   Profile: a fresh agent defaults to Splunk AO span creation, while an
   existing OTel/Galileo producer is preserved and enriched. Read
   `../references/splunk-agent-observability.md` for fresh-agent SDK APIs and
-  current official examples even when no SDK import exists yet. Include
+  current official examples even when no SDK import exists yet. Before
+  prescribing any creator for fresh or uncovered Python GenAI functions,
+  complete its mandatory per-function producer decision gate for every actual
+  agent/model/tool/retrieval function. Keep native SDK `@log` versus justified
+  application-owned function-decorator choices consistent across findings;
+  record proposed patterns and probe acceptance without executing them. Include
   the intended Splunk AO runtime in the AO assessment below when that default
   producer is selected; absence of an installed SDK does not exclude its
   source-backed project, Agent Stream, or routing configuration gaps. Include
@@ -1093,10 +1098,14 @@ remaining`. Apply Decorator Selection for each custom Python function: name
 SDK `@log`, its actual `span_type`/function and public capture/sink support where
 compatible. For a precise SDK decorator limitation, name the application-owned
 function decorator and documented creator it invokes once at that boundary.
-Use the lower-level method table only for a supported fallback or non-function
-lifetime. Check the current official example and matching APIs; record the
-resolved example revision and chosen compatible packages in the report. This
-is a plan, not installed or runtime proof.
+Complete the mandatory per-function decision before prescribing lower-level
+methods or schema helpers; the same pattern/probe acceptance applies to model,
+tool and retrieval functions as to the agent. A manual context-manager scope
+does not satisfy a fresh function's decorator pattern. Use the lower-level
+method table only inside a justified function-decorator fallback or for a
+source-proven non-function lifetime. Check the current official example and
+matching APIs; record the resolved example revision and chosen compatible
+packages in the report. This is a plan, not installed or runtime proof.
 Keep the receipt in canonical evidence and the applicable finding's
 `required_fix`/acceptance. A general SDK citation or 'logger/schema helpers'
 without named symbols/example/version is incomplete; correct that report

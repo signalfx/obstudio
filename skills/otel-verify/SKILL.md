@@ -55,10 +55,16 @@ creator symbols, actual boundary,
 installed or proposed source-verified version and exact example/revision;
 separate that prospective choice from actual emitted-span proof. A fixture
 without an installed SDK does not justify silently changing the fresh default.
-Verify decorator selection per function: supported SDK `@log` scenarios use it;
-an incompatible capture, generator protocol, lifecycle or sink requires exact
-evidence and a supported application-owned function-decorator fallback. Verify
-actual business values, stream behavior and one node per operation, not merely
+Apply its mandatory per-function producer decision gate to every fresh or
+newly uncovered Python GenAI source function, including model/tool/retrieval
+functions and async-generator agents. Reconcile the named function/type and
+native public source/probe assessment with the actual SDK `@log` or justified
+application-owned function decorator. A missing decision or newly added manual
+function scope without a proven exception is Fail/Partial even with correct
+span attributes; `@contextmanager` on a scope factory is not that function
+decorator or SDK `@log`. An incompatible capture, generator protocol, lifecycle,
+creation-time or sink contract requires exact evidence and a supported fallback.
+Verify actual business values, stream behavior and one node per operation, not merely
 the presence of an annotation. Preserve framework/provider-owned operations
 without a duplicate decorator span and keep all remaining field gaps visible.
 
