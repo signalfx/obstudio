@@ -44,7 +44,7 @@
     {
       "check": "Target-product evidence",
       "finding": "The target-product task requires an explicit decision whether to add a distinct Studio destination while retaining Galileo; no producer or provider migration is authorized.",
-      "source": "README.md:9-15"
+      "source": "README.md:9-17"
     }
   ],
   "routes": [
@@ -58,7 +58,7 @@
     }
   ],
   "signal_flow": {
-    "component_flow_map": "FastAPI stream [SOURCE-COVERED] -> existing app-owned GenAI spans -> Galileo processor [PRESERVE]\nExisting provider -> optional distinct Studio OTLP route [SELECTED CONFIGURATION ONLY]\nsupport_turn [GAP: Streaming lifecycle telemetry]"
+    "component_flow_map": "FastAPI stream [SOURCE-COVERED] -> existing app-owned GenAI spans [SOURCE-COVERED] -> Galileo processor [SOURCE-COVERED]\nOperator additional-destination policy [GAP: Additional destination selection] -> existing provider -> optional distinct Studio OTLP route [GAP: Additional native OTel trace routing]\nsupport_turn [GAP: Streaming lifecycle telemetry]"
   },
   "current_instrumentation": {
     "spans": [

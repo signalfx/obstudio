@@ -7,11 +7,13 @@ No instrumentation implementation is supplied by this probe.
 from __future__ import annotations
 
 import argparse
+import ast
 import asyncio
 import contextlib
 import hashlib
 import importlib.util
 import io
+import inspect
 import json
 import os
 import re
@@ -25,10 +27,11 @@ from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsSer
 from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportMetricsServiceRequest
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 
-from app import AgentDemo, MODES
+from app import AgentDemo, MODES, RESOURCE
 
 SCENARIOS = ("success", "tool_error", "provider_error", "cancel")
 ROUTING_HEADERS = {"projectid", "logstreamid", "agentstreamid"}
+CANCELLATION_TYPES = {"cancelled", "CancelledError", "asyncio.CancelledError", "asyncio.exceptions.CancelledError"}
 
 
 def _value(value: Any) -> Any:
@@ -126,6 +129,93 @@ class Receiver:
         return f"http://127.0.0.1:{self.server.server_port}"
 
 
+def snapshot_resources(app: AgentDemo, environment: dict[str, str]) -> dict[str, Any]:
+    """Read caller-owned resources before integration; do not change SDK state."""
+    source = Path(inspect.getsourcefile(type(app).__init__)).read_text()
+    tree = ast.parse(source)
+    explicit_keys = {
+        field.partition("=")[0].strip()
+        for field in environment.get("OTEL_RESOURCE_ATTRIBUTES", "").split(",") if "=" in field
+    }
+    if environment.get("OTEL_SERVICE_NAME"):
+        explicit_keys.add("service.name")
+    source_keys = set(explicit_keys)
+    known_constructors = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        is_resource = isinstance(node.func, ast.Name) and node.func.id == "Resource"
+        is_resource_create = isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name) and node.func.value.id == "Resource" and node.func.attr == "create"
+        if is_resource or is_resource_create:
+            arguments = list(node.args) + [keyword.value for keyword in node.keywords if keyword.arg == "attributes"]
+            known_mapping = len(node.args) <= 1 and all(keyword.arg in {"attributes", "schema_url"} for keyword in node.keywords)
+            for argument in arguments:
+                if isinstance(argument, ast.Dict):
+                    source_keys.update(key.value for key in argument.keys if isinstance(key, ast.Constant) and isinstance(key.value, str))
+                    known_mapping &= all(isinstance(key, ast.Constant) and isinstance(key.value, str) for key in argument.keys)
+                elif not (isinstance(argument, ast.Constant) and argument.value is None):
+                    known_mapping = False
+            if known_mapping:
+                known_constructors.add(id(node))
+
+    def known_resource_expression(node: ast.AST) -> bool:
+        if isinstance(node, ast.Name) and node.id == "RESOURCE":
+            return True
+        if id(node) in known_constructors:
+            return True
+        return (
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "merge"
+            and len(node.args) == 1 and not node.keywords
+            and known_resource_expression(node.func.value) and known_resource_expression(node.args[0])
+        )
+
+    declarations = [
+        node.value for node in ast.walk(tree)
+        if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "RESOURCE" for target in node.targets)
+    ]
+    source_origin_known = bool(declarations) and all(known_resource_expression(node) for node in declarations)
+    # A literal application instance ID is explicit even when constructed indirectly.
+    application_instance_id = any(isinstance(node, ast.Constant) and node.value == "service.instance.id" for node in ast.walk(tree))
+    signals = {}
+    for signal, provider in (("traces", app.trace_provider), ("metrics", app.metric_provider), ("logs", app.log_provider)):
+        if provider is None:
+            continue
+        resource = getattr(provider, "resource", None)
+        ownership = "provider.resource"
+        if signal == "metrics" and resource is None:
+            # MeterProvider has no public resource getter. This fixture passes its
+            # application-owned RESOURCE directly; verify that source binding.
+            bound = any(
+                isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "MeterProvider"
+                and any(keyword.arg == "resource" and isinstance(keyword.value, ast.Name) and keyword.value.id == "RESOURCE" for keyword in node.keywords)
+                for node in ast.walk(tree)
+            )
+            if bound:
+                resource = RESOURCE
+                ownership = "app.RESOURCE passed to MeterProvider"
+        if resource is not None:
+            signals[signal] = {"original": dict(resource.attributes), "ownership": ownership}
+    return {
+        "signals": signals, "source_resource_keys": sorted(source_keys),
+        "explicit_resource_keys": sorted(explicit_keys),
+        "sdk_generated_service_instance_id": source_origin_known and not application_instance_id and "service.instance.id" not in explicit_keys,
+    }
+
+
+def finalize_resource_proof(snapshot: dict[str, Any], requests: list[dict[str, Any]]) -> dict[str, Any]:
+    sentinels = {"traces": "legacy.sentinel", "metrics": "legacy.metric", "logs": "legacy.log"}
+    for signal, proof in snapshot["signals"].items():
+        exported = [
+            record["resource"] for request in requests if request["path"] == f"/v1/{signal}"
+            for record in request["records"] if sentinels[signal] in record["attributes"]
+        ]
+        proof["exported_legacy_resources"] = exported
+        proof["original_values_preserved"] = bool(exported) and all(
+            all(resource.get(key) == value for key, value in proof["original"].items()) for resource in exported
+        )
+    return snapshot
+
+
 def capture(mode: str, instrumentation: Path | None = None, reject_traces: bool = False) -> dict[str, Any]:
     saved_environment = dict(os.environ)
     try:
@@ -139,6 +229,7 @@ def capture(mode: str, instrumentation: Path | None = None, reject_traces: bool 
             os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = receiver.endpoint
             os.environ["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf"
             app = AgentDemo(mode, receiver.endpoint)
+            resource_snapshot = snapshot_resources(app, saved_environment)
             originals = {key: value for key, value in app.owned_objects().items() if value is not None}
             original_types = {key: f"{type(value).__module__}.{type(value).__qualname__}" for key, value in originals.items()}
             setup_errors = []
@@ -179,6 +270,7 @@ def capture(mode: str, instrumentation: Path | None = None, reject_traces: bool 
                 "second_shutdown_requests": len(receiver.requests) - request_count_after_shutdown,
                 "header_environment": {key: value for key, value in os.environ.items() if key.startswith("OTEL_") and key.endswith("HEADERS")},
                 "requests": list(receiver.requests),
+                "resource_proof": finalize_resource_proof(resource_snapshot, receiver.requests),
             }
     finally:
         os.environ.clear()
@@ -207,6 +299,50 @@ def compare(before: dict[str, Any], after: dict[str, Any], contract: str, projec
     for signal in ("METRICS", "LOGS"):
         key = f"OTEL_EXPORTER_OTLP_{signal}_HEADERS"
         require(after["header_environment"].get(key) == before["header_environment"].get(key), f"{signal.lower()} header environment changed")
+    for receipt in (before, after):
+        for signal, proof in receipt.get("resource_proof", {}).get("signals", {}).items():
+            sentinel = {"traces": "legacy.sentinel", "metrics": "legacy.metric", "logs": "legacy.log"}[signal]
+            exported = [record["resource"] for record in records(receipt, signal) if sentinel in record["attributes"]]
+            require(
+                proof.get("original_values_preserved") is True and bool(exported)
+                and all(all(resource.get(key) == value for key, value in proof["original"].items()) for resource in exported)
+                and Counter(json.dumps(resource, sort_keys=True) for resource in exported)
+                == Counter(json.dumps(resource, sort_keys=True) for resource in proof.get("exported_legacy_resources", [])),
+                f"original {signal} resource changed during process",
+            )
+
+    def preserves_resource(prior: dict[str, Any], current: dict[str, Any], signal: str) -> bool:
+        prior_proof = before.get("resource_proof", {})
+        current_proof = after.get("resource_proof", {})
+        prior_owner = prior_proof.get("signals", {}).get(signal, {})
+        current_owner = current_proof.get("signals", {}).get(signal, {})
+        within_process_proven = (
+            prior_owner.get("original_values_preserved") is True
+            and current_owner.get("original_values_preserved") is True
+            and prior in prior_owner.get("exported_legacy_resources", [])
+            and current in current_owner.get("exported_legacy_resources", [])
+        )
+        for key, value in prior.items():
+            if current.get(key) == value:
+                continue
+            generated_instance = (
+                key == "service.instance.id" and within_process_proven
+                and prior_proof.get("sdk_generated_service_instance_id") is True
+                and current_proof.get("sdk_generated_service_instance_id") is True
+                and "service.instance.id" not in prior_proof.get("explicit_resource_keys", [])
+                and "service.instance.id" not in current_proof.get("explicit_resource_keys", [])
+                and value == prior_owner.get("original", {}).get(key)
+                and current.get(key) == current_owner.get("original", {}).get(key)
+            )
+            if not generated_instance:
+                return False
+        for key in current.keys() - prior.keys():
+            if not (
+                within_process_proven and key in current_proof.get("source_resource_keys", [])
+                and current[key] == current_owner.get("original", {}).get(key)
+            ):
+                return False
+        return True
 
     old_spans = records(before, "traces")
     spans = records(after, "traces")
@@ -222,15 +358,45 @@ def compare(before: dict[str, Any], after: dict[str, Any], contract: str, projec
                     and old["attributes"].get("legacy.operation") == "workflow"
                     and {"scenario": "cancel", "outcome": "CancelledError"} in before["outcomes"]
                     and current["status"]["code"] == 2
-                    and current["attributes"].get("error.type") in {"CancelledError", "asyncio.CancelledError"}
+                    and current["attributes"].get("error.type") in CANCELLATION_TYPES
                 )
-                require(current[key] == old[key] or missing_cancellation_status_filled, f"existing span {key} changed: {old['span_id']}")
+                resource_preserved = key == "resource" and preserves_resource(old["resource"], current["resource"], "traces")
+                require(current[key] == old[key] or missing_cancellation_status_filled or resource_preserved, f"existing span {key} changed: {old['span_id']}")
             require(all(current["attributes"].get(key) == value for key, value in old["attributes"].items()), f"existing span attributes changed: {old['span_id']}")
             require(all(event in current["events"] for event in old["events"] if event["name"].startswith("legacy.")), f"existing span events lost: {old['span_id']}")
+            prior_exceptions = [event for event in old["events"] if event["name"] == "exception"]
+            current_exceptions = [event for event in current["events"] if event["name"] == "exception"]
+            prior_types = Counter(event["attributes"].get("exception.type") for event in prior_exceptions)
+            current_types = Counter(event["attributes"].get("exception.type") for event in current_exceptions)
+            missing_cancel_event_filled = (
+                not prior_exceptions and len(current_exceptions) == 1
+                and old["attributes"].get("legacy.request") == "turn-4"
+                and old["attributes"].get("legacy.operation") == "workflow"
+                and {"scenario": "cancel", "outcome": "CancelledError"} in before["outcomes"]
+                and current_exceptions[0]["attributes"].get("exception.type") in CANCELLATION_TYPES
+            )
+            require(prior_types == current_types or missing_cancel_event_filled, f"existing span exception event name/type/cardinality changed: {old['span_id']}")
+            for exception_type in prior_types:
+                prior_group = [event for event in prior_exceptions if event["attributes"].get("exception.type") == exception_type]
+                current_group = [event for event in current_exceptions if event["attributes"].get("exception.type") == exception_type]
+                for key in ("exception.message", "exception.stacktrace"):
+                    required = sum(isinstance(event["attributes"].get(key), str) and bool(event["attributes"][key]) for event in prior_group)
+                    present = sum(isinstance(event["attributes"].get(key), str) and bool(event["attributes"][key]) for event in current_group)
+                    require(present >= required, f"existing span exception event {key} missing: {old['span_id']}")
 
     prior_metrics = records(before, "metrics")
     retained_metrics = [record for record in records(after, "metrics") if "legacy.metric" in record["attributes"]]
-    require(Counter(json.dumps(record, sort_keys=True) for record in prior_metrics) == Counter(json.dumps(record, sort_keys=True) for record in retained_metrics), "existing metrics values/fields missing or duplicated")
+    require(len(prior_metrics) == len(retained_metrics), "existing metrics values/fields missing or duplicated")
+    unmatched_metrics = list(retained_metrics)
+    for prior in prior_metrics:
+        matched = next((
+            index for index, current in enumerate(unmatched_metrics)
+            if {key: value for key, value in prior.items() if key != "resource"} == {key: value for key, value in current.items() if key != "resource"}
+            and preserves_resource(prior["resource"], current["resource"], "metrics")
+        ), None)
+        require(matched is not None, "existing metrics values/fields missing or duplicated")
+        if matched is not None:
+            unmatched_metrics.pop(matched)
 
     prior_logs = records(before, "logs")
     retained_logs = [record for record in records(after, "logs") if "legacy.log" in record["attributes"]]
@@ -241,6 +407,10 @@ def compare(before: dict[str, Any], after: dict[str, Any], contract: str, projec
     for prior in prior_logs:
         def preserves_log(current: dict[str, Any]) -> bool:
             for key, value in prior.items():
+                if key == "resource":
+                    if not preserves_resource(value, current.get(key, {}), "logs"):
+                        return False
+                    continue
                 if key not in {"attributes", "trace_id", "span_id"} and current.get(key) != value:
                     return False
             if not all(current["attributes"].get(key) == value for key, value in prior["attributes"].items()):

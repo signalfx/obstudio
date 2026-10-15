@@ -354,7 +354,7 @@ class StudioAPI:
         try:
             connection.request(method, "/ao/api/projects" + path, encoded, headers)
             response = connection.getresponse()
-            if response.status != 200:
+            if response.status != 200 and not (method == "POST" and response.status == 201):
                 raise StudioAPIError(response.status)
             payload = response.read(STUDIO_MAX_RESPONSE_BYTES + 1)
             if len(payload) > STUDIO_MAX_RESPONSE_BYTES:

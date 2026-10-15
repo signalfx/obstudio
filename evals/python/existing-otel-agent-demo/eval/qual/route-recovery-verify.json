@@ -1,0 +1,25 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "route-recovery-verify",
+      "eval_inputs": [
+        "eval/inputs/route_recovery_source.py",
+        "eval/inputs/route-recovery-capture.json",
+        "eval/inputs/vendor-route-capture.json"
+      ],
+      "task": "This is a narrow existing-exporter route recovery fixture, not a request to rebuild GenAI instrumentation or full five-mode reports. app.py already owns real generic trace, metric and log providers/exporters. route_recovery_source.py is a separate supplied application startup adapter. route-recovery-capture.json records actual local HTTP/OTLP across four separate app worker processes, with source hashes, installed versions and independent helper contrasts; it is not cloud receipt or a repaired implementation. Verify the captured current source without executing applications/resource APIs or changing source/dependencies/inputs/profiles/canonical app state. Save .observe/route-recovery-verify.md and .json. Determine per-stage resource/create/relookup and native-route results from actual requests, owner booleans, process IDs, source receipts and headers. Initial 201 success, later source cache behavior and independent helper contrast are distinct evidence; do not invent an application lookup or auth error that its cached branch never attempted. Assess required restart relookup/current ownership and identify the smallest supported same-owner repair and concrete rerun acceptance. Never require an AO span creator/SDK-only endpoint/auth trio for native exporter headers. Keep local mock resource/native receipt separate from real Studio/cloud visibility, and retain existing core signal evidence even when selected AO routing fails. File/terminal only, no network/app execution or browser/UI. Also assess vendor-route-capture.json as a separate real captured source/SDK-field case: compare original versus candidate effective vendor project/stream/API/auth profile and the actual harmless generic OTLP header probe. Preserve original vendor destination and credential ownership when adding a distinct native destination, honor real generic-versus-trace-specific precedence, and never forward unrelated destination credentials. The resource adapter repair does not authorize edits to this separate vendor case. Record concrete source-bound verdict and required acceptance, not a generic preservation promise; captured field/function probes are not full lifecycle/cloud proof."
+    }
+  ],
+  "judge_inputs": [
+    "Compare every observed stage and independent helper contrast in the capture against actual source, source SHA/versions and generated reports. The current adapter is not repaired in this task.",
+    "Return exactly five ordered checks rubric-1 through rubric-5. Grade truthful current failure/preservation assessment; do not require or fabricate execution."
+  ],
+  "rubric": [
+    "Preserves existing generic OTel producers/providers/exporters and native metric/log paths as independent supported behavior; no fresh-AO classification, SDK span-creator dependency/client triplet, producer migration, provider replacement or duplicate exporter is introduced. Separately assesses the supplied actual vendor launch/header case: candidate profile loses original GALILEO_LOG_STREAM=production and real SDK resolves default; the new header function drops harmless generic fallback. Names exact source/effective values and fixes/acceptance while retaining vendor project/stream/API/auth and source-supported generic/signal precedence. This source probe does not become full vendor lifecycle or cloud proof.",
+    "Accepts the actually observed initial ordered Project+stream HTTP201 creation as scoped local API support, with returned IDs, existing owner identity and native receipt. Records source hashes/date/SDK versions honestly; does not misclassify201 as rejection, require200-only or infer real cloud resource creation from the fixture.",
+    "Fails current restart routing acceptance from concrete evidence: separate worker process IDs, cached profile branch, zero adapter helper/API requests after external identity rotation, and stale trace header IDs. The auth-configured startup also skipped lookup; independent helper changed-ID/403 receipts prove only that helper boundary, not that the adapter refreshed or handled failure.",
+    "Assesses actual Studio trace-only projectid/logstreamid, original harmless headers/endpoints, metric/log isolation, original signals/business results and owner booleans per stage. Does not pass resource ownership from native HTTP200, reuse cached IDs as proof, invent a public/Studio alias mix, or claim wider GenAI/runtime/cloud closure.",
+    "Provides exact scoped repair ownership and acceptance for fresh startup resolution,201 creation, repeated no-create lookup, changed current IDs and failed-lookup isolation with existing core continuation. Current unsupported/missing selected routing remains failed/incomplete while available ordinary signal proof remains scoped; does not mutate canonical state or fabricate corrected app execution."
+  ]
+}

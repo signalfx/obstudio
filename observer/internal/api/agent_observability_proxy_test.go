@@ -1,17 +1,22 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/otlp"
+	"github.com/signalfx/obstudio/observer/internal/store"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 )
 
@@ -276,6 +281,147 @@ func TestAgentObservabilityProxyBindsStreamsOnlyToResolvingConnection(t *testing
 	resolve(http.MethodGet, streamPath+"/"+firstStreamID)
 	if !isBound(firstStreamID) {
 		t.Fatal("exact stream lookup did not rebind the current cloud route")
+	}
+}
+
+func TestAgentObservabilityProxyFreshInstanceRequiresReadOnlyRouteResolution(t *testing.T) {
+	const projectID = "3c90ff2e-f907-42a8-ac30-52e2b67f21a9"
+	const streamID = "02ea43cc-dd21-4081-b6c9-4aa4b843e163"
+	projectPath := "/ao/api/projects/" + projectID
+	streamPath := projectPath + "/log_streams/" + streamID
+	var resourceMu sync.Mutex
+	var resourceRequests []string
+	var cloudIngests atomic.Int32
+	cloud := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-SF-Token") != testSplunkAccessToken || r.Header.Get("Authorization") != "" {
+			t.Error("synthetic cloud did not receive only Studio-owned authentication")
+		}
+		if r.URL.Path == "/v2/trace/otlp" {
+			body, err := io.ReadAll(r.Body)
+			traces, decodeErr := (&ptrace.ProtoUnmarshaler{}).UnmarshalTraces(body)
+			if err != nil || decodeErr != nil || traces.SpanCount() != 1 || r.Method != http.MethodPost ||
+				r.Header.Get("projectid") != projectID || r.Header.Get("logstreamid") != streamID {
+				t.Error("routed ingest lost protobuf span or persisted resource IDs")
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			cloudIngests.Add(1)
+			w.Header().Set("Content-Type", "application/x-protobuf")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		resourceMu.Lock()
+		resourceRequests = append(resourceRequests, r.Method+" "+r.URL.Path)
+		resourceMu.Unlock()
+		if r.Method != http.MethodGet || (r.URL.Path != projectPath && r.URL.Path != streamPath) {
+			t.Error("route recovery attempted a resource write or unexpected lookup")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == projectPath {
+			_, _ = io.WriteString(w, `{"id":"`+projectID+`","name":"Persisted project"}`)
+		} else {
+			_, _ = io.WriteString(w, `{"id":"`+streamID+`","name":"Persisted stream","project_id":"`+projectID+`"}`)
+		}
+	}))
+	t.Cleanup(cloud.Close)
+	originalTransport := http.DefaultTransport
+	cloudTransport := cloud.Client().Transport.(*http.Transport).Clone()
+	cloudTransport.Proxy = nil
+	cloudTransport.TLSClientConfig.ServerName = "127.0.0.1"
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	cloudTransport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		if address != "app.lab0.observability.splunkcloud.com:443" && address != "ingest.lab0.observability.splunkcloud.com:443" {
+			return nil, errors.New("test forbids an unexpected upstream")
+		}
+		return dialer.DialContext(ctx, network, cloud.Listener.Addr().String())
+	}
+	http.DefaultTransport = cloudTransport
+	t.Cleanup(func() {
+		http.DefaultTransport = originalTransport
+		cloudTransport.CloseIdleConnections()
+	})
+	client := &http.Client{Transport: originalTransport, Timeout: 5 * time.Second}
+	newGateway := func() (*httptest.Server, *store.Store) {
+		t.Helper()
+		service, mux := newTestAgentObservabilityProxy(t)
+		localStore := store.New()
+		receiver, err := otlp.StartReceiver(context.Background(), localStore, "127.0.0.1:0", "127.0.0.1:0", otlp.WithTracesExporter(service.traces))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := receiver.Shutdown(context.Background()); err != nil {
+				t.Error(err)
+			}
+		})
+		mux.Handle("POST /otel/v1/traces", receiver.HTTPHandler())
+		gateway := httptest.NewServer(mux)
+		t.Cleanup(gateway.Close)
+		return gateway, localStore
+	}
+	lookup := func(gateway *httptest.Server, path, id string) {
+		t.Helper()
+		request, _ := http.NewRequest(http.MethodGet, gateway.URL+path, nil)
+		request.Header.Set("X-SF-Token", agentObservabilityLocalSDKKey)
+		response, err := client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		var resource map[string]string
+		if err := json.NewDecoder(response.Body).Decode(&resource); err != nil || response.StatusCode != http.StatusOK || resource["id"] != id ||
+			(path == streamPath && resource["project_id"] != projectID) {
+			t.Fatalf("read-only resource lookup failed: status=%d resource=%v error=%v", response.StatusCode, resource, err)
+		}
+	}
+	traces := ptrace.NewTraces()
+	span := traces.ResourceSpans().AppendEmpty().ScopeSpans().AppendEmpty().Spans().AppendEmpty()
+	span.SetName("persisted route")
+	span.SetTraceID([16]byte{1})
+	span.SetSpanID([8]byte{1})
+	body, err := (&ptrace.ProtoMarshaler{}).MarshalTraces(traces)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ingest := func(gateway *httptest.Server, wantStatus int, wantCloudCalls int32) {
+		t.Helper()
+		request, _ := http.NewRequest(http.MethodPost, gateway.URL+"/otel/v1/traces", bytes.NewReader(body))
+		request.Header.Set("Content-Type", "application/x-protobuf")
+		request.Header.Set("projectid", projectID)
+		request.Header.Set("logstreamid", streamID)
+		response, err := client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		_, _ = io.Copy(io.Discard, response.Body)
+		if response.StatusCode != wantStatus || cloudIngests.Load() != wantCloudCalls {
+			t.Fatalf("ingest status=%d cloud calls=%d, want status=%d calls=%d", response.StatusCode, cloudIngests.Load(), wantStatus, wantCloudCalls)
+		}
+	}
+	first, _ := newGateway()
+	lookup(first, projectPath, projectID)
+	lookup(first, streamPath, streamID)
+	ingest(first, http.StatusOK, 1)
+	first.Close()
+
+	fresh, localStore := newGateway()
+	ingest(fresh, http.StatusServiceUnavailable, 1)
+	lookup(fresh, projectPath, projectID)
+	ingest(fresh, http.StatusServiceUnavailable, 1)
+	lookup(fresh, streamPath, streamID)
+	ingest(fresh, http.StatusOK, 2)
+	ingest(fresh, http.StatusOK, 3)
+	if localStore.Stats().SpanCount != 1 {
+		t.Fatalf("repeated routed ingest duplicated local spans: %+v", localStore.Stats())
+	}
+	resourceMu.Lock()
+	defer resourceMu.Unlock()
+	wantRequests := []string{"GET " + projectPath, "GET " + streamPath, "GET " + projectPath, "GET " + streamPath}
+	if strings.Join(resourceRequests, "\n") != strings.Join(wantRequests, "\n") {
+		t.Fatalf("resource recovery requests=%v, want only ordered read-only lookups %v", resourceRequests, wantRequests)
 	}
 }
 

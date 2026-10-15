@@ -657,6 +657,24 @@ class StudioHTTPTests(unittest.TestCase):
         self.assertNotIn("private.example", serialized)
         self.assertNotIn("private-response", output + second_output)
 
+    def test_post_created_status_creates_both_resources_once_and_repeat_reuses(self):
+        api = StudioResourceAPI(existing=False)
+        def route(method, path, body):
+            status, payload, headers = api(method, path, body)
+            return (201 if method == "POST" else status), payload, headers
+        with local_studio(route) as (origin, requests):
+            result, evidence, _ = self.run_cli(origin)
+            self.assertEqual(result, 0)
+            self.assertEqual((evidence["project"]["outcome"], evidence["agent_stream"]["outcome"]), ("created", "created"))
+            self.assertEqual(evidence["project"]["id"], "p")
+            self.assertEqual(evidence["agent_stream"]["project_id"], "p")
+            second_result, second, _ = self.run_cli(origin)
+            self.assertEqual(second_result, 0)
+            self.assertEqual((second["project"]["outcome"], second["agent_stream"]["outcome"]), ("reused", "reused"))
+        self.assertEqual([path for method, path, _, _ in requests if method == "POST"], [
+            "/ao/api/projects", "/ao/api/projects/p/log_streams",
+        ])
+
     def test_stream_lookup_scans_all_pages_before_reusing_or_rejecting_duplicates(self):
         for duplicate in (False, True):
             api = StudioResourceAPI()
@@ -860,6 +878,24 @@ class StudioHTTPTests(unittest.TestCase):
                     self.assertEqual(self.resolve(origin)[kind]["outcome"], "reused")
                 self.assertEqual(sum(method == "POST" and path == create_path for method, path, _, _ in requests), 1)
 
+    def test_unsupported_create_success_statuses_fail_without_relookup_or_retry(self):
+        for kind in ("project", "agent_stream"):
+            for status in (202, 204):
+                api = StudioResourceAPI(existing=kind == "agent_stream")
+                api.streams = []
+                def route(method, path, body):
+                    response = api(method, path, body)
+                    return (status, response[1], response[2]) if method == "POST" else response
+                with self.subTest(kind=kind, status=status), local_studio(route) as (origin, requests):
+                    with self.assertRaises(MODULE.ResolutionError) as raised:
+                        self.resolve(origin)
+                    self.assertEqual(raised.exception.code, f"{kind}_create_failed")
+                    record = raised.exception.evidence[kind]
+                    self.assertEqual(record["create_http_status"], status)
+                    self.assertEqual(record["create_attempts"], 1)
+                    self.assertEqual(record["relookup_attempts"], 0)
+                self.assertEqual(sum(method == "POST" for method, _, _, _ in requests), 1)
+
     def test_uncertain_transport_create_unresolved_or_failed_relookup_never_recreates(self):
         for failure in ("absent", "ambiguous", "lookup-error"):
             api = StudioResourceAPI(existing=False)
@@ -887,7 +923,7 @@ class StudioHTTPTests(unittest.TestCase):
 
     def test_lookup_errors_oversize_and_redirects_never_create_or_follow_location(self):
         with local_studio(StudioResourceAPI()) as (other_origin, other_requests):
-            for status, payload in ((401, {}), (403, {}), (503, {}), (302, {}), (307, {}), (200, b"private-response-not-json"), (200, b"x" * 65)):
+            for status, payload in ((201, [{"id": "p", "name": "project"}]), (401, {}), (403, {}), (503, {}), (302, {}), (307, {}), (200, b"private-response-not-json"), (200, b"x" * 65)):
                 def route(*_):
                     return status, payload, {"Location": other_origin + "/ao/api/projects/all"}
                 with self.subTest(status=status, payload=payload), local_studio(route) as (origin, requests), patch.object(MODULE, "STUDIO_MAX_RESPONSE_BYTES", 64):

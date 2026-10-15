@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -462,3 +464,171 @@ def test_capture_and_compare_cli_write_reviewable_receipts(tmp_path: Path) -> No
     )
     assert result.returncode == 1
     assert json.loads(result.stdout)["cloud_visibility"] == "not_proven"
+
+
+def _capture_process(output: Path, fixture: Path = FIXTURE, resource_attributes: str | None = None) -> dict:
+    environment = {key: value for key, value in os.environ.items() if not key.startswith(("OTEL_", "SPLUNK_", "GALILEO_"))}
+    if resource_attributes is not None:
+        environment["OTEL_RESOURCE_ATTRIBUTES"] = resource_attributes
+    result = subprocess.run(
+        [sys.executable, str(fixture / "probe.py"), "capture", "--mode", "generic", "--output", str(output)],
+        env=environment, check=False, text=True, capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(output.read_text())
+
+
+def _resource_failures(before: dict, after: dict) -> list[str]:
+    return [failure for failure in probe.compare(before, after, "studio", "project", "stream")
+            if "resource" in failure or "existing metrics" in failure or "existing logs" in failure]
+
+
+def test_real_unchanged_cross_process_resources_preserve_original_values(tmp_path: Path) -> None:
+    before = _capture_process(tmp_path / "before.json")
+    after = _capture_process(tmp_path / "after.json")
+    for receipt in (before, after):
+        proof = receipt["resource_proof"]
+        assert proof["sdk_generated_service_instance_id"] is True
+        assert set(proof["signals"]) == {"traces", "metrics", "logs"}
+        assert all(owner["original_values_preserved"] for owner in proof["signals"].values())
+    first = before["resource_proof"]["signals"]["traces"]["original"].get("service.instance.id")
+    second = after["resource_proof"]["signals"]["traces"]["original"].get("service.instance.id")
+    if first is not None and second is not None:
+        assert first != second, "these are actual separate SDK process instances"
+    assert _resource_failures(before, after) == []
+
+
+def test_operator_instance_ids_are_immutable_across_real_processes(tmp_path: Path) -> None:
+    before = _capture_process(tmp_path / "operator-before.json", resource_attributes="service.instance.id=operator-instance")
+    same = _capture_process(tmp_path / "operator-same.json", resource_attributes="service.instance.id=operator-instance")
+    changed = _capture_process(tmp_path / "operator-changed.json", resource_attributes="service.instance.id=changed-instance")
+    assert before["resource_proof"]["sdk_generated_service_instance_id"] is False
+    assert "service.instance.id" in before["resource_proof"]["explicit_resource_keys"]
+    assert _resource_failures(before, same) == []
+    assert any("existing span resource changed" in failure for failure in _resource_failures(before, changed))
+
+
+def test_literal_application_instance_id_cannot_be_treated_as_sdk_generated(tmp_path: Path) -> None:
+    service = tmp_path / "source"
+    service.mkdir()
+    shutil.copyfile(FIXTURE / "probe.py", service / "probe.py")
+    original = (FIXTURE / "app.py").read_text()
+    source = original.replace('"legacy.resource": "keep-resource"', '"legacy.resource": "keep-resource", "service.instance.id": "application-instance"', 1)
+    (service / "app.py").write_text(source)
+    before = _capture_process(tmp_path / "application-before.json", fixture=service)
+    (service / "app.py").write_text(source.replace('"application-instance"', '"changed-application-instance"'))
+    after = _capture_process(tmp_path / "application-after.json", fixture=service)
+    assert before["resource_proof"]["sdk_generated_service_instance_id"] is False
+    assert after["resource_proof"]["sdk_generated_service_instance_id"] is False
+    assert _resource_failures(before, after)
+
+
+def test_dynamic_application_resource_mapping_does_not_get_volatile_id_exemption(tmp_path: Path) -> None:
+    service = tmp_path / "dynamic-source"
+    service.mkdir()
+    shutil.copyfile(FIXTURE / "probe.py", service / "probe.py")
+    source = (FIXTURE / "app.py").read_text()
+    source = source.replace('RESOURCE = Resource.create(', 'RESOURCE_VALUES = {"service.instance" + ".id": "dynamic-instance"}\nRESOURCE = Resource.create(', 1)
+    source = source.replace('"legacy.resource": "keep-resource"', '"legacy.resource": "keep-resource", **RESOURCE_VALUES', 1)
+    (service / "app.py").write_text(source)
+    before = _capture_process(tmp_path / "dynamic-before.json", fixture=service)
+    (service / "app.py").write_text(source.replace('"dynamic-instance"', '"changed-dynamic-instance"'))
+    after = _capture_process(tmp_path / "dynamic-after.json", fixture=service)
+    assert before["resource_proof"]["sdk_generated_service_instance_id"] is False
+    assert after["resource_proof"]["sdk_generated_service_instance_id"] is False
+    assert _resource_failures(before, after)
+
+
+def test_real_source_declared_missing_resource_field_may_be_filled(tmp_path: Path) -> None:
+    before = _capture_process(tmp_path / "before.json")
+    service = tmp_path / "source"
+    service.mkdir()
+    shutil.copyfile(FIXTURE / "probe.py", service / "probe.py")
+    source = (FIXTURE / "app.py").read_text().replace('"legacy.resource": "keep-resource"', '"legacy.resource": "keep-resource", "service.version": "0.1.0"', 1)
+    (service / "app.py").write_text(source)
+    after = _capture_process(tmp_path / "after.json", fixture=service)
+    assert "service.version" in after["resource_proof"]["source_resource_keys"]
+    assert _resource_failures(before, after) == []
+
+
+@pytest.mark.parametrize("mutation", ["drop-field", "changed-field", "changed-instance", "unproven-addition", "missing-proof", "within-process-proof-false"])
+def test_resource_proof_rejects_mutation_or_missing_ownership_evidence(baseline_receipts: dict, mutation: str) -> None:
+    before = baseline_receipts["generic"]
+    after = copy.deepcopy(before)
+    resource = probe.records(after, "traces")[0]["resource"]
+    if mutation == "drop-field":
+        del resource["legacy.resource"]
+    elif mutation == "changed-field":
+        resource["service.name"] = "changed"
+    elif mutation == "changed-instance":
+        resource["service.instance.id"] = "changed-within-process"
+    elif mutation == "unproven-addition":
+        resource["unproven.resource"] = "invented"
+    elif mutation == "missing-proof":
+        del after["resource_proof"]
+        resource["service.instance.id"] = "changed-without-proof"
+    else:
+        after["resource_proof"]["signals"]["traces"]["original_values_preserved"] = False
+    assert _resource_failures(before, after)
+
+
+@pytest.mark.parametrize("mutation", ["point-dimension", "point-value"])
+def test_resource_enrichment_cannot_change_metric_point_contract(baseline_receipts: dict, mutation: str) -> None:
+    before = baseline_receipts["generic"]
+    after = copy.deepcopy(before)
+    metric = probe.records(after, "metrics")[0]
+    if mutation == "point-dimension":
+        metric["attributes"]["invented.dimension"] = "extra"
+    else:
+        metric["value"] += 1
+    assert "existing metrics values/fields missing or duplicated" in probe.compare(before, after, "studio", "project", "stream")
+
+
+@pytest.mark.parametrize("taxonomy", ["cancelled", "CancelledError", "asyncio.CancelledError", "asyncio.exceptions.CancelledError"])
+def test_actual_cancel_status_accepts_bounded_source_taxonomy(baseline_receipts: dict, taxonomy: str) -> None:
+    before = baseline_receipts["generic"]
+    after = _synthetic_completed_receipt(before)
+    cancelled = next(span for span in probe.records(after, "traces") if span["attributes"].get("legacy.request") == "turn-4")
+    cancelled["attributes"]["error.type"] = taxonomy
+    assert probe.compare(before, after, "studio", "project", "stream") == []
+
+
+@pytest.mark.parametrize("mutation", ["drop", "rename", "wrong-type", "duplicate", "missing-message", "missing-stacktrace"])
+def test_existing_sdk_exception_event_identity_and_fields_cannot_be_lost(baseline_receipts: dict, mutation: str) -> None:
+    before = baseline_receipts["generic"]
+    after = _synthetic_completed_receipt(before)
+    span = next(span for span in probe.records(after, "traces") if any(event["name"] == "exception" for event in span["events"]))
+    event = next(event for event in span["events"] if event["name"] == "exception")
+    if mutation == "drop":
+        span["events"].remove(event)
+    elif mutation == "rename":
+        event["name"] = "renamed-error"
+    elif mutation == "wrong-type":
+        event["attributes"]["exception.type"] = "ValueError"
+    elif mutation == "duplicate":
+        span["events"].append(copy.deepcopy(event))
+    else:
+        del event["attributes"]["exception.message" if mutation == "missing-message" else "exception.stacktrace"]
+    failures = probe.compare(before, after, "studio", "project", "stream")
+    assert any("exception event" in failure for failure in failures), failures
+
+
+def test_exception_event_safe_redaction_and_dynamic_traceback_text_are_allowed(baseline_receipts: dict) -> None:
+    before = baseline_receipts["generic"]
+    after = _synthetic_completed_receipt(before)
+    for span in probe.records(after, "traces"):
+        for event in span["events"]:
+            if event["name"] == "exception":
+                event["attributes"]["exception.message"] = "[REDACTED]"
+                event["attributes"]["exception.stacktrace"] = "Traceback: /different/process/source.py:123\nRuntimeError: [REDACTED]"
+    assert probe.compare(before, after, "studio", "project", "stream") == []
+
+
+def test_real_cross_process_sdk_exception_events_are_preserved(tmp_path: Path) -> None:
+    before = _capture_process(tmp_path / "exception-before.json")
+    after = _capture_process(tmp_path / "exception-after.json")
+    events = [event for span in probe.records(before, "traces") for event in span["events"] if event["name"] == "exception"]
+    assert len(events) == 3
+    assert all(event["attributes"]["exception.type"] == "RuntimeError" for event in events)
+    failures = probe.compare(before, after, "studio", "project", "stream")
+    assert not any("exception event" in failure for failure in failures), failures

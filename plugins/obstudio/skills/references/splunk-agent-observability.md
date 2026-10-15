@@ -919,10 +919,37 @@ configure that supported hook instead of writing unused environment variables.
 If an operator destination cannot route to AO, preserve it and expose the exact
 destination decision; do not silently retarget it or add another exporter.
 
+When a distinct additional destination is explicitly selected, preserve the
+original integration's effective configuration, including inherited vendor
+project/stream names, API origins, credentials and loaded profile values.
+An exclusive Studio profile isolates only incompatible settings of its own
+selected SDK path; it must not unset another integration's namespace or reset
+its configured stream to a default. Prove both effective destinations with
+non-default operator values before and after the new launcher runs.
+
+Inspect the existing exporter's actual header precedence too. If trace-specific
+headers are absent and it inherits generic `OTEL_EXPORTER_OTLP_HEADERS`, adding
+`OTEL_EXPORTER_OTLP_TRACES_HEADERS` can hide that fallback. Retain applicable
+harmless inherited headers when merging the selected trace route, honor
+explicit trace-header/constructor precedence, and leave global, metric and log
+configuration intact. Authentication remains destination-scoped: do not copy
+another destination's credentials into a new sink. Exercise the actual launcher
+and exporter with sentinel harmless global and trace-specific headers.
+
 The current Studio receiver recognizes this ID pair on `/v1/traces`,
 `/otel/v1/traces` and `/v2/trace/otlp`. Successful normal resource resolution
 through the same gateway confirms the route for its active cloud connection.
 An ID copied from another connection is insufficient until resolved there.
+Persisted UUID headers also do not restore the gateway's in-memory route after
+its restart or active cloud connection change. Before treating routed delivery
+as restored, run read-only project and scoped stream relookup through that
+active gateway, using the persisted IDs with reuse-only semantics (or exact
+name lookup). This deployment/resource bootstrap must not create duplicates,
+replace the exporter, or make ordinary application instrumentation depend on a
+reachable gateway. If relookup is unavailable, keep existing telemetry active
+and report routed forwarding as unproven/failed. Test a cleared route followed
+by relookup and repeated export, preserving IDs and zero additional creates;
+headers alone before relookup must not be accepted as recovery proof.
 The gateway retains local telemetry and uses its routed AO forwarding branch;
 ordinary OTLP receipt without the pair does not select an Agent Stream. Check
 rejected-span/partial-success responses, not only HTTP success. Resource

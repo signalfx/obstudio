@@ -1131,6 +1131,13 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   token-limit, truncation, timeout, provider, or tool classifications. Do not
   attach transient terminal outcome/error dimensions to intermediate gauges or
   size measurements unless the metric contract explicitly requires them.
+- Keep production instrumentation independent of audit, report and eval input
+  files. If runtime schema validation needs a data asset, make it an
+  application-owned asset included by the normal packaging/deployment path;
+  validation-only schemas remain in tests. Prove actual startup and local
+  export from a clean application copy without `.observe`, `eval/inputs`,
+  harness workspaces or absolute paths to the development directory. Include the
+  declared application assets and normal operator configuration in that test.
 - For GenAI/LLM code, apply the `Single-Source GenAI Span Contract` before
   adding manual spans. Inventory framework/vendor bridges, provider SDK hooks,
   callbacks, middleware, auto-instrumentors, and existing app spans that can

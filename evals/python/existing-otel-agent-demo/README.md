@@ -64,6 +64,11 @@ resource, scope, and attributes must survive one-for-one; safe attributes may
 be added. An empty context may be filled only with a received span from that
 same request, while existing nonempty context IDs remain fixed. Existing metric
 values and dimensions are compared exactly.
+Resource proof snapshots each existing owner before integration and compares its
+legacy exports within the same process. Cross-process comparison treats only an
+SDK-generated `service.instance.id` as volatile when both ownership/export
+proofs pass; explicit application or operator IDs remain fixed. Missing resource
+attributes may be filled only when declared by source or the selected profile.
 
 The fixture tests prove baseline exports, lifecycle behavior, hook contracts,
 and rejection of intentionally damaged receipts. They do not prove skill
