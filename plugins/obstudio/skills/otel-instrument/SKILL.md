@@ -1734,6 +1734,15 @@ At minimum:
    mapping in a negative test so arguments/results-only content cannot pass.
    Check current schema, redaction and unchanged trace/span identity with no
    duplicate node; test successful null separately from no result on failure.
+   Exercise the selected content policy with source-shaped sensitive fields
+   both as structured values and embedded in JSON or labelled freeform text,
+   including nested inputs and produced outputs. Dictionary-key filtering does
+   not sanitize a string containing identity or protected reasoning fields.
+   Check completed owning spans and actual exported content for their absence
+   under the redacted policy, while retaining useful approved question/result
+   content. A `redacted` label, sanitizer-only assertion, or blanking all content
+   is insufficient. If a value cannot be safely transformed before any writer
+   captures it, omit that value and report the remaining content gap.
    Build an exact signal closure matrix and execute every changed span name and
    metric call site that should still emit, plus explicit absence proof for
    every removed signal. Do not infer coverage for create, batch, update,

@@ -2379,3 +2379,146 @@ def test_incident_preflight_is_independent_from_ao_resource_work():
     bullet = "- Detect incident-readiness surfaces."
     line = next(line for line in text.splitlines() if bullet in line)
     assert line.startswith(bullet), "Incident preflight must remain its own top-level bullet"
+
+
+def test_content_redaction_case_targets_real_completed_capture_and_narrow_scope():
+    fixture = REPO_ROOT / "evals/python/existing-otel-agent-demo"
+    case = json.loads((fixture / "eval/qual/content-redaction-instrument.json").read_text())
+    assert case["skill"] == "otel-instrument"
+    assert len(case["prompts"]) == 1 and len(case["rubric"]) == 6
+    prompt = case["prompts"][0]
+    for relative in prompt["eval_inputs"]:
+        assert (fixture / relative).is_file()
+    for requirement in (
+        "exactly six existing workflow/model spans", "before loading/exercising the adapter",
+        "OTEL_SDK_DISABLED=true", "approved-question-marker", "identity-sentinel",
+        "hidden-reasoning-sentinel", "actual native baseline", "JSON text",
+        "key=value", "UTF-8", "complete input/output message documents",
+        "failed/no-result", "clean runtime directory", "Do not add spans",
+        "No new full canonical report packet", "not the default probe.compare eighteen-span",
+    ):
+        assert requirement in prompt["task"]
+
+
+@pytest.mark.parametrize("representation", ["key-value", "json-text", "nested-text"])
+def test_content_capture_seed_exposes_string_leak_on_real_completed_sdk_span(monkeypatch, representation):
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    monkeypatch.setenv("OTEL_SDK_DISABLED", "true")
+    with monkeypatch.context() as construction:
+        construction.setenv("OTEL_SDK_DISABLED", "false")
+        provider = TracerProvider(resource=Resource.create({"service.name": "content-capture-seed-test"}))
+    assert __import__("os").environ["OTEL_SDK_DISABLED"] == "true"
+    adapter = runpy.run_path(str(REPO_ROOT / "evals/python/existing-otel-agent-demo/eval/inputs/content_capture_source.py"))
+    sink = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(sink))
+    protected = {"user_id": "identity-sentinel", "hidden_reasoning": "hidden-reasoning-sentinel", "api_key": "secret-sentinel"}
+    useful_input = "approved-question-marker Where is my order?"
+    useful_output = "approved-result-marker Your order is shipped"
+
+    def payload(useful):
+        if representation == "json-text":
+            return json.dumps({"approved": useful, **protected})
+        labeled = useful + " " + " ".join(f"{key}={value}" for key, value in protected.items())
+        if representation == "nested-text":
+            return {"nested": [{**protected, "notes": labeled}], "approved": useful}
+        return labeled
+
+    try:
+        tracer = provider.get_tracer("completed-content-seam")
+        with tracer.start_as_current_span("chat completed-content-seam") as span:
+            assert span.is_recording()
+            adapter["write_content"](span, payload(useful_input), result_available=True, result=payload(useful_output))
+        finished = sink.get_finished_spans()
+        assert len(finished) == 1 and finished[0].end_time is not None
+        attributes = finished[0].attributes
+        assert attributes["demo.capture.mode"] == "redacted"
+        for key, useful in (("gen_ai.input.messages", useful_input), ("gen_ai.output.messages", useful_output)):
+            assert useful in attributes[key]
+            assert all(sentinel in attributes[key] for sentinel in protected.values())
+            assert json.loads(attributes[key])[0]["parts"][0]["type"] == "text"
+        # The deliberate bug handles structured keys; freeform string data is
+        # the missing capture boundary, even on an actual ended SDK span.
+        assert all(sentinel not in json.dumps(adapter["sanitize"](protected)) for sentinel in protected.values())
+        assert __import__("os").environ["OTEL_SDK_DISABLED"] == "true"
+    finally:
+        provider.shutdown()
+
+
+def test_content_capture_seed_native_leak_preserves_six_existing_spans_and_owners(monkeypatch):
+    import asyncio
+    import importlib.util
+    import os
+    from collections import Counter
+
+    fixture = REPO_ROOT / "evals/python/existing-otel-agent-demo"
+    monkeypatch.syspath_prepend(str(fixture))
+    prior_app = sys.modules.pop("app", None)
+    try:
+        spec = importlib.util.spec_from_file_location("content_seed_probe", fixture / "probe.py")
+        native_probe = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(native_probe)
+    finally:
+        sys.modules.pop("app", None)
+        if prior_app is not None:
+            sys.modules["app"] = prior_app
+    for name in list(os.environ):
+        if name.startswith(("OTEL_", "SPLUNK_", "GALILEO_")):
+            monkeypatch.delenv(name)
+    adapter = runpy.run_path(str(fixture / "eval/inputs/content_capture_source.py"))
+    question = "approved-question-marker Where is my order? user_id=identity-sentinel hidden_reasoning=hidden-reasoning-sentinel api_key=secret-sentinel"
+
+    def capture(with_adapter):
+        with native_probe.Receiver() as receiver:
+            app = native_probe.AgentDemo("genai", receiver.endpoint)
+            owners = {key: value for key, value in app.owned_objects().items() if value is not None}
+            if with_adapter:
+                adapter["configure"](app)
+                adapter["configure"](app)
+                assert len(app.trace_producer.span_hooks) == 1 and len(app.operation_hooks) == 1
+            app.start()
+            app.start()
+            outcomes = []
+            try:
+                for scenario in native_probe.SCENARIOS:
+                    try:
+                        outcomes.append(app.run_agent(question, scenario))
+                    except (RuntimeError, asyncio.CancelledError) as error:
+                        outcomes.append(type(error).__name__)
+            finally:
+                app.shutdown()
+                count = len(receiver.requests)
+                app.shutdown()
+            assert len(receiver.requests) == count
+            assert all(app.owned_objects()[key] is value for key, value in owners.items())
+            return {"requests": copy.deepcopy(receiver.requests)}, outcomes
+
+    before, before_outcomes = capture(False)
+    leaked, leaked_outcomes = capture(True)
+    assert before_outcomes == leaked_outcomes
+    original_spans = native_probe.records(before, "traces")
+    spans = native_probe.records(leaked, "traces")
+    assert len(original_spans) == len(spans) == 6
+    assert Counter(request["path"] for request in leaked["requests"]) == {"/v1/traces": 1, "/v1/metrics": 1, "/v1/logs": 1}
+    for original in original_spans:
+        current = next(span for span in spans if (span["trace_id"], span["span_id"]) == (original["trace_id"], original["span_id"]))
+        for key in ("parent_span_id", "name", "kind", "resource", "scope", "status"):
+            assert current[key] == original[key]
+        assert all(current["attributes"].get(key) == value for key, value in original["attributes"].items())
+        assert all(event in current["events"] for event in original["events"] if event["name"].startswith("legacy."))
+        def exception_types(span):
+            return Counter(event["attributes"]["exception.type"] for event in span["events"] if event["name"] == "exception")
+        assert exception_types(current) == exception_types(original)
+    for signal in ("metrics", "logs"):
+        assert native_probe.records(leaked, signal) == native_probe.records(before, signal)
+        assert len(native_probe.records(leaked, signal)) == 4
+    for span in spans:
+        assert span["attributes"]["demo.capture.mode"] == "redacted"
+        assert all(marker in span["attributes"]["gen_ai.input.messages"] for marker in
+                   ("approved-question-marker", "identity-sentinel", "hidden-reasoning-sentinel", "secret-sentinel"))
+    outputs = [span for span in spans if "gen_ai.output.messages" in span["attributes"]]
+    assert len(outputs) == 2
+    assert all("Your order is shipped" in span["attributes"]["gen_ai.output.messages"] for span in outputs)

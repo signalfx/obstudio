@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261015T021612278435Z",
+    "run_id": "20261015T035924094850Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "",
@@ -182,6 +182,22 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/existing-otel-agent-demo/qual/route-recovery-verify",
+      "case": "python/existing-otel-agent-demo",
+      "language": "python",
+      "service": "existing-otel-agent-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "route-recovery-verify"
+      ],
+      "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/route-recovery-verify.json",
+      "eval_dir": "evals/python/existing-otel-agent-demo",
+      "skill_path": "skills/otel-verify",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
       "id": "python/existing-otel-agent-demo/qual/verify",
       "case": "python/existing-otel-agent-demo",
       "language": "python",
@@ -199,16 +215,16 @@
     }
   ],
   "summary": {
-    "eval_count": 11,
-    "case_count": 11,
-    "prompt_count": 11,
+    "eval_count": 12,
+    "case_count": 12,
+    "prompt_count": 12,
     "sanity_check_count": 0,
-    "rubric_check_count": 62,
+    "rubric_check_count": 67,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 4,
-    "digest": "3a8ce26c546b6d7fa2943f3dedd17a1b4e437628d9030f6d547d21ba6e53d0c9",
+    "digest": "518cb6266867c127c1af8abf1a6aa26cb5f20e607adf560fdca4bec677123539",
     "eval_kinds": [
       "rubric"
     ],
@@ -243,7 +259,7 @@
       "skills/references/report-flow-contract.md": "be4af921d9faf71ca9c206a91ba091db5d8bc878dc87ab6b844bc39cc455eb0e",
       "skills/references/scripts/observe_report.py": "dc6d5048a117595bd658e7f4ff7f91e11cd512693ee0e37d09080578574e4325",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
-      "skills/references/splunk-agent-observability.md": "182ad9e64e41467f242c23b8551741b779f24f54f34847662516ec855b1c34d1",
+      "skills/references/splunk-agent-observability.md": "e21f6bbc36e7a86f05a655ebb438d7c050ddc299ed9f21208b406a1fd6b18fe2",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "39e6e35f16272b4f33f202b03dd13823284d4067fb50ebba48fb80bb67f4ce16",
@@ -282,7 +298,7 @@
       "evals/python/ai-assistant-demo/eval/qual/resource-selector-failures.json": "630135f49ec0d4334185aa8778f56f1ed24ca1372be34f50b0b2c45154f9efcd",
       "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json": "0aa217a1410c384a8afda2ab7608e19c93bb9e5ae5483a87e5bec66e8bf5ea1d",
       "evals/python/ai-assistant-demo/eval/qual/resource-selector-length-verify.json": "952fb1f6a120610e80de94a21d211892f3836a946cc800f794d755fef41a877c",
-      "evals/python/ai-assistant-demo/eval/inputs/ao-resource-resolver.py": "e9b79ddf540284fa605168e9cc85b26bd090555e66d002041ded3214487cbde2",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-resource-resolver.py": "93885c6541d8655603287e1b5759b3098354d4858376668e88774ddfea46a7fc",
       "evals/python/ai-assistant-demo/eval/qual/reuse-env-policy-verification.json": "549779746b1ff60c7949d40b6fb7ea08be4677205d190715cfa783174bffadc6",
       "evals/python/ai-assistant-demo/eval/inputs/genai-tool-enrichment-evidence.json": "5b991c48950fece0a6935a5ae652f90f8bf3479916c197c3885f6a3361de000e",
       "evals/python/ai-assistant-demo/eval/inputs/genai-tool-message-mapping.json": "4cbd7c4f59c8dd85096cfa1209528b65d29d5772095cc1fef0627e01dfc0c77c",
@@ -293,13 +309,17 @@
       "evals/python/ai-assistant-demo/eval/inputs/otel-verify-ao.json": "1d5c603245a2c42847d7f186e78e233674c81fc16300c2279d167dce7a7b17ab",
       "evals/python/ai-assistant-demo/eval/qual/verify.json": "38bb7faf17734c7cc773bb3f2c285b62f5b2d98a7161d0c62758eb44798eb77f",
       "evals/python/existing-otel-agent-demo/Makefile": "a2beb661c8e836e44bb31e4c9430592848e522d2c48b2fa416a2363bcbea6a7a",
-      "evals/python/existing-otel-agent-demo/README.md": "e8a80d74bba88668cb30a3faaf037f1f144930fabdab327d26bf799fa6080319",
+      "evals/python/existing-otel-agent-demo/README.md": "4453fab9db1f5a62b5ddd4544e8145a3b12596e8867df0513223a52f71badc87",
       "evals/python/existing-otel-agent-demo/app.py": "bd65b5623b2f1997eb1523deadca5fce090f76f551609d7b3e0dff680c1e1d5f",
+      "evals/python/existing-otel-agent-demo/eval/inputs/route-recovery-capture.json": "fc50f0a1a861dfc0c5fe9032d8288193f4ec3cbfad662ddecd888b1dcf47b46b",
+      "evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py": "07b8ba11dac16c041d57fb0018ac65fab90e6eadcca0675cdd3cae01d3635a77",
+      "evals/python/existing-otel-agent-demo/eval/inputs/vendor-route-capture.json": "6505493b4367a977e8cc9808ad21027fc802a12fe6a2b64fa93d783cee1abfef",
+      "evals/python/existing-otel-agent-demo/eval/qual/route-recovery-verify.json": "bff6e2d54a3f68ea0924c347760780ea9a7250d173a0034563acc4993390e224",
+      "evals/python/existing-otel-agent-demo/probe.py": "eeb43641e53dd35012559bb77b58eac92941131927260746d268a614aa84c127",
+      "evals/python/existing-otel-agent-demo/pyproject.toml": "dfc360d25da6e430e782c891bdbc92fb5d7b2ddf6a901629d09bc3a874635a25",
       "evals/python/existing-otel-agent-demo/eval/inputs/genai-schema-evidence.json": "cb2d154a37cd662e4ddbcae6d30f7ce5588524d660d6ce19abdf42adc5032a5d",
       "evals/python/existing-otel-agent-demo/eval/inputs/python-preflight-requirements.txt": "9bc8378353b95a0405d8b052226aa3075aa7f7f32d30c29c235b0a343df6fa3f",
-      "evals/python/existing-otel-agent-demo/eval/qual/verify.json": "81f5c0217247d8ac7265a08ed82479a3d9ddbc4ba6fa04e261a2fbca3984052e",
-      "evals/python/existing-otel-agent-demo/probe.py": "93eba7241e6da5158c8b5d67c18b96c0289766c72e580ae9a7ee908eac49fcc5",
-      "evals/python/existing-otel-agent-demo/pyproject.toml": "dfc360d25da6e430e782c891bdbc92fb5d7b2ddf6a901629d09bc3a874635a25"
+      "evals/python/existing-otel-agent-demo/eval/qual/verify.json": "81f5c0217247d8ac7265a08ed82479a3d9ddbc4ba6fa04e261a2fbca3984052e"
     },
     "skill_path": "skills/otel-verify",
     "shared_reference_consumers": [
@@ -435,6 +455,17 @@
           "eval/inputs/otel-instrumentation-ao.json",
           "eval/inputs/otel-verify-ao.json",
           "eval/inputs/ao-gateway-verify-evidence.txt"
+        ]
+      },
+      {
+        "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/route-recovery-verify.json",
+        "fixture_dir": "evals/python/existing-otel-agent-demo",
+        "prompt_id": "route-recovery-verify",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/route_recovery_source.py",
+          "eval/inputs/route-recovery-capture.json",
+          "eval/inputs/vendor-route-capture.json"
         ]
       },
       {

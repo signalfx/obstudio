@@ -7,30 +7,30 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261014T200302308380Z |
-| Agent model | gpt-6-sol |
-| Judge model | gpt-6-sol |
+| Run ID | 20261015T035758110685Z |
+| Agent model | gpt-6.1-sol |
+| Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
 | Workers | 1 |
-| Config | evals/codex-evals.model-override.toml |
+| Config | evals/codex-evals.local-http.toml |
 
 ## Rubric Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/per-function-decorator-instrument | python/ai-assistant-demo | 1 | 100% (6/6), avg score 97 | 2.3M | 8.4m | - | - | - |
+| with_skill | python/existing-otel-agent-demo/qual/content-redaction-instrument | python/existing-otel-agent-demo | 1 | 100% (6/6), avg score 100 | 1.7M | 9.2m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/per-function-decorator-instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 2258298 | 2156544 | 0 | 21582 | 4666 | unknown | 2279880 |
+| with_skill | python/existing-otel-agent-demo/qual/content-redaction-instrument | python/existing-otel-agent-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1653533 | 1554816 | 0 | 21550 | 6338 | unknown | 1675083 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/per-function-decorator-instrument | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 307370 | 261760 | 0 | 3061 | 1268 | unknown | 310431 |
+| with_skill | python/existing-otel-agent-demo/qual/content-redaction-instrument | python/existing-otel-agent-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 387245 | 317056 | 0 | 4872 | 1346 | unknown | 392117 |
 
 ## Rubric Failures
 

@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261015T021612278451Z |
+| Run ID | 20261015T035800223231Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -50,7 +50,10 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/ai-assistant-demo/qual/tool-message-mapping-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/tool-message-mapping-instrument.json | 0 | 4 | 0 |
 | python/assistant-v3-framework-bridge-demo/qual/instrument | python/assistant-v3-framework-bridge-demo | 1 | evals/python/assistant-v3-framework-bridge-demo/eval/qual/instrument.json | 0 | 7 | 0 |
 | python/checkout-red-demo/qual/instrument | python/checkout-red-demo | 1 | evals/python/checkout-red-demo/eval/qual/instrument.json | 0 | 8 | 0 |
+| python/existing-otel-agent-demo/qual/content-redaction-instrument | python/existing-otel-agent-demo | 1 | evals/python/existing-otel-agent-demo/eval/qual/content-redaction-instrument.json | 0 | 6 | 0 |
 | python/existing-otel-agent-demo/qual/instrument | python/existing-otel-agent-demo | 4 | evals/python/existing-otel-agent-demo/eval/qual/instrument.json | 0 | 8 | 0 |
+| python/existing-otel-agent-demo/qual/portability-instrument | python/existing-otel-agent-demo | 2 | evals/python/existing-otel-agent-demo/eval/qual/portability-instrument.json | 0 | 8 | 0 |
+| python/existing-otel-agent-demo/qual/route-recovery-instrument | python/existing-otel-agent-demo | 1 | evals/python/existing-otel-agent-demo/eval/qual/route-recovery-instrument.json | 0 | 6 | 0 |
 | python/fastapi-celery/qual/incident-readiness | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/qual/incident-readiness.json | 0 | 7 | 0 |
 | python/fastapi-celery/qual/instrument | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/instrument.json | 0 | 5 | 0 |
 | python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/runtime/instrument.json | 0 | 0 | 1 |

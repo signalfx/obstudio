@@ -686,3 +686,315 @@ def test_real_baseline_transport_spans_remain_supported(tmp_path: Path) -> None:
     damaged = copy.deepcopy(after)
     next(span for span in probe.records(damaged, "traces") if span["name"] == "legacy.http.transport")["attributes"]["transport.sentinel"] = "lost"
     assert any("existing span attributes changed" in failure for failure in probe.compare(before, damaged, "studio", "project", "stream"))
+
+
+def validate_local_trace_graph(spans: list[dict], *, root_operation: str = "invoke_workflow") -> list[str]:
+    """Validate full-wire traces for the synchronous AgentDemo request paths.
+
+    Input uses probe-style decoded fields plus original OTLP
+    start_time_unix_nano/end_time_unix_nano values (integers or decimal strings).
+    This test-only contract does not cover vendor schemas, distributed parents,
+    asynchronous fan-out, cloud delivery, or arbitrary operation manifests.
+    The none actor's audited single-agent scope selects root_operation=invoke_agent.
+    """
+    import re
+    from collections import Counter, defaultdict
+
+    failures = []
+
+    def require(condition: bool, description: str) -> None:
+        if not condition:
+            failures.append(description)
+
+    if root_operation not in {"invoke_workflow", "invoke_agent"}:
+        return [f"unsupported source-bound root operation: {root_operation}"]
+    scenarios = {f"turn-{index + 1}": scenario for index, scenario in enumerate(probe.SCENARIOS)}
+    expected = {}
+    for request_id, scenario in scenarios.items():
+        graph = {"invoke_agent": "invoke_workflow" if root_operation == "invoke_workflow" else None,
+                 "retrieval": "invoke_agent", "execute_tool": "invoke_agent"}
+        if root_operation == "invoke_workflow":
+            graph["invoke_workflow"] = None
+        if scenario in {"success", "provider_error"}:
+            graph["chat"] = "invoke_agent"
+        expected[request_id] = graph
+
+    def valid_id(value: object, width: int) -> bool:
+        return isinstance(value, str) and re.fullmatch(rf"[0-9a-f]{{{width}}}", value) is not None and int(value, 16) != 0
+
+    def timestamp(value: object) -> int | None:
+        if type(value) is int or isinstance(value, str) and re.fullmatch(r"[0-9]+", value):
+            number = int(value)
+            if 0 < number < 2**64:
+                return number
+        return None
+
+    by_id, span_ids, times = {}, set(), {}
+    by_request, by_trace = defaultdict(list), defaultdict(list)
+    request_traces, trace_requests = defaultdict(set), defaultdict(set)
+    for index, span in enumerate(spans):
+        trace_id, span_id, parent_id = (span.get(key) for key in ("trace_id", "span_id", "parent_span_id"))
+        valid_trace, valid_span = valid_id(trace_id, 32), valid_id(span_id, 16)
+        require(valid_trace, f"invalid or zero trace ID at span {index}")
+        require(valid_span, f"invalid or zero span ID at span {index}")
+        require(parent_id == "" or valid_id(parent_id, 16), f"invalid or zero parent span ID at span {index}")
+        if valid_trace and valid_span:
+            identity = (trace_id, span_id)
+            require(identity not in span_ids, f"duplicate span ID in trace: {trace_id}/{span_id}")
+            span_ids.add(identity)
+            by_id[identity] = span
+            by_trace[trace_id].append(span)
+        attributes = span.get("attributes", {})
+        if not isinstance(attributes, dict):
+            attributes = {}
+        request_id, scenario = attributes.get("app.request_id"), attributes.get("app.scenario")
+        known_request = isinstance(request_id, str) and request_id in expected
+        require(known_request, f"missing or unknown request identity at span {index}")
+        if known_request:
+            by_request[request_id].append(span)
+            require(scenario == scenarios[request_id], f"request/scenario mismatch: {request_id}")
+            if valid_trace:
+                request_traces[request_id].add(trace_id)
+                trace_requests[trace_id].add(request_id)
+        start, end = timestamp(span.get("start_time_unix_nano")), timestamp(span.get("end_time_unix_nano"))
+        require(start is not None and end is not None, f"missing or unfinished span timestamps at span {index}")
+        if start is not None and end is not None:
+            require(end >= start, f"reversed span timestamps at span {index}")
+            if valid_trace and valid_span:
+                times[(trace_id, span_id)] = (start, end)
+
+    require(len(spans) == sum(len(graph) for graph in expected.values()), "unexpected total source-bound span count")
+    require(len(by_trace) == len(expected), f"expected 4 complete local traces, got {len(by_trace)}")
+    for request_id, graph in expected.items():
+        local = by_request[request_id]
+        require(len(request_traces[request_id]) == 1, f"request must have exactly one trace: {request_id}")
+        operations = [span.get("attributes", {}).get("gen_ai.operation.name") for span in local]
+        require(all(isinstance(operation, str) and operation in graph for operation in operations), f"unknown source-bound operation: {request_id}")
+        require(Counter(operation for operation in operations if isinstance(operation, str)) == Counter(graph.keys()), f"missing or duplicate expected operation: {request_id}")
+        roots = [span for span in local if span.get("parent_span_id") == ""]
+        require(len(roots) == 1 and roots[0].get("attributes", {}).get("gen_ai.operation.name") == root_operation,
+                f"expected exactly one {root_operation} root: {request_id}")
+    for trace_id, local in by_trace.items():
+        require(len(trace_requests[trace_id]) == 1, f"trace contains multiple or unknown requests: {trace_id}")
+        roots = [span for span in local if span.get("parent_span_id") == ""]
+        require(len(roots) == 1, f"trace must have exactly one root: {trace_id}")
+        children = defaultdict(list)
+        for span in local:
+            key = (trace_id, span["span_id"])
+            parent_id = span.get("parent_span_id")
+            parent = by_id.get((trace_id, parent_id)) if isinstance(parent_id, str) else None
+            if parent_id != "":
+                require(parent is not None, f"orphan or cross-trace parent: {span['span_id']}")
+                if parent is not None:
+                    children[parent_id].append(span["span_id"])
+                    if key in times and (trace_id, parent_id) in times:
+                        start, end = times[key]
+                        parent_start, parent_end = times[(trace_id, parent_id)]
+                        require(parent_start <= start <= end <= parent_end, f"child outside synchronous parent time bounds: {span['span_id']}")
+            attributes = span.get("attributes", {})
+            graph = expected.get(attributes.get("app.request_id"), {})
+            operation = attributes.get("gen_ai.operation.name")
+            if isinstance(operation, str) and operation in graph:
+                parent_operation = parent.get("attributes", {}).get("gen_ai.operation.name") if parent is not None else None
+                require(parent_operation == graph[operation] and (parent is not None or parent_id == ""), f"wrong source-bound operation parent: {operation}")
+            visited, cursor = set(), span
+            while cursor is not None:
+                cursor_id = cursor["span_id"]
+                if cursor_id in visited:
+                    failures.append(f"parent cycle in trace: {trace_id}")
+                    break
+                visited.add(cursor_id)
+                cursor = by_id.get((trace_id, cursor.get("parent_span_id")))
+        reached, pending = set(), [roots[0]["span_id"]] if len(roots) == 1 else []
+        while pending:
+            span_id = pending.pop()
+            if span_id not in reached:
+                reached.add(span_id)
+                pending.extend(children[span_id])
+        require(len(reached) == len(local), f"unreachable spans in trace: {trace_id}")
+    return failures
+
+
+@pytest.fixture(scope="module")
+def sdk_full_trace_contract_receipts() -> dict:
+    """Real SDK/wire inputs from fixture hooks, never a skill success claim."""
+    import asyncio
+    import contextlib
+    from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    original_decode = probe.decode
+
+    def decode_with_timestamps(path, body):
+        decoded = original_decode(path, body)
+        if path == "/v1/traces":
+            message = probe.ExportTraceServiceRequest.FromString(body)
+            wire = [span for resource in message.resource_spans for scope in resource.scope_spans for span in scope.spans]
+            assert len(decoded) == len(wire)
+            for record, span in zip(decoded, wire):
+                assert record["span_id"] == span.span_id.hex()
+                record.update(start_time_unix_nano=span.start_time_unix_nano, end_time_unix_nano=span.end_time_unix_nano)
+        return decoded
+
+    receipts = {}
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(probe, "decode", decode_with_timestamps)
+        for name in list(os.environ):
+            if name.startswith(("OTEL_", "SPLUNK_", "GALILEO_")):
+                patch.delenv(name)
+        for mode in probe.MODES:
+            with probe.Receiver() as receiver:
+                app = probe.AgentDemo(mode, receiver.endpoint)
+                provider = app.trace_provider
+                if provider is None:
+                    provider = TracerProvider()
+                    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=receiver.endpoint + "/v1/traces"), schedule_delay_millis=3_600_000))
+                tracer = provider.get_tracer("trace-graph-contract-test")
+                root_operation = "invoke_agent" if mode == "none" else "invoke_workflow"
+
+                @contextlib.contextmanager
+                def contract_hook(operation, metadata):
+                    # Test scaffolding observes actual source calls and their timing;
+                    # it is not shipped instrumentation or an actor implementation.
+                    if operation == "workflow" and root_operation == "invoke_agent":
+                        yield
+                        return
+                    attributes = {"gen_ai.operation.name": {"workflow": "invoke_workflow", "agent": "invoke_agent", "retrieval": "retrieval", "tool": "execute_tool", "model": "chat"}[operation],
+                                  "app.request_id": metadata["request_id"], "app.scenario": metadata["scenario"]}
+                    if app.trace_producer is not None and operation in {"workflow", "model"}:
+                        current = trace.get_current_span()
+                        current.set_attributes(attributes)
+                        yield
+                    else:
+                        with tracer.start_as_current_span(attributes["gen_ai.operation.name"], attributes=attributes):
+                            yield
+
+                app.operation_hooks.append(contract_hook)
+                outcomes = []
+                try:
+                    app.start()
+                    for scenario in probe.SCENARIOS:
+                        try:
+                            app.run_agent("synthetic trace-contract input", scenario)
+                            outcomes.append("success")
+                        except (RuntimeError, asyncio.CancelledError) as error:
+                            outcomes.append(type(error).__name__)
+                finally:
+                    app.shutdown()
+                    if app.trace_provider is None:
+                        provider.shutdown()
+                assert outcomes == ["success", "RuntimeError", "RuntimeError", "CancelledError"]
+                receipts[mode] = copy.deepcopy(probe.records({"requests": receiver.requests}, "traces"))
+    return receipts
+
+
+@pytest.mark.parametrize("mode", ["generic", "genai", "metrics", "logs", "none"])
+def test_full_trace_contract_accepts_source_bound_real_sdk_wire_graphs(sdk_full_trace_contract_receipts: dict, mode: str) -> None:
+    spans = sdk_full_trace_contract_receipts[mode]
+    root_operation = "invoke_agent" if mode == "none" else "invoke_workflow"
+    assert validate_local_trace_graph(spans, root_operation=root_operation) == []
+    from collections import Counter
+    counts = Counter(span["attributes"]["app.request_id"] for span in spans)
+    assert [counts[f"turn-{index}"] for index in range(1, 5)] == ([4, 3, 4, 3] if mode == "none" else [5, 4, 5, 4])
+
+
+@pytest.mark.parametrize("mode", ["metrics", "logs", "none"])
+def test_full_trace_contract_does_not_pass_uninstrumented_zero_trace_baselines(baseline_receipts: dict, mode: str) -> None:
+    assert probe.records(baseline_receipts[mode], "traces") == []
+    failures = validate_local_trace_graph([], root_operation="invoke_agent" if mode == "none" else "invoke_workflow")
+    assert "expected 4 complete local traces, got 0" in failures
+
+
+@pytest.mark.parametrize("mode", ["generic", "none"])
+@pytest.mark.parametrize("mutation,expected_failure", [
+    ("missing-root", "expected exactly one"),
+    ("orphan", "orphan or cross-trace parent"),
+    ("split-trace", "request must have exactly one trace"),
+    ("merge-traces", "trace contains multiple or unknown requests"),
+    ("cycle", "parent cycle"),
+    ("extra-root", "trace must have exactly one root"),
+    ("unknown-root", "unknown source-bound operation"),
+    ("unfinished", "missing or unfinished span timestamps"),
+    ("reversed-time", "reversed span timestamps"),
+    ("child-out-of-bounds", "child outside synchronous parent time bounds"),
+    ("dropped-expected-span", "missing or duplicate expected operation"),
+    ("duplicated-ids", "duplicate span ID"),
+    ("zero-trace-id", "invalid or zero trace ID"),
+    ("invalid-span-id", "invalid or zero span ID"),
+    ("zero-parent-id", "invalid or zero parent span ID"),
+])
+def test_full_trace_contract_rejects_real_wire_graph_mutations(sdk_full_trace_contract_receipts: dict, mode: str, mutation: str, expected_failure: str) -> None:
+    # Only the input mutation is artificial; the original SDK graph was exported
+    # from actual fixture operations. This tests the validator, never a skill.
+    spans = copy.deepcopy(sdk_full_trace_contract_receipts[mode])
+    local = [span for span in spans if span["attributes"]["app.request_id"] == "turn-1"]
+    root = next(span for span in local if span["parent_span_id"] == "")
+    tool = next(span for span in local if span["attributes"]["gen_ai.operation.name"] == "execute_tool")
+    retrieval = next(span for span in local if span["attributes"]["gen_ai.operation.name"] == "retrieval")
+    if mutation == "missing-root":
+        spans.remove(root)
+    elif mutation == "orphan":
+        tool["parent_span_id"] = "deadc0de00000001"
+    elif mutation == "split-trace":
+        tool["trace_id"] = "0" * 24 + "deadc0de"
+    elif mutation == "merge-traces":
+        for span in spans:
+            if span["attributes"]["app.request_id"] == "turn-2":
+                span["trace_id"] = root["trace_id"]
+    elif mutation == "cycle":
+        tool["parent_span_id"], retrieval["parent_span_id"] = retrieval["span_id"], tool["span_id"]
+    elif mutation == "extra-root":
+        extra = copy.deepcopy(root)
+        extra["span_id"] = "deadc0de00000002"
+        spans.append(extra)
+    elif mutation == "unknown-root":
+        root["attributes"]["gen_ai.operation.name"] = "unknown.root"
+    elif mutation == "unfinished":
+        tool["end_time_unix_nano"] = 0
+    elif mutation == "reversed-time":
+        tool["end_time_unix_nano"] = tool["start_time_unix_nano"] - 1
+    elif mutation == "child-out-of-bounds":
+        parent = next(span for span in local if span["span_id"] == tool["parent_span_id"])
+        tool["start_time_unix_nano"] = parent["start_time_unix_nano"] - 1
+    elif mutation == "dropped-expected-span":
+        spans.remove(retrieval)
+    elif mutation == "duplicated-ids":
+        spans.append(copy.deepcopy(tool))
+    elif mutation == "zero-trace-id":
+        tool["trace_id"] = "0" * 32
+    elif mutation == "invalid-span-id":
+        tool["span_id"] = "not-a-valid-otel-span-id"
+    elif mutation == "zero-parent-id":
+        tool["parent_span_id"] = "0" * 16
+    failures = validate_local_trace_graph(spans, root_operation="invoke_agent" if mode == "none" else "invoke_workflow")
+    assert any(expected_failure in failure for failure in failures), failures
+
+
+def test_full_trace_contract_accepts_original_decimal_wire_timestamps(sdk_full_trace_contract_receipts: dict) -> None:
+    spans = copy.deepcopy(sdk_full_trace_contract_receipts["generic"])
+    for span in spans:
+        for key in ("start_time_unix_nano", "end_time_unix_nano"):
+            span[key] = str(span[key])
+    assert validate_local_trace_graph(spans) == []
+
+
+def test_full_trace_contract_allows_span_id_reuse_in_different_traces(sdk_full_trace_contract_receipts: dict) -> None:
+    spans = copy.deepcopy(sdk_full_trace_contract_receipts["generic"])
+    first = [span for span in spans if span["attributes"]["app.request_id"] == "turn-1"]
+    third = [span for span in spans if span["attributes"]["app.request_id"] == "turn-3"]
+    assert first[0]["trace_id"] != third[0]["trace_id"]
+    first_ids = {span["attributes"]["gen_ai.operation.name"]: span["span_id"] for span in first}
+    replacements = {span["span_id"]: first_ids[span["attributes"]["gen_ai.operation.name"]] for span in third}
+    for span in third:
+        span["span_id"] = replacements[span["span_id"]]
+        span["parent_span_id"] = replacements.get(span["parent_span_id"], span["parent_span_id"])
+    assert {span["span_id"] for span in first} == {span["span_id"] for span in third}
+    assert validate_local_trace_graph(spans) == []
+
+
+def test_full_trace_contract_keeps_single_agent_scope_explicit(sdk_full_trace_contract_receipts: dict) -> None:
+    spans = sdk_full_trace_contract_receipts["none"]
+    assert validate_local_trace_graph(spans, root_operation="invoke_agent") == []
+    assert validate_local_trace_graph(spans)

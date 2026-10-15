@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20261015T021612278448Z |
+| Run ID | 20261015T035924094837Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -40,6 +40,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/assistant-v3-framework-bridge-demo/qual/audit | python/assistant-v3-framework-bridge-demo | 1 | evals/python/assistant-v3-framework-bridge-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | python/checkout-red-demo/qual/audit | python/checkout-red-demo | 1 | evals/python/checkout-red-demo/eval/qual/audit.json | 0 | 5 | 0 |
 | python/existing-otel-agent-demo/qual/audit | python/existing-otel-agent-demo | 1 | evals/python/existing-otel-agent-demo/eval/qual/audit.json | 0 | 7 | 0 |
+| python/existing-otel-agent-demo/qual/route-recovery-audit | python/existing-otel-agent-demo | 1 | evals/python/existing-otel-agent-demo/eval/qual/route-recovery-audit.json | 0 | 5 | 0 |
 | python/fastapi-celery/qual/audit | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/audit.json | 0 | 5 | 0 |
 | python/flask-basic/qual/audit | python/flask-basic | 2 | evals/python/flask-basic/eval/qual/audit.json | 0 | 6 | 0 |
 | python/galileo-agent-demo/qual/audit | python/galileo-agent-demo | 1 | evals/python/galileo-agent-demo/eval/qual/audit.json | 0 | 6 | 0 |
