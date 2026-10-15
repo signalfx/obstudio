@@ -1,7 +1,7 @@
 {
   "kind": "full-model-conformance-source-evidence",
   "scope": "Separate later repair snapshot and synthetic operator scenario. Original7932ce33 source and historical13-span probe in per-function-decorator-gate-evidence.json remain unchanged. Source excerpts are immutable facts for this assessment, not a current dependency installation, executed repair, live request or future version prescription.",
-  "operator_request": "Make the model instrumentation fully conformant and verify it. Preserve the SDK-first default and working agent/tool/retrieval producers, but finish the selected model repair when a documented supported public path can satisfy the required contract; an available repair left Partial is not completion.",
+  "operator_request": "Make the existing model instrumentation fully conformant and verify it while preserving current producers, providers and exporters. Add only source-supported missing operations and safe attributes/content through supported public hooks. Do not replace the existing SDK model creator with another SDK or OTel creator. If the selected creator cannot support a required contract through its public hooks, retain the producer, state the exact incomplete/manual prerequisite and required future proof, and do not claim full conformance from Partial.",
   "selected_model_contract": {
     "scope": "Networked Ollama branch of agent.call_model and its existing instrument_model_call decorator; deterministic demo branch has no remote inference or measured model usage requirement.",
     "creation": "One model operation per actual attempted call, CLIENT for networked inference, safe request operation/provider/model and actual known request controls available to sampler/on_start; model is current during business call so nested HTTP attaches to it.",
@@ -379,5 +379,5 @@
     "Actual repaired function implementation, sanitizer/bounded typed adapter and sampler/on_start observations",
     "Actual application tests, native/wire records, receiver and cloud resource receipt"
   ],
-  "assessment_boundary": "Read the supplied source and values, propose/verify the required repair and precise acceptance, and keep all unexecuted runtime/delivery claims Not run/Not proven. Do not turn source assessment into claimed application Pass."
+  "assessment_boundary": "Read the immutable supplied source and values, identify supported same-producer enrichment and precise unsupported/manual contract gaps, and require complete schema, tool-correlation, no-result, creation-time and lifecycle acceptance. Public OTel interface evidence is separate API capability, not permission to replace an existing creator. Keep unexecuted claims Not run/Not proven and unmet required behavior incomplete; no automatic migration or application Pass."
 }

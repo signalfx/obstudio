@@ -1,0 +1,13 @@
+# Opt-in runtime for fixtures that bind isolated numeric-loopback HTTP servers.
+# MODEL=<account-supported model> selects both actor and rubric judge.
+[run]
+mode = "with_skill"
+
+[rubric]
+enabled = true
+
+[runtime]
+enabled = false
+
+[agent]
+extra_args = ["--config", 'model_reasoning_effort="high"', "--config", "sandbox_workspace_write.network_access=true"]

@@ -29,6 +29,35 @@ def _read(path: Path) -> str:
     return path.read_text()
 
 
+def test_language_without_compatible_ao_sdk_has_native_full_profile_path():
+    text = " ".join(_read(GENAI_REF).split())
+    fallback = next(line for line in _read(GENAI_REF).splitlines()
+                    if line.startswith("| Agent runtime whose language has no compatible"))
+    assert "native OpenTelemetry libraries" in fallback
+    assert "Required GenAI Coverage Profile" in fallback
+    assert "both vendors' compatibility mappings" in fallback
+    assert "compatible supported Splunk AO SDK for its language" in text
+    assert "record that uncertainty and use the native path" in text
+    assert "installation and an OTLP exporter alone do not produce GenAI semantics" in text
+    assert "SDK-free resource path" in text
+    ao = " ".join(_read(SPLUNK_AO_REF).split())
+    assert "unsupported runtime is an explicit prerequisite" not in ao
+    assert "verify completed exported spans, concrete content schemas and full trace trees" in ao
+    assert "tool arguments/results plus their message mappings" in ao
+    assert "Missing source values remain explicit gaps or justified N/A" in ao
+
+
+def test_each_otel_skill_distinguishes_unavailable_ao_sdk_from_missing_install():
+    for name in ("otel-audit", "otel-instrument", "otel-verify"):
+        text = " ".join(_read(SKILLS_DIR / name / "SKILL.md").split())
+        assert "compatible supported" in text, name
+        assert "language" in text and "native OTel" in text, name
+        assert "GenAI/vendor" in text or "Splunk AO/Galileo content mappings" in text, name
+    verify = " ".join(_read(OTEL_VERIFY).split())
+    assert "without an installed SDK does not justify silently changing the fresh default" in verify
+    assert "merely because AO SDK packages or Python `@log` are absent" in verify
+
+
 def test_genai_reference_covers_otel_semconv_signals():
     text = _read(GENAI_REF)
     required_terms = [
@@ -131,13 +160,109 @@ def test_genai_instrumentation_keeps_token_metric_dimensions_when_known():
             _read(REPO_ROOT / "evals/python/ai-assistant-demo/eval/qual/instrument.json")
         )["rubric"]
     )
+    # The older selected fixture remains a compatibility contract, not the
+    # current-convention recipe for newly instrumented inference.
+    assert "gen_ai.client.token.usage" in rubric
+    assert "gen_ai.token.type" in rubric
+    assert "gen_ai.token.modality" in instrument
+    assert "current inference usage counters" in " ".join(instrument.split())
     for text in (instrument, rubric):
-        assert "gen_ai.client.token.usage" in text
-        assert "gen_ai.token.type" in text
         assert "gen_ai.operation.name" in text
         assert "gen_ai.provider.name" in text
         assert "gen_ai.request.model" in text
         assert "on the token metric" in text
+
+
+def test_new_inference_metrics_use_current_contract_and_preserve_legacy():
+    text = " ".join(_read(GENAI_REF).split())
+    for name in ("gen_ai.client.inference.duration",
+                 "gen_ai.client.inference.usage.input_tokens",
+                 "gen_ai.client.inference.usage.output_tokens"):
+        assert name in text
+    assert "a duration histogram in seconds" in text
+    assert "token counters with `gen_ai.token.modality`" in text
+    assert "excludes inference from `gen_ai.client.operation.duration`" in text
+    assert "Preserve existing `gen_ai.client.token.usage`/`gen_ai.token.type`" in text
+    assert "zero with modality `unknown`" in text
+    assert "does not authorize fabricated span usage or successful output" in text
+
+
+def test_audit_metric_inventory_keeps_optional_dispositions_in_canonical_evidence():
+    text = " ".join(_read(SKILLS_DIR / "otel-audit/SKILL.md").split())
+    inventory = text.split("**GenAI metric applicability inventory**", 1)[1].split(
+        "Before handoff, apply the per-tool", 1
+    )[0]
+    for required in (
+        "one row per metric in canonical Audit Evidence (`evidence[]`)",
+        "official level, type/unit, actual source boundary and value availability",
+        "applicability, disposition and reason",
+        "`applicable`, `N/A` and `source unknown`",
+        "`required`, `recommended`, `optional` and `deferred`",
+        "token distributions separately from usage totals",
+        "non-inference duration scopes separately from inference exclusions",
+        "do not force every optional metric to emit",
+        "Required missing metrics must remain in their owning executable findings",
+        "supplemental matrix does not replace this canonical inventory",
+        "Preserve existing metric producers and consumer contracts",
+    ):
+        assert required in inventory, required
+
+    fixture = REPO_ROOT / "evals/go/native-genai-demo"
+    definition = json.loads(_read(fixture / "eval/qual/audit.json"))
+    packet = "eval/inputs/audit-metric-inventory-evidence.json"
+    assert packet in definition["prompts"][0]["eval_inputs"]
+    acceptance = definition["rubric"][4]
+    for metric in (
+        "gen_ai.client.inference.operation.input_tokens/output_tokens",
+        "gen_ai.client.operation.duration",
+        "agent/tool duration/call-count",
+    ):
+        assert metric in acceptance
+    assert "Optional applicable metrics may be recommended or deferred" in acceptance
+    assert "supplemental-only inventory does not pass" in acceptance
+    for consumer in ("instrument", "verify"):
+        other = json.loads(_read(fixture / f"eval/qual/{consumer}.json"))
+        assert all(packet not in prompt["eval_inputs"] for prompt in other["prompts"])
+
+    # The established evidence fields retain the full inventory without new schema keys.
+    normalize = runpy.run_path(str(SKILLS_DIR / "references/scripts/observe_report.py"))[
+        "normalize_evidence_row"
+    ]
+    row = {
+        "check": "GenAI metric: gen_ai.client.inference.operation.input_tokens",
+        "finding": "Recommended; Histogram/{token}; source usage available; applicable; "
+        "deferred optional percentile distribution; totals alone do not cover it.",
+        "source": "current official token table and main.go:ModelResponse.Usage",
+    }
+    assert normalize(row, "evidence[0]") == row
+
+
+def test_audit_metric_fact_packet_covers_current_families_without_fixture_verdicts():
+    inputs = REPO_ROOT / "evals/go/native-genai-demo/eval/inputs"
+    packet = json.loads(_read(inputs / "audit-metric-inventory-evidence.json"))
+    shared = json.loads(_read(inputs / "genai-profile-evidence.json"))["otel"]
+    assert packet["resolved_revision"] == shared["resolved_revision"]
+    source_hashes = {source["path"]: source["sha256"] for source in shared["files"]}
+    for source in packet["source_documents"]:
+        assert source["sha256"] == source_hashes[source["path"]]
+    facts = {row["name"]: row for row in packet["metric_facts"]}
+    assert len(facts) == len(packet["metric_facts"]) == 19
+    assert facts["gen_ai.client.inference.operation.input_tokens"]["instrument_type"] == "Histogram"
+    assert facts["gen_ai.client.inference.operation.output_tokens"]["unit"] == "{token}"
+    for name in (
+        "gen_ai.client.operation.duration", "gen_ai.invoke_agent.duration",
+        "gen_ai.execute_tool.duration", "gen_ai.invoke_agent.inference_calls",
+        "gen_ai.invoke_agent.tool_calls", "gen_ai.invoke_workflow.duration",
+        "gen_ai.server.request.duration", "gen_ai.client.inference.time_to_first_chunk",
+        "gen_ai.client.inference.usage.cache_read.input_tokens",
+        "gen_ai.client.inference.usage.reasoning.output_tokens",
+    ):
+        assert name in facts
+    for row in facts.values():
+        assert row["official_level"] == "Recommended"
+        assert row["scope_conditions"] and row["source_section"]
+        assert row["source_document"] in source_hashes
+        assert not {"applicable", "disposition", "expected_grade", "fixture_required"} & row.keys()
 
 
 def test_genai_skills_require_single_canonical_span_source():
@@ -164,10 +289,10 @@ def test_genai_skills_require_single_canonical_span_source():
 
     instrument_only_terms = [
         "do not create duplicate app-owned",
-        "disable, opt out of, or suppress overlapping framework/vendor GenAI instrumentation",
-        "discovered runtime mechanism",
-        "Do not hard-code this decision to one framework",
-        "Keep HTTP/database/runtime auto-instrumentation",
+        "enrich that creator through supported hooks first",
+        "Do not disable existing bridges or replace their operations",
+        "prerequisite/manual decision",
+        "Preserve unrelated coverage",
     ]
     instrument_normalized = " ".join(instrument.split())
     missing = [
@@ -325,7 +450,8 @@ def test_audit_requires_process_relative_ao_runtime_coverage():
         "its retrieval finding must be included separately from the tool finding",
         "include any unresolved ordinary provider-lifecycle finding needed by that route",
         "local proof scenario for the exact live entry point",
-        "attach exactly one AO sink/processor",
+        "reuse the existing provider and compatible",
+        "exporter with routed trace headers",
         "inspect every active sink",
         "at most one export to the same AO destination",
         "Exercise `force_flush` and `shutdown`",
@@ -536,28 +662,27 @@ def test_galileo_choice_fixture_citations_cover_the_claimed_behavior():
         assert span["name"].split()[0] in cited_text(span["source"])
 
 
-def test_genai_skills_require_pre_bootstrap_suppression_for_app_owned_spans():
-    audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
-    instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
-    reference = _read(GENAI_REF)
-    shared_terms = [
-        "opentelemetry-instrument",
-        "auto-instrumentation bootstrap",
-        "launch environment",
-        "before the bootstrap",
-        "App module code that mutates environment variables",
-        "not sufficient proof",
-        "framework hooks may already be registered",
-        "Makefile targets",
-        "service runner scripts",
-        "Docker or Helm env",
-        "VS Code launch configs",
-        "generated env scripts",
-    ]
-    for raw_text in (reference, audit, instrument):
-        text = " ".join(raw_text.split())
-        missing = [term for term in shared_terms if term not in text]
-        assert not missing
+def test_genai_skills_preserve_existing_owners_through_actual_startup():
+    contracts = {
+        GENAI_REF: (
+            "retain them and add only missing", "real bootstrap and startup environment",
+            "Do not install overlapping", "manual decision", "module-local environment edits after bootstrap",
+        ),
+        SKILLS_DIR / "otel-audit" / "SKILL.md": (
+            "existing canonical producer", "not permission to disable the original bridge",
+            "manual decision", "launch environment", "before the bootstrap",
+            "not sufficient proof", "framework hooks may already be registered",
+        ),
+        SKILLS_DIR / "otel-instrument" / "SKILL.md": (
+            "enrich that creator through supported hooks first", "Do not disable existing bridges",
+            "prerequisite/manual decision", "actual preload/agent/auto-instrumentation bootstrap",
+            "real launch profile", "after bootstrap do not prove",
+        ),
+    }
+    for path, terms in contracts.items():
+        text = " ".join(_read(path).split())
+        for term in terms:
+            assert term in text, (path, term)
 
 
 def test_genai_nested_reference_paths_resolve():
@@ -1418,8 +1543,12 @@ def test_genai_sdk_default_rubrics_exercise_new_and_preserved_producers():
     fixture = REPO_ROOT / "evals/python/ai-assistant-demo/eval"
     scenarios = json.loads(_read(fixture / "inputs/genai-default-scenarios.json"))
     assert scenarios["fresh_agent"]["existing_genai_producer"] is None
-    assert scenarios["export_only_fresh_agent"]["existing_genai_producer"] is None
-    assert "add_splunk_ao_span_processor" in scenarios["export_only_fresh_agent"]["source_snapshot"]
+    assert scenarios["existing_export_only_ao"]["existing_genai_producer"] is None
+    assert "add_splunk_ao_span_processor" in scenarios["existing_export_only_ao"]["source_snapshot"]
+    for key in ("existing_generic_otel", "existing_metrics_only", "existing_logs_only",
+                "existing_export_only_ao", "externally_bootstrapped_otel"):
+        assert scenarios[key]["source_snapshot" if "source_snapshot" in scenarios[key]
+                              else "launcher_source_snapshot"]
     for key in ("existing_otel", "existing_galileo"):
         assert "start_as_current_span" in scenarios[key]["source_snapshot"]
         assert scenarios[key]["known_values"]["stream"] is True
@@ -1434,8 +1563,13 @@ def test_genai_sdk_default_rubrics_exercise_new_and_preserved_producers():
         inputs = case["prompts"][0]["eval_inputs"]
         assert "eval/inputs/genai-default-scenarios.json" in inputs
         rubric = " ".join(case["rubric"])
-        assert "existing OTel and Galileo" in rubric
-        assert "Splunk AO span creation by default" in rubric
+        for term in (
+            "genuinely fresh", "existing OTel, Galileo, AO export-only",
+            "generic OTel, metrics-only, logs-only", "external-launcher",
+            "no AO span-creation SDK dependency", "replacement provider",
+            "duplicate destination exporter",
+        ):
+            assert term in rubric
         assert "required acceptance" in rubric
         assert "Opt-In provenance" in rubric
 
@@ -1734,12 +1868,12 @@ def test_assistant_v3_framework_bridge_eval_covers_duplicate_span_risk():
         "framework_shadow_nodes",
         "simulate_framework_shadow_nodes",
         "one canonical GenAI span source",
-        "before opentelemetry-instrument bootstraps",
+        "Preserves active launch-owned provider/producers/export paths",
         "OTEL_PYTHON_DISABLED_INSTRUMENTATIONS",
         "POST /v2/assistant/sessions",
         "must not become the GenAI workflow card",
         "LangGraph",
-        "step nodes",
+        "no-op handles and simulated JSON nodes",
     ]
     assert not [term for term in required_terms if term not in combined]
 
@@ -2370,3 +2504,146 @@ def test_incident_preflight_is_independent_from_ao_resource_work():
     bullet = "- Detect incident-readiness surfaces."
     line = next(line for line in text.splitlines() if bullet in line)
     assert line.startswith(bullet), "Incident preflight must remain its own top-level bullet"
+
+
+def test_content_redaction_case_targets_real_completed_capture_and_narrow_scope():
+    fixture = REPO_ROOT / "evals/python/existing-otel-agent-demo"
+    case = json.loads((fixture / "eval/qual/content-redaction-instrument.json").read_text())
+    assert case["skill"] == "otel-instrument"
+    assert len(case["prompts"]) == 1 and len(case["rubric"]) == 6
+    prompt = case["prompts"][0]
+    for relative in prompt["eval_inputs"]:
+        assert (fixture / relative).is_file()
+    for requirement in (
+        "exactly six existing workflow/model spans", "before loading/exercising the adapter",
+        "OTEL_SDK_DISABLED=true", "approved-question-marker", "identity-sentinel",
+        "hidden-reasoning-sentinel", "actual native baseline", "JSON text",
+        "key=value", "UTF-8", "complete input/output message documents",
+        "failed/no-result", "clean runtime directory", "Do not add spans",
+        "No new full canonical report packet", "not the default probe.compare eighteen-span",
+    ):
+        assert requirement in prompt["task"]
+
+
+@pytest.mark.parametrize("representation", ["key-value", "json-text", "nested-text"])
+def test_content_capture_seed_exposes_string_leak_on_real_completed_sdk_span(monkeypatch, representation):
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    monkeypatch.setenv("OTEL_SDK_DISABLED", "true")
+    with monkeypatch.context() as construction:
+        construction.setenv("OTEL_SDK_DISABLED", "false")
+        provider = TracerProvider(resource=Resource.create({"service.name": "content-capture-seed-test"}))
+    assert __import__("os").environ["OTEL_SDK_DISABLED"] == "true"
+    adapter = runpy.run_path(str(REPO_ROOT / "evals/python/existing-otel-agent-demo/eval/inputs/content_capture_source.py"))
+    sink = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(sink))
+    protected = {"user_id": "identity-sentinel", "hidden_reasoning": "hidden-reasoning-sentinel", "api_key": "secret-sentinel"}
+    useful_input = "approved-question-marker Where is my order?"
+    useful_output = "approved-result-marker Your order is shipped"
+
+    def payload(useful):
+        if representation == "json-text":
+            return json.dumps({"approved": useful, **protected})
+        labeled = useful + " " + " ".join(f"{key}={value}" for key, value in protected.items())
+        if representation == "nested-text":
+            return {"nested": [{**protected, "notes": labeled}], "approved": useful}
+        return labeled
+
+    try:
+        tracer = provider.get_tracer("completed-content-seam")
+        with tracer.start_as_current_span("chat completed-content-seam") as span:
+            assert span.is_recording()
+            adapter["write_content"](span, payload(useful_input), result_available=True, result=payload(useful_output))
+        finished = sink.get_finished_spans()
+        assert len(finished) == 1 and finished[0].end_time is not None
+        attributes = finished[0].attributes
+        assert attributes["demo.capture.mode"] == "redacted"
+        for key, useful in (("gen_ai.input.messages", useful_input), ("gen_ai.output.messages", useful_output)):
+            assert useful in attributes[key]
+            assert all(sentinel in attributes[key] for sentinel in protected.values())
+            assert json.loads(attributes[key])[0]["parts"][0]["type"] == "text"
+        # The deliberate bug handles structured keys; freeform string data is
+        # the missing capture boundary, even on an actual ended SDK span.
+        assert all(sentinel not in json.dumps(adapter["sanitize"](protected)) for sentinel in protected.values())
+        assert __import__("os").environ["OTEL_SDK_DISABLED"] == "true"
+    finally:
+        provider.shutdown()
+
+
+def test_content_capture_seed_native_leak_preserves_six_existing_spans_and_owners(monkeypatch):
+    import asyncio
+    import importlib.util
+    import os
+    from collections import Counter
+
+    fixture = REPO_ROOT / "evals/python/existing-otel-agent-demo"
+    monkeypatch.syspath_prepend(str(fixture))
+    prior_app = sys.modules.pop("app", None)
+    try:
+        spec = importlib.util.spec_from_file_location("content_seed_probe", fixture / "probe.py")
+        native_probe = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(native_probe)
+    finally:
+        sys.modules.pop("app", None)
+        if prior_app is not None:
+            sys.modules["app"] = prior_app
+    for name in list(os.environ):
+        if name.startswith(("OTEL_", "SPLUNK_", "GALILEO_")):
+            monkeypatch.delenv(name)
+    adapter = runpy.run_path(str(fixture / "eval/inputs/content_capture_source.py"))
+    question = "approved-question-marker Where is my order? user_id=identity-sentinel hidden_reasoning=hidden-reasoning-sentinel api_key=secret-sentinel"
+
+    def capture(with_adapter):
+        with native_probe.Receiver() as receiver:
+            app = native_probe.AgentDemo("genai", receiver.endpoint)
+            owners = {key: value for key, value in app.owned_objects().items() if value is not None}
+            if with_adapter:
+                adapter["configure"](app)
+                adapter["configure"](app)
+                assert len(app.trace_producer.span_hooks) == 1 and len(app.operation_hooks) == 1
+            app.start()
+            app.start()
+            outcomes = []
+            try:
+                for scenario in native_probe.SCENARIOS:
+                    try:
+                        outcomes.append(app.run_agent(question, scenario))
+                    except (RuntimeError, asyncio.CancelledError) as error:
+                        outcomes.append(type(error).__name__)
+            finally:
+                app.shutdown()
+                count = len(receiver.requests)
+                app.shutdown()
+            assert len(receiver.requests) == count
+            assert all(app.owned_objects()[key] is value for key, value in owners.items())
+            return {"requests": copy.deepcopy(receiver.requests)}, outcomes
+
+    before, before_outcomes = capture(False)
+    leaked, leaked_outcomes = capture(True)
+    assert before_outcomes == leaked_outcomes
+    original_spans = native_probe.records(before, "traces")
+    spans = native_probe.records(leaked, "traces")
+    assert len(original_spans) == len(spans) == 6
+    assert Counter(request["path"] for request in leaked["requests"]) == {"/v1/traces": 1, "/v1/metrics": 1, "/v1/logs": 1}
+    for original in original_spans:
+        current = next(span for span in spans if (span["trace_id"], span["span_id"]) == (original["trace_id"], original["span_id"]))
+        for key in ("parent_span_id", "name", "kind", "resource", "scope", "status"):
+            assert current[key] == original[key]
+        assert all(current["attributes"].get(key) == value for key, value in original["attributes"].items())
+        assert all(event in current["events"] for event in original["events"] if event["name"].startswith("legacy."))
+        def exception_types(span):
+            return Counter(event["attributes"]["exception.type"] for event in span["events"] if event["name"] == "exception")
+        assert exception_types(current) == exception_types(original)
+    for signal in ("metrics", "logs"):
+        assert native_probe.records(leaked, signal) == native_probe.records(before, signal)
+        assert len(native_probe.records(leaked, signal)) == 4
+    for span in spans:
+        assert span["attributes"]["demo.capture.mode"] == "redacted"
+        assert all(marker in span["attributes"]["gen_ai.input.messages"] for marker in
+                   ("approved-question-marker", "identity-sentinel", "hidden-reasoning-sentinel", "secret-sentinel"))
+    outputs = [span for span in spans if "gen_ai.output.messages" in span["attributes"]]
+    assert len(outputs) == 2
+    assert all("Your order is shipped" in span["attributes"]["gen_ai.output.messages"] for span in outputs)

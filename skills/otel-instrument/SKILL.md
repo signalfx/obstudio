@@ -37,9 +37,11 @@ When any selected finding uses
 `finding_group: splunk-agent-observability`, or the repository contains a
 `splunk_ao` dependency/import, also read
 `../references/splunk-agent-observability.md` before editing.
-For fresh or uncovered Python GenAI functions, read that reference even without
-an SDK import and complete its mandatory per-function producer decision gate
-before selecting lower-level creators/schema helpers or editing functions.
+For a fresh Python runtime with no existing telemetry instrumentation, or
+uncovered functions on an existing Splunk AO producer path, read that reference
+and complete its per-function producer decision gate before selecting creators.
+An existing OTel/Galileo trace, metric, log or export-only pipeline stays on its
+current stack; fill missing GenAI operations with OTel and supported hooks.
 Record each native SDK `@log`, justified application-owned function-decorator,
 or preserved-producer decision in existing plan/report evidence; a manual
 context-manager scope alone does not instrument a fresh function by this gate.
@@ -105,6 +107,14 @@ Markdown reports.
   unrelated upgrade. Keep fixed library release numbers out of skill recipes.
   Record the resolved versions, metadata source/date and tested signatures in
   the run report, then persist the approved dependency set in the app lockfile.
+- Check current Splunk AO SDK support for the application's actual language
+  separately from native OTel support. Without a compatible supported AO SDK,
+  use that language's public OTel libraries/instrumentation and apply the entire
+  applicable Required GenAI Coverage Profile, including Splunk AO/Galileo content
+  mappings, known parameters, correct kinds and complete trace trees. Follow the
+  shared GenAI selection rule; AO SDK absence is not a blocker, permission to
+  omit semantics, or a reason to install a Python sidecar. Preserve existing
+  providers/exporters and keep selected resource/routing work SDK-free.
 - Read `./references/project-runtime-validation.md`, inventory the repository's
   configured runtime and build/test commands, and select the locally available
   project runtime before editing. Do not use the shell's default runtime when
@@ -173,8 +183,11 @@ Markdown reports.
   requests. When AO destination settings are absent, default the local route
   to an available cloud-compatible Studio gateway. Its absence must not block
   source instrumentation, SDK imports, local tests, or implementation of the
-  supported resource-creation branch. Use normal AO SDK resource
-  calls and per-request routing, not a Studio-specific application adapter or
+  supported resource-creation branch. For existing non-AO applications, use
+  SDK-free resource APIs and the existing exporter's trace-specific headers
+  under the shared AO reference; do not introduce a vendor SDK dependency,
+  replacement provider or second AO export path. For an SDK-owned path, use
+  normal AO SDK resource calls and per-request routing, not a Studio-specific application adapter or
   global destination registration. Local receiver receipt is not cloud proof.
   Resolve absent AO settings independently of any existing OTel endpoint and
   provide the Studio-only example profile described in
@@ -232,12 +245,18 @@ Markdown reports.
   AI surfaces with official semconv docs when available, record
   live-or-snapshot provenance, and build a semconv closure matrix.
   Apply GenAI Instrumentation Selection and the Required GenAI Coverage
-  Profile. Read `../references/splunk-agent-observability.md` for a fresh
-  agent even without an existing SDK import: default to supported Splunk AO
-  span creators/framework integration; use the shared per-operation public
+  Profile. Only a target runtime with no existing telemetry instrumentation is
+  fresh; generic OTel, metrics-only, logs-only and active export-only pipelines
+  stay incremental. Read `../references/splunk-agent-observability.md` for a fresh
+  agent even without an existing SDK import: use supported Splunk AO
+  span creators/framework integration when a compatible SDK exists for its
+  language; otherwise select native OTel with the full applicable field profile.
+  For a selected supported AO SDK, use the shared per-operation public
   OTel exception only for source-proven incompatible SDK boundaries. An
-  export-only processor is not a creator. Preserve an existing OTel/Galileo producer and
-  fill only its gaps. Applicable safe content/vendor fields are required
+  export-only processor is not a creator. Preserve all existing producers,
+  providers and exporters and fill only proven gaps. Record before/after
+  operation and field inventories and prove no lost coverage or duplicate
+  operation/export. Applicable safe content/vendor fields are required
   acceptance; a published Opt-In label or metadata-only span is not closure.
 - When GenAI incidents, postmortems, tickets, alerts, or failure examples are
   part of the request, use GenAI incident-evidence mode from
@@ -618,8 +637,10 @@ report background:
   Agent Observability resource settings rather than inventing spans or metrics. Leave durable
   app/deployment configuration for the selected API and ingest endpoints. In
   gateway mode Studio owns cloud realm/credentials; the application uses only
-  supported generic SDK configuration and local credentials when required.
-  For Python Studio gateway mode, follow the shared AO reference's populated
+  supported resource/export configuration and local credentials when required.
+  Existing non-AO paths use the discovered standard resource HTTP API and
+  existing trace exporter; add no AO SDK configuration or dependency.
+  For a selected Python SDK-owned Studio gateway path, follow the shared AO reference's populated
   profile contract: persist `SPLUNK_AO_API_URL`, `SPLUNK_AO_CONSOLE_URL`, and
   `SPLUNK_AO_API_KEY=local-gateway` in the actual loaded env profile before
   running provisioning. Use the discovered API base, preserve non-default
@@ -632,21 +653,23 @@ report background:
   Python, use `scripts/resolve_ao_resources.py` through the project runner, or
   implement an application-native equivalent with the same tested contract.
   Persist the resolved project/stream bindings in the actual launch profile
-  before constructing the AO exporter. Verify both-existing (zero creates),
-  both-missing, mixed, repeated-run, duplicate-race, and failure-isolation
-  paths with fake SDK clients. A live API failure blocks resource delivery
+  before initializing the selected trace export path. Verify both-existing
+  (zero creates), both-missing, mixed, repeated-run, duplicate-race, and
+  failure-isolation paths with real loopback HTTP API fakes for SDK-free
+  paths, or compatible SDK clients for an SDK-owned path. A live API failure blocks resource delivery
   proof, not implementation and testing of creation. Record creation as
   attempted/blocked/recovered accurately and rerun when the prerequisite is
   available; do not replace the selected creation work with an operator task.
-- For selected Agent Observability export, persist the required exporter
-  packages in both the dependency manifest and the project lockfile, in the
+- When selected Agent Observability work needs an additional exporter package,
+  persist only that required package in both the dependency manifest and the project lockfile, in the
   dependency set installed by the application's actual launch. An optional
   extra that the normal launch never selects is not an installed AO route.
   If the project's configured runner is `uv sync`, create or update `uv.lock`,
   run `uv sync --locked` for the default launch (or the same locked extra/group
   profile used by the actual launch), then import and
-  exercise the installed SDK exporter without live credentials. A preflight
-  environment containing the SDK does not prove that a later normal sync kept
+  exercise the actual selected exporter without live credentials. Existing
+  SDK-free exporters do not require installing the AO SDK. A preflight
+  environment containing an optional exporter does not prove that a later normal sync kept
   it installed. Treat missing credentials for remote project, Agent Stream,
   or delivery proof separately from dependency resolution: credentials do not
   block local lockfile, import, or configuration checks. If package resolution
@@ -873,7 +896,7 @@ a send/write failure signal. Add a counter, span event, or low-cardinality
 outcome attribute for send/write failure when app code can observe it; otherwise
 owner-map the missing source explicitly to the framework/server/platform.
 
-For token/context pressure gaps, `gen_ai.client.token.usage` plus a
+For token/context pressure gaps, current inference usage metrics plus a
 context-window usage gauge does not close a broader token-pressure gap unless
 the audit contract only requires those two signals. If `required_signals`
 include context budget percent, truncation rate, token-limit errors,
@@ -956,10 +979,10 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Find any existing OTel setup before adding new code. Extend it. Treat lazy
   provider helpers and providers initialized on first instrument creation as
   existing setup even when the startup wrapper itself contains no OTel call.
-- Keep one global provider per signal. When adding traces/logs around an
-  existing custom metrics provider, consolidate resource/exporter ownership or
-  adapt the helper to the shared provider; never let auto-instrumentation and
-  app code race to call `set_meter_provider`.
+- Keep one global provider per signal. Preserve the actual source-owned
+  provider and its resource/exporter ownership. Add providers only for absent
+  signals; adapt new hooks to existing instances and never let new bootstrap
+  code race the existing `set_meter_provider` path.
 - Preserve operator resource values. Merge app defaults only for absent keys;
   do not overwrite `OTEL_SERVICE_NAME`, `deployment.environment`,
   `deployment.environment.name`, or `service.version` from
@@ -1078,16 +1101,19 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   baseline distributed tracing plus OTel GenAI spans for inference,
   `invoke_agent`, `invoke_workflow`, `plan`, `execute_tool`, `retrieval`, and
   memory operations where code evidence exists; emit
-  `gen_ai.client.operation.duration` and
-  `gen_ai.client.token.usage` when the data is available and selected by the
+  the current inference duration and usage metrics from the shared reference
+  when their source data is available and selected by the
   audit or requested signal scope; use stable tool names;
   add low-cardinality `error.type`; and avoid raw prompt, completion, retrieved
   content, memory record, tool argument, evaluation explanation, user, tenant,
   session, task, request, trace, or raw URL values in metric dimensions.
-  For `gen_ai.client.token.usage`, include `gen_ai.token.type` and each known
+  Use the current inference metric names, instrument types, units and required
+  measurement attributes; include applicable `gen_ai.token.modality` and known
   stable `gen_ai.operation.name`, `gen_ai.provider.name`, and
   `gen_ai.request.model` on the metric measurement itself, not only on the
-  owning chat span. Assert those exact attributes on collected metric points.
+  owning chat span. Preserve existing legacy metric producers as consumer
+  contracts; do not silently rename them. Assert exact current and preserved
+  contracts separately on collected metric points.
 - When an audit selects only selected tool operations by exact stable name,
   branch at the tool dispatch or execution boundary: emit `execute_tool`
   spans and attributes for those names only. Let unselected tool names follow
@@ -1118,6 +1144,13 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   token-limit, truncation, timeout, provider, or tool classifications. Do not
   attach transient terminal outcome/error dimensions to intermediate gauges or
   size measurements unless the metric contract explicitly requires them.
+- Keep production instrumentation independent of audit, report and eval input
+  files. If runtime schema validation needs a data asset, make it an
+  application-owned asset included by the normal packaging/deployment path;
+  validation-only schemas remain in tests. Prove actual startup and local
+  export from a clean application copy without `.observe`, `eval/inputs`,
+  harness workspaces or absolute paths to the development directory. Include the
+  declared application assets and normal operator configuration in that test.
 - For GenAI/LLM code, apply the `Single-Source GenAI Span Contract` before
   adding manual spans. Inventory framework/vendor bridges, provider SDK hooks,
   callbacks, middleware, auto-instrumentors, and existing app spans that can
@@ -1127,22 +1160,16 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   semconv spans with lifecycle, privacy, model/tool attributes, and parent
   context, keep that bridge and add only missing workflow/agent context,
   aggregates, metrics, or owner mappings; do not create duplicate app-owned
-  `chat` or `execute_tool` spans for those same operations. If app-owned spans
-  are the canonical source, emit the complete app-owned span set and disable,
-  opt out of, or suppress overlapping framework/vendor GenAI instrumentation
-  using the discovered runtime mechanism, such as instrumentor names, bridge
-  settings, callback configuration, or provider-hook opt-out flags. Do not
-  hard-code this decision to one framework. Keep HTTP/database/runtime
-  auto-instrumentation when it does not create duplicate GenAI nodes.
-  When the process uses preload, agent, `opentelemetry-instrument`,
-  `NODE_OPTIONS --require`, or another auto-instrumentation bootstrap, apply
-  the suppression in the launch environment before the bootstrap runs. Update
-  the actual startup surfaces the repo uses, such as Makefile targets, service
-  runner scripts, Docker or Helm env, VS Code launch configs, procfiles,
-  systemd units, shell env generators, or generated env scripts. App module
-  code that mutates environment variables after import is only defense in depth
-  and is not sufficient proof because framework hooks may already be
-  registered.
+  `chat` or `execute_tool` spans for those same operations. Preserve existing
+  app-owned spans in the same way. A new uncovered operation must not duplicate
+  another active creator; enrich that creator through supported hooks first.
+  Do not disable existing bridges or replace their operations merely because
+  a new wrapper is easier to author. If ownership conflicts already exist or
+  supported enrichment cannot make a producer safe, record the exact affected
+  operations and prerequisite/manual decision. Preserve unrelated coverage.
+  Inspect the actual preload/agent/auto-instrumentation bootstrap and exercise
+  changes through the real launch profile. Module-local environment edits
+  after bootstrap do not prove the active producer/configuration state.
   Verification or static proof must show one GenAI node per logical operation,
   no wrapper-only spans counted as tools, expected LLM/tool counts, stable
   model/tool names, and workflow/agent parent shape such as
@@ -1160,8 +1187,8 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     add an app-owned OTel span around the same logical operation. Treat HTTP,
     metrics, logs, streaming, sessions, and uncovered GenAI operations as
     independent closure work.
-    A fresh agent without GenAI span creation uses supported Splunk AO creators
-    by default. Apply the mandatory per-function producer decision gate in
+    Only a live runtime without any existing telemetry instrumentation uses
+    supported Splunk AO creators by default. Apply the mandatory per-function producer decision gate in
     Decorator Selection before choosing helpers: use SDK `@log` for every
     supported uncovered function scenario, or an application-owned function
     decorator invoking the documented chosen creator for an exact SDK decorator
@@ -1169,10 +1196,14 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     assess the shared per-operation public OTel compatibility exception before
     accepting a known-invalid helper. Preserve supported framework/provider ownership without a
     duplicate decorator span. Inspect current examples and chosen compatible
-    APIs; an evaluation-only SDK import or HTTP provider is not existing
-    live-agent GenAI instrumentation.
+    APIs; evaluation-only imports do not cover a live runtime, while an active
+    HTTP provider still selects incremental OTel gap filling.
   - With an **existing OpenTelemetry provider**, preserve that provider and
-    pass the exact instance to Splunk AO export when selected. A single
+    all existing producers/exporters. Prefer SDK-free resource resolution and
+    trace headers on the existing compatible exporter as the shared reference
+    specifies. Do not introduce an AO SDK dependency or creator. The following
+    SDK-specific configuration applies to an already selected compatible SDK
+    export path, not to header-only existing exporters. A single
     `add_splunk_ao_span_processor` registration is valid only when all AO
     spans share one resolved destination. If the application chooses project
     or Agent Stream per request, do not register a startup-wide singleton AO
@@ -1323,8 +1354,8 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   `gen_ai.operation.name` such as `chat`, `generate_content`, or
   `text_completion`, `gen_ai.provider.name`, `gen_ai.request.model` when known,
   `gen_ai.response.model` when known, and token usage on that inference span
-  when provider usage is available. When recording `gen_ai.client.token.usage`,
-  put `gen_ai.token.type` and the known stable `gen_ai.operation.name`,
+  when provider usage is available. For current inference usage counters,
+  put the required `gen_ai.token.modality` and known stable `gen_ai.operation.name`,
   `gen_ai.provider.name`, and `gen_ai.request.model` on the token metric as
   attributes too; span attributes alone do not make token metrics filterable
   by operation, provider, or model. Include `gen_ai.response.model` on the
@@ -1716,6 +1747,15 @@ At minimum:
    mapping in a negative test so arguments/results-only content cannot pass.
    Check current schema, redaction and unchanged trace/span identity with no
    duplicate node; test successful null separately from no result on failure.
+   Exercise the selected content policy with source-shaped sensitive fields
+   both as structured values and embedded in JSON or labelled freeform text,
+   including nested inputs and produced outputs. Dictionary-key filtering does
+   not sanitize a string containing identity or protected reasoning fields.
+   Check completed owning spans and actual exported content for their absence
+   under the redacted policy, while retaining useful approved question/result
+   content. A `redacted` label, sanitizer-only assertion, or blanking all content
+   is insufficient. If a value cannot be safely transformed before any writer
+   captures it, omit that value and report the remaining content gap.
    Build an exact signal closure matrix and execute every changed span name and
    metric call site that should still emit, plus explicit absence proof for
    every removed signal. Do not infer coverage for create, batch, update,

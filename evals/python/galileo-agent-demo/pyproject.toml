@@ -5,9 +5,10 @@ description = "Galileo-owned OpenTelemetry GenAI fixture"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
-    "galileo",
-    "opentelemetry-api>=1.30",
-    "opentelemetry-sdk>=1.30",
+    "galileo[otel]",
+    "opentelemetry-api>=1.44,<1.45",
+    "opentelemetry-sdk>=1.44,<1.45",
+    "opentelemetry-exporter-otlp>=1.44,<1.45",
     "pydantic>=2.10",
     "uvicorn[standard]>=0.34",
 ]

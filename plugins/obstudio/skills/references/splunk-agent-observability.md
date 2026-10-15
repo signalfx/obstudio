@@ -172,11 +172,13 @@ the uncertain outcome, but an unresolved lookup must retain the original
 failure and must not cause a second create.
 
 For Python, `otel-instrument/scripts/resolve_ao_resources.py` provides this
-provisioning path with supported `Projects` and `AgentStreams` clients. Run it
-with the project-managed Python environment after validating the selected AO
-scope. Use the paired helper only when both resource findings are selected;
+provisioning path using the existing SDK, or the explicit SDK-free
+`--studio-api-origin` HTTP mode for an existing non-AO application. Run it with
+the project-managed Python environment after validating selected resource
+scope; an SDK-free application must not gain a vendor dependency for this step. Use the paired helper only when both resource findings are selected;
 for project-only scope, perform only the selected project operation through
-the SDK. Never create an unselected stream as a side effect. Its JSON evidence
+the supported resource API, using the SDK-free HTTP client for a non-AO
+application or its existing SDK client for an SDK-owned path. Never create an unselected stream as a side effect. Its JSON evidence
 records reused, created, or recovered resources and
 real IDs; it is evidence of resource resolution, not an additional selection
 ledger or proof of cloud trace receipt. An application-native equivalent must
@@ -205,7 +207,8 @@ Resolve missing AO destination settings independently from ordinary OTel
 settings. An existing `OTEL_EXPORTER_OTLP_ENDPOINT` does not select the AO
 resource API or change an explicit AO destination. When AO has no explicit
 destination, configure the available local Studio gateway through the
-installed SDK's supported endpoint mode. Discover its API address during
+existing exporter's supported trace headers for a non-AO runtime, or the
+installed SDK's supported endpoint mode for an SDK-owned runtime. Discover its API address during
 instrumentation from advertised endpoints or checked-in topology; keep an
 explicit ordinary OTLP destination intact. If the gateway is unavailable,
 record the unresolved prerequisite without silently enabling direct cloud.
@@ -278,6 +281,17 @@ prerequisite, not a reason to request a cloud token for the application.
 
 ### Configuration Profiles
 
+For existing non-AO applications, use the repository's normal profile/loader
+to supply the resource setup command's explicit discovered API origin and
+selectors, then persist the resolved IDs in the existing exporter's supported
+trace-specific header configuration. Preserve the compatible endpoint,
+protocol, harmless existing headers and all unrelated signal/exporter settings.
+Exercise that actual loader and exporter constructor; do not add SDK variables,
+an SDK import or a new config loader to an SDK-free application. Keep resource
+resolution failure separate from the existing telemetry pipeline.
+
+The following SDK configuration applies only when an SDK-owned path is
+selected; it is not required by the header-only non-AO path above.
 For selected AO configuration work, provide a Studio-only example profile:
 `.env.studio.example` for a dotenv application, or the equivalent named
 deployment/launch profile for the repository's configuration system. Put the
@@ -384,13 +398,17 @@ spans around those operations. Audit HTTP, runtime, metrics, logs, sessions,
 streaming lifecycle, and uncovered GenAI operations independently; SDK-created
 workflow or tool spans do not prove those other signals.
 
-When the live agent has no GenAI span creation, default to Splunk AO
-instrumentation and apply **Fresh Agent SDK Instrumentation** below. Generic
-OpenTelemetry transport/provider setup and evaluation-only SDK usage do not
-change that fresh-agent classification. Ordinary non-GenAI OTel work continues
-to use application-owned official OpenTelemetry. When an OTel/Galileo GenAI
-producer already exists, preserve it and fill its gaps through supported
-application hooks; do not migrate it to Splunk AO by default.
+Default to **Fresh Agent SDK Instrumentation** only when the live runtime has
+no existing telemetry instrumentation and its language has a compatible
+supported Splunk AO SDK. Apply the native OTel language fallback below when no
+such SDK is available. Existing generic OTel spans, a real
+metrics or logs pipeline, an active export-only provider, Galileo or another
+framework producer select incremental OTel gap filling. Preserve their
+producers, providers and exporters, enrich supported hooks, and add only
+source-proven uncovered operations; missing GenAI spans do not authorize SDK
+adoption. Evaluation-only imports and unused packages do not establish live
+instrumentation. Apply the shared GenAI Instrumentation Selection decision
+before using any SDK creator below.
 
 If a high-level helper creates a provider, retain the returned provider in
 application startup state, pass it to supported instrumentation that
@@ -401,8 +419,9 @@ it does not conclude unfinished operations or replace shutdown.
 
 ### Fresh Agent SDK Instrumentation
 
-Use the installed version's supported Splunk AO span-creation APIs for a fresh
-agent, rather than only adding `add_splunk_ao_span_processor`. Before choosing
+For a fresh agent whose language has a compatible supported Splunk AO SDK,
+use its supported span-creation APIs, rather than only adding
+`add_splunk_ao_span_processor`. Before choosing
 an integration, inspect the current
 [official SDK examples](https://github.com/splunk/splunk-ao-python/tree/main/examples)
 and the matching installed API/source. Record the example path, revision/date,
@@ -465,7 +484,11 @@ resources and do not create GenAI operation spans.
 For supported function scenarios, use the decorator pattern when adding or
 repairing hooks. Prefer SDK `@log` at the uncovered operation boundary after
 checking current [decorator documentation](https://agent-observability-docs.splunk.com/sdk-api/logging/log-decorator/log-decorator),
-chosen package source and public configuration. Keep existing valid producers.
+chosen package source and public configuration. This producer-choice gate applies
+only to a genuinely uninstrumented runtime or a proven uncovered operation in
+an existing AO-owned path. Preserve every existing producer, including one with
+incomplete semantics; enrich its supported hooks. An unsupported field or kind
+stays Partial with a precise manual decision instead of authorizing replacement.
 
 **Mandatory per-function producer decision gate.** Before edits for fresh or
 uncovered Python GenAI operations, record a decision for every actual source
@@ -635,8 +658,12 @@ alternative.
 
 ### Per-Operation Public OTel Compatibility Exception
 
-Keep Splunk AO creation as the default where it meets the selected contract.
-When current source/probes show that the applicable SDK integration and public
+This exception selects a creator for a new, uncovered operation; it does not
+replace an existing creator that emits incomplete semantics. Preserve that
+creator and report the exact unsupported requirement and manual prerequisite
+when supported same-span enrichment cannot repair it. Keep Splunk AO creation
+as the default for a genuinely uninstrumented runtime where it meets the
+selected contract. When current source/probes show that the applicable SDK integration and public
 helper cannot meet a required kind, creation-time field, truthful content or
 lifecycle contract, a named application-owned function decorator may create
 that one operation through the documented public OTel API. Record the exact
@@ -645,7 +672,7 @@ provider and configured export paths, preserving any existing or selected AO
 processor/exporter. Retain SDK creators on supported boundaries and emit one
 operation per real call. Label the creator as application OTel and report its
 actual export path separately; an AO processor is not its creator. Do not
-replace an already valid OTel/Galileo/framework producer or use an absent
+replace an existing OTel/Galileo/framework/AO producer or use an absent
 gateway as a reason for this exception.
 
 For a remote model, supply CLIENT and safe known request attributes when
@@ -855,17 +882,108 @@ This choice does not require Studio/gateway availability or live credentials
 for source work and deterministic tests. Use the selected supported export
 destination and normal SDK resource/config APIs; existing direct-cloud and
 gateway behavior stays independent of the span-creation choice. For another
-language, verify the supported SDK/integration for that runtime; Python
-examples do not prove another language's API. An unsupported runtime is an
-explicit prerequisite rather than an invented SDK or silent default change.
+language, check current official documentation, package metadata and public
+APIs for a compatible supported SDK/integration; record source/date and runtime
+compatibility. Python examples do not prove another language's API. If the
+language has no compatible supported Splunk AO SDK, use its native public
+OpenTelemetry SDK, supported instrumentation and OTLP exporters. A bounded
+check that cannot establish AO SDK support is recorded as unverified support,
+not a reason to block the supported native path. Do not invent an AO package,
+install a Python sidecar or require a deliberately failing SDK import.
+
+Apply the entire applicable **Required GenAI Coverage Profile** from
+`genai-readiness.md` to these native spans: actual operation/name/kind/parent,
+provider/model and known request/response/usage fields, bounded safe typed
+inputs/outputs, tool arguments/results plus their message mappings, retrieval
+query/documents, source-supported correlation and correct error/cancel endings.
+Preserve existing creators and use supported same-span hooks before adding
+uncovered operations. Native libraries do not automatically fill these fields;
+verify completed exported spans, concrete content schemas and full trace trees.
+Missing source values remain explicit gaps or justified N/A rather than
+fabricated defaults or successful outputs. Use the SDK-free resource and trace
+routing path below for selected Project/Agent Stream configuration. SDK absence
+does not make that configuration dependent on an AO span-creation library.
 
 ### Existing OpenTelemetry Provider
 
-Preserve the application's existing provider. For export-only adoption, call
-`add_splunk_ao_span_processor` with that exact provider once, retain any
-existing processors, set or preserve the intended global provider separately,
-and keep `provider.shutdown()` in the application teardown path. Do not create
-a second provider merely to export to Splunk AO.
+Preserve existing producers, providers and exporters for every signal. When
+project/Agent Stream routing is selected for a non-AO application, resolve or
+create the real resources independently of instrumentation. Use normal supported
+resource APIs; do not install Splunk AO merely to obtain resource clients or an
+export processor. The bundled resource helper's explicit
+`--studio-api-origin <discovered-loopback-origin>` mode uses the current Studio
+HTTP resource contract without an SDK dependency. It performs normal resource
+calls, not endpoint discovery or a separate route-registration operation. Keep
+lookup/create/repeated-run/duplicate-conflict proof and real IDs before binding
+export. A failed lookup or create leaves the selected AO route unconfigured
+while existing telemetry remains active.
+
+Prefer adding routing headers to the existing compatible trace exporter. Inspect
+its actual endpoint, protocol, constructor/env precedence and downstream
+forwarding before editing. Current public standalone AO documentation specifies
+`projectid` and `agentstreamid`; the current Studio receiver and inspected SDK
+transport use `projectid` and `logstreamid`. Determine the target's supported
+contract from current docs and installed/source evidence; do not send both
+stream aliases or assume that the documentation contract fits every gateway.
+For the current Studio HTTP/protobuf path, persist the resolved UUIDs in the
+actual launch profile as:
+
+```dotenv
+OTEL_EXPORTER_OTLP_TRACES_HEADERS=projectid=<project-uuid>,logstreamid=<agent-stream-uuid>
+```
+
+Merge harmless existing trace headers, reject conflicting resource selectors,
+and preserve the compatible explicit endpoint and protocol, including a
+non-default port. Use trace-specific settings so AO routing/auth does not leak
+into metrics or local logs. If code supplies exporter arguments directly,
+configure that supported hook instead of writing unused environment variables.
+If an operator destination cannot route to AO, preserve it and expose the exact
+destination decision; do not silently retarget it or add another exporter.
+
+When a distinct additional destination is explicitly selected, preserve the
+original integration's effective configuration, including inherited vendor
+project/stream names, API origins, credentials and loaded profile values.
+An exclusive Studio profile isolates only incompatible settings of its own
+selected SDK path; it must not unset another integration's namespace or reset
+its configured stream to a default. Prove both effective destinations with
+non-default operator values before and after the new launcher runs.
+
+Inspect the existing exporter's actual header precedence too. If trace-specific
+headers are absent and it inherits generic `OTEL_EXPORTER_OTLP_HEADERS`, adding
+`OTEL_EXPORTER_OTLP_TRACES_HEADERS` can hide that fallback. Retain applicable
+harmless inherited headers when merging the selected trace route, honor
+explicit trace-header/constructor precedence, and leave global, metric and log
+configuration intact. Authentication remains destination-scoped: do not copy
+another destination's credentials into a new sink. Exercise the actual launcher
+and exporter with sentinel harmless global and trace-specific headers.
+
+The current Studio receiver recognizes this ID pair on `/v1/traces`,
+`/otel/v1/traces` and `/v2/trace/otlp`. Successful normal resource resolution
+through the same gateway confirms the route for its active cloud connection.
+An ID copied from another connection is insufficient until resolved there.
+Persisted UUID headers also do not restore the gateway's in-memory route after
+its restart or active cloud connection change. Before treating routed delivery
+as restored, run read-only project and scoped stream relookup through that
+active gateway, using the persisted IDs with reuse-only semantics (or exact
+name lookup). This deployment/resource bootstrap must not create duplicates,
+replace the exporter, or make ordinary application instrumentation depend on a
+reachable gateway. If relookup is unavailable, keep existing telemetry active
+and report routed forwarding as unproven/failed. Test a cleared route followed
+by relookup and repeated export, preserving IDs and zero additional creates;
+headers alone before relookup must not be accepted as recovery proof.
+The gateway retains local telemetry and uses its routed AO forwarding branch;
+ordinary OTLP receipt without the pair does not select an Agent Stream. Check
+rejected-span/partial-success responses, not only HTTP success. Resource
+resolution, local routed receipt and cloud product visibility remain separate.
+
+Inspect all active export paths to the final destination. Adding an AO
+processor while an existing exporter already reaches that same AO destination
+duplicates delivery. Prove one canonical operation and one export to each
+selected destination, while preserving unrelated existing sinks. Only when
+export-only SDK integration is explicitly chosen and compatible, register
+`add_splunk_ao_span_processor` on the existing provider once and retain existing
+processors; do not introduce SDK span creators. Keep the existing provider's
+flush/shutdown ownership and prove both sinks drain without a second provider.
 
 If supported HTTP propagation is also selected, pass the same provider to the
 supported helper. Use `configure_distributed_tracing(tracer_provider=...)`
@@ -978,20 +1096,10 @@ duplicate logical operations. Keep project, Agent Stream, dataset, prompt,
 annotation, evaluator, integration, and attachment work as AO configuration
 findings.
 
-Create a Galileo-versus-`splunk-ao` `manual decision` only when validated
-source and target-product evidence shows that the required routing, field
-mapping, or supported runtime behavior has two real mutually exclusive
-supported paths. Give each option a separate executable finding and disjoint
-`unlocks`; answering the decision must not select either branch. When the
-evidence shows the current Galileo path can satisfy the requirement, retain it
-and do not create a migration branch. When it shows Galileo cannot satisfy the
-requirement, do not present it as an equivalent option.
-
-For a selected keep-Galileo path, preserve Galileo configuration and add only
-the missing non-overlapping OTel or AO configuration. For a selected
-`splunk-ao` branch, disable the overlapping Galileo processor, wrappers,
-callbacks, and preload configuration before enabling `splunk-ao`. Verify a
-fresh application trace in the intended project and Agent Stream, inspect the
-required Agent Observability fields, and prove one canonical span per logical
-operation. A successful configuration call without fresh routed application
-data and duplicate-span proof is not a working result.
+Preserve the existing Galileo path and close missing non-overlapping OTel or
+selected AO resource/routing gaps through supported hooks and exporter
+configuration. A missing field or incompatible destination requires exact
+source/probe evidence and a prerequisite or destination decision, not a
+replacement Splunk AO producer. Verify existing span/metric/log coverage and
+one canonical operation before and after, then exercise the selected route.
+A configuration call without application telemetry is not a working result.

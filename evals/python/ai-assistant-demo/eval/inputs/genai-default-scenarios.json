@@ -1,5 +1,5 @@
 {
-  "scope": "Read-only source scenarios for GenAI producer selection and required-content planning; snapshots are not runtime proof.",
+  "scope": "Read-only source scenarios for preserving every active application or externally bootstrapped OTel/Galileo/AO signal producer/provider/exporter and planning source-proven missing operations; snapshots are not runtime proof.",
   "fresh_agent": {
     "source": "app.py",
     "runtime": "interactive FastAPI build_turn -> run_tool/call_provider",
@@ -26,13 +26,37 @@
     },
     "content_hooks": "Actual messages/arguments and returned values are available at the same producer boundary"
   },
-  "export_only_fresh_agent": {
-    "source_snapshot": "from splunk_ao.otel import add_splunk_ao_span_processor\nfrom opentelemetry.sdk.trace import TracerProvider\nprovider = TracerProvider()\nadd_splunk_ao_span_processor(provider)\nasync def turn(messages, client):\n    return await client.chat(messages=messages)\n",
-    "existing_genai_producer": null
-  },
   "limits": {
     "credentials": "No live credentials are supplied",
     "runtime": "Do not import source snapshots or call models/cloud; assess source and supplied evidence only",
     "content": "Bounded useful redacted content is required. Exclude credentials, sensitive identity and hidden reasoning; retain approved opaque correlation on spans."
+  },
+  "existing_export_only_ao": {
+    "source_snapshot": "from opentelemetry import trace\nfrom splunk_ao.otel import add_splunk_ao_span_processor\nfrom opentelemetry.sdk.trace import TracerProvider\nprovider = TracerProvider()\nadd_splunk_ao_span_processor(provider)\ntrace.set_tracer_provider(provider)\nasync def turn(messages, client):\n    return await client.chat(messages=messages)\n",
+    "existing_genai_producer": null,
+    "signal_ownership": "Active app-owned OTel provider and AO export processor exist even though no GenAI operation spans are created yet; preserve both and add only source-proven missing spans via OTel or supported existing hooks. Do not install/introduce an AO span-creation SDK or second exporter to this destination."
+  },
+  "existing_generic_otel": {
+    "source_snapshot": "from opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter\nprovider = TracerProvider()\nexporter = OTLPSpanExporter(endpoint=\"http://127.0.0.1:55327/v1/traces\", headers={\"X-App-Tenant\":\"synthetic-tenant\"})\nprovider.add_span_processor(BatchSpanProcessor(exporter))\ntrace.set_tracer_provider(provider)\ntracer=trace.get_tracer(\"existing-http\")\nasync def turn(messages, client):\n    with tracer.start_as_current_span(\"HTTP POST /chat\"):\n        return await client.chat(messages=messages)\n",
+    "source_context": "Generic HTTP spans are active instrumentation; no GenAI spans exist yet. Preserve provider, existing HTTP node, custom OTLP path and harmless header while adding only actual turn and model operations through supported OTel/current-stack hooks."
+  },
+  "existing_metrics_only": {
+    "source_snapshot": "from opentelemetry import metrics\nfrom opentelemetry.sdk.metrics import MeterProvider\nfrom opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader, ConsoleMetricExporter\nreader=PeriodicExportingMetricReader(ConsoleMetricExporter())\nprovider=MeterProvider(metric_readers=[reader])\nmetrics.set_meter_provider(provider)\ncalls=metrics.get_meter(\"agent\").create_counter(\"agent.turns\")\nasync def turn(messages, client):\n    calls.add(1)\n    return await client.chat(messages=messages)\n",
+    "source_context": "A real metric SDK/provider/exporter and counter are active; not a fresh AO default. Keep metric ownership intact and add missing trace operations with a supported OTel path, without an AO span-creation dependency."
+  },
+  "existing_logs_only": {
+    "source_snapshot": "import logging\nfrom opentelemetry.sdk._logs import LoggerProvider, LoggingHandler\nfrom opentelemetry.sdk._logs.export import BatchLogRecordProcessor, ConsoleLogExporter\nprovider=LoggerProvider()\nprovider.add_log_record_processor(BatchLogRecordProcessor(ConsoleLogExporter()))\nlogger=logging.getLogger(\"agent\")\nlogger.addHandler(logging.StreamHandler())\nlogger.addHandler(LoggingHandler(logger_provider=provider))\nasync def turn(messages, client):\n    logger.warning(\"agent turn started\")\n    return await client.chat(messages=messages)\n",
+    "source_context": "A real OTel log SDK/bridge/provider/exporter is active independently of stdout. Preserve it and its original sink; no fresh AO default or forced producer migration."
+  },
+  "externally_bootstrapped_otel": {
+    "app_source_snapshot": "async def turn(messages, client):\n    return await client.chat(messages=messages)\n",
+    "launcher_source_snapshot": "#!/bin/sh\nexport OTEL_SERVICE_NAME=external-agent\nexport OTEL_TRACES_EXPORTER=otlp\nexport OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:55327/v1/traces\nexport OTEL_EXPORTER_OTLP_TRACES_HEADERS=X-App-Tenant=synthetic-tenant\nexec opentelemetry-instrument python app.py\n",
+    "source_context": "The actual supported launcher activates OTel although app.py has no OTel import. Preserve launch-owned provider/export path and add missing operations through its current provider; no replacement provider or AO SDK."
+  },
+  "stdout_dependency_only_fresh": {
+    "app_source_snapshot": "import logging\nlogger=logging.getLogger(\"agent\")\nlogger.addHandler(logging.StreamHandler())\nasync def turn(messages, client):\n    logger.warning(\"agent turn started\")\n    return await client.chat(messages=messages)\n",
+    "dependency_snapshot": "[project]\ndependencies = [\"splunk-ao\", \"opentelemetry-api\"]\n",
+    "launcher_source_snapshot": "#!/bin/sh\nexec python app.py\n",
+    "source_context": "Plain stdout and installed dependencies with no imported/initialized producer/provider/exporter do not establish actual instrumentation. This genuinely fresh interactive runtime remains eligible for the default supported AO producer plan; separate eval_runner.py usage does not change it."
   }
 }

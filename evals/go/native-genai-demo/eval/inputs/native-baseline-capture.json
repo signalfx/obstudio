@@ -1,0 +1,133 @@
+{
+  "expect": "baseline",
+  "format": "local-go-native-genai-capture-v1",
+  "logs_applicability": "No application logging stack; business stdout JSON is not an OTel LogRecord.",
+  "passed": true,
+  "reject_traces": false,
+  "resolved_agent_stream": null,
+  "resolved_project": null,
+  "resource_scenario": "missing",
+  "runs": [
+    {
+      "business_outcomes": [
+        {
+          "request_id": "turn-1",
+          "result": "Your order is shipped; used 1 policy document.",
+          "scenario": "success"
+        },
+        {
+          "error_type": "tool_unavailable",
+          "request_id": "turn-2",
+          "scenario": "tool_error"
+        },
+        {
+          "error_type": "provider_unavailable",
+          "request_id": "turn-3",
+          "scenario": "provider_error"
+        },
+        {
+          "error_type": "cancelled",
+          "request_id": "turn-4",
+          "scenario": "cancel"
+        }
+      ],
+      "duration_ms": 27,
+      "exit_ok": true,
+      "failures": [],
+      "model_requests": [
+        {
+          "max_tokens": 64,
+          "messages": [
+            {
+              "content": "Answer order questions using the supplied policy and order state.",
+              "role": "system"
+            },
+            {
+              "content": "{\"documents\":[\"Policy: orders can be checked with lookup_order.\"],\"order\":{\"state\":\"shipped\"},\"prompt\":\"Where is my order? email: fixture@example.test; token: fixture-token-secret; question: delivery status\"}",
+              "role": "user"
+            }
+          ],
+          "model": "fixture-model-v1",
+          "request_id": "turn-1",
+          "scenario": "success",
+          "stop": [
+            "END"
+          ],
+          "temperature": 0.2,
+          "tools": [
+            {
+              "function": {
+                "description": "Read the current shipping state of an order.",
+                "name": "lookup_order",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "order_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order_id"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            }
+          ],
+          "top_p": 0.9
+        },
+        {
+          "max_tokens": 64,
+          "messages": [
+            {
+              "content": "Answer order questions using the supplied policy and order state.",
+              "role": "system"
+            },
+            {
+              "content": "{\"documents\":[\"Policy: orders can be checked with lookup_order.\"],\"order\":{\"state\":\"shipped\"},\"prompt\":\"Where is my order? email: fixture@example.test; token: fixture-token-secret; question: delivery status\"}",
+              "role": "user"
+            }
+          ],
+          "model": "fixture-model-v1",
+          "request_id": "turn-3",
+          "scenario": "provider_error",
+          "stop": [
+            "END"
+          ],
+          "temperature": 0.2,
+          "tools": [
+            {
+              "function": {
+                "description": "Read the current shipping state of an order.",
+                "name": "lookup_order",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "order_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order_id"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            }
+          ],
+          "top_p": 0.9
+        }
+      ],
+      "model_response_ids": {
+        "turn-1": "fixture-response-18390221-287d-4edd-b27a-d6c49f208a7f"
+      },
+      "native_requests": [],
+      "passed": true,
+      "resource_requests": [],
+      "run": 1,
+      "stderr": ""
+    }
+  ]
+}

@@ -1,0 +1,1102 @@
+{
+  "expect": "capture",
+  "format": "local-go-native-genai-capture-v1",
+  "logs_applicability": "No application logging stack; business stdout JSON is not an OTel LogRecord.",
+  "passed": true,
+  "reject_traces": false,
+  "resolved_agent_stream": null,
+  "resolved_project": null,
+  "resource_scenario": "auth",
+  "runs": [
+    {
+      "business_outcomes": [
+        {
+          "request_id": "turn-1",
+          "result": "Your order is shipped; used 1 policy document.",
+          "scenario": "success"
+        },
+        {
+          "error_type": "tool_unavailable",
+          "request_id": "turn-2",
+          "scenario": "tool_error"
+        },
+        {
+          "error_type": "provider_unavailable",
+          "request_id": "turn-3",
+          "scenario": "provider_error"
+        },
+        {
+          "error_type": "cancelled",
+          "request_id": "turn-4",
+          "scenario": "cancel"
+        }
+      ],
+      "duration_ms": 43,
+      "exit_ok": true,
+      "failures": [],
+      "model_requests": [
+        {
+          "max_tokens": 64,
+          "messages": [
+            {
+              "content": "Answer order questions using the supplied policy and order state.",
+              "role": "system"
+            },
+            {
+              "content": "{\"documents\":[\"Policy: orders can be checked with lookup_order.\"],\"order\":{\"state\":\"shipped\"},\"prompt\":\"Where is my order? email: fixture@example.test; token: fixture-token-secret; question: delivery status\"}",
+              "role": "user"
+            }
+          ],
+          "model": "fixture-model-v1",
+          "request_id": "turn-1",
+          "scenario": "success",
+          "stop": [
+            "END"
+          ],
+          "temperature": 0.2,
+          "tools": [
+            {
+              "function": {
+                "description": "Read the current shipping state of an order.",
+                "name": "lookup_order",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "order_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order_id"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            }
+          ],
+          "top_p": 0.9
+        },
+        {
+          "max_tokens": 64,
+          "messages": [
+            {
+              "content": "Answer order questions using the supplied policy and order state.",
+              "role": "system"
+            },
+            {
+              "content": "{\"documents\":[\"Policy: orders can be checked with lookup_order.\"],\"order\":{\"state\":\"shipped\"},\"prompt\":\"Where is my order? email: fixture@example.test; token: fixture-token-secret; question: delivery status\"}",
+              "role": "user"
+            }
+          ],
+          "model": "fixture-model-v1",
+          "request_id": "turn-3",
+          "scenario": "provider_error",
+          "stop": [
+            "END"
+          ],
+          "temperature": 0.2,
+          "tools": [
+            {
+              "function": {
+                "description": "Read the current shipping state of an order.",
+                "name": "lookup_order",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "order_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order_id"
+                  ],
+                  "type": "object"
+                }
+              },
+              "type": "function"
+            }
+          ],
+          "top_p": 0.9
+        }
+      ],
+      "model_response_ids": {
+        "turn-1": "fixture-response-8fafc928-4817-410d-8a76-61be1aa2c614"
+      },
+      "native_requests": [
+        {
+          "body_base64": "CpgLCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBLSCgoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRK3CgoQ0FtDjiHrZevXnZ6aDVBhyBIIo4pO5zfJo6kiCJm0Awq88SoKKhhyZXRyaWV2YWwga25vd2xlZGdlX2Jhc2UwATlQ9RpaZZ3eGEGxVBtaZZ3eGEoaCg5hcHAucmVxdWVzdF9pZBIICgZ0dXJuLTFKGQoMYXBwLnNjZW5hcmlvEgkKB3N1Y2Nlc3NKJgoUZ2VuX2FpLnByb3ZpZGVyLm5hbWUSDgoMZml4dHVyZS5odHRwSiQKEWdlbl9haS5hZ2VudC5uYW1lEg8KDXN1cHBvcnRfYWdlbnRKlQEKC2lucHV0LnZhbHVlEoUBCoIBeyJkYXRhX3NvdXJjZSI6Imtub3dsZWRnZV9iYXNlIiwicXVlcnkiOiJXaGVyZSBpcyBteSBvcmRlcj8gZW1haWw6IFtSRURBQ1RFRF9FTUFJTF07IHRva2VuOltSRURBQ1RFRF07IHF1ZXN0aW9uOiBkZWxpdmVyeSBzdGF0dXMifUolCg9pbnB1dC5taW1lX3R5cGUSEgoQYXBwbGljYXRpb24vanNvbkp4ChtnZW5fYWkucmV0cmlldmFsLnF1ZXJ5LnRleHQSWQpXV2hlcmUgaXMgbXkgb3JkZXI/IGVtYWlsOiBbUkVEQUNURURfRU1BSUxdOyB0b2tlbjpbUkVEQUNURURdOyBxdWVzdGlvbjogZGVsaXZlcnkgc3RhdHVzSikKFWdlbl9haS5kYXRhX3NvdXJjZS5pZBIQCg5rbm93bGVkZ2VfYmFzZUokChVnZW5fYWkub3BlcmF0aW9uLm5hbWUSCwoJcmV0cmlldmFsSiYKF29wZW5pbmZlcmVuY2Uuc3Bhbi5raW5kEgsKCVJFVFJJRVZFUkrfAQoVZ2VuX2FpLmlucHV0Lm1lc3NhZ2VzEsUBCsIBW3sicGFydHMiOlt7ImNvbnRlbnQiOiJ7XCJkYXRhX3NvdXJjZVwiOlwia25vd2xlZGdlX2Jhc2VcIixcInF1ZXJ5XCI6XCJXaGVyZSBpcyBteSBvcmRlcj8gZW1haWw6IFtSRURBQ1RFRF9FTUFJTF07IHRva2VuOltSRURBQ1RFRF07IHF1ZXN0aW9uOiBkZWxpdmVyeSBzdGF0dXNcIn0iLCJ0eXBlIjoidGV4dCJ9XSwicm9sZSI6InVzZXIifV1KRgoMb3V0cHV0LnZhbHVlEjYKNFsiUG9saWN5OiBvcmRlcnMgY2FuIGJlIGNoZWNrZWQgd2l0aCBsb29rdXBfb3JkZXIuIl1KJgoQb3V0cHV0Lm1pbWVfdHlwZRISChBhcHBsaWNhdGlvbi9qc29uSo8BChZnZW5fYWkub3V0cHV0Lm1lc3NhZ2VzEnUKc1t7InBhcnRzIjpbeyJjb250ZW50IjoiW1wiUG9saWN5OiBvcmRlcnMgY2FuIGJlIGNoZWNrZWQgd2l0aCBsb29rdXBfb3JkZXIuXCJdIiwidHlwZSI6InRleHQifV0sInJvbGUiOiJhc3Npc3RhbnQifV1KYAoaZ2VuX2FpLnJldHJpZXZhbC5kb2N1bWVudHMSQgpAW3siY29udGVudCI6IlBvbGljeTogb3JkZXJzIGNhbiBiZSBjaGVja2VkIHdpdGggbG9va3VwX29yZGVyLiJ9XUpcCiZyZXRyaWV2YWwuZG9jdW1lbnRzLjAuZG9jdW1lbnQuY29udGVudBIyCjBQb2xpY3k6IG9yZGVycyBjYW4gYmUgY2hlY2tlZCB3aXRoIGxvb2t1cF9vcmRlci56AIUBAQEAAA==",
+          "body_sha256": "82ca4fc4baaa57cd14331898b9f4c7d7402546d82153de005e071f8320184c99",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "1435",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-1",
+                "app.scenario": "success",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.data_source.id": "knowledge_base",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"{\\\"data_source\\\":\\\"knowledge_base\\\",\\\"query\\\":\\\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\\\"}\",\"type\":\"text\"}],\"role\":\"user\"}]",
+                "gen_ai.operation.name": "retrieval",
+                "gen_ai.output.messages": "[{\"parts\":[{\"content\":\"[\\\"Policy: orders can be checked with lookup_order.\\\"]\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.retrieval.documents": "[{\"content\":\"Policy: orders can be checked with lookup_order.\"}]",
+                "gen_ai.retrieval.query.text": "Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status",
+                "input.mime_type": "application/json",
+                "input.value": "{\"data_source\":\"knowledge_base\",\"query\":\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\"}",
+                "openinference.span.kind": "RETRIEVER",
+                "output.mime_type": "application/json",
+                "output.value": "[\"Policy: orders can be checked with lookup_order.\"]",
+                "retrieval.documents.0.document.content": "Policy: orders can be checked with lookup_order."
+              },
+              "end_time_unix_nano": "1792042760369034417",
+              "events": [],
+              "flags": 257,
+              "kind": 1,
+              "links": [],
+              "name": "retrieval knowledge_base",
+              "parent_span_id": "99b4030abcf12a0a",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "a38a4ee737c9a3a9",
+              "start_time_unix_nano": "1792042760369010000",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "trace_id": "d05b438e21eb65ebd79d9e9a0d5061c8"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "CukHCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBKjBwoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRKIBwoQ0FtDjiHrZevXnZ6aDVBhyBII45G6p+x9muciCJm0Awq88SoKKhlleGVjdXRlX3Rvb2wgbG9va3VwX29yZGVyMAE5QHooWmWd3hhBuc4oWmWd3hhKGgoOYXBwLnJlcXVlc3RfaWQSCAoGdHVybi0xShkKDGFwcC5zY2VuYXJpbxIJCgdzdWNjZXNzSiYKFGdlbl9haS5wcm92aWRlci5uYW1lEg4KDGZpeHR1cmUuaHR0cEokChFnZW5fYWkuYWdlbnQubmFtZRIPCg1zdXBwb3J0X2FnZW50SioKC2lucHV0LnZhbHVlEhsKGXsib3JkZXJfaWQiOiJbUkVEQUNURURdIn1KJQoPaW5wdXQubWltZV90eXBlEhIKEGFwcGxpY2F0aW9uL2pzb25KIgoQZ2VuX2FpLnRvb2wubmFtZRIOCgxsb29rdXBfb3JkZXJKSQoXZ2VuX2FpLnRvb2wuZGVzY3JpcHRpb24SLgosUmVhZCB0aGUgY3VycmVudCBzaGlwcGluZyBzdGF0ZSBvZiBhbiBvcmRlci5KHgoQZ2VuX2FpLnRvb2wudHlwZRIKCghmdW5jdGlvbko5ChpnZW5fYWkudG9vbC5jYWxsLmFyZ3VtZW50cxIbChl7Im9yZGVyX2lkIjoiW1JFREFDVEVEXSJ9SicKFWdlbl9haS5vcGVyYXRpb24ubmFtZRIOCgxleGVjdXRlX3Rvb2xKcAoVZ2VuX2FpLmlucHV0Lm1lc3NhZ2VzElcKVVt7InBhcnRzIjpbeyJjb250ZW50Ijoie1wib3JkZXJfaWRcIjpcIltSRURBQ1RFRF1cIn0iLCJ0eXBlIjoidGV4dCJ9XSwicm9sZSI6InRvb2wifV1KJQoMb3V0cHV0LnZhbHVlEhUKE3sic3RhdGUiOiJzaGlwcGVkIn1KJgoQb3V0cHV0Lm1pbWVfdHlwZRISChBhcHBsaWNhdGlvbi9qc29uSmsKFmdlbl9haS5vdXRwdXQubWVzc2FnZXMSUQpPW3sicGFydHMiOlt7ImNvbnRlbnQiOiJ7XCJzdGF0ZVwiOlwic2hpcHBlZFwifSIsInR5cGUiOiJ0ZXh0In1dLCJyb2xlIjoidG9vbCJ9XUowChdnZW5fYWkudG9vbC5jYWxsLnJlc3VsdBIVChN7InN0YXRlIjoic2hpcHBlZCJ9egCFAQEBAAA=",
+          "body_sha256": "8916b6600d1f921f90d7ce09b5cf709d824422ddbddef7a76708781ec7b016a8",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "1004",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-1",
+                "app.scenario": "success",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"{\\\"order_id\\\":\\\"[REDACTED]\\\"}\",\"type\":\"text\"}],\"role\":\"tool\"}]",
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.output.messages": "[{\"parts\":[{\"content\":\"{\\\"state\\\":\\\"shipped\\\"}\",\"type\":\"text\"}],\"role\":\"tool\"}]",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.tool.call.arguments": "{\"order_id\":\"[REDACTED]\"}",
+                "gen_ai.tool.call.result": "{\"state\":\"shipped\"}",
+                "gen_ai.tool.description": "Read the current shipping state of an order.",
+                "gen_ai.tool.name": "lookup_order",
+                "gen_ai.tool.type": "function",
+                "input.mime_type": "application/json",
+                "input.value": "{\"order_id\":\"[REDACTED]\"}",
+                "output.mime_type": "application/json",
+                "output.value": "{\"state\":\"shipped\"}"
+              },
+              "end_time_unix_nano": "1792042760369917625",
+              "events": [],
+              "flags": 257,
+              "kind": 1,
+              "links": [],
+              "name": "execute_tool lookup_order",
+              "parent_span_id": "99b4030abcf12a0a",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "e391baa7ec7d9ae7",
+              "start_time_unix_nano": "1792042760369896000",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "trace_id": "d05b438e21eb65ebd79d9e9a0d5061c8"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "CpQUCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBLOEwoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRKzEwoQ0FtDjiHrZevXnZ6aDVBhyBIIKHH5XWg+gYEiCJm0Awq88SoKKhVjaGF0IGZpeHR1cmUtbW9kZWwtdjEwAzmQoi1aZZ3eGEHHTTVaZZ3eGEoaCg5hcHAucmVxdWVzdF9pZBIICgZ0dXJuLTFKGQoMYXBwLnNjZW5hcmlvEgkKB3N1Y2Nlc3NKJgoUZ2VuX2FpLnByb3ZpZGVyLm5hbWUSDgoMZml4dHVyZS5odHRwSiQKEWdlbl9haS5hZ2VudC5uYW1lEg8KDXN1cHBvcnRfYWdlbnRK6QUKC2lucHV0LnZhbHVlEtkFCtYFeyJtYXhfdG9rZW5zIjo2NCwibWVzc2FnZXMiOlt7ImNvbnRlbnQiOiJBbnN3ZXIgb3JkZXIgcXVlc3Rpb25zIHVzaW5nIHRoZSBzdXBwbGllZCBwb2xpY3kgYW5kIG9yZGVyIHN0YXRlLiIsInJvbGUiOiJzeXN0ZW0ifSx7ImNvbnRlbnQiOiJ7XCJkb2N1bWVudHNcIjpbXCJQb2xpY3k6IG9yZGVycyBjYW4gYmUgY2hlY2tlZCB3aXRoIGxvb2t1cF9vcmRlci5cIl0sXCJvcmRlclwiOntcInN0YXRlXCI6XCJzaGlwcGVkXCJ9LFwicHJvbXB0XCI6XCJXaGVyZSBpcyBteSBvcmRlcj8gZW1haWw6IFtSRURBQ1RFRF9FTUFJTF07IHRva2VuOltSRURBQ1RFRF07IHF1ZXN0aW9uOiBkZWxpdmVyeSBzdGF0dXNcIn0iLCJyb2xlIjoidXNlciJ9XSwibW9kZWwiOiJmaXh0dXJlLW1vZGVsLXYxIiwicmVxdWVzdF9pZCI6InR1cm4tMSIsInNjZW5hcmlvIjoic3VjY2VzcyIsInN0b3AiOlsiRU5EIl0sInRlbXBlcmF0dXJlIjowLjIsInRvb2xzIjpbeyJmdW5jdGlvbiI6eyJkZXNjcmlwdGlvbiI6IlJlYWQgdGhlIGN1cnJlbnQgc2hpcHBpbmcgc3RhdGUgb2YgYW4gb3JkZXIuIiwibmFtZSI6Imxvb2t1cF9vcmRlciIsInBhcmFtZXRlcnMiOnsiYWRkaXRpb25hbFByb3BlcnRpZXMiOmZhbHNlLCJwcm9wZXJ0aWVzIjp7Im9yZGVyX2lkIjoiW1JFREFDVEVEXSJ9LCJyZXF1aXJlZCI6WyJvcmRlcl9pZCJdLCJ0eXBlIjoib2JqZWN0In19LCJ0eXBlIjoiZnVuY3Rpb24ifV0sInRvcF9wIjowLjl9SiUKD2lucHV0Lm1pbWVfdHlwZRISChBhcHBsaWNhdGlvbi9qc29uSioKFGdlbl9haS5yZXF1ZXN0Lm1vZGVsEhIKEGZpeHR1cmUtbW9kZWwtdjFKJwoaZ2VuX2FpLnJlcXVlc3QudGVtcGVyYXR1cmUSCSGamZmZmZnJP0ohChRnZW5fYWkucmVxdWVzdC50b3BfcBIJIc3MzMzMzOw/Sh8KGWdlbl9haS5yZXF1ZXN0Lm1heF90b2tlbnMSAhhASioKHWdlbl9haS5yZXF1ZXN0LnN0b3Bfc2VxdWVuY2VzEgkqBwoFCgNFTkRKHQoOc2VydmVyLmFkZHJlc3MSCwoJMTI3LjAuMC4xShMKC3NlcnZlci5wb3J0EgQYiZsDSocCChdnZW5fYWkudG9vbC5kZWZpbml0aW9ucxLrAQroAVt7ImRlc2NyaXB0aW9uIjoiUmVhZCB0aGUgY3VycmVudCBzaGlwcGluZyBzdGF0ZSBvZiBhbiBvcmRlci4iLCJuYW1lIjoibG9va3VwX29yZGVyIiwicGFyYW1ldGVycyI6eyJhZGRpdGlvbmFsUHJvcGVydGllcyI6ZmFsc2UsInByb3BlcnRpZXMiOnsib3JkZXJfaWQiOnsidHlwZSI6InN0cmluZyJ9fSwicmVxdWlyZWQiOlsib3JkZXJfaWQiXSwidHlwZSI6Im9iamVjdCJ9LCJ0eXBlIjoiZnVuY3Rpb24ifV1KngMKFWdlbl9haS5pbnB1dC5tZXNzYWdlcxKEAwqBA1t7InBhcnRzIjpbeyJjb250ZW50IjoiQW5zd2VyIG9yZGVyIHF1ZXN0aW9ucyB1c2luZyB0aGUgc3VwcGxpZWQgcG9saWN5IGFuZCBvcmRlciBzdGF0ZS4iLCJ0eXBlIjoidGV4dCJ9XSwicm9sZSI6InN5c3RlbSJ9LHsicGFydHMiOlt7ImNvbnRlbnQiOiJ7XCJkb2N1bWVudHNcIjpbXCJQb2xpY3k6IG9yZGVycyBjYW4gYmUgY2hlY2tlZCB3aXRoIGxvb2t1cF9vcmRlci5cIl0sXCJvcmRlclwiOntcInN0YXRlXCI6XCJzaGlwcGVkXCJ9LFwicHJvbXB0XCI6XCJXaGVyZSBpcyBteSBvcmRlcj8gZW1haWw6IFtSRURBQ1RFRF9FTUFJTF07IHRva2VuOltSRURBQ1RFRF07IHF1ZXN0aW9uOiBkZWxpdmVyeSBzdGF0dXNcIn0iLCJ0eXBlIjoidGV4dCJ9XSwicm9sZSI6InVzZXIifV1KHwoVZ2VuX2FpLm9wZXJhdGlvbi5uYW1lEgYKBGNoYXRKIAoXb3BlbmluZmVyZW5jZS5zcGFuLmtpbmQSBQoDTExNSkAKDG91dHB1dC52YWx1ZRIwCi5Zb3VyIG9yZGVyIGlzIHNoaXBwZWQ7IHVzZWQgMSBwb2xpY3kgZG9jdW1lbnQuSiAKEG91dHB1dC5taW1lX3R5cGUSDAoKdGV4dC9wbGFpbkqHAQoWZ2VuX2FpLm91dHB1dC5tZXNzYWdlcxJtCmtbeyJwYXJ0cyI6W3siY29udGVudCI6IllvdXIgb3JkZXIgaXMgc2hpcHBlZDsgdXNlZCAxIHBvbGljeSBkb2N1bWVudC4iLCJ0eXBlIjoidGV4dCJ9XSwicm9sZSI6ImFzc2lzdGFudCJ9XUpNChJnZW5fYWkucmVzcG9uc2UuaWQSNwo1Zml4dHVyZS1yZXNwb25zZS04ZmFmYzkyOC00ODE3LTQxMGQtOGE3Ni02MWJlMWFhMmM2MTRKKwoVZ2VuX2FpLnJlc3BvbnNlLm1vZGVsEhIKEGZpeHR1cmUtbW9kZWwtdjFKLAoeZ2VuX2FpLnJlc3BvbnNlLmZpbmlzaF9yZWFzb25zEgoqCAoGCgRzdG9wSh8KGWdlbl9haS51c2FnZS5pbnB1dF90b2tlbnMSAhgLSiAKGmdlbl9haS51c2FnZS5vdXRwdXRfdG9rZW5zEgIYB3oAhQEBAQAA",
+          "body_sha256": "69f73166aa34719a3286a54c33eca2af04acf98e58f570dcfc5bbee49ee56bfe",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "2583",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-1",
+                "app.scenario": "success",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"Answer order questions using the supplied policy and order state.\",\"type\":\"text\"}],\"role\":\"system\"},{\"parts\":[{\"content\":\"{\\\"documents\\\":[\\\"Policy: orders can be checked with lookup_order.\\\"],\\\"order\\\":{\\\"state\\\":\\\"shipped\\\"},\\\"prompt\\\":\\\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\\\"}\",\"type\":\"text\"}],\"role\":\"user\"}]",
+                "gen_ai.operation.name": "chat",
+                "gen_ai.output.messages": "[{\"parts\":[{\"content\":\"Your order is shipped; used 1 policy document.\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.request.max_tokens": 64,
+                "gen_ai.request.model": "fixture-model-v1",
+                "gen_ai.request.stop_sequences": [
+                  "END"
+                ],
+                "gen_ai.request.temperature": 0.2,
+                "gen_ai.request.top_p": 0.9,
+                "gen_ai.response.finish_reasons": [
+                  "stop"
+                ],
+                "gen_ai.response.id": "fixture-response-8fafc928-4817-410d-8a76-61be1aa2c614",
+                "gen_ai.response.model": "fixture-model-v1",
+                "gen_ai.tool.definitions": "[{\"description\":\"Read the current shipping state of an order.\",\"name\":\"lookup_order\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"order_id\":{\"type\":\"string\"}},\"required\":[\"order_id\"],\"type\":\"object\"},\"type\":\"function\"}]",
+                "gen_ai.usage.input_tokens": 11,
+                "gen_ai.usage.output_tokens": 7,
+                "input.mime_type": "application/json",
+                "input.value": "{\"max_tokens\":64,\"messages\":[{\"content\":\"Answer order questions using the supplied policy and order state.\",\"role\":\"system\"},{\"content\":\"{\\\"documents\\\":[\\\"Policy: orders can be checked with lookup_order.\\\"],\\\"order\\\":{\\\"state\\\":\\\"shipped\\\"},\\\"prompt\\\":\\\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\\\"}\",\"role\":\"user\"}],\"model\":\"fixture-model-v1\",\"request_id\":\"turn-1\",\"scenario\":\"success\",\"stop\":[\"END\"],\"temperature\":0.2,\"tools\":[{\"function\":{\"description\":\"Read the current shipping state of an order.\",\"name\":\"lookup_order\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"order_id\":\"[REDACTED]\"},\"required\":[\"order_id\"],\"type\":\"object\"}},\"type\":\"function\"}],\"top_p\":0.9}",
+                "openinference.span.kind": "LLM",
+                "output.mime_type": "text/plain",
+                "output.value": "Your order is shipped; used 1 policy document.",
+                "server.address": "127.0.0.1",
+                "server.port": 52617
+              },
+              "end_time_unix_nano": "1792042760370736583",
+              "events": [],
+              "flags": 257,
+              "kind": 3,
+              "links": [],
+              "name": "chat fixture-model-v1",
+              "parent_span_id": "99b4030abcf12a0a",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "2871f95d683e8181",
+              "start_time_unix_nano": "1792042760370234000",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "trace_id": "d05b438e21eb65ebd79d9e9a0d5061c8"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "CtEJCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBKLCQoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRLwCAoQ0FtDjiHrZevXnZ6aDVBhyBIImbQDCrzxKgoqGmludm9rZV9hZ2VudCBzdXBwb3J0X2FnZW50MAE5yGQaWmWd3hhBGkM4WmWd3hhKGgoOYXBwLnJlcXVlc3RfaWQSCAoGdHVybi0xShkKDGFwcC5zY2VuYXJpbxIJCgdzdWNjZXNzSiYKFGdlbl9haS5wcm92aWRlci5uYW1lEg4KDGZpeHR1cmUuaHR0cEokChFnZW5fYWkuYWdlbnQubmFtZRIPCg1zdXBwb3J0X2FnZW50SqIBCgtpbnB1dC52YWx1ZRKSAQqPAXsicHJvbXB0IjoiV2hlcmUgaXMgbXkgb3JkZXI/IGVtYWlsOiBbUkVEQUNURURfRU1BSUxdOyB0b2tlbjpbUkVEQUNURURdOyBxdWVzdGlvbjogZGVsaXZlcnkgc3RhdHVzIiwicmVxdWVzdF9pZCI6InR1cm4tMSIsInNjZW5hcmlvIjoic3VjY2VzcyJ9SiUKD2lucHV0Lm1pbWVfdHlwZRISChBhcHBsaWNhdGlvbi9qc29uSm8KGGdlbl9haS5hZ2VudC5kZXNjcmlwdGlvbhJTClFSZXNvbHZlIGFuIG9yZGVyIHF1ZXN0aW9uIHdpdGggcG9saWN5IHJldHJpZXZhbCwgb3JkZXIgbG9va3VwLCBhbmQgYW4gSFRUUCBtb2RlbC5KKgoUZ2VuX2FpLnJlcXVlc3QubW9kZWwSEgoQZml4dHVyZS1tb2RlbC12MUonChVnZW5fYWkub3BlcmF0aW9uLm5hbWUSDgoMaW52b2tlX2FnZW50SiIKF29wZW5pbmZlcmVuY2Uuc3Bhbi5raW5kEgcKBUFHRU5USvABChVnZW5fYWkuaW5wdXQubWVzc2FnZXMS1gEK0wFbeyJwYXJ0cyI6W3siY29udGVudCI6IntcInByb21wdFwiOlwiV2hlcmUgaXMgbXkgb3JkZXI/IGVtYWlsOiBbUkVEQUNURURfRU1BSUxdOyB0b2tlbjpbUkVEQUNURURdOyBxdWVzdGlvbjogZGVsaXZlcnkgc3RhdHVzXCIsXCJyZXF1ZXN0X2lkXCI6XCJ0dXJuLTFcIixcInNjZW5hcmlvXCI6XCJzdWNjZXNzXCJ9IiwidHlwZSI6InRleHQifV0sInJvbGUiOiJ1c2VyIn1dSkAKDG91dHB1dC52YWx1ZRIwCi5Zb3VyIG9yZGVyIGlzIHNoaXBwZWQ7IHVzZWQgMSBwb2xpY3kgZG9jdW1lbnQuSiAKEG91dHB1dC5taW1lX3R5cGUSDAoKdGV4dC9wbGFpbkqHAQoWZ2VuX2FpLm91dHB1dC5tZXNzYWdlcxJtCmtbeyJwYXJ0cyI6W3siY29udGVudCI6IllvdXIgb3JkZXIgaXMgc2hpcHBlZDsgdXNlZCAxIHBvbGljeSBkb2N1bWVudC4iLCJ0eXBlIjoidGV4dCJ9XSwicm9sZSI6ImFzc2lzdGFudCJ9XXoAhQEBAQAA",
+          "body_sha256": "1cd3b5a589fbe1c5b82080f231d9b31a23a6b0670d7ff273394e5123354e481f",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "1236",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-1",
+                "app.scenario": "success",
+                "gen_ai.agent.description": "Resolve an order question with policy retrieval, order lookup, and an HTTP model.",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"{\\\"prompt\\\":\\\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\\\",\\\"request_id\\\":\\\"turn-1\\\",\\\"scenario\\\":\\\"success\\\"}\",\"type\":\"text\"}],\"role\":\"user\"}]",
+                "gen_ai.operation.name": "invoke_agent",
+                "gen_ai.output.messages": "[{\"parts\":[{\"content\":\"Your order is shipped; used 1 policy document.\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.request.model": "fixture-model-v1",
+                "input.mime_type": "application/json",
+                "input.value": "{\"prompt\":\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\",\"request_id\":\"turn-1\",\"scenario\":\"success\"}",
+                "openinference.span.kind": "AGENT",
+                "output.mime_type": "text/plain",
+                "output.value": "Your order is shipped; used 1 policy document."
+              },
+              "end_time_unix_nano": "1792042760370930458",
+              "events": [],
+              "flags": 257,
+              "kind": 1,
+              "links": [],
+              "name": "invoke_agent support_agent",
+              "parent_span_id": "",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "99b4030abcf12a0a",
+              "start_time_unix_nano": "1792042760368973000",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "trace_id": "d05b438e21eb65ebd79d9e9a0d5061c8"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "CpsLCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBLVCgoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRK6CgoQwJKGZV6YAvQcXNmq9DuuyRII3SsBqXGp6+0iCF6cZWRAcf1pKhhyZXRyaWV2YWwga25vd2xlZGdlX2Jhc2UwATloqDtaZZ3eGEER/DtaZZ3eGEoaCg5hcHAucmVxdWVzdF9pZBIICgZ0dXJuLTJKHAoMYXBwLnNjZW5hcmlvEgwKCnRvb2xfZXJyb3JKJgoUZ2VuX2FpLnByb3ZpZGVyLm5hbWUSDgoMZml4dHVyZS5odHRwSiQKEWdlbl9haS5hZ2VudC5uYW1lEg8KDXN1cHBvcnRfYWdlbnRKlQEKC2lucHV0LnZhbHVlEoUBCoIBeyJkYXRhX3NvdXJjZSI6Imtub3dsZWRnZV9iYXNlIiwicXVlcnkiOiJXaGVyZSBpcyBteSBvcmRlcj8gZW1haWw6IFtSRURBQ1RFRF9FTUFJTF07IHRva2VuOltSRURBQ1RFRF07IHF1ZXN0aW9uOiBkZWxpdmVyeSBzdGF0dXMifUolCg9pbnB1dC5taW1lX3R5cGUSEgoQYXBwbGljYXRpb24vanNvbkp4ChtnZW5fYWkucmV0cmlldmFsLnF1ZXJ5LnRleHQSWQpXV2hlcmUgaXMgbXkgb3JkZXI/IGVtYWlsOiBbUkVEQUNURURfRU1BSUxdOyB0b2tlbjpbUkVEQUNURURdOyBxdWVzdGlvbjogZGVsaXZlcnkgc3RhdHVzSikKFWdlbl9haS5kYXRhX3NvdXJjZS5pZBIQCg5rbm93bGVkZ2VfYmFzZUokChVnZW5fYWkub3BlcmF0aW9uLm5hbWUSCwoJcmV0cmlldmFsSiYKF29wZW5pbmZlcmVuY2Uuc3Bhbi5raW5kEgsKCVJFVFJJRVZFUkrfAQoVZ2VuX2FpLmlucHV0Lm1lc3NhZ2VzEsUBCsIBW3sicGFydHMiOlt7ImNvbnRlbnQiOiJ7XCJkYXRhX3NvdXJjZVwiOlwia25vd2xlZGdlX2Jhc2VcIixcInF1ZXJ5XCI6XCJXaGVyZSBpcyBteSBvcmRlcj8gZW1haWw6IFtSRURBQ1RFRF9FTUFJTF07IHRva2VuOltSRURBQ1RFRF07IHF1ZXN0aW9uOiBkZWxpdmVyeSBzdGF0dXNcIn0iLCJ0eXBlIjoidGV4dCJ9XSwicm9sZSI6InVzZXIifV1KRgoMb3V0cHV0LnZhbHVlEjYKNFsiUG9saWN5OiBvcmRlcnMgY2FuIGJlIGNoZWNrZWQgd2l0aCBsb29rdXBfb3JkZXIuIl1KJgoQb3V0cHV0Lm1pbWVfdHlwZRISChBhcHBsaWNhdGlvbi9qc29uSo8BChZnZW5fYWkub3V0cHV0Lm1lc3NhZ2VzEnUKc1t7InBhcnRzIjpbeyJjb250ZW50IjoiW1wiUG9saWN5OiBvcmRlcnMgY2FuIGJlIGNoZWNrZWQgd2l0aCBsb29rdXBfb3JkZXIuXCJdIiwidHlwZSI6InRleHQifV0sInJvbGUiOiJhc3Npc3RhbnQifV1KYAoaZ2VuX2FpLnJldHJpZXZhbC5kb2N1bWVudHMSQgpAW3siY29udGVudCI6IlBvbGljeTogb3JkZXJzIGNhbiBiZSBjaGVja2VkIHdpdGggbG9va3VwX29yZGVyLiJ9XUpcCiZyZXRyaWV2YWwuZG9jdW1lbnRzLjAuZG9jdW1lbnQuY29udGVudBIyCjBQb2xpY3k6IG9yZGVycyBjYW4gYmUgY2hlY2tlZCB3aXRoIGxvb2t1cF9vcmRlci56AIUBAQEAAA==",
+          "body_sha256": "df679199ba4d31d7a7f48de03e6540581956e9d33a01b54e3779cee526c7f01b",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "1438",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-2",
+                "app.scenario": "tool_error",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.data_source.id": "knowledge_base",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"{\\\"data_source\\\":\\\"knowledge_base\\\",\\\"query\\\":\\\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\\\"}\",\"type\":\"text\"}],\"role\":\"user\"}]",
+                "gen_ai.operation.name": "retrieval",
+                "gen_ai.output.messages": "[{\"parts\":[{\"content\":\"[\\\"Policy: orders can be checked with lookup_order.\\\"]\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.retrieval.documents": "[{\"content\":\"Policy: orders can be checked with lookup_order.\"}]",
+                "gen_ai.retrieval.query.text": "Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status",
+                "input.mime_type": "application/json",
+                "input.value": "{\"data_source\":\"knowledge_base\",\"query\":\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\"}",
+                "openinference.span.kind": "RETRIEVER",
+                "output.mime_type": "application/json",
+                "output.value": "[\"Policy: orders can be checked with lookup_order.\"]",
+                "retrieval.documents.0.document.content": "Policy: orders can be checked with lookup_order."
+              },
+              "end_time_unix_nano": "1792042760371174417",
+              "events": [],
+              "flags": 257,
+              "kind": 1,
+              "links": [],
+              "name": "retrieval knowledge_base",
+              "parent_span_id": "5e9c65644071fd69",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "dd2b01a971a9ebed",
+              "start_time_unix_nano": "1792042760371153000",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "trace_id": "c09286655e9802f41c5cd9aaf43baec9"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "CpkHCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBLTBgoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRK4BgoQwJKGZV6YAvQcXNmq9DuuyRIIynVZjwEj5IwiCF6cZWRAcf1pKhlleGVjdXRlX3Rvb2wgbG9va3VwX29yZGVyMAE5+Ps+WmWd3hhBJxc/WmWd3hhKGgoOYXBwLnJlcXVlc3RfaWQSCAoGdHVybi0yShwKDGFwcC5zY2VuYXJpbxIMCgp0b29sX2Vycm9ySiYKFGdlbl9haS5wcm92aWRlci5uYW1lEg4KDGZpeHR1cmUuaHR0cEokChFnZW5fYWkuYWdlbnQubmFtZRIPCg1zdXBwb3J0X2FnZW50SioKC2lucHV0LnZhbHVlEhsKGXsib3JkZXJfaWQiOiJbUkVEQUNURURdIn1KJQoPaW5wdXQubWltZV90eXBlEhIKEGFwcGxpY2F0aW9uL2pzb25KIgoQZ2VuX2FpLnRvb2wubmFtZRIOCgxsb29rdXBfb3JkZXJKSQoXZ2VuX2FpLnRvb2wuZGVzY3JpcHRpb24SLgosUmVhZCB0aGUgY3VycmVudCBzaGlwcGluZyBzdGF0ZSBvZiBhbiBvcmRlci5KHgoQZ2VuX2FpLnRvb2wudHlwZRIKCghmdW5jdGlvbko5ChpnZW5fYWkudG9vbC5jYWxsLmFyZ3VtZW50cxIbChl7Im9yZGVyX2lkIjoiW1JFREFDVEVEXSJ9SicKFWdlbl9haS5vcGVyYXRpb24ubmFtZRIOCgxleGVjdXRlX3Rvb2xKcAoVZ2VuX2FpLmlucHV0Lm1lc3NhZ2VzElcKVVt7InBhcnRzIjpbeyJjb250ZW50Ijoie1wib3JkZXJfaWRcIjpcIltSRURBQ1RFRF1cIn0iLCJ0eXBlIjoidGV4dCJ9XSwicm9sZSI6InRvb2wifV1KIAoKZXJyb3IudHlwZRISChB0b29sX3VuYXZhaWxhYmxlWmMJUBc/WmWd3hgSCWV4Y2VwdGlvbhokCg5leGNlcHRpb24udHlwZRISChB0b29sX3VuYXZhaWxhYmxlGicKEWV4Y2VwdGlvbi5tZXNzYWdlEhIKEHRvb2xfdW5hdmFpbGFibGV6FBIQdG9vbF91bmF2YWlsYWJsZRgChQEBAQAA",
+          "body_sha256": "049e11e9034506359cf873c8f32c51087a034e99c0dc725c9e09e461e18e82fb",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "924",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-2",
+                "app.scenario": "tool_error",
+                "error.type": "tool_unavailable",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"{\\\"order_id\\\":\\\"[REDACTED]\\\"}\",\"type\":\"text\"}],\"role\":\"tool\"}]",
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.tool.call.arguments": "{\"order_id\":\"[REDACTED]\"}",
+                "gen_ai.tool.description": "Read the current shipping state of an order.",
+                "gen_ai.tool.name": "lookup_order",
+                "gen_ai.tool.type": "function",
+                "input.mime_type": "application/json",
+                "input.value": "{\"order_id\":\"[REDACTED]\"}"
+              },
+              "end_time_unix_nano": "1792042760371377959",
+              "events": [
+                {
+                  "attributes": {
+                    "exception.message": "tool_unavailable",
+                    "exception.type": "tool_unavailable"
+                  },
+                  "name": "exception",
+                  "time_unix_nano": "1792042760371378000"
+                }
+              ],
+              "flags": 257,
+              "kind": 1,
+              "links": [],
+              "name": "execute_tool lookup_order",
+              "parent_span_id": "5e9c65644071fd69",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "ca75598f0123e48c",
+              "start_time_unix_nano": "1792042760371371000",
+              "status": {
+                "code": 2,
+                "message": "tool_unavailable"
+              },
+              "trace_id": "c09286655e9802f41c5cd9aaf43baec9"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "CocJCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBLBCAoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRKmCAoQwJKGZV6YAvQcXNmq9DuuyRIIXpxlZEBx/WkqGmludm9rZV9hZ2VudCBzdXBwb3J0X2FnZW50MAE5aCs7WmWd3hhBn91CWmWd3hhKGgoOYXBwLnJlcXVlc3RfaWQSCAoGdHVybi0yShwKDGFwcC5zY2VuYXJpbxIMCgp0b29sX2Vycm9ySiYKFGdlbl9haS5wcm92aWRlci5uYW1lEg4KDGZpeHR1cmUuaHR0cEokChFnZW5fYWkuYWdlbnQubmFtZRIPCg1zdXBwb3J0X2FnZW50SqUBCgtpbnB1dC52YWx1ZRKVAQqSAXsicHJvbXB0IjoiV2hlcmUgaXMgbXkgb3JkZXI/IGVtYWlsOiBbUkVEQUNURURfRU1BSUxdOyB0b2tlbjpbUkVEQUNURURdOyBxdWVzdGlvbjogZGVsaXZlcnkgc3RhdHVzIiwicmVxdWVzdF9pZCI6InR1cm4tMiIsInNjZW5hcmlvIjoidG9vbF9lcnJvciJ9SiUKD2lucHV0Lm1pbWVfdHlwZRISChBhcHBsaWNhdGlvbi9qc29uSm8KGGdlbl9haS5hZ2VudC5kZXNjcmlwdGlvbhJTClFSZXNvbHZlIGFuIG9yZGVyIHF1ZXN0aW9uIHdpdGggcG9saWN5IHJldHJpZXZhbCwgb3JkZXIgbG9va3VwLCBhbmQgYW4gSFRUUCBtb2RlbC5KKgoUZ2VuX2FpLnJlcXVlc3QubW9kZWwSEgoQZml4dHVyZS1tb2RlbC12MUonChVnZW5fYWkub3BlcmF0aW9uLm5hbWUSDgoMaW52b2tlX2FnZW50SiIKF29wZW5pbmZlcmVuY2Uuc3Bhbi5raW5kEgcKBUFHRU5USvMBChVnZW5fYWkuaW5wdXQubWVzc2FnZXMS2QEK1gFbeyJwYXJ0cyI6W3siY29udGVudCI6IntcInByb21wdFwiOlwiV2hlcmUgaXMgbXkgb3JkZXI/IGVtYWlsOiBbUkVEQUNURURfRU1BSUxdOyB0b2tlbjpbUkVEQUNURURdOyBxdWVzdGlvbjogZGVsaXZlcnkgc3RhdHVzXCIsXCJyZXF1ZXN0X2lkXCI6XCJ0dXJuLTJcIixcInNjZW5hcmlvXCI6XCJ0b29sX2Vycm9yXCJ9IiwidHlwZSI6InRleHQifV0sInJvbGUiOiJ1c2VyIn1dSiAKCmVycm9yLnR5cGUSEgoQdG9vbF91bmF2YWlsYWJsZVpjCSjcQlplnd4YEglleGNlcHRpb24aJAoOZXhjZXB0aW9uLnR5cGUSEgoQdG9vbF91bmF2YWlsYWJsZRonChFleGNlcHRpb24ubWVzc2FnZRISChB0b29sX3VuYXZhaWxhYmxlehQSEHRvb2xfdW5hdmFpbGFibGUYAoUBAQEAAA==",
+          "body_sha256": "e637294ac1162aee700aeec5670901b99149e7f7e0158a8d0a727e290ec65a42",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "1162",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-2",
+                "app.scenario": "tool_error",
+                "error.type": "tool_unavailable",
+                "gen_ai.agent.description": "Resolve an order question with policy retrieval, order lookup, and an HTTP model.",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"{\\\"prompt\\\":\\\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\\\",\\\"request_id\\\":\\\"turn-2\\\",\\\"scenario\\\":\\\"tool_error\\\"}\",\"type\":\"text\"}],\"role\":\"user\"}]",
+                "gen_ai.operation.name": "invoke_agent",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.request.model": "fixture-model-v1",
+                "input.mime_type": "application/json",
+                "input.value": "{\"prompt\":\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\",\"request_id\":\"turn-2\",\"scenario\":\"tool_error\"}",
+                "openinference.span.kind": "AGENT"
+              },
+              "end_time_unix_nano": "1792042760371625375",
+              "events": [
+                {
+                  "attributes": {
+                    "exception.message": "tool_unavailable",
+                    "exception.type": "tool_unavailable"
+                  },
+                  "name": "exception",
+                  "time_unix_nano": "1792042760371625000"
+                }
+              ],
+              "flags": 257,
+              "kind": 1,
+              "links": [],
+              "name": "invoke_agent support_agent",
+              "parent_span_id": "",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "5e9c65644071fd69",
+              "start_time_unix_nano": "1792042760371121000",
+              "status": {
+                "code": 2,
+                "message": "tool_unavailable"
+              },
+              "trace_id": "c09286655e9802f41c5cd9aaf43baec9"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "Cp8LCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBLZCgoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRK+CgoQs7P+u64eyah70ZkcI8xbrxII15NdJBGQn0UiCLxdAWwv60ghKhhyZXRyaWV2YWwga25vd2xlZGdlX2Jhc2UwATkgckZaZZ3eGEFv1EZaZZ3eGEoaCg5hcHAucmVxdWVzdF9pZBIICgZ0dXJuLTNKIAoMYXBwLnNjZW5hcmlvEhAKDnByb3ZpZGVyX2Vycm9ySiYKFGdlbl9haS5wcm92aWRlci5uYW1lEg4KDGZpeHR1cmUuaHR0cEokChFnZW5fYWkuYWdlbnQubmFtZRIPCg1zdXBwb3J0X2FnZW50SpUBCgtpbnB1dC52YWx1ZRKFAQqCAXsiZGF0YV9zb3VyY2UiOiJrbm93bGVkZ2VfYmFzZSIsInF1ZXJ5IjoiV2hlcmUgaXMgbXkgb3JkZXI/IGVtYWlsOiBbUkVEQUNURURfRU1BSUxdOyB0b2tlbjpbUkVEQUNURURdOyBxdWVzdGlvbjogZGVsaXZlcnkgc3RhdHVzIn1KJQoPaW5wdXQubWltZV90eXBlEhIKEGFwcGxpY2F0aW9uL2pzb25KeAobZ2VuX2FpLnJldHJpZXZhbC5xdWVyeS50ZXh0ElkKV1doZXJlIGlzIG15IG9yZGVyPyBlbWFpbDogW1JFREFDVEVEX0VNQUlMXTsgdG9rZW46W1JFREFDVEVEXTsgcXVlc3Rpb246IGRlbGl2ZXJ5IHN0YXR1c0opChVnZW5fYWkuZGF0YV9zb3VyY2UuaWQSEAoOa25vd2xlZGdlX2Jhc2VKJAoVZ2VuX2FpLm9wZXJhdGlvbi5uYW1lEgsKCXJldHJpZXZhbEomChdvcGVuaW5mZXJlbmNlLnNwYW4ua2luZBILCglSRVRSSUVWRVJK3wEKFWdlbl9haS5pbnB1dC5tZXNzYWdlcxLFAQrCAVt7InBhcnRzIjpbeyJjb250ZW50Ijoie1wiZGF0YV9zb3VyY2VcIjpcImtub3dsZWRnZV9iYXNlXCIsXCJxdWVyeVwiOlwiV2hlcmUgaXMgbXkgb3JkZXI/IGVtYWlsOiBbUkVEQUNURURfRU1BSUxdOyB0b2tlbjpbUkVEQUNURURdOyBxdWVzdGlvbjogZGVsaXZlcnkgc3RhdHVzXCJ9IiwidHlwZSI6InRleHQifV0sInJvbGUiOiJ1c2VyIn1dSkYKDG91dHB1dC52YWx1ZRI2CjRbIlBvbGljeTogb3JkZXJzIGNhbiBiZSBjaGVja2VkIHdpdGggbG9va3VwX29yZGVyLiJdSiYKEG91dHB1dC5taW1lX3R5cGUSEgoQYXBwbGljYXRpb24vanNvbkqPAQoWZ2VuX2FpLm91dHB1dC5tZXNzYWdlcxJ1CnNbeyJwYXJ0cyI6W3siY29udGVudCI6IltcIlBvbGljeTogb3JkZXJzIGNhbiBiZSBjaGVja2VkIHdpdGggbG9va3VwX29yZGVyLlwiXSIsInR5cGUiOiJ0ZXh0In1dLCJyb2xlIjoiYXNzaXN0YW50In1dSmAKGmdlbl9haS5yZXRyaWV2YWwuZG9jdW1lbnRzEkIKQFt7ImNvbnRlbnQiOiJQb2xpY3k6IG9yZGVycyBjYW4gYmUgY2hlY2tlZCB3aXRoIGxvb2t1cF9vcmRlci4ifV1KXAomcmV0cmlldmFsLmRvY3VtZW50cy4wLmRvY3VtZW50LmNvbnRlbnQSMgowUG9saWN5OiBvcmRlcnMgY2FuIGJlIGNoZWNrZWQgd2l0aCBsb29rdXBfb3JkZXIuegCFAQEBAAA=",
+          "body_sha256": "44da9f65c3d79a6dccdc0635a740fd3a7aa87c611ab699b91a2b2cad1a3a717a",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "1442",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-3",
+                "app.scenario": "provider_error",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.data_source.id": "knowledge_base",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"{\\\"data_source\\\":\\\"knowledge_base\\\",\\\"query\\\":\\\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\\\"}\",\"type\":\"text\"}],\"role\":\"user\"}]",
+                "gen_ai.operation.name": "retrieval",
+                "gen_ai.output.messages": "[{\"parts\":[{\"content\":\"[\\\"Policy: orders can be checked with lookup_order.\\\"]\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.retrieval.documents": "[{\"content\":\"Policy: orders can be checked with lookup_order.\"}]",
+                "gen_ai.retrieval.query.text": "Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status",
+                "input.mime_type": "application/json",
+                "input.value": "{\"data_source\":\"knowledge_base\",\"query\":\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\"}",
+                "openinference.span.kind": "RETRIEVER",
+                "output.mime_type": "application/json",
+                "output.value": "[\"Policy: orders can be checked with lookup_order.\"]",
+                "retrieval.documents.0.document.content": "Policy: orders can be checked with lookup_order."
+              },
+              "end_time_unix_nano": "1792042760371885167",
+              "events": [],
+              "flags": 257,
+              "kind": 1,
+              "links": [],
+              "name": "retrieval knowledge_base",
+              "parent_span_id": "bc5d016c2feb4821",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "d7935d2411909f45",
+              "start_time_unix_nano": "1792042760371860000",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "trace_id": "b3b3febbae1ec9a87bd1991c23cc5baf"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "CvAHCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBKqBwoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRKPBwoQs7P+u64eyah70ZkcI8xbrxIIuVp4U26Vtv4iCLxdAWwv60ghKhlleGVjdXRlX3Rvb2wgbG9va3VwX29yZGVyMAE5GItJWmWd3hhBqc1JWmWd3hhKGgoOYXBwLnJlcXVlc3RfaWQSCAoGdHVybi0zSiAKDGFwcC5zY2VuYXJpbxIQCg5wcm92aWRlcl9lcnJvckomChRnZW5fYWkucHJvdmlkZXIubmFtZRIOCgxmaXh0dXJlLmh0dHBKJAoRZ2VuX2FpLmFnZW50Lm5hbWUSDwoNc3VwcG9ydF9hZ2VudEoqCgtpbnB1dC52YWx1ZRIbChl7Im9yZGVyX2lkIjoiW1JFREFDVEVEXSJ9SiUKD2lucHV0Lm1pbWVfdHlwZRISChBhcHBsaWNhdGlvbi9qc29uSiIKEGdlbl9haS50b29sLm5hbWUSDgoMbG9va3VwX29yZGVySkkKF2dlbl9haS50b29sLmRlc2NyaXB0aW9uEi4KLFJlYWQgdGhlIGN1cnJlbnQgc2hpcHBpbmcgc3RhdGUgb2YgYW4gb3JkZXIuSh4KEGdlbl9haS50b29sLnR5cGUSCgoIZnVuY3Rpb25KOQoaZ2VuX2FpLnRvb2wuY2FsbC5hcmd1bWVudHMSGwoZeyJvcmRlcl9pZCI6IltSRURBQ1RFRF0ifUonChVnZW5fYWkub3BlcmF0aW9uLm5hbWUSDgoMZXhlY3V0ZV90b29sSnAKFWdlbl9haS5pbnB1dC5tZXNzYWdlcxJXClVbeyJwYXJ0cyI6W3siY29udGVudCI6IntcIm9yZGVyX2lkXCI6XCJbUkVEQUNURURdXCJ9IiwidHlwZSI6InRleHQifV0sInJvbGUiOiJ0b29sIn1dSiUKDG91dHB1dC52YWx1ZRIVChN7InN0YXRlIjoic2hpcHBlZCJ9SiYKEG91dHB1dC5taW1lX3R5cGUSEgoQYXBwbGljYXRpb24vanNvbkprChZnZW5fYWkub3V0cHV0Lm1lc3NhZ2VzElEKT1t7InBhcnRzIjpbeyJjb250ZW50Ijoie1wic3RhdGVcIjpcInNoaXBwZWRcIn0iLCJ0eXBlIjoidGV4dCJ9XSwicm9sZSI6InRvb2wifV1KMAoXZ2VuX2FpLnRvb2wuY2FsbC5yZXN1bHQSFQoTeyJzdGF0ZSI6InNoaXBwZWQifXoAhQEBAQAA",
+          "body_sha256": "3c82dc0622b79ddb8f2927bff5790c0e451196173d95f249752d96ad7dbe678d",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "1011",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-3",
+                "app.scenario": "provider_error",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"{\\\"order_id\\\":\\\"[REDACTED]\\\"}\",\"type\":\"text\"}],\"role\":\"tool\"}]",
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.output.messages": "[{\"parts\":[{\"content\":\"{\\\"state\\\":\\\"shipped\\\"}\",\"type\":\"text\"}],\"role\":\"tool\"}]",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.tool.call.arguments": "{\"order_id\":\"[REDACTED]\"}",
+                "gen_ai.tool.call.result": "{\"state\":\"shipped\"}",
+                "gen_ai.tool.description": "Read the current shipping state of an order.",
+                "gen_ai.tool.name": "lookup_order",
+                "gen_ai.tool.type": "function",
+                "input.mime_type": "application/json",
+                "input.value": "{\"order_id\":\"[REDACTED]\"}",
+                "output.mime_type": "application/json",
+                "output.value": "{\"state\":\"shipped\"}"
+              },
+              "end_time_unix_nano": "1792042760372080041",
+              "events": [],
+              "flags": 257,
+              "kind": 1,
+              "links": [],
+              "name": "execute_tool lookup_order",
+              "parent_span_id": "bc5d016c2feb4821",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "b95a78536e95b6fe",
+              "start_time_unix_nano": "1792042760372063000",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "trace_id": "b3b3febbae1ec9a87bd1991c23cc5baf"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "CvIRCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBKsEQoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRKREQoQs7P+u64eyah70ZkcI8xbrxIIvPFQuBoyrwkiCLxdAWwv60ghKhVjaGF0IGZpeHR1cmUtbW9kZWwtdjEwAznYU01aZZ3eGEFy1U9aZZ3eGEoaCg5hcHAucmVxdWVzdF9pZBIICgZ0dXJuLTNKIAoMYXBwLnNjZW5hcmlvEhAKDnByb3ZpZGVyX2Vycm9ySiYKFGdlbl9haS5wcm92aWRlci5uYW1lEg4KDGZpeHR1cmUuaHR0cEokChFnZW5fYWkuYWdlbnQubmFtZRIPCg1zdXBwb3J0X2FnZW50SvAFCgtpbnB1dC52YWx1ZRLgBQrdBXsibWF4X3Rva2VucyI6NjQsIm1lc3NhZ2VzIjpbeyJjb250ZW50IjoiQW5zd2VyIG9yZGVyIHF1ZXN0aW9ucyB1c2luZyB0aGUgc3VwcGxpZWQgcG9saWN5IGFuZCBvcmRlciBzdGF0ZS4iLCJyb2xlIjoic3lzdGVtIn0seyJjb250ZW50Ijoie1wiZG9jdW1lbnRzXCI6W1wiUG9saWN5OiBvcmRlcnMgY2FuIGJlIGNoZWNrZWQgd2l0aCBsb29rdXBfb3JkZXIuXCJdLFwib3JkZXJcIjp7XCJzdGF0ZVwiOlwic2hpcHBlZFwifSxcInByb21wdFwiOlwiV2hlcmUgaXMgbXkgb3JkZXI/IGVtYWlsOiBbUkVEQUNURURfRU1BSUxdOyB0b2tlbjpbUkVEQUNURURdOyBxdWVzdGlvbjogZGVsaXZlcnkgc3RhdHVzXCJ9Iiwicm9sZSI6InVzZXIifV0sIm1vZGVsIjoiZml4dHVyZS1tb2RlbC12MSIsInJlcXVlc3RfaWQiOiJ0dXJuLTMiLCJzY2VuYXJpbyI6InByb3ZpZGVyX2Vycm9yIiwic3RvcCI6WyJFTkQiXSwidGVtcGVyYXR1cmUiOjAuMiwidG9vbHMiOlt7ImZ1bmN0aW9uIjp7ImRlc2NyaXB0aW9uIjoiUmVhZCB0aGUgY3VycmVudCBzaGlwcGluZyBzdGF0ZSBvZiBhbiBvcmRlci4iLCJuYW1lIjoibG9va3VwX29yZGVyIiwicGFyYW1ldGVycyI6eyJhZGRpdGlvbmFsUHJvcGVydGllcyI6ZmFsc2UsInByb3BlcnRpZXMiOnsib3JkZXJfaWQiOiJbUkVEQUNURURdIn0sInJlcXVpcmVkIjpbIm9yZGVyX2lkIl0sInR5cGUiOiJvYmplY3QifX0sInR5cGUiOiJmdW5jdGlvbiJ9XSwidG9wX3AiOjAuOX1KJQoPaW5wdXQubWltZV90eXBlEhIKEGFwcGxpY2F0aW9uL2pzb25KKgoUZ2VuX2FpLnJlcXVlc3QubW9kZWwSEgoQZml4dHVyZS1tb2RlbC12MUonChpnZW5fYWkucmVxdWVzdC50ZW1wZXJhdHVyZRIJIZqZmZmZmck/SiEKFGdlbl9haS5yZXF1ZXN0LnRvcF9wEgkhzczMzMzM7D9KHwoZZ2VuX2FpLnJlcXVlc3QubWF4X3Rva2VucxICGEBKKgodZ2VuX2FpLnJlcXVlc3Quc3RvcF9zZXF1ZW5jZXMSCSoHCgUKA0VOREodCg5zZXJ2ZXIuYWRkcmVzcxILCgkxMjcuMC4wLjFKEwoLc2VydmVyLnBvcnQSBBiJmwNKhwIKF2dlbl9haS50b29sLmRlZmluaXRpb25zEusBCugBW3siZGVzY3JpcHRpb24iOiJSZWFkIHRoZSBjdXJyZW50IHNoaXBwaW5nIHN0YXRlIG9mIGFuIG9yZGVyLiIsIm5hbWUiOiJsb29rdXBfb3JkZXIiLCJwYXJhbWV0ZXJzIjp7ImFkZGl0aW9uYWxQcm9wZXJ0aWVzIjpmYWxzZSwicHJvcGVydGllcyI6eyJvcmRlcl9pZCI6eyJ0eXBlIjoic3RyaW5nIn19LCJyZXF1aXJlZCI6WyJvcmRlcl9pZCJdLCJ0eXBlIjoib2JqZWN0In0sInR5cGUiOiJmdW5jdGlvbiJ9XUqeAwoVZ2VuX2FpLmlucHV0Lm1lc3NhZ2VzEoQDCoEDW3sicGFydHMiOlt7ImNvbnRlbnQiOiJBbnN3ZXIgb3JkZXIgcXVlc3Rpb25zIHVzaW5nIHRoZSBzdXBwbGllZCBwb2xpY3kgYW5kIG9yZGVyIHN0YXRlLiIsInR5cGUiOiJ0ZXh0In1dLCJyb2xlIjoic3lzdGVtIn0seyJwYXJ0cyI6W3siY29udGVudCI6IntcImRvY3VtZW50c1wiOltcIlBvbGljeTogb3JkZXJzIGNhbiBiZSBjaGVja2VkIHdpdGggbG9va3VwX29yZGVyLlwiXSxcIm9yZGVyXCI6e1wic3RhdGVcIjpcInNoaXBwZWRcIn0sXCJwcm9tcHRcIjpcIldoZXJlIGlzIG15IG9yZGVyPyBlbWFpbDogW1JFREFDVEVEX0VNQUlMXTsgdG9rZW46W1JFREFDVEVEXTsgcXVlc3Rpb246IGRlbGl2ZXJ5IHN0YXR1c1wifSIsInR5cGUiOiJ0ZXh0In1dLCJyb2xlIjoidXNlciJ9XUofChVnZW5fYWkub3BlcmF0aW9uLm5hbWUSBgoEY2hhdEogChdvcGVuaW5mZXJlbmNlLnNwYW4ua2luZBIFCgNMTE1KJAoKZXJyb3IudHlwZRIWChRwcm92aWRlcl91bmF2YWlsYWJsZVprCXjUT1plnd4YEglleGNlcHRpb24aKAoOZXhjZXB0aW9uLnR5cGUSFgoUcHJvdmlkZXJfdW5hdmFpbGFibGUaKwoRZXhjZXB0aW9uLm1lc3NhZ2USFgoUcHJvdmlkZXJfdW5hdmFpbGFibGV6GBIUcHJvdmlkZXJfdW5hdmFpbGFibGUYAoUBAQEAAA==",
+          "body_sha256": "a817745ed52e8dc41e8d66248252330f70ba3c67430df9f6b25d6af12c35bc5d",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "2293",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-3",
+                "app.scenario": "provider_error",
+                "error.type": "provider_unavailable",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"Answer order questions using the supplied policy and order state.\",\"type\":\"text\"}],\"role\":\"system\"},{\"parts\":[{\"content\":\"{\\\"documents\\\":[\\\"Policy: orders can be checked with lookup_order.\\\"],\\\"order\\\":{\\\"state\\\":\\\"shipped\\\"},\\\"prompt\\\":\\\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\\\"}\",\"type\":\"text\"}],\"role\":\"user\"}]",
+                "gen_ai.operation.name": "chat",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.request.max_tokens": 64,
+                "gen_ai.request.model": "fixture-model-v1",
+                "gen_ai.request.stop_sequences": [
+                  "END"
+                ],
+                "gen_ai.request.temperature": 0.2,
+                "gen_ai.request.top_p": 0.9,
+                "gen_ai.tool.definitions": "[{\"description\":\"Read the current shipping state of an order.\",\"name\":\"lookup_order\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"order_id\":{\"type\":\"string\"}},\"required\":[\"order_id\"],\"type\":\"object\"},\"type\":\"function\"}]",
+                "input.mime_type": "application/json",
+                "input.value": "{\"max_tokens\":64,\"messages\":[{\"content\":\"Answer order questions using the supplied policy and order state.\",\"role\":\"system\"},{\"content\":\"{\\\"documents\\\":[\\\"Policy: orders can be checked with lookup_order.\\\"],\\\"order\\\":{\\\"state\\\":\\\"shipped\\\"},\\\"prompt\\\":\\\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\\\"}\",\"role\":\"user\"}],\"model\":\"fixture-model-v1\",\"request_id\":\"turn-3\",\"scenario\":\"provider_error\",\"stop\":[\"END\"],\"temperature\":0.2,\"tools\":[{\"function\":{\"description\":\"Read the current shipping state of an order.\",\"name\":\"lookup_order\",\"parameters\":{\"additionalProperties\":false,\"properties\":{\"order_id\":\"[REDACTED]\"},\"required\":[\"order_id\"],\"type\":\"object\"}},\"type\":\"function\"}],\"top_p\":0.9}",
+                "openinference.span.kind": "LLM",
+                "server.address": "127.0.0.1",
+                "server.port": 52617
+              },
+              "end_time_unix_nano": "1792042760372475250",
+              "events": [
+                {
+                  "attributes": {
+                    "exception.message": "provider_unavailable",
+                    "exception.type": "provider_unavailable"
+                  },
+                  "name": "exception",
+                  "time_unix_nano": "1792042760372475000"
+                }
+              ],
+              "flags": 257,
+              "kind": 3,
+              "links": [],
+              "name": "chat fixture-model-v1",
+              "parent_span_id": "bc5d016c2feb4821",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "bcf150b81a32af09",
+              "start_time_unix_nano": "1792042760372311000",
+              "status": {
+                "code": 2,
+                "message": "provider_unavailable"
+              },
+              "trace_id": "b3b3febbae1ec9a87bd1991c23cc5baf"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "CqMJCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBLdCAoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRLCCAoQs7P+u64eyah70ZkcI8xbrxIIvF0BbC/rSCEqGmludm9rZV9hZ2VudCBzdXBwb3J0X2FnZW50MAE5gOVFWmWd3hhBEfVRWmWd3hhKGgoOYXBwLnJlcXVlc3RfaWQSCAoGdHVybi0zSiAKDGFwcC5zY2VuYXJpbxIQCg5wcm92aWRlcl9lcnJvckomChRnZW5fYWkucHJvdmlkZXIubmFtZRIOCgxmaXh0dXJlLmh0dHBKJAoRZ2VuX2FpLmFnZW50Lm5hbWUSDwoNc3VwcG9ydF9hZ2VudEqpAQoLaW5wdXQudmFsdWUSmQEKlgF7InByb21wdCI6IldoZXJlIGlzIG15IG9yZGVyPyBlbWFpbDogW1JFREFDVEVEX0VNQUlMXTsgdG9rZW46W1JFREFDVEVEXTsgcXVlc3Rpb246IGRlbGl2ZXJ5IHN0YXR1cyIsInJlcXVlc3RfaWQiOiJ0dXJuLTMiLCJzY2VuYXJpbyI6InByb3ZpZGVyX2Vycm9yIn1KJQoPaW5wdXQubWltZV90eXBlEhIKEGFwcGxpY2F0aW9uL2pzb25KbwoYZ2VuX2FpLmFnZW50LmRlc2NyaXB0aW9uElMKUVJlc29sdmUgYW4gb3JkZXIgcXVlc3Rpb24gd2l0aCBwb2xpY3kgcmV0cmlldmFsLCBvcmRlciBsb29rdXAsIGFuZCBhbiBIVFRQIG1vZGVsLkoqChRnZW5fYWkucmVxdWVzdC5tb2RlbBISChBmaXh0dXJlLW1vZGVsLXYxSicKFWdlbl9haS5vcGVyYXRpb24ubmFtZRIOCgxpbnZva2VfYWdlbnRKIgoXb3BlbmluZmVyZW5jZS5zcGFuLmtpbmQSBwoFQUdFTlRK9wEKFWdlbl9haS5pbnB1dC5tZXNzYWdlcxLdAQraAVt7InBhcnRzIjpbeyJjb250ZW50Ijoie1wicHJvbXB0XCI6XCJXaGVyZSBpcyBteSBvcmRlcj8gZW1haWw6IFtSRURBQ1RFRF9FTUFJTF07IHRva2VuOltSRURBQ1RFRF07IHF1ZXN0aW9uOiBkZWxpdmVyeSBzdGF0dXNcIixcInJlcXVlc3RfaWRcIjpcInR1cm4tM1wiLFwic2NlbmFyaW9cIjpcInByb3ZpZGVyX2Vycm9yXCJ9IiwidHlwZSI6InRleHQifV0sInJvbGUiOiJ1c2VyIn1dSiQKCmVycm9yLnR5cGUSFgoUcHJvdmlkZXJfdW5hdmFpbGFibGVaawlY91FaZZ3eGBIJZXhjZXB0aW9uGigKDmV4Y2VwdGlvbi50eXBlEhYKFHByb3ZpZGVyX3VuYXZhaWxhYmxlGisKEWV4Y2VwdGlvbi5tZXNzYWdlEhYKFHByb3ZpZGVyX3VuYXZhaWxhYmxlehgSFHByb3ZpZGVyX3VuYXZhaWxhYmxlGAKFAQEBAAA=",
+          "body_sha256": "818770dddec1fe98326347d067f6f8f25d6dc095bf3b7c2af4e70b5a23c43df4",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "1190",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-3",
+                "app.scenario": "provider_error",
+                "error.type": "provider_unavailable",
+                "gen_ai.agent.description": "Resolve an order question with policy retrieval, order lookup, and an HTTP model.",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"{\\\"prompt\\\":\\\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\\\",\\\"request_id\\\":\\\"turn-3\\\",\\\"scenario\\\":\\\"provider_error\\\"}\",\"type\":\"text\"}],\"role\":\"user\"}]",
+                "gen_ai.operation.name": "invoke_agent",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.request.model": "fixture-model-v1",
+                "input.mime_type": "application/json",
+                "input.value": "{\"prompt\":\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\",\"request_id\":\"turn-3\",\"scenario\":\"provider_error\"}",
+                "openinference.span.kind": "AGENT"
+              },
+              "end_time_unix_nano": "1792042760372614417",
+              "events": [
+                {
+                  "attributes": {
+                    "exception.message": "provider_unavailable",
+                    "exception.type": "provider_unavailable"
+                  },
+                  "name": "exception",
+                  "time_unix_nano": "1792042760372615000"
+                }
+              ],
+              "flags": 257,
+              "kind": 1,
+              "links": [],
+              "name": "invoke_agent support_agent",
+              "parent_span_id": "",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "bc5d016c2feb4821",
+              "start_time_unix_nano": "1792042760371824000",
+              "status": {
+                "code": 2,
+                "message": "provider_unavailable"
+              },
+              "trace_id": "b3b3febbae1ec9a87bd1991c23cc5baf"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "CpcLCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBLRCgoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRK2CgoQIyqFymwaHONVD7RKLwQEqhIIzvGCg76ujUsiCIXmtIyaf1HoKhhyZXRyaWV2YWwga25vd2xlZGdlX2Jhc2UwATl4M1VaZZ3eGEEnhlVaZZ3eGEoaCg5hcHAucmVxdWVzdF9pZBIICgZ0dXJuLTRKGAoMYXBwLnNjZW5hcmlvEggKBmNhbmNlbEomChRnZW5fYWkucHJvdmlkZXIubmFtZRIOCgxmaXh0dXJlLmh0dHBKJAoRZ2VuX2FpLmFnZW50Lm5hbWUSDwoNc3VwcG9ydF9hZ2VudEqVAQoLaW5wdXQudmFsdWUShQEKggF7ImRhdGFfc291cmNlIjoia25vd2xlZGdlX2Jhc2UiLCJxdWVyeSI6IldoZXJlIGlzIG15IG9yZGVyPyBlbWFpbDogW1JFREFDVEVEX0VNQUlMXTsgdG9rZW46W1JFREFDVEVEXTsgcXVlc3Rpb246IGRlbGl2ZXJ5IHN0YXR1cyJ9SiUKD2lucHV0Lm1pbWVfdHlwZRISChBhcHBsaWNhdGlvbi9qc29uSngKG2dlbl9haS5yZXRyaWV2YWwucXVlcnkudGV4dBJZCldXaGVyZSBpcyBteSBvcmRlcj8gZW1haWw6IFtSRURBQ1RFRF9FTUFJTF07IHRva2VuOltSRURBQ1RFRF07IHF1ZXN0aW9uOiBkZWxpdmVyeSBzdGF0dXNKKQoVZ2VuX2FpLmRhdGFfc291cmNlLmlkEhAKDmtub3dsZWRnZV9iYXNlSiQKFWdlbl9haS5vcGVyYXRpb24ubmFtZRILCglyZXRyaWV2YWxKJgoXb3BlbmluZmVyZW5jZS5zcGFuLmtpbmQSCwoJUkVUUklFVkVSSt8BChVnZW5fYWkuaW5wdXQubWVzc2FnZXMSxQEKwgFbeyJwYXJ0cyI6W3siY29udGVudCI6IntcImRhdGFfc291cmNlXCI6XCJrbm93bGVkZ2VfYmFzZVwiLFwicXVlcnlcIjpcIldoZXJlIGlzIG15IG9yZGVyPyBlbWFpbDogW1JFREFDVEVEX0VNQUlMXTsgdG9rZW46W1JFREFDVEVEXTsgcXVlc3Rpb246IGRlbGl2ZXJ5IHN0YXR1c1wifSIsInR5cGUiOiJ0ZXh0In1dLCJyb2xlIjoidXNlciJ9XUpGCgxvdXRwdXQudmFsdWUSNgo0WyJQb2xpY3k6IG9yZGVycyBjYW4gYmUgY2hlY2tlZCB3aXRoIGxvb2t1cF9vcmRlci4iXUomChBvdXRwdXQubWltZV90eXBlEhIKEGFwcGxpY2F0aW9uL2pzb25KjwEKFmdlbl9haS5vdXRwdXQubWVzc2FnZXMSdQpzW3sicGFydHMiOlt7ImNvbnRlbnQiOiJbXCJQb2xpY3k6IG9yZGVycyBjYW4gYmUgY2hlY2tlZCB3aXRoIGxvb2t1cF9vcmRlci5cIl0iLCJ0eXBlIjoidGV4dCJ9XSwicm9sZSI6ImFzc2lzdGFudCJ9XUpgChpnZW5fYWkucmV0cmlldmFsLmRvY3VtZW50cxJCCkBbeyJjb250ZW50IjoiUG9saWN5OiBvcmRlcnMgY2FuIGJlIGNoZWNrZWQgd2l0aCBsb29rdXBfb3JkZXIuIn1dSlwKJnJldHJpZXZhbC5kb2N1bWVudHMuMC5kb2N1bWVudC5jb250ZW50EjIKMFBvbGljeTogb3JkZXJzIGNhbiBiZSBjaGVja2VkIHdpdGggbG9va3VwX29yZGVyLnoAhQEBAQAA",
+          "body_sha256": "e7dc27d1fba90f5f593ec420effbf0e5f6f01357cc0d37f5307328e971295519",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "1434",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-4",
+                "app.scenario": "cancel",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.data_source.id": "knowledge_base",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"{\\\"data_source\\\":\\\"knowledge_base\\\",\\\"query\\\":\\\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\\\"}\",\"type\":\"text\"}],\"role\":\"user\"}]",
+                "gen_ai.operation.name": "retrieval",
+                "gen_ai.output.messages": "[{\"parts\":[{\"content\":\"[\\\"Policy: orders can be checked with lookup_order.\\\"]\",\"type\":\"text\"}],\"role\":\"assistant\"}]",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.retrieval.documents": "[{\"content\":\"Policy: orders can be checked with lookup_order.\"}]",
+                "gen_ai.retrieval.query.text": "Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status",
+                "input.mime_type": "application/json",
+                "input.value": "{\"data_source\":\"knowledge_base\",\"query\":\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\"}",
+                "openinference.span.kind": "RETRIEVER",
+                "output.mime_type": "application/json",
+                "output.value": "[\"Policy: orders can be checked with lookup_order.\"]",
+                "retrieval.documents.0.document.content": "Policy: orders can be checked with lookup_order."
+              },
+              "end_time_unix_nano": "1792042760372848167",
+              "events": [],
+              "flags": 257,
+              "kind": 1,
+              "links": [],
+              "name": "retrieval knowledge_base",
+              "parent_span_id": "85e6b48c9a7f51e8",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "cef18283beae8d4b",
+              "start_time_unix_nano": "1792042760372827000",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "trace_id": "232a85ca6c1a1ce3550fb44a2f0404aa"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "CvkGCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBKzBgoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRKYBgoQIyqFymwaHONVD7RKLwQEqhII+2XUJ/GvUh0iCIXmtIyaf1HoKhlleGVjdXRlX3Rvb2wgbG9va3VwX29yZGVyMAE5CI1XWmWd3hhBwJhXWmWd3hhKGgoOYXBwLnJlcXVlc3RfaWQSCAoGdHVybi00ShgKDGFwcC5zY2VuYXJpbxIICgZjYW5jZWxKJgoUZ2VuX2FpLnByb3ZpZGVyLm5hbWUSDgoMZml4dHVyZS5odHRwSiQKEWdlbl9haS5hZ2VudC5uYW1lEg8KDXN1cHBvcnRfYWdlbnRKKgoLaW5wdXQudmFsdWUSGwoZeyJvcmRlcl9pZCI6IltSRURBQ1RFRF0ifUolCg9pbnB1dC5taW1lX3R5cGUSEgoQYXBwbGljYXRpb24vanNvbkoiChBnZW5fYWkudG9vbC5uYW1lEg4KDGxvb2t1cF9vcmRlckpJChdnZW5fYWkudG9vbC5kZXNjcmlwdGlvbhIuCixSZWFkIHRoZSBjdXJyZW50IHNoaXBwaW5nIHN0YXRlIG9mIGFuIG9yZGVyLkoeChBnZW5fYWkudG9vbC50eXBlEgoKCGZ1bmN0aW9uSjkKGmdlbl9haS50b29sLmNhbGwuYXJndW1lbnRzEhsKGXsib3JkZXJfaWQiOiJbUkVEQUNURURdIn1KJwoVZ2VuX2FpLm9wZXJhdGlvbi5uYW1lEg4KDGV4ZWN1dGVfdG9vbEpwChVnZW5fYWkuaW5wdXQubWVzc2FnZXMSVwpVW3sicGFydHMiOlt7ImNvbnRlbnQiOiJ7XCJvcmRlcl9pZFwiOlwiW1JFREFDVEVEXVwifSIsInR5cGUiOiJ0ZXh0In1dLCJyb2xlIjoidG9vbCJ9XUoZCgplcnJvci50eXBlEgsKCWNhbmNlbGxlZFpVCcCYV1plnd4YEglleGNlcHRpb24aHQoOZXhjZXB0aW9uLnR5cGUSCwoJY2FuY2VsbGVkGiAKEWV4Y2VwdGlvbi5tZXNzYWdlEgsKCWNhbmNlbGxlZHoNEgljYW5jZWxsZWQYAoUBAQEAAA==",
+          "body_sha256": "642cb2d3f72fb665185410845b83c477c1233e6196ccaf07fb65010ac627ca18",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "892",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-4",
+                "app.scenario": "cancel",
+                "error.type": "cancelled",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"{\\\"order_id\\\":\\\"[REDACTED]\\\"}\",\"type\":\"text\"}],\"role\":\"tool\"}]",
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.tool.call.arguments": "{\"order_id\":\"[REDACTED]\"}",
+                "gen_ai.tool.description": "Read the current shipping state of an order.",
+                "gen_ai.tool.name": "lookup_order",
+                "gen_ai.tool.type": "function",
+                "input.mime_type": "application/json",
+                "input.value": "{\"order_id\":\"[REDACTED]\"}"
+              },
+              "end_time_unix_nano": "1792042760372984000",
+              "events": [
+                {
+                  "attributes": {
+                    "exception.message": "cancelled",
+                    "exception.type": "cancelled"
+                  },
+                  "name": "exception",
+                  "time_unix_nano": "1792042760372984000"
+                }
+              ],
+              "flags": 257,
+              "kind": 1,
+              "links": [],
+              "name": "execute_tool lookup_order",
+              "parent_span_id": "85e6b48c9a7f51e8",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "fb65d427f1af521d",
+              "start_time_unix_nano": "1792042760372981000",
+              "status": {
+                "code": 2,
+                "message": "cancelled"
+              },
+              "trace_id": "232a85ca6c1a1ce3550fb44a2f0404aa"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "Ct8ICkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBKZCAoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRL+BwoQIyqFymwaHONVD7RKLwQEqhIIhea0jJp/UegqGmludm9rZV9hZ2VudCBzdXBwb3J0X2FnZW50MAE5YLpUWmWd3hhBnJpaWmWd3hhKGgoOYXBwLnJlcXVlc3RfaWQSCAoGdHVybi00ShgKDGFwcC5zY2VuYXJpbxIICgZjYW5jZWxKJgoUZ2VuX2FpLnByb3ZpZGVyLm5hbWUSDgoMZml4dHVyZS5odHRwSiQKEWdlbl9haS5hZ2VudC5uYW1lEg8KDXN1cHBvcnRfYWdlbnRKoQEKC2lucHV0LnZhbHVlEpEBCo4BeyJwcm9tcHQiOiJXaGVyZSBpcyBteSBvcmRlcj8gZW1haWw6IFtSRURBQ1RFRF9FTUFJTF07IHRva2VuOltSRURBQ1RFRF07IHF1ZXN0aW9uOiBkZWxpdmVyeSBzdGF0dXMiLCJyZXF1ZXN0X2lkIjoidHVybi00Iiwic2NlbmFyaW8iOiJjYW5jZWwifUolCg9pbnB1dC5taW1lX3R5cGUSEgoQYXBwbGljYXRpb24vanNvbkpvChhnZW5fYWkuYWdlbnQuZGVzY3JpcHRpb24SUwpRUmVzb2x2ZSBhbiBvcmRlciBxdWVzdGlvbiB3aXRoIHBvbGljeSByZXRyaWV2YWwsIG9yZGVyIGxvb2t1cCwgYW5kIGFuIEhUVFAgbW9kZWwuSioKFGdlbl9haS5yZXF1ZXN0Lm1vZGVsEhIKEGZpeHR1cmUtbW9kZWwtdjFKJwoVZ2VuX2FpLm9wZXJhdGlvbi5uYW1lEg4KDGludm9rZV9hZ2VudEoiChdvcGVuaW5mZXJlbmNlLnNwYW4ua2luZBIHCgVBR0VOVErvAQoVZ2VuX2FpLmlucHV0Lm1lc3NhZ2VzEtUBCtIBW3sicGFydHMiOlt7ImNvbnRlbnQiOiJ7XCJwcm9tcHRcIjpcIldoZXJlIGlzIG15IG9yZGVyPyBlbWFpbDogW1JFREFDVEVEX0VNQUlMXTsgdG9rZW46W1JFREFDVEVEXTsgcXVlc3Rpb246IGRlbGl2ZXJ5IHN0YXR1c1wiLFwicmVxdWVzdF9pZFwiOlwidHVybi00XCIsXCJzY2VuYXJpb1wiOlwiY2FuY2VsXCJ9IiwidHlwZSI6InRleHQifV0sInJvbGUiOiJ1c2VyIn1dShkKCmVycm9yLnR5cGUSCwoJY2FuY2VsbGVkWlUJSJpaWmWd3hgSCWV4Y2VwdGlvbhodCg5leGNlcHRpb24udHlwZRILCgljYW5jZWxsZWQaIAoRZXhjZXB0aW9uLm1lc3NhZ2USCwoJY2FuY2VsbGVkeg0SCWNhbmNlbGxlZBgChQEBAQAA",
+          "body_sha256": "d554578137c4c961f930e53f7b27713dced88e6dbf6be256318df7b574b4af8d",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "1122",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel OTLP Exporter Go/1.46.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "trace"
+          },
+          "path": "/v1/traces",
+          "records": [
+            {
+              "attributes": {
+                "app.request_id": "turn-4",
+                "app.scenario": "cancel",
+                "error.type": "cancelled",
+                "gen_ai.agent.description": "Resolve an order question with policy retrieval, order lookup, and an HTTP model.",
+                "gen_ai.agent.name": "support_agent",
+                "gen_ai.input.messages": "[{\"parts\":[{\"content\":\"{\\\"prompt\\\":\\\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\\\",\\\"request_id\\\":\\\"turn-4\\\",\\\"scenario\\\":\\\"cancel\\\"}\",\"type\":\"text\"}],\"role\":\"user\"}]",
+                "gen_ai.operation.name": "invoke_agent",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.request.model": "fixture-model-v1",
+                "input.mime_type": "application/json",
+                "input.value": "{\"prompt\":\"Where is my order? email: [REDACTED_EMAIL]; token:[REDACTED]; question: delivery status\",\"request_id\":\"turn-4\",\"scenario\":\"cancel\"}",
+                "openinference.span.kind": "AGENT"
+              },
+              "end_time_unix_nano": "1792042760373181084",
+              "events": [
+                {
+                  "attributes": {
+                    "exception.message": "cancelled",
+                    "exception.type": "cancelled"
+                  },
+                  "name": "exception",
+                  "time_unix_nano": "1792042760373181000"
+                }
+              ],
+              "flags": 257,
+              "kind": 1,
+              "links": [],
+              "name": "invoke_agent support_agent",
+              "parent_span_id": "",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "span_id": "85e6b48c9a7f51e8",
+              "start_time_unix_nano": "1792042760372796000",
+              "status": {
+                "code": 2,
+                "message": "cancelled"
+              },
+              "trace_id": "232a85ca6c1a1ce3550fb44a2f0404aa"
+            }
+          ],
+          "status": 200
+        },
+        {
+          "body_base64": "CtoUCkEKIwoMc2VydmljZS5uYW1lEhMKEW5hdGl2ZS1nZW5haS1kZW1vChoKD3NlcnZpY2UudmVyc2lvbhIHCgUxLjAuMBKUFAoWChRuYXRpdmUtZ2VuYWktcHJvZmlsZRLuCAogZ2VuX2FpLmNsaWVudC5pbmZlcmVuY2UuZHVyYXRpb24aAXNKxggKjAQRiEsZWmWd3hgZGJZcWmWd3hghAQAAAAAAAAAp+0K7T/2fPT8ygAEAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADp4AAAAAAAAAAAAAAAAAAAUQAAAAAAAACRAAAAAAAAAOUAAAAAAAABJQAAAAAAAwFJAAAAAAAAAWUAAAAAAAEBvQAAAAAAAQH9AAAAAAABwh0AAAAAAAECPQAAAAAAAiKNAAAAAAACIs0AAAAAAAEy9QAAAAAAAiMNAQi4RWKs0WmWd3hgiCChx+V1oPoGBKhDQW0OOIetl69ednpoNUGHIGftCu0/9nz0/Sh8KFWdlbl9haS5vcGVyYXRpb24ubmFtZRIGCgRjaGF0SiYKFGdlbl9haS5wcm92aWRlci5uYW1lEg4KDGZpeHR1cmUuaHR0cEoqChRnZW5fYWkucmVxdWVzdC5tb2RlbBISChBmaXh0dXJlLW1vZGVsLXYxSh0KDnNlcnZlci5hZGRyZXNzEgsKCTEyNy4wLjAuMUoTCgtzZXJ2ZXIucG9ydBIEGImbA1n7QrtP/Z89P2H7QrtP/Z89PwqyBBGISxlaZZ3eGBkYllxaZZ3eGCEBAAAAAAAAACn5Tsx6MZQjPzKAAQAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOngAAAAAAAAAAAAAAAAAABRAAAAAAAAAJEAAAAAAAAA5QAAAAAAAAElAAAAAAADAUkAAAAAAAABZQAAAAAAAQG9AAAAAAABAf0AAAAAAAHCHQAAAAAAAQI9AAAAAAACIo0AAAAAAAIizQAAAAAAATL1AAAAAAACIw0BCLhEguU9aZZ3eGCIIvPFQuBoyrwkqELOz/ruuHsmoe9GZHCPMW68Z+U7MejGUIz9KJAoKZXJyb3IudHlwZRIWChRwcm92aWRlcl91bmF2YWlsYWJsZUofChVnZW5fYWkub3BlcmF0aW9uLm5hbWUSBgoEY2hhdEomChRnZW5fYWkucHJvdmlkZXIubmFtZRIOCgxmaXh0dXJlLmh0dHBKKgoUZ2VuX2FpLnJlcXVlc3QubW9kZWwSEgoQZml4dHVyZS1tb2RlbC12MUodCg5zZXJ2ZXIuYWRkcmVzcxILCgkxMjcuMC4wLjFKEwoLc2VydmVyLnBvcnQSBBiJmwNZ+U7MejGUIz9h+U7MejGUIz8QAhLCBQoqZ2VuX2FpLmNsaWVudC5pbmZlcmVuY2UudXNhZ2UuaW5wdXRfdG9rZW5zGgd7dG9rZW59OooFCsICEchqGVplnd4YGUC5XFplnd4YKi4RELc0WmWd3hgiCChx+V1oPoGBKhDQW0OOIetl69ednpoNUGHIMQsAAAAAAAAAOh8KFWdlbl9haS5vcGVyYXRpb24ubmFtZRIGCgRjaGF0OiYKFGdlbl9haS5wcm92aWRlci5uYW1lEg4KDGZpeHR1cmUuaHR0cDoqChRnZW5fYWkucmVxdWVzdC5tb2RlbBISChBmaXh0dXJlLW1vZGVsLXYxOisKFWdlbl9haS5yZXNwb25zZS5tb2RlbBISChBmaXh0dXJlLW1vZGVsLXYxOh8KFWdlbl9haS50b2tlbi5tb2RhbGl0eRIGCgR0ZXh0Oh0KDnNlcnZlci5hZGRyZXNzEgsKCTEyNy4wLjAuMToTCgtzZXJ2ZXIucG9ydBIEGImbAzELAAAAAAAAAAq+AhHIahlaZZ3eGBlAuVxaZZ3eGCouEdjET1plnd4YIgi88VC4GjKvCSoQs7P+u64eyah70ZkcI8xbrzEAAAAAAAAAADokCgplcnJvci50eXBlEhYKFHByb3ZpZGVyX3VuYXZhaWxhYmxlOh8KFWdlbl9haS5vcGVyYXRpb24ubmFtZRIGCgRjaGF0OiYKFGdlbl9haS5wcm92aWRlci5uYW1lEg4KDGZpeHR1cmUuaHR0cDoqChRnZW5fYWkucmVxdWVzdC5tb2RlbBISChBmaXh0dXJlLW1vZGVsLXYxOiIKFWdlbl9haS50b2tlbi5tb2RhbGl0eRIJCgd1bmtub3duOh0KDnNlcnZlci5hZGRyZXNzEgsKCTEyNy4wLjAuMToTCgtzZXJ2ZXIucG9ydBIEGImbAzEAAAAAAAAAABACGAESwwUKK2dlbl9haS5jbGllbnQuaW5mZXJlbmNlLnVzYWdlLm91dHB1dF90b2tlbnMaB3t0b2tlbn06igUKvgIRgHYZWmWd3hgZEMFcWmWd3hgqLhHAyE9aZZ3eGCIIvPFQuBoyrwkqELOz/ruuHsmoe9GZHCPMW68xAAAAAAAAAAA6JAoKZXJyb3IudHlwZRIWChRwcm92aWRlcl91bmF2YWlsYWJsZTofChVnZW5fYWkub3BlcmF0aW9uLm5hbWUSBgoEY2hhdDomChRnZW5fYWkucHJvdmlkZXIubmFtZRIOCgxmaXh0dXJlLmh0dHA6KgoUZ2VuX2FpLnJlcXVlc3QubW9kZWwSEgoQZml4dHVyZS1tb2RlbC12MToiChVnZW5fYWkudG9rZW4ubW9kYWxpdHkSCQoHdW5rbm93bjodCg5zZXJ2ZXIuYWRkcmVzcxILCgkxMjcuMC4wLjE6EwoLc2VydmVyLnBvcnQSBBiJmwMxAAAAAAAAAAAKwgIRgHYZWmWd3hgZEMFcWmWd3hgqLhGwxjRaZZ3eGCIIKHH5XWg+gYEqENBbQ44h62Xr152emg1QYcgxBwAAAAAAAAA6HwoVZ2VuX2FpLm9wZXJhdGlvbi5uYW1lEgYKBGNoYXQ6JgoUZ2VuX2FpLnByb3ZpZGVyLm5hbWUSDgoMZml4dHVyZS5odHRwOioKFGdlbl9haS5yZXF1ZXN0Lm1vZGVsEhIKEGZpeHR1cmUtbW9kZWwtdjE6KwoVZ2VuX2FpLnJlc3BvbnNlLm1vZGVsEhIKEGZpeHR1cmUtbW9kZWwtdjE6HwoVZ2VuX2FpLnRva2VuLm1vZGFsaXR5EgYKBHRleHQ6HQoOc2VydmVyLmFkZHJlc3MSCwoJMTI3LjAuMC4xOhMKC3NlcnZlci5wb3J0EgQYiZsDMQcAAAAAAAAAEAIYAQ==",
+          "body_sha256": "50d1ffee2a1fb3c4ea442e0a3cd14c93897f173caafa55317901a0cde9ed8747",
+          "headers": {
+            "accept-encoding": "gzip",
+            "content-length": "2653",
+            "content-type": "application/x-protobuf",
+            "user-agent": "OTel Go OTLP over HTTP/protobuf metrics exporter/1.43.0",
+            "x-fixture-header": "keep",
+            "x-precedence": "generic"
+          },
+          "path": "/v1/metrics",
+          "records": [
+            {
+              "attributes": {
+                "gen_ai.operation.name": "chat",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.request.model": "fixture-model-v1",
+                "server.address": "127.0.0.1",
+                "server.port": 52617
+              },
+              "count": 1,
+              "name": "gen_ai.client.inference.duration",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "sum": 0.000452041,
+              "type": "histogram",
+              "unit": "s"
+            },
+            {
+              "attributes": {
+                "error.type": "provider_unavailable",
+                "gen_ai.operation.name": "chat",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.request.model": "fixture-model-v1",
+                "server.address": "127.0.0.1",
+                "server.port": 52617
+              },
+              "count": 1,
+              "name": "gen_ai.client.inference.duration",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "sum": 0.000149375,
+              "type": "histogram",
+              "unit": "s"
+            },
+            {
+              "attributes": {
+                "gen_ai.operation.name": "chat",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.request.model": "fixture-model-v1",
+                "gen_ai.response.model": "fixture-model-v1",
+                "gen_ai.token.modality": "text",
+                "server.address": "127.0.0.1",
+                "server.port": 52617
+              },
+              "monotonic": true,
+              "name": "gen_ai.client.inference.usage.input_tokens",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "type": "sum",
+              "unit": "{token}",
+              "value": 11
+            },
+            {
+              "attributes": {
+                "error.type": "provider_unavailable",
+                "gen_ai.operation.name": "chat",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.request.model": "fixture-model-v1",
+                "gen_ai.token.modality": "unknown",
+                "server.address": "127.0.0.1",
+                "server.port": 52617
+              },
+              "monotonic": true,
+              "name": "gen_ai.client.inference.usage.input_tokens",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "type": "sum",
+              "unit": "{token}",
+              "value": 0
+            },
+            {
+              "attributes": {
+                "error.type": "provider_unavailable",
+                "gen_ai.operation.name": "chat",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.request.model": "fixture-model-v1",
+                "gen_ai.token.modality": "unknown",
+                "server.address": "127.0.0.1",
+                "server.port": 52617
+              },
+              "monotonic": true,
+              "name": "gen_ai.client.inference.usage.output_tokens",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "type": "sum",
+              "unit": "{token}",
+              "value": 0
+            },
+            {
+              "attributes": {
+                "gen_ai.operation.name": "chat",
+                "gen_ai.provider.name": "fixture.http",
+                "gen_ai.request.model": "fixture-model-v1",
+                "gen_ai.response.model": "fixture-model-v1",
+                "gen_ai.token.modality": "text",
+                "server.address": "127.0.0.1",
+                "server.port": 52617
+              },
+              "monotonic": true,
+              "name": "gen_ai.client.inference.usage.output_tokens",
+              "resource": {
+                "service.name": "native-genai-demo",
+                "service.version": "1.0.0"
+              },
+              "scope": "native-genai-profile",
+              "type": "sum",
+              "unit": "{token}",
+              "value": 7
+            }
+          ],
+          "status": 200
+        }
+      ],
+      "passed": true,
+      "resource_requests": [
+        {
+          "body": null,
+          "method": "GET",
+          "path": "/ao/api/projects/all",
+          "query": "type=gen_ai",
+          "status": 403
+        }
+      ],
+      "run": 1,
+      "stderr": "Studio resource lookup failed; exporting without bound AO IDs\n"
+    }
+  ]
+}

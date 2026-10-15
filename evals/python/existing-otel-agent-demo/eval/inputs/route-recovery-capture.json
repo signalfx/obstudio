@@ -1,0 +1,1184 @@
+{
+  "kind": "captured-local-existing-otel-route-startups",
+  "captured_at_utc": "2026-10-15T04:49:25.341693+00:00",
+  "proof_scope": "Separate real app startup processes, local mock resource HTTP and native OTLP; no Studio/cloud forwarding or model API.",
+  "adapter_path": "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py",
+  "adapter_sha256": "07b8ba11dac16c041d57fb0018ac65fab90e6eadcca0675cdd3cae01d3635a77",
+  "resolver_path": "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/skills/otel-instrument/scripts/resolve_ao_resources.py",
+  "resolver_sha256": "93885c6541d8655603287e1b5759b3098354d4858376668e88774ddfea46a7fc",
+  "fixture_source_sha256": {
+    "app.py": "bd65b5623b2f1997eb1523deadca5fce090f76f551609d7b3e0dff680c1e1d5f",
+    "probe.py": "8cc9dd2ba1124e3bf5a20ee65c500c688a0db7429eed9396013485d46d0f737a",
+    "eval/inputs/capture_route_recovery.py": "a1f499f05e6d54d83c4db55eb419f95f111c4b8b196afbbf7f0dece367e25bf7",
+    "eval/inputs/studio_resources.py": "77dde2b8964e10024448f2254b62ab0a614708ea88c500138b69e2eea3bc5a62",
+    "eval/inputs/resource_recovery_fixture.py": "c1c9b649b2be56392a7b51a911e4411f149617a917ac4429c7b0d5618de1e422"
+  },
+  "installed_versions": {
+    "opentelemetry-sdk": "1.45.1",
+    "opentelemetry-exporter-otlp-proto-http": "1.45.1"
+  },
+  "stages": [
+    {
+      "process_id": 30740,
+      "configure_error": null,
+      "owners_preserved": true,
+      "endpoint": "http://127.0.0.1:55917",
+      "trace_headers": {
+        "User-Agent": "python-requests/2.34.2",
+        "Accept-Encoding": "gzip, deflate",
+        "Accept": "*/*",
+        "Connection": "keep-alive",
+        "x-legacy-trace": "keep-trace-header",
+        "projectid": "b12aba69-843d-47ce-ae9a-7f385f498100",
+        "logstreamid": "87abe6cc-c350-401f-9d09-b33955b02742"
+      },
+      "profile_before": {
+        "project_name": "fixture-project",
+        "agent_stream_name": "fixture-agent",
+        "native_endpoint": "http://127.0.0.1:55917",
+        "keep_setting": "operator-owned"
+      },
+      "profile_after": {
+        "project_name": "fixture-project",
+        "agent_stream_name": "fixture-agent",
+        "native_endpoint": "http://127.0.0.1:55917",
+        "keep_setting": "operator-owned",
+        "resolved_ids": {
+          "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
+          "agent_stream_id": "87abe6cc-c350-401f-9d09-b33955b02742"
+        }
+      },
+      "business_result": "Your order is shipped; used 1 policy document.",
+      "helper_calls": [
+        {
+          "command": [
+            "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python3",
+            "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/skills/otel-instrument/scripts/resolve_ao_resources.py",
+            "--studio-api-origin",
+            "http://127.0.0.1:55916",
+            "--project-name",
+            "fixture-project",
+            "--agent-stream-name",
+            "fixture-agent"
+          ],
+          "returncode": 0,
+          "result": {
+            "schema_version": 1,
+            "status": "resolved",
+            "project": {
+              "selector": "name",
+              "lookup_attempts": 2,
+              "create_attempts": 1,
+              "relookup_attempts": 1,
+              "id": "b12aba69-843d-47ce-ae9a-7f385f498100",
+              "name": "fixture-project",
+              "create_response": "identity-returned",
+              "outcome": "created"
+            },
+            "agent_stream": {
+              "selector": "name",
+              "lookup_attempts": 2,
+              "create_attempts": 1,
+              "relookup_attempts": 1,
+              "id": "87abe6cc-c350-401f-9d09-b33955b02742",
+              "name": "fixture-agent",
+              "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
+              "create_response": "identity-returned",
+              "outcome": "created"
+            }
+          },
+          "stderr": ""
+        }
+      ],
+      "stage": "initial_201_create",
+      "worker_command": [
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python3",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/capture_route_recovery.py",
+        "worker",
+        "--resolver",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/skills/otel-instrument/scripts/resolve_ao_resources.py",
+        "--adapter",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py",
+        "--profile",
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-rbhq5nwt/runtime-profile.json",
+        "--origin",
+        "http://127.0.0.1:55916",
+        "--endpoint",
+        "http://127.0.0.1:55917",
+        "--output",
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-rbhq5nwt/initial_201_create.json"
+      ],
+      "worker_returncode": 0,
+      "stdout": "support request turn-1: success\n",
+      "stderr": "",
+      "resource_requests": [
+        {
+          "method": "GET",
+          "path": "/ao/api/projects/all?type=gen_ai",
+          "headers": {
+            "host": "127.0.0.1:55916",
+            "accept-encoding": "identity",
+            "accept": "application/json",
+            "x-sf-token": "local-gateway"
+          },
+          "body": null,
+          "status": 200,
+          "response": []
+        },
+        {
+          "method": "POST",
+          "path": "/ao/api/projects",
+          "headers": {
+            "host": "127.0.0.1:55916",
+            "accept-encoding": "identity",
+            "content-length": "80",
+            "accept": "application/json",
+            "x-sf-token": "local-gateway",
+            "content-type": "application/json"
+          },
+          "body": {
+            "name": "fixture-project",
+            "type": "gen_ai",
+            "create_example_templates": false
+          },
+          "status": 201,
+          "response": {
+            "id": "b12aba69-843d-47ce-ae9a-7f385f498100",
+            "name": "fixture-project"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/ao/api/projects/all?type=gen_ai",
+          "headers": {
+            "host": "127.0.0.1:55916",
+            "accept-encoding": "identity",
+            "accept": "application/json",
+            "x-sf-token": "local-gateway"
+          },
+          "body": null,
+          "status": 200,
+          "response": [
+            {
+              "id": "b12aba69-843d-47ce-ae9a-7f385f498100",
+              "name": "fixture-project"
+            }
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/ao/api/projects/b12aba69-843d-47ce-ae9a-7f385f498100/log_streams/paginated?include_counts=false&limit=100&starting_token=0",
+          "headers": {
+            "host": "127.0.0.1:55916",
+            "accept-encoding": "identity",
+            "accept": "application/json",
+            "x-sf-token": "local-gateway"
+          },
+          "body": null,
+          "status": 200,
+          "response": {
+            "log_streams": [],
+            "paginated": false,
+            "next_starting_token": null
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/ao/api/projects/b12aba69-843d-47ce-ae9a-7f385f498100/log_streams",
+          "headers": {
+            "host": "127.0.0.1:55916",
+            "accept-encoding": "identity",
+            "content-length": "25",
+            "accept": "application/json",
+            "x-sf-token": "local-gateway",
+            "content-type": "application/json"
+          },
+          "body": {
+            "name": "fixture-agent"
+          },
+          "status": 201,
+          "response": {
+            "id": "87abe6cc-c350-401f-9d09-b33955b02742",
+            "name": "fixture-agent",
+            "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/ao/api/projects/b12aba69-843d-47ce-ae9a-7f385f498100/log_streams/paginated?include_counts=false&limit=100&starting_token=0",
+          "headers": {
+            "host": "127.0.0.1:55916",
+            "accept-encoding": "identity",
+            "accept": "application/json",
+            "x-sf-token": "local-gateway"
+          },
+          "body": null,
+          "status": 200,
+          "response": {
+            "log_streams": [
+              {
+                "id": "87abe6cc-c350-401f-9d09-b33955b02742",
+                "name": "fixture-agent",
+                "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100"
+              }
+            ],
+            "paginated": false,
+            "next_starting_token": null
+          }
+        }
+      ],
+      "native_requests": [
+        {
+          "path": "/v1/metrics",
+          "headers": {
+            "host": "127.0.0.1:55917",
+            "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "content-type": "application/x-protobuf",
+            "x-exporter-owner": "legacy-metrics",
+            "content-length": "440"
+          },
+          "body_sha256": "e71bccdfa2aec4a4cfdf6b27f751f026be74787787ee34d05eabc681c00a8aae",
+          "status": 200,
+          "records": [
+            {
+              "name": "legacy.agent.requests",
+              "unit": "{request}",
+              "description": "Existing support requests",
+              "attributes": {
+                "legacy.metric": "keep-metric",
+                "scenario": "success"
+              },
+              "value": 7,
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "f398b425-4306-4c46-921f-332b722bf22e",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.metrics"
+            }
+          ]
+        },
+        {
+          "path": "/v1/traces",
+          "headers": {
+            "host": "127.0.0.1:55917",
+            "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "x-legacy-trace": "keep-trace-header",
+            "projectid": "b12aba69-843d-47ce-ae9a-7f385f498100",
+            "logstreamid": "87abe6cc-c350-401f-9d09-b33955b02742",
+            "content-type": "application/x-protobuf",
+            "x-exporter-owner": "legacy-traces",
+            "content-length": "741"
+          },
+          "body_sha256": "0b682a4b28f6f7e5972292b81827dcea15669db4056910ad168050368e70971a",
+          "status": 200,
+          "records": [
+            {
+              "name": "POST /model",
+              "trace_id": "0000000000000000000000000000a001",
+              "span_id": "000000000000b012",
+              "parent_span_id": "000000000000b011",
+              "kind": 1,
+              "start_time_unix_nano": 1792039764891207000,
+              "end_time_unix_nano": 1792039764891219000,
+              "attributes": {
+                "legacy.operation": "model",
+                "legacy.sentinel": "keep-span",
+                "legacy.request": "turn-1"
+              },
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "f398b425-4306-4c46-921f-332b722bf22e",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.producer",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "events": [
+                {
+                  "name": "legacy.started",
+                  "attributes": {
+                    "legacy.event": "keep-event"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /agent",
+              "trace_id": "0000000000000000000000000000a001",
+              "span_id": "000000000000b011",
+              "parent_span_id": "",
+              "kind": 1,
+              "start_time_unix_nano": 1792039764891136000,
+              "end_time_unix_nano": 1792039764891232000,
+              "attributes": {
+                "legacy.operation": "workflow",
+                "legacy.sentinel": "keep-span",
+                "legacy.request": "turn-1"
+              },
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "f398b425-4306-4c46-921f-332b722bf22e",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.producer",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "events": [
+                {
+                  "name": "legacy.started",
+                  "attributes": {
+                    "legacy.event": "keep-event"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "path": "/v1/logs",
+          "headers": {
+            "host": "127.0.0.1:55917",
+            "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "content-type": "application/x-protobuf",
+            "x-exporter-owner": "legacy-logs",
+            "content-length": "383"
+          },
+          "body_sha256": "92fa9f32fc85fa75dd02e14f6ddd9d80782298aa8b65e168143032574b037814",
+          "status": 200,
+          "records": [
+            {
+              "body": "legacy audit record",
+              "severity_number": 9,
+              "severity_text": "INFO",
+              "attributes": {
+                "legacy.log": "keep-log",
+                "scenario": "success"
+              },
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "f398b425-4306-4c46-921f-332b722bf22e",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.audit",
+              "trace_id": "",
+              "span_id": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "process_id": 30743,
+      "configure_error": null,
+      "owners_preserved": true,
+      "endpoint": "http://127.0.0.1:55917",
+      "trace_headers": {
+        "User-Agent": "python-requests/2.34.2",
+        "Accept-Encoding": "gzip, deflate",
+        "Accept": "*/*",
+        "Connection": "keep-alive",
+        "x-legacy-trace": "keep-trace-header",
+        "projectid": "b12aba69-843d-47ce-ae9a-7f385f498100",
+        "logstreamid": "87abe6cc-c350-401f-9d09-b33955b02742"
+      },
+      "profile_before": {
+        "project_name": "fixture-project",
+        "agent_stream_name": "fixture-agent",
+        "native_endpoint": "http://127.0.0.1:55917",
+        "keep_setting": "operator-owned",
+        "resolved_ids": {
+          "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
+          "agent_stream_id": "87abe6cc-c350-401f-9d09-b33955b02742"
+        }
+      },
+      "profile_after": {
+        "project_name": "fixture-project",
+        "agent_stream_name": "fixture-agent",
+        "native_endpoint": "http://127.0.0.1:55917",
+        "keep_setting": "operator-owned",
+        "resolved_ids": {
+          "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
+          "agent_stream_id": "87abe6cc-c350-401f-9d09-b33955b02742"
+        }
+      },
+      "business_result": "Your order is shipped; used 1 policy document.",
+      "helper_calls": [],
+      "stage": "clean_restart_after_external_identity_change",
+      "worker_command": [
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python3",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/capture_route_recovery.py",
+        "worker",
+        "--resolver",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/skills/otel-instrument/scripts/resolve_ao_resources.py",
+        "--adapter",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py",
+        "--profile",
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-rbhq5nwt/runtime-profile.json",
+        "--origin",
+        "http://127.0.0.1:55916",
+        "--endpoint",
+        "http://127.0.0.1:55917",
+        "--output",
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-rbhq5nwt/clean_restart_after_external_identity_change.json"
+      ],
+      "worker_returncode": 0,
+      "stdout": "support request turn-1: success\n",
+      "stderr": "",
+      "resource_requests": [],
+      "native_requests": [
+        {
+          "path": "/v1/metrics",
+          "headers": {
+            "host": "127.0.0.1:55917",
+            "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "content-type": "application/x-protobuf",
+            "x-exporter-owner": "legacy-metrics",
+            "content-length": "440"
+          },
+          "body_sha256": "c217765ac4bef0829b5a75fbfb289b9e427136f627d922b895b69c0135a52dbb",
+          "status": 200,
+          "records": [
+            {
+              "name": "legacy.agent.requests",
+              "unit": "{request}",
+              "description": "Existing support requests",
+              "attributes": {
+                "legacy.metric": "keep-metric",
+                "scenario": "success"
+              },
+              "value": 7,
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "4ed856f1-3128-4681-b302-698040b05073",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.metrics"
+            }
+          ]
+        },
+        {
+          "path": "/v1/traces",
+          "headers": {
+            "host": "127.0.0.1:55917",
+            "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "x-legacy-trace": "keep-trace-header",
+            "projectid": "b12aba69-843d-47ce-ae9a-7f385f498100",
+            "logstreamid": "87abe6cc-c350-401f-9d09-b33955b02742",
+            "content-type": "application/x-protobuf",
+            "x-exporter-owner": "legacy-traces",
+            "content-length": "741"
+          },
+          "body_sha256": "05af895b78f173a1269d884464fd8ab17bd159b4f266172f2825593b72ac31ac",
+          "status": 200,
+          "records": [
+            {
+              "name": "POST /model",
+              "trace_id": "0000000000000000000000000000a001",
+              "span_id": "000000000000b012",
+              "parent_span_id": "000000000000b011",
+              "kind": 1,
+              "start_time_unix_nano": 1792039765015702000,
+              "end_time_unix_nano": 1792039765015713000,
+              "attributes": {
+                "legacy.operation": "model",
+                "legacy.sentinel": "keep-span",
+                "legacy.request": "turn-1"
+              },
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "4ed856f1-3128-4681-b302-698040b05073",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.producer",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "events": [
+                {
+                  "name": "legacy.started",
+                  "attributes": {
+                    "legacy.event": "keep-event"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /agent",
+              "trace_id": "0000000000000000000000000000a001",
+              "span_id": "000000000000b011",
+              "parent_span_id": "",
+              "kind": 1,
+              "start_time_unix_nano": 1792039765015657000,
+              "end_time_unix_nano": 1792039765015724000,
+              "attributes": {
+                "legacy.operation": "workflow",
+                "legacy.sentinel": "keep-span",
+                "legacy.request": "turn-1"
+              },
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "4ed856f1-3128-4681-b302-698040b05073",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.producer",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "events": [
+                {
+                  "name": "legacy.started",
+                  "attributes": {
+                    "legacy.event": "keep-event"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "path": "/v1/logs",
+          "headers": {
+            "host": "127.0.0.1:55917",
+            "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "content-type": "application/x-protobuf",
+            "x-exporter-owner": "legacy-logs",
+            "content-length": "383"
+          },
+          "body_sha256": "29c5ea31a7c860677224eea166ae37322eafb6f51ae41df60dbd98f396b43f1b",
+          "status": 200,
+          "records": [
+            {
+              "body": "legacy audit record",
+              "severity_number": 9,
+              "severity_text": "INFO",
+              "attributes": {
+                "legacy.log": "keep-log",
+                "scenario": "success"
+              },
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "4ed856f1-3128-4681-b302-698040b05073",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.audit",
+              "trace_id": "",
+              "span_id": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "process_id": 30744,
+      "configure_error": null,
+      "owners_preserved": true,
+      "endpoint": "http://127.0.0.1:55917",
+      "trace_headers": {
+        "User-Agent": "python-requests/2.34.2",
+        "Accept-Encoding": "gzip, deflate",
+        "Accept": "*/*",
+        "Connection": "keep-alive",
+        "x-legacy-trace": "keep-trace-header",
+        "projectid": "b12aba69-843d-47ce-ae9a-7f385f498100",
+        "logstreamid": "87abe6cc-c350-401f-9d09-b33955b02742"
+      },
+      "profile_before": {
+        "project_name": "fixture-project",
+        "agent_stream_name": "fixture-agent",
+        "native_endpoint": "http://127.0.0.1:55917",
+        "keep_setting": "operator-owned",
+        "resolved_ids": {
+          "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
+          "agent_stream_id": "87abe6cc-c350-401f-9d09-b33955b02742"
+        }
+      },
+      "profile_after": {
+        "project_name": "fixture-project",
+        "agent_stream_name": "fixture-agent",
+        "native_endpoint": "http://127.0.0.1:55917",
+        "keep_setting": "operator-owned",
+        "resolved_ids": {
+          "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
+          "agent_stream_id": "87abe6cc-c350-401f-9d09-b33955b02742"
+        }
+      },
+      "business_result": "Your order is shipped; used 1 policy document.",
+      "helper_calls": [],
+      "stage": "repeated_restart",
+      "worker_command": [
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python3",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/capture_route_recovery.py",
+        "worker",
+        "--resolver",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/skills/otel-instrument/scripts/resolve_ao_resources.py",
+        "--adapter",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py",
+        "--profile",
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-rbhq5nwt/runtime-profile.json",
+        "--origin",
+        "http://127.0.0.1:55916",
+        "--endpoint",
+        "http://127.0.0.1:55917",
+        "--output",
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-rbhq5nwt/repeated_restart.json"
+      ],
+      "worker_returncode": 0,
+      "stdout": "support request turn-1: success\n",
+      "stderr": "",
+      "resource_requests": [],
+      "native_requests": [
+        {
+          "path": "/v1/metrics",
+          "headers": {
+            "host": "127.0.0.1:55917",
+            "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "content-type": "application/x-protobuf",
+            "x-exporter-owner": "legacy-metrics",
+            "content-length": "440"
+          },
+          "body_sha256": "a5d1257e36429b9f4ea5dae4058877054ac06c20bab5e0f2687348bb0718f842",
+          "status": 200,
+          "records": [
+            {
+              "name": "legacy.agent.requests",
+              "unit": "{request}",
+              "description": "Existing support requests",
+              "attributes": {
+                "legacy.metric": "keep-metric",
+                "scenario": "success"
+              },
+              "value": 7,
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "a2baab12-ac1e-494d-85ee-0455180f64b0",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.metrics"
+            }
+          ]
+        },
+        {
+          "path": "/v1/traces",
+          "headers": {
+            "host": "127.0.0.1:55917",
+            "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "x-legacy-trace": "keep-trace-header",
+            "projectid": "b12aba69-843d-47ce-ae9a-7f385f498100",
+            "logstreamid": "87abe6cc-c350-401f-9d09-b33955b02742",
+            "content-type": "application/x-protobuf",
+            "x-exporter-owner": "legacy-traces",
+            "content-length": "741"
+          },
+          "body_sha256": "b0ce54894c9480d8f33805b3c41b94fbafea3b8de6c065f2c83b53f87fa28c3d",
+          "status": 200,
+          "records": [
+            {
+              "name": "POST /model",
+              "trace_id": "0000000000000000000000000000a001",
+              "span_id": "000000000000b012",
+              "parent_span_id": "000000000000b011",
+              "kind": 1,
+              "start_time_unix_nano": 1792039765138215000,
+              "end_time_unix_nano": 1792039765138226000,
+              "attributes": {
+                "legacy.operation": "model",
+                "legacy.sentinel": "keep-span",
+                "legacy.request": "turn-1"
+              },
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "a2baab12-ac1e-494d-85ee-0455180f64b0",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.producer",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "events": [
+                {
+                  "name": "legacy.started",
+                  "attributes": {
+                    "legacy.event": "keep-event"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /agent",
+              "trace_id": "0000000000000000000000000000a001",
+              "span_id": "000000000000b011",
+              "parent_span_id": "",
+              "kind": 1,
+              "start_time_unix_nano": 1792039765138173000,
+              "end_time_unix_nano": 1792039765138234000,
+              "attributes": {
+                "legacy.operation": "workflow",
+                "legacy.sentinel": "keep-span",
+                "legacy.request": "turn-1"
+              },
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "a2baab12-ac1e-494d-85ee-0455180f64b0",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.producer",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "events": [
+                {
+                  "name": "legacy.started",
+                  "attributes": {
+                    "legacy.event": "keep-event"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "path": "/v1/logs",
+          "headers": {
+            "host": "127.0.0.1:55917",
+            "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "content-type": "application/x-protobuf",
+            "x-exporter-owner": "legacy-logs",
+            "content-length": "383"
+          },
+          "body_sha256": "d9038c1bec669ce7d3f825211b08c78dc6fdbe3fb73ad7d437900411edd9ea70",
+          "status": 200,
+          "records": [
+            {
+              "body": "legacy audit record",
+              "severity_number": 9,
+              "severity_text": "INFO",
+              "attributes": {
+                "legacy.log": "keep-log",
+                "scenario": "success"
+              },
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "a2baab12-ac1e-494d-85ee-0455180f64b0",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.audit",
+              "trace_id": "",
+              "span_id": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "process_id": 30746,
+      "configure_error": null,
+      "owners_preserved": true,
+      "endpoint": "http://127.0.0.1:55917",
+      "trace_headers": {
+        "User-Agent": "python-requests/2.34.2",
+        "Accept-Encoding": "gzip, deflate",
+        "Accept": "*/*",
+        "Connection": "keep-alive",
+        "x-legacy-trace": "keep-trace-header",
+        "projectid": "b12aba69-843d-47ce-ae9a-7f385f498100",
+        "logstreamid": "87abe6cc-c350-401f-9d09-b33955b02742"
+      },
+      "profile_before": {
+        "project_name": "fixture-project",
+        "agent_stream_name": "fixture-agent",
+        "native_endpoint": "http://127.0.0.1:55917",
+        "keep_setting": "operator-owned",
+        "resolved_ids": {
+          "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
+          "agent_stream_id": "87abe6cc-c350-401f-9d09-b33955b02742"
+        }
+      },
+      "profile_after": {
+        "project_name": "fixture-project",
+        "agent_stream_name": "fixture-agent",
+        "native_endpoint": "http://127.0.0.1:55917",
+        "keep_setting": "operator-owned",
+        "resolved_ids": {
+          "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
+          "agent_stream_id": "87abe6cc-c350-401f-9d09-b33955b02742"
+        }
+      },
+      "business_result": "Your order is shipped; used 1 policy document.",
+      "helper_calls": [],
+      "stage": "clean_restart_with_permission_failure",
+      "worker_command": [
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python3",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/capture_route_recovery.py",
+        "worker",
+        "--resolver",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/skills/otel-instrument/scripts/resolve_ao_resources.py",
+        "--adapter",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py",
+        "--profile",
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-rbhq5nwt/runtime-profile.json",
+        "--origin",
+        "http://127.0.0.1:55916",
+        "--endpoint",
+        "http://127.0.0.1:55917",
+        "--output",
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-rbhq5nwt/clean_restart_with_permission_failure.json"
+      ],
+      "worker_returncode": 0,
+      "stdout": "support request turn-1: success\n",
+      "stderr": "",
+      "resource_requests": [],
+      "native_requests": [
+        {
+          "path": "/v1/metrics",
+          "headers": {
+            "host": "127.0.0.1:55917",
+            "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "content-type": "application/x-protobuf",
+            "x-exporter-owner": "legacy-metrics",
+            "content-length": "440"
+          },
+          "body_sha256": "5551ad9e5c8fc79c1ac0e760d55f1ae0b99b063fe83f708c0179984fe52e1f74",
+          "status": 200,
+          "records": [
+            {
+              "name": "legacy.agent.requests",
+              "unit": "{request}",
+              "description": "Existing support requests",
+              "attributes": {
+                "legacy.metric": "keep-metric",
+                "scenario": "success"
+              },
+              "value": 7,
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "230d4804-a5fe-4ec6-8010-6775f467229e",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.metrics"
+            }
+          ]
+        },
+        {
+          "path": "/v1/traces",
+          "headers": {
+            "host": "127.0.0.1:55917",
+            "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "x-legacy-trace": "keep-trace-header",
+            "projectid": "b12aba69-843d-47ce-ae9a-7f385f498100",
+            "logstreamid": "87abe6cc-c350-401f-9d09-b33955b02742",
+            "content-type": "application/x-protobuf",
+            "x-exporter-owner": "legacy-traces",
+            "content-length": "741"
+          },
+          "body_sha256": "09d869e11a469ea4cb5e6347e2712f0dd116fee87bec3a9c16cf2e4966bb73fb",
+          "status": 200,
+          "records": [
+            {
+              "name": "POST /model",
+              "trace_id": "0000000000000000000000000000a001",
+              "span_id": "000000000000b012",
+              "parent_span_id": "000000000000b011",
+              "kind": 1,
+              "start_time_unix_nano": 1792039765281647000,
+              "end_time_unix_nano": 1792039765281657000,
+              "attributes": {
+                "legacy.operation": "model",
+                "legacy.sentinel": "keep-span",
+                "legacy.request": "turn-1"
+              },
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "230d4804-a5fe-4ec6-8010-6775f467229e",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.producer",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "events": [
+                {
+                  "name": "legacy.started",
+                  "attributes": {
+                    "legacy.event": "keep-event"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /agent",
+              "trace_id": "0000000000000000000000000000a001",
+              "span_id": "000000000000b011",
+              "parent_span_id": "",
+              "kind": 1,
+              "start_time_unix_nano": 1792039765281608000,
+              "end_time_unix_nano": 1792039765281665000,
+              "attributes": {
+                "legacy.operation": "workflow",
+                "legacy.sentinel": "keep-span",
+                "legacy.request": "turn-1"
+              },
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "230d4804-a5fe-4ec6-8010-6775f467229e",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.producer",
+              "status": {
+                "code": 0,
+                "message": ""
+              },
+              "events": [
+                {
+                  "name": "legacy.started",
+                  "attributes": {
+                    "legacy.event": "keep-event"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "path": "/v1/logs",
+          "headers": {
+            "host": "127.0.0.1:55917",
+            "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
+            "accept-encoding": "gzip, deflate",
+            "accept": "*/*",
+            "connection": "keep-alive",
+            "content-type": "application/x-protobuf",
+            "x-exporter-owner": "legacy-logs",
+            "content-length": "383"
+          },
+          "body_sha256": "008f93efd99a91f992449a9f12f29c44495d83d9d6d5b9b9471677509a38c450",
+          "status": 200,
+          "records": [
+            {
+              "body": "legacy audit record",
+              "severity_number": 9,
+              "severity_text": "INFO",
+              "attributes": {
+                "legacy.log": "keep-log",
+                "scenario": "success"
+              },
+              "resource": {
+                "telemetry.sdk.language": "python",
+                "telemetry.sdk.name": "opentelemetry",
+                "telemetry.sdk.version": "1.45.1",
+                "service.instance.id": "230d4804-a5fe-4ec6-8010-6775f467229e",
+                "service.name": "existing-otel-agent-demo",
+                "legacy.resource": "keep-resource"
+              },
+              "scope": "legacy.agent.audit",
+              "trace_id": "",
+              "span_id": ""
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "independent_helper_after_rotation": {
+    "result": {
+      "schema_version": 1,
+      "status": "resolved",
+      "project": {
+        "selector": "name",
+        "lookup_attempts": 1,
+        "create_attempts": 0,
+        "relookup_attempts": 0,
+        "id": "f3370c1b-4bca-4a57-afee-812bb7ab9010",
+        "name": "fixture-project",
+        "outcome": "reused"
+      },
+      "agent_stream": {
+        "selector": "name",
+        "lookup_attempts": 1,
+        "create_attempts": 0,
+        "relookup_attempts": 0,
+        "id": "b9b4b5ce-5e85-424a-8b42-70992265d010",
+        "name": "fixture-agent",
+        "project_id": "f3370c1b-4bca-4a57-afee-812bb7ab9010",
+        "outcome": "reused"
+      }
+    },
+    "resource_requests": [
+      {
+        "method": "GET",
+        "path": "/ao/api/projects/all?type=gen_ai",
+        "headers": {
+          "host": "127.0.0.1:55916",
+          "accept-encoding": "identity",
+          "accept": "application/json",
+          "x-sf-token": "local-gateway"
+        },
+        "body": null,
+        "status": 200,
+        "response": [
+          {
+            "id": "f3370c1b-4bca-4a57-afee-812bb7ab9010",
+            "name": "fixture-project"
+          }
+        ]
+      },
+      {
+        "method": "GET",
+        "path": "/ao/api/projects/f3370c1b-4bca-4a57-afee-812bb7ab9010/log_streams/paginated?include_counts=false&limit=100&starting_token=0",
+        "headers": {
+          "host": "127.0.0.1:55916",
+          "accept-encoding": "identity",
+          "accept": "application/json",
+          "x-sf-token": "local-gateway"
+        },
+        "body": null,
+        "status": 200,
+        "response": {
+          "log_streams": [
+            {
+              "id": "b9b4b5ce-5e85-424a-8b42-70992265d010",
+              "name": "fixture-agent",
+              "project_id": "f3370c1b-4bca-4a57-afee-812bb7ab9010"
+            }
+          ],
+          "paginated": false,
+          "next_starting_token": null
+        }
+      }
+    ],
+    "proof_scope": "Independent helper result, not adapter repair or app-route closure."
+  },
+  "independent_helper_permission_failure": {
+    "call": {
+      "command": [
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python3",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/skills/otel-instrument/scripts/resolve_ao_resources.py",
+        "--studio-api-origin",
+        "http://127.0.0.1:55916",
+        "--project-name",
+        "fixture-project",
+        "--agent-stream-name",
+        "fixture-agent"
+      ],
+      "returncode": 1,
+      "result": {
+        "schema_version": 1,
+        "status": "failed",
+        "project": {
+          "selector": "name",
+          "lookup_attempts": 1,
+          "create_attempts": 0,
+          "relookup_attempts": 0,
+          "lookup_http_status": 403
+        },
+        "error": "project_lookup_failed"
+      },
+      "stderr": "AO resource resolution: project_lookup_failed\n"
+    },
+    "resource_requests": [
+      {
+        "method": "GET",
+        "path": "/ao/api/projects/all?type=gen_ai",
+        "headers": {
+          "host": "127.0.0.1:55916",
+          "accept-encoding": "identity",
+          "accept": "application/json",
+          "x-sf-token": "local-gateway"
+        },
+        "body": null,
+        "status": 403,
+        "response": {
+          "error": "fixture_permission_denied"
+        }
+      }
+    ],
+    "proof_scope": "Independent helper failure, not evidence the cached adapter performed lookup."
+  }
+}

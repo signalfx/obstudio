@@ -1,0 +1,43 @@
+{
+  "kind": "captured-existing-vendor-launch-and-header-boundary",
+  "scope": "Actual prior actor source and real installed Galileo env-helper/public header function probe, not a repaired implementation, native lifecycle or cloud proof. Values and credential markers are synthetic local evidence.",
+  "sources": {
+    "original_launcher": {
+      "origin_file": "evals/python/galileo-agent-demo/Makefile",
+      "origin_sha256": "d73ee26d7e47fcf4fbfb25a6352c62aa50378c3f32ee7604860a4ac0c96dbe08",
+      "source_text": ".PHONY: sync dev test clean\n\nsync:\n\tuv sync\n\ndev: sync\n\tGALILEO_PROJECT=galileo-agent-demo GALILEO_LOG_STREAM=production OTEL_SERVICE_NAME=galileo-agent-demo uv run uvicorn app:app --host 0.0.0.0 --port 8040\n\ntest: sync\n\tuv run python -m compileall app.py\n\nclean:\n\trm -rf .venv __pycache__ .pytest_cache .observe\n"
+    },
+    "candidate_launcher": {
+      "origin_file": ".workspace/codex-evals/otel-instrument/20261015T021938578726Z/cases/python/galileo-agent-demo/route-existing-otel/with_skill/service/Makefile",
+      "origin_sha256": "593f1e702a9ae852548eabd6e443e1a3a40077b773fdebc8e6f7e6b5f2c7124a",
+      "source_text": ".PHONY: sync dev dev-studio test clean\n\nsync:\n\tuv sync\n\ndev: sync\n\tGALILEO_PROJECT=galileo-agent-demo GALILEO_LOG_STREAM=production OTEL_SERVICE_NAME=galileo-agent-demo uv run uvicorn app:app --host 0.0.0.0 --port 8040\n\ndev-studio:\n\tuv sync --locked\n\tuv run --locked --env-file .env.studio uvicorn app:app --host 0.0.0.0 --port 8040\n\ntest: sync\n\tuv run --locked python -m compileall -q app.py studio_telemetry.py ao_resources.py tests\n\tOTEL_SDK_DISABLED=true uv run --locked python -m unittest discover -s tests -v\n\nclean:\n\trm -rf .venv __pycache__ .pytest_cache .observe\n"
+    },
+    "candidate_profile": {
+      "origin_file": ".workspace/codex-evals/otel-instrument/20261015T021938578726Z/cases/python/galileo-agent-demo/route-existing-otel/with_skill/service/.env.studio.example",
+      "origin_sha256": "b4499eb367ca25865c6ba7a0bd1eae9b3a86c0fbf8f29678db66f1071d876e44",
+      "source_text": "# Copy to .env.studio and select with make dev-studio.\n# Studio discovery unavailable in this run: fill the actual numeric loopback\n# API origin and HTTP/protobuf trace endpoint, preserving their real ports.\nSTUDIO_ROUTE_ENABLED=true\nSTUDIO_API_ORIGIN=\nOTEL_EXPORTER_OTLP_TRACES_ENDPOINT=\nOTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf\n# Bound selection: project/stream are named targets, not existing resources.\nSTUDIO_PROJECT=galileo-agent-demo\nSTUDIO_AGENT_STREAM=galileo-agent-demo-live\nOTEL_SERVICE_NAME=galileo-agent-demo\nOTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=local\nOTEL_BSP_SCHEDULE_DELAY=100\n# Existing harmless trace headers are retained; conflicting selectors fail closed.\n# No metric/log exporter is added by AO-001. Galileo credentials stay operator-owned.\n"
+    },
+    "candidate_headers": {
+      "origin_file": ".workspace/codex-evals/otel-instrument/20261015T021938578726Z/cases/python/galileo-agent-demo/route-existing-otel/with_skill/service/studio_telemetry.py",
+      "origin_sha256": "eef4a56aa3e7f11da5fd1e230d401729f2a525c67cbbfab9a23ad18ee4b54e6e",
+      "source_extract": "def _headers(project: str, stream: str) -> dict[str, str]:\n    headers = {}\n    for entry in os.getenv('OTEL_EXPORTER_OTLP_TRACES_HEADERS', '').split(','):\n        if not entry.strip(): continue\n        key, value = entry.strip().split('=', 1)\n        key, value = unquote(key).lower(), unquote(value)\n        if key in headers or any(c in key+value for c in '\\r\\n'):\n            raise ValueError('invalid_headers')\n        headers[key] = value\n    if 'agentstreamid' in headers:\n        raise ValueError('unsupported_stream_alias')\n    for key, value in (('projectid', project), ('logstreamid', stream)):\n        if key in headers and headers[key] != value:\n            raise ValueError('conflicting_resource_header')\n        headers[key] = value\n    return headers"
+    }
+  },
+  "actual_probe": {
+    "origin_file": ".workspace/codex-evals/otel-instrument/20261015T021938578726Z/cases/python/galileo-agent-demo/route-existing-otel/with_skill/rubric_trace.jsonl",
+    "origin_sha256": "6caedbbeb1ac4b12514f7c0d822f2a5f5f62e92bef120e8e13b35ffa8c217812",
+    "receipts": [
+      {
+        "line": 49,
+        "receipt": {
+          "id": "item_24",
+          "type": "command_execution",
+          "command": "/bin/zsh -lc \"PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -c 'import os; from unittest.mock import patch; from galileo.utils.env_helpers import _get_log_stream_or_default; from studio_telemetry import _headers\nwith patch.dict(os.environ, {}, clear=True):\n print(\\\"Studio profile without GALILEO_LOG_STREAM:\\\", _get_log_stream_or_default(None))\nwith patch.dict(os.environ, {\\\"GALILEO_LOG_STREAM\\\":\\\"production\\\"}, clear=True):\n print(\\\"Original make dev:\\\", _get_log_stream_or_default(None))\nwith patch.dict(os.environ, {\\\"OTEL_EXPORTER_OTLP_HEADERS\\\":\\\"harmless=retained\\\"}, clear=True):\n print(\\\"Native route headers with generic fallback configured:\\\", _headers(\\\"project-id\\\", \\\"stream-id\\\"))'\"",
+          "aggregated_output": "Studio profile without GALILEO_LOG_STREAM: default\nOriginal make dev: production\nNative route headers with generic fallback configured: {'projectid': 'project-id', 'logstreamid': 'stream-id'}\n",
+          "exit_code": 0,
+          "status": "completed"
+        }
+      }
+    ]
+  }
+}

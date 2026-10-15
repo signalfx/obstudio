@@ -12,7 +12,7 @@
     "genai_ownership_detected": true
   },
   "summary": [
-    "Galileo currently exports the application's OTel GenAI spans; validated target-product evidence now requires a choice between retaining that path and replacing it with splunk-ao for dedicated Agent Stream routing."
+    "Galileo already exports the application's OTel GenAI spans. Preserve that integration; the operator may separately select delivery of these same producer spans to a distinct Splunk Agent Observability destination through a supported native OTel path."
   ],
   "flow": "audit -> decide -> select -> instrument -> verify",
   "evidence": [
@@ -43,8 +43,8 @@
     },
     {
       "check": "Target-product evidence",
-      "finding": "A later validated compatibility check established two mutually exclusive supported export paths for the requested dedicated Agent Stream",
-      "source": "README.md:9-15"
+      "finding": "The target-product task requires an explicit decision whether to add a distinct Studio destination while retaining Galileo; no producer or provider migration is authorized.",
+      "source": "README.md:9-17"
     }
   ],
   "routes": [
@@ -58,7 +58,7 @@
     }
   ],
   "signal_flow": {
-    "component_flow_map": "FastAPI stream [SOURCE-COVERED] -> Galileo processor [GAP: GenAI export path choice] -> support_turn [GAP: Streaming lifecycle telemetry]\nReplacement path -> splunk-ao [GAP: Splunk AO routing change]"
+    "component_flow_map": "FastAPI stream [SOURCE-COVERED] -> existing app-owned GenAI spans [SOURCE-COVERED] -> Galileo processor [SOURCE-COVERED]\nOperator additional-destination policy [GAP: Additional destination selection] -> existing provider -> optional distinct Studio OTLP route [GAP: Additional native OTel trace routing]\nsupport_turn [GAP: Streaming lifecycle telemetry]"
   },
   "current_instrumentation": {
     "spans": [
@@ -96,32 +96,32 @@
   "findings": [
     {
       "id": "OTEL-001",
-      "title": "Choose the GenAI export path",
+      "title": "Choose whether to add a distinct AO destination",
       "severity": "high",
       "priority": "required",
       "effort": "decision",
       "status": "proposed",
-      "area": "GenAI export path",
-      "gap": "Validated target-product evidence establishes two supported but mutually exclusive runtime export paths; enabling both would duplicate the same logical GenAI operations.",
-      "impact": "Without one selected path, the application can duplicate traces or silently route them through the wrong project and Agent Stream.",
-      "product_outcome": "The application uses one explicit GenAI export path before either option is applied.",
-      "required_fix": "The AI platform team must select whether Galileo remains in place or is replaced by splunk-ao.",
+      "area": "Additional destination selection",
+      "gap": "The application has no selected additional Studio destination; its working Galileo producer/provider/export path must be retained.",
+      "impact": "Silently adding or replacing a destination could alter operator-owned export behavior or duplicate delivery to an existing destination.",
+      "product_outcome": "The operator explicitly selects whether the existing provider also routes to a distinct Studio destination.",
+      "required_fix": "Choose whether to retain only current destinations or additionally configure one distinct Studio OTLP destination using existing OTel producers.",
       "instrument_mode": "manual decision",
       "decision_owner": "AI platform owner",
-      "decision_question": "Which supported runtime path should handle GenAI span export and project/Agent Stream routing?",
+      "decision_question": "Should this selected task add one distinct Studio Agent Observability destination while preserving Galileo?",
       "decision_options": [
         {
           "id": "keep-galileo",
-          "label": "Keep Galileo",
-          "outcome": "Retain Galileo and add only non-overlapping application-owned OTel lifecycle telemetry.",
+          "label": "Keep current destinations",
+          "outcome": "Retain all current Galileo/OTel producers, provider and destinations and add only non-overlapping application lifecycle telemetry.",
           "unlocks": [
             "OTEL-002"
           ]
         },
         {
-          "id": "use-splunk-ao",
-          "label": "Use splunk-ao",
-          "outcome": "Disable the overlapping Galileo export path and configure splunk-ao as the direct Agent Observability path.",
+          "id": "route-existing-otel",
+          "label": "Route existing OTel spans to Studio",
+          "outcome": "Retain Galileo and every existing producer/provider/exporter, and configure one supported native OTel route to a distinct selected Studio destination without an AO span-creation SDK.",
           "unlocks": [
             "AO-001"
           ]
@@ -136,10 +136,10 @@
         "README.md:3-11"
       ],
       "acceptance_criteria": [
-        "Exactly one supported GenAI export path is recorded and only its executable option can enter selection."
+        "The selected additional-destination policy is recorded; only its executable option enters selection and existing producers/provider/exporters remain intact."
       ],
       "constraints": [
-        "Do not enable Galileo and splunk-ao as overlapping export paths for the same logical operations."
+        "Do not migrate existing span creation, replace the provider or remove Galileo; never add another exporter to an already configured destination."
       ],
       "expected_telemetry": [
         {
@@ -150,7 +150,7 @@
         }
       ],
       "follow_up_actions": [
-        "Record one export-path choice before selecting option-specific work."
+        "Record the additional-destination policy before selecting option-specific configuration."
       ]
     },
     {
@@ -221,19 +221,19 @@
     {
       "id": "AO-001",
       "finding_group": "splunk-agent-observability",
-      "title": "Replace Galileo with splunk-ao for dedicated routing",
+      "title": "Route existing OTel spans to a distinct Studio destination",
       "severity": "high",
       "priority": "required",
       "effort": "medium",
       "status": "proposed",
-      "area": "Splunk AO routing change",
-      "gap": "The selected replacement path requires splunk-ao to become the sole GenAI exporter and to persist direct project and Agent Stream routing.",
-      "impact": "Leaving Galileo active would duplicate logical operations, while incomplete routing would leave traces unassigned or in the wrong stream.",
-      "product_outcome": "A fresh application trace reaches the intended project and Agent Stream through splunk-ao with required fields and no duplicate nodes.",
-      "required_fix": "Disable the overlapping Galileo processor and startup configuration, add splunk-ao through supported application/deployment configuration, and persist operator-overridable project and Agent Stream routing.",
+      "area": "Additional native OTel trace routing",
+      "gap": "The selected distinct Studio destination requires resource identity resolution and supported native OTLP trace routing on the existing provider; no new span creator is needed.",
+      "impact": "Missing resource binding leaves traces unrouted; duplicate destination registration duplicates delivery.",
+      "product_outcome": "Existing producer spans reach the selected project and Agent Stream without changing Galileo or logical-operation topology.",
+      "required_fix": "Preserve the registered provider, Galileo processor and existing span creators. Resolve selected resource identities through a supported SDK-free API path and configure at most one native OTel exporter to the distinct selected Studio endpoint, using trace-specific projectid/logstreamid headers while retaining existing harmless trace headers and all other destinations.",
       "instrument_mode": "default",
       "verification_scenarios": [
-        "ao.routing.migration"
+        "ao.routing.existing-otel"
       ],
       "dependencies": [
         "OTEL-001"
@@ -243,24 +243,26 @@
         "Makefile:6"
       ],
       "acceptance_criteria": [
-        "The Galileo processor is not active in the selected runtime.",
-        "A fresh application trace appears in the intended project and Agent Stream with workflow, model, tool, token, timing, and terminal lifecycle fields.",
-        "The representative trace contains one node per logical workflow, chat call, and tool call."
+        "Galileo and all existing producer/provider identities and destinations remain intact; no splunk-ao span-creation dependency is introduced.",
+        "Selected resource names/IDs are resolved and ownership checked; reuse, minimal ordered create, repeated runs, duplicate races and lookup failures are evidenced.",
+        "Exactly one native trace export per operation reaches the distinct selected Studio destination with projectid/logstreamid, no routing headers leak to metrics/logs, and no second exporter is registered for the same destination.",
+        "Actual cloud visibility remains separate from local source/configuration/OTLP receipts and Not proven when unavailable."
       ],
       "constraints": [
         "Keep credentials in operator-owned secret storage and commit only placeholders or secret references.",
-        "Do not patch installed Galileo or splunk-ao packages."
+        "Do not patch installed Galileo or OTel packages, replace existing providers/producers or introduce an AO span-creation dependency.",
+        "An unsupported existing exporter mutation is a precise capability gap, not permission to migrate producers or claim delivery."
       ],
       "expected_telemetry": [
         {
           "type": "configuration",
-          "name": "agent-observability.splunk-ao-routing",
+          "name": "agent-observability.runtime-routing",
           "attributes": [],
           "product_view": "Dedicated project and Agent Stream routing"
         }
       ],
       "follow_up_actions": [
-        "Inspect a fresh routed trace and confirm required Agent Observability fields and duplicate-free topology."
+        "Verify resource identities, one export per destination, preserved Galileo delivery, required fields and local trace routing separately from live cloud receipt."
       ]
     }
   ],
@@ -278,9 +280,9 @@
     "scenarios": [
       {
         "id": "telemetry.integration.selection",
-        "trigger": "Resolve the export-path decision before making changes",
+        "trigger": "Record whether the task includes a distinct additional Studio destination before configuration",
         "entrypoint": "app.py:25",
-        "expected_signals": "one selected GenAI export path",
+        "expected_signals": "one explicit additional-destination policy with existing Galileo preserved",
         "proof_level": "focused call-site",
         "acceptance_criteria": "Only the executable option unlocked by the recorded export-path choice enters selection.",
         "environments": [
@@ -299,12 +301,12 @@
         ]
       },
       {
-        "id": "ao.routing.migration",
-        "trigger": "Run a fresh POST /v1/chat/stream after selecting the splunk-ao replacement branch",
+        "id": "ao.routing.existing-otel",
+        "trigger": "Run a fresh POST /v1/chat/stream after selecting native OTel routing to a distinct Studio destination",
         "entrypoint": "app.py:51",
-        "expected_signals": "fresh duplicate-free trace in the configured project and Agent Stream with required workflow/model/tool/timing/terminal fields",
+        "expected_signals": "Existing canonical workflow/model/tool spans with selected trace-only resource binding and preserved Galileo delivery",
         "proof_level": "full runtime",
-        "acceptance_criteria": "The trace is routed to the intended project and Agent Stream, required fields populate, and Galileo emits no overlapping nodes.",
+        "acceptance_criteria": "Existing producers/provider/exporter identities remain, one export reaches each intended destination, routing headers stay on traces and unavailable cloud proof remains incomplete.",
         "environments": [
           "python.local"
         ]
@@ -312,9 +314,10 @@
     ]
   },
   "anti_patterns": [
-    "Running Galileo and splunk-ao as simultaneous export paths for the same logical GenAI operations would duplicate traces."
+    "Replacing a working Galileo producer/provider/exporter solely to add AO routing.",
+    "Registering two exporters to the same destination or introducing duplicate GenAI operations."
   ],
   "recommendation": [
-    "Record the export-path decision, select only its unlocked executable finding, and run $otel-instrument."
+    "Preserve current instrumentation, record the additional-destination policy, select only its executable configuration or lifecycle finding, and run $otel-instrument."
   ]
 }
