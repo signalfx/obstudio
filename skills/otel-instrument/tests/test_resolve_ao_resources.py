@@ -81,7 +81,8 @@ def local_studio(route):
             encoded = response if isinstance(response, bytes) else json.dumps(response).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(encoded)))
+            if "Content-Length" not in headers:
+                self.send_header("Content-Length", str(len(encoded)))
             for name, value in headers.items():
                 self.send_header(name, value)
             self.end_headers()
@@ -877,6 +878,80 @@ class StudioHTTPTests(unittest.TestCase):
                     self.assertEqual(evidence[kind]["relookup_attempts"], 1)
                     self.assertEqual(self.resolve(origin)[kind]["outcome"], "reused")
                 self.assertEqual(sum(method == "POST" and path == create_path for method, path, _, _ in requests), 1)
+
+    def test_truncated_project_or_stream_lookup_never_authorizes_creation(self):
+        for kind in ("project", "agent_stream"):
+            api = StudioResourceAPI(existing=kind == "agent_stream")
+            api.streams = []
+            lookup_path = "/ao/api/projects/all" if kind == "project" else "/ao/api/projects/p/log_streams/paginated"
+            def route(method, target, body):
+                status, payload, headers = api(method, target, body)
+                if method == "GET" and urlsplit(target).path == lookup_path:
+                    encoded = json.dumps(payload).encode()
+                    return status, encoded, {"Content-Length": str(len(encoded) + 10), "Connection": "close"}
+                return status, payload, headers
+            with self.subTest(kind=kind), local_studio(route) as (origin, requests):
+                result, evidence, output = self.run_cli(origin)
+                self.assertEqual(result, 1)
+                self.assertEqual(evidence["error"], f"{kind}_lookup_failed")
+                self.assertEqual(evidence[kind]["lookup_attempts"], 1)
+                self.assertEqual(evidence[kind]["create_attempts"], 0)
+                self.assertNotIn("private-response", output)
+                self.assertEqual(sum(method == "POST" for method, _, _, _ in requests), 0)
+
+    def test_truncated_successful_create_reconciles_exact_identity_without_repeating_post(self):
+        for kind in ("project", "agent_stream"):
+            for status in (200, 201):
+                api = StudioResourceAPI(existing=kind == "agent_stream")
+                api.streams = []
+                create_path = "/ao/api/projects" if kind == "project" else "/ao/api/projects/p/log_streams"
+                def route(method, target, body):
+                    response = api(method, target, body)
+                    if method == "POST" and target == create_path:
+                        encoded = json.dumps(response[1]).encode()
+                        return status, encoded, {"Content-Length": str(len(encoded) + 10), "Connection": "close"}
+                    return response
+                with self.subTest(kind=kind, status=status), local_studio(route) as (origin, requests):
+                    result, evidence, output = self.run_cli(origin)
+                    self.assertEqual(result, 0)
+                    self.assertEqual(evidence[kind]["outcome"], "reused-after-uncertain-create")
+                    self.assertEqual(evidence[kind]["id"], "p" if kind == "project" else "s")
+                    self.assertEqual(evidence[kind]["create_attempts"], 1)
+                    self.assertEqual(evidence[kind]["relookup_attempts"], 1)
+                    self.assertNotIn("create_response", evidence[kind])
+                    self.assertEqual(evidence["agent_stream"]["project_id"], evidence["project"]["id"])
+                    second_result, second, second_output = self.run_cli(origin)
+                    self.assertEqual(second_result, 0)
+                    self.assertEqual(second[kind]["outcome"], "reused")
+                    self.assertNotIn("private-response", output + second_output)
+                self.assertEqual(sum(method == "POST" and target == create_path for method, target, _, _ in requests), 1)
+
+    def test_truncated_create_with_truncated_relookup_stays_unresolved_without_recreate(self):
+        for kind in ("project", "agent_stream"):
+            api = StudioResourceAPI(existing=kind == "agent_stream")
+            api.streams = []
+            create_path = "/ao/api/projects" if kind == "project" else "/ao/api/projects/p/log_streams"
+            lookup_path = "/ao/api/projects/all" if kind == "project" else "/ao/api/projects/p/log_streams/paginated"
+            attempted = False
+            def route(method, target, body):
+                nonlocal attempted
+                status, payload, headers = api(method, target, body)
+                if method == "POST" and target == create_path:
+                    attempted = True
+                if attempted and (target == create_path or urlsplit(target).path == lookup_path):
+                    encoded = json.dumps(payload).encode()
+                    return status, encoded, {"Content-Length": str(len(encoded) + 10), "Connection": "close"}
+                return status, payload, headers
+            with self.subTest(kind=kind), local_studio(route) as (origin, requests):
+                result, evidence, output = self.run_cli(origin)
+                self.assertEqual(result, 1)
+                self.assertEqual(evidence["error"], f"{kind}_create_unresolved")
+                self.assertEqual(evidence[kind]["reconciliation_error"], f"{kind}_lookup_failed")
+                self.assertEqual(evidence[kind]["create_attempts"], 1)
+                self.assertEqual(evidence[kind]["relookup_attempts"], 1)
+                self.assertNotIn("id", evidence[kind])
+                self.assertNotIn("private-response", output)
+            self.assertEqual(sum(method == "POST" and target == create_path for method, target, _, _ in requests), 1)
 
     def test_unsupported_create_success_statuses_fail_without_relookup_or_retry(self):
         for kind in ("project", "agent_stream"):

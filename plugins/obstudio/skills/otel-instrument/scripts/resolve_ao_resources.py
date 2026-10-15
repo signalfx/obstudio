@@ -359,6 +359,8 @@ class StudioAPI:
             payload = response.read(STUDIO_MAX_RESPONSE_BYTES + 1)
             if len(payload) > STUDIO_MAX_RESPONSE_BYTES:
                 raise StudioAPIError()
+            if response.length not in (None, 0):
+                raise StudioAPIError(uncertain_create=method == "POST")
             try:
                 return json.loads(payload.decode("utf-8"))
             except (UnicodeError, ValueError):

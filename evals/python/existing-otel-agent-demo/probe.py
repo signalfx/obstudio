@@ -450,6 +450,10 @@ def compare(before: dict[str, Any], after: dict[str, Any], contract: str, projec
     for span in spans:
         attributes = span["attributes"]
         operation = attributes.get("gen_ai.operation.name")
+        require(
+            (span["trace_id"], span["span_id"]) in legacy_ids or operation in expected,
+            f"unexpected after-only span operation: {span['name']} ({operation or 'missing'})",
+        )
         if operation in expected:
             scenario = attributes.get("app.scenario")
             require(scenario in SCENARIOS, f"missing safe scenario identity for {operation}")

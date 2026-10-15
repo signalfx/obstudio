@@ -1,14 +1,14 @@
 {
   "kind": "captured-local-existing-otel-route-startups",
-  "captured_at_utc": "2026-10-15T03:12:46.277339+00:00",
+  "captured_at_utc": "2026-10-15T03:33:28.445966+00:00",
   "proof_scope": "Separate real app startup processes, local mock resource HTTP and native OTLP; no Studio/cloud forwarding or model API.",
   "adapter_path": "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py",
   "adapter_sha256": "07b8ba11dac16c041d57fb0018ac65fab90e6eadcca0675cdd3cae01d3635a77",
   "resolver_path": "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/skills/otel-instrument/scripts/resolve_ao_resources.py",
-  "resolver_sha256": "43c0f1658f4b30d04564d9dfb92e36399109230dec6e67854768fdf1d4bdbabf",
+  "resolver_sha256": "93885c6541d8655603287e1b5759b3098354d4858376668e88774ddfea46a7fc",
   "fixture_source_sha256": {
     "app.py": "bd65b5623b2f1997eb1523deadca5fce090f76f551609d7b3e0dff680c1e1d5f",
-    "probe.py": "76c8c73e7ca53fa0cf6aefeebf1ae38f8088e2835113c7c37ce43cc90d73b473",
+    "probe.py": "eeb43641e53dd35012559bb77b58eac92941131927260746d268a614aa84c127",
     "eval/inputs/capture_route_recovery.py": "8530c1ace3e13ece0cdf9cb4bb5ffaab17a1ffcc051330ba5ae6ccdf7083dd82",
     "eval/inputs/studio_resources.py": "77dde2b8964e10024448f2254b62ab0a614708ea88c500138b69e2eea3bc5a62",
     "eval/inputs/resource_recovery_fixture.py": "c1c9b649b2be56392a7b51a911e4411f149617a917ac4429c7b0d5618de1e422"
@@ -19,10 +19,10 @@
   },
   "stages": [
     {
-      "process_id": 2542,
+      "process_id": 10118,
       "configure_error": null,
       "owners_preserved": true,
-      "endpoint": "http://127.0.0.1:57359",
+      "endpoint": "http://127.0.0.1:51265",
       "trace_headers": {
         "User-Agent": "python-requests/2.34.2",
         "Accept-Encoding": "gzip, deflate",
@@ -35,13 +35,13 @@
       "profile_before": {
         "project_name": "fixture-project",
         "agent_stream_name": "fixture-agent",
-        "native_endpoint": "http://127.0.0.1:57359",
+        "native_endpoint": "http://127.0.0.1:51265",
         "keep_setting": "operator-owned"
       },
       "profile_after": {
         "project_name": "fixture-project",
         "agent_stream_name": "fixture-agent",
-        "native_endpoint": "http://127.0.0.1:57359",
+        "native_endpoint": "http://127.0.0.1:51265",
         "keep_setting": "operator-owned",
         "resolved_ids": {
           "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
@@ -52,10 +52,10 @@
       "helper_calls": [
         {
           "command": [
-            "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python",
+            "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python3",
             "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/skills/otel-instrument/scripts/resolve_ao_resources.py",
             "--studio-api-origin",
-            "http://127.0.0.1:57358",
+            "http://127.0.0.1:51264",
             "--project-name",
             "fixture-project",
             "--agent-stream-name",
@@ -92,7 +92,7 @@
       ],
       "stage": "initial_201_create",
       "worker_command": [
-        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python3",
         "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/capture_route_recovery.py",
         "worker",
         "--resolver",
@@ -100,13 +100,13 @@
         "--adapter",
         "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py",
         "--profile",
-        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-mcq4w706/runtime-profile.json",
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-2e3ocw71/runtime-profile.json",
         "--origin",
-        "http://127.0.0.1:57358",
+        "http://127.0.0.1:51264",
         "--endpoint",
-        "http://127.0.0.1:57359",
+        "http://127.0.0.1:51265",
         "--output",
-        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-mcq4w706/initial_201_create.json"
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-2e3ocw71/initial_201_create.json"
       ],
       "worker_returncode": 0,
       "stdout": "support request turn-1: success\n",
@@ -116,7 +116,7 @@
           "method": "GET",
           "path": "/ao/api/projects/all?type=gen_ai",
           "headers": {
-            "host": "127.0.0.1:57358",
+            "host": "127.0.0.1:51264",
             "accept-encoding": "identity",
             "accept": "application/json",
             "x-sf-token": "local-gateway"
@@ -129,7 +129,7 @@
           "method": "POST",
           "path": "/ao/api/projects",
           "headers": {
-            "host": "127.0.0.1:57358",
+            "host": "127.0.0.1:51264",
             "accept-encoding": "identity",
             "content-length": "80",
             "accept": "application/json",
@@ -151,7 +151,7 @@
           "method": "GET",
           "path": "/ao/api/projects/all?type=gen_ai",
           "headers": {
-            "host": "127.0.0.1:57358",
+            "host": "127.0.0.1:51264",
             "accept-encoding": "identity",
             "accept": "application/json",
             "x-sf-token": "local-gateway"
@@ -169,7 +169,7 @@
           "method": "GET",
           "path": "/ao/api/projects/b12aba69-843d-47ce-ae9a-7f385f498100/log_streams/paginated?include_counts=false&limit=100&starting_token=0",
           "headers": {
-            "host": "127.0.0.1:57358",
+            "host": "127.0.0.1:51264",
             "accept-encoding": "identity",
             "accept": "application/json",
             "x-sf-token": "local-gateway"
@@ -186,7 +186,7 @@
           "method": "POST",
           "path": "/ao/api/projects/b12aba69-843d-47ce-ae9a-7f385f498100/log_streams",
           "headers": {
-            "host": "127.0.0.1:57358",
+            "host": "127.0.0.1:51264",
             "accept-encoding": "identity",
             "content-length": "25",
             "accept": "application/json",
@@ -207,7 +207,7 @@
           "method": "GET",
           "path": "/ao/api/projects/b12aba69-843d-47ce-ae9a-7f385f498100/log_streams/paginated?include_counts=false&limit=100&starting_token=0",
           "headers": {
-            "host": "127.0.0.1:57358",
+            "host": "127.0.0.1:51264",
             "accept-encoding": "identity",
             "accept": "application/json",
             "x-sf-token": "local-gateway"
@@ -231,7 +231,7 @@
         {
           "path": "/v1/metrics",
           "headers": {
-            "host": "127.0.0.1:57359",
+            "host": "127.0.0.1:51265",
             "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
             "accept-encoding": "gzip, deflate",
             "accept": "*/*",
@@ -240,7 +240,7 @@
             "x-exporter-owner": "legacy-metrics",
             "content-length": "440"
           },
-          "body_sha256": "cb7db759d87f5bf9dd6b653bdb49bfd139879fc7a3c31c606bb022a5cd0a87a9",
+          "body_sha256": "dc3726690c824c7e1b1ff1c84272da8ccc6084bf6974a12012809592751b94fe",
           "status": 200,
           "records": [
             {
@@ -256,7 +256,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "82382007-fae5-457b-b052-adff59c2dfcd",
+                "service.instance.id": "5e9b5051-9e58-469a-8799-f527d0a61bcf",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -267,7 +267,7 @@
         {
           "path": "/v1/traces",
           "headers": {
-            "host": "127.0.0.1:57359",
+            "host": "127.0.0.1:51265",
             "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
             "accept-encoding": "gzip, deflate",
             "accept": "*/*",
@@ -279,7 +279,7 @@
             "x-exporter-owner": "legacy-traces",
             "content-length": "741"
           },
-          "body_sha256": "f8cbfae1e8e09a7998421082bf16d6caaec563c42902fabab908e5acbe83153e",
+          "body_sha256": "46ff28f43b38ef80887e9aa30fd2e770a08d3243f0ba4d7fa5c1013171862f93",
           "status": 200,
           "records": [
             {
@@ -297,7 +297,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "82382007-fae5-457b-b052-adff59c2dfcd",
+                "service.instance.id": "5e9b5051-9e58-469a-8799-f527d0a61bcf",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -330,7 +330,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "82382007-fae5-457b-b052-adff59c2dfcd",
+                "service.instance.id": "5e9b5051-9e58-469a-8799-f527d0a61bcf",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -353,7 +353,7 @@
         {
           "path": "/v1/logs",
           "headers": {
-            "host": "127.0.0.1:57359",
+            "host": "127.0.0.1:51265",
             "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
             "accept-encoding": "gzip, deflate",
             "accept": "*/*",
@@ -362,7 +362,7 @@
             "x-exporter-owner": "legacy-logs",
             "content-length": "383"
           },
-          "body_sha256": "2cef683afd3425fab0427b9393ff5de9a2f90f9b48399c961b60c1bac0791ad0",
+          "body_sha256": "bc623f7552f00bad64788eaa9bf80eb50d1d69ec890b3257d8e9aebf4c9d0a88",
           "status": 200,
           "records": [
             {
@@ -377,7 +377,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "82382007-fae5-457b-b052-adff59c2dfcd",
+                "service.instance.id": "5e9b5051-9e58-469a-8799-f527d0a61bcf",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -390,10 +390,10 @@
       ]
     },
     {
-      "process_id": 2544,
+      "process_id": 10120,
       "configure_error": null,
       "owners_preserved": true,
-      "endpoint": "http://127.0.0.1:57359",
+      "endpoint": "http://127.0.0.1:51265",
       "trace_headers": {
         "User-Agent": "python-requests/2.34.2",
         "Accept-Encoding": "gzip, deflate",
@@ -406,7 +406,7 @@
       "profile_before": {
         "project_name": "fixture-project",
         "agent_stream_name": "fixture-agent",
-        "native_endpoint": "http://127.0.0.1:57359",
+        "native_endpoint": "http://127.0.0.1:51265",
         "keep_setting": "operator-owned",
         "resolved_ids": {
           "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
@@ -416,7 +416,7 @@
       "profile_after": {
         "project_name": "fixture-project",
         "agent_stream_name": "fixture-agent",
-        "native_endpoint": "http://127.0.0.1:57359",
+        "native_endpoint": "http://127.0.0.1:51265",
         "keep_setting": "operator-owned",
         "resolved_ids": {
           "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
@@ -427,7 +427,7 @@
       "helper_calls": [],
       "stage": "clean_restart_after_external_identity_change",
       "worker_command": [
-        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python3",
         "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/capture_route_recovery.py",
         "worker",
         "--resolver",
@@ -435,13 +435,13 @@
         "--adapter",
         "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py",
         "--profile",
-        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-mcq4w706/runtime-profile.json",
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-2e3ocw71/runtime-profile.json",
         "--origin",
-        "http://127.0.0.1:57358",
+        "http://127.0.0.1:51264",
         "--endpoint",
-        "http://127.0.0.1:57359",
+        "http://127.0.0.1:51265",
         "--output",
-        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-mcq4w706/clean_restart_after_external_identity_change.json"
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-2e3ocw71/clean_restart_after_external_identity_change.json"
       ],
       "worker_returncode": 0,
       "stdout": "support request turn-1: success\n",
@@ -451,7 +451,7 @@
         {
           "path": "/v1/metrics",
           "headers": {
-            "host": "127.0.0.1:57359",
+            "host": "127.0.0.1:51265",
             "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
             "accept-encoding": "gzip, deflate",
             "accept": "*/*",
@@ -460,7 +460,7 @@
             "x-exporter-owner": "legacy-metrics",
             "content-length": "440"
           },
-          "body_sha256": "157b6049d7deb4aa2dd756c904fefa7281eb97e7d36d97d54fb5e57a938354a1",
+          "body_sha256": "015305362f4cbfc0739529a47bd6d49fca4e71e2720d29f654a65487ef90cbde",
           "status": 200,
           "records": [
             {
@@ -476,7 +476,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "81e7fc16-187d-4aa6-a6f4-836bc232f140",
+                "service.instance.id": "ff9046cb-ff35-443a-ac1b-d05bb4e0ed78",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -487,7 +487,7 @@
         {
           "path": "/v1/traces",
           "headers": {
-            "host": "127.0.0.1:57359",
+            "host": "127.0.0.1:51265",
             "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
             "accept-encoding": "gzip, deflate",
             "accept": "*/*",
@@ -499,7 +499,7 @@
             "x-exporter-owner": "legacy-traces",
             "content-length": "741"
           },
-          "body_sha256": "bf695f16ea39ffdf50b8f6714b5029df9cc2a451f9fa0ee5b64d42126559f435",
+          "body_sha256": "dbb5bd653087bbf7ed9dc4bb7cdc2745e33ef07fb1ea4b7628072028c2e4b9cd",
           "status": 200,
           "records": [
             {
@@ -517,7 +517,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "81e7fc16-187d-4aa6-a6f4-836bc232f140",
+                "service.instance.id": "ff9046cb-ff35-443a-ac1b-d05bb4e0ed78",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -550,7 +550,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "81e7fc16-187d-4aa6-a6f4-836bc232f140",
+                "service.instance.id": "ff9046cb-ff35-443a-ac1b-d05bb4e0ed78",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -573,7 +573,7 @@
         {
           "path": "/v1/logs",
           "headers": {
-            "host": "127.0.0.1:57359",
+            "host": "127.0.0.1:51265",
             "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
             "accept-encoding": "gzip, deflate",
             "accept": "*/*",
@@ -582,7 +582,7 @@
             "x-exporter-owner": "legacy-logs",
             "content-length": "383"
           },
-          "body_sha256": "5efd6489f5cac4a73a5b83781dca0a0d191d83a2b95c5457ac9f37f0459ed8b8",
+          "body_sha256": "fb2d473d64721d15c448cce752b5846f8f23ad440b0716964eb3cf9968fdfb48",
           "status": 200,
           "records": [
             {
@@ -597,7 +597,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "81e7fc16-187d-4aa6-a6f4-836bc232f140",
+                "service.instance.id": "ff9046cb-ff35-443a-ac1b-d05bb4e0ed78",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -610,10 +610,10 @@
       ]
     },
     {
-      "process_id": 2545,
+      "process_id": 10121,
       "configure_error": null,
       "owners_preserved": true,
-      "endpoint": "http://127.0.0.1:57359",
+      "endpoint": "http://127.0.0.1:51265",
       "trace_headers": {
         "User-Agent": "python-requests/2.34.2",
         "Accept-Encoding": "gzip, deflate",
@@ -626,7 +626,7 @@
       "profile_before": {
         "project_name": "fixture-project",
         "agent_stream_name": "fixture-agent",
-        "native_endpoint": "http://127.0.0.1:57359",
+        "native_endpoint": "http://127.0.0.1:51265",
         "keep_setting": "operator-owned",
         "resolved_ids": {
           "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
@@ -636,7 +636,7 @@
       "profile_after": {
         "project_name": "fixture-project",
         "agent_stream_name": "fixture-agent",
-        "native_endpoint": "http://127.0.0.1:57359",
+        "native_endpoint": "http://127.0.0.1:51265",
         "keep_setting": "operator-owned",
         "resolved_ids": {
           "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
@@ -647,7 +647,7 @@
       "helper_calls": [],
       "stage": "repeated_restart",
       "worker_command": [
-        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python3",
         "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/capture_route_recovery.py",
         "worker",
         "--resolver",
@@ -655,13 +655,13 @@
         "--adapter",
         "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py",
         "--profile",
-        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-mcq4w706/runtime-profile.json",
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-2e3ocw71/runtime-profile.json",
         "--origin",
-        "http://127.0.0.1:57358",
+        "http://127.0.0.1:51264",
         "--endpoint",
-        "http://127.0.0.1:57359",
+        "http://127.0.0.1:51265",
         "--output",
-        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-mcq4w706/repeated_restart.json"
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-2e3ocw71/repeated_restart.json"
       ],
       "worker_returncode": 0,
       "stdout": "support request turn-1: success\n",
@@ -671,7 +671,7 @@
         {
           "path": "/v1/metrics",
           "headers": {
-            "host": "127.0.0.1:57359",
+            "host": "127.0.0.1:51265",
             "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
             "accept-encoding": "gzip, deflate",
             "accept": "*/*",
@@ -680,7 +680,7 @@
             "x-exporter-owner": "legacy-metrics",
             "content-length": "440"
           },
-          "body_sha256": "c188944fd9a24c562dd4609fdcf3fd98f5fcca028b7b96c9d043519332d5ec21",
+          "body_sha256": "bb3ac89fd8290ad221aa744258487b9218db02f48d65e99499dbd5eb3c7b69eb",
           "status": 200,
           "records": [
             {
@@ -696,7 +696,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "4525a763-0f7c-45ed-aaba-0fbb1652bca6",
+                "service.instance.id": "485caa8e-6560-4806-89e0-fc1cc4a26527",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -707,7 +707,7 @@
         {
           "path": "/v1/traces",
           "headers": {
-            "host": "127.0.0.1:57359",
+            "host": "127.0.0.1:51265",
             "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
             "accept-encoding": "gzip, deflate",
             "accept": "*/*",
@@ -719,7 +719,7 @@
             "x-exporter-owner": "legacy-traces",
             "content-length": "741"
           },
-          "body_sha256": "ba6611563edcca416d57b856df5cb91833b97b6b105bd574228e1cab8285f261",
+          "body_sha256": "ba80807376a038a9c53344177243ebc1f226fd712cc46726575cd6a932358e71",
           "status": 200,
           "records": [
             {
@@ -737,7 +737,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "4525a763-0f7c-45ed-aaba-0fbb1652bca6",
+                "service.instance.id": "485caa8e-6560-4806-89e0-fc1cc4a26527",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -770,7 +770,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "4525a763-0f7c-45ed-aaba-0fbb1652bca6",
+                "service.instance.id": "485caa8e-6560-4806-89e0-fc1cc4a26527",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -793,7 +793,7 @@
         {
           "path": "/v1/logs",
           "headers": {
-            "host": "127.0.0.1:57359",
+            "host": "127.0.0.1:51265",
             "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
             "accept-encoding": "gzip, deflate",
             "accept": "*/*",
@@ -802,7 +802,7 @@
             "x-exporter-owner": "legacy-logs",
             "content-length": "383"
           },
-          "body_sha256": "fc0cb457308f84c4aeb5e3a33afbffd655be0cb566167e7791887a31155846a0",
+          "body_sha256": "537deea3b94a385c569aba67d3efb49e6f66e7f7546ea9e0b14ce250aa9ff5e8",
           "status": 200,
           "records": [
             {
@@ -817,7 +817,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "4525a763-0f7c-45ed-aaba-0fbb1652bca6",
+                "service.instance.id": "485caa8e-6560-4806-89e0-fc1cc4a26527",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -830,10 +830,10 @@
       ]
     },
     {
-      "process_id": 2547,
+      "process_id": 10123,
       "configure_error": null,
       "owners_preserved": true,
-      "endpoint": "http://127.0.0.1:57359",
+      "endpoint": "http://127.0.0.1:51265",
       "trace_headers": {
         "User-Agent": "python-requests/2.34.2",
         "Accept-Encoding": "gzip, deflate",
@@ -846,7 +846,7 @@
       "profile_before": {
         "project_name": "fixture-project",
         "agent_stream_name": "fixture-agent",
-        "native_endpoint": "http://127.0.0.1:57359",
+        "native_endpoint": "http://127.0.0.1:51265",
         "keep_setting": "operator-owned",
         "resolved_ids": {
           "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
@@ -856,7 +856,7 @@
       "profile_after": {
         "project_name": "fixture-project",
         "agent_stream_name": "fixture-agent",
-        "native_endpoint": "http://127.0.0.1:57359",
+        "native_endpoint": "http://127.0.0.1:51265",
         "keep_setting": "operator-owned",
         "resolved_ids": {
           "project_id": "b12aba69-843d-47ce-ae9a-7f385f498100",
@@ -867,7 +867,7 @@
       "helper_calls": [],
       "stage": "clean_restart_with_permission_failure",
       "worker_command": [
-        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python3",
         "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/capture_route_recovery.py",
         "worker",
         "--resolver",
@@ -875,13 +875,13 @@
         "--adapter",
         "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py",
         "--profile",
-        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-mcq4w706/runtime-profile.json",
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-2e3ocw71/runtime-profile.json",
         "--origin",
-        "http://127.0.0.1:57358",
+        "http://127.0.0.1:51264",
         "--endpoint",
-        "http://127.0.0.1:57359",
+        "http://127.0.0.1:51265",
         "--output",
-        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-mcq4w706/clean_restart_with_permission_failure.json"
+        "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/route-recovery-profile-2e3ocw71/clean_restart_with_permission_failure.json"
       ],
       "worker_returncode": 0,
       "stdout": "support request turn-1: success\n",
@@ -891,7 +891,7 @@
         {
           "path": "/v1/metrics",
           "headers": {
-            "host": "127.0.0.1:57359",
+            "host": "127.0.0.1:51265",
             "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
             "accept-encoding": "gzip, deflate",
             "accept": "*/*",
@@ -900,7 +900,7 @@
             "x-exporter-owner": "legacy-metrics",
             "content-length": "440"
           },
-          "body_sha256": "379c16af0790d5b1a39c8740382e358c0ccc852859bba8462c86c96c5b95c6f2",
+          "body_sha256": "0c904e9e1c470f78916f3a6f640fddb2105f0c0f50e2758f6da692d5064eabf2",
           "status": 200,
           "records": [
             {
@@ -916,7 +916,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "946659bf-4ca2-4b9a-b6f5-563547e191b0",
+                "service.instance.id": "4ee61ff5-3046-4810-bef1-b995b3dc3ca4",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -927,7 +927,7 @@
         {
           "path": "/v1/traces",
           "headers": {
-            "host": "127.0.0.1:57359",
+            "host": "127.0.0.1:51265",
             "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
             "accept-encoding": "gzip, deflate",
             "accept": "*/*",
@@ -939,7 +939,7 @@
             "x-exporter-owner": "legacy-traces",
             "content-length": "741"
           },
-          "body_sha256": "3007a7e40760481a34f1058e7a1c7e55d361dcc5a4763a4a69ca5693ef08ebc0",
+          "body_sha256": "9e4851968e398f971a3e56b11975e796b4c90751918d28d302146ee41b39c6a1",
           "status": 200,
           "records": [
             {
@@ -957,7 +957,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "946659bf-4ca2-4b9a-b6f5-563547e191b0",
+                "service.instance.id": "4ee61ff5-3046-4810-bef1-b995b3dc3ca4",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -990,7 +990,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "946659bf-4ca2-4b9a-b6f5-563547e191b0",
+                "service.instance.id": "4ee61ff5-3046-4810-bef1-b995b3dc3ca4",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -1013,7 +1013,7 @@
         {
           "path": "/v1/logs",
           "headers": {
-            "host": "127.0.0.1:57359",
+            "host": "127.0.0.1:51265",
             "user-agent": "OTel-OTLP-Exporter-Python/1.45.1",
             "accept-encoding": "gzip, deflate",
             "accept": "*/*",
@@ -1022,7 +1022,7 @@
             "x-exporter-owner": "legacy-logs",
             "content-length": "383"
           },
-          "body_sha256": "db1426fa11cf12dba62fb352f06b1a1df0dd8cb4dbbbc13a521a68b30aaf2faf",
+          "body_sha256": "367331d474cd8d41fa341c3d57d48d5e5d4ce5e9806627f67f35b052f0c16769",
           "status": 200,
           "records": [
             {
@@ -1037,7 +1037,7 @@
                 "telemetry.sdk.language": "python",
                 "telemetry.sdk.name": "opentelemetry",
                 "telemetry.sdk.version": "1.45.1",
-                "service.instance.id": "946659bf-4ca2-4b9a-b6f5-563547e191b0",
+                "service.instance.id": "4ee61ff5-3046-4810-bef1-b995b3dc3ca4",
                 "service.name": "existing-otel-agent-demo",
                 "legacy.resource": "keep-resource"
               },
@@ -1079,7 +1079,7 @@
         "method": "GET",
         "path": "/ao/api/projects/all?type=gen_ai",
         "headers": {
-          "host": "127.0.0.1:57358",
+          "host": "127.0.0.1:51264",
           "accept-encoding": "identity",
           "accept": "application/json",
           "x-sf-token": "local-gateway"
@@ -1097,7 +1097,7 @@
         "method": "GET",
         "path": "/ao/api/projects/f3370c1b-4bca-4a57-afee-812bb7ab9010/log_streams/paginated?include_counts=false&limit=100&starting_token=0",
         "headers": {
-          "host": "127.0.0.1:57358",
+          "host": "127.0.0.1:51264",
           "accept-encoding": "identity",
           "accept": "application/json",
           "x-sf-token": "local-gateway"
@@ -1122,10 +1122,10 @@
   "independent_helper_permission_failure": {
     "call": {
       "command": [
-        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python",
+        "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/evals/.venv/bin/python3",
         "/Users/tithumma/.codex/worktrees/otel-preserve-existing-routing/obstudio/skills/otel-instrument/scripts/resolve_ao_resources.py",
         "--studio-api-origin",
-        "http://127.0.0.1:57358",
+        "http://127.0.0.1:51264",
         "--project-name",
         "fixture-project",
         "--agent-stream-name",
@@ -1151,7 +1151,7 @@
         "method": "GET",
         "path": "/ao/api/projects/all?type=gen_ai",
         "headers": {
-          "host": "127.0.0.1:57358",
+          "host": "127.0.0.1:51264",
           "accept-encoding": "identity",
           "accept": "application/json",
           "x-sf-token": "local-gateway"

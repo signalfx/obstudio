@@ -291,6 +291,8 @@ def _synthetic_completed_receipt(before: dict, contract: str = "studio") -> dict
     request["headers"].update({"projectid": "project", "logstreamid" if contract == "studio" else "agentstreamid": "stream"})
     spans = request["records"]
     for span in spans:
+        if span["attributes"].get("legacy.operation") not in {"workflow", "model"}:
+            continue
         span["attributes"]["gen_ai.operation.name"] = "invoke_workflow" if span["attributes"]["legacy.operation"] == "workflow" else "chat"
         index = int(span["attributes"]["legacy.request"].split("-")[1])
         span["attributes"].update({"app.request_id": f"turn-{index}", "app.scenario": probe.SCENARIOS[index - 1]})
@@ -632,3 +634,55 @@ def test_real_cross_process_sdk_exception_events_are_preserved(tmp_path: Path) -
     assert all(event["attributes"]["exception.type"] == "RuntimeError" for event in events)
     failures = probe.compare(before, after, "studio", "project", "stream")
     assert not any("exception event" in failure for failure in failures), failures
+
+
+@pytest.mark.parametrize("operation", [None, "", "unknown.wrapper", "http.request"])
+@pytest.mark.parametrize("scope", ["accidental.model.wrapper", "legacy.agent.producer"])
+def test_comparator_rejects_after_only_unrecognized_wrapper_spans(baseline_receipts: dict, operation: str | None, scope: str) -> None:
+    # Contract mutations only, never skill-produced or emitted extra-span proof.
+    before = baseline_receipts["generic"]
+    after = _synthetic_completed_receipt(before)
+    spans = next(request for request in after["requests"] if request["path"] == "/v1/traces")["records"]
+    original = next(span for span in spans if span["attributes"].get("gen_ai.operation.name") == "chat")
+    wrapper = copy.deepcopy(original)
+    wrapper["span_id"] = "00000000000de001"
+    wrapper["scope"] = scope
+    wrapper["attributes"] = {key: value for key, value in wrapper["attributes"].items() if key in {"app.request_id", "app.scenario"}}
+    if operation is not None:
+        wrapper["attributes"]["gen_ai.operation.name"] = operation
+    spans.append(wrapper)
+    failures = probe.compare(before, after, "studio", "project", "stream")
+    assert len(spans) == 19
+    assert failures == [f"unexpected after-only span operation: {wrapper['name']} ({operation or 'missing'})"]
+
+
+def test_real_baseline_transport_spans_remain_supported(tmp_path: Path) -> None:
+    # Real source-bound original transport spans, plus synthetic gap completion.
+    # This validates comparator compatibility, not a skill instrumentation run.
+    service = tmp_path / "source"
+    service.mkdir()
+    shutil.copyfile(FIXTURE / "probe.py", service / "probe.py")
+    source = (FIXTURE / "app.py").read_text()
+    old = '''        with trace.use_span(span, end_on_exit=True):
+            span.add_event("legacy.started", {"legacy.event": "keep-event"})
+'''
+    new = '''        with trace.use_span(span, end_on_exit=True):
+            with self.tracer.start_as_current_span("legacy.http.transport", attributes={"transport.sentinel": "keep-transport"}):
+                pass
+            span.add_event("legacy.started", {"legacy.event": "keep-event"})
+'''
+    assert source.count(old) == 1
+    (service / "app.py").write_text(source.replace(old, new))
+    before = _capture_process(tmp_path / "transport-before.json", fixture=service)
+    transport_spans = [span for span in probe.records(before, "traces") if span["name"] == "legacy.http.transport"]
+    assert len(transport_spans) == 6
+    assert all("gen_ai.operation.name" not in span["attributes"] for span in transport_spans)
+    after = _synthetic_completed_receipt(before)
+    assert len(probe.records(after, "traces")) == 24
+    assert probe.compare(before, after, "studio", "project", "stream") == []
+    for original in transport_spans:
+        current = next(span for span in probe.records(after, "traces") if span["span_id"] == original["span_id"])
+        assert current == original
+    damaged = copy.deepcopy(after)
+    next(span for span in probe.records(damaged, "traces") if span["name"] == "legacy.http.transport")["attributes"]["transport.sentinel"] = "lost"
+    assert any("existing span attributes changed" in failure for failure in probe.compare(before, damaged, "studio", "project", "stream"))
