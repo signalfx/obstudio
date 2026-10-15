@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261015T051845290254Z",
+    "run_id": "20261015T054232482610Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "",
@@ -834,7 +834,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "009806f7b5ac1121a033ec713dcf55cc064c21040d33719dbe4a32037ffe8548",
+    "digest": "3c845be28ea89275d4ebfc09b31b0f657e680d96f46107b958ce8cbf31362bed",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1088,7 +1088,7 @@
       "skills/connect-splunk-observability-cloud/agents/openai.yaml": "206b920092a097ec7ab0f92b97d457a6e794bdddcc7f2def837955ff8a756407",
       "skills/create-splunk-free-account/SKILL.md": "1ea265ff983db6013c15f96e008b35d83c68eb8b7d041d0bf3660dfbb877d53b",
       "skills/create-splunk-free-account/agents/openai.yaml": "7767ebaee1f22c7cc76c22ff75676dcaf24e02821939b7229cc80a8b66e0a237",
-      "skills/otel-audit/SKILL.md": "da2f5dae0b99c2828984fdde030adcf0b6357f12e4c511872ab5c358501cd44c",
+      "skills/otel-audit/SKILL.md": "8e8655c64590b43218ccf5e195f710af85ddfe5dfd31777b4f9dca885e985bb5",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
       "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
       "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",

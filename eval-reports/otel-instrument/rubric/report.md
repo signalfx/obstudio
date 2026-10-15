@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261015T042404871666Z |
+| Run ID | 20261015T051846028835Z |
 | Agent model | gpt-6.1-sol |
 | Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/existing-otel-agent-demo/qual/route-recovery-instrument | python/existing-otel-agent-demo | 1 | 100% (6/6), avg score 100 | 2.5M | 8.9m | - | - | - |
+| with_skill | go/native-genai-demo/qual/instrument | go/native-genai-demo | 1 | 100% (8/8), avg score 100 | 4.7M | 16.5m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/existing-otel-agent-demo/qual/route-recovery-instrument | python/existing-otel-agent-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 2507118 | 2390656 | 0 | 21153 | 5379 | unknown | 2528271 |
+| with_skill | go/native-genai-demo/qual/instrument | go/native-genai-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 4695911 | 4526976 | 0 | 46141 | 10408 | unknown | 4742052 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/existing-otel-agent-demo/qual/route-recovery-instrument | python/existing-otel-agent-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 579174 | 491904 | 0 | 4875 | 1088 | unknown | 584049 |
+| with_skill | go/native-genai-demo/qual/instrument | go/native-genai-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 909022 | 791808 | 0 | 6778 | 1426 | unknown | 915800 |
 
 ## Rubric Failures
 
