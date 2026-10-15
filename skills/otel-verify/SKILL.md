@@ -65,6 +65,13 @@ creator symbols, actual boundary,
 installed or proposed source-verified version and exact example/revision;
 separate that prospective choice from actual emitted-span proof. A fixture
 without an installed SDK does not justify silently changing the fresh default.
+Distinguish that missing installation from a language/runtime with no compatible
+supported Splunk AO SDK. For the latter, verify its native OTel implementation
+against the same applicable GenAI/vendor field profile, complete trace graph,
+privacy/schema, lifecycle and signal/export preservation. Require current
+support evidence and public language-native APIs; do not fail the native path
+merely because AO SDK packages or Python `@log` are absent. Keep real missing
+fields or unsupported native capabilities explicit and scoped.
 Apply its mandatory per-function producer decision gate to every fresh or
 newly uncovered Python GenAI source function, including model/tool/retrieval
 functions and async-generator agents. Reconcile the named function/type and

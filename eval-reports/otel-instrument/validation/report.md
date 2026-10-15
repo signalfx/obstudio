@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261015T042405785199Z |
+| Run ID | 20261015T051845290254Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -27,6 +27,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | go/kvstore/qual/incident-readiness | go/kvstore | 1 | evals/go/kvstore/eval/qual/incident-readiness.json | 0 | 6 | 0 |
 | go/kvstore/qual/instrument | go/kvstore | 2 | evals/go/kvstore/eval/qual/instrument.json | 0 | 11 | 0 |
 | go/kvstore/runtime/instrument | go/kvstore | 1 | evals/go/kvstore/eval/runtime/instrument.json | 0 | 0 | 2 |
+| go/native-genai-demo/qual/instrument | go/native-genai-demo | 1 | evals/go/native-genai-demo/eval/qual/instrument.json | 0 | 8 | 0 |
 | java/kafka-batch-consumer/qual/instrument | java/kafka-batch-consumer | 2 | evals/java/kafka-batch-consumer/eval/qual/instrument.json | 0 | 5 | 0 |
 | java/kafka-listener-container/qual/instrument | java/kafka-listener-container | 2 | evals/java/kafka-listener-container/eval/qual/instrument.json | 0 | 5 | 0 |
 | java/kafka-producer-consumer/qual/instrument | java/kafka-producer-consumer | 2 | evals/java/kafka-producer-consumer/eval/qual/instrument.json | 0 | 5 | 0 |

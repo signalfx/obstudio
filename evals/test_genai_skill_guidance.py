@@ -29,6 +29,35 @@ def _read(path: Path) -> str:
     return path.read_text()
 
 
+def test_language_without_compatible_ao_sdk_has_native_full_profile_path():
+    text = " ".join(_read(GENAI_REF).split())
+    fallback = next(line for line in _read(GENAI_REF).splitlines()
+                    if line.startswith("| Agent runtime whose language has no compatible"))
+    assert "native OpenTelemetry libraries" in fallback
+    assert "Required GenAI Coverage Profile" in fallback
+    assert "both vendors' compatibility mappings" in fallback
+    assert "compatible supported Splunk AO SDK for its language" in text
+    assert "record that uncertainty and use the native path" in text
+    assert "installation and an OTLP exporter alone do not produce GenAI semantics" in text
+    assert "SDK-free resource path" in text
+    ao = " ".join(_read(SPLUNK_AO_REF).split())
+    assert "unsupported runtime is an explicit prerequisite" not in ao
+    assert "verify completed exported spans, concrete content schemas and full trace trees" in ao
+    assert "tool arguments/results plus their message mappings" in ao
+    assert "Missing source values remain explicit gaps or justified N/A" in ao
+
+
+def test_each_otel_skill_distinguishes_unavailable_ao_sdk_from_missing_install():
+    for name in ("otel-audit", "otel-instrument", "otel-verify"):
+        text = " ".join(_read(SKILLS_DIR / name / "SKILL.md").split())
+        assert "compatible supported" in text, name
+        assert "language" in text and "native OTel" in text, name
+        assert "GenAI/vendor" in text or "Splunk AO/Galileo content mappings" in text, name
+    verify = " ".join(_read(OTEL_VERIFY).split())
+    assert "without an installed SDK does not justify silently changing the fresh default" in verify
+    assert "merely because AO SDK packages or Python `@log` are absent" in verify
+
+
 def test_genai_reference_covers_otel_semconv_signals():
     text = _read(GENAI_REF)
     required_terms = [
@@ -131,13 +160,31 @@ def test_genai_instrumentation_keeps_token_metric_dimensions_when_known():
             _read(REPO_ROOT / "evals/python/ai-assistant-demo/eval/qual/instrument.json")
         )["rubric"]
     )
+    # The older selected fixture remains a compatibility contract, not the
+    # current-convention recipe for newly instrumented inference.
+    assert "gen_ai.client.token.usage" in rubric
+    assert "gen_ai.token.type" in rubric
+    assert "gen_ai.token.modality" in instrument
+    assert "current inference usage counters" in " ".join(instrument.split())
     for text in (instrument, rubric):
-        assert "gen_ai.client.token.usage" in text
-        assert "gen_ai.token.type" in text
         assert "gen_ai.operation.name" in text
         assert "gen_ai.provider.name" in text
         assert "gen_ai.request.model" in text
         assert "on the token metric" in text
+
+
+def test_new_inference_metrics_use_current_contract_and_preserve_legacy():
+    text = " ".join(_read(GENAI_REF).split())
+    for name in ("gen_ai.client.inference.duration",
+                 "gen_ai.client.inference.usage.input_tokens",
+                 "gen_ai.client.inference.usage.output_tokens"):
+        assert name in text
+    assert "a duration histogram in seconds" in text
+    assert "token counters with `gen_ai.token.modality`" in text
+    assert "excludes inference from `gen_ai.client.operation.duration`" in text
+    assert "Preserve existing `gen_ai.client.token.usage`/`gen_ai.token.type`" in text
+    assert "zero with modality `unknown`" in text
+    assert "does not authorize fabricated span usage or successful output" in text
 
 
 def test_genai_skills_require_single_canonical_span_source():

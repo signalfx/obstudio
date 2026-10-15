@@ -136,6 +136,15 @@ jobs:
       - name: Validate every eval definition and fixture
         run: make test-eval-harness
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: evals/go/native-genai-demo/go.mod
+          cache-dependency-path: evals/go/native-genai-demo/go.sum
+
+      - name: Test native GenAI fixture contracts
+        working-directory: evals/go/native-genai-demo
+        run: go test -race ./...
+
       - name: Run eval-input handoff tests
         run: make test-pytest-plugin
 

@@ -1,0 +1,188 @@
+{
+  "checked_at_utc": "2026-10-15T04:47:22.085167+00:00",
+  "toolchain": "go1.25.1",
+  "modules": [
+    {
+      "module": "go.opentelemetry.io/otel",
+      "metadata_url": "https://proxy.golang.org/go.opentelemetry.io/otel/@latest",
+      "metadata": {
+        "Version": "v1.47.0",
+        "Time": "2026-10-02T08:10:46Z",
+        "Origin": {
+          "VCS": "git",
+          "URL": "https://github.com/open-telemetry/opentelemetry-go",
+          "Hash": "66cfc9520e205b7d450183532772401bc2b6674c",
+          "Ref": "refs/tags/v1.47.0"
+        }
+      },
+      "go_mod_url": "https://proxy.golang.org/go.opentelemetry.io/otel/@v/v1.47.0.mod",
+      "go_directive": "go 1.26.0"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/sdk",
+      "metadata_url": "https://proxy.golang.org/go.opentelemetry.io/otel/sdk/@latest",
+      "metadata": {
+        "Version": "v1.47.0",
+        "Time": "2026-10-02T08:10:46Z",
+        "Origin": {
+          "VCS": "git",
+          "URL": "https://github.com/open-telemetry/opentelemetry-go",
+          "Subdir": "sdk",
+          "Hash": "66cfc9520e205b7d450183532772401bc2b6674c",
+          "Ref": "refs/tags/sdk/v1.47.0"
+        }
+      },
+      "go_mod_url": "https://proxy.golang.org/go.opentelemetry.io/otel/sdk/@v/v1.47.0.mod",
+      "go_directive": "go 1.26.0"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/trace",
+      "metadata_url": "https://proxy.golang.org/go.opentelemetry.io/otel/trace/@latest",
+      "metadata": {
+        "Version": "v1.47.0",
+        "Time": "2026-10-02T08:10:46Z",
+        "Origin": {
+          "VCS": "git",
+          "URL": "https://github.com/open-telemetry/opentelemetry-go",
+          "Subdir": "trace",
+          "Hash": "66cfc9520e205b7d450183532772401bc2b6674c",
+          "Ref": "refs/tags/trace/v1.47.0"
+        }
+      },
+      "go_mod_url": "https://proxy.golang.org/go.opentelemetry.io/otel/trace/@v/v1.47.0.mod",
+      "go_directive": "go 1.26.0"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "metadata_url": "https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/@latest",
+      "metadata": {
+        "Version": "v1.47.0",
+        "Time": "2026-10-02T08:10:46Z",
+        "Origin": {
+          "VCS": "git",
+          "URL": "https://github.com/open-telemetry/opentelemetry-go",
+          "Subdir": "exporters/otlp/otlptrace/otlptracehttp",
+          "Hash": "66cfc9520e205b7d450183532772401bc2b6674c",
+          "Ref": "refs/tags/exporters/otlp/otlptrace/otlptracehttp/v1.47.0"
+        }
+      },
+      "go_mod_url": "https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/@v/v1.47.0.mod",
+      "go_directive": "go 1.26.0"
+    }
+  ],
+  "compatibility_candidates": [
+    {
+      "version": "v1.46.0",
+      "modules": [
+        {
+          "module": "go.opentelemetry.io/otel",
+          "go_mod_url": "https://proxy.golang.org/go.opentelemetry.io/otel/@v/v1.46.0.mod",
+          "go_directive": "go 1.25.0"
+        },
+        {
+          "module": "go.opentelemetry.io/otel/sdk",
+          "go_mod_url": "https://proxy.golang.org/go.opentelemetry.io/otel/sdk/@v/v1.46.0.mod",
+          "go_directive": "go 1.25.0"
+        },
+        {
+          "module": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+          "go_mod_url": "https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/@v/v1.46.0.mod",
+          "go_directive": "go 1.25.0"
+        }
+      ]
+    }
+  ],
+  "selected_version": "v1.46.0",
+  "selection_reason": "Newest examined common SDK/API/OTLPHTTP exporter release compatible with cached Go1.25.1. Newest overall1.47.0 requires Go1.26.",
+  "test_jsonschema_metadata": {
+    "metadata_url": "https://proxy.golang.org/github.com/santhosh-tekuri/jsonschema/v6/@latest",
+    "metadata": {
+      "Version": "v6.0.3",
+      "Time": "2026-06-28T17:38:00Z",
+      "Origin": {
+        "VCS": "git",
+        "URL": "https://github.com/santhosh-tekuri/jsonschema",
+        "Hash": "b0fc661f4939578bc429f408c18202573dbafcc4",
+        "Ref": "refs/tags/v6.0.3"
+      }
+    }
+  },
+  "selected_sources": [
+    {
+      "metadata_url": "https://proxy.golang.org/go.opentelemetry.io/otel/@v/v1.46.0.info",
+      "metadata": {
+        "Version": "v1.46.0",
+        "Time": "2026-08-25T16:52:31Z",
+        "Origin": {
+          "VCS": "git",
+          "URL": "https://github.com/open-telemetry/opentelemetry-go",
+          "Hash": "58db4c898f5b5594f8ba78f156475bf48486e2f2",
+          "Ref": "refs/tags/v1.46.0"
+        }
+      }
+    },
+    {
+      "metadata_url": "https://proxy.golang.org/go.opentelemetry.io/otel/sdk/@v/v1.46.0.info",
+      "metadata": {
+        "Version": "v1.46.0",
+        "Time": "2026-08-25T16:52:31Z",
+        "Origin": {
+          "VCS": "git",
+          "URL": "https://github.com/open-telemetry/opentelemetry-go",
+          "Subdir": "sdk",
+          "Hash": "58db4c898f5b5594f8ba78f156475bf48486e2f2",
+          "Ref": "refs/tags/sdk/v1.46.0"
+        }
+      }
+    },
+    {
+      "metadata_url": "https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/@v/v1.46.0.info",
+      "metadata": {
+        "Version": "v1.46.0",
+        "Time": "2026-08-25T16:52:31Z",
+        "Origin": {
+          "VCS": "git",
+          "URL": "https://github.com/open-telemetry/opentelemetry-go",
+          "Subdir": "exporters/otlp/otlptrace/otlptracehttp",
+          "Hash": "58db4c898f5b5594f8ba78f156475bf48486e2f2",
+          "Ref": "refs/tags/exporters/otlp/otlptrace/otlptracehttp/v1.46.0"
+        }
+      }
+    }
+  ],
+  "metric_sources_checked_at_utc": "2026-10-15T05:06:25.263004+00:00",
+  "metric_sources": [
+    {
+      "metadata_url": "https://proxy.golang.org/go.opentelemetry.io/otel/sdk/metric/@v/v1.46.0.info",
+      "metadata": {
+        "Version": "v1.46.0",
+        "Time": "2026-08-25T16:52:31Z",
+        "Origin": {
+          "VCS": "git",
+          "URL": "https://github.com/open-telemetry/opentelemetry-go",
+          "Subdir": "sdk/metric",
+          "Hash": "58db4c898f5b5594f8ba78f156475bf48486e2f2",
+          "Ref": "refs/tags/sdk/metric/v1.46.0"
+        }
+      },
+      "go_mod_url": "https://proxy.golang.org/go.opentelemetry.io/otel/sdk/metric/@v/v1.46.0.mod",
+      "go_directive": "go 1.25.0"
+    },
+    {
+      "metadata_url": "https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp/@v/v1.46.0.info",
+      "metadata": {
+        "Version": "v1.46.0",
+        "Time": "2026-08-25T16:52:31Z",
+        "Origin": {
+          "VCS": "git",
+          "URL": "https://github.com/open-telemetry/opentelemetry-go",
+          "Subdir": "exporters/otlp/otlpmetric/otlpmetrichttp",
+          "Hash": "58db4c898f5b5594f8ba78f156475bf48486e2f2",
+          "Ref": "refs/tags/exporters/otlp/otlpmetric/otlpmetrichttp/v1.46.0"
+        }
+      },
+      "go_mod_url": "https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp/@v/v1.46.0.mod",
+      "go_directive": "go 1.25.0"
+    }
+  ]
+}

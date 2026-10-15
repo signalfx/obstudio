@@ -30,7 +30,8 @@ its export destination:
 |---|---|
 | Existing OTel instrumentation for any signal, Galileo integration, framework bridge, or application spans | Preserve existing producers, providers and exporters. Enrich existing spans through supported hooks; add OTel spans, metrics and logs only for proven uncovered operations. Generic HTTP spans, a metrics-only or logs-only pipeline, and an active export-only provider all select this incremental path even when GenAI coverage is missing. Do not introduce Splunk AO instrumentation or a new SDK dependency to fill those gaps. |
 | Existing Splunk AO span creation | Preserve it and fill its version-specific gaps without duplicate operation spans. |
-| Agent runtime with no existing telemetry instrumentation | Introduce Splunk AO instrumentation by default, using SDK `@log` for supported function boundaries. If its exact contract cannot meet requirements, assess the supported SDK creator and then the source-proven per-operation public OTel exception below. An unused dependency, evaluation-only import or ordinary stdout logger alone does not establish runtime OTel instrumentation. |
+| Agent runtime with no existing telemetry instrumentation and a compatible supported Splunk AO SDK for its language | Introduce Splunk AO instrumentation by default, using SDK `@log` for supported function boundaries. If its exact contract cannot meet requirements, assess the supported SDK creator and then the source-proven per-operation public OTel exception below. An unused dependency, evaluation-only import or ordinary stdout logger alone does not establish runtime OTel instrumentation. |
+| Agent runtime whose language has no compatible supported Splunk AO SDK | Use that language's supported native OpenTelemetry libraries and framework instrumentation. Add application-owned spans for remaining source-proven GenAI operations and apply the same Required GenAI Coverage Profile and both vendors' compatibility mappings. AO SDK absence does not block instrumentation or reduce semantic acceptance. |
 
 Classify the actual target process before choosing a creator. Trace source-active
 or externally bootstrapped providers, instrumentors and exporters for each signal
@@ -71,7 +72,26 @@ If no supported repair exists, name the exact prerequisite and keep the surface
 partial. Explicit user choices override the default. Existing valid producers
 remain the default for already instrumented operations.
 
-For every new or repaired function hook, assess the decorator pattern first.
+For a fresh runtime, check SDK support for the actual language from current official
+documentation, package metadata and public APIs; record the sources and date.
+Do not infer another language's support from Python examples, invent a package,
+or install a Python sidecar to obtain span creation. When a compatible AO SDK
+is unavailable, select native OTel directly without requiring a failing AO
+installation or gateway. If a bounded source check cannot establish AO SDK
+support, record that uncertainty and use the native path rather than blocking
+supported telemetry work. Keep a real native-library or field limitation scoped
+to its affected operation/signal, with an explicit remaining gap.
+
+The native path has the same per-operation content, parameter, usage,
+correlation, privacy, schema, lifecycle and complete-trace acceptance below.
+Inspect actual emitted fields; native OTel installation and an OTLP exporter
+alone do not produce GenAI semantics. Use language-native wrappers or supported
+hooks for function boundaries instead of assuming Python `@log` syntax. Keep
+Project/Agent Stream resolution and destination-specific trace routing
+independent of the creator through the SDK-free resource path.
+
+For every new or repaired function hook, assess its language's supported
+decorator or wrapper pattern first.
 Within the selected Splunk AO producer path, use SDK `@log` wherever the chosen release supports the actual function and
 required safe content, semantics, lifecycle and export path. This includes
 ordinary sync/async functions, methods, serial nested calls and bounded plain
@@ -303,7 +323,7 @@ span-level attributes when the service can observe the value.
 | LLM/chat card | Span `chat {model}` or another GenAI inference operation with `gen_ai.operation.name=chat`, `gen_ai.provider.name`, `gen_ai.request.model`, and `gen_ai.response.model` when known |
 | Tool card | Span `execute_tool {tool}` with `gen_ai.operation.name=execute_tool` and stable `gen_ai.tool.name` |
 | Retrieval card | Span `retrieval {source}` with `gen_ai.operation.name=retrieval` and a low-cardinality data source attribute |
-| Tokens summary | `gen_ai.client.token.usage` metric with `gen_ai.token.type`; also set available `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` on the owning GenAI span; a derived total uses an application/vendor-owned attribute |
+| Tokens summary | Current inference input/output usage counters with `gen_ai.token.modality`; retain any existing legacy token metric as a consumer contract. Also set available `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` on the owning GenAI span; a derived total uses an application/vendor-owned attribute |
 | LLM/tool call counts | Service-owned per-workflow attributes or metrics such as `assistant.llm.calls` and `assistant.tool.calls`, plus child spans when possible |
 | Error badges | Span status ERROR plus low-cardinality `error.type` |
 | Streaming timeout explanation | First event/chunk latency, stream close reason family, timeout/cancel/disconnect events, and workflow ERROR with `error.type=first_event_timeout` or another stable class |
@@ -617,8 +637,8 @@ Required signals should be listed separately when the repo can observe them:
 - prompt/tool schema size.
 - LLM call count per turn.
 - tool call count per turn.
-- input and output token usage through `gen_ai.client.token.usage` when
-  provider usage data is available.
+- input and output token usage through current inference usage metrics when
+  provider usage data is available, with explicit unknown-usage handling.
 
 If only token usage and context-window usage are implemented, mark the ledger
 row as partial instead of filled. Use explicit wording such as: `Partial: token usage and context window added; truncation, token-limit error, prompt/tool schema size, and LLM-call fanout remain missing.`
@@ -670,8 +690,8 @@ GenAI readiness complete:
   version, freshness or last-ingest age, and cache hit/miss.
 - **Token/context/cost pressure:** input, output, and cached tokens; context
   length or bytes; budget percent; truncation; token-limit errors; and
-  per-workflow aggregated tokens and LLM calls. Use `gen_ai.client.token.usage`
-  and provider/model attributes as the semconv source of usage. If the
+  per-workflow aggregated tokens and LLM calls. Use current inference usage
+  metrics and provider/model attributes as the semconv source of usage. If the
   application owns an accurate pricing map, add a low-cardinality custom cost
   metric by workflow/provider/model and currency. If cost is computed by billing
   exports, provider dashboards, or finance systems, owner-map the exact source
@@ -874,17 +894,32 @@ low-cardinality class such as `timeout`, `rate_limit`, `provider_5xx`,
 
 ## Metrics
 
-Prefer OTel GenAI metrics where data is available:
+Resolve the current official GenAI metric contract at task time alongside the
+span conventions. Inspect instrument types, units, required measurement
+attributes and error/unknown-usage rules; familiar historical names do not
+establish the current contract. Current inference conventions use:
 
-- `gen_ai.client.operation.duration` for latency by operation/provider/model.
-- `gen_ai.client.token.usage` for input/output token histograms with
-  `gen_ai.token.type`.
-- `gen_ai.client.operation.time_to_first_chunk` and
-  `gen_ai.client.operation.time_per_output_chunk` for streaming workflows.
+- `gen_ai.client.inference.duration`, a duration histogram in seconds.
+- `gen_ai.client.inference.usage.input_tokens` and
+  `gen_ai.client.inference.usage.output_tokens`, token counters with
+  `gen_ai.token.modality` plus the applicable operation/provider/model fields.
+- Source-applicable cache/reasoning counters, per-operation token distributions
+  and streaming timing metrics from the current inference/token tables.
 
-Do not report token metrics when token counts cannot be obtained efficiently or
-accurately. When providers distinguish billable tokens from raw used tokens,
-report billable tokens.
+The current contract excludes inference from `gen_ai.client.operation.duration`;
+use that metric only for its applicable non-inference operations. Preserve
+existing `gen_ai.client.token.usage`/`gen_ai.token.type` and older streaming
+metrics as explicit compatibility contracts instead of silently renaming or
+duplicating their producers. Record any selected transition and its consumer
+impact separately from current-convention acceptance.
+
+Use provider-reported usage and the current documented aggregation semantics.
+Do not estimate tokens or substitute billing values for another defined count.
+Where the current usage-counter contract specifies zero with modality `unknown`
+for a missing/error response, prove that metric convention separately from
+observed usage; it does not authorize fabricated span usage or successful
+output. Keep unavailable source values explicit. Match every chosen metric to
+the exact current table and observable source in the closure matrix.
 
 Add service-owned metrics only when OTel has no convention:
 
@@ -909,7 +944,7 @@ Map incident patterns to concrete signals:
 
 | Incident pattern | Detection/localization signal |
 |---|---|
-| Slow or timing-out assistant/workflow | workflow p90/p99, `gen_ai.client.operation.duration`, timeout rate by workflow/provider/model/environment |
+| Slow or timing-out assistant/workflow | workflow p90/p99, applicable operation duration, `gen_ai.client.inference.duration` for inference, timeout rate by workflow/provider/model/environment |
 | Extra LLM/tool fanout | LLM-call count, tool-call count, input/output tokens, context bytes per workflow request |
 | Provider outage/latency | provider latency/error/timeout/rate-limit by provider/model/region/deployment |
 | Model/config mismatch | model readiness check, failed model resolution, request vs response model, config version |

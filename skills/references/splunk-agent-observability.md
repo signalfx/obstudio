@@ -399,7 +399,9 @@ streaming lifecycle, and uncovered GenAI operations independently; SDK-created
 workflow or tool spans do not prove those other signals.
 
 Default to **Fresh Agent SDK Instrumentation** only when the live runtime has
-no existing telemetry instrumentation. Existing generic OTel spans, a real
+no existing telemetry instrumentation and its language has a compatible
+supported Splunk AO SDK. Apply the native OTel language fallback below when no
+such SDK is available. Existing generic OTel spans, a real
 metrics or logs pipeline, an active export-only provider, Galileo or another
 framework producer select incremental OTel gap filling. Preserve their
 producers, providers and exporters, enrich supported hooks, and add only
@@ -417,8 +419,9 @@ it does not conclude unfinished operations or replace shutdown.
 
 ### Fresh Agent SDK Instrumentation
 
-Use the installed version's supported Splunk AO span-creation APIs for a fresh
-agent, rather than only adding `add_splunk_ao_span_processor`. Before choosing
+For a fresh agent whose language has a compatible supported Splunk AO SDK,
+use its supported span-creation APIs, rather than only adding
+`add_splunk_ao_span_processor`. Before choosing
 an integration, inspect the current
 [official SDK examples](https://github.com/splunk/splunk-ao-python/tree/main/examples)
 and the matching installed API/source. Record the example path, revision/date,
@@ -879,9 +882,27 @@ This choice does not require Studio/gateway availability or live credentials
 for source work and deterministic tests. Use the selected supported export
 destination and normal SDK resource/config APIs; existing direct-cloud and
 gateway behavior stays independent of the span-creation choice. For another
-language, verify the supported SDK/integration for that runtime; Python
-examples do not prove another language's API. An unsupported runtime is an
-explicit prerequisite rather than an invented SDK or silent default change.
+language, check current official documentation, package metadata and public
+APIs for a compatible supported SDK/integration; record source/date and runtime
+compatibility. Python examples do not prove another language's API. If the
+language has no compatible supported Splunk AO SDK, use its native public
+OpenTelemetry SDK, supported instrumentation and OTLP exporters. A bounded
+check that cannot establish AO SDK support is recorded as unverified support,
+not a reason to block the supported native path. Do not invent an AO package,
+install a Python sidecar or require a deliberately failing SDK import.
+
+Apply the entire applicable **Required GenAI Coverage Profile** from
+`genai-readiness.md` to these native spans: actual operation/name/kind/parent,
+provider/model and known request/response/usage fields, bounded safe typed
+inputs/outputs, tool arguments/results plus their message mappings, retrieval
+query/documents, source-supported correlation and correct error/cancel endings.
+Preserve existing creators and use supported same-span hooks before adding
+uncovered operations. Native libraries do not automatically fill these fields;
+verify completed exported spans, concrete content schemas and full trace trees.
+Missing source values remain explicit gaps or justified N/A rather than
+fabricated defaults or successful outputs. Use the SDK-free resource and trace
+routing path below for selected Project/Agent Stream configuration. SDK absence
+does not make that configuration dependent on an AO span-creation library.
 
 ### Existing OpenTelemetry Provider
 

@@ -1,0 +1,2109 @@
+{
+  "kind": "dated-go-sdk-capability-and-complete-native-genai-profile",
+  "scope": "Read-only current-source evidence for a fresh Go agent. Absence of a documented compatible Splunk AO Go SDK selects native Go OTel; it does not make applicable GenAI/vendor fields optional or block native work.",
+  "captured_at_utc": "2026-10-15T04:49:37.936127+00:00",
+  "sdk_capability": {
+    "selected_language": "Go",
+    "reviewed_sdk_catalog_languages": [
+      "python"
+    ],
+    "reviewed_sdk_catalog_go_entry_count": 0,
+    "conclusion": "No compatible Splunk AO Go span-creation SDK is documented in the captured official SDK catalog. This is a scoped dated finding, not proof of permanent global absence. Do not invent a Go SDK or force a Python sidecar; use supported Go OTel APIs while reporting that exact SDK capability gap.",
+    "future_check": "Recheck current official SDK documentation/package/runtime compatibility when doing a new task; unsupported or unverified vendor SDK support must not block native OTel gap closure.",
+    "catalog_excerpt": "- [Overview](https://agent-observability-docs.splunk.com/sdk-api/python/sdk-reference.md): Get started using the Splunk AO Python SDK",
+    "primary_sources": [
+      {
+        "key": "ao-python-sdk",
+        "url": "https://agent-observability-docs.splunk.com/sdk-api/python/sdk-reference",
+        "resolved_url": "https://agent-observability-docs.splunk.com/sdk-api/python/sdk-reference",
+        "captured_at_utc": "2026-10-15T04:45:52.670246+00:00",
+        "sha256": "e66e9004cef8b5070fdbfa0e84ca9b0636b2888022cb764cd8a7f82364bffd43",
+        "bytes": 472431
+      },
+      {
+        "key": "otel-go-instrumentation",
+        "url": "https://opentelemetry.io/docs/languages/go/instrumentation/",
+        "resolved_url": "https://opentelemetry.io/docs/languages/go/instrumentation/",
+        "captured_at_utc": "2026-10-15T04:45:53.352293+00:00",
+        "sha256": "66cf46c8448ecd875a1f39bc58f2000d1fd9129a7e5ca9dcd677a5b1978ddf4b",
+        "bytes": 557615
+      },
+      {
+        "key": "ao-index",
+        "url": "https://agent-observability-docs.splunk.com/llms.txt",
+        "resolved_url": "https://agent-observability-docs.splunk.com/llms.txt",
+        "captured_at_utc": "2026-10-15T04:45:53.487416+00:00",
+        "sha256": "fbccf1cd4c6424c7f56688f40f21b8aaecbf8425ae0a487adac99ba0817a4948",
+        "bytes": 95917
+      },
+      {
+        "url": "https://raw.githubusercontent.com/splunk/splunk-ao-python/b5f226e947e1861b5687ee85b39474fe9d63df57/README.md",
+        "repository": "https://github.com/splunk/splunk-ao-python",
+        "requested_ref": "main",
+        "resolved_revision": "b5f226e947e1861b5687ee85b39474fe9d63df57",
+        "captured_at_utc": "2026-10-15T04:49:54.105319+00:00",
+        "sha256": "eac0c2624eb4974e32520f120ea71b289fed2ad1b0812b58e05da8b3f0ad7a62",
+        "bytes": 24305,
+        "capability_scope": "Python SDK README/install/API evidence; this repository is not a Go SDK catalog."
+      }
+    ]
+  },
+  "otel": {
+    "repository": "https://github.com/open-telemetry/semantic-conventions-genai",
+    "requested_ref": "main",
+    "resolved_revision": "f3c6d0c9bb66ebd474668a3a0be25c61226f02c2",
+    "commit_date": "2026-10-14T23:28:29Z",
+    "captured_at_utc": "2026-10-15T04:47:05.881324+00:00",
+    "files": [
+      {
+        "path": "docs/gen-ai/gen-ai-agent-spans.md",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/docs/gen-ai/gen-ai-agent-spans.md",
+        "sha256": "2f2dc2e7b74e3d764f65d1a00297f13bf96ecc0ae4a21de901ce7c60876bccb4",
+        "bytes": 146972
+      },
+      {
+        "path": "docs/gen-ai/client-inference.md",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/docs/gen-ai/client-inference.md",
+        "sha256": "38038f6b981dd12a73db3cb7c7bc2b14e0fa39140ce639861d82f1fbe0fea3bc",
+        "bytes": 116237
+      },
+      {
+        "path": "docs/gen-ai/gen-ai-spans.md",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/docs/gen-ai/gen-ai-spans.md",
+        "sha256": "24442968d4cbe2233b90bd542ab3ace08fd62e3548948d3f4b3803c176b92852",
+        "bytes": 83979
+      },
+      {
+        "path": "model/gen-ai/gen-ai-input-messages.json",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/model/gen-ai/gen-ai-input-messages.json",
+        "sha256": "034fcd8c87f1e013f3a5a5018503210e2bee4d2499c361823b96e906d40a50ad",
+        "bytes": 20355
+      },
+      {
+        "path": "model/gen-ai/gen-ai-output-messages.json",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/model/gen-ai/gen-ai-output-messages.json",
+        "sha256": "cb1e0296de9a5c15237f4e49af2f13e1409ffc9a671f89767da20ad986f37461",
+        "bytes": 21615
+      },
+      {
+        "path": "model/gen-ai/gen-ai-tool-call-arguments.json",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/model/gen-ai/gen-ai-tool-call-arguments.json",
+        "sha256": "73607a8e8d9e84393475ef460108c59dbb9e1d2ddc0d0177fce6f735a62367ea",
+        "bytes": 171
+      },
+      {
+        "path": "model/gen-ai/gen-ai-tool-call-result.json",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/model/gen-ai/gen-ai-tool-call-result.json",
+        "sha256": "44eb4a93b05eea7da14489f1d253814c6429772d1fe869f8f6fc1749d7593412",
+        "bytes": 168
+      },
+      {
+        "path": "model/gen-ai/gen-ai-tool-definitions.json",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/model/gen-ai/gen-ai-tool-definitions.json",
+        "sha256": "023501e9835139703d4b475c86d3d6b6b11dee2ccc08ea6c8ab48d173b89aa80",
+        "bytes": 3227
+      },
+      {
+        "path": "model/gen-ai/gen-ai-retrieval-documents.json",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/model/gen-ai/gen-ai-retrieval-documents.json",
+        "sha256": "051d5e2f31789949763fc27c69356e8e5cfb7067fe6262a2a24066a7a474af29",
+        "bytes": 1438
+      },
+      {
+        "path": "docs/gen-ai/gen-ai-metrics.md",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/docs/gen-ai/gen-ai-metrics.md",
+        "sha256": "bf2359b880618efece9c8f5e1f76e3b3782fe8d8ecc22fb1df2bac3b549d7194",
+        "bytes": 64991
+      },
+      {
+        "path": "docs/gen-ai/gen-ai-token-metrics.md",
+        "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/docs/gen-ai/gen-ai-token-metrics.md",
+        "sha256": "15a1d1143c1cc23beb3ff353e4b7556bc1d21caeee134572e7ce8ff43236c688",
+        "bytes": 88131
+      }
+    ],
+    "attribute_requirement_rows": [
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.operation.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "error.type",
+        "official_level": "Conditionally Required",
+        "condition": "If the operation ended in an error."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.agent.description",
+        "official_level": "Conditionally Required",
+        "condition": "When available."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.agent.name",
+        "official_level": "Conditionally Required",
+        "condition": "When available."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.conversation.id",
+        "official_level": "Conditionally Required",
+        "condition": "[3]"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.data_source.id",
+        "official_level": "Conditionally Required",
+        "condition": "If applicable."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.output.type",
+        "official_level": "Conditionally Required",
+        "condition": "[6]"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.choice.count",
+        "official_level": "Conditionally Required",
+        "condition": "If available, in the request, and !=1."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.seed",
+        "official_level": "Conditionally Required",
+        "condition": "If applicable and if the request includes a seed."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.frequency_penalty",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.max_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.model",
+        "official_level": "Recommended",
+        "condition": "If applicable."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.presence_penalty",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.stop_sequences",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.temperature",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.request.top_p",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.response.finish_reasons",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.usage.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.usage.output_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.input.messages",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.output.messages",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.system_instructions",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-agent-spans.md",
+        "section": "Invoke agent internal span",
+        "attribute": "gen_ai.tool.definitions",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.operation.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.provider.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "error.type",
+        "official_level": "Conditionally Required",
+        "condition": "If the operation ended in an error."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.conversation.id",
+        "official_level": "Conditionally Required",
+        "condition": "[4]"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.output.type",
+        "official_level": "Conditionally Required",
+        "condition": "[6]"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.prompt.name",
+        "official_level": "Conditionally Required",
+        "condition": "when a named prompt template is used"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.prompt.version",
+        "official_level": "Conditionally Required",
+        "condition": "[8]"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.choice.count",
+        "official_level": "Conditionally Required",
+        "condition": "If available, in the request, and !=1."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.model",
+        "official_level": "Conditionally Required",
+        "condition": "If available."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.seed",
+        "official_level": "Conditionally Required",
+        "condition": "If applicable and if the request includes a seed."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.stream",
+        "official_level": "Conditionally Required",
+        "condition": "[11]"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.top_k",
+        "official_level": "Conditionally Required",
+        "condition": "If applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "server.port",
+        "official_level": "Conditionally Required",
+        "condition": "If server.address is set."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.conversation.compacted",
+        "official_level": "Recommended",
+        "condition": "when available"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.frequency_penalty",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.max_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.presence_penalty",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.previous_response.id",
+        "official_level": "Recommended",
+        "condition": "[15]"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.reasoning.level",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.stop_sequences",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.temperature",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.request.top_p",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.response.finish_reasons",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.response.id",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.response.model",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.response.time_to_first_chunk",
+        "official_level": "Recommended",
+        "condition": "If the request was a streaming request."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.audio.cache_read.input_tokens",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.audio.input_tokens",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.audio.output_tokens",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.cache_read.input_tokens",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.cache_write.input_tokens",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.image.cache_read.input_tokens",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.image.input_tokens",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.image.output_tokens",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.input_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.output_tokens",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.reasoning.output_tokens",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.text.cache_read.input_tokens",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.text.input_tokens",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.usage.text.output_tokens",
+        "official_level": "Recommended",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "server.address",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.input.messages",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.output.messages",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.prompt.variable",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.system_instructions",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/client-inference.md",
+        "section": "Span: `gen_ai.client.inference`",
+        "attribute": "gen_ai.tool.definitions",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.operation.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "error.type",
+        "official_level": "Conditionally Required",
+        "condition": "If the operation ended in an error."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.data_source.id",
+        "official_level": "Conditionally Required",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.provider.name",
+        "official_level": "Conditionally Required",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.request.model",
+        "official_level": "Conditionally Required",
+        "condition": "If available."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "server.port",
+        "official_level": "Conditionally Required",
+        "condition": "If server.address is set."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.retrieval.top_k",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "server.address",
+        "official_level": "Recommended"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.retrieval.documents",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Retrievals",
+        "attribute": "gen_ai.retrieval.query.text",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.operation.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.tool.name",
+        "official_level": "Required"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "error.type",
+        "official_level": "Conditionally Required",
+        "condition": "If the operation ended in an error."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.agent.name",
+        "official_level": "Conditionally Required",
+        "condition": "When applicable."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.conversation.id",
+        "official_level": "Conditionally Required",
+        "condition": "If available."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.tool.call.id",
+        "official_level": "Recommended",
+        "condition": "If available."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.tool.description",
+        "official_level": "Recommended",
+        "condition": "If available."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.tool.type",
+        "official_level": "Recommended",
+        "condition": "If available."
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.tool.call.arguments",
+        "official_level": "Opt-In"
+      },
+      {
+        "document": "docs/gen-ai/gen-ai-spans.md",
+        "section": "Execute tool span",
+        "attribute": "gen_ai.tool.call.result",
+        "official_level": "Opt-In"
+      }
+    ],
+    "structured_schemas": {
+      "model/gen-ai/gen-ai-input-messages.json": {
+        "$defs": {
+          "BlobPart": {
+            "description": "Represents blob binary data sent inline to the model",
+            "properties": {
+              "type": {
+                "const": "blob",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "mime_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The IANA MIME type of the attached data.",
+                "title": "Mime Type"
+              },
+              "modality": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Modality"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "The general modality of the data if it is known. Instrumentations SHOULD also set the mimeType field if the specific type is known.",
+                "title": "Modality"
+              },
+              "content": {
+                "description": "Raw bytes of the attached data. This field SHOULD be encoded as a base64 string when serialized to JSON.",
+                "format": "binary",
+                "title": "Content",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "modality",
+              "content"
+            ],
+            "title": "BlobPart",
+            "type": "object"
+          },
+          "ChatMessage": {
+            "additionalProperties": true,
+            "properties": {
+              "role": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Role"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "Role of the entity that created the message.",
+                "title": "Role"
+              },
+              "parts": {
+                "description": "List of message parts that make up the message content.",
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/TextPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ToolCallRequestPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ToolCallResponsePart"
+                    },
+                    {
+                      "$ref": "#/$defs/ServerToolCallPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ServerToolCallResponsePart"
+                    },
+                    {
+                      "$ref": "#/$defs/BlobPart"
+                    },
+                    {
+                      "$ref": "#/$defs/FilePart"
+                    },
+                    {
+                      "$ref": "#/$defs/UriPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ReasoningPart"
+                    },
+                    {
+                      "$ref": "#/$defs/CompactionPart"
+                    },
+                    {
+                      "$ref": "#/$defs/GenericPart"
+                    }
+                  ]
+                },
+                "title": "Parts",
+                "type": "array"
+              },
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The name of the participant.",
+                "title": "Name"
+              }
+            },
+            "required": [
+              "role",
+              "parts"
+            ],
+            "title": "ChatMessage",
+            "type": "object"
+          },
+          "CompactionPart": {
+            "additionalProperties": true,
+            "description": "Represents compacted conversation state sent to or received from the model.",
+            "properties": {
+              "type": {
+                "const": "compaction",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Provider-assigned identifier for the compaction item or block.",
+                "title": "Id"
+              },
+              "content": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The unencrypted compacted conversation summary, when available.",
+                "title": "Content"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "title": "CompactionPart",
+            "type": "object"
+          },
+          "FilePart": {
+            "additionalProperties": true,
+            "description": "Represents an external referenced file sent to the model by file id",
+            "properties": {
+              "type": {
+                "const": "file",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "mime_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The IANA MIME type of the attached data.",
+                "title": "Mime Type"
+              },
+              "modality": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Modality"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "The general modality of the data if it is known. Instrumentations SHOULD also set the mimeType field if the specific type is known.",
+                "title": "Modality"
+              },
+              "file_id": {
+                "description": "An identifier referencing a file that was pre-uploaded to the provider.",
+                "title": "File Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "modality",
+              "file_id"
+            ],
+            "title": "FilePart",
+            "type": "object"
+          },
+          "GenericPart": {
+            "additionalProperties": true,
+            "description": "Represents an arbitrary message part with any type and properties.\nThis allows for extensibility with custom message part types.",
+            "properties": {
+              "type": {
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "title": "GenericPart",
+            "type": "object"
+          },
+          "GenericServerToolCall": {
+            "additionalProperties": true,
+            "description": "Represents an arbitrary server tool call with any type and properties.\nThis allows for extensibility with custom server tool types.",
+            "properties": {
+              "type": {
+                "description": "Type identifier for the server tool call.",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "title": "GenericServerToolCall",
+            "type": "object"
+          },
+          "GenericServerToolCallResponse": {
+            "additionalProperties": true,
+            "description": "Represents an arbitrary server tool call response with any type and properties.\nThis allows for extensibility with custom server tool response types.",
+            "properties": {
+              "type": {
+                "description": "Type identifier for the server tool call response.",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "title": "GenericServerToolCallResponse",
+            "type": "object"
+          },
+          "Modality": {
+            "enum": [
+              "image",
+              "video",
+              "audio",
+              "document"
+            ],
+            "title": "Modality",
+            "type": "string"
+          },
+          "ReasoningPart": {
+            "additionalProperties": true,
+            "description": "Represents reasoning/thinking content received from the model.",
+            "properties": {
+              "type": {
+                "const": "reasoning",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "content": {
+                "description": "Reasoning/thinking content received from the model.",
+                "title": "Content",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "content"
+            ],
+            "title": "ReasoningPart",
+            "type": "object"
+          },
+          "Role": {
+            "enum": [
+              "system",
+              "user",
+              "assistant",
+              "tool"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "ServerToolCallPart": {
+            "additionalProperties": true,
+            "description": "Represents a server-side tool call invocation. Server tool calls are executed by the model provider on the server side rather than by the client application. Provider-specific tools (e.g., code_interpreter, web_search) can have well-defined schemas defined by the respective providers.",
+            "properties": {
+              "type": {
+                "const": "server_tool_call",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Unique identifier for the server tool call.",
+                "title": "Id"
+              },
+              "name": {
+                "description": "Name of the server tool.",
+                "title": "Name",
+                "type": "string"
+              },
+              "server_tool_call": {
+                "$ref": "#/$defs/GenericServerToolCall",
+                "description": "Polymorphic server tool call details with type discriminator. The structure varies based on the tool type."
+              }
+            },
+            "required": [
+              "type",
+              "name",
+              "server_tool_call"
+            ],
+            "title": "ServerToolCallPart",
+            "type": "object"
+          },
+          "ServerToolCallResponsePart": {
+            "additionalProperties": true,
+            "description": "Represents a server-side tool call response. Contains the outcome and details of a server tool execution. Provider-specific tools (e.g., code_interpreter, web_search) can have well-defined response schemas defined by the respective providers.",
+            "properties": {
+              "type": {
+                "const": "server_tool_call_response",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Unique server tool call identifier matching the original call.",
+                "title": "Id"
+              },
+              "server_tool_call_response": {
+                "$ref": "#/$defs/GenericServerToolCallResponse",
+                "description": "Polymorphic server tool call response with type discriminator. The structure varies based on the tool type."
+              }
+            },
+            "required": [
+              "type",
+              "server_tool_call_response"
+            ],
+            "title": "ServerToolCallResponsePart",
+            "type": "object"
+          },
+          "TextPart": {
+            "additionalProperties": true,
+            "description": "Represents text content sent to or received from the model.",
+            "properties": {
+              "type": {
+                "const": "text",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "content": {
+                "description": "Text content sent to or received from the model.",
+                "title": "Content",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "content"
+            ],
+            "title": "TextPart",
+            "type": "object"
+          },
+          "ToolCallRequestPart": {
+            "additionalProperties": true,
+            "description": "Represents a tool call requested by the model.",
+            "properties": {
+              "type": {
+                "const": "tool_call",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Unique identifier for the tool call.",
+                "title": "Id"
+              },
+              "name": {
+                "description": "Name of the tool.",
+                "title": "Name",
+                "type": "string"
+              },
+              "arguments": {
+                "default": null,
+                "description": "Arguments for the tool call.",
+                "title": "Arguments"
+              }
+            },
+            "required": [
+              "type",
+              "name"
+            ],
+            "title": "ToolCallRequestPart",
+            "type": "object"
+          },
+          "ToolCallResponsePart": {
+            "additionalProperties": true,
+            "description": "Represents a tool call result sent to the model or a built-in tool call outcome and details.",
+            "properties": {
+              "type": {
+                "const": "tool_call_response",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Unique tool call identifier.",
+                "title": "Id"
+              },
+              "response": {
+                "description": "Tool call response.",
+                "title": "Response"
+              }
+            },
+            "required": [
+              "type",
+              "response"
+            ],
+            "title": "ToolCallResponsePart",
+            "type": "object"
+          },
+          "UriPart": {
+            "additionalProperties": true,
+            "description": "Represents an external referenced file sent to the model by URI",
+            "properties": {
+              "type": {
+                "const": "uri",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "mime_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The IANA MIME type of the attached data.",
+                "title": "Mime Type"
+              },
+              "modality": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Modality"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "The general modality of the data if it is known. Instrumentations SHOULD also set the mimeType field if the specific type is known.",
+                "title": "Modality"
+              },
+              "uri": {
+                "description": "A URI referencing attached data. It should not be a base64 data URL, which should use the `blob` part instead. The URI may use a scheme known to the provider api (e.g. `gs://bucket/object.png`), or be a publicly accessible location.",
+                "title": "Uri",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "modality",
+              "uri"
+            ],
+            "title": "UriPart",
+            "type": "object"
+          }
+        },
+        "description": "Represents the list of input messages sent to the model.",
+        "items": {
+          "$ref": "#/$defs/ChatMessage"
+        },
+        "title": "InputMessages",
+        "type": "array"
+      },
+      "model/gen-ai/gen-ai-output-messages.json": {
+        "$defs": {
+          "BlobPart": {
+            "description": "Represents blob binary data sent inline to the model",
+            "properties": {
+              "type": {
+                "const": "blob",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "mime_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The IANA MIME type of the attached data.",
+                "title": "Mime Type"
+              },
+              "modality": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Modality"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "The general modality of the data if it is known. Instrumentations SHOULD also set the mimeType field if the specific type is known.",
+                "title": "Modality"
+              },
+              "content": {
+                "description": "Raw bytes of the attached data. This field SHOULD be encoded as a base64 string when serialized to JSON.",
+                "format": "binary",
+                "title": "Content",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "modality",
+              "content"
+            ],
+            "title": "BlobPart",
+            "type": "object"
+          },
+          "CompactionPart": {
+            "additionalProperties": true,
+            "description": "Represents compacted conversation state sent to or received from the model.",
+            "properties": {
+              "type": {
+                "const": "compaction",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Provider-assigned identifier for the compaction item or block.",
+                "title": "Id"
+              },
+              "content": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The unencrypted compacted conversation summary, when available.",
+                "title": "Content"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "title": "CompactionPart",
+            "type": "object"
+          },
+          "FilePart": {
+            "additionalProperties": true,
+            "description": "Represents an external referenced file sent to the model by file id",
+            "properties": {
+              "type": {
+                "const": "file",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "mime_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The IANA MIME type of the attached data.",
+                "title": "Mime Type"
+              },
+              "modality": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Modality"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "The general modality of the data if it is known. Instrumentations SHOULD also set the mimeType field if the specific type is known.",
+                "title": "Modality"
+              },
+              "file_id": {
+                "description": "An identifier referencing a file that was pre-uploaded to the provider.",
+                "title": "File Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "modality",
+              "file_id"
+            ],
+            "title": "FilePart",
+            "type": "object"
+          },
+          "FinishReason": {
+            "description": "Represents the reason for finishing the generation.",
+            "enum": [
+              "stop",
+              "length",
+              "content_filter",
+              "tool_call",
+              "compaction",
+              "error"
+            ],
+            "title": "FinishReason",
+            "type": "string"
+          },
+          "GenericPart": {
+            "additionalProperties": true,
+            "description": "Represents an arbitrary message part with any type and properties.\nThis allows for extensibility with custom message part types.",
+            "properties": {
+              "type": {
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "title": "GenericPart",
+            "type": "object"
+          },
+          "GenericServerToolCall": {
+            "additionalProperties": true,
+            "description": "Represents an arbitrary server tool call with any type and properties.\nThis allows for extensibility with custom server tool types.",
+            "properties": {
+              "type": {
+                "description": "Type identifier for the server tool call.",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "title": "GenericServerToolCall",
+            "type": "object"
+          },
+          "GenericServerToolCallResponse": {
+            "additionalProperties": true,
+            "description": "Represents an arbitrary server tool call response with any type and properties.\nThis allows for extensibility with custom server tool response types.",
+            "properties": {
+              "type": {
+                "description": "Type identifier for the server tool call response.",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "title": "GenericServerToolCallResponse",
+            "type": "object"
+          },
+          "Modality": {
+            "enum": [
+              "image",
+              "video",
+              "audio",
+              "document"
+            ],
+            "title": "Modality",
+            "type": "string"
+          },
+          "OutputMessage": {
+            "additionalProperties": true,
+            "description": "Represents an output message generated by the model or agent. The output message captures\nspecific response (choice, candidate).",
+            "properties": {
+              "role": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Role"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "Role of the entity that created the message.",
+                "title": "Role"
+              },
+              "parts": {
+                "description": "List of message parts that make up the message content.",
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/TextPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ToolCallRequestPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ToolCallResponsePart"
+                    },
+                    {
+                      "$ref": "#/$defs/ServerToolCallPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ServerToolCallResponsePart"
+                    },
+                    {
+                      "$ref": "#/$defs/BlobPart"
+                    },
+                    {
+                      "$ref": "#/$defs/FilePart"
+                    },
+                    {
+                      "$ref": "#/$defs/UriPart"
+                    },
+                    {
+                      "$ref": "#/$defs/ReasoningPart"
+                    },
+                    {
+                      "$ref": "#/$defs/CompactionPart"
+                    },
+                    {
+                      "$ref": "#/$defs/GenericPart"
+                    }
+                  ]
+                },
+                "title": "Parts",
+                "type": "array"
+              },
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The name of the participant.",
+                "title": "Name"
+              },
+              "finish_reason": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/FinishReason"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "deprecated": true,
+                "description": "Deprecated: report finish reasons in `gen_ai.response.finish_reasons` instead. Reason for finishing the generation.",
+                "title": "Finish Reason"
+              }
+            },
+            "required": [
+              "role",
+              "parts"
+            ],
+            "title": "OutputMessage",
+            "type": "object"
+          },
+          "ReasoningPart": {
+            "additionalProperties": true,
+            "description": "Represents reasoning/thinking content received from the model.",
+            "properties": {
+              "type": {
+                "const": "reasoning",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "content": {
+                "description": "Reasoning/thinking content received from the model.",
+                "title": "Content",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "content"
+            ],
+            "title": "ReasoningPart",
+            "type": "object"
+          },
+          "Role": {
+            "enum": [
+              "system",
+              "user",
+              "assistant",
+              "tool"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "ServerToolCallPart": {
+            "additionalProperties": true,
+            "description": "Represents a server-side tool call invocation. Server tool calls are executed by the model provider on the server side rather than by the client application. Provider-specific tools (e.g., code_interpreter, web_search) can have well-defined schemas defined by the respective providers.",
+            "properties": {
+              "type": {
+                "const": "server_tool_call",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Unique identifier for the server tool call.",
+                "title": "Id"
+              },
+              "name": {
+                "description": "Name of the server tool.",
+                "title": "Name",
+                "type": "string"
+              },
+              "server_tool_call": {
+                "$ref": "#/$defs/GenericServerToolCall",
+                "description": "Polymorphic server tool call details with type discriminator. The structure varies based on the tool type."
+              }
+            },
+            "required": [
+              "type",
+              "name",
+              "server_tool_call"
+            ],
+            "title": "ServerToolCallPart",
+            "type": "object"
+          },
+          "ServerToolCallResponsePart": {
+            "additionalProperties": true,
+            "description": "Represents a server-side tool call response. Contains the outcome and details of a server tool execution. Provider-specific tools (e.g., code_interpreter, web_search) can have well-defined response schemas defined by the respective providers.",
+            "properties": {
+              "type": {
+                "const": "server_tool_call_response",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Unique server tool call identifier matching the original call.",
+                "title": "Id"
+              },
+              "server_tool_call_response": {
+                "$ref": "#/$defs/GenericServerToolCallResponse",
+                "description": "Polymorphic server tool call response with type discriminator. The structure varies based on the tool type."
+              }
+            },
+            "required": [
+              "type",
+              "server_tool_call_response"
+            ],
+            "title": "ServerToolCallResponsePart",
+            "type": "object"
+          },
+          "TextPart": {
+            "additionalProperties": true,
+            "description": "Represents text content sent to or received from the model.",
+            "properties": {
+              "type": {
+                "const": "text",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "content": {
+                "description": "Text content sent to or received from the model.",
+                "title": "Content",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "content"
+            ],
+            "title": "TextPart",
+            "type": "object"
+          },
+          "ToolCallRequestPart": {
+            "additionalProperties": true,
+            "description": "Represents a tool call requested by the model.",
+            "properties": {
+              "type": {
+                "const": "tool_call",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Unique identifier for the tool call.",
+                "title": "Id"
+              },
+              "name": {
+                "description": "Name of the tool.",
+                "title": "Name",
+                "type": "string"
+              },
+              "arguments": {
+                "default": null,
+                "description": "Arguments for the tool call.",
+                "title": "Arguments"
+              }
+            },
+            "required": [
+              "type",
+              "name"
+            ],
+            "title": "ToolCallRequestPart",
+            "type": "object"
+          },
+          "ToolCallResponsePart": {
+            "additionalProperties": true,
+            "description": "Represents a tool call result sent to the model or a built-in tool call outcome and details.",
+            "properties": {
+              "type": {
+                "const": "tool_call_response",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Unique tool call identifier.",
+                "title": "Id"
+              },
+              "response": {
+                "description": "Tool call response.",
+                "title": "Response"
+              }
+            },
+            "required": [
+              "type",
+              "response"
+            ],
+            "title": "ToolCallResponsePart",
+            "type": "object"
+          },
+          "UriPart": {
+            "additionalProperties": true,
+            "description": "Represents an external referenced file sent to the model by URI",
+            "properties": {
+              "type": {
+                "const": "uri",
+                "description": "The type of the content captured in this part.",
+                "title": "Type",
+                "type": "string"
+              },
+              "mime_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The IANA MIME type of the attached data.",
+                "title": "Mime Type"
+              },
+              "modality": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Modality"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "The general modality of the data if it is known. Instrumentations SHOULD also set the mimeType field if the specific type is known.",
+                "title": "Modality"
+              },
+              "uri": {
+                "description": "A URI referencing attached data. It should not be a base64 data URL, which should use the `blob` part instead. The URI may use a scheme known to the provider api (e.g. `gs://bucket/object.png`), or be a publicly accessible location.",
+                "title": "Uri",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "modality",
+              "uri"
+            ],
+            "title": "UriPart",
+            "type": "object"
+          }
+        },
+        "description": "Represents the list of output messages generated by the model or agent.",
+        "items": {
+          "$ref": "#/$defs/OutputMessage"
+        },
+        "title": "OutputMessages",
+        "type": "array"
+      },
+      "model/gen-ai/gen-ai-tool-call-arguments.json": {
+        "additionalProperties": true,
+        "description": "Represents object-like arguments passed to a tool call.",
+        "title": "ToolCallArguments",
+        "type": "object"
+      },
+      "model/gen-ai/gen-ai-tool-call-result.json": {
+        "additionalProperties": true,
+        "description": "Represents object-like results returned by a tool call.",
+        "title": "ToolCallResult",
+        "type": "object"
+      },
+      "model/gen-ai/gen-ai-tool-definitions.json": {
+        "$defs": {
+          "FunctionToolDefinition": {
+            "additionalProperties": true,
+            "description": "Represents a tool definition in the form of a function.",
+            "properties": {
+              "type": {
+                "const": "function",
+                "description": "The type of the tool.",
+                "title": "Type",
+                "type": "string"
+              },
+              "name": {
+                "description": "The name of the tool.",
+                "title": "Name",
+                "type": "string"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The description of the tool. Since this attribute could be large, it's NOT RECOMMENDED to be populated by default. Instrumentations MAY provide a way to enable populating this property.",
+                "title": "Description"
+              },
+              "parameters": {
+                "anyOf": [
+                  {
+                    "$ref": "http://json-schema.org/draft-07/schema#"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "JSON Schema document describing the parameters accepted by the tool. The value MUST conform to JSON Schema draft-07. Since this attribute could be large, it's NOT RECOMMENDED to be populated by default. Instrumentations MAY provide a way to enable populating this property.",
+                "title": "Parameters"
+              }
+            },
+            "required": [
+              "type",
+              "name"
+            ],
+            "title": "FunctionToolDefinition",
+            "type": "object"
+          },
+          "GenericToolDefinition": {
+            "additionalProperties": true,
+            "description": "Represents a tool definition in any form.",
+            "properties": {
+              "type": {
+                "description": "The type of the tool.",
+                "title": "Type",
+                "type": "string"
+              },
+              "name": {
+                "description": "The name of the tool.",
+                "title": "Name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "name"
+            ],
+            "title": "GenericToolDefinition",
+            "type": "object"
+          }
+        },
+        "description": "Represents the list of tool definitions available to the GenAI agent or model.",
+        "items": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FunctionToolDefinition"
+            },
+            {
+              "$ref": "#/$defs/GenericToolDefinition"
+            }
+          ]
+        },
+        "title": "ToolDefinitions",
+        "type": "array"
+      },
+      "model/gen-ai/gen-ai-retrieval-documents.json": {
+        "$defs": {
+          "RetrievalDocument": {
+            "additionalProperties": true,
+            "description": "Represents a single document retrieved from a vector database or search system.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "A unique identifier for the document.",
+                "title": "Id"
+              },
+              "score": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The relevance score of the document.",
+                "title": "Score"
+              }
+            },
+            "title": "RetrievalDocument",
+            "type": "object"
+          }
+        },
+        "description": "Represents the list of documents retrieved from a vector database or search system.",
+        "items": {
+          "$ref": "#/$defs/RetrievalDocument"
+        },
+        "title": "RetrievalDocuments",
+        "type": "array"
+      }
+    },
+    "requirement_policy": "Keep official requirement levels separate from the required vendor/application profile. All applicable source-known input/output, tool mappings, request/response fields, schema/privacy/bounds, errors and whole-trace lifecycle remain required. Source-absent metadata is explicitly not applicable; do not invent reserved attributes or correlation IDs.",
+    "inference_metric_profile": {
+      "source_documents": [
+        "docs/gen-ai/client-inference.md",
+        "docs/gen-ai/gen-ai-token-metrics.md",
+        "docs/gen-ai/gen-ai-metrics.md"
+      ],
+      "instruments": [
+        {
+          "name": "gen_ai.client.inference.duration",
+          "type": "Histogram",
+          "unit": "s",
+          "official_level": "Recommended",
+          "skill_acceptance": "Applicable: two actual model HTTP attempts (success and provider_error), positive observed duration; low-cardinality provider/model/operation and applicable error identity."
+        },
+        {
+          "name": "gen_ai.client.inference.usage.input_tokens",
+          "type": "Counter",
+          "unit": "{token}",
+          "official_level": "Recommended",
+          "skill_acceptance": "Applicable: provider returns 11 input tokens on success. Record actual usage; missing failed-response usage is zero with unknown modality as the current metric convention specifies, not invented span usage or billing."
+        },
+        {
+          "name": "gen_ai.client.inference.usage.output_tokens",
+          "type": "Counter",
+          "unit": "{token}",
+          "official_level": "Recommended",
+          "skill_acceptance": "Applicable: provider returns 7 output tokens on success; same missing-usage distinction."
+        }
+      ],
+      "required_token_dimensions": [
+        "gen_ai.operation.name",
+        "gen_ai.provider.name",
+        "gen_ai.token.modality"
+      ],
+      "source_known_dimensions": [
+        "gen_ai.request.model",
+        "server.address",
+        "server.port"
+      ],
+      "optional_distribution_instruments": [
+        "gen_ai.client.inference.operation.input_tokens",
+        "gen_ai.client.inference.operation.output_tokens"
+      ],
+      "legacy_compatibility": "The captured current main says gen_ai.client.operation.duration should not represent inference. Existing applications may retain source-bound historical instruments for compatibility, but this fresh fixture must not call those names current official inference conventions.",
+      "not_applicable": [
+        "streaming chunk timing: this source has one nonstreaming response",
+        "server-side inference timing: this application owns a client request, not model server internals",
+        "cache/reasoning token breakdown: not returned by actual response",
+        "monetary billing: fixture usage is a local model response, not a price or invoice"
+      ]
+    }
+  },
+  "vendor_profile": {
+    "primary_source": {
+      "key": "ao-otel-profile",
+      "url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+      "resolved_url": "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+      "captured_at_utc": "2026-10-15T04:45:52.849827+00:00",
+      "sha256": "0d361ef6c414933a26114634b443157ec3438a3531de5a83890120482d5aef63",
+      "bytes": 547668
+    },
+    "requirements": {
+      "agent": [
+        "operation, provider, agent name and source-known metadata",
+        "INTERNAL for in-process agent; CLIENT only for actual remote agent invocation",
+        "actual input/output messages"
+      ],
+      "model": [
+        "operation/provider/request model and known response metadata",
+        "actual model-bound request and produced response messages",
+        "source-known parameters/tool definitions/response finish reason/usage only"
+      ],
+      "tool": [
+        "execute_tool and source tool name",
+        "GenAI mapping: real call arguments plus same-tool input messages; documented OpenInference alternative: input.value",
+        "GenAI mapping: real produced result plus same-tool output messages; documented OpenInference alternative: output.value",
+        "call ID only when actually supplied by model/framework"
+      ],
+      "retrieval": [
+        "source query and actual retrieved document list",
+        "current GenAI fields plus documented vendor db.operation mapping when applicable; preserve its vendor provenance"
+      ],
+      "errors": [
+        "ERROR status and sanitized error.type for failure/cancel",
+        "no fabricated successful output or usage"
+      ],
+      "delivery": [
+        "inspect rejected/partial success outcomes separately from local acceptance and real cloud visibility"
+      ]
+    },
+    "public_ao_headers": {
+      "project": "projectid",
+      "stream": "agentstreamid",
+      "scope": "Standalone public AO contract, not the selected Studio receiver contract"
+    },
+    "selected_studio_headers": {
+      "project": "projectid",
+      "stream": "logstreamid",
+      "scope": "Current repository Studio OTLP receiver; exact resource resolution and real native receipt still require execution"
+    },
+    "additional_primary_sources": [
+      {
+        "url": "https://docs.galileo.ai/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+        "sha256": "d9977ec62f365998676979c7fa70e5b7cf63529aa5b02b4632171d677b42bd19",
+        "bytes": 547606,
+        "captured_at_utc": "2026-10-15T04:54:26.145569+00:00",
+        "scope": "Galileo compatibility mapping, distinct from compatible Splunk AO Go SDK availability or current OTel requirement levels."
+      }
+    ],
+    "openinference_alternative": {
+      "repository": "https://github.com/Arize-ai/openinference",
+      "requested_ref": "main",
+      "resolved_revision": "100ce015dbf73d1789da5d707f5ed0cc9d2c4da2",
+      "url": "https://raw.githubusercontent.com/Arize-ai/openinference/100ce015dbf73d1789da5d707f5ed0cc9d2c4da2/spec/semantic_conventions.md",
+      "sha256": "0981038b3eb18c55161712ba32567d37395a157d07523db7d56af7931b0a1ff7",
+      "bytes": 77207,
+      "captured_at_utc": "2026-10-15T04:57:38.943331+00:00",
+      "kind_attribute": "openinference.span.kind",
+      "source_applicable_enum_values": [
+        "AGENT",
+        "LLM",
+        "TOOL",
+        "RETRIEVER"
+      ],
+      "value_attributes": {
+        "input.value": "string",
+        "output.value": "string",
+        "input.mime_type": "string",
+        "output.mime_type": "string",
+        "retrieval.documents": "flattened indexed document.* attributes on OTLP spans"
+      },
+      "policy": "Use exact official enum casing and documented field shape when this alternative is selected. Current OTel fields and vendor-required source content remain separately applicable; no invented database operation or backend recognition claim."
+    }
+  },
+  "source_attribution": "Primary documentation SHA values describe complete captured upstream bodies. Structured schemas are complete JSON values at the resolved revision; attribute requirement rows are factual selected-table extracts for the four source operations. No precomputed instrumented result or implementation is supplied."
+}

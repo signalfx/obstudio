@@ -41,16 +41,27 @@ uv run python probe.py compare /tmp/existing-before.json /tmp/existing-after.jso
 ```
 
 `capture` supplies an isolated loopback OTLP receiver and removes ambient OTel
-and vendor endpoints/credentials during the run. It records decoded protobuf
-receipts, not a mocked exporter invocation. Ambient environment is restored on
+and vendor endpoints/credentials plus inherited proxy settings during the run.
+It records decoded protobuf receipts, not a mocked exporter invocation. Ambient environment is restored on
 return. The comparison requires existing span IDs, names, attributes, events,
 resource and status fields; retained original objects; unchanged metric/log
-values; exactly one copy of each expected operation; connected parentage; and
-one upstream trace request. Existing spans may acquire an intermediate parent
-when an uncovered agent operation is added. Trace routing must retain the
+values; and one upstream trace request. Native span start/end timestamps are
+retained from protobuf. The actual comparison validates four complete local
+request traces: nonzero valid IDs, unique identities within each trace, one
+trace per request, one expected root, present parents, no cycles or unreachable
+spans, complete operation graphs, completed time bounds, and synchronous child
+containment. Original baseline transport spans remain supported and retain
+their own identity, fields, connectivity and completed timing. Existing spans
+may acquire an intermediate parent when an uncovered agent operation is added. Trace routing must retain the
 existing transport headers and use either Studio `projectid`/`logstreamid` or
 public `projectid`/`agentstreamid`, selected explicitly, without routing headers
 on metric or log requests or in global OTLP headers.
+The default graph is 18 spans across success, tool error, provider error and
+cancellation (5/4/5/4). Only an explicitly audited single-agent `none` runtime
+may select `compare --root-operation invoke_agent` (or the matching Python
+keyword), yielding 14 spans (4/3/4/3). This scope does not create a speculative
+second workflow operation. Missing timestamps in historical receipts require a
+fresh native capture; comparison never invents completion times.
 For deterministic scenario correlation, integration hooks must copy the safe
 metadata IDs to `app.request_id` and `app.scenario` on operation spans. Newly
 added failed/cancelled operations must have error status and a sanitized

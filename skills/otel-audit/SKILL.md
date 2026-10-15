@@ -76,8 +76,12 @@ Scan the repository to determine language, framework, and existing instrumentati
   reconcile detected AI surfaces with official semconv docs when available,
   record live-or-snapshot provenance, and build a semconv closure matrix.
   Apply GenAI Instrumentation Selection and the Required GenAI Coverage
-  Profile: only a runtime with no existing telemetry instrumentation defaults
-  to Splunk AO span creation. Preserve and enrich existing OTel/Galileo/AO
+  Profile: only a runtime with no existing telemetry instrumentation and a
+  compatible supported AO SDK for its language defaults to Splunk AO span
+  creation. When no compatible AO SDK is available, plan that language's native
+  OTel libraries and the same applicable GenAI/vendor coverage; record the
+  current support evidence and actionable native gaps rather than blocking
+  instrumentation on AO SDK availability. Preserve and enrich existing OTel/Galileo/AO
   producers, providers and exporters, including generic spans, metrics-only
   and logs-only pipelines. Missing GenAI coverage does not make them fresh. Read
   `../references/splunk-agent-observability.md` for fresh-agent SDK APIs and

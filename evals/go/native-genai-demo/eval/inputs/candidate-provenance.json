@@ -1,0 +1,64 @@
+{
+  "kind": "actual-native-Go-OTLP-source-and-capture-provenance",
+  "captured_at_utc": "2026-10-15T05:18:14.164408+00:00",
+  "toolchain": "go1.25.1 darwin/arm64",
+  "dependencies": "Official native Go SDK/API/OTLP HTTP trace and metric exporters; versions and primary metadata in native-module-evidence.json and go.mod/go.sum. No AO SDK or Python runtime.",
+  "files": {
+    "main.go": "7ff08c72f55f98255c93762056f8816f2a4351975365e2c03dfc3b1f39bee09f",
+    "main_test.go": "a0f03b2b02fb3611808b500c198dd96d1fe9eaeda4372ceed389998b8449c23e",
+    "telemetry.go": "1a6a265bbf7e72ab6b1a4cbfe5c99bfac66af61dd4bd9e1eddb4dfe392e0a22d",
+    "go.mod": "b2b828937bb1b3f44774b3a912db72b6642f92ba0bfd55e03d2c1c48c42268f1",
+    "go.sum": "bb817b2d8c6107d7a75a150775fc87b46632dc25b56cb60ad251fb1e619fc862",
+    "eval/inputs/nativeprobe/main.go": "2a2dcfeffb8bb6a370f8dc342e18d3432514cf849b423107b728940173be64ca",
+    "eval/inputs/nativeprobe/main_test.go": "5cb7acc05da4623cf87e08218f0ca684ba8e8adb5dac2cfdbcf46954d83a60b6",
+    "eval/inputs/nativecandidate/telemetry.go": "4723881447935dbddf4ef17c6855f184e3e6cd5dd4786b01aaa2d5e7c728ca7e",
+    "eval/inputs/schemacheck/main.go": "c0049f5ecbd169dfc0ac6a576b126054a49feabdd46c7f96c3eb1717beefc3c8",
+    "eval/inputs/schemacheck/main_test.go": "3ceeff0d5bc8383ed85b5fd90fd8b10f69724b04c0aa8b7d327e33d9ea6cb081",
+    "eval/inputs/genai-profile-evidence.json": "aa816ae1e830e83a99289d326264d53e050cccd0c50648d49c3f2f8627ce7343",
+    "eval/inputs/native-module-evidence.json": "450d81069099780c28e3a105394662a5713d004cf23a7f1f92289a8b252b996c",
+    "eval/inputs/native-baseline-capture.json": "053fe1477741e02918477f75c69fc00e4f2e93f93299176ef123d86760b1aa01",
+    "eval/inputs/native-candidate-capture.json": "218670ba8c11cbb48925a6dc7e4bd952adcd94aa825880bc5828b3da16376d99",
+    "eval/inputs/native-missing-tool-message-capture.json": "18b64946996fae93d18d31e5f47145a2d7bd15ac61b187fcd83923ad31528a43",
+    "eval/inputs/native-lookup-failure-capture.json": "a73b2c51ab558194fd8139d4bb23a4f58206619719111b0a98e8bc4c84c4fffb",
+    "eval/inputs/native-rejected-traces-capture.json": "46118445fcf91905f0b053f9bb5c88a10e4f4632174f8ee0152f6e32a7e0571c"
+  },
+  "baseline": {
+    "source": "main.go + no-op telemetry.go",
+    "result": "Actual separate process; zero native exports/resource calls, two HTTP model calls, four business outcomes."
+  },
+  "candidate_transformation": {
+    "source": "eval/inputs/nativecandidate/telemetry.go",
+    "method": "Copy main.go, go.mod and go.sum into a separate scratch module; replace telemetry.go with candidate contents after removing first build-tag line and following blank line; go build .",
+    "runtime_files": [
+      "main.go",
+      "telemetry.go",
+      "go.mod",
+      "go.sum"
+    ],
+    "runtime_eval_dependencies": [],
+    "compiled_telemetry_sha256": "f2e1799298b11aff4edffa5ab762372a4966b59f355391aa9a1f83973f77c21e"
+  },
+  "negative_transformation": {
+    "method": "Same actual native candidate; replace the single condition below before compiling a separate binary. No receipt mutation.",
+    "old": "if operation.Name != \"model\" {",
+    "new": "if operation.Name != \"model\" && operation.Name != \"tool\" {",
+    "compiled_telemetry_sha256": "43c12c623024bf7f180bf01dc23e8e9e60e5cfcc3db7732c8114fd0e3ca2b48c",
+    "expected_failures": [
+      "missing gen_ai.input.messages",
+      "missing gen_ai.input.messages",
+      "missing gen_ai.input.messages",
+      "missing gen_ai.input.messages"
+    ]
+  },
+  "execution": {
+    "controller": "go run ./eval/inputs/nativeprobe --app ABSOLUTE_COMPILED_APP --output RECEIPT --expect MODE [--runs 2] [--resources missing|existing|auth] [--reject-traces]",
+    "read_only": "go run ./eval/inputs/nativeprobe --validate-receipt RECEIPT --expect MODE",
+    "schema": "go run ./eval/inputs/schemacheck --profile eval/inputs/genai-profile-evidence.json --receipt eval/inputs/native-candidate-capture.json",
+    "offline_environment": {
+      "GOTOOLCHAIN": "local",
+      "GOPROXY": "off",
+      "GOSUMDB": "off"
+    }
+  },
+  "proof_scope": "Real application processes and official native exporters to isolated local Go HTTP handlers. Not real Studio/controller bindings, cloud delivery, backend recognition or billing."
+}

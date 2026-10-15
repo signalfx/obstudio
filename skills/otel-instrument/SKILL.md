@@ -107,6 +107,14 @@ Markdown reports.
   unrelated upgrade. Keep fixed library release numbers out of skill recipes.
   Record the resolved versions, metadata source/date and tested signatures in
   the run report, then persist the approved dependency set in the app lockfile.
+- Check current Splunk AO SDK support for the application's actual language
+  separately from native OTel support. Without a compatible supported AO SDK,
+  use that language's public OTel libraries/instrumentation and apply the entire
+  applicable Required GenAI Coverage Profile, including Splunk AO/Galileo content
+  mappings, known parameters, correct kinds and complete trace trees. Follow the
+  shared GenAI selection rule; AO SDK absence is not a blocker, permission to
+  omit semantics, or a reason to install a Python sidecar. Preserve existing
+  providers/exporters and keep selected resource/routing work SDK-free.
 - Read `./references/project-runtime-validation.md`, inventory the repository's
   configured runtime and build/test commands, and select the locally available
   project runtime before editing. Do not use the shell's default runtime when
@@ -240,8 +248,10 @@ Markdown reports.
   Profile. Only a target runtime with no existing telemetry instrumentation is
   fresh; generic OTel, metrics-only, logs-only and active export-only pipelines
   stay incremental. Read `../references/splunk-agent-observability.md` for a fresh
-  agent even without an existing SDK import: default to supported Splunk AO
-  span creators/framework integration; use the shared per-operation public
+  agent even without an existing SDK import: use supported Splunk AO
+  span creators/framework integration when a compatible SDK exists for its
+  language; otherwise select native OTel with the full applicable field profile.
+  For a selected supported AO SDK, use the shared per-operation public
   OTel exception only for source-proven incompatible SDK boundaries. An
   export-only processor is not a creator. Preserve all existing producers,
   providers and exporters and fill only proven gaps. Record before/after
@@ -886,7 +896,7 @@ a send/write failure signal. Add a counter, span event, or low-cardinality
 outcome attribute for send/write failure when app code can observe it; otherwise
 owner-map the missing source explicitly to the framework/server/platform.
 
-For token/context pressure gaps, `gen_ai.client.token.usage` plus a
+For token/context pressure gaps, current inference usage metrics plus a
 context-window usage gauge does not close a broader token-pressure gap unless
 the audit contract only requires those two signals. If `required_signals`
 include context budget percent, truncation rate, token-limit errors,
@@ -1091,16 +1101,19 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   baseline distributed tracing plus OTel GenAI spans for inference,
   `invoke_agent`, `invoke_workflow`, `plan`, `execute_tool`, `retrieval`, and
   memory operations where code evidence exists; emit
-  `gen_ai.client.operation.duration` and
-  `gen_ai.client.token.usage` when the data is available and selected by the
+  the current inference duration and usage metrics from the shared reference
+  when their source data is available and selected by the
   audit or requested signal scope; use stable tool names;
   add low-cardinality `error.type`; and avoid raw prompt, completion, retrieved
   content, memory record, tool argument, evaluation explanation, user, tenant,
   session, task, request, trace, or raw URL values in metric dimensions.
-  For `gen_ai.client.token.usage`, include `gen_ai.token.type` and each known
+  Use the current inference metric names, instrument types, units and required
+  measurement attributes; include applicable `gen_ai.token.modality` and known
   stable `gen_ai.operation.name`, `gen_ai.provider.name`, and
   `gen_ai.request.model` on the metric measurement itself, not only on the
-  owning chat span. Assert those exact attributes on collected metric points.
+  owning chat span. Preserve existing legacy metric producers as consumer
+  contracts; do not silently rename them. Assert exact current and preserved
+  contracts separately on collected metric points.
 - When an audit selects only selected tool operations by exact stable name,
   branch at the tool dispatch or execution boundary: emit `execute_tool`
   spans and attributes for those names only. Let unselected tool names follow
@@ -1341,8 +1354,8 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   `gen_ai.operation.name` such as `chat`, `generate_content`, or
   `text_completion`, `gen_ai.provider.name`, `gen_ai.request.model` when known,
   `gen_ai.response.model` when known, and token usage on that inference span
-  when provider usage is available. When recording `gen_ai.client.token.usage`,
-  put `gen_ai.token.type` and the known stable `gen_ai.operation.name`,
+  when provider usage is available. For current inference usage counters,
+  put the required `gen_ai.token.modality` and known stable `gen_ai.operation.name`,
   `gen_ai.provider.name`, and `gen_ai.request.model` on the token metric as
   attributes too; span attributes alone do not make token metrics filterable
   by operation, provider, or model. Include `gen_ai.response.model` on the
