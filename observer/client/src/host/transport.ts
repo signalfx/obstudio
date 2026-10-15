@@ -1,13 +1,15 @@
-import type { RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
+import type { O11yOAuthSessionStatus, RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 
 export const observerHostCloudActions = [
   "connect",
   "create-free-account",
   "detect-free-account-region",
   "disconnect-cimd",
+  "disconnect-o11y-oauth",
   "forget",
   "initialize",
   "login-cimd",
+  "login-o11y-oauth",
   "open-audit-report",
   "open-free-edition",
   "open-free-edition-terms",
@@ -25,10 +27,10 @@ export const observerHostCloudActions = [
 
 export type ObserverHostCloudAction = typeof observerHostCloudActions[number];
 
-// login-cimd/setup-cimd block on a human completing an out-of-band browser sign-in
-// (or a slower SIS round trip), which can easily exceed the default cloud-action
-// timeout below -- give them a much longer allowance.
-const cimdCloudActions: ReadonlySet<ObserverHostCloudAction> = new Set(['login-cimd', 'setup-cimd']);
+// login-cimd/setup-cimd/login-o11y-oauth block on a human completing an out-of-band
+// browser sign-in (or a slower SIS round trip), which can easily exceed the default
+// cloud-action timeout below -- give them a much longer allowance.
+const cimdCloudActions: ReadonlySet<ObserverHostCloudAction> = new Set(['login-cimd', 'login-o11y-oauth', 'setup-cimd']);
 
 export const observerHostSkillIds = [
   "otel-audit",
@@ -44,12 +46,15 @@ export type ObserverHostSkillId = typeof observerHostSkillIds[number];
 export interface ObserverHostCloudPayload {
   accessToken?: string;
   adminToken?: string;
+  clientId?: string;
+  clientSecret?: string;
   destination?: string;
   email?: string;
   enabled?: boolean;
   expectedVersion?: string;
   firstName?: string;
   lastName?: string;
+  orgId?: string;
   realm?: string;
   region?: string;
   skill?: ObserverHostSkillId;
@@ -64,6 +69,7 @@ export interface ObserverHostCloudResponse {
   o11yOAuthClientCreated?: boolean;
   o11yOAuthClientId?: string;
   o11yOAuthClientSecret?: string;
+  o11yOAuthSession?: O11yOAuthSessionStatus;
   realm?: string;
   region?: string;
   registrationAndAuthProtocol?: RegistrationAndAuthProtocol;
@@ -383,7 +389,8 @@ function isObserverHostCloudResponse(value: unknown): value is ObserverHostCloud
     && (response.cimdSession === undefined || isSISCIMDSessionStatus(response.cimdSession))
     && (response.o11yOAuthClientId === undefined || typeof response.o11yOAuthClientId === "string")
     && (response.o11yOAuthClientCreated === undefined || typeof response.o11yOAuthClientCreated === "boolean")
-    && (response.o11yOAuthClientSecret === undefined || typeof response.o11yOAuthClientSecret === "string");
+    && (response.o11yOAuthClientSecret === undefined || typeof response.o11yOAuthClientSecret === "string")
+    && (response.o11yOAuthSession === undefined || isO11yOAuthSessionStatus(response.o11yOAuthSession));
 }
 
 function isSISCIMDSessionStatus(value: unknown): value is SISCIMDSessionStatus {
@@ -396,6 +403,21 @@ function isSISCIMDSessionStatus(value: unknown): value is SISCIMDSessionStatus {
     && (status.scope === undefined || typeof status.scope === "string")
     && (status.connectedAt === undefined || typeof status.connectedAt === "string")
     && (status.expiresAt === undefined || typeof status.expiresAt === "string");
+}
+
+function isO11yOAuthSessionStatus(value: unknown): value is O11yOAuthSessionStatus {
+  if (typeof value !== "object" || value === null) return false;
+  const status = value as Record<string, unknown>;
+  return (status.phase === "disconnected" || status.phase === "pending"
+    || status.phase === "connected" || status.phase === "error")
+    && (status.error === undefined || typeof status.error === "string")
+    && (status.issuer === undefined || typeof status.issuer === "string")
+    && (status.realm === undefined || typeof status.realm === "string")
+    && (status.orgId === undefined || typeof status.orgId === "string")
+    && (status.connectedAt === undefined || typeof status.connectedAt === "string")
+    && (status.expiresAt === undefined || typeof status.expiresAt === "string")
+    // TEMPORARY, TEST-ONLY field -- see O11yOAuthSessionStatus's doc comment in api/types.ts.
+    && (status.accessToken === undefined || typeof status.accessToken === "string");
 }
 
 function isSplunkExportStatus(value: unknown): value is SplunkExportStatus {

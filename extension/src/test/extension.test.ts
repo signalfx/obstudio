@@ -55,6 +55,7 @@ import {
 	StoredSplunkCloudConnectionVerificationUnavailableError,
 	shouldRestoreObserverAfterCloudMutationFailure,
 	verifyStoredSplunkCloudConnection,
+	waitForO11yOAuthLoginOutcome,
 	writeSplunkCloudStatePair,
 } from '../cloud-bridge';
 import {
@@ -706,6 +707,70 @@ test('IDE host transport restricts HTTP paths, cancellation, and telemetry comma
 			type: 'obstudio.host.request',
 		}), false, `${cimdAction} must not accept a realm payload`);
 	}
+	assert.equal(isObserverHostRequestEnvelope({
+		request: {
+			action: 'register-o11y-oauth',
+			kind: 'cloud',
+			payload: { adminToken: 'admin-token', expectedVersion: 'V'.repeat(43), realm: 'us0' },
+		},
+		requestId: 'request-123',
+		type: 'obstudio.host.request',
+	}), true);
+	assert.equal(isObserverHostRequestEnvelope({
+		request: { action: 'register-o11y-oauth', kind: 'cloud', payload: { adminToken: '', realm: 'us0' } },
+		requestId: 'request-123',
+		type: 'obstudio.host.request',
+	}), false, 'register-o11y-oauth must reject a blank admin token');
+	assert.equal(isObserverHostRequestEnvelope({
+		request: {
+			action: 'login-o11y-oauth',
+			kind: 'cloud',
+			payload: {
+				clientId: 'the-client-id',
+				clientSecret: 'the-client-secret',
+				expectedVersion: 'V'.repeat(43),
+				orgId: 'org-123',
+				realm: 'us0',
+			},
+		},
+		requestId: 'request-123',
+		type: 'obstudio.host.request',
+	}), true);
+	for (const missingField of ['clientId', 'clientSecret', 'orgId', 'realm']) {
+		const payload: Record<string, string> = {
+			clientId: 'the-client-id',
+			clientSecret: 'the-client-secret',
+			orgId: 'org-123',
+			realm: 'us0',
+		};
+		payload[missingField] = '';
+		assert.equal(isObserverHostRequestEnvelope({
+			request: { action: 'login-o11y-oauth', kind: 'cloud', payload },
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), false, `login-o11y-oauth must reject a blank ${missingField}`);
+	}
+	for (const o11yOAuthAction of ['disconnect-o11y-oauth'] as const) {
+		assert.equal(isObserverHostRequestEnvelope({
+			request: { action: o11yOAuthAction, kind: 'cloud', payload: { expectedVersion: 'V'.repeat(43) } },
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), true, o11yOAuthAction);
+		assert.equal(isObserverHostRequestEnvelope({
+			request: { action: o11yOAuthAction, kind: 'cloud' },
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), true, `${o11yOAuthAction} must allow retry without an available state version`);
+		assert.equal(isObserverHostRequestEnvelope({
+			request: {
+				action: o11yOAuthAction,
+				kind: 'cloud',
+				payload: { expectedVersion: 'V'.repeat(43), realm: 'us0' },
+			},
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), false, `${o11yOAuthAction} must not accept a realm payload`);
+	}
 });
 
 test('IDE host response collection rejects truncated and aborted responses', async () => {
@@ -1165,6 +1230,10 @@ test('disabled CIMD initialization never reads optional session configuration', 
 			calls.push('cimd');
 			throw new Error('newly contributed setting is not registered yet');
 		},
+		readO11yOAuthSession: async () => {
+			calls.push('o11y-oauth');
+			throw new Error('must not be read');
+		},
 		readStatus: async () => {
 			calls.push('read');
 			return status;
@@ -1186,6 +1255,10 @@ test('disabled CIMD initialization falls back to stored status without reading a
 		registrationAndAuthProtocol: 'NONE',
 		readCimdSession: async () => {
 			calls.push('cimd');
+			throw new Error('must not be read');
+		},
+		readO11yOAuthSession: async () => {
+			calls.push('o11y-oauth');
 			throw new Error('must not be read');
 		},
 		readStatus: async () => {
@@ -1216,6 +1289,7 @@ test('disabled CIMD initialization propagates fallback status errors', async () 
 				cimdReads += 1;
 				throw new Error('must not be read');
 			},
+			readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 			readStatus: async () => { throw fallbackError; },
 			refreshStatus: async () => { throw new Error('refresh failed'); },
 		}),
@@ -1236,6 +1310,7 @@ test('enabled CIMD initialization reads Cloud and session state concurrently', a
 			calls.push('cimd');
 			return session;
 		},
+		readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 		readStatus: async () => {
 			calls.push('read');
 			return { connected: false };
@@ -1269,6 +1344,7 @@ test('enabled CIMD initialization retries only a failed session load', async () 
 			}
 			return { subject: 'user-123' };
 		},
+		readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 		readStatus: async () => {
 			fallbackReads += 1;
 			return status;
@@ -1294,6 +1370,7 @@ test('enabled CIMD initialization preserves a session when Cloud refresh falls b
 			sessionReads += 1;
 			return { subject: 'user-123' };
 		},
+		readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 		readStatus: async () => ({ connected: false }),
 		refreshStatus: async () => { throw new Error('refresh failed'); },
 	});
@@ -1322,6 +1399,7 @@ test('enabled CIMD initialization waits for the original refresh before retrying
 			}
 			return { subject: 'user-123' };
 		},
+		readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 		readStatus: async () => {
 			fallbackStatusReads += 1;
 			return { connected: false };
@@ -1357,6 +1435,7 @@ test('enabled CIMD initialization still rejects when fallback session loading fa
 				sessionReads += 1;
 				throw new Error('CIMD failed');
 			},
+			readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 			readStatus: async () => ({ connected: false }),
 			refreshStatus: async () => ({ connected: true }),
 		}),
@@ -1365,17 +1444,149 @@ test('enabled CIMD initialization still rejects when fallback session loading fa
 	assert.equal(sessionReads, 2);
 });
 
+test('enabled O11Y_OAUTH initialization reads Cloud and session state concurrently', async () => {
+	const calls: string[] = [];
+	let resolveRefresh!: (value: unknown) => void;
+	let resolveSession!: (value: { phase: string }) => void;
+	const refresh = new Promise<unknown>((resolve) => { resolveRefresh = resolve; });
+	const session = new Promise<{ phase: string }>((resolve) => { resolveSession = resolve; });
+	const initialization = initializeCloudBridgeState({
+		registrationAndAuthProtocol: 'O11Y_OAUTH',
+		readCimdSession: async () => { throw new Error('must not be read'); },
+		readO11yOAuthSession: () => {
+			calls.push('o11y-oauth');
+			return session;
+		},
+		readStatus: async () => {
+			calls.push('read');
+			return { connected: false };
+		},
+		refreshStatus: () => {
+			calls.push('refresh');
+			return refresh;
+		},
+	});
+
+	assert.deepEqual(calls, ['refresh', 'o11y-oauth']);
+	resolveSession({ phase: 'connected' });
+	resolveRefresh({ connected: true });
+	assert.deepEqual(await initialization, {
+		registrationAndAuthProtocol: 'O11Y_OAUTH',
+		o11yOAuthSession: { phase: 'connected' },
+		status: { connected: true },
+	});
+});
+
+test('O11Y_OAUTH initialization falls back to stored status when the session read fails', async () => {
+	const status = { connected: false };
+	let sessionReads = 0;
+	const result = await initializeCloudBridgeState({
+		registrationAndAuthProtocol: 'O11Y_OAUTH',
+		readCimdSession: async () => { throw new Error('must not be read'); },
+		readO11yOAuthSession: async () => {
+			sessionReads += 1;
+			if (sessionReads === 1) {
+				throw new Error('transient O11Y_OAUTH read failure');
+			}
+			return { phase: 'disconnected' };
+		},
+		readStatus: async () => status,
+		refreshStatus: async () => status,
+	});
+
+	assert.equal(sessionReads, 2);
+	assert.deepEqual(result, {
+		registrationAndAuthProtocol: 'O11Y_OAUTH',
+		o11yOAuthSession: { phase: 'disconnected' },
+		status,
+		warning: 'transient O11Y_OAUTH read failure',
+	});
+});
+
 test('enabled CIMD initialization lets fallback status errors win over session warnings', async () => {
 	const fallbackError = new Error('stored status failed');
 	await assert.rejects(
 		initializeCloudBridgeState({
 			registrationAndAuthProtocol: 'CIMD',
 			readCimdSession: async () => { throw new Error('CIMD failed'); },
+			readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 			readStatus: async () => { throw fallbackError; },
 			refreshStatus: async () => { throw new Error('refresh failed'); },
 		}),
 		(error) => error === fallbackError,
 	);
+});
+
+test('O11y OAuth login polling resolves immediately on a connected session', async () => {
+	const delays: number[] = [];
+	const result = await waitForO11yOAuthLoginOutcome({
+		delay: async (ms) => { delays.push(ms); },
+		intervalMs: 1_500,
+		isCancelled: () => false,
+		readSession: async () => ({ phase: 'connected' }),
+	});
+	assert.deepEqual(result, { phase: 'connected' });
+	assert.deepEqual(delays, []);
+});
+
+test('O11y OAuth login polling resolves immediately on an error session', async () => {
+	const result = await waitForO11yOAuthLoginOutcome({
+		delay: async () => { throw new Error('must not delay'); },
+		intervalMs: 1_500,
+		isCancelled: () => false,
+		readSession: async () => ({ error: 'access_denied', phase: 'error' }),
+	});
+	assert.deepEqual(result, { error: 'access_denied', phase: 'error' });
+});
+
+test('O11y OAuth login polling treats a disconnected session as terminal', async () => {
+	// Cancelling a sign-in posts a disconnect request that flips the backend to
+	// 'disconnected' -- the loop must notice that on its own, not only via isCancelled(),
+	// so a disconnect that lands before the extension's own cancellation flag is read
+	// still ends the wait rather than looping on a phase it will never treat as pending.
+	const result = await waitForO11yOAuthLoginOutcome({
+		delay: async () => { throw new Error('must not delay'); },
+		intervalMs: 1_500,
+		isCancelled: () => false,
+		readSession: async () => ({ phase: 'disconnected' }),
+	});
+	assert.deepEqual(result, { phase: 'disconnected' });
+});
+
+test('O11y OAuth login polling stops as soon as isCancelled becomes true, even mid-pending', async () => {
+	let cancelled = false;
+	let reads = 0;
+	const result = await waitForO11yOAuthLoginOutcome({
+		delay: async () => { cancelled = true; },
+		intervalMs: 1_500,
+		isCancelled: () => cancelled,
+		readSession: async () => {
+			reads += 1;
+			return { phase: 'pending' };
+		},
+	});
+	assert.deepEqual(result, { phase: 'pending' });
+	// One read observes 'pending' and delays (flipping `cancelled`); the next read's
+	// result is still 'pending', but isCancelled() now short-circuits the loop before a
+	// third read or delay happens.
+	assert.equal(reads, 2);
+});
+
+test('O11y OAuth login polling keeps polling on an interval while pending', async () => {
+	const delays: number[] = [];
+	let reads = 0;
+	const result = await waitForO11yOAuthLoginOutcome({
+		delay: async (ms) => { delays.push(ms); },
+		intervalMs: 1_500,
+		isCancelled: () => false,
+		readSession: async () => {
+			reads += 1;
+			return reads < 3 ? { phase: 'pending' } : { phase: 'connected' };
+		},
+	});
+	assert.deepEqual(result, { phase: 'connected' });
+	assert.equal(reads, 3);
+	assert.deepEqual(delays, [1_500, 1_500]);
 });
 
 test('extension treats shared Splunk Observability Studio cloud initialization as read-only', () => {
