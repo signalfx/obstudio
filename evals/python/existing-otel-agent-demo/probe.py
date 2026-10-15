@@ -219,9 +219,9 @@ def finalize_resource_proof(snapshot: dict[str, Any], requests: list[dict[str, A
 def capture(mode: str, instrumentation: Path | None = None, reject_traces: bool = False) -> dict[str, Any]:
     saved_environment = dict(os.environ)
     try:
-        # Ambient credentials/endpoints must never turn this local probe into a cloud call.
+        # Ambient credentials/endpoints/proxies must not redirect local capture.
         for name in list(os.environ):
-            if name.startswith(("OTEL_", "SPLUNK_", "GALILEO_")):
+            if name.startswith(("OTEL_", "SPLUNK_", "GALILEO_")) or name.casefold() in {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}:
                 del os.environ[name]
         with Receiver(reject_traces) as receiver:
             for signal in ("TRACES", "METRICS", "LOGS"):

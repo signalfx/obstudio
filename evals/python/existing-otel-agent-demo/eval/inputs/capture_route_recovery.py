@@ -23,7 +23,8 @@ from resource_recovery_fixture import RecoveryServer
 
 def clean_environment():
     return {key: value for key, value in os.environ.items()
-            if not key.startswith(("OTEL_", "SPLUNK_", "GALILEO_"))}
+            if not key.startswith(("OTEL_", "SPLUNK_", "GALILEO_"))
+            and key.casefold() not in {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}}
 
 
 def resolve_resources(resolver, origin, project_name, stream_name, calls):

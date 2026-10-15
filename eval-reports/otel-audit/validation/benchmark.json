@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261015T035924094837Z",
+    "run_id": "20261015T042405784985Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "",
@@ -542,7 +542,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "90c5b916c8eefeacb89cf213b8c112dadaf2d0b2bea6a0fa52dd7243fd897b89",
+    "digest": "045841deb571846aa4295ca6242a827872bf683f10a7cc76d3f0b7f949576572",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -693,9 +693,9 @@
       "evals/python/existing-otel-agent-demo/eval/inputs/genai-schema-evidence.json": "cb2d154a37cd662e4ddbcae6d30f7ce5588524d660d6ce19abdf42adc5032a5d",
       "evals/python/existing-otel-agent-demo/eval/inputs/python-preflight-requirements.txt": "9bc8378353b95a0405d8b052226aa3075aa7f7f32d30c29c235b0a343df6fa3f",
       "evals/python/existing-otel-agent-demo/eval/qual/audit.json": "5216a9555b5fbce480848030158e762f93589235a2fab887f3998e3228190855",
-      "evals/python/existing-otel-agent-demo/probe.py": "eeb43641e53dd35012559bb77b58eac92941131927260746d268a614aa84c127",
+      "evals/python/existing-otel-agent-demo/probe.py": "aae342109e0894a33bb309b7f1b07b71f8a1b2adf2301599e4b29c544241f0fe",
       "evals/python/existing-otel-agent-demo/pyproject.toml": "dfc360d25da6e430e782c891bdbc92fb5d7b2ddf6a901629d09bc3a874635a25",
-      "evals/python/existing-otel-agent-demo/eval/inputs/route-recovery-capture.json": "fc50f0a1a861dfc0c5fe9032d8288193f4ec3cbfad662ddecd888b1dcf47b46b",
+      "evals/python/existing-otel-agent-demo/eval/inputs/route-recovery-capture.json": "3b39f03682d10d710a93f7d6a1b4d1a8137f2df2b5983abfc065b4651b2bbb7d",
       "evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py": "07b8ba11dac16c041d57fb0018ac65fab90e6eadcca0675cdd3cae01d3635a77",
       "evals/python/existing-otel-agent-demo/eval/inputs/vendor-route-capture.json": "6505493b4367a977e8cc9808ad21027fc802a12fe6a2b64fa93d783cee1abfef",
       "evals/python/existing-otel-agent-demo/eval/qual/route-recovery-audit.json": "8698248fac57fb93ad1c5a71152ddbcd943efe1ac9683b550d9a6eb0b3e45512",

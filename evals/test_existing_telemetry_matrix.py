@@ -998,3 +998,120 @@ def test_full_trace_contract_keeps_single_agent_scope_explicit(sdk_full_trace_co
     spans = sdk_full_trace_contract_receipts["none"]
     assert validate_local_trace_graph(spans, root_operation="invoke_agent") == []
     assert validate_local_trace_graph(spans)
+
+
+@pytest.fixture
+def recording_loopback_proxy():
+    import hashlib
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    contacts = []
+
+    class Proxy(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            contacts.append({"target": self.path, "body_sha256": hashlib.sha256(body).hexdigest()})
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-protobuf")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Proxy)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", contacts
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def _configure_ambient_proxy(monkeypatch, origin: str, no_proxy: str) -> None:
+    for name in list(os.environ):
+        if name.casefold() in {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}:
+            monkeypatch.delenv(name)
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.setenv(name, origin)
+    if no_proxy != "absent":
+        for name in ("NO_PROXY", "no_proxy"):
+            monkeypatch.setenv(name, "" if no_proxy == "empty" else "unrelated.example.invalid")
+    monkeypatch.setenv("PROXY_TEST_UNRELATED", "keep-unrelated-setting")
+
+
+def _load_route_recovery_capture() -> dict:
+    import runpy
+
+    names = ("app", "probe", "studio_resources", "resource_recovery_fixture")
+    prior = {name: sys.modules.pop(name, None) for name in names}
+    prior_path = list(sys.path)
+    try:
+        sys.path[:0] = [str(FIXTURE / "eval/inputs"), str(FIXTURE)]
+        return runpy.run_path(str(FIXTURE / "eval/inputs/capture_route_recovery.py"))
+    finally:
+        sys.path[:] = prior_path
+        for name in names:
+            sys.modules.pop(name, None)
+            if prior[name] is not None:
+                sys.modules[name] = prior[name]
+
+
+@pytest.mark.parametrize("no_proxy", ["absent", "empty", "unrelated-host"])
+def test_capture_ignores_configured_proxy_and_restores_caller_environment(monkeypatch, recording_loopback_proxy, no_proxy: str) -> None:
+    from collections import Counter
+
+    origin, proxy_contacts = recording_loopback_proxy
+    _configure_ambient_proxy(monkeypatch, origin, no_proxy)
+    observed_proxy_keys = []
+    original_app = probe.AgentDemo
+
+    def construct_app(mode, endpoint):
+        observed_proxy_keys.extend(name for name in os.environ if name.casefold() in {"http_proxy", "https_proxy", "all_proxy", "no_proxy"})
+        return original_app(mode, endpoint)
+
+    monkeypatch.setattr(probe, "AgentDemo", construct_app)
+    caller_environment = dict(os.environ)
+    receipt = probe.capture("generic")
+    assert dict(os.environ) == caller_environment
+    assert proxy_contacts == []
+    assert observed_proxy_keys == []
+    assert receipt["setup_errors"] == []
+    assert {signal: len(probe.records(receipt, signal)) for signal in ("traces", "metrics", "logs")} == {"traces": 6, "metrics": 4, "logs": 4}
+    assert Counter(request["path"] for request in receipt["requests"]) == {"/v1/traces": 1, "/v1/metrics": 1, "/v1/logs": 1}
+    assert all(request["status"] == 200 for request in receipt["requests"])
+    assert all(receipt["original_objects_retained"].values())
+
+
+@pytest.mark.parametrize("no_proxy", ["absent", "empty", "unrelated-host"])
+def test_recovery_worker_ignores_configured_proxy_for_actual_native_exports(monkeypatch, recording_loopback_proxy, tmp_path: Path, no_proxy: str) -> None:
+    from collections import Counter
+
+    origin, proxy_contacts = recording_loopback_proxy
+    _configure_ambient_proxy(monkeypatch, origin, no_proxy)
+    controller = _load_route_recovery_capture()
+    caller_environment = dict(os.environ)
+    environment = controller["clean_environment"]()
+    profile = tmp_path / "cached-local-profile.json"
+    profile.write_text(json.dumps({"resolved_ids": {"project_id": "local-project", "agent_stream_id": "local-stream"}}))
+    output = tmp_path / "worker.json"
+    with probe.Receiver() as receiver:
+        command = [sys.executable, str(FIXTURE / "eval/inputs/capture_route_recovery.py"), "worker",
+                   "--resolver", str(Path(__file__).resolve().parents[1] / "skills/otel-instrument/scripts/resolve_ao_resources.py"),
+                   "--adapter", str(FIXTURE / "eval/inputs/route_recovery_source.py"),
+                   "--profile", str(profile), "--origin", receiver.endpoint,
+                   "--endpoint", receiver.endpoint, "--output", str(output)]
+        result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=20)
+        assert result.returncode == 0, result.stderr
+    assert dict(os.environ) == caller_environment
+    assert proxy_contacts == []
+    assert not any(name.casefold() in {"http_proxy", "https_proxy", "all_proxy", "no_proxy"} for name in environment)
+    assert environment["PROXY_TEST_UNRELATED"] == "keep-unrelated-setting"
+    receipt = {"requests": receiver.requests}
+    assert {signal: len(probe.records(receipt, signal)) for signal in ("traces", "metrics", "logs")} == {"traces": 2, "metrics": 1, "logs": 1}
+    assert Counter(request["path"] for request in receiver.requests) == {"/v1/traces": 1, "/v1/metrics": 1, "/v1/logs": 1}
+    assert all(request["status"] == 200 for request in receiver.requests)
+    assert json.loads(output.read_text())["owners_preserved"] is True
