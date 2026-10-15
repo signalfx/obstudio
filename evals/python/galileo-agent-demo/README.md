@@ -23,3 +23,9 @@ existing export path.
 The project and log stream remain operator-overridable through
 `GALILEO_PROJECT` and `GALILEO_LOG_STREAM`. Credentials are supplied through
 the runtime secret environment and are not stored in this fixture.
+
+The manifest enables Galileo's supported `otel` extra because this entrypoint
+imports its OTLP exporter. Its transport dependencies use the compatible OTel
+family below 1.45: Galileo's exporter accesses the inherited requests session,
+which the newer transport removed. This keeps the real existing exporter
+runnable without patching the SDK or changing application ownership.
