@@ -44,8 +44,16 @@ test against documented configured limits. Require useful schema-valid content,
 truthful truncation/gap handling and credential/token/email sentinel absence from
 native records, attributes/events and wire as applicable. Keep proposed settings
 and unrun acceptance tests separate from observed configuration or emission.
-For fresh or export-only GenAI scenarios using the Splunk AO default or an
-explicit Splunk AO choice, also read
+Classify preservation before checking creator choice: any existing runtime
+OTel/Galileo/AO producer, provider or exporter for traces, metrics or logs makes
+this incremental. Compare its before/after identity, operations, safe fields,
+metrics/log records and destinations; a missing GenAI span does not authorize
+SDK adoption or framework suppression. Run the real startup and configured
+export path, and exercise repeated callbacks and teardown for duplicates or
+unfinished spans. Missing original evidence is Not proven, not permission to
+replace it.
+For a runtime with no existing telemetry instrumentation using the Splunk AO
+default, or an existing Splunk AO creator, also read
 `../references/splunk-agent-observability.md` and its Decorator Selection plus
 Fresh Agent SDK Instrumentation mapping, even with no `splunk_ao` import or selected
 AO resource finding. Select a supported Splunk AO creator for that path where
@@ -520,7 +528,9 @@ For selected Splunk Agent Observability work, verify four outcomes separately:
 - a fresh application trace is observed in the intended project and stream.
 
 For selected resource provisioning, inspect the configured `ao_target` and
-exercise the application's provisioning step with credential-free SDK fakes.
+exercise the application's actual provisioning step with credential-free API
+fakes. Existing non-AO paths must work without importing or installing the AO
+SDK: use its configured standard resource HTTP client and existing exporter.
 Prove both-existing causes zero creates, both-missing and mixed resources are
 resolved or created in the intended project, and a repeated run reuses the
 same IDs. Exercise duplicate/conflict recovery by exact scoped relookup,
@@ -545,6 +555,15 @@ runtime that passes its own resource names explicitly. Prove explicit-ID
 plumbing when supported, or state the source-backed name-only limitation;
 passing an ID string to a name lookup does not prove ID support.
 
+For a non-AO application, verify the actual launch consumes the resolved IDs
+through the existing exporter's supported trace-header hook: current Studio
+uses `projectid`/`logstreamid`, public standalone AO docs use
+`projectid`/`agentstreamid`. Verify the exact target contract and authentication,
+preserved endpoint/protocol/non-default port and harmless existing headers,
+no AO header leakage to metrics/logs, no second provider/SDK creator, one AO
+delivery per operation and unchanged unrelated sinks. Test resource failure
+before binding headers and normal resource resolution through the same gateway
+connection. A sample env file or fake lookup alone does not prove this path.
 Local Studio visibility proves receiver delivery only. For Python SDK gateway
 mode, verify its actual profile loader and env generator deliver populated
 `SPLUNK_AO_API_URL`, `SPLUNK_AO_CONSOLE_URL`, and

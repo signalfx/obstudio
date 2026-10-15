@@ -17,8 +17,8 @@ def test_ao_audit_requires_early_compatibility_evidence_and_gateway_candidate():
     for term in (
         "Before scoring AO routing",
         "canonical Audit Evidence",
-        "project/Agent Stream API endpoint",
-        "SDK auth configuration",
+        "selected resource API/authentication",
+        "existing exporter's",
         "per-request trace routing separately",
         "`supported`",
         "`unsupported`",
@@ -33,9 +33,12 @@ def test_ao_audit_requires_early_compatibility_evidence_and_gateway_candidate():
         assert term in " ".join(discovery.split())
 
     gate = canonical.split("Before `finalize-audit`, apply this AO acceptance gate", 1)[1]
-    assert "auth configuration and per-request trace-route compatibility as separate" in " ".join(
-        gate.split()
-    )
+    for term in (
+        "selected resource client's project/Agent Stream API endpoint",
+        "authentication and existing exporter's per-request trace-route compatibility",
+        "SDK-owned path", "Do not require SDK variables or a new AO SDK dependency",
+    ):
+        assert term in " ".join(gate.split())
     assert "do not defer them to the acceptance scenario" in " ".join(gate.split())
 
 

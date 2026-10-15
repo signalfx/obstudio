@@ -6,13 +6,14 @@ approved runtime export path. Application-owned OTel spans describe the stable
 configuration keeps Galileo unless the user explicitly selects a supported
 alternative.
 
-For the integration-choice evaluation only, a validated compatibility check
-establishes two supported but mutually exclusive ways to satisfy dedicated
-Agent Stream routing: retain the existing Galileo processor with the
-operator-managed mapping, or disable that processor and configure `splunk-ao`
-as the replacement export path. Enabling both paths would export the same
-logical operations twice, so the audit must ask for one explicit choice without
-preselecting either branch.
+For the integration-choice evaluation only, the operator chooses whether to
+keep the current destinations or add one distinct Studio destination through
+supported native OpenTelemetry transport. Both choices retain Galileo and all
+existing producer/provider ownership. Resource setup and trace-specific
+project/Agent Stream headers are configuration work; they do not require a
+`splunk-ao` span-creation dependency. Two exporters targeting the same Studio
+destination would deliver every operation twice, so destination deduplication
+is required before registering an additional export path.
 
 The streaming path intentionally lacks detector-ready first-chunk, chunk
 cadence, cancellation, timeout, disconnect, and close-reason telemetry. Those

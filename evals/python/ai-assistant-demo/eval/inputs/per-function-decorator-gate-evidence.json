@@ -307,7 +307,7 @@
   },
   "preservation_cases": {
     "origin_file": "eval/inputs/genai-default-scenarios.json",
-    "origin_sha256": "4a8d08e43b2517b6b241a0ce8e78674981e6ecce22d16ce8b5d5772964cb5d49",
+    "origin_sha256": "2d4640f2f910a698de2a6155fff4fbfbbb8f66583d1986dd53dd4b825941ab6f",
     "sections": {
       "/existing_otel": {
         "source_snapshot": "from opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nprovider = TracerProvider()\ntrace.set_tracer_provider(provider)\ntracer = trace.get_tracer(\"existing_agent\")\nasync def model_call(messages, client):\n    with tracer.start_as_current_span(\"chat local-demo\", attributes={\"gen_ai.operation.name\": \"chat\", \"gen_ai.provider.name\": \"ollama\", \"gen_ai.request.model\": \"local-demo\"}):\n        return await client.chat(messages=messages, temperature=0.2, stream=True)\nasync def tool_call(arguments, handler):\n    with tracer.start_as_current_span(\"execute_tool lookup_weather\", attributes={\"gen_ai.operation.name\": \"execute_tool\", \"gen_ai.tool.name\": \"lookup_weather\"}):\n        return await handler(arguments)\n",

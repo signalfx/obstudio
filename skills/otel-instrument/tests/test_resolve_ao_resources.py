@@ -7,10 +7,14 @@ import io
 import json
 import os
 import tempfile
+import threading
+import time
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "resolve_ao_resources.py"
@@ -59,6 +63,72 @@ class Client:
         created = resource(f"id-{len(self.resources) + 1}", name, scope.get("project_id"))
         self.resources.append(created)
         return created
+
+
+@contextlib.contextmanager
+def local_studio(route):
+    requests = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def handle_resource(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            payload = json.loads(body) if body else None
+            requests.append((self.command, self.path, payload, dict(self.headers)))
+            status, response, headers = route(self.command, self.path, payload)
+            if status is None:
+                self.close_connection = True
+                return
+            encoded = response if isinstance(response, bytes) else json.dumps(response).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            for name, value in headers.items():
+                self.send_header(name, value)
+            self.end_headers()
+            try:
+                self.wfile.write(encoded)
+            except OSError:
+                pass  # A timeout test deliberately closes the connection.
+
+        do_GET = handle_resource
+        do_POST = handle_resource
+
+        def log_message(self, *_):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=0.01), daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", requests
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+class StudioResourceAPI:
+    def __init__(self, *, existing=True):
+        self.projects = [{"id": "p", "name": "project"}] if existing else []
+        self.streams = [{"id": "s", "name": "stream", "project_id": "p"}] if existing else []
+
+    def __call__(self, method, target, body):
+        path = urlsplit(target).path
+        if method == "GET" and path == "/ao/api/projects/all":
+            return 200, self.projects, {}
+        if method == "GET" and path == "/ao/api/projects/p/log_streams/paginated":
+            return 200, {"log_streams": self.streams, "paginated": False}, {}
+        if method == "POST" and path == "/ao/api/projects":
+            project = {"id": "p", "name": body["name"], "ignored_secret": "private-response"}
+            self.projects.append(project)
+            return 200, project, {}
+        if method == "POST" and path == "/ao/api/projects/p/log_streams":
+            stream = {"id": "s", "name": body["name"], "project_id": "p"}
+            self.streams.append(stream)
+            return 200, stream, {}
+        resources = self.streams if "/log_streams/" in path else self.projects
+        found = next((item for item in resources if item["id"] == path.rsplit("/", 1)[-1]), None)
+        return (200, found, {}) if found else (404, {"error": "private-response"}, {})
 
 
 class ResolverTests(unittest.TestCase):
@@ -536,6 +606,331 @@ class SDKAdapterTests(unittest.TestCase):
             MODULE.resolve_resources(Client([resource("p", "project")]), adapter, project_name="project", agent_stream_name="stream")
         self.assertEqual(raised.exception.code, "agent_stream_lookup_failed")
         self.assertEqual(client.create_calls, [])
+
+
+class StudioHTTPTests(unittest.TestCase):
+    def resolve(self, origin, **selectors):
+        projects, streams = MODULE._studio_clients(origin)
+        return MODULE.resolve_resources(
+            projects, streams,
+            **(selectors or {"project_name": "project", "agent_stream_name": "stream"}),
+            sleep=lambda _: None,
+        )
+
+    def run_cli(self, origin, *arguments):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            result = MODULE.main([
+                "--studio-api-origin", origin, "--project-name", "project",
+                "--agent-stream-name", "stream", *arguments,
+            ])
+        return result, json.loads(stdout.getvalue()), stdout.getvalue() + stderr.getvalue()
+
+    def test_sdk_free_cli_creates_once_repeats_reuse_and_sends_only_public_marker(self):
+        api = StudioResourceAPI(existing=False)
+        environment = {
+            "SPLUNK_AO_API_KEY": "private-cloud-key", "SPLUNK_AO_URL": "https://private.example",
+            "HTTP_PROXY": "http://proxy.invalid:1", "HTTPS_PROXY": "http://proxy.invalid:1",
+            "ALL_PROXY": "http://proxy.invalid:1", "NO_PROXY": "",
+        }
+        with local_studio(api) as (origin, requests), patch.dict(os.environ, environment, clear=True), patch.object(MODULE, "_sdk_clients") as sdk:
+            before = dict(os.environ)
+            result, evidence, output = self.run_cli(origin)
+            self.assertEqual(result, 0)
+            self.assertEqual((evidence["project"]["outcome"], evidence["agent_stream"]["outcome"]), ("created", "created"))
+            second_result, second, second_output = self.run_cli(origin)
+            self.assertEqual(second_result, 0)
+            self.assertEqual((second["project"]["outcome"], second["agent_stream"]["outcome"]), ("reused", "reused"))
+            sdk.assert_not_called()
+            self.assertEqual(dict(os.environ), before)
+        creates = [(path, body) for method, path, body, _ in requests if method == "POST"]
+        self.assertEqual(creates, [
+            ("/ao/api/projects", {"name": "project", "type": "gen_ai", "create_example_templates": False}),
+            ("/ao/api/projects/p/log_streams", {"name": "stream"}),
+        ])
+        for _, _, _, headers in requests:
+            self.assertEqual(headers["X-SF-Token"], "local-gateway")
+            self.assertNotIn("Authorization", headers)
+            self.assertNotIn("Cookie", headers)
+        serialized = json.dumps(requests) + output + second_output
+        self.assertNotIn("private-cloud-key", serialized)
+        self.assertNotIn("private.example", serialized)
+        self.assertNotIn("private-response", output + second_output)
+
+    def test_stream_lookup_scans_all_pages_before_reusing_or_rejecting_duplicates(self):
+        for duplicate in (False, True):
+            api = StudioResourceAPI()
+            def route(method, path, body):
+                if "/paginated?" in path:
+                    token = int(parse_qs(urlsplit(path).query)["starting_token"][0])
+                    page = {
+                        "log_streams": [{"id": f"s-{token}", "name": "stream" if token or duplicate else "other", "project_id": "p"}],
+                        "paginated": token == 0, "next_starting_token": 7 if token == 0 else None,
+                    }
+                    return 200, page, {}
+                return api(method, path, body)
+            with self.subTest(duplicate=duplicate), local_studio(route) as (origin, requests):
+                if duplicate:
+                    with self.assertRaises(MODULE.ResolutionError) as raised:
+                        self.resolve(origin)
+                    self.assertEqual(raised.exception.code, "agent_stream_ambiguous_name")
+                else:
+                    self.assertEqual(self.resolve(origin)["agent_stream"]["id"], "s-7")
+            stream_queries = [parse_qs(urlsplit(path).query) for _, path, _, _ in requests if "/paginated?" in path]
+            self.assertEqual([query["starting_token"] for query in stream_queries], [["0"], ["7"]])
+            self.assertTrue(all(query["include_counts"] == ["false"] and query["limit"] == ["100"] for query in stream_queries))
+            self.assertFalse(any(method == "POST" for method, _, _, _ in requests))
+
+    def test_explicit_null_token_is_eof_even_when_paginated_is_true(self):
+        api = StudioResourceAPI()
+        def route(method, path, body):
+            if "/paginated?" in path:
+                return 200, {"log_streams": api.streams, "paginated": True, "next_starting_token": None}, {}
+            return api(method, path, body)
+        with local_studio(route) as (origin, requests):
+            self.assertEqual(self.resolve(origin)["agent_stream"]["outcome"], "reused")
+        self.assertEqual(len(requests), 2)
+        self.assertFalse(any(method == "POST" for method, _, _, _ in requests))
+
+    def test_later_page_failure_or_wrong_parent_never_creates_from_partial_results(self):
+        for failure in (401, 403, 503, "malformed", "wrong-parent", "timeout"):
+            api = StudioResourceAPI()
+            def route(method, path, body):
+                if "/paginated?" not in path:
+                    return api(method, path, body)
+                if parse_qs(urlsplit(path).query)["starting_token"] == ["0"]:
+                    return 200, {"log_streams": [], "paginated": True, "next_starting_token": 7}, {}
+                if isinstance(failure, int):
+                    return failure, {"error": "private-response"}, {}
+                if failure == "wrong-parent":
+                    return 200, {"log_streams": [{"id": "s", "name": "unrelated", "project_id": "other"}], "paginated": False}, {}
+                if failure == "timeout":
+                    time.sleep(0.05)
+                return 200, b"private-response-not-json", {}
+            with self.subTest(failure=failure), local_studio(route) as (origin, requests), patch.object(MODULE, "STUDIO_HTTP_TIMEOUT", 0.02):
+                with self.assertRaises(MODULE.ResolutionError) as raised:
+                    self.resolve(origin)
+                self.assertEqual(raised.exception.code, "agent_stream_wrong_project" if failure == "wrong-parent" else "agent_stream_lookup_failed")
+                self.assertNotIn("private-response", json.dumps(raised.exception.evidence))
+            self.assertFalse(any(method == "POST" for method, _, _, _ in requests))
+
+    def test_invalid_pages_fail_closed_and_pagination_is_bounded(self):
+        pages = (
+            None, [], {"log_streams": None}, {"log_streams": []},
+            {"log_streams": [], "paginated": True, "next_starting_token": 0},
+            {"log_streams": [], "paginated": True, "next_starting_token": -1},
+            {"log_streams": [], "paginated": True, "next_starting_token": True},
+            {"log_streams": [], "paginated": True},
+            {"log_streams": [], "paginated": False, "next_starting_token": 7},
+            {"log_streams": [{"name": "other", "project_id": "p"}], "paginated": False},
+            {"log_streams": [{"id": "s", "name": {"bad": "shape"}, "project_id": "p"}], "paginated": False},
+            {"log_streams": [{"id": "s", "project_id": "p"}], "paginated": False},
+            {"log_streams": [{"id": "s", "name": "stream"}], "paginated": False},
+        )
+        api = StudioResourceAPI()
+        for page in pages:
+            def route(method, path, body):
+                return (200, page, {}) if "/paginated?" in path else api(method, path, body)
+            with self.subTest(page=page), local_studio(route) as (origin, requests):
+                with self.assertRaises(MODULE.ResolutionError) as raised:
+                    self.resolve(origin)
+                self.assertEqual(raised.exception.code, "agent_stream_lookup_failed")
+            self.assertFalse(any(method == "POST" for method, _, _, _ in requests))
+        def endless(method, path, body):
+            if "/paginated?" not in path:
+                return api(method, path, body)
+            token = int(parse_qs(urlsplit(path).query)["starting_token"][0])
+            return 200, {"log_streams": [], "paginated": True, "next_starting_token": token + 1}, {}
+        with local_studio(endless) as (origin, requests), patch.object(MODULE, "STUDIO_MAX_PAGES", 2):
+            with self.assertRaises(MODULE.ResolutionError):
+                self.resolve(origin)
+        self.assertEqual(len(requests), 3)
+
+    def test_resource_ids_validate_parent_and_missing_ids_never_create(self):
+        for project_id, stream_id, code in (("p", "s", None), ("missing", "s", "project_id_not_found"), ("p", "missing", "agent_stream_id_not_found"), ("../api_keys", "s", "project_lookup_failed")):
+            with self.subTest(project_id=project_id, stream_id=stream_id), local_studio(StudioResourceAPI()) as (origin, requests):
+                if code:
+                    with self.assertRaises(MODULE.ResolutionError) as raised:
+                        self.resolve(origin, project_id=project_id, agent_stream_id=stream_id)
+                    self.assertEqual(raised.exception.code, code)
+                else:
+                    self.assertEqual(self.resolve(origin, project_id=project_id, agent_stream_id=stream_id)["agent_stream"]["id"], "s")
+            self.assertFalse(any(method == "POST" for method, _, _, _ in requests))
+        api = StudioResourceAPI()
+        api.streams[0]["project_id"] = "other"
+        with local_studio(api) as (origin, _), self.assertRaises(MODULE.ResolutionError) as raised:
+            self.resolve(origin, project_id="p", agent_stream_id="s")
+        self.assertEqual(raised.exception.code, "agent_stream_wrong_project")
+
+    def test_local_id_failures_never_import_the_sdk(self):
+        original_import = builtins.__import__
+        imports = []
+        def without_sdk(name, *args, **kwargs):
+            if name.startswith("splunk_ao"):
+                imports.append(name)
+                raise ImportError("SDK absent")
+            return original_import(name, *args, **kwargs)
+        with local_studio(StudioResourceAPI()) as (origin, _), patch("builtins.__import__", side_effect=without_sdk):
+            with self.assertRaises(MODULE.ResolutionError) as raised:
+                self.resolve(origin, project_id="../invalid", agent_stream_id="s")
+            self.assertEqual(raised.exception.code, "project_lookup_failed")
+        self.assertEqual(imports, [])
+
+    def test_project_id_lookup_keeps_optional_name_contract(self):
+        for project in ({"id": "p"}, {"id": "p", "name": None}):
+            api = StudioResourceAPI()
+            api.projects = [project]
+            with self.subTest(project=project), local_studio(api) as (origin, requests):
+                evidence = self.resolve(origin, project_id="p", agent_stream_id="s")
+                self.assertEqual(evidence["project"]["id"], "p")
+                self.assertEqual(evidence["agent_stream"]["project_id"], "p")
+            self.assertFalse(any(method == "POST" for method, _, _, _ in requests))
+
+    def test_conflicts_reconcile_by_identity_once_for_both_resources(self):
+        api = StudioResourceAPI(existing=False)
+        def route(method, path, body):
+            response = api(method, path, body)
+            return (409, {"error": "private-duplicate-response"}, {}) if method == "POST" else response
+        with local_studio(route) as (origin, requests):
+            evidence = self.resolve(origin)
+            self.assertEqual((evidence["project"]["outcome"], evidence["agent_stream"]["outcome"]), ("reused-after-conflict", "reused-after-conflict"))
+            second = self.resolve(origin)
+            self.assertEqual(second["agent_stream"]["outcome"], "reused")
+        self.assertEqual(sum(method == "POST" for method, _, _, _ in requests), 2)
+        self.assertNotIn("private-duplicate-response", json.dumps(evidence))
+
+    def test_unresolved_or_ambiguous_conflict_has_bounded_relookup_without_recreate(self):
+        for ambiguous in (False, True):
+            api = StudioResourceAPI(existing=False)
+            def route(method, path, body):
+                if method == "POST":
+                    if ambiguous:
+                        api.projects.extend([{"id": "p1", "name": "project"}, {"id": "p2", "name": "project"}])
+                    return 409, {"error": "private-duplicate-response"}, {}
+                return api(method, path, body)
+            with self.subTest(ambiguous=ambiguous), local_studio(route) as (origin, requests):
+                with self.assertRaises(MODULE.ResolutionError) as raised:
+                    self.resolve(origin)
+                self.assertEqual(raised.exception.code, "project_create_unresolved")
+                record = raised.exception.evidence["project"]
+                self.assertEqual(record["relookup_attempts"], 1 if ambiguous else 3)
+                self.assertEqual(record["create_attempts"], 1)
+                self.assertNotIn("agent_stream", raised.exception.evidence)
+            self.assertEqual(sum(method == "POST" for method, _, _, _ in requests), 1)
+
+    def test_unknown_create_errors_are_terminal_and_repeat_recovers_existing_identity(self):
+        for failure in (403, 422, 503, "malformed"):
+            api = StudioResourceAPI(existing=False)
+            def route(method, path, body):
+                response = api(method, path, body)
+                if method != "POST":
+                    return response
+                if isinstance(failure, int):
+                    return failure, {"error": "duplicate private-response"}, {}
+                return 200, b"private-response-not-json", {}
+            with self.subTest(failure=failure), local_studio(route) as (origin, requests), patch.object(MODULE, "STUDIO_HTTP_TIMEOUT", 0.02):
+                with self.assertRaises(MODULE.ResolutionError) as raised:
+                    self.resolve(origin)
+                self.assertEqual(raised.exception.code, "project_create_failed")
+                self.assertEqual(raised.exception.evidence["project"]["relookup_attempts"], 0)
+                self.assertEqual(len(requests), 2)
+                self.assertNotIn("private-response", json.dumps(raised.exception.evidence))
+                api.streams.append({"id": "s", "name": "stream", "project_id": "p"})
+                self.assertEqual(self.resolve(origin)["project"]["outcome"], "reused")
+            self.assertEqual(sum(method == "POST" for method, _, _, _ in requests), 1)
+
+    def test_transport_failure_after_create_reconciles_without_repeating_the_post(self):
+        for kind in ("project", "agent_stream"):
+            for failure in ("disconnect", "timeout"):
+                api = StudioResourceAPI(existing=kind == "agent_stream")
+                api.streams = []
+                create_path = "/ao/api/projects" if kind == "project" else "/ao/api/projects/p/log_streams"
+                def route(method, path, body):
+                    response = api(method, path, body)
+                    if method == "POST" and path == create_path:
+                        if failure == "disconnect":
+                            return None, None, {}
+                        time.sleep(0.05)
+                    return response
+                with self.subTest(kind=kind, failure=failure), local_studio(route) as (origin, requests), patch.object(MODULE, "STUDIO_HTTP_TIMEOUT", 0.02):
+                    evidence = self.resolve(origin)
+                    self.assertEqual(evidence[kind]["outcome"], "reused-after-uncertain-create")
+                    self.assertEqual(evidence[kind]["create_attempts"], 1)
+                    self.assertEqual(evidence[kind]["relookup_attempts"], 1)
+                    self.assertEqual(self.resolve(origin)[kind]["outcome"], "reused")
+                self.assertEqual(sum(method == "POST" and path == create_path for method, path, _, _ in requests), 1)
+
+    def test_uncertain_transport_create_unresolved_or_failed_relookup_never_recreates(self):
+        for failure in ("absent", "ambiguous", "lookup-error"):
+            api = StudioResourceAPI(existing=False)
+            attempted = False
+            def route(method, path, body):
+                nonlocal attempted
+                if method == "POST":
+                    attempted = True
+                    if failure == "ambiguous":
+                        api.projects.extend([{"id": "p1", "name": "project"}, {"id": "p2", "name": "project"}])
+                    return None, None, {}
+                if attempted and failure == "lookup-error":
+                    return 503, {"error": "private-response"}, {}
+                return api(method, path, body)
+            with self.subTest(failure=failure), local_studio(route) as (origin, requests):
+                with self.assertRaises(MODULE.ResolutionError) as raised:
+                    self.resolve(origin)
+                self.assertEqual(raised.exception.code, "project_create_unresolved")
+                record = raised.exception.evidence["project"]
+                self.assertEqual(record["create_attempts"], 1)
+                self.assertEqual(record["relookup_attempts"], 3 if failure == "absent" else 1)
+                self.assertNotIn("agent_stream", raised.exception.evidence)
+                self.assertNotIn("private-response", json.dumps(raised.exception.evidence))
+            self.assertEqual(sum(method == "POST" for method, _, _, _ in requests), 1)
+
+    def test_lookup_errors_oversize_and_redirects_never_create_or_follow_location(self):
+        with local_studio(StudioResourceAPI()) as (other_origin, other_requests):
+            for status, payload in ((401, {}), (403, {}), (503, {}), (302, {}), (307, {}), (200, b"private-response-not-json"), (200, b"x" * 65)):
+                def route(*_):
+                    return status, payload, {"Location": other_origin + "/ao/api/projects/all"}
+                with self.subTest(status=status, payload=payload), local_studio(route) as (origin, requests), patch.object(MODULE, "STUDIO_MAX_RESPONSE_BYTES", 64):
+                    result, evidence, output = self.run_cli(origin)
+                    self.assertEqual(result, 1)
+                    self.assertEqual(evidence["error"], "project_lookup_failed")
+                    self.assertNotIn("private-response", output)
+                self.assertEqual(len(requests), 1)
+                self.assertEqual(requests[0][0], "GET")
+            self.assertEqual(other_requests, [])
+
+    def test_malformed_project_list_or_later_identity_never_authorizes_creation(self):
+        for payload in (
+            {"items": []}, [{"name": "other"}],
+            [{"id": "p"}], [{"id": "p", "name": None}],
+            [{"id": "p", "name": "project"}, {"id": "p2"}],
+            [{"id": "p", "name": "project"}, {"id": "../api_keys", "name": "other"}],
+            [{"id": "p", "name": {"unexpected": "name"}}],
+        ):
+            with self.subTest(payload=payload), local_studio(lambda *_: (200, payload, {})) as (origin, requests):
+                with self.assertRaises(MODULE.ResolutionError) as raised:
+                    self.resolve(origin)
+                self.assertEqual(raised.exception.code, "project_lookup_failed")
+            self.assertEqual(len(requests), 1)
+            self.assertEqual(requests[0][0], "GET")
+
+    def test_origin_rejects_nonloopback_auth_paths_and_controls_before_requests(self):
+        origins = (
+            "", "http://localhost:4319", "http://remote.example:4319", "http://192.0.2.1:4319",
+            "http://127.0.0.1", "http://127.0.0.1:0", "https://127.0.0.1:4319",
+            "http://private-user:private-password@127.0.0.1:4319", "http://127.0.0.1:4319/ao/api",
+            "http://127.0.0.1:4319?private-query", "http://127.0.0.1:4319#private-fragment",
+            "http://127.0.0.1:4319\n", "http://[::1]:invalid", "http://127.0.0.1:4319?",
+        )
+        for origin in origins:
+            with self.subTest(origin=origin), patch.object(MODULE.http.client, "HTTPConnection") as connection, patch.object(MODULE, "_sdk_clients") as sdk:
+                result, evidence, output = self.run_cli(origin)
+                self.assertEqual(result, 1)
+                self.assertEqual(evidence["error"], "studio_api_origin_invalid")
+                self.assertNotIn("private-", output)
+                connection.assert_not_called()
+                sdk.assert_not_called()
+        self.assertEqual(MODULE.StudioAPI("http://[::1]:4319").host, "::1")
 
 
 class CLITests(unittest.TestCase):

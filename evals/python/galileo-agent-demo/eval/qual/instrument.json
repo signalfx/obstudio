@@ -3,13 +3,17 @@
   "prompts": [
     {
       "id": "keep-galileo",
-      "eval_inputs": ["eval/inputs/otel-audit-integration-choice.json"],
+      "eval_inputs": [
+        "eval/inputs/otel-audit-integration-choice.json"
+      ],
       "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit-integration-choice.json to ./service/.observe/otel-audit.json. Record the decision OTEL-001=keep-galileo and request executable OTEL-002 through the bundled selection flow. Implement and verify only that path."
     },
     {
-      "id": "use-splunk-ao",
-      "eval_inputs": ["eval/inputs/otel-audit-integration-choice.json"],
-      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit-integration-choice.json to ./service/.observe/otel-audit.json. Record the decision OTEL-001=use-splunk-ao and request executable AO-001 through the bundled selection flow. Implement and verify only that path."
+      "id": "route-existing-otel",
+      "eval_inputs": [
+        "eval/inputs/otel-audit-integration-choice.json"
+      ],
+      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit-integration-choice.json to ./service/.observe/otel-audit.json. Record OTEL-001=route-existing-otel and request executable AO-001 through the bundled selection flow. Implement and verify only the selected native OTel configuration path to a distinct Studio destination, retaining Galileo and all current span creators/provider/exporters. Introduce no AO span-creation SDK. Use local fake HTTP or OTLP boundaries for credential-free proof and report actual external resource and cloud delivery as Not proven."
     }
   ],
   "judge_inputs": [
@@ -18,11 +22,11 @@
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
-    "Applies only the option explicitly recorded in the bound selection and leaves the unchosen mutually exclusive path untouched.",
+    "Applies only the recorded additional-destination choice and its bound executable scope; neither branch migrates Galileo, replaces providers or rewrites existing GenAI producers.",
     "For keep-galileo, retains the Galileo processor and dependencies, adds the missing application-owned OTel streaming lifecycle closure without overlapping workflow/chat/tool spans, and does not install splunk-ao.",
-    "For use-splunk-ao, disables or removes the overlapping Galileo processor and startup configuration before enabling splunk-ao, while preserving unrelated HTTP and application instrumentation.",
+    "For route-existing-otel, preserves Galileo and existing creators/provider/exporters, resolves selected project/Agent Stream identities through supported SDK-free interfaces, and configures only one native OTel route to a distinct Studio destination. Existing destinations and harmless headers remain intact, Studio projectid/logstreamid stays trace-specific, and no splunk-ao span-creation dependency or duplicate destination exporter is added.",
     "Never edits installed Galileo package files, virtual environments, site-packages, node_modules, generated clients, or caches.",
     "Writes bound selection and instrumentation artifacts that keep the manual decision outside requested_ids and approved_ids, include only the chosen option-unlocked executable finding, and leave the source audit unchanged.",
-    "Verification exercises the selected direct application path and checks intended project and Agent Stream routing, required Agent Observability field population, stable workflow/model/tool identities, and absence of duplicate logical-operation spans; unmet live prerequisites remain Not proven rather than Working."
+    "Verification exercises the selected direct application path and checks exact current workflow/model/tool cardinality, safe fields and lifecycle. For selected native routing it proves resource identity ownership and lookup/create/repeat/race/error handling plus trace-specific header delivery without metric/log leakage, preserving original Galileo output. Local fake or source evidence never becomes actual cloud resource/Agent Stream visibility; missing proof remains Not proven."
   ]
 }

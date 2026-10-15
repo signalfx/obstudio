@@ -1,23 +1,35 @@
 #!/usr/bin/env python3
-"""Resolve or create one AO Project and its Agent Stream using the installed SDK.
+"""Resolve or create one AO Project and its Agent Stream.
 
 Run with the application's Python runner and configured SPLUNK_AO_* environment.
 Omitted selectors use that environment; explicit selectors override it per
 resource. An environment name/ID pair is rejected rather than guessed.
+The default uses the installed SDK. --studio-api-origin explicitly selects an
+SDK-free local Studio API proved reachable in the application's network namespace.
 No credentials are accepted as arguments or copied into the evidence report.
 """
 
 from __future__ import annotations
 
 import argparse
+import http.client
+import ipaddress
 import json
 import os
+import re
 import sys
 import tempfile
 import time
 import unicodedata
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable
+from urllib.parse import urlencode, urlsplit
+
+
+STUDIO_HTTP_TIMEOUT = 10
+STUDIO_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+STUDIO_MAX_PAGES = 1000
 
 
 class ResolutionError(Exception):
@@ -27,6 +39,15 @@ class ResolutionError(Exception):
         self.code = code
         self.evidence = evidence
         super().__init__(code)
+
+
+class StudioAPIError(Exception):
+    """A local HTTP failure with no response body, URL, or credentials."""
+
+    def __init__(self, status_code: int | None = None, *, uncertain_create: bool = False) -> None:
+        self.status_code = status_code
+        self.uncertain_create = uncertain_create
+        super().__init__("studio_api_failed")
 
 
 def _status(error: Exception) -> int | None:
@@ -83,7 +104,7 @@ def resolve_resources(
     """Accept Projects-compatible clients and a stream client whose list is complete.
 
     A failed name lookup never authorizes creation. ID selectors never create.
-    The CLI supplies SDKAgentStreams so name lookup covers every page.
+    The CLI supplies adapters so name lookup covers every page.
     """
     evidence: dict[str, Any] = {"schema_version": 1, "status": "resolving"}
 
@@ -151,7 +172,10 @@ def resolve_resources(
                 # Missing selected IDs are failures, never name creation requests.
                 if resource_id is not None and (
                     status == 404
-                    or (kind == "project" and status is None and _project_not_found(error))
+                    or (
+                        kind == "project" and status is None
+                        and not isinstance(error, StudioAPIError) and _project_not_found(error)
+                    )
                 ):
                     fail(f"{kind}_id_not_found")
                 if isinstance(error, ValueError) and error.args == ("wrong_project",):
@@ -179,7 +203,9 @@ def resolve_resources(
                 record["create_http_status"] = status
             # Legacy APIException omits HTTP status. Reconcile its uncertain
             # outcome by identity; never infer a duplicate from message text.
-            if status is not None and status != 409:
+            if (status is not None and status != 409) or (
+                isinstance(error, StudioAPIError) and status != 409 and not error.uncertain_create
+            ):
                 fail(f"{kind}_create_failed")
             create_exception = True
             reconciliation = "reused-after-conflict" if status == 409 else "reused-after-uncertain-create"
@@ -274,6 +300,151 @@ def _sdk_clients() -> tuple[Any, Any]:
     return Projects(), SDKAgentStreams(AgentStreams(), page_loader=pages.sync, unset_type=Unset)
 
 
+def _studio_resource_id(value: Any) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,512}", value):
+        raise StudioAPIError()
+    return value
+
+
+def _studio_resource(payload: Any, *, stream: bool = False) -> Any:
+    if not isinstance(payload, dict):
+        raise StudioAPIError()
+    fields = {"id": _studio_resource_id(payload.get("id"))}
+    name = payload.get("name")
+    if stream and (name is None or "project_id" not in payload):
+        raise StudioAPIError()
+    if name is not None:
+        if _invalid_selector(name):
+            raise StudioAPIError()
+        fields["name"] = name
+    if "project_id" in payload:
+        fields["project_id"] = _studio_resource_id(payload["project_id"])
+    return SimpleNamespace(**fields)
+
+
+class StudioAPI:
+    """Only the explicit numeric loopback API origin; no discovery or redirects."""
+
+    def __init__(self, origin: str) -> None:
+        try:
+            parsed = urlsplit(origin)
+            if (
+                _invalid_selector(origin) or parsed.scheme != "http"
+                or parsed.username is not None or parsed.password is not None
+                or parsed.path not in ("", "/") or "?" in origin or "#" in origin
+                or parsed.port is None or not 1 <= parsed.port <= 65535
+                or not ipaddress.ip_address(parsed.hostname).is_loopback
+            ):
+                raise ValueError()
+            self.host, self.port = parsed.hostname, parsed.port
+        except (TypeError, ValueError):
+            code = "studio_api_origin_invalid"
+            raise ResolutionError(code, {"schema_version": 1, "status": "failed", "error": code}) from None
+
+    def request(self, method: str, path: str, body: dict | None = None) -> Any:
+        # HTTPConnection neither uses environment proxies/netrc nor follows a
+        # Location header. The only authentication value is the public marker.
+        connection = http.client.HTTPConnection(self.host, self.port, timeout=STUDIO_HTTP_TIMEOUT)
+        response = None
+        headers = {"Accept": "application/json", "X-SF-Token": "local-gateway"}
+        encoded = None
+        if body is not None:
+            encoded = json.dumps(body).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        try:
+            connection.request(method, "/ao/api/projects" + path, encoded, headers)
+            response = connection.getresponse()
+            if response.status != 200:
+                raise StudioAPIError(response.status)
+            payload = response.read(STUDIO_MAX_RESPONSE_BYTES + 1)
+            if len(payload) > STUDIO_MAX_RESPONSE_BYTES:
+                raise StudioAPIError()
+            try:
+                return json.loads(payload.decode("utf-8"))
+            except (UnicodeError, ValueError):
+                raise StudioAPIError() from None
+        except StudioAPIError:
+            raise
+        except (OSError, http.client.HTTPException):
+            # A transport failure can occur after the server committed a POST.
+            # Reconcile by identity; the resolver never retries the creation.
+            raise StudioAPIError(uncertain_create=True) from None
+        finally:
+            if response is not None:
+                response.close()
+            connection.close()
+
+
+class StudioProjects:
+    def __init__(self, api: StudioAPI) -> None:
+        self.api = api
+
+    def list(self) -> list[Any]:
+        payload = self.api.request("GET", "/all?type=gen_ai")
+        if not isinstance(payload, list):
+            raise StudioAPIError()
+        resources = [_studio_resource(item) for item in payload]
+        if any(getattr(item, "name", None) is None for item in resources):
+            raise StudioAPIError()
+        return resources
+
+    def get(self, *, id: str) -> Any:
+        return _studio_resource(self.api.request("GET", "/" + _studio_resource_id(id)))
+
+    def create(self, *, name: str) -> Any:
+        return _studio_resource(self.api.request("POST", "", {
+            "name": name, "type": "gen_ai", "create_example_templates": False,
+        }))
+
+
+class StudioAgentStreams:
+    def __init__(self, api: StudioAPI) -> None:
+        self.api = api
+
+    def list(self, *, project_id: str) -> list[Any]:
+        path = "/" + _studio_resource_id(project_id) + "/log_streams/paginated?"
+        resources: list[Any] = []
+        token = 0
+        seen_tokens = {token}
+        for _ in range(STUDIO_MAX_PAGES):
+            page = self.api.request("GET", path + urlencode({
+                "include_counts": "false", "limit": 100, "starting_token": token,
+            }))
+            if not isinstance(page, dict) or not isinstance(page.get("log_streams"), list):
+                raise StudioAPIError()
+            for item in page["log_streams"]:
+                stream = _studio_resource(item, stream=True)
+                _identity(stream, project_id=project_id)
+                resources.append(stream)
+            paginated = page.get("paginated")
+            next_token = page.get("next_starting_token")
+            if next_token is None and (
+                paginated is False or (paginated is True and "next_starting_token" in page)
+            ):
+                return resources
+            if (
+                paginated is not True or not isinstance(next_token, int)
+                or isinstance(next_token, bool) or next_token < 0 or next_token in seen_tokens
+            ):
+                raise StudioAPIError()
+            seen_tokens.add(next_token)
+            token = next_token
+        raise StudioAPIError()
+
+    def get(self, *, id: str, project_id: str) -> Any:
+        path = "/" + _studio_resource_id(project_id) + "/log_streams/" + _studio_resource_id(id)
+        return _studio_resource(self.api.request("GET", path), stream=True)
+
+    def create(self, *, name: str, project_id: str) -> Any:
+        path = "/" + _studio_resource_id(project_id) + "/log_streams"
+        return _studio_resource(self.api.request("POST", path, {"name": name}), stream=True)
+
+
+def _studio_clients(origin: str) -> tuple[Any, Any]:
+    api = StudioAPI(origin)
+    return StudioProjects(api), StudioAgentStreams(api)
+
+
 def _write_evidence(path: Path, evidence: dict[str, Any]) -> None:
     descriptor, temporary = tempfile.mkstemp(prefix=".ao-resources-", dir=path.parent)
     try:
@@ -314,6 +485,10 @@ def main(argv: list[str] | None = None) -> int:
     stream.add_argument("--agent-stream-name", help="Otherwise use SPLUNK_AO_AGENT_STREAM")
     stream.add_argument("--agent-stream-id", help="Otherwise use SPLUNK_AO_AGENT_STREAM_ID")
     parser.add_argument("--reuse-only", action="store_true")
+    parser.add_argument(
+        "--studio-api-origin",
+        help="Use SDK-free Studio HTTP at an explicitly discovered http://numeric-loopback:port origin",
+    )
     parser.add_argument("--output", type=Path, help="Write resource-only JSON evidence atomically")
     args = parser.parse_args(argv)
     try:
@@ -325,7 +500,7 @@ def main(argv: list[str] | None = None) -> int:
             "agent_stream", args.agent_stream_name, args.agent_stream_id,
             "SPLUNK_AO_AGENT_STREAM", "SPLUNK_AO_AGENT_STREAM_ID",
         )
-        projects, streams = _sdk_clients()
+        projects, streams = _studio_clients(args.studio_api_origin) if args.studio_api_origin is not None else _sdk_clients()
         evidence = resolve_resources(
             projects, streams, project_name=project_name, project_id=project_id,
             agent_stream_name=stream_name, agent_stream_id=stream_id,
@@ -336,7 +511,8 @@ def main(argv: list[str] | None = None) -> int:
     except ImportError:
         evidence = {"schema_version": 1, "status": "failed", "error": "sdk_unavailable"}
     except Exception:
-        evidence = {"schema_version": 1, "status": "failed", "error": "sdk_initialization_failed"}
+        code = "studio_api_initialization_failed" if args.studio_api_origin is not None else "sdk_initialization_failed"
+        evidence = {"schema_version": 1, "status": "failed", "error": code}
     if args.output:
         try:
             _write_evidence(args.output, evidence)

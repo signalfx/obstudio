@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "framework-bridge",
-      "task": "Instrument the assistant v3 service in ./service. It already has app-owned GenAI lifecycle spans and also preloads framework instrumentation. Preserve the app-owned DAG and prevent duplicate framework GenAI nodes."
+      "task": "Instrument the assistant v3 service in ./service while preserving its actual externally bootstrapped OTel/framework provider, producers and exporter configuration. Read the real app helper bodies and launcher: SpanHandle returns and framework_shadow_nodes response JSON are source placeholders/simulations, not actual received OTel spans. Add only source-proven missing operations and safe required attributes/content using supported public current-provider or framework hooks, preserve assistant_v3_turn/deepagents source identities, and prove actual emitted parentage/counts. Do not suppress active framework instrumentors, replace existing producers/provider, introduce an AO span-creation dependency or modify business shadow-node output solely to make duplicate assertions pass. If current ownership/hooks or runtime proof is unavailable, retain precise incomplete/manual gaps without a fabricated compliant trace. Use credential-free local calls; no model or cloud requests."
     }
   ],
   "judge_inputs": [
@@ -12,12 +12,12 @@
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
-    "Chooses the app-owned GenAI spans as the canonical source for this fixture and does not add duplicate app-owned chat or execute_tool spans.",
-    "For app-owned canonical spans, suppresses overlapping LangChain/OpenAI GenAI instrumentors in the Makefile or another real startup surface before opentelemetry-instrument bootstraps.",
-    "Keeps baseline HTTP/database/runtime auto-instrumentation active while suppressing only overlapping GenAI framework emitters.",
+    "Identifies actual producer ownership from helper bodies and real startup. The dataclass SpanHandle and framework_shadow_nodes JSON simulate operations but do not create/export OTel spans; does not claim their labels prove current received coverage. Preserves the externally bootstrapped OTel/framework stack and adds only actual source-proven missing operations through supported current-provider hooks.",
+    "Retains existing LangChain/OpenAI/HTTP/database/runtime instrumentation and launch-owned provider/export paths instead of disabling framework instrumentors before bootstrap to prefer new app spans. A real unsupported or overlapping existing-owner capability is recorded as an exact incomplete/manual gap; no automatic suppression, replacement, AO SDK dependency or private SDK patch.",
+    "Preserves all existing endpoints, harmless trace headers, destinations and business response fields. Does not remove framework_shadow_nodes response data or hide nodes in presentation to fake no-duplicate telemetry; missing coverage is added only after checking actual current owners and source dataflow.",
     "Preserves assistant_v3_turn and deepagents exactly; it does not invent assistant_v3_session_turn, assistant_v3_agent, or POST /v2/assistant/sessions as GenAI names.",
-    "Requires runtime/static proof that Splunk Observability Studio would show one workflow node, one agent node, expected LLM/tool counts, stable model/tool names, and no wrapper-only LangGraph or step nodes.",
+    "Requires actual emitted trace or honest unrun acceptance for the source-backed workflow/agent/model/tool parent tree and exact per-business-call counts. Source labels, simulated shadow-node arrays, installed packages and stdout alone do not prove native telemetry or duplicate spans; no invented LangGraph/workflow wrappers or duplicate corrective creators are accepted.",
     "Writes a separate instrumentation report with Signals Changed. When a source audit exists, it preserves every Audit Gap Closure and GenAI Readiness Closure surface and required-signal cell; otherwise it records that no source audit was available.",
-    "Runs otel-verify against exact app-owned span names and duplicate-span expectations, or records the exact blocker; unexecuted full-runtime or explorer claims remain Not proven rather than Working."
+    "Runs focused verification of the actual preserved current-provider operation names, schema-valid bounded safe content, parentage, counts, errors/cancel and original startup/export behavior, or records the exact unsupported/runtime blocker. Unexecuted local receiver or cloud/explorer claims remain Not proven, and incomplete existing coverage is never treated as fresh default AO adoption."
   ]
 }

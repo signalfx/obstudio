@@ -61,6 +61,17 @@ collector; distinguish that export failure from application business behavior.
 Do not promise an independent direct cloud route unless one was selected and
 configured.
 
+Preserve an existing compatible exporter and its endpoint/protocol precedence.
+An explicit generic non-default endpoint must not be overridden by new
+signal-specific conventional-port defaults. For selected AO routing, normal
+resource resolution can supply IDs to that same exporter's supported
+trace-header configuration. Inspect the target contract: current Studio uses
+`projectid`/`logstreamid`, while public standalone AO documentation specifies
+`projectid`/`agentstreamid`. Keep these headers trace-specific, preserve unrelated
+headers and metric/log sinks, and use one export path per AO destination. Read
+the shared AO reference for resource binding and compatibility details; routing
+does not require replacing existing span creators or adding a second processor.
+
 ## Verification
 
 Exercise the effective endpoint/protocol/path tuple for every configured

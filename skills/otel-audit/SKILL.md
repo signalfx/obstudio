@@ -76,11 +76,13 @@ Scan the repository to determine language, framework, and existing instrumentati
   reconcile detected AI surfaces with official semconv docs when available,
   record live-or-snapshot provenance, and build a semconv closure matrix.
   Apply GenAI Instrumentation Selection and the Required GenAI Coverage
-  Profile: a fresh agent defaults to Splunk AO span creation, while an
-  existing OTel/Galileo producer is preserved and enriched. Read
+  Profile: only a runtime with no existing telemetry instrumentation defaults
+  to Splunk AO span creation. Preserve and enrich existing OTel/Galileo/AO
+  producers, providers and exporters, including generic spans, metrics-only
+  and logs-only pipelines. Missing GenAI coverage does not make them fresh. Read
   `../references/splunk-agent-observability.md` for fresh-agent SDK APIs and
-  current official examples even when no SDK import exists yet. Before
-  prescribing any creator for fresh or uncovered Python GenAI functions,
+  current official examples when the fresh or existing AO producer path applies.
+  Before prescribing creators on that Python Splunk AO path,
   complete its mandatory per-function producer decision gate for every actual
   agent/model/tool/retrieval function. Keep native SDK `@log` versus justified
   application-owned function-decorator choices consistent across findings;
@@ -114,8 +116,8 @@ Scan the repository to determine language, framework, and existing instrumentati
   must not hide an interactive runtime from this assessment.
   Before scoring AO routing, record a source-backed compatibility decision in
   canonical Audit Evidence and the affected runtime readiness/finding rows:
-  classify the installed SDK's project/Agent Stream API endpoint, SDK auth
-  configuration, and per-request trace routing separately as `supported`,
+  classify the selected resource API/authentication and existing exporter's
+  per-request trace routing separately as `supported`,
   `unsupported` (name the missing contract), or `unverified` (name the exact
   package/runtime evidence unavailable after inspection). Do not defer this
   classification to a future acceptance test. Separately classify fresh cloud
@@ -127,13 +129,16 @@ Scan the repository to determine language, framework, and existing instrumentati
   AO settings are absent, keep the routing gap independent of an existing
   ordinary OTLP endpoint and put the required exclusive Studio profile in the
   AO routing finding's `required_fix` and acceptance criteria: a
-  `.env.studio.example` or repository-native named profile with the installed
-  SDK's supported API URL, console URL, and local gateway authentication,
-  filled from an actually discovered same-namespace loopback API origin during
-  instrumentation. Require removal of inherited direct-cloud realm/token
-  variables when selecting that profile, real project/stream resolution before
-  export, and a separate direct-cloud profile only when requested or already
-  maintained. Describe the missing profile even when the gateway is currently
+  `.env.studio.example` or repository-native named profile filled from an
+  actually discovered same-namespace loopback API origin during instrumentation.
+  For existing non-AO applications, plan SDK-free resource resolution and merge
+  the target-supported project/stream headers into the existing trace exporter;
+  preserve its endpoint/protocol and unrelated headers. Current Studio uses
+  `projectid`/`logstreamid`; public standalone AO docs use
+  `projectid`/`agentstreamid`. Do not prescribe a new SDK or second AO exporter.
+  Require the SDK API/console/auth profile only when an SDK path is selected;
+  isolate its inherited direct-cloud settings in that profile. Require real
+  project/stream resolution before export. Describe missing wiring even when the gateway is currently
   unavailable; mark endpoint and delivery proof unverified instead of filling
   a guessed port or claiming it works.
 7. Record exact evidence paths that should appear in the report:
@@ -608,11 +613,11 @@ names, classes, registration names, callback owner names, docs, or prior trace
 names. Mark agent coverage `partial` when instrumentation invents generic
 service-derived names. For example, a DeepAgents-backed agent should be
 `deepagents`, not `assistant_v3_agent`, `assistant`, or `agent`.
-Keep duplicate-span remediation in `remaining_signals` unless the audit proves
-either the framework/vendor bridge is canonical and app duplicates are absent,
-or app-owned spans are
-canonical and overlapping framework/vendor GenAI instrumentation is disabled,
-opted out, or suppressed by the app's discovered runtime mechanism.
+Keep duplicate-span remediation in `remaining_signals` until the audit names
+the existing canonical producer and proves no duplicate operation. Preserve
+existing framework/vendor or app-owned coverage; a newly proposed app span is
+not permission to disable the original bridge. An existing ownership conflict
+or unsupported safe enrichment requires a precise manual decision.
 When app-owned spans are canonical and the process uses preload, agent,
 `opentelemetry-instrument`, `NODE_OPTIONS --require`, or another
 auto-instrumentation bootstrap, audit the launch environment and startup
@@ -816,8 +821,9 @@ For a new live AO sink, include any unresolved ordinary provider-lifecycle
 finding needed by that route. Author a local proof scenario for the exact
 live entry point and attach it to the AO routing finding or its selected
 provider-lifecycle prerequisite. Use fake or in-memory application and AO
-sinks without cloud credentials: reuse the intended provider, attach exactly
-one AO sink/processor, emit one canonical workflow/model/tool span per logical
+sinks without cloud credentials: reuse the existing provider and compatible
+exporter with routed trace headers (or the already selected SDK sink), emit one
+canonical workflow/model/tool span per logical
 operation, inspect every active sink, and prove at most one export to the same
 AO destination. Exercise `force_flush` and `shutdown` on owned providers or
 supported AO logger termination; assert completed pending spans drain and
@@ -837,15 +843,19 @@ finding, not only to a generic provider finding:
    the gateway. Cite the actual endpoint and
    availability evidence only when discovered. If no gateway or live target
    was inspected, say `unverified` and do not invent a host or port.
-   For Python Studio gateway mode, inspect populated `SPLUNK_AO_API_URL`,
+   For an existing non-AO path, inspect its actual resource API origin,
+   selectors, resolved trace-header configuration and supported existing
+   exporter. Do not require SDK variables or a new AO SDK dependency.
+   For an SDK-owned Python Studio gateway path, inspect populated `SPLUNK_AO_API_URL`,
    `SPLUNK_AO_CONSOLE_URL`, and the public `SPLUNK_AO_API_KEY=local-gateway`
    marker in the actual loaded profile and any generated env, not only key
    allowlists or examples. Missing values require a selected configuration
    fix and a profile-to-process acceptance scenario; audit does not write the
    env file. Missing application cloud credentials do not establish that this
    gateway path is unavailable.
-2. State the installed AO SDK's project/Agent Stream API endpoint, SDK
-   auth configuration and per-request trace-route compatibility as separate
+2. State the selected resource client's project/Agent Stream API endpoint,
+   authentication and existing exporter's per-request trace-route compatibility
+   (or the installed AO SDK's contracts for an SDK-owned path) as separate
    `supported`, `unsupported` with the exact missing contract, or `unverified`
    with the exact unavailable package/runtime evidence decisions in canonical
    evidence and AO runtime rows; do not defer them to the acceptance scenario.
@@ -915,8 +925,11 @@ recover duplicate conflicts and uncertain create outcomes with bounded exact
 relookup; treat supplied IDs as lookup-only with no create on an unresolved ID;
 validate ownership and stream/project association; and never treat auth,
 transport, or 5xx failures as absence. Failure must not suppress ordinary OTel.
-The routing scenario must prove the named launch profile is loaded before SDK
-import/initialization, not just that an env file contains the right keys.
+The routing scenario must prove the named launch profile is loaded before
+exporter initialization (and SDK import on an SDK-owned path), not just that
+an env file contains the right keys. Existing non-AO apps use supported
+resource APIs and trace-specific headers on the existing exporter without a
+new SDK dependency.
 A read-only audit
 does not create resources or claim that an unqueried resource is absent.
 For the resource plan, inventory the actual application launch profile and
@@ -981,9 +994,10 @@ Do not create manual or external findings just to record product/runtime
 choices, billing, cost, safety policy, content-governance, or external business
 context.
 When a default GenAI gap involves duplicate or overlapping instrumentation,
-name the intended canonical owner per logical operation and the pre-bootstrap
-suppression surface in `Required fix`. If source evidence cannot support that
-choice, use `manual decision`; do not hand `$otel-instrument` an unresolved
+name the existing canonical owner per logical operation and its supported
+enrichment hook or proven uncovered boundary in `Required fix`. Do not propose
+a replacement producer plus blanket suppression. If source evidence cannot
+support ownership or safe enrichment, use `manual decision`; do not hand `$otel-instrument` an unresolved
 "select one canonical source" instruction in a `default` row.
 
 For mutually exclusive choices, first decide whether the branches are in scope.

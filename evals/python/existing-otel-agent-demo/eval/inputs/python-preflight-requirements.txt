@@ -1,0 +1,2 @@
+# Validation tooling only; app runtime already declares its OTel pipeline.
+jsonschema

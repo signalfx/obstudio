@@ -164,10 +164,10 @@ def test_genai_skills_require_single_canonical_span_source():
 
     instrument_only_terms = [
         "do not create duplicate app-owned",
-        "disable, opt out of, or suppress overlapping framework/vendor GenAI instrumentation",
-        "discovered runtime mechanism",
-        "Do not hard-code this decision to one framework",
-        "Keep HTTP/database/runtime auto-instrumentation",
+        "enrich that creator through supported hooks first",
+        "Do not disable existing bridges or replace their operations",
+        "prerequisite/manual decision",
+        "Preserve unrelated coverage",
     ]
     instrument_normalized = " ".join(instrument.split())
     missing = [
@@ -325,7 +325,8 @@ def test_audit_requires_process_relative_ao_runtime_coverage():
         "its retrieval finding must be included separately from the tool finding",
         "include any unresolved ordinary provider-lifecycle finding needed by that route",
         "local proof scenario for the exact live entry point",
-        "attach exactly one AO sink/processor",
+        "reuse the existing provider and compatible",
+        "exporter with routed trace headers",
         "inspect every active sink",
         "at most one export to the same AO destination",
         "Exercise `force_flush` and `shutdown`",
@@ -536,28 +537,27 @@ def test_galileo_choice_fixture_citations_cover_the_claimed_behavior():
         assert span["name"].split()[0] in cited_text(span["source"])
 
 
-def test_genai_skills_require_pre_bootstrap_suppression_for_app_owned_spans():
-    audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
-    instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
-    reference = _read(GENAI_REF)
-    shared_terms = [
-        "opentelemetry-instrument",
-        "auto-instrumentation bootstrap",
-        "launch environment",
-        "before the bootstrap",
-        "App module code that mutates environment variables",
-        "not sufficient proof",
-        "framework hooks may already be registered",
-        "Makefile targets",
-        "service runner scripts",
-        "Docker or Helm env",
-        "VS Code launch configs",
-        "generated env scripts",
-    ]
-    for raw_text in (reference, audit, instrument):
-        text = " ".join(raw_text.split())
-        missing = [term for term in shared_terms if term not in text]
-        assert not missing
+def test_genai_skills_preserve_existing_owners_through_actual_startup():
+    contracts = {
+        GENAI_REF: (
+            "retain them and add only missing", "real bootstrap and startup environment",
+            "Do not install overlapping", "manual decision", "module-local environment edits after bootstrap",
+        ),
+        SKILLS_DIR / "otel-audit" / "SKILL.md": (
+            "existing canonical producer", "not permission to disable the original bridge",
+            "manual decision", "launch environment", "before the bootstrap",
+            "not sufficient proof", "framework hooks may already be registered",
+        ),
+        SKILLS_DIR / "otel-instrument" / "SKILL.md": (
+            "enrich that creator through supported hooks first", "Do not disable existing bridges",
+            "prerequisite/manual decision", "actual preload/agent/auto-instrumentation bootstrap",
+            "real launch profile", "after bootstrap do not prove",
+        ),
+    }
+    for path, terms in contracts.items():
+        text = " ".join(_read(path).split())
+        for term in terms:
+            assert term in text, (path, term)
 
 
 def test_genai_nested_reference_paths_resolve():
@@ -1418,8 +1418,12 @@ def test_genai_sdk_default_rubrics_exercise_new_and_preserved_producers():
     fixture = REPO_ROOT / "evals/python/ai-assistant-demo/eval"
     scenarios = json.loads(_read(fixture / "inputs/genai-default-scenarios.json"))
     assert scenarios["fresh_agent"]["existing_genai_producer"] is None
-    assert scenarios["export_only_fresh_agent"]["existing_genai_producer"] is None
-    assert "add_splunk_ao_span_processor" in scenarios["export_only_fresh_agent"]["source_snapshot"]
+    assert scenarios["existing_export_only_ao"]["existing_genai_producer"] is None
+    assert "add_splunk_ao_span_processor" in scenarios["existing_export_only_ao"]["source_snapshot"]
+    for key in ("existing_generic_otel", "existing_metrics_only", "existing_logs_only",
+                "existing_export_only_ao", "externally_bootstrapped_otel"):
+        assert scenarios[key]["source_snapshot" if "source_snapshot" in scenarios[key]
+                              else "launcher_source_snapshot"]
     for key in ("existing_otel", "existing_galileo"):
         assert "start_as_current_span" in scenarios[key]["source_snapshot"]
         assert scenarios[key]["known_values"]["stream"] is True
@@ -1434,8 +1438,13 @@ def test_genai_sdk_default_rubrics_exercise_new_and_preserved_producers():
         inputs = case["prompts"][0]["eval_inputs"]
         assert "eval/inputs/genai-default-scenarios.json" in inputs
         rubric = " ".join(case["rubric"])
-        assert "existing OTel and Galileo" in rubric
-        assert "Splunk AO span creation by default" in rubric
+        for term in (
+            "genuinely fresh", "existing OTel, Galileo, AO export-only",
+            "generic OTel, metrics-only, logs-only", "external-launcher",
+            "no AO span-creation SDK dependency", "replacement provider",
+            "duplicate destination exporter",
+        ):
+            assert term in rubric
         assert "required acceptance" in rubric
         assert "Opt-In provenance" in rubric
 
@@ -1734,12 +1743,12 @@ def test_assistant_v3_framework_bridge_eval_covers_duplicate_span_risk():
         "framework_shadow_nodes",
         "simulate_framework_shadow_nodes",
         "one canonical GenAI span source",
-        "before opentelemetry-instrument bootstraps",
+        "Preserves active launch-owned provider/producers/export paths",
         "OTEL_PYTHON_DISABLED_INSTRUMENTATIONS",
         "POST /v2/assistant/sessions",
         "must not become the GenAI workflow card",
         "LangGraph",
-        "step nodes",
+        "no-op handles and simulated JSON nodes",
     ]
     assert not [term for term in required_terms if term not in combined]
 

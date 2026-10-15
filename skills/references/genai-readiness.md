@@ -28,9 +28,29 @@ its export destination:
 
 | Runtime evidence | Default instrumentation path |
 |---|---|
-| Existing OTel GenAI library, Galileo integration, framework bridge, or application GenAI spans | Preserve the current producer and provider; fill only uncovered operations, attributes, content, context, metrics, and lifecycle through supported hooks. Do not migrate to Splunk AO merely to export there. |
+| Existing OTel instrumentation for any signal, Galileo integration, framework bridge, or application spans | Preserve existing producers, providers and exporters. Enrich existing spans through supported hooks; add OTel spans, metrics and logs only for proven uncovered operations. Generic HTTP spans, a metrics-only or logs-only pipeline, and an active export-only provider all select this incremental path even when GenAI coverage is missing. Do not introduce Splunk AO instrumentation or a new SDK dependency to fill those gaps. |
 | Existing Splunk AO span creation | Preserve it and fill its version-specific gaps without duplicate operation spans. |
-| Fresh agent application without GenAI span creation | Use Splunk AO instrumentation by default: preserve matching supported framework/provider ownership and use SDK `@log` for supported uncovered function boundaries. If its exact contract cannot meet requirements, assess the supported SDK creator and then the source-proven per-operation public OTel exception below; document the chosen function decorator and creator. A generic OTel provider, HTTP spans, or an evaluation-only SDK import does not make the live agent instrumented. |
+| Agent runtime with no existing telemetry instrumentation | Introduce Splunk AO instrumentation by default, using SDK `@log` for supported function boundaries. If its exact contract cannot meet requirements, assess the supported SDK creator and then the source-proven per-operation public OTel exception below. An unused dependency, evaluation-only import or ordinary stdout logger alone does not establish runtime OTel instrumentation. |
+
+Classify the actual target process before choosing a creator. Trace source-active
+or externally bootstrapped providers, instrumentors and exporters for each signal
+from startup to its call sites. Missing GenAI attributes do not make an already
+instrumented application fresh. Unknown producer ownership is an evidence gap;
+preserve it while resolving that gap. Keep signal coverage scoring independent
+of this preservation decision.
+
+Record a before/after operation inventory with each existing creator, provider,
+exporter destination and observable fields. Prove the same existing operation
+still emits once, retains its parent/context and safe fields, and preserves
+existing metric/log values. Exercise the real startup and configured export
+path alongside any added operation. Do not disable an existing framework
+instrumentor or replace its spans to make a duplicate check pass. If supported
+enrichment cannot resolve a privacy or semantic defect, report the exact
+limitation and a manual decision rather than silently substituting a producer.
+Selected AO resource/routing work is independent of creator choice: non-AO
+applications can resolve/create resources and route their existing exporter
+through supported trace headers; follow **Existing OpenTelemetry Provider** in
+`splunk-agent-observability.md`.
 
 For a fresh Python agent, read the **Fresh Agent SDK Instrumentation** section
 of `splunk-agent-observability.md` before authoring the audit finding or code.
@@ -52,7 +72,7 @@ partial. Explicit user choices override the default. Existing valid producers
 remain the default for already instrumented operations.
 
 For every new or repaired function hook, assess the decorator pattern first.
-Use SDK `@log` wherever the chosen release supports the actual function and
+Within the selected Splunk AO producer path, use SDK `@log` wherever the chosen release supports the actual function and
 required safe content, semantics, lifecycle and export path. This includes
 ordinary sync/async functions, methods, serial nested calls and bounded plain
 sync/async iteration; async generators alone are not a reason to avoid it.
@@ -338,12 +358,12 @@ operation: workflow, model call, tool call, retrieval, memory operation, or
 evaluation result, not both a framework wrapper span and an app-owned duplicate
 for the same work.
 
-The audit handoff must name the intended canonical owner for each discovered
+The audit handoff must name the existing canonical owner for each discovered
 logical-operation family: workflow, agent, model call, tool call, retrieval,
-memory, and evaluation when present. It must also name the startup/config
-surface that suppresses overlapping bridges before bootstrap. If source
-evidence is insufficient to choose, classify ownership as a `manual decision`
-instead of leaving a `default` instrumentation row ambiguous.
+memory, and evaluation when present. Preserve that owner and name the supported
+enrichment hook or exact uncovered boundary. If source evidence is insufficient
+to establish ownership, classify it as a `manual decision` instead of authoring
+a competing default producer.
 
 If the framework/vendor bridge is the canonical source, keep it and add only
 missing app-owned workflow/agent context, safe aggregate attributes, metrics,
@@ -351,22 +371,15 @@ or owner mappings. Do not add duplicate app-owned `chat` or `execute_tool`
 spans for operations that the bridge already emits with correct semconv,
 privacy, model/tool attributes, lifecycle, and parent context.
 
-If app-owned spans are the canonical source, add the complete app-owned
-workflow/agent/chat/tool/retrieval/memory/evaluation spans and disable, opt out
-of, or suppress overlapping framework/vendor GenAI instrumentation in that
-process. The exact mechanism is runtime-specific: use discovered instrumentor
-names, bridge settings, callback configuration, or provider-hook opt-out flags
-instead of hard-coding one framework. Keep baseline HTTP/database/runtime
-instrumentation when it does not create duplicate GenAI nodes.
-For preload, javaagent, `opentelemetry-instrument`, `NODE_OPTIONS --require`,
-or similar auto-instrumentation bootstraps, suppression must be configured in
-the launch environment or startup wrapper before the bootstrap runs; otherwise
-framework hooks may already be registered. App module code that mutates
-environment variables after bootstrap is only defense in depth and is not
-sufficient proof. Update the real startup surfaces that operators use, such as
-Makefile targets, service runner scripts, Docker or Helm env, VS Code launch
-configs, procfiles, systemd units, shell env generators, or generated env
-scripts.
+When existing app-owned spans are canonical, retain them and add only missing
+operations or fields. Check the real bootstrap and startup environment for
+framework spans before adding a new creator. Do not install overlapping
+instrumentation and then disable an existing bridge to justify the new spans.
+If the application already has competing owners, record the source-backed
+conflict and exact affected operations as a manual decision. A gap-filling run
+must preserve unrelated framework, HTTP, database, metrics and log coverage.
+Changes to the real launch profile must be exercised through that profile;
+module-local environment edits after bootstrap do not prove the intended state.
 
 Mark trace/semconv coverage `partial` when a selected trace shows duplicate
 GenAI nodes for the same logical operation, middleware or step-wrapper spans
@@ -793,24 +806,15 @@ documented application hook or configuration surface, add an app-owned OTel
 closure, or record the exact external SDK prerequisite. Changing an
 application-owned fork is a separate, explicitly selected scope.
 
-Offer an integration choice only when source and target-product evidence
-proves that two supported paths are both real and mutually exclusive.
-For example, keeping Galileo as the canonical processor and replacing it with
-`splunk-ao` are separate branches only when the required routing or field
-mapping cannot be satisfied by exporter-independent OTel plus the existing
-Galileo path. Represent that case as one `manual decision` prerequisite whose
-options unlock separate executable findings. Do not offer a false migration
-choice when one branch is unsupported, unverified, or unnecessary.
-
-After the path is selected, change only that branch. A keep-existing branch
-retains the current processor/bridge and adds only non-overlapping OTel closure.
-A replacement branch disables or removes the overlapping processor, wrappers,
-callbacks, or preload configuration before enabling the new path. Never leave
-two integrations emitting the same logical operation to the same destination.
-Verification must exercise the selected runtime path and prove the expected
-project/stream routing and field population when applicable, plus one canonical
-span node per logical operation with no duplicate workflow, model, tool,
-retrieval, memory, or evaluation spans.
+For an existing Galileo or other vendor path, keep its producer, provider and
+exporter. Add selected AO resource/routing configuration through supported
+existing-exporter headers where compatible, without introducing Splunk AO
+instrumentation or an SDK dependency. If its API cannot enrich a required field
+or route to the selected destination, name that exact external prerequisite or
+destination decision; do not treat migration as automatic gap closure.
+Verification must compare before/after operations, fields, metrics and logs,
+prove one canonical span per logical operation and one export to each intended
+destination, and separately prove project/stream routing when selected.
 
 ## Trace Shape
 

@@ -1,0 +1,1028 @@
+{
+  "kind": "dated-official-genai-schema-source",
+  "scope": "Offline schema/source evidence, not current-live latest, application emission or receiver proof. The structured schemas are copied losslessly from the selected JSON pointer.",
+  "origin_file": "evals/python/ai-assistant-demo/eval/inputs/genai-semconv-source-snapshot.json",
+  "origin_sha256": "37dcf51de2138b706b7272c32e4215d280a94790b3d4bb454000ef66ef24e3ae",
+  "source_pointer": "/otel/structured_schemas",
+  "repository": "https://github.com/open-telemetry/semantic-conventions-genai",
+  "resolved_revision": "5293effb97f18ddb0602da884dadee6119d67679",
+  "commit_date": "2026-10-12T19:05:02Z",
+  "captured_at_utc": "2026-10-13T06:56:26.057696+00:00",
+  "files": [
+    {
+      "path": "docs/gen-ai/gen-ai-agent-spans.md",
+      "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/docs/gen-ai/gen-ai-agent-spans.md",
+      "sha256": "018ffd339be99c7e56ddba7265dd3095ca0735ddf680d28f96036043641384f4",
+      "bytes": 146984
+    },
+    {
+      "path": "docs/gen-ai/client-inference.md",
+      "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/docs/gen-ai/client-inference.md",
+      "sha256": "d66935733da1edd048cfa3b90d081f8d81b6961b62a69dafa15c1c5ad03b9c5b",
+      "bytes": 116267
+    },
+    {
+      "path": "model/gen-ai/gen-ai-input-messages.json",
+      "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-input-messages.json",
+      "sha256": "034fcd8c87f1e013f3a5a5018503210e2bee4d2499c361823b96e906d40a50ad",
+      "bytes": 20355
+    },
+    {
+      "path": "model/gen-ai/gen-ai-output-messages.json",
+      "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-output-messages.json",
+      "sha256": "cb1e0296de9a5c15237f4e49af2f13e1409ffc9a671f89767da20ad986f37461",
+      "bytes": 21615
+    },
+    {
+      "path": "model/gen-ai/gen-ai-tool-call-arguments.json",
+      "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-tool-call-arguments.json",
+      "sha256": "73607a8e8d9e84393475ef460108c59dbb9e1d2ddc0d0177fce6f735a62367ea",
+      "bytes": 171
+    },
+    {
+      "path": "model/gen-ai/gen-ai-tool-call-result.json",
+      "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-tool-call-result.json",
+      "sha256": "44eb4a93b05eea7da14489f1d253814c6429772d1fe869f8f6fc1749d7593412",
+      "bytes": 168
+    },
+    {
+      "path": "model/gen-ai/gen-ai-tool-definitions.json",
+      "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/model/gen-ai/gen-ai-tool-definitions.json",
+      "sha256": "023501e9835139703d4b475c86d3d6b6b11dee2ccc08ea6c8ab48d173b89aa80",
+      "bytes": 3227
+    },
+    {
+      "path": "docs/gen-ai/gen-ai-spans.md",
+      "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/5293effb97f18ddb0602da884dadee6119d67679/docs/gen-ai/gen-ai-spans.md",
+      "sha256": "af0b7501177452a5fb929e09a42d791631511a0544f2c71e1a008ff177bcebf0",
+      "bytes": 84003
+    }
+  ],
+  "structured_schemas": {
+    "model/gen-ai/gen-ai-input-messages.json": {
+      "$defs": {
+        "BlobPart": {
+          "properties": {
+            "type": {
+              "const": "blob",
+              "type": "string"
+            },
+            "mime_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "modality": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Modality"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "content": {
+              "format": "binary",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "modality",
+            "content"
+          ],
+          "type": "object"
+        },
+        "ChatMessage": {
+          "additionalProperties": true,
+          "properties": {
+            "role": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Role"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "parts": {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TextPart"
+                  },
+                  {
+                    "$ref": "#/$defs/ToolCallRequestPart"
+                  },
+                  {
+                    "$ref": "#/$defs/ToolCallResponsePart"
+                  },
+                  {
+                    "$ref": "#/$defs/ServerToolCallPart"
+                  },
+                  {
+                    "$ref": "#/$defs/ServerToolCallResponsePart"
+                  },
+                  {
+                    "$ref": "#/$defs/BlobPart"
+                  },
+                  {
+                    "$ref": "#/$defs/FilePart"
+                  },
+                  {
+                    "$ref": "#/$defs/UriPart"
+                  },
+                  {
+                    "$ref": "#/$defs/ReasoningPart"
+                  },
+                  {
+                    "$ref": "#/$defs/CompactionPart"
+                  },
+                  {
+                    "$ref": "#/$defs/GenericPart"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "role",
+            "parts"
+          ],
+          "type": "object"
+        },
+        "CompactionPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "compaction",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "content": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        "FilePart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "file",
+              "type": "string"
+            },
+            "mime_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "modality": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Modality"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "file_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "modality",
+            "file_id"
+          ],
+          "type": "object"
+        },
+        "GenericPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        "GenericServerToolCall": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        "GenericServerToolCallResponse": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        "Modality": {
+          "enum": [
+            "image",
+            "video",
+            "audio",
+            "document"
+          ],
+          "type": "string"
+        },
+        "ReasoningPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "reasoning",
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "content"
+          ],
+          "type": "object"
+        },
+        "Role": {
+          "enum": [
+            "system",
+            "user",
+            "assistant",
+            "tool"
+          ],
+          "type": "string"
+        },
+        "ServerToolCallPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "server_tool_call",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "name": {
+              "type": "string"
+            },
+            "server_tool_call": {
+              "$ref": "#/$defs/GenericServerToolCall"
+            }
+          },
+          "required": [
+            "type",
+            "name",
+            "server_tool_call"
+          ],
+          "type": "object"
+        },
+        "ServerToolCallResponsePart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "server_tool_call_response",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "server_tool_call_response": {
+              "$ref": "#/$defs/GenericServerToolCallResponse"
+            }
+          },
+          "required": [
+            "type",
+            "server_tool_call_response"
+          ],
+          "type": "object"
+        },
+        "TextPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "text",
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "content"
+          ],
+          "type": "object"
+        },
+        "ToolCallRequestPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "tool_call",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "name": {
+              "type": "string"
+            },
+            "arguments": {
+              "default": null
+            }
+          },
+          "required": [
+            "type",
+            "name"
+          ],
+          "type": "object"
+        },
+        "ToolCallResponsePart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "tool_call_response",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "response": {}
+          },
+          "required": [
+            "type",
+            "response"
+          ],
+          "type": "object"
+        },
+        "UriPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "uri",
+              "type": "string"
+            },
+            "mime_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "modality": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Modality"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "uri": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "modality",
+            "uri"
+          ],
+          "type": "object"
+        }
+      },
+      "items": {
+        "$ref": "#/$defs/ChatMessage"
+      },
+      "type": "array"
+    },
+    "model/gen-ai/gen-ai-output-messages.json": {
+      "$defs": {
+        "BlobPart": {
+          "properties": {
+            "type": {
+              "const": "blob",
+              "type": "string"
+            },
+            "mime_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "modality": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Modality"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "content": {
+              "format": "binary",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "modality",
+            "content"
+          ],
+          "type": "object"
+        },
+        "CompactionPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "compaction",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "content": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        "FilePart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "file",
+              "type": "string"
+            },
+            "mime_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "modality": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Modality"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "file_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "modality",
+            "file_id"
+          ],
+          "type": "object"
+        },
+        "FinishReason": {
+          "enum": [
+            "stop",
+            "length",
+            "content_filter",
+            "tool_call",
+            "compaction",
+            "error"
+          ],
+          "type": "string"
+        },
+        "GenericPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        "GenericServerToolCall": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        "GenericServerToolCallResponse": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        "Modality": {
+          "enum": [
+            "image",
+            "video",
+            "audio",
+            "document"
+          ],
+          "type": "string"
+        },
+        "OutputMessage": {
+          "additionalProperties": true,
+          "properties": {
+            "role": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Role"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "parts": {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TextPart"
+                  },
+                  {
+                    "$ref": "#/$defs/ToolCallRequestPart"
+                  },
+                  {
+                    "$ref": "#/$defs/ToolCallResponsePart"
+                  },
+                  {
+                    "$ref": "#/$defs/ServerToolCallPart"
+                  },
+                  {
+                    "$ref": "#/$defs/ServerToolCallResponsePart"
+                  },
+                  {
+                    "$ref": "#/$defs/BlobPart"
+                  },
+                  {
+                    "$ref": "#/$defs/FilePart"
+                  },
+                  {
+                    "$ref": "#/$defs/UriPart"
+                  },
+                  {
+                    "$ref": "#/$defs/ReasoningPart"
+                  },
+                  {
+                    "$ref": "#/$defs/CompactionPart"
+                  },
+                  {
+                    "$ref": "#/$defs/GenericPart"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "finish_reason": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/FinishReason"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "deprecated": true
+            }
+          },
+          "required": [
+            "role",
+            "parts"
+          ],
+          "type": "object"
+        },
+        "ReasoningPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "reasoning",
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "content"
+          ],
+          "type": "object"
+        },
+        "Role": {
+          "enum": [
+            "system",
+            "user",
+            "assistant",
+            "tool"
+          ],
+          "type": "string"
+        },
+        "ServerToolCallPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "server_tool_call",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "name": {
+              "type": "string"
+            },
+            "server_tool_call": {
+              "$ref": "#/$defs/GenericServerToolCall"
+            }
+          },
+          "required": [
+            "type",
+            "name",
+            "server_tool_call"
+          ],
+          "type": "object"
+        },
+        "ServerToolCallResponsePart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "server_tool_call_response",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "server_tool_call_response": {
+              "$ref": "#/$defs/GenericServerToolCallResponse"
+            }
+          },
+          "required": [
+            "type",
+            "server_tool_call_response"
+          ],
+          "type": "object"
+        },
+        "TextPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "text",
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "content"
+          ],
+          "type": "object"
+        },
+        "ToolCallRequestPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "tool_call",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "name": {
+              "type": "string"
+            },
+            "arguments": {
+              "default": null
+            }
+          },
+          "required": [
+            "type",
+            "name"
+          ],
+          "type": "object"
+        },
+        "ToolCallResponsePart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "tool_call_response",
+              "type": "string"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "response": {}
+          },
+          "required": [
+            "type",
+            "response"
+          ],
+          "type": "object"
+        },
+        "UriPart": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "uri",
+              "type": "string"
+            },
+            "mime_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "modality": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Modality"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "uri": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "modality",
+            "uri"
+          ],
+          "type": "object"
+        }
+      },
+      "items": {
+        "$ref": "#/$defs/OutputMessage"
+      },
+      "type": "array"
+    },
+    "model/gen-ai/gen-ai-tool-call-arguments.json": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "model/gen-ai/gen-ai-tool-call-result.json": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "model/gen-ai/gen-ai-tool-definitions.json": {
+      "$defs": {
+        "FunctionToolDefinition": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "function",
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parameters": {
+              "anyOf": [
+                {
+                  "$ref": "http://json-schema.org/draft-07/schema#"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "type",
+            "name"
+          ],
+          "type": "object"
+        },
+        "GenericToolDefinition": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "name"
+          ],
+          "type": "object"
+        }
+      },
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/FunctionToolDefinition"
+          },
+          {
+            "$ref": "#/$defs/GenericToolDefinition"
+          }
+        ]
+      },
+      "type": "array"
+    }
+  }
+}
