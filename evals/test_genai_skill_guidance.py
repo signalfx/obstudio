@@ -187,6 +187,84 @@ def test_new_inference_metrics_use_current_contract_and_preserve_legacy():
     assert "does not authorize fabricated span usage or successful output" in text
 
 
+def test_audit_metric_inventory_keeps_optional_dispositions_in_canonical_evidence():
+    text = " ".join(_read(SKILLS_DIR / "otel-audit/SKILL.md").split())
+    inventory = text.split("**GenAI metric applicability inventory**", 1)[1].split(
+        "Before handoff, apply the per-tool", 1
+    )[0]
+    for required in (
+        "one row per metric in canonical Audit Evidence (`evidence[]`)",
+        "official level, type/unit, actual source boundary and value availability",
+        "applicability, disposition and reason",
+        "`applicable`, `N/A` and `source unknown`",
+        "`required`, `recommended`, `optional` and `deferred`",
+        "token distributions separately from usage totals",
+        "non-inference duration scopes separately from inference exclusions",
+        "do not force every optional metric to emit",
+        "Required missing metrics must remain in their owning executable findings",
+        "supplemental matrix does not replace this canonical inventory",
+        "Preserve existing metric producers and consumer contracts",
+    ):
+        assert required in inventory, required
+
+    fixture = REPO_ROOT / "evals/go/native-genai-demo"
+    definition = json.loads(_read(fixture / "eval/qual/audit.json"))
+    packet = "eval/inputs/audit-metric-inventory-evidence.json"
+    assert packet in definition["prompts"][0]["eval_inputs"]
+    acceptance = definition["rubric"][4]
+    for metric in (
+        "gen_ai.client.inference.operation.input_tokens/output_tokens",
+        "gen_ai.client.operation.duration",
+        "agent/tool duration/call-count",
+    ):
+        assert metric in acceptance
+    assert "Optional applicable metrics may be recommended or deferred" in acceptance
+    assert "supplemental-only inventory does not pass" in acceptance
+    for consumer in ("instrument", "verify"):
+        other = json.loads(_read(fixture / f"eval/qual/{consumer}.json"))
+        assert all(packet not in prompt["eval_inputs"] for prompt in other["prompts"])
+
+    # The established evidence fields retain the full inventory without new schema keys.
+    normalize = runpy.run_path(str(SKILLS_DIR / "references/scripts/observe_report.py"))[
+        "normalize_evidence_row"
+    ]
+    row = {
+        "check": "GenAI metric: gen_ai.client.inference.operation.input_tokens",
+        "finding": "Recommended; Histogram/{token}; source usage available; applicable; "
+        "deferred optional percentile distribution; totals alone do not cover it.",
+        "source": "current official token table and main.go:ModelResponse.Usage",
+    }
+    assert normalize(row, "evidence[0]") == row
+
+
+def test_audit_metric_fact_packet_covers_current_families_without_fixture_verdicts():
+    inputs = REPO_ROOT / "evals/go/native-genai-demo/eval/inputs"
+    packet = json.loads(_read(inputs / "audit-metric-inventory-evidence.json"))
+    shared = json.loads(_read(inputs / "genai-profile-evidence.json"))["otel"]
+    assert packet["resolved_revision"] == shared["resolved_revision"]
+    source_hashes = {source["path"]: source["sha256"] for source in shared["files"]}
+    for source in packet["source_documents"]:
+        assert source["sha256"] == source_hashes[source["path"]]
+    facts = {row["name"]: row for row in packet["metric_facts"]}
+    assert len(facts) == len(packet["metric_facts"]) == 19
+    assert facts["gen_ai.client.inference.operation.input_tokens"]["instrument_type"] == "Histogram"
+    assert facts["gen_ai.client.inference.operation.output_tokens"]["unit"] == "{token}"
+    for name in (
+        "gen_ai.client.operation.duration", "gen_ai.invoke_agent.duration",
+        "gen_ai.execute_tool.duration", "gen_ai.invoke_agent.inference_calls",
+        "gen_ai.invoke_agent.tool_calls", "gen_ai.invoke_workflow.duration",
+        "gen_ai.server.request.duration", "gen_ai.client.inference.time_to_first_chunk",
+        "gen_ai.client.inference.usage.cache_read.input_tokens",
+        "gen_ai.client.inference.usage.reasoning.output_tokens",
+    ):
+        assert name in facts
+    for row in facts.values():
+        assert row["official_level"] == "Recommended"
+        assert row["scope_conditions"] and row["source_section"]
+        assert row["source_document"] in source_hashes
+        assert not {"applicable", "disposition", "expected_grade", "fixture_required"} & row.keys()
+
+
 def test_genai_skills_require_single_canonical_span_source():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
     instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")

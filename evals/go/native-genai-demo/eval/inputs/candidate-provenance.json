@@ -1,6 +1,6 @@
 {
   "kind": "actual-native-Go-OTLP-source-and-capture-provenance",
-  "captured_at_utc": "2026-10-15T05:18:14.164408+00:00",
+  "captured_at_utc": "2026-10-15T05:40:01.504890+00:00",
   "toolchain": "go1.25.1 darwin/arm64",
   "dependencies": "Official native Go SDK/API/OTLP HTTP trace and metric exporters; versions and primary metadata in native-module-evidence.json and go.mod/go.sum. No AO SDK or Python runtime.",
   "files": {
@@ -10,17 +10,17 @@
     "go.mod": "b2b828937bb1b3f44774b3a912db72b6642f92ba0bfd55e03d2c1c48c42268f1",
     "go.sum": "bb817b2d8c6107d7a75a150775fc87b46632dc25b56cb60ad251fb1e619fc862",
     "eval/inputs/nativeprobe/main.go": "2a2dcfeffb8bb6a370f8dc342e18d3432514cf849b423107b728940173be64ca",
-    "eval/inputs/nativeprobe/main_test.go": "5cb7acc05da4623cf87e08218f0ca684ba8e8adb5dac2cfdbcf46954d83a60b6",
-    "eval/inputs/nativecandidate/telemetry.go": "4723881447935dbddf4ef17c6855f184e3e6cd5dd4786b01aaa2d5e7c728ca7e",
+    "eval/inputs/nativeprobe/main_test.go": "f3a4aebe0fa1fd2d31f8c57e586081f5c69a6f5f41bc9fa3e963134edb8af025",
+    "eval/inputs/nativecandidate/telemetry.go": "bae9ae52fd8f05fc4ba3dba125ce93c507cd3b434abbf9f47bfc4f6c2e0bd671",
     "eval/inputs/schemacheck/main.go": "c0049f5ecbd169dfc0ac6a576b126054a49feabdd46c7f96c3eb1717beefc3c8",
     "eval/inputs/schemacheck/main_test.go": "3ceeff0d5bc8383ed85b5fd90fd8b10f69724b04c0aa8b7d327e33d9ea6cb081",
     "eval/inputs/genai-profile-evidence.json": "aa816ae1e830e83a99289d326264d53e050cccd0c50648d49c3f2f8627ce7343",
     "eval/inputs/native-module-evidence.json": "450d81069099780c28e3a105394662a5713d004cf23a7f1f92289a8b252b996c",
     "eval/inputs/native-baseline-capture.json": "053fe1477741e02918477f75c69fc00e4f2e93f93299176ef123d86760b1aa01",
-    "eval/inputs/native-candidate-capture.json": "218670ba8c11cbb48925a6dc7e4bd952adcd94aa825880bc5828b3da16376d99",
-    "eval/inputs/native-missing-tool-message-capture.json": "18b64946996fae93d18d31e5f47145a2d7bd15ac61b187fcd83923ad31528a43",
-    "eval/inputs/native-lookup-failure-capture.json": "a73b2c51ab558194fd8139d4bb23a4f58206619719111b0a98e8bc4c84c4fffb",
-    "eval/inputs/native-rejected-traces-capture.json": "46118445fcf91905f0b053f9bb5c88a10e4f4632174f8ee0152f6e32a7e0571c"
+    "eval/inputs/native-candidate-capture.json": "d48153885e37ee333af1ed4b6c6dbf552151f5db87066b32d41a2de3bf4c69e6",
+    "eval/inputs/native-missing-tool-message-capture.json": "4c07b1f3d747d9a675999fa46417fb19035e7cd6a61771c5e552f2673de05cd8",
+    "eval/inputs/native-lookup-failure-capture.json": "f5aa6d4674d8ec7ec141774ec004c025117b96f349643aca5c59e9d759fb5b54",
+    "eval/inputs/native-rejected-traces-capture.json": "fae4a0ff2f040808de3dfbb030a9a2890fd67711d213ea7aeed157276cd04d35"
   },
   "baseline": {
     "source": "main.go + no-op telemetry.go",
@@ -36,13 +36,13 @@
       "go.sum"
     ],
     "runtime_eval_dependencies": [],
-    "compiled_telemetry_sha256": "f2e1799298b11aff4edffa5ab762372a4966b59f355391aa9a1f83973f77c21e"
+    "compiled_telemetry_sha256": "955b3c6bd53efdb1e5368e4fea2bfc5ff3336e5c9d218842a431a70c528ee606"
   },
   "negative_transformation": {
     "method": "Same actual native candidate; replace the single condition below before compiling a separate binary. No receipt mutation.",
     "old": "if operation.Name != \"model\" {",
     "new": "if operation.Name != \"model\" && operation.Name != \"tool\" {",
-    "compiled_telemetry_sha256": "43c12c623024bf7f180bf01dc23e8e9e60e5cfcc3db7732c8114fd0e3ca2b48c",
+    "compiled_telemetry_sha256": "f8419a6f4d866809b15b56098562a743836757a4dae9c3481983fb7b54c03e35",
     "expected_failures": [
       "missing gen_ai.input.messages",
       "missing gen_ai.input.messages",
@@ -60,5 +60,21 @@
       "GOSUMDB": "off"
     }
   },
-  "proof_scope": "Real application processes and official native exporters to isolated local Go HTTP handlers. Not real Studio/controller bindings, cloud delivery, backend recognition or billing."
+  "proof_scope": "Real application processes and official native exporters to isolated local Go HTTP handlers. Not real Studio/controller bindings, cloud delivery, backend recognition or billing.",
+  "candidate_refresh_scope": "Reference-only metadata and bounded SDK-free409 recovery. Only four candidate/negative/auth/rejected captures were regenerated; original actual zero-telemetry baseline is unchanged.",
+  "source_known_metadata": "All14source-affiliated spans per process contain gen_ai.agent.name=support_agent; four actual agent roots include fixed configured gen_ai.request.model=fixture-model-v1. Actual model responses/usage remain success-only.",
+  "resource_conflict_proof": {
+    "test": "TestNativeCandidateMetadataAndConflictRecovery in eval/inputs/nativeprobe/main_test.go",
+    "boundary": "Stage exact candidate/app/module files under t.TempDir, compile official native SDK app, execute real numeric-loopback HTTP resource/model/OTLP requests.",
+    "scenarios": [
+      "source_metadata",
+      "project_conflict",
+      "stream_conflict",
+      "project_unresolved",
+      "stream_wrong_parent",
+      "project_relookup_forbidden"
+    ],
+    "bounds": "At most one POST per resource;409 has at most2validated exact scoped relookups, no secondPOST; entire resolution10seconds with2secondHTTP requests.",
+    "failure_behavior": "Invalid/unresolved/auth-failed relookup returns no bound headers; sanitized diagnostics, four business outcomes and independent native metric export continue."
+  }
 }

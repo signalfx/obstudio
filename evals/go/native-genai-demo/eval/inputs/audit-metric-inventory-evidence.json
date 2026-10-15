@@ -1,0 +1,204 @@
+{
+  "kind": "audit-only-current-genai-metric-facts",
+  "scope": "Documentation facts for explicit metric applicability/disposition assessment against the actual app source. This is not an instrumented receipt, precomputed fixture applicability or a requirement to emit every optional instrument. It does not change the shared GenAI profile or capture provenance.",
+  "repository": "https://github.com/open-telemetry/semantic-conventions-genai",
+  "requested_ref": "main",
+  "resolved_revision": "f3c6d0c9bb66ebd474668a3a0be25c61226f02c2",
+  "commit_date": "2026-10-14T23:28:29Z",
+  "source_documents": [
+    {
+      "path": "docs/gen-ai/client-inference.md",
+      "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/docs/gen-ai/client-inference.md",
+      "sha256": "38038f6b981dd12a73db3cb7c7bc2b14e0fa39140ce639861d82f1fbe0fea3bc",
+      "bytes": 116237
+    },
+    {
+      "path": "docs/gen-ai/gen-ai-token-metrics.md",
+      "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/docs/gen-ai/gen-ai-token-metrics.md",
+      "sha256": "15a1d1143c1cc23beb3ff353e4b7556bc1d21caeee134572e7ce8ff43236c688",
+      "bytes": 88131
+    },
+    {
+      "path": "docs/gen-ai/gen-ai-metrics.md",
+      "url": "https://raw.githubusercontent.com/open-telemetry/semantic-conventions-genai/f3c6d0c9bb66ebd474668a3a0be25c61226f02c2/docs/gen-ai/gen-ai-metrics.md",
+      "sha256": "bf2359b880618efece9c8f5e1f76e3b3782fe8d8ecc22fb1df2bac3b549d7194",
+      "bytes": 64991
+    }
+  ],
+  "metric_facts": [
+    {
+      "name": "gen_ai.client.inference.duration",
+      "instrument_type": "Histogram",
+      "unit": "s",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/client-inference.md",
+      "source_section": "Metric: `gen_ai.client.inference.duration`",
+      "scope_conditions": "Actual client inference attempt duration, including errors; not agent or tool duration."
+    },
+    {
+      "name": "gen_ai.client.inference.time_to_first_chunk",
+      "instrument_type": "Histogram",
+      "unit": "s",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/client-inference.md",
+      "source_section": "Metric: `gen_ai.client.inference.time_to_first_chunk`",
+      "scope_conditions": "Client streaming response first-chunk timing; requires an actual stream."
+    },
+    {
+      "name": "gen_ai.client.inference.time_per_output_chunk",
+      "instrument_type": "Histogram",
+      "unit": "s",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/client-inference.md",
+      "source_section": "Metric: `gen_ai.client.inference.time_per_output_chunk`",
+      "scope_conditions": "Client streaming inter-chunk timing; requires subsequent response chunks."
+    },
+    {
+      "name": "gen_ai.client.inference.usage.input_tokens",
+      "instrument_type": "Counter",
+      "unit": "{token}",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-token-metrics.md",
+      "source_section": "Metric: `gen_ai.client.inference.usage.input_tokens`",
+      "scope_conditions": "Monotonic input-usage total; observed count or specified missing-response zero with unknown modality."
+    },
+    {
+      "name": "gen_ai.client.inference.usage.output_tokens",
+      "instrument_type": "Counter",
+      "unit": "{token}",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-token-metrics.md",
+      "source_section": "Metric: `gen_ai.client.inference.usage.output_tokens`",
+      "scope_conditions": "Monotonic output-usage total; observed count or specified missing-response zero with unknown modality."
+    },
+    {
+      "name": "gen_ai.client.inference.usage.cache_read.input_tokens",
+      "instrument_type": "Counter",
+      "unit": "{token}",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-token-metrics.md",
+      "source_section": "Metric: `gen_ai.client.inference.usage.cache_read.input_tokens`",
+      "scope_conditions": "Known cache-read subset of input usage; no invented cache breakdown."
+    },
+    {
+      "name": "gen_ai.client.inference.usage.cache_write.input_tokens",
+      "instrument_type": "Counter",
+      "unit": "{token}",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-token-metrics.md",
+      "source_section": "Metric: `gen_ai.client.inference.usage.cache_write.input_tokens`",
+      "scope_conditions": "Known cache-write subset of input usage; no invented cache breakdown."
+    },
+    {
+      "name": "gen_ai.client.inference.usage.reasoning.output_tokens",
+      "instrument_type": "Counter",
+      "unit": "{token}",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-token-metrics.md",
+      "source_section": "Metric: `gen_ai.client.inference.usage.reasoning.output_tokens`",
+      "scope_conditions": "Known reasoning subset of output usage; no invented reasoning breakdown."
+    },
+    {
+      "name": "gen_ai.client.inference.operation.input_tokens",
+      "instrument_type": "Histogram",
+      "unit": "{token}",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-token-metrics.md",
+      "source_section": "Metric: `gen_ai.client.inference.operation.input_tokens`",
+      "scope_conditions": "Per-inference input-token distribution, not total usage; no modality dimension; documented missing-usage zero."
+    },
+    {
+      "name": "gen_ai.client.inference.operation.output_tokens",
+      "instrument_type": "Histogram",
+      "unit": "{token}",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-token-metrics.md",
+      "source_section": "Metric: `gen_ai.client.inference.operation.output_tokens`",
+      "scope_conditions": "Per-inference output-token distribution, not total usage; no modality dimension; documented missing-usage zero."
+    },
+    {
+      "name": "gen_ai.client.operation.duration",
+      "instrument_type": "Histogram",
+      "unit": "s",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-metrics.md",
+      "source_section": "Metric: `gen_ai.client.operation.duration`",
+      "scope_conditions": "Assess non-inference GenAI operation scope; inference is explicitly excluded."
+    },
+    {
+      "name": "gen_ai.server.request.duration",
+      "instrument_type": "Histogram",
+      "unit": "s",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-metrics.md",
+      "source_section": "Metric: `gen_ai.server.request.duration`",
+      "scope_conditions": "Model-server request duration; requires observation of server execution, distinct from client latency."
+    },
+    {
+      "name": "gen_ai.server.time_per_output_token",
+      "instrument_type": "Histogram",
+      "unit": "s",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-metrics.md",
+      "source_section": "Metric: `gen_ai.server.time_per_output_token`",
+      "scope_conditions": "Model-server token-generation timing; requires server-side observations."
+    },
+    {
+      "name": "gen_ai.server.time_to_first_token",
+      "instrument_type": "Histogram",
+      "unit": "s",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-metrics.md",
+      "source_section": "Metric: `gen_ai.server.time_to_first_token`",
+      "scope_conditions": "Model-server first-token timing; requires server-side observations."
+    },
+    {
+      "name": "gen_ai.invoke_workflow.duration",
+      "instrument_type": "Histogram",
+      "unit": "s",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-metrics.md",
+      "source_section": "Metric: `gen_ai.invoke_workflow.duration`",
+      "scope_conditions": "A distinct bounded workflow execution; do not invent another boundary for a single agent."
+    },
+    {
+      "name": "gen_ai.invoke_agent.duration",
+      "instrument_type": "Histogram",
+      "unit": "s",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-metrics.md",
+      "source_section": "Metric: `gen_ai.invoke_agent.duration`",
+      "scope_conditions": "Reliably bounded in-process agent invocation, including terminal errors."
+    },
+    {
+      "name": "gen_ai.invoke_agent.inference_calls",
+      "instrument_type": "Histogram",
+      "unit": "{inference_call}",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-metrics.md",
+      "source_section": "Metric: `gen_ai.invoke_agent.inference_calls`",
+      "scope_conditions": "Inference attempts attributed once to their issuing agent invocation, including failed attempts."
+    },
+    {
+      "name": "gen_ai.invoke_agent.tool_calls",
+      "instrument_type": "Histogram",
+      "unit": "{tool_call}",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-metrics.md",
+      "source_section": "Metric: `gen_ai.invoke_agent.tool_calls`",
+      "scope_conditions": "Agent-side tool attempts attributed once to their issuing agent invocation, including failed attempts."
+    },
+    {
+      "name": "gen_ai.execute_tool.duration",
+      "instrument_type": "Histogram",
+      "unit": "s",
+      "official_level": "Recommended",
+      "source_document": "docs/gen-ai/gen-ai-metrics.md",
+      "source_section": "Metric: `gen_ai.execute_tool.duration`",
+      "scope_conditions": "Reliably bounded observable tool execution, matching its span duration when both are reported."
+    }
+  ],
+  "audit_requirement": "For each listed metric, decide source boundary/value availability, applicability and reason, and required/recommended/optional/deferred/covered disposition using actual app source and current skill/vendor/user acceptance. Unknown source facts stay unknown. Core required metrics remain executable findings; optional omission needs an explicit decision, not a false covered claim.",
+  "source_packet_captured_at_utc": "2026-10-15T04:47:05.881324+00:00",
+  "assembled_at_utc": "2026-10-15T05:36:33.711840+00:00"
+}

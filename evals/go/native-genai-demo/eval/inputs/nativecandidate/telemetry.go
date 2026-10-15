@@ -151,8 +151,15 @@ func studioHeaders(ctx context.Context) (map[string]string, error) {
 	if _, err := newApp(origin); err != nil {
 		return nil, errors.New("invalid Studio API origin")
 	}
+	projectName, streamName := os.Getenv("SPLUNK_AO_PROJECT"), os.Getenv("SPLUNK_AO_AGENT_STREAM")
+	if strings.TrimSpace(projectName) == "" || strings.TrimSpace(streamName) == "" {
+		return nil, errors.New("resource selectors missing")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	client := &http.Client{Transport: &http.Transport{Proxy: nil}, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	defer client.CloseIdleConnections()
+	conflict := errors.New("resource create conflict")
 	call := func(method, path string, input any, output any) error {
 		var body io.Reader
 		if input != nil {
@@ -172,6 +179,9 @@ func studioHeaders(ctx context.Context) (map[string]string, error) {
 			return errors.New("resource request failed")
 		}
 		defer response.Body.Close()
+		if method == "POST" && response.StatusCode == http.StatusConflict {
+			return conflict
+		}
 		if response.StatusCode != 200 && (method != "POST" || response.StatusCode != 201) {
 			return errors.New("resource response rejected")
 		}
@@ -190,78 +200,124 @@ func studioHeaders(ctx context.Context) (map[string]string, error) {
 		ProjectID string `json:"project_id"`
 	}
 	validID := regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
-	var projects []item
-	if err := call("GET", "/all?type=gen_ai", nil, &projects); err != nil {
+	findProject := func() (item, error) {
+		var rows []item
+		if err := call("GET", "/all?type=gen_ai", nil, &rows); err != nil {
+			return item{}, err
+		}
+		if rows == nil {
+			return item{}, errors.New("incomplete project list")
+		}
+		var selected item
+		for _, candidate := range rows {
+			if !validID.MatchString(candidate.ID) || candidate.Name == "" {
+				return item{}, errors.New("incomplete project list")
+			}
+			if candidate.Name == projectName {
+				if selected.ID != "" {
+					return item{}, errors.New("ambiguous project")
+				}
+				selected = candidate
+			}
+		}
+		return selected, nil
+	}
+	project, err := findProject()
+	if err != nil {
 		return nil, err
 	}
-	var project item
-	for _, candidate := range projects {
-		if !validID.MatchString(candidate.ID) || candidate.Name == "" {
-			return nil, errors.New("incomplete project list")
-		}
-		if candidate.Name == os.Getenv("SPLUNK_AO_PROJECT") {
-			if project.ID != "" {
-				return nil, errors.New("ambiguous project")
-			}
-			project = candidate
-		}
-	}
 	if project.ID == "" {
-		if err := call("POST", "", map[string]any{"name": os.Getenv("SPLUNK_AO_PROJECT"), "type": "gen_ai", "create_example_templates": false}, &project); err != nil {
+		err = call("POST", "", map[string]any{"name": projectName, "type": "gen_ai", "create_example_templates": false}, &project)
+		if errors.Is(err, conflict) {
+			for attempt := 0; attempt < 2; attempt++ {
+				project, err = findProject()
+				if err != nil {
+					return nil, err
+				}
+				if project.ID != "" {
+					break
+				}
+			}
+			if project.ID == "" {
+				return nil, errors.New("project conflict unresolved")
+			}
+		} else if err != nil {
 			return nil, err
 		}
 	}
-	if !validID.MatchString(project.ID) || project.Name != os.Getenv("SPLUNK_AO_PROJECT") {
+	if !validID.MatchString(project.ID) || project.Name != projectName {
 		return nil, errors.New("wrong project identity")
 	}
-	var stream item
-	seen := map[int]bool{}
-	token := 0
-	for pages := 0; pages < 1000; pages++ {
-		if seen[token] {
-			return nil, errors.New("pagination loop")
-		}
-		seen[token] = true
-		var page struct {
-			Streams   []item          `json:"log_streams"`
-			Paginated *bool           `json:"paginated"`
-			Next      json.RawMessage `json:"next_starting_token"`
-		}
-		path := "/" + project.ID + "/log_streams/paginated?include_counts=false&limit=100&starting_token=" + strconv.Itoa(token)
-		if err := call("GET", path, nil, &page); err != nil {
-			return nil, err
-		}
-		if page.Streams == nil || page.Paginated == nil || len(page.Next) == 0 {
-			return nil, errors.New("incomplete stream page")
-		}
-		for _, candidate := range page.Streams {
-			if !validID.MatchString(candidate.ID) || candidate.Name == "" || candidate.ProjectID != project.ID {
-				return nil, errors.New("incomplete stream list")
+	findStream := func() (item, error) {
+		var selected item
+		seen := map[int]bool{}
+		token := 0
+		for pages := 0; pages < 1000; pages++ {
+			if seen[token] {
+				return item{}, errors.New("pagination loop")
 			}
-			if candidate.Name == os.Getenv("SPLUNK_AO_AGENT_STREAM") {
-				if stream.ID != "" {
-					return nil, errors.New("ambiguous stream")
+			seen[token] = true
+			var page struct {
+				Streams   []item          `json:"log_streams"`
+				Paginated *bool           `json:"paginated"`
+				Next      json.RawMessage `json:"next_starting_token"`
+			}
+			path := "/" + project.ID + "/log_streams/paginated?include_counts=false&limit=100&starting_token=" + strconv.Itoa(token)
+			if err := call("GET", path, nil, &page); err != nil {
+				return item{}, err
+			}
+			if page.Streams == nil || page.Paginated == nil || len(page.Next) == 0 {
+				return item{}, errors.New("incomplete stream page")
+			}
+			for _, candidate := range page.Streams {
+				if !validID.MatchString(candidate.ID) || candidate.Name == "" || candidate.ProjectID != project.ID {
+					return item{}, errors.New("incomplete stream list")
 				}
-				stream = candidate
+				if candidate.Name == streamName {
+					if selected.ID != "" {
+						return item{}, errors.New("ambiguous stream")
+					}
+					selected = candidate
+				}
+			}
+			if string(page.Next) == "null" {
+				return selected, nil
+			}
+			if !*page.Paginated || json.Unmarshal(page.Next, &token) != nil || token < 0 {
+				return item{}, errors.New("invalid stream pagination")
 			}
 		}
-		if string(page.Next) == "null" {
-			break
-		}
-		if !*page.Paginated || json.Unmarshal(page.Next, &token) != nil || token < 0 || pages == 999 {
-			return nil, errors.New("invalid stream pagination")
-		}
+		return item{}, errors.New("stream page limit")
+	}
+	stream, err := findStream()
+	if err != nil {
+		return nil, err
 	}
 	if stream.ID == "" {
-		if err := call("POST", "/"+project.ID+"/log_streams", map[string]any{"name": os.Getenv("SPLUNK_AO_AGENT_STREAM")}, &stream); err != nil {
+		err = call("POST", "/"+project.ID+"/log_streams", map[string]any{"name": streamName}, &stream)
+		if errors.Is(err, conflict) {
+			for attempt := 0; attempt < 2; attempt++ {
+				stream, err = findStream()
+				if err != nil {
+					return nil, err
+				}
+				if stream.ID != "" {
+					break
+				}
+			}
+			if stream.ID == "" {
+				return nil, errors.New("stream conflict unresolved")
+			}
+		} else if err != nil {
 			return nil, err
 		}
 	}
-	if !validID.MatchString(stream.ID) || stream.Name != os.Getenv("SPLUNK_AO_AGENT_STREAM") || stream.ProjectID != project.ID {
+	if !validID.MatchString(stream.ID) || stream.Name != streamName || stream.ProjectID != project.ID {
 		return nil, errors.New("wrong stream identity")
 	}
 	return map[string]string{"projectid": project.ID, "logstreamid": stream.ID}, nil
 }
+
 func toolDefinitions(tools []ToolDefinition) []any {
 	out := []any{}
 	for index, tool := range tools {
@@ -342,12 +398,12 @@ func configureTelemetry(ctx context.Context, app *App) (func(context.Context) er
 	tracer := provider.Tracer("native-genai-profile")
 	app.Observe = func(ctx context.Context, operation Operation) (context.Context, func(any, error)) {
 		name, kind, oi := "", trace.SpanKindInternal, ""
-		attrs := []attribute.KeyValue{attribute.String("app.request_id", operation.RequestID), attribute.String("app.scenario", operation.Scenario), attribute.String("gen_ai.provider.name", ProviderName), attribute.String("input.value", safe(operation.Input)), attribute.String("input.mime_type", "application/json")}
+		attrs := []attribute.KeyValue{attribute.String("app.request_id", operation.RequestID), attribute.String("app.scenario", operation.Scenario), attribute.String("gen_ai.provider.name", ProviderName), attribute.String("gen_ai.agent.name", AgentName), attribute.String("input.value", safe(operation.Input)), attribute.String("input.mime_type", "application/json")}
 		switch operation.Name {
 		case "agent":
 			name = "invoke_agent"
 			oi = "AGENT"
-			attrs = append(attrs, attribute.String("gen_ai.agent.name", AgentName), attribute.String("gen_ai.agent.description", AgentDescription))
+			attrs = append(attrs, attribute.String("gen_ai.agent.description", AgentDescription), attribute.String("gen_ai.request.model", ModelName))
 		case "retrieval":
 			name = "retrieval"
 			oi = "RETRIEVER"

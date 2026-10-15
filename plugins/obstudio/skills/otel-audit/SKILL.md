@@ -725,6 +725,26 @@ Do not collapse a partial GenAI gap into `covered` because one metric or span
 exists. The GenAI Readiness surface row is the source of truth for deciding
 whether a selectable `$otel-instrument` finding is warranted.
 
+**GenAI metric applicability inventory** -- assess every metric in the reviewed
+current official tables relevant to the detected operations, including metrics
+not chosen for implementation. Put one row per metric in canonical Audit
+Evidence (`evidence[]`): `check` names the instrument; `finding` records its
+official level, type/unit, actual source boundary and value availability,
+applicability, disposition and reason; `source` cites the table/revision/date
+and application source. Distinguish `applicable`, `N/A` and `source unknown`
+from `required`, `recommended`, `optional` and `deferred` decisions. Assess
+token distributions separately from usage totals, and non-inference duration
+scopes separately from inference exclusions. An applicable optional metric may
+remain recommended or deferred with a reason and its remaining capability
+explicit; do not force every optional metric to emit or label it covered by an
+instrument with different semantics. Required missing metrics must remain in
+their owning executable findings' `required_fix`, `expected_telemetry`,
+acceptance and verification scenarios; an official optional level cannot
+downgrade a required skill/vendor or selected contract. A supplemental matrix
+does not replace this canonical inventory, and a short list of chosen metrics
+does not assess the rest. Preserve existing metric producers and consumer
+contracts when proposing any transition.
+
 Before handoff, apply the per-tool vendor content contract in
 `../references/genai-readiness.md` to every actual tool boundary. For the GenAI
 path, list `gen_ai.tool.call.arguments` plus `gen_ai.input.messages` for its
