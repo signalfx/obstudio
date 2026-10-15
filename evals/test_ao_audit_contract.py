@@ -56,6 +56,33 @@ def test_ao_route_dependency_closure_includes_nested_retrieval_producer():
         assert term in " ".join(contract.split())
 
 
+def test_ao_audit_reports_destination_scoped_header_contracts():
+    import json
+
+    canonical = (REPO_ROOT / "skills/otel-audit/SKILL.md").read_text()
+    bundled = (REPO_ROOT / "plugins/obstudio/skills/otel-audit/SKILL.md").read_text()
+    assert canonical == bundled
+    contract = canonical.split("For AO/native routing assessments", 1)[1].split(
+        "For each inspected creator", 1
+    )[0]
+    for term in (
+        "separate destination-scoped header",
+        "current Studio uses `projectid` and `logstreamid`",
+        "public standalone AO uses `projectid` and `agentstreamid`",
+        "applicability", "`supported`/`unsupported`/`unverified` status",
+        "source or captured protocol evidence",
+        "never call it a globally unsupported alias",
+        "without claiming it was executed or changing the route",
+    ):
+        assert term in " ".join(contract.split())
+
+    case = json.loads((REPO_ROOT / "evals/python/existing-otel-agent-demo/eval/qual/route-recovery-audit.json").read_text())
+    criterion = case["rubric"][3]
+    for term in ("separate applicability and status", "source evidence", "projectid/logstreamid",
+                 "projectid/agentstreamid", "globally unsupported alias"):
+        assert term in criterion
+
+
 def test_galileo_preservation_audit_validates_and_selects_both_destination_choices(tmp_path):
     import json
     import subprocess

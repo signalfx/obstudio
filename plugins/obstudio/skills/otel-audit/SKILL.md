@@ -1091,6 +1091,17 @@ finished receipt against the inventory before handoff. Keep nonlive evidence
 separate and do not invent cases from reference examples or expand the task's
 audit domains.
 
+For AO/native routing assessments, report separate destination-scoped header
+compatibility rows or fields for the selected implementation and the public
+standalone AO contract. Name the exact pair: current Studio uses `projectid`
+and `logstreamid`; public standalone AO uses `projectid` and `agentstreamid`.
+For each, state applicability, `supported`/`unsupported`/`unverified` status,
+and the source or captured protocol evidence supporting that scope. A local
+receiver rejecting `agentstreamid` establishes only that receiver's contract;
+never call it a globally unsupported alias or omit the distinct public AO
+contract. A contract outside the selected route remains separately documented
+as not selected, without claiming it was executed or changing the route.
+
 For each inspected creator, record its version/file/symbol and actual start
 arguments, which attributes/kind reach the sampler and `on_start`, and which
 fields are applied later or during finalization. When source establishes a
