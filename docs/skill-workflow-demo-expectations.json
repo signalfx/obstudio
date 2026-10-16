@@ -1,0 +1,37 @@
+{
+  "author": "Independent source-derived acceptance, frozen before skill runs",
+  "scenarios": [
+    {
+      "id": "tasks.create",
+      "method": "POST",
+      "path": "/tasks",
+      "body": "{\"title\":\"proof\"}",
+      "http_status": 201,
+      "span": {
+        "name": "POST /tasks",
+        "kind": "SERVER",
+        "attributes": {
+          "http.route": "/tasks",
+          "http.request.method": "POST",
+          "http.response.status_code": 201
+        }
+      }
+    },
+    {
+      "id": "tasks.bad-body",
+      "method": "POST",
+      "path": "/tasks",
+      "body": "{",
+      "http_status": 400,
+      "span": {
+        "name": "POST /tasks",
+        "kind": "SERVER",
+        "attributes": {
+          "http.route": "/tasks",
+          "http.request.method": "POST",
+          "http.response.status_code": 400
+        }
+      }
+    }
+  ]
+}
