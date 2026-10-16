@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "cases": {
+    "order-api": {
+      "language": "go",
+      "units": [
+        {
+          "id": "parentage",
+          "gap": true,
+          "truth": "reserve uses context.Background rather than the incoming server context; its CLIENT span is a separate trace."
+        },
+        {
+          "id": "span-cardinality",
+          "gap": true,
+          "truth": "reserve embeds unbounded order ID in the span name."
+        },
+        {
+          "id": "request-metrics",
+          "gap": true,
+          "truth": "Only trace SDK/exporter configured; no meter provider or request metrics."
+        },
+        {
+          "id": "trace-provider",
+          "gap": false,
+          "truth": "Reachable main creates real SDK provider and OTLP exporter and passes its tracer directly."
+        },
+        {
+          "id": "environment-resource",
+          "gap": false,
+          "truth": "Go SDK 1.45 WithResource merges resource.Environment even with explicit empty resource.New."
+        },
+        {
+          "id": "shutdown",
+          "gap": false,
+          "truth": "Main defers provider.Shutdown."
+        },
+        {
+          "id": "database",
+          "gap": false,
+          "truth": "No database client or dependency exists."
+        },
+        {
+          "id": "genai",
+          "gap": false,
+          "truth": "No GenAI runtime exists."
+        }
+      ]
+    },
+    "feed-api": {
+      "language": "go",
+      "units": [
+        {
+          "id": "duplicate-server-spans",
+          "gap": true,
+          "truth": "readFeed starts two nested SERVER spans for the same GET /feed operation."
+        },
+        {
+          "id": "error-status",
+          "gap": true,
+          "truth": "The reproduced 503 path returns an error but leaves both spans UNSET and records no exception."
+        },
+        {
+          "id": "request-metrics",
+          "gap": true,
+          "truth": "No meter provider or request metrics configured."
+        },
+        {
+          "id": "trace-provider",
+          "gap": false,
+          "truth": "Main creates and explicitly passes a real SDK tracer with OTLP exporter."
+        },
+        {
+          "id": "environment-resource",
+          "gap": false,
+          "truth": "Go SDK 1.45 merges OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES through WithResource."
+        },
+        {
+          "id": "shutdown",
+          "gap": false,
+          "truth": "Main defers provider.Shutdown."
+        },
+        {
+          "id": "database",
+          "gap": false,
+          "truth": "No database client exists."
+        },
+        {
+          "id": "genai",
+          "gap": false,
+          "truth": "No GenAI runtime exists."
+        }
+      ]
+    },
+    "settlement-worker": {
+      "language": "go",
+      "units": [
+        {
+          "id": "parentage",
+          "gap": false,
+          "truth": "ledger.write starts with the active settle.batch context."
+        },
+        {
+          "id": "span-cardinality",
+          "gap": false,
+          "truth": "Fixed settle.batch and ledger.write span names; no identifiers."
+        },
+        {
+          "id": "error-status",
+          "gap": false,
+          "truth": "Failure sets ERROR and records exception on child and root."
+        },
+        {
+          "id": "metric-cardinality",
+          "gap": false,
+          "truth": "Counter labels only bounded ok/error outcome."
+        },
+        {
+          "id": "trace-provider",
+          "gap": false,
+          "truth": "Explicit provider-owned tracer is passed; global registration is not required."
+        },
+        {
+          "id": "environment-resource",
+          "gap": false,
+          "truth": "Go SDK 1.45 merges environment resource at TracerProvider construction."
+        },
+        {
+          "id": "shutdown",
+          "gap": false,
+          "truth": "Main shuts down trace and meter providers."
+        },
+        {
+          "id": "genai",
+          "gap": false,
+          "truth": "No GenAI runtime exists."
+        }
+      ]
+    },
+    "dispatch-worker": {
+      "language": "python",
+      "units": [
+        {
+          "id": "parentage",
+          "gap": true,
+          "truth": "A fresh ThreadPoolExecutor thread does not copy the active OTel context; deliver becomes a separate root trace."
+        },
+        {
+          "id": "metric-cardinality",
+          "gap": true,
+          "truth": "Each unbounded job_id is attached to jobs.completed."
+        },
+        {
+          "id": "error-status",
+          "gap": true,
+          "truth": "deliver catches RuntimeError before the SDK context manager observes it; span remains UNSET without exception."
+        },
+        {
+          "id": "trace-provider",
+          "gap": false,
+          "truth": "Explicit tracer from the SDK provider is reachable; missing global registration is not a defect."
+        },
+        {
+          "id": "environment-resource",
+          "gap": false,
+          "truth": "Resource.create merges service/resource environment values."
+        },
+        {
+          "id": "shutdown",
+          "gap": false,
+          "truth": "Finally calls close, which shuts down both providers."
+        },
+        {
+          "id": "database",
+          "gap": false,
+          "truth": "No database client exists."
+        },
+        {
+          "id": "genai",
+          "gap": false,
+          "truth": "No GenAI runtime exists."
+        }
+      ]
+    },
+    "catalog-handler": {
+      "language": "python",
+      "units": [
+        {
+          "id": "span-cardinality",
+          "gap": true,
+          "truth": "Span name embeds unbounded item_id."
+        },
+        {
+          "id": "sensitive-attribute",
+          "gap": true,
+          "truth": "Raw customer email is recorded without redaction, minimization, or an opt-in."
+        },
+        {
+          "id": "error-status",
+          "gap": false,
+          "truth": "503 path records exception and explicitly sets ERROR."
+        },
+        {
+          "id": "metric-cardinality",
+          "gap": false,
+          "truth": "Counter labels only bounded ok/error outcome."
+        },
+        {
+          "id": "trace-provider",
+          "gap": false,
+          "truth": "Telemetry creates real SDK provider and passes its tracer explicitly."
+        },
+        {
+          "id": "environment-resource",
+          "gap": false,
+          "truth": "Resource.create merges environment attributes."
+        },
+        {
+          "id": "shutdown",
+          "gap": false,
+          "truth": "Finally closes both providers."
+        },
+        {
+          "id": "genai",
+          "gap": false,
+          "truth": "No GenAI runtime exists."
+        }
+      ]
+    },
+    "billing-worker": {
+      "language": "python",
+      "units": [
+        {
+          "id": "parentage",
+          "gap": false,
+          "truth": "asyncio.create_task inherits active context; charge is a child of invoice."
+        },
+        {
+          "id": "span-cardinality",
+          "gap": false,
+          "truth": "Fixed invoice and charge span names."
+        },
+        {
+          "id": "error-status",
+          "gap": false,
+          "truth": "Failure sets ERROR on both spans and records exception on the CLIENT child."
+        },
+        {
+          "id": "metric-cardinality",
+          "gap": false,
+          "truth": "Counter labels are bounded ok/error outcome."
+        },
+        {
+          "id": "trace-provider",
+          "gap": false,
+          "truth": "Explicit provider tracer is sufficient; no global registration needed."
+        },
+        {
+          "id": "environment-resource",
+          "gap": false,
+          "truth": "Resource.create merges environment resource."
+        },
+        {
+          "id": "shutdown",
+          "gap": false,
+          "truth": "Finally closes both providers."
+        },
+        {
+          "id": "genai",
+          "gap": false,
+          "truth": "No GenAI runtime exists."
+        }
+      ]
+    }
+  }
+}

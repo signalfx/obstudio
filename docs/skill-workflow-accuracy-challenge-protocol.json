@@ -1,0 +1,333 @@
+{
+  "schema_version": 1,
+  "frozen_utc": "2026-10-16T19:39:07.701886+00:00",
+  "baseline_revision": "f56299311afa7c62c9896de1aa76d4ff5a22106f",
+  "candidate_revision": "e9162c27e07be461997fb3021f686db5875c7414",
+  "prompt": "$otel-audit",
+  "model": "gpt-6.1-sol",
+  "reasoning_effort": "xhigh",
+  "runs_per_version_per_app": 2,
+  "seed": 2640290,
+  "timeout_seconds": 1500,
+  "cases": {
+    "order-api": {
+      "language": "go",
+      "units": [
+        {
+          "id": "parentage",
+          "gap": true,
+          "truth": "reserve uses context.Background rather than the incoming server context; its CLIENT span is a separate trace."
+        },
+        {
+          "id": "span-cardinality",
+          "gap": true,
+          "truth": "reserve embeds unbounded order ID in the span name."
+        },
+        {
+          "id": "request-metrics",
+          "gap": true,
+          "truth": "Only trace SDK/exporter configured; no meter provider or request metrics."
+        },
+        {
+          "id": "trace-provider",
+          "gap": false,
+          "truth": "Reachable main creates real SDK provider and OTLP exporter and passes its tracer directly."
+        },
+        {
+          "id": "environment-resource",
+          "gap": false,
+          "truth": "Go SDK 1.45 WithResource merges resource.Environment even with explicit empty resource.New."
+        },
+        {
+          "id": "shutdown",
+          "gap": false,
+          "truth": "Main defers provider.Shutdown."
+        },
+        {
+          "id": "database",
+          "gap": false,
+          "truth": "No database client or dependency exists."
+        },
+        {
+          "id": "genai",
+          "gap": false,
+          "truth": "No GenAI runtime exists."
+        }
+      ],
+      "source_hashes": {
+        "go.mod": "8779e8928bbe7d335e573effb208866560eb243b6565df104cc08939b97df80e",
+        "go.sum": "778207fff3a9693ccefa51ae38971df6ab83a977ac8d0953a092f0759c92e556",
+        "main.go": "39bf38a3db498342657757a3d7275b9663864eaf447953a3580c5a53879cd0a1"
+      }
+    },
+    "feed-api": {
+      "language": "go",
+      "units": [
+        {
+          "id": "duplicate-server-spans",
+          "gap": true,
+          "truth": "readFeed starts two nested SERVER spans for the same GET /feed operation."
+        },
+        {
+          "id": "error-status",
+          "gap": true,
+          "truth": "The reproduced 503 path returns an error but leaves both spans UNSET and records no exception."
+        },
+        {
+          "id": "request-metrics",
+          "gap": true,
+          "truth": "No meter provider or request metrics configured."
+        },
+        {
+          "id": "trace-provider",
+          "gap": false,
+          "truth": "Main creates and explicitly passes a real SDK tracer with OTLP exporter."
+        },
+        {
+          "id": "environment-resource",
+          "gap": false,
+          "truth": "Go SDK 1.45 merges OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES through WithResource."
+        },
+        {
+          "id": "shutdown",
+          "gap": false,
+          "truth": "Main defers provider.Shutdown."
+        },
+        {
+          "id": "database",
+          "gap": false,
+          "truth": "No database client exists."
+        },
+        {
+          "id": "genai",
+          "gap": false,
+          "truth": "No GenAI runtime exists."
+        }
+      ],
+      "source_hashes": {
+        "go.mod": "8779e8928bbe7d335e573effb208866560eb243b6565df104cc08939b97df80e",
+        "go.sum": "778207fff3a9693ccefa51ae38971df6ab83a977ac8d0953a092f0759c92e556",
+        "main.go": "ef038e7d3594dc413367206489715d0ea82c7d0b16f18fa25ec87726b36e2d18"
+      }
+    },
+    "settlement-worker": {
+      "language": "go",
+      "units": [
+        {
+          "id": "parentage",
+          "gap": false,
+          "truth": "ledger.write starts with the active settle.batch context."
+        },
+        {
+          "id": "span-cardinality",
+          "gap": false,
+          "truth": "Fixed settle.batch and ledger.write span names; no identifiers."
+        },
+        {
+          "id": "error-status",
+          "gap": false,
+          "truth": "Failure sets ERROR and records exception on child and root."
+        },
+        {
+          "id": "metric-cardinality",
+          "gap": false,
+          "truth": "Counter labels only bounded ok/error outcome."
+        },
+        {
+          "id": "trace-provider",
+          "gap": false,
+          "truth": "Explicit provider-owned tracer is passed; global registration is not required."
+        },
+        {
+          "id": "environment-resource",
+          "gap": false,
+          "truth": "Go SDK 1.45 merges environment resource at TracerProvider construction."
+        },
+        {
+          "id": "shutdown",
+          "gap": false,
+          "truth": "Main shuts down trace and meter providers."
+        },
+        {
+          "id": "genai",
+          "gap": false,
+          "truth": "No GenAI runtime exists."
+        }
+      ],
+      "source_hashes": {
+        "go.mod": "e606f7bec55dff2ecaf8917e94c7e4b8d96ebc2707b6609d7dae795d42e51056",
+        "go.sum": "50d91110b10cc565dfc9b48b1a724eb2880d26b4004570549613c5e9df26be12",
+        "main.go": "fa62725547d69a5c484219184c40122a47c718204a16a9cebbfb2a33e966c045"
+      }
+    },
+    "dispatch-worker": {
+      "language": "python",
+      "units": [
+        {
+          "id": "parentage",
+          "gap": true,
+          "truth": "A fresh ThreadPoolExecutor thread does not copy the active OTel context; deliver becomes a separate root trace."
+        },
+        {
+          "id": "metric-cardinality",
+          "gap": true,
+          "truth": "Each unbounded job_id is attached to jobs.completed."
+        },
+        {
+          "id": "error-status",
+          "gap": true,
+          "truth": "deliver catches RuntimeError before the SDK context manager observes it; span remains UNSET without exception."
+        },
+        {
+          "id": "trace-provider",
+          "gap": false,
+          "truth": "Explicit tracer from the SDK provider is reachable; missing global registration is not a defect."
+        },
+        {
+          "id": "environment-resource",
+          "gap": false,
+          "truth": "Resource.create merges service/resource environment values."
+        },
+        {
+          "id": "shutdown",
+          "gap": false,
+          "truth": "Finally calls close, which shuts down both providers."
+        },
+        {
+          "id": "database",
+          "gap": false,
+          "truth": "No database client exists."
+        },
+        {
+          "id": "genai",
+          "gap": false,
+          "truth": "No GenAI runtime exists."
+        }
+      ],
+      "source_hashes": {
+        "app.py": "834518ca3be599239d5a23ea130c057ab5224b303f6e5e85976032750398cd70",
+        "requirements.txt": "01172138b8783497883e2599bb41fecb8bdd523c3bcdb3bbe0a1798fcdf3b3b9"
+      }
+    },
+    "catalog-handler": {
+      "language": "python",
+      "units": [
+        {
+          "id": "span-cardinality",
+          "gap": true,
+          "truth": "Span name embeds unbounded item_id."
+        },
+        {
+          "id": "sensitive-attribute",
+          "gap": true,
+          "truth": "Raw customer email is recorded without redaction, minimization, or an opt-in."
+        },
+        {
+          "id": "error-status",
+          "gap": false,
+          "truth": "503 path records exception and explicitly sets ERROR."
+        },
+        {
+          "id": "metric-cardinality",
+          "gap": false,
+          "truth": "Counter labels only bounded ok/error outcome."
+        },
+        {
+          "id": "trace-provider",
+          "gap": false,
+          "truth": "Telemetry creates real SDK provider and passes its tracer explicitly."
+        },
+        {
+          "id": "environment-resource",
+          "gap": false,
+          "truth": "Resource.create merges environment attributes."
+        },
+        {
+          "id": "shutdown",
+          "gap": false,
+          "truth": "Finally closes both providers."
+        },
+        {
+          "id": "genai",
+          "gap": false,
+          "truth": "No GenAI runtime exists."
+        }
+      ],
+      "source_hashes": {
+        "app.py": "a842734dfd826b67295e02a5e839b055415a818e616fd0fc88ab7ccb7770d631",
+        "requirements.txt": "01172138b8783497883e2599bb41fecb8bdd523c3bcdb3bbe0a1798fcdf3b3b9"
+      }
+    },
+    "billing-worker": {
+      "language": "python",
+      "units": [
+        {
+          "id": "parentage",
+          "gap": false,
+          "truth": "asyncio.create_task inherits active context; charge is a child of invoice."
+        },
+        {
+          "id": "span-cardinality",
+          "gap": false,
+          "truth": "Fixed invoice and charge span names."
+        },
+        {
+          "id": "error-status",
+          "gap": false,
+          "truth": "Failure sets ERROR on both spans and records exception on the CLIENT child."
+        },
+        {
+          "id": "metric-cardinality",
+          "gap": false,
+          "truth": "Counter labels are bounded ok/error outcome."
+        },
+        {
+          "id": "trace-provider",
+          "gap": false,
+          "truth": "Explicit provider tracer is sufficient; no global registration needed."
+        },
+        {
+          "id": "environment-resource",
+          "gap": false,
+          "truth": "Resource.create merges environment resource."
+        },
+        {
+          "id": "shutdown",
+          "gap": false,
+          "truth": "Finally closes both providers."
+        },
+        {
+          "id": "genai",
+          "gap": false,
+          "truth": "No GenAI runtime exists."
+        }
+      ],
+      "source_hashes": {
+        "app.py": "72e85faf2616d801afd583247be9ee8493e2921a987667f7ec050dc91eb45813",
+        "requirements.txt": "01172138b8783497883e2599bb41fecb8bdd523c3bcdb3bbe0a1798fcdf3b3b9"
+      }
+    }
+  },
+  "grading": {
+    "primary": "Mean of per-application closed-set F1, averaging repeats within each application. Both actual and predicted empty sets score 1; actual empty with any false prediction scores 0.",
+    "primary_excluded_units": [
+      "environment-resource"
+    ],
+    "exclusion_reason": "The SDK environment-resource behavior was already examined in the earlier post-hoc probe. It remains a diagnostic control and is excluded from the primary score to avoid presenting a known mechanism as new holdout evidence.",
+    "secondary": "Micro precision/recall and per-unit mistakes. All finding IDs receive supported/contradicted/unresolved factual-premise review; recommendations are not defects solely for being optional.",
+    "blinding": "Two fresh grading sessions per paired report set, randomized opaque report IDs/order; version labels and skill source are withheld. Model grading, not independent human review.",
+    "agreement": "Only unanimous unit predictions and factual finding verdicts are accepted; disagreement is unresolved. Any unresolved unit blocks a superiority claim; unknown finding premises remain visible and conservatively count as not established supported.",
+    "acceptance": "Candidate macro-F1 gain at least 0.05, paired application-cluster bootstrap 95% percentile interval lower bound above 0, and factual finding support rate no more than 0.02 below baseline. No post-output skill changes or case removal.",
+    "bootstrap": {
+      "replicates": 20000,
+      "seed": 2640290,
+      "cluster": "application; repeat scores averaged before resampling"
+    },
+    "limits": "Six newly authored synthetic applications, two languages, two repetitions. Exploratory evidence for these patterns, not proof for arbitrary production applications. Cases are not used to tune either frozen skill version."
+  },
+  "probes": {
+    "go_probe.txt": "2e723dd4532e40e3228faaead9e7624dce5c147e31805758b0c31979373ae95f",
+    "python_probe.py": "43ba16ca01744d397d9f2a267544c1b67b6392551a747ff9840f7e4040e6ef7c"
+  },
+  "execution_harness_sha256": "d153ded97a05799b40dcb3e08680c05e246fdf0e3e565f9a1b4ebfa7260e3f07"
+}
