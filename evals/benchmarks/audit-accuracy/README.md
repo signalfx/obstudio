@@ -42,6 +42,16 @@ The local research runner is `evals/audit_accuracy.py`; its frozen execution
 version is identified by the protocol hash and Git history. From the repository
 root, with the documented eval venv and local Go/Codex runtimes available:
 
+The runner resolves `codex`, `go`, and `node` from `PATH`. Set
+`AUDIT_ACCURACY_CODEX_BIN` or `AUDIT_ACCURACY_GO_BIN` to select executable
+paths explicitly; `AUDIT_ACCURACY_NODE_BIN` selects the Node binary directory.
+The published experiment's exact runtime versions and execution harness hashes
+are retained in the results ledger. After execution completed, machine-specific
+tool paths were replaced with this discovery; the grading prompt, schema,
+scoring functions, frozen source, and acceptance gate were unchanged.
+Python truth probes also reject installed SDK versions that differ from the
+fixture's pinned requirements; use a matching environment before running them.
+
 ```sh
 evals/.venv/bin/python3 evals/audit_accuracy.py prepare --workspace /tmp/audit-accuracy-new
 evals/.venv/bin/python3 evals/audit_accuracy.py truth --workspace /tmp/audit-accuracy-new

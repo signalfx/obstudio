@@ -1,8 +1,10 @@
 """Scoring must preserve false positives, misses, and application clustering."""
 
+import os
+
 import pytest
 
-from audit_accuracy import cluster_interval, confusion, f1, grade, source_hashes, write_json
+from audit_accuracy import check_python_runtime, cluster_interval, confusion, environment, f1, grade, resolve_binary, source_hashes, write_json
 
 
 def test_confusion_keeps_each_error_direction():
@@ -54,3 +56,32 @@ def test_grading_waits_for_complete_pairs(tmp_path, monkeypatch):
     monkeypatch.setattr("audit_accuracy.invoke", unexpected_model_call)
     grade(tmp_path, tmp_path / "unused-home", 1)
     assert not (tmp_path / "grading").exists()
+
+
+def test_explicit_runtime_override_wins_over_path(monkeypatch):
+    monkeypatch.setenv("AUDIT_ACCURACY_GO_BIN", "/selected/go")
+    monkeypatch.setattr("audit_accuracy.shutil.which", lambda name: "/other/go")
+    assert resolve_binary("go", "AUDIT_ACCURACY_GO_BIN") == "/selected/go"
+    monkeypatch.delenv("AUDIT_ACCURACY_GO_BIN")
+    assert resolve_binary("go", "AUDIT_ACCURACY_GO_BIN") == "/other/go"
+
+
+def test_missing_runtime_does_not_add_cwd_to_path(tmp_path, monkeypatch):
+    monkeypatch.setattr("audit_accuracy.GO", "go")
+    monkeypatch.setattr("audit_accuracy.NODE_BIN", "")
+    monkeypatch.setenv("PATH", "/existing/bin")
+    result = environment(tmp_path)
+    assert "." not in result["PATH"].split(os.pathsep)
+    assert result["PATH"].endswith("/existing/bin")
+    assert result["OBSTUDIO_SKILL_MCP_ENDPOINT"] == "none"
+
+
+@pytest.mark.parametrize("installed", ["1.45.1", "1.46.0"])
+def test_truth_requires_declared_sdk_version(tmp_path, monkeypatch, installed):
+    (tmp_path / "requirements.txt").write_text("opentelemetry-sdk==1.45.1\n")
+    monkeypatch.setattr("audit_accuracy.importlib.metadata.version", lambda package: installed)
+    if installed == "1.45.1":
+        check_python_runtime(tmp_path)
+    else:
+        with pytest.raises(ValueError, match="fixture requires 1.45.1"):
+            check_python_runtime(tmp_path)

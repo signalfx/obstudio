@@ -425,3 +425,119 @@ was inspected with real passing/failing application evaluations; screenshots and
 raw CLI/OTLP artifacts are retained locally in
 `.workspace/skill-observability-proof/followup/`. No new Windows, editor-host,
 Claude execution, Docker, cloud, or provider-token test is claimed.
+
+
+## Repeated audit accuracy challenge (2026-10-16)
+
+The stronger comparison **did not demonstrate improved audit accuracy**.
+[Protocol](skill-workflow-accuracy-challenge-protocol.json) was committed in
+`b771e41` before audited outputs; [results](skill-workflow-accuracy-challenge-results.json)
+retain both grader responses, finding inventories, actual SDK captures, source
+hashes and raw artifact hashes. Both frozen skill versions remained unchanged.
+
+Six newly authored synthetic Go/Python applications exercise lost request/thread
+context, unbounded span names and metric dimensions, duplicate server spans,
+caught errors without ERROR status, raw sensitive attributes, and covered
+provider/context/error/metric/shutdown predicates. Two applications are covered
+controls for their declared predicates. Separate real-SDK probes executed actual
+application functions before auditing; their code was outside audited workspaces.
+These in-memory captures do not prove HTTP transport, OTLP delivery, every
+lifecycle interleaving, or cloud ingestion.
+
+Each version ran twice per application with only `$otel-audit`, model
+`gpt-6.1-sol`, effort `xhigh`, the same source/dependencies and a 1,500-second
+budget. All 24 audits completed successfully with source unchanged and no
+unexpected files outside allowed outputs. Every report was graded in two fresh
+version-blinded sessions: 24 paired grading sessions, 48 individual report grades.
+This is model-assisted grading using the same model, not independent human review.
+
+| Frozen primary result | Original | Revised |
+|---|---:|---:|
+| Known gaps detected | 22 / 22 | 22 / 22 |
+| Covered predicates correctly left unflagged | 62 / 62 | 62 / 62 |
+| Closed-set precision / recall | 100% / 100% | 100% / 100% |
+| Mean per-application F1 | 100% | 100% |
+
+There were zero predicate disagreements between graders. Primary gain was **0
+percentage points**; the paired application-cluster bootstrap interval was
+`[0, 0]`. The predeclared superiority gate failed: it requires at least five
+points of gain and an interval lower bound above zero, plus the factual-support
+guard. A degenerate resampling interval over tied observed cases does not prove
+population equivalence or exclude differences on future applications.
+
+The SDK environment-resource predicate had been investigated in the earlier
+post-hoc probe, so it was explicitly excluded from primary scoring before this
+challenge. It exposed one incorrect resource explanation in each version:
+original `order-api` repetition 1 and revised `feed-api` repetition 0. Both
+misread SDK 1.45's final resource composition; actual application SDK captures
+retain supplied service name/version/environment through `WithResource`.
+The matched final reports, not provisional commentary, were scored.
+
+All 112 findings, including extra findings, received a factual-premise review.
+Original: **46 supported, 1 contradicted, 7 unresolved** out of 54. Revised:
+**54 supported, 1 contradicted, 3 unresolved** out of 58. The established-support
+shares (85.2% vs 93.1%) measure evidence established from the grading inputs;
+they do not demonstrate improved factual accuracy. Unknown premises can be true,
+some audit sidecars were not supplied to graders, proposed fixes were not all
+executed, and the conditional support bounds overlap. The ledger preserves
+unresolved findings instead of turning them into correctness passes.
+
+Execution used the frozen `b771e41` harness for preparation, SDK probes and
+audits. A scheduling-only change in `0df00da` allowed complete pairs to be graded
+while later audits ran and recorded each grading harness hash. Prompt, schema,
+scoring functions and acceptance rules were unchanged (AST-checked). After all
+model processes exited, the published runner gained PATH/explicit runtime
+resolution and a Python fixture-version guard. No model task, source expectation,
+score or threshold changed; recomputing the summary preserved every result.
+See the ledger's phase provenance and benchmark README for reproduction.
+
+Exact experiment commands, from the repository root (isolated authenticated
+Codex home; recorded Go 1.27.2 and Python SDK/exporter 1.45.1):
+
+```sh
+evals/.venv/bin/python3 evals/audit_accuracy.py prepare --workspace /private/tmp/obstudio-audit-challenge-20261016-final
+evals/.venv/bin/python3 evals/audit_accuracy.py truth --workspace /private/tmp/obstudio-audit-challenge-20261016-final
+evals/.venv/bin/python3 evals/audit_accuracy.py run --workspace /private/tmp/obstudio-audit-challenge-20261016-final --codex-home /Users/tithumma/code/splunk/obstudio/.workspace/codex-evals/codex-home --workers 4
+evals/.venv/bin/python3 -u .workspace/skill-observability-proof/challenge/grade_ready.py
+evals/.venv/bin/python3 evals/audit_accuracy.py summarize --workspace /private/tmp/obstudio-audit-challenge-20261016-final
+evals/.venv/bin/python3 .workspace/skill-observability-proof/challenge/collect_results.py
+```
+
+The local grade scheduler invokes `audit_accuracy.grade(workspace, home, 2)`
+repeatedly for completed pairs; the published `grade` action with the same
+workspace/home reproduces its fixed grading procedure. Raw local artifacts are
+retained in the ledger-linked ignored `raw-artifacts.tar.gz`; all original source,
+report and grading-copy bindings were checked before publication. Captured read
+commands mention each audit entrypoint, and no explicit reads of the truth,
+protocol or grading paths appeared in captured audit commands. This is a bounded
+command-path check, not authenticated activation, complete-context proof, or a
+security sandbox.
+
+Final local checks (PATH included the eval venv, pinned Go/Node and local tools;
+`UV_NO_CONFIG=1` for Make):
+
+- `make test-eval-harness`: **734 passed, 1 skipped**, all 26 tracked report
+  manifests valid. An initial run without Node on PATH failed two existing Node
+  checks; the corrected complete runs passed.
+- `make agent-policy-check`: **49 policy tests + 8 guideline tests passed**;
+  agent policy check passed.
+- `evals/.venv/bin/python3 -m pytest -q evals/test_audit_accuracy.py`: initial
+  scoring suite **7 passed**, pair scheduling suite **8 passed**; final full
+  harness includes all **12** scoring/scheduling/runtime-resolution/version tests.
+- `evals/.venv/bin/python3 evals/audit_accuracy.py truth --workspace /private/tmp/obstudio-audit-challenge-20261016-final`:
+  **6 real-SDK application-function probes passed**.
+- Supplemental `go test -count=1 -v -run TestSourceExporterDefaultsWithoutNetwork ./...`:
+  **passed**; actual pinned SDK requests `https://localhost:4318/v1/traces` by
+  default and the explicit no-options resource has zero attributes without
+  operator values. A custom RoundTripper intercepted the request; this was
+  post-hoc configuration proof, outside the scores and grading inputs.
+
+No shipped skill changed in this follow-up, so no fresh skill rubric run was
+required. Core Observer/client/editor behavior and full application HTTP/OTLP
+pipelines were not changed or re-exercised locally by this benchmark; the earlier
+ordinary native pipeline proof remains separate. Six small synthetic applications
+share bootstrap templates, there are only two repetitions per version, and both
+graders use the same model. These limits preclude a general production accuracy,
+causal, equivalence, or broad non-regression claim. Native/skill-workflow telemetry
+export was disabled; no evaluation usage was presented as Studio OTel or native
+provider token telemetry.

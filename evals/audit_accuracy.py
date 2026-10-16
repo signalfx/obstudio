@@ -11,6 +11,7 @@ import argparse
 import concurrent.futures
 import datetime as dt
 import hashlib
+import importlib.metadata
 import io
 import json
 import os
@@ -27,9 +28,13 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "evals/benchmarks/audit-accuracy"
 BASELINE = "f56299311afa7c62c9896de1aa76d4ff5a22106f"
 CANDIDATE = "e9162c27e07be461997fb3021f686db5875c7414"
-CLI = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
-GO = "/Users/tithumma/.cache/tooling/obstudio-go-1.27.2/go/bin/go"
-NODE_BIN = "/Users/tithumma/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin"
+def resolve_binary(name, override):
+    return os.environ.get(override) or shutil.which(name) or name
+
+
+CLI = resolve_binary("codex", "AUDIT_ACCURACY_CODEX_BIN")
+GO = resolve_binary("go", "AUDIT_ACCURACY_GO_BIN")
+NODE_BIN = os.environ.get("AUDIT_ACCURACY_NODE_BIN") or (str(Path(shutil.which("node")).parent) if shutil.which("node") else "")
 MODEL = "gpt-6.1-sol"
 REPEATS = 2
 SEED = 2640290
@@ -52,6 +57,14 @@ def source_hashes(directory):
 
 def now():
     return dt.datetime.now(dt.timezone.utc).isoformat()
+
+
+def check_python_runtime(source):
+    for requirement in (source / "requirements.txt").read_text().splitlines():
+        package, expected = requirement.split("==", 1)
+        actual = importlib.metadata.version(package)
+        if actual != expected:
+            raise ValueError(f"{package}: installed {actual}, fixture requires {expected}")
 
 
 def prepare(workspace):
@@ -144,6 +157,7 @@ def truth(workspace):
             (target / "proof_test.go").write_text(probe.replace("CASE_CALL", call).replace("CASE_ASSERT", check))
             command = [GO, "test", "-count=1", "-v", "./..."]
         else:
+            check_python_runtime(target)
             command = [sys.executable, str(FIXTURES / "probes/python_probe.py"), case, str(target), str(target / "sdk-evidence.json")]
         result = subprocess.run(command, cwd=target, text=True, capture_output=True, timeout=180)
         (target / "probe.log").write_text(result.stdout + result.stderr)
@@ -155,7 +169,12 @@ def truth(workspace):
 
 def environment(codex_home):
     env = dict(os.environ, CODEX_HOME=str(codex_home), OBSTUDIO_SKILL_MCP_ENDPOINT="none", UV_NO_CONFIG="1")
-    env["PATH"] = f"{Path(sys.executable).parent}:{Path(GO).parent}:{NODE_BIN}:/Users/tithumma/.local/bin:" + env["PATH"]
+    paths = [str(Path(sys.executable).parent)]
+    if Path(GO).is_absolute():
+        paths.append(str(Path(GO).parent))
+    if NODE_BIN:
+        paths.append(NODE_BIN)
+    env["PATH"] = os.pathsep.join(paths + [env.get("PATH", "")])
     return env
 
 
