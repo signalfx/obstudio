@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261015T054232482610Z",
+    "run_id": "20261016T001759182684Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "",
@@ -834,7 +834,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "3c845be28ea89275d4ebfc09b31b0f657e680d96f46107b958ce8cbf31362bed",
+    "digest": "48dc1caba7fc548ec89f403a7a21f46d050436adf10d64d10a5d97813908010e",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -974,7 +974,7 @@
       "observer/cmd/obstudio/embed.go": "c03df1eb5339c062d8de86cb91f142cefecae6754952e4b2c077f8fb36bcb110",
       "observer/cmd/obstudio/env_file_test.go": "14a6c74358c81dc000e1aa0cbb366034347721a3b8bfd390e92cb0fe505939c6",
       "observer/cmd/obstudio/install.go": "c7d3978afac4b3cd017e262adfcd5471bb8519afd19323ef9d2e1b02031ac468",
-      "observer/cmd/obstudio/install_test.go": "575cae19b576a8ec5436039ad9b2325ee8e9c39904d058165781bba1788873a6",
+      "observer/cmd/obstudio/install_test.go": "5a471e0875beebf4527bb2e2b546ab25ad68e66810c0882932a024055d595f79",
       "observer/cmd/obstudio/lifecycle.go": "a9ccae2038fc47f83e8813a7c28dd45fe0ac74865f46a0fb1a7b6d2d449affca",
       "observer/cmd/obstudio/lifecycle_test.go": "aa45491be0495f4a424f18e1a779e56fcb5c5b4d4d65e5ec7d78bbbf7aa3c713",
       "observer/cmd/obstudio/lifecycle_unix.go": "d47061f333807234befcf22787c90e9421ec30cf89f28869229fb0fee78bbbed",
