@@ -203,6 +203,10 @@ def grade(workspace, codex_home, workers):
     for case in protocol["cases"]:
         for repeat in range(REPEATS):
             pair = [j for j in jobs if j["case"] == case and j["repeat"] == repeat]
+            if len(pair) != 2:
+                raise ValueError("Each grading pair must contain both frozen versions")
+            if any(not (workspace / "runs" / j["id"] / "result.json").exists() for j in pair):
+                continue
             for judge in range(2):
                 directory = workspace / "grading" / f"{case}-{repeat}-{judge}"
                 if (directory / "result.json").exists():
@@ -233,6 +237,7 @@ For EVERY truth unit, reported_gap is true only if the report asserts that speci
 For EVERY entry in the report's findings array, judge its MATERIAL FACTUAL PREMISES: supported if source/probe establishes them, contradicted if a material premise is false, unresolved if not decidable from the available evidence. Judge the entire finding, not only its headline. Optional recommendations are acceptable if their factual premises are accurate; missing a metric/log is not itself a false claim. No invented requirements. Claims outside the frozen truth units still need a finding verdict. Do not score an audit's self-reported pass flag or workflow traces as correctness. Read local files only; do not change files or fetch remote sources."""
     def one(directory):
         status = invoke(directory, prompt, directory / "grade.json", codex_home, schema_path, timeout=900)
+        status["harness_sha256"] = digest(Path(__file__))
         write_json(directory / "result.json", status)
         print("graded", directory.name, status, flush=True)
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:

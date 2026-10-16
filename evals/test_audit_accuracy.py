@@ -2,7 +2,7 @@
 
 import pytest
 
-from audit_accuracy import cluster_interval, confusion, f1, source_hashes
+from audit_accuracy import cluster_interval, confusion, f1, grade, source_hashes, write_json
 
 
 def test_confusion_keeps_each_error_direction():
@@ -41,3 +41,16 @@ def test_hashes_bind_source_but_exclude_agent_outputs(tmp_path):
     assert source_hashes(tmp_path) == before
     source.write_text("print('changed')\n")
     assert source_hashes(tmp_path) != before
+
+
+def test_grading_waits_for_complete_pairs(tmp_path, monkeypatch):
+    write_json(tmp_path / "protocol.json", {"cases": {"pending-app": {}}})
+    write_json(tmp_path / "jobs.json", [
+        dict(id=f"{version}-{repeat}", case="pending-app", repeat=repeat, version=version)
+        for repeat in range(2) for version in ["baseline", "candidate"]
+    ])
+    def unexpected_model_call(*args, **kwargs):
+        pytest.fail("An incomplete audit pair must not be graded")
+    monkeypatch.setattr("audit_accuracy.invoke", unexpected_model_call)
+    grade(tmp_path, tmp_path / "unused-home", 1)
+    assert not (tmp_path / "grading").exists()
