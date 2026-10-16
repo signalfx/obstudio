@@ -141,8 +141,182 @@ func TestConfigureMCPCopilotLocalEmitsStdioType(t *testing.T) {
 	if got := server["command"]; got != "/usr/local/bin/obstudio" {
 		t.Fatalf("Copilot local config command = %#v, want /usr/local/bin/obstudio", got)
 	}
+	if args, ok := server["args"].([]any); !ok || len(args) != 0 {
+		t.Fatalf("Copilot local config args = %#v, want empty array", server["args"])
+	}
 	if _, ok := server["url"]; ok {
 		t.Fatalf("Copilot local config should not include url field, got %#v", server["url"])
+	}
+}
+
+func TestCopilotMCPConfigPathResolvesPerOS(t *testing.T) {
+	// os.UserConfigDir() switches on runtime.GOOS, a compile-time constant: a
+	// darwin test binary can only ever execute the darwin branch, no matter
+	// what env vars are set. This asserts the branch matching the host OS;
+	// the other OSes are covered by the CI matrix (observer-smoke job).
+	tmp := t.TempDir()
+
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("AppData", tmp)
+		want := filepath.Join(tmp, "Code", "User", "mcp.json")
+		if got := targets["copilot"].mcpConfig.path(); got != want {
+			t.Fatalf("Copilot MCP config path = %q, want %q", got, want)
+		}
+	case "darwin":
+		t.Setenv("HOME", tmp)
+		want := filepath.Join(tmp, "Library", "Application Support", "Code", "User", "mcp.json")
+		if got := targets["copilot"].mcpConfig.path(); got != want {
+			t.Fatalf("Copilot MCP config path = %q, want %q", got, want)
+		}
+	default: // unix-like, including linux
+		t.Run("xdg_config_home_set", func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", tmp)
+			want := filepath.Join(tmp, "Code", "User", "mcp.json")
+			if got := targets["copilot"].mcpConfig.path(); got != want {
+				t.Fatalf("Copilot MCP config path = %q, want %q", got, want)
+			}
+		})
+		t.Run("xdg_config_home_unset", func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", "")
+			t.Setenv("HOME", tmp)
+			want := filepath.Join(tmp, ".config", "Code", "User", "mcp.json")
+			if got := targets["copilot"].mcpConfig.path(); got != want {
+				t.Fatalf("Copilot MCP config path = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestConfigureMCPCopilotWritesToResolvedVSCodePath(t *testing.T) {
+	tmp := t.TempDir()
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("AppData", tmp)
+	case "darwin":
+		t.Setenv("HOME", tmp)
+	default:
+		t.Setenv("XDG_CONFIG_HOME", tmp)
+	}
+
+	target := targets["copilot"].mcpConfig // deliberately not overriding target.path
+	wantPath := target.path()
+
+	if err := configureMCP(target, "/usr/local/bin/obstudio", ""); err != nil {
+		t.Fatalf("configureMCP returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Fatalf("read Copilot MCP config at resolved path %q: %v", wantPath, err)
+	}
+	var config struct {
+		Servers map[string]map[string]any `json:"servers"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal Copilot MCP config: %v", err)
+	}
+	server := config.Servers["obstudio"]
+	if server == nil {
+		t.Fatalf("obstudio entry missing from servers: %#v", config.Servers)
+	}
+	if got := server["type"]; got != "stdio" {
+		t.Fatalf("Copilot config type = %#v, want %q", got, "stdio")
+	}
+	if got := server["command"]; got != "/usr/local/bin/obstudio" {
+		t.Fatalf("Copilot config command = %#v, want /usr/local/bin/obstudio", got)
+	}
+}
+
+func TestConfigureMCPCopilotRemoteEmitsHTTPType(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "mcp.json")
+	target := targets["copilot"].mcpConfig
+	target.path = func() string { return configPath }
+
+	const mcpURL = "http://127.0.0.1:3000/mcp"
+	if err := configureMCP(target, "/usr/local/bin/obstudio", mcpURL); err != nil {
+		t.Fatalf("configureMCP returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read Copilot MCP config: %v", err)
+	}
+	var config struct {
+		Servers map[string]map[string]any `json:"servers"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal Copilot MCP config: %v", err)
+	}
+	server := config.Servers["obstudio"]
+	if server == nil {
+		t.Fatalf("obstudio entry missing from servers: %#v", config.Servers)
+	}
+	if got := server["type"]; got != "http" {
+		t.Fatalf("Copilot remote config type = %#v, want %q", got, "http")
+	}
+	if got := server["url"]; got != mcpURL {
+		t.Fatalf("Copilot remote config url = %#v, want %q", got, mcpURL)
+	}
+	if _, ok := server["command"]; ok {
+		t.Fatalf("Copilot remote config should not include command field, got %#v", server["command"])
+	}
+	if _, ok := server["args"]; ok {
+		t.Fatalf("Copilot remote config should not include args field, got %#v", server["args"])
+	}
+}
+
+func TestConfigureMCPCopilotPreservesExistingVSCodeConfig(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "mcp.json")
+	target := targets["copilot"].mcpConfig
+	target.path = func() string { return configPath }
+
+	initial := map[string]any{
+		"inputs": []any{
+			map[string]any{"id": "api-key", "type": "promptString"},
+		},
+		"servers": map[string]any{
+			"other-server": map[string]any{
+				"type":    "stdio",
+				"command": "/usr/local/bin/other",
+			},
+		},
+	}
+	data, err := json.Marshal(initial)
+	if err != nil {
+		t.Fatalf("marshal initial Copilot MCP config: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		t.Fatalf("write initial Copilot MCP config: %v", err)
+	}
+
+	if err := configureMCP(target, "/usr/local/bin/obstudio", ""); err != nil {
+		t.Fatalf("configureMCP returned error: %v", err)
+	}
+
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read Copilot MCP config: %v", err)
+	}
+	var config struct {
+		Inputs  []any                     `json:"inputs"`
+		Servers map[string]map[string]any `json:"servers"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal Copilot MCP config: %v", err)
+	}
+	if len(config.Inputs) != 1 {
+		t.Fatalf("expected inputs to be preserved, got %#v", config.Inputs)
+	}
+	if config.Servers["other-server"] == nil {
+		t.Fatalf("expected other-server entry to be preserved, got %#v", config.Servers)
+	}
+	if config.Servers["obstudio"] == nil {
+		t.Fatalf("expected obstudio entry to be added, got %#v", config.Servers)
 	}
 }
 

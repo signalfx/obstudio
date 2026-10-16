@@ -541,3 +541,16 @@ graders use the same model. These limits preclude a general production accuracy,
 causal, equivalence, or broad non-regression claim. Native/skill-workflow telemetry
 export was disabled; no evaluation usage was presented as Studio OTel or native
 provider token telemetry.
+
+After measurement, `main` advanced to `f4166e5` (PR #288), adding Copilot
+installation configuration tests and their CI matrix coverage. The only merge
+conflicts were the two generated otel-instrument validation reports. The main
+tests/workflow were preserved and the combined report was regenerated through
+`make eval-validation SKILL=skills/otel-instrument`: **643 passed, 1 skipped**.
+The exact narrow command below passed on Darwin; it exercises the newly merged
+tests without changing real user configuration. The application fixture and
+skill bytes used by the completed benchmark were unchanged by this merge.
+
+```sh
+go -C observer test ./cmd/obstudio -run 'Test(CopilotTargetUsesVSCodeUserMCPJSON|CopilotMCPConfigPathResolvesPerOS|ConfigureMCPCopilot.*)$' -count=1 -v
+```
