@@ -127,3 +127,45 @@ and rubric grading. This mirrors Galileo's distinction between
 [code-based metrics and model-based evaluation](https://docs.galileo.ai/concepts/metrics/overview).
 The workflow query returns both path diagnostics and evaluation events for
 subsequent dataset selection and regression analysis.
+
+## Evaluate application correctness contracts
+
+`observer_skill_correctness_evaluate` adds a separate evaluation path for
+per-finding application telemetry. It consumes explicit expectations linked to
+audit finding/scenario IDs, report digests, source revision and an application
+capture witness. The complete wire and harness contract lives in the
+[verification reference](../skills/otel-verify/references/correctness-evaluations.md),
+which is also served in the SEP catalog and packaged with the local skill.
+`otel-verify` reads it when a project/user supplies an optional contract.
+
+```mermaid
+flowchart LR
+    C["Independent test or reviewed contract"] --> E["Correctness evaluator"]
+    A["Actual application scenario"] --> S["SDK capture and OTLP"]
+    S --> T["Retained spans, datapoints and logs"]
+    T --> E
+    W["Harness capture manifest and source revision"] --> E
+    E --> R["Finding/scenario result and evidence receipt"]
+    R --> V["Evaluation events on the skill trace"]
+```
+
+Span checks cover exact count, required attributes, kind, status and parentage.
+Metric checks cover exact datapoint count, type, unit, required dimensions and
+optional gauge/sum value ranges; logs cover event category, severity, required
+attributes and app-span correlation. A complete declared capture can establish
+that a required signal was missing. A matching contract passes an
+`instrumentation` claim and refutes an `audit_gap` claim; a mismatch reverses
+those results. Missing, stale, evicted or contract-only captures remain unknown.
+These are scenario contracts rather than an automatic judgment of all code or
+all audit findings. Original workflow checks remain independent and unchanged.
+
+The checker inspects actual retained data instead of accepting a skill's
+reported success. The caller still owns the expectations, report bindings and
+harness. Manifests establish consistency with the retained capture, not
+cryptographic attestation of application execution or completeness upstream of
+the SDK. A producer could lie; an expectation author could choose a weak
+contract. Report digests are recorded bindings, not local file validation.
+Independent app tests and reviewed/seeded expectations are therefore required
+before describing the result as independent correctness evidence. Precision or
+recall across all audit gaps, model judgment, source scanning, performance
+regression statistics and cloud receipt are not implemented by this tool.

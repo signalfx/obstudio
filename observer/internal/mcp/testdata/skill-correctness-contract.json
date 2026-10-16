@@ -1,0 +1,39 @@
+{
+  "runId": "replace-with-recorded-workflow",
+  "auditSha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "sourceRevision": "fixture-v1",
+  "scenarios": [
+    {
+      "id": "tasks.create",
+      "traceId": "replace-with-application-trace",
+      "witnessSpanId": "replace-with-harness-witness",
+      "serviceName": "tasks",
+      "rules": [
+        {
+          "name": "tasks.server.correct",
+          "findingId": "OTEL-001",
+          "claim": "instrumentation",
+          "signal": "span",
+          "signalName": "POST /tasks",
+          "count": 1,
+          "kind": "SERVER",
+          "status": "UNSET",
+          "parentName": "scenario POST /tasks",
+          "attributes": {"http.route": "/tasks", "http.response.status_code": 201}
+        },
+        {
+          "name": "tasks.audit.gap",
+          "findingId": "OTEL-001",
+          "claim": "audit_gap",
+          "signal": "span",
+          "signalName": "POST /tasks",
+          "count": 1,
+          "kind": "SERVER",
+          "status": "UNSET",
+          "parentName": "scenario POST /tasks",
+          "attributes": {"http.route": "/tasks", "http.response.status_code": 201}
+        }
+      ]
+    }
+  ]
+}

@@ -360,7 +360,7 @@ func workflowTools() []toolDef {
 		{Name: "observer_skill_workflows", Description: "Inspect retained skill stage paths, branches, and explicitly completed workflow intervals. Incomplete and unobserved are distinct from success; tokens remain unknown.",
 			InputSchema: jsonSchema{Type: "object", Properties: map[string]jsonSchema{"skillName": {Type: "string"}, "runId": {Type: "string"}, "limit": {Type: "integer"}, "includeSpans": {Type: "boolean"}}},
 			Annotations: toolAnnot{Title: "Inspect skill workflows", ReadOnlyHint: true, IdempotentHint: true}},
-	}, workflowEvaluationTool())
+	}, workflowEvaluationTool(), correctnessTool())
 }
 
 func (d *Dispatcher) recordWorkflowMetrics(spans []store.Span) {

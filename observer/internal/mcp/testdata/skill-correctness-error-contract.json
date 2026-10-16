@@ -1,0 +1,34 @@
+{
+  "runId": "replace-with-recorded-workflow",
+  "auditSha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "sourceRevision": "fixture-v1",
+  "scenarios": [{
+    "id": "tasks.create",
+    "traceId": "replace-with-application-trace",
+    "witnessSpanId": "replace-with-harness-witness",
+    "serviceName": "tasks",
+    "rules": [{
+      "name": "tasks.failure.correct",
+      "findingId": "OTEL-001",
+      "claim": "instrumentation",
+      "signal": "span",
+      "signalName": "POST /tasks",
+      "count": 1,
+      "kind": "SERVER",
+      "status": "ERROR",
+      "parentName": "scenario POST /tasks",
+      "attributes": {"http.route": "/tasks", "http.response.status_code": 500, "error.type": "task_creation_failed"}
+    }, {
+      "name": "tasks.failure.audit_gap",
+      "findingId": "OTEL-001",
+      "claim": "audit_gap",
+      "signal": "span",
+      "signalName": "POST /tasks",
+      "count": 1,
+      "kind": "SERVER",
+      "status": "ERROR",
+      "parentName": "scenario POST /tasks",
+      "attributes": {"http.route": "/tasks", "http.response.status_code": 500, "error.type": "task_creation_failed"}
+    }]
+  }]
+}

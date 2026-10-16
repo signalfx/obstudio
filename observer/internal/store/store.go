@@ -333,7 +333,6 @@ type TelemetrySnapshot struct {
 
 // Store is the in-memory telemetry store.
 type Store struct {
-	skillWorkflowMu                sync.Mutex
 	mu                             sync.RWMutex
 	spans                          ringBuffer[Span]
 	agentSpanIndex                 map[agentSpanIdentity]int

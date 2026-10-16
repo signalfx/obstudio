@@ -5,8 +5,10 @@
 Work started from a fresh clone of remote `main` at
 `f56299311afa7c62c9896de1aa76d4ff5a22106f`; the remote head was rechecked and
 unchanged before handoff. The original working checkout was left untouched.
-All 15 extracted stage reference bodies were compared byte-for-byte with their
-original sections. Public skill names, local discovery links, report schemas,
+The initial extraction compared all 15 stage reference bodies byte-for-byte with
+their original sections. The correctness follow-up adds optional guidance to
+verification's report stage without removing the original instructions. Public
+skill names, local discovery links, report schemas,
 producer rules and original rubric criteria are retained. Plugin skill copies
 are generated from the canonical source. Default `git diff --check` reports
 blank separators at the ends of extracted references; these preserve original
@@ -159,6 +161,101 @@ issue action, which opens named evaluation explanations. Screenshots cover
 without page horizontal overflow at the recorded widths. Temporary viewport
 overrides were reset. The standalone app exposes the existing dark theme; no
 light-theme or editor-host rendering claim is made.
+
+## Correctness follow-up
+
+The follow-up adds `observer_skill_correctness_evaluate` and an optional
+`otel-verify` path for a separately supplied contract. A reported skill pass is
+not accepted as proof. The server compares retained application spans, metric
+datapoints and correlated logs with explicit finding/scenario expectations,
+checking run/service/source identity and consistency with a producer-declared
+complete capture. Results include exact count differences, mismatched field
+names, report bindings and a receipt; raw log bodies and attribute values are
+not copied into the evaluation events. The source capture is linked for review.
+
+Independent execution proof uses `TestCorrectnessIndependentAppSDKOTLPAndMCP`:
+an actual HTTP handler executes, the real Go tracing SDK captures its spans,
+a test exporter serializes those SDK observations to OTLP, the production
+OTLP/HTTP receiver ingests them, and the public MCP tool evaluates them against
+separate fixed JSON contracts. Expectations are loaded before execution and
+are not generated from the observed spans or a skill's reported outcome.
+
+| Executed fixture | Instrumentation claim | Audit gap claim |
+|---|---|---|
+| Correct route instrumentation | Pass | Fail: gap refuted |
+| Wrong route attribute | Fail | Pass: gap supported |
+| No instrumentation despite the handler running | Fail | Pass |
+| Duplicate server spans | Fail | Pass |
+| Wrong parent span | Fail | Pass |
+| Application failure with expected HTTP 500, ERROR and error.type | Pass | Fail |
+| Capture labeled contract-only | Unknown | Unknown |
+
+Focused unit checks additionally cover metric type/unit/dimensions/value bounds,
+empty histogram measurements, log severity/attributes/owning-span correlation,
+missing versus evicted evidence, stale revisions, inconsistent/absent manifests,
+invalid requests, immutable/replay-safe receipts, capture arrival order, and
+one unavailable scenario beside a working scenario. Coverage inspection of the
+new evaluator was used to identify the missing arrival-order and histogram
+branches; no repository-wide coverage target was used.
+
+The earlier Copilot review's four concrete findings are addressed: workflow and
+evaluation insertion no longer trigger idle application-session resets;
+deduplication/conflict validation and insertion share the store lock; Claude
+foreground command outcomes are normalized without converting absent,
+background or interrupted results into success; shell operators with or without
+spaces cannot mask recorder failures; and huge/invalid durations fail the check
+instead of aborting grading. A real shell reproduction exits 7 in the recorder
+and 0 in its pipeline, which the corrected grader rejects. Existing Codex checks,
+ordinary application-session resets and explicit Clear/replay remain covered.
+These harden the workflow-check feature introduced by this draft; existing
+sanity check kinds and public report schemas remain unchanged.
+
+Commands for this follow-up use the same runtime/PATH setup as above:
+
+| Command from repository root unless stated | Result |
+|---|---|
+| `cd observer && go test ./internal/mcp -run TestCorrectnessIndependentAppSDKOTLPAndMCP -count=1 -v` | Pass, all 7 executed fixtures |
+| `cd observer && go test ./internal/mcp -run TestCorrectness -count=1` | Pass, focused contract and isolation checks |
+| `cd observer && go test ./internal/store -run 'TestSkillWorkflow\|TestSessionReset' -count=1` | Pass, retention/bookkeeping and existing reset behavior |
+| `make test` | Pass, full Go suite |
+| `make vet` | Pass |
+| `cd observer && go test -race ./internal/mcp ./internal/store` | Pass |
+| `make build` | Pass, embedded skills/client/binary |
+| `uv run --project pytest-codex-evals pytest pytest-codex-evals/tests/test_workflow.py -q` | 8 passed |
+| `make test-pytest-plugin` | 221 passed |
+| `make test-eval-harness` | 722 passed, 1 skipped |
+| `make -C evals eval-report-freshness` | All 26 tracked report manifests verified |
+| `make test-interactive-otel-scripts` | Pass, including 184 guidance checks |
+| `make agent-policy-check` | 49 policy tests and 8 guideline checks passed |
+| `claude plugin validate ./plugins/obstudio --strict` and `claude plugin validate .` | Both passed |
+| `make eval-validation SKILL=skills/otel-audit` | 611 passed, 1 skipped |
+| `make eval-validation SKILL=skills/otel-instrument` | 631 passed, 1 skipped |
+| `make eval-validation SKILL=skills/otel-verify` | 577 passed, 1 skipped |
+
+The follow-up rubric command was:
+
+```sh
+make eval-rubric SKILL=skills/otel-verify CASE=go/chi-basic PROMPT=canonical-proof-packet EVAL_CONFIG=.workspace/skill-observability-proof/evals.toml EVAL_CODEX_HOME=/Users/tithumma/code/splunk/obstudio/.workspace/codex-evals/codex-home
+```
+
+Run `20261016T165657113677Z` passed all **7/7** criteria, raw score **100**,
+including the unchanged original criteria and the new independent-contract
+criterion. This follows the initial stage-refactor verification result of 6/6,
+score 99; the clean-main baseline was 5/5, score 100. No criteria were weakened.
+One preparatory rubric invocation was interrupted after discovering that the
+new fixture input had not been included in the prompt's explicit seed list;
+the reported run includes that input and matches the final skill/eval sources.
+The task and schema-constrained judge ran outside Studio with recorder export
+disabled, separately from the SDK/OTLP integration fixtures above.
+
+No new UI code or editor-host behavior is introduced in this follow-up. It reuses
+the existing evaluation rendering; this validation proves the backend events
+and trace projection, not a new browser screenshot or native SEP client run.
+Cloud delivery, authenticated provenance, all-language correctness, automatic
+audit precision/recall and LLM judging are outside this implementation. The
+contract author and capture producer remain trust inputs. A passing result
+establishes only the explicitly checked scenario, not all skill recommendations
+or instrumentation throughout an application.
 
 ## Limits and review boundary
 

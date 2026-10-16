@@ -7,6 +7,12 @@ instrumentation digest; validate the flow; and refresh
 `.observe/otel-instrumentation.html`. Leave `.observe/otel.html` as the audit
 and scope surface.
 
+When a project/user-supplied correctness contract is available, read
+`references/correctness-evaluations.md` and reconcile its per-finding scenarios
+through the optional `observer_skill_correctness_evaluate` tool. Preserve
+independent expectations; skill-reported success is not correctness evidence.
+Keep unavailable/unknown scores separate from existing app verification proof.
+
 ## Reader Report
 
 Write this order:

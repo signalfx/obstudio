@@ -311,6 +311,11 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, req jsonRPCRequest) js
 
 	var result toolResult
 	switch toolName {
+	case "observer_skill_correctness_evaluate":
+		if d.skillCatalog == nil || len(d.skillCatalog.names) == 0 {
+			return rpcError(req.ID, -32602, "Unknown tool: "+toolName)
+		}
+		result = d.skillCorrectnessEvaluate(args)
 	case "observer_skill_workflow_evaluate":
 		if d.skillCatalog == nil || len(d.skillCatalog.names) == 0 {
 			return rpcError(req.ID, -32602, "Unknown tool: "+toolName)

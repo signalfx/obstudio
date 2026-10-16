@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-verify |
-| Run ID | 20261016T061549808263Z |
+| Run ID | 20261016T165657113677Z |
 | Agent model | - |
 | Judge model | - |
 | Rubric enabled | True |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/verify | go/chi-basic | 1 | 100% (6/6), avg score 99 | 2.0M | 15.3m | - | - | - |
+| with_skill | go/chi-basic/qual/verify | go/chi-basic | 1 | 100% (7/7), avg score 100 | 2.1M | 9.5m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1995450 | 1897984 | 0 | 17227 | 4264 | unknown | 2012677 |
+| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2129438 | 2017792 | 0 | 17977 | 5161 | unknown | 2147415 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 539261 | 449920 | 0 | 6052 | 2305 | unknown | 545313 |
+| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 434617 | 355584 | 0 | 5474 | 1886 | unknown | 440091 |
 
 ## Rubric Failures
 

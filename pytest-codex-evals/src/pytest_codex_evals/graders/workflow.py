@@ -11,6 +11,39 @@ from pytest_codex_evals.definitions.sanity import SanityCheck
 from pytest_codex_evals.trace import TraceSummary
 
 
+def simple_command_words(command: str) -> list[str]:
+    """Accept one literal shell command, preserving quoted child arguments."""
+    quote = ""
+    escaped = False
+    for char in command:
+        if char in "\r\n":
+            raise ValueError("Multiline shell commands are not independent witnesses")
+        if escaped:
+            escaped = False
+            continue
+        if quote == "'":
+            if char == "'":
+                quote = ""
+            continue
+        if char == "\\":
+            escaped = True
+        elif char in "$`":
+            raise ValueError("Shell expansion is not an independent witness")
+        elif quote == '"':
+            if char == '"':
+                quote = ""
+        elif char in "'\"":
+            quote = char
+        elif char in ";&|()<>":
+            raise ValueError("Shell control operators are not independent witnesses")
+    if quote or escaped:
+        raise ValueError("Unfinished shell quoting")
+    words = shlex.split(command)
+    if len(words) == 3 and Path(words[0]).name in {"sh", "bash", "zsh"} and words[1] in {"-c", "-lc"}:
+        return simple_command_words(words[2])
+    return words
+
+
 def inside(root: Path, relative: str) -> Path:
     path = Path(relative)
     if not relative or path.is_absolute() or ".." in path.parts or "\\" in relative:
@@ -61,30 +94,27 @@ def grade_workflow(check: SanityCheck, service_dir: Path, trace: TraceSummary | 
                 failures.append(f'forbidden branch: {event["stage"]}')
         for stage in check.executed_stages:
             event = latest.get(stage, {})
-            if (event.get("source") != "executed" or event.get("exitCode") != 0 or not isinstance(event.get("durationMs"), (int, float))
+            if (event.get("source") != "executed" or event.get("status") != "passed" or type(event.get("exitCode")) is not int or event["exitCode"] != 0 or type(event.get("durationMs")) not in (int, float)
                     or not math.isfinite(event["durationMs"]) or event["durationMs"] < 0):
                 failures.append(f"missing measured execution: {stage}")
                 continue
             witnessed = False
             for action in trace.actions if trace is not None else []:
-                if action.kind != "command" or action.exit_code != event["exitCode"]:
+                if action.kind != "command" or action.status.lower() != "completed" or action.exit_code != event["exitCode"]:
                     continue
                 try:
-                    words = shlex.split(action.input.get("command", ""))
-                    if (len(words)==3 and Path(words[0]).name in {"sh", "bash", "zsh"}
-                            and words[1] in {"-c", "-lc"}):
-                        words=shlex.split(words[2])
+                    words = simple_command_words(action.input.get("command", ""))
                 except ValueError:
                     continue
                 # Conservative: shell expansion/aliases do not independently prove an operation.
                 if (len(words) < 5 or not Path(words[0]).name.startswith("python")
-                        or Path(words[1]).name != "skill_workflow.py" or words[2] != "execute"
-                        or any(word in {";", "&&", "||", "|"} for word in words)):
+                        or Path(words[1]).name != "skill_workflow.py" or words[2] != "execute"):
                     continue
                 args = words[3:]
-                if ("--run" in args and "--stage" in args and "--" in args
-                        and args[args.index("--stage") + 1] == stage):
-                    journal = Path(args[args.index("--run") + 1])
+                options = args[:args.index("--")] if "--" in args else []
+                if (options.count("--run") == 1 and options.count("--stage") == 1
+                        and options[options.index("--stage") + 1] == stage):
+                    journal = Path(options[options.index("--run") + 1])
                     if journal.resolve() == path.resolve() or journal == path.relative_to(service_dir):
                         witnessed = True
             if not witnessed:
@@ -103,6 +133,6 @@ def grade_workflow(check: SanityCheck, service_dir: Path, trace: TraceSummary | 
                        if item.get("path") == relative and item.get("sha256") == expected]
             if not matches:
                 failures.append(f"artifact digest not witnessed: {relative}")
-    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
+    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError, OverflowError):
         return False, "Invalid workflow journal, expectation, or evidence"
     return not failures, "; ".join(failures) if failures else "Declared path, command witnesses, and artifact digests agree; checkpoints remain self-reported"
