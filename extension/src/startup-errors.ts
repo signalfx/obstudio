@@ -42,21 +42,26 @@ export function formatPortConflictMessage(details: PortConflictDetails): string 
 		? ` is already in use by "${details.owner}".`
 		: ' is already in use.';
 	const staleObserver = details.owner !== undefined && observerOwnerPattern.test(details.owner);
-	const staleObserverHint = staleObserver
-		? ' Another Splunk Observability Studio instance or a stale local-service process may still be running.'
-		: '';
 
 	if (staleObserver) {
+		// `identifyPortOwner` only matches the obstudio pattern once it has resolved
+		// a listener, so `owner` here always carries the PID (e.g. "obstudio
+		// (PID 94901)"). Use "that process" with the owner text as the handle — a
+		// stale instance may be a CLI, another editor, or a terminal, not a VS Code
+		// window, and our "Stop" command only stops observers this extension spawned,
+		// so we deliberately say "Terminate" (an OS-level verb), not "Stop".
 		const resolution = details.settingName
-			? ` Close the other VS Code window or terminate the stale local-service process, or change observability-studio.${details.settingName}.`
-			: ' Close the other VS Code window or terminate the stale local-service process before restarting Splunk Observability Studio.';
-		return `${details.role} port ${details.port}${ownerText}${staleObserverHint}${resolution}`;
+			? `Terminate that process or change observability-studio.${details.settingName}, then run Splunk Observability Studio: Start or reload the window.`
+			: 'Terminate that process, then run Splunk Observability Studio: Start or reload the window.';
+		return `${details.role} port ${details.port}${ownerText} Only one Splunk Observability Studio instance can run at a time. ${resolution}`;
 	}
 
+	// A genuinely foreign (or unidentifiable) process. Keep the semantics — free
+	// the endpoint — but align the closing with the stale-observer branch.
 	const resolution = details.settingName
-		? ` Stop the other process or change observability-studio.${details.settingName}.`
-		: ` Stop the other process that is using the fixed ${details.role} endpoint before starting Splunk Observability Studio.`;
-	return `${details.role} port ${details.port}${ownerText}${resolution}`;
+		? `Stop the other process or change observability-studio.${details.settingName}, then run Splunk Observability Studio: Start or reload the window.`
+		: `Stop the other process using the fixed ${details.role} endpoint, then run Splunk Observability Studio: Start or reload the window.`;
+	return `${details.role} port ${details.port}${ownerText} ${resolution}`;
 }
 
 export function getObserverStartupHint(kind: ObserverStartupFailureKind = 'generic'): string {

@@ -51,9 +51,9 @@ when raw-signal collection must also be disabled.
 
 The managed instance may bind host-local endpoints such as:
 
-- `http://127.0.0.1:3000/`
-- `http://127.0.0.1:3000/api/health`
-- `http://127.0.0.1:3000/mcp`
+- `http://127.0.0.1:17900/`
+- `http://127.0.0.1:17900/api/health`
+- `http://127.0.0.1:17900/mcp`
 - `127.0.0.1:4317`
 - `127.0.0.1:4318`
 
@@ -64,7 +64,7 @@ running.
 
 Splunk Observability Studio command skills do not automatically follow a
 non-default MCP endpoint. They verify or control only the default loopback
-instance at `127.0.0.1:3000`.
+instance at `127.0.0.1:17900`.
 
 ## Local data
 
@@ -96,9 +96,9 @@ charts, or detectors.
 Host-local checks are optional, one-time verification or control probes. Codex
 and Claude Code may prompt for user approval before a shell command accesses
 host-local endpoints. Health checks use
-`http://127.0.0.1:3000/api/health`, not the MCP endpoint. Control or listener
+`http://127.0.0.1:17900/api/health`, not the MCP endpoint. Control or listener
 checks should be limited to the default Splunk Observability Studio loopback ports:
-`127.0.0.1:3000`, `127.0.0.1:4317`, and `127.0.0.1:4318`.
+`127.0.0.1:17900`, `127.0.0.1:4317`, and `127.0.0.1:4318`.
 
 If elevated access is denied or the endpoint cannot be verified from the
 available context, report `sandbox-unverified`; it does not prove that the

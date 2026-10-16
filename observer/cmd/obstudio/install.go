@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -39,7 +40,7 @@ const (
 	codexManagedBlockStart = "# BEGIN OBSTUDIO MCP CONFIG"
 	codexManagedBlockEnd   = "# END OBSTUDIO MCP CONFIG"
 
-	defaultSharedObserverBaseURL      = "http://127.0.0.1:3000"
+	defaultSharedObserverBaseURL      = "http://127.0.0.1:17900"
 	defaultSharedObserverMCPURL       = defaultSharedObserverBaseURL + "/mcp"
 	defaultSharedObserverHealth       = defaultSharedObserverBaseURL + "/api/health"
 	sharedObserverHealthTimeout       = 750 * time.Millisecond
@@ -51,13 +52,12 @@ const (
 )
 
 type mcpConfigTarget struct {
-	format                mcpConfigFormat
-	path                  func() string
-	serversKey            mcpServersKey
-	includeLocalType      bool
-	includeRemoteType     bool
-	preserveFields        []string
-	preserveSameURLFields []string
+	format            mcpConfigFormat
+	path              func() string
+	serversKey        mcpServersKey
+	includeLocalType  bool
+	includeRemoteType bool
+	preserveFields    []string
 }
 
 type agentTarget struct {
@@ -99,21 +99,21 @@ var targets = map[string]agentTarget{
 	"cursor": {
 		skillsDir: func(home string) string { return filepath.Join(home, ".cursor", "skills", "obstudio") },
 		mcpConfig: mcpConfigTarget{
-			format:                mcpConfigJSON,
-			path:                  func() string { return filepath.Join(userHome(), ".cursor", "mcp.json") },
-			serversKey:            "mcpServers",
-			includeRemoteType:     true,
-			preserveSameURLFields: []string{"headers"},
+			format:            mcpConfigJSON,
+			path:              func() string { return filepath.Join(userHome(), ".cursor", "mcp.json") },
+			serversKey:        "mcpServers",
+			includeRemoteType: true,
+			preserveFields:    []string{"headers"},
 		},
 	},
 	"claude-code": {
 		skillsDir: func(home string) string { return filepath.Join(home, ".claude", "skills", "obstudio") },
 		mcpConfig: mcpConfigTarget{
-			format:                mcpConfigJSON,
-			path:                  func() string { return filepath.Join(userHome(), ".claude.json") },
-			serversKey:            "mcpServers",
-			includeRemoteType:     true,
-			preserveSameURLFields: []string{"headers"},
+			format:            mcpConfigJSON,
+			path:              func() string { return filepath.Join(userHome(), ".claude.json") },
+			serversKey:        "mcpServers",
+			includeRemoteType: true,
+			preserveFields:    []string{"headers"},
 		},
 	},
 	"codex": {
@@ -126,33 +126,171 @@ var targets = map[string]agentTarget{
 	"kiro": {
 		skillsDir: func(home string) string { return filepath.Join(home, ".kiro", "skills", "obstudio") },
 		mcpConfig: mcpConfigTarget{
-			format:                mcpConfigJSON,
-			path:                  func() string { return filepath.Join(userHome(), ".kiro", "settings", "mcp.json") },
-			serversKey:            "mcpServers",
-			preserveFields:        []string{"autoApprove", "disabled", "disabledTools", "timeout"},
-			preserveSameURLFields: []string{"headers", "env", "oauth", "oauthScopes"},
+			format:         mcpConfigJSON,
+			path:           func() string { return filepath.Join(userHome(), ".kiro", "settings", "mcp.json") },
+			serversKey:     "mcpServers",
+			preserveFields: []string{"autoApprove", "disabled", "disabledTools", "timeout", "headers", "env", "oauth", "oauthScopes"},
 		},
 	},
 	"windsurf": {
 		skillsDir: func(home string) string { return filepath.Join(home, ".codeium", "windsurf", "skills", "obstudio") },
 		mcpConfig: mcpConfigTarget{
-			format:                mcpConfigJSON,
-			path:                  func() string { return filepath.Join(userHome(), ".codeium", "windsurf", "mcp_config.json") },
-			serversKey:            "mcpServers",
-			includeRemoteType:     true,
-			preserveSameURLFields: []string{"headers"},
+			format:            mcpConfigJSON,
+			path:              func() string { return filepath.Join(userHome(), ".codeium", "windsurf", "mcp_config.json") },
+			serversKey:        "mcpServers",
+			includeRemoteType: true,
+			preserveFields:    []string{"headers"},
 		},
 	},
 	"copilot": {
 		mcpConfig: mcpConfigTarget{
-			format:                mcpConfigJSON,
-			path:                  func() string { return filepath.Join(userConfigDir(), "Code", "User", "mcp.json") },
-			serversKey:            "servers",
-			includeLocalType:      true,
-			includeRemoteType:     true,
-			preserveSameURLFields: []string{"headers"},
+			format:            mcpConfigJSON,
+			path:              func() string { return filepath.Join(userConfigDir(), "Code", "User", "mcp.json") },
+			serversKey:        "servers",
+			includeLocalType:  true,
+			includeRemoteType: true,
+			preserveFields:    []string{"headers"},
 		},
 	},
+}
+
+// configuredObstudioMCPURL extracts the obstudio MCP server URL recorded in a
+// target's agent config file, if any. It returns the URL and true only when an
+// HTTP(S) "url" entry is present (the shared-server install mode); stdio
+// command-mode entries have no URL and return ("", false). Parse failures are
+// treated as "no URL" — the nudge is best-effort and must never block startup.
+func configuredObstudioMCPURL(t mcpConfigTarget) (string, bool) {
+	path := t.path()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	switch t.format {
+	case mcpConfigJSON:
+		var config map[string]any
+		if err := json.Unmarshal(data, &config); err != nil {
+			return "", false
+		}
+		servers, ok := config[string(t.serversKey)].(map[string]any)
+		if !ok {
+			return "", false
+		}
+		server, ok := servers["obstudio"].(map[string]any)
+		if !ok {
+			return "", false
+		}
+		rawURL, ok := server["url"].(string)
+		if !ok || strings.TrimSpace(rawURL) == "" {
+			return "", false
+		}
+		return strings.TrimSpace(rawURL), true
+	case mcpConfigTOML:
+		url, err := codexObstudioURL(string(data))
+		if err != nil || strings.TrimSpace(url) == "" {
+			return "", false
+		}
+		return strings.TrimSpace(url), true
+	default:
+		return "", false
+	}
+}
+
+// codexObstudioURL returns the url assigned to mcp_servers.obstudio in a codex
+// config, or "" if none. It reuses the same preserved-header parser machinery
+// by scanning for the url assignment inside the obstudio section.
+func codexObstudioURL(content string) (string, error) {
+	if strings.TrimSpace(content) == "" {
+		return "", nil
+	}
+	lines := strings.Split(content, "\n")
+	codeLines, err := codexTOMLCodeLines(lines)
+	if err != nil {
+		return "", err
+	}
+	inObstudio := false
+	for _, codeLine := range codeLines {
+		structural := tomlStructuralLine(codeLine)
+		if structural == "" {
+			continue
+		}
+		if tablePath, ok := parseCodexTOMLTablePath(structural); ok {
+			inObstudio = slices.Equal(tablePath, []string{"mcp_servers", "obstudio"})
+			continue
+		}
+		if isTOMLTableHeader(structural) {
+			inObstudio = false
+			continue
+		}
+		if !inObstudio {
+			continue
+		}
+		keyText, valueText, ok := splitCodexTOMLAssignment(structural)
+		if !ok {
+			continue
+		}
+		key, keyErr := parseCodexTOMLKey(keyText)
+		if keyErr != nil || key != "url" {
+			continue
+		}
+		return parseCodexTOMLString(valueText)
+	}
+	return "", nil
+}
+
+// warnStaleMCPPortConfigs scans the known agent-config paths for obstudio MCP
+// entries that pin a loopback HTTP URL on a port other than the running port,
+// and prints a one-time nudge to re-run install. It is best-effort: any read or
+// parse error for a given target is silently skipped. currentPort is the port
+// this obstudio process is actually serving on.
+func warnStaleMCPPortConfigs(w io.Writer, currentPort string) {
+	names := make([]string, 0, len(targets))
+	for name := range targets {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	stale := make([]string, 0, len(names))
+	for _, name := range names {
+		rawURL, ok := configuredObstudioMCPURL(targets[name].mcpConfig)
+		if !ok {
+			continue
+		}
+		parsed, err := url.Parse(rawURL)
+		if err != nil || !isLoopbackSharedObserverHost(parsed.Hostname()) {
+			continue
+		}
+		port := parsed.Port()
+		if port == "" || port == currentPort {
+			continue
+		}
+		stale = append(stale, fmt.Sprintf("%s (%s)", name, rawURL))
+	}
+	if len(stale) == 0 {
+		return
+	}
+	fmt.Fprintf(
+		w,
+		"\n[obstudio] Some agent MCP configs point at an old port; this instance serves :%s.\n"+
+			"           Stale: %s\n"+
+			"           Update them with: obstudio install --target=%s\n\n",
+		currentPort,
+		strings.Join(stale, ", "),
+		staleTargetList(stale),
+	)
+}
+
+// staleTargetList renders the comma-joined target names from the "name (url)"
+// entries produced by warnStaleMCPPortConfigs, for the install --target hint.
+func staleTargetList(entries []string) string {
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if idx := strings.IndexByte(entry, ' '); idx > 0 {
+			names = append(names, entry[:idx])
+		} else {
+			names = append(names, entry)
+		}
+	}
+	return strings.Join(names, ",")
 }
 
 func supportedTargets() string {
@@ -696,7 +834,7 @@ func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string) error {
 			}
 			server["url"] = sharedURL
 		}
-		err = upsertJSONMCPServer(target.path(), target.serversKey, server, target.preserveFields, target.preserveSameURLFields)
+		err = upsertJSONMCPServer(target.path(), target.serversKey, server, target.preserveFields)
 	case mcpConfigTOML:
 		server := codexMCPServer{}
 		if sharedURL == "" {
@@ -715,7 +853,7 @@ func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string) error {
 	return nil
 }
 
-func upsertJSONMCPServer(path string, serversKey mcpServersKey, server map[string]any, preserveFields, preserveSameURLFields []string, privateWrites ...bool) error {
+func upsertJSONMCPServer(path string, serversKey mcpServersKey, server map[string]any, preserveFields []string, privateWrites ...bool) error {
 	if serversKey == "" {
 		return fmt.Errorf("serversKey is not configured for this target — open an issue at https://github.com/signalfx/obstudio/issues to request support")
 	}
@@ -736,47 +874,45 @@ func upsertJSONMCPServer(path string, serversKey mcpServersKey, server map[strin
 		servers = map[string]any{}
 	}
 	if existing, ok := servers["obstudio"].(map[string]any); ok {
-		existingURL, existingHasURL := existing["url"].(string)
-		serverURL, serverHasURL := server["url"].(string)
-		if existingHasURL && serverHasURL && existingURL != "" && existingURL == serverURL {
-			for _, field := range preserveSameURLFields {
-				if value, exists := existing[field]; exists {
-					if field == "headers" {
-						mergedHeaders := make(map[string]any)
-						desiredHeaders, _ := server[field].(map[string]any)
-						if existingHeaders, ok := value.(map[string]any); ok {
-							for name, headerValue := range existingHeaders {
-								if strings.EqualFold(name, "Authorization") {
-									continue
-								}
-								mergedHeaders[name] = headerValue
-							}
-						}
-						if desiredHeaders != nil {
-							for desiredName := range desiredHeaders {
-								for existingName := range mergedHeaders {
-									if strings.EqualFold(existingName, desiredName) {
-										delete(mergedHeaders, existingName)
-									}
-								}
-							}
-							for name, headerValue := range desiredHeaders {
-								mergedHeaders[name] = headerValue
-							}
-						}
-						if len(mergedHeaders) > 0 {
-							server[field] = mergedHeaders
-						}
-						continue
-					}
-					server[field] = value
-				}
-			}
-		}
+		// Always preserve the user's listed fields across an upsert. The obstudio
+		// MCP URL is always loopback and the only URL change that ever happens is a
+		// port-only move on the same local server (:3000→:17900), so there is no
+		// genuinely-different endpoint a URL gate would protect against.
+		// Authorization headers are stripped unconditionally regardless.
 		for _, field := range preserveFields {
-			if value, exists := existing[field]; exists {
-				server[field] = value
+			value, exists := existing[field]
+			if !exists {
+				continue
 			}
+			if field == "headers" {
+				mergedHeaders := make(map[string]any)
+				desiredHeaders, _ := server[field].(map[string]any)
+				if existingHeaders, ok := value.(map[string]any); ok {
+					for name, headerValue := range existingHeaders {
+						if strings.EqualFold(name, "Authorization") {
+							continue
+						}
+						mergedHeaders[name] = headerValue
+					}
+				}
+				if desiredHeaders != nil {
+					for desiredName := range desiredHeaders {
+						for existingName := range mergedHeaders {
+							if strings.EqualFold(existingName, desiredName) {
+								delete(mergedHeaders, existingName)
+							}
+						}
+					}
+					for name, headerValue := range desiredHeaders {
+						mergedHeaders[name] = headerValue
+					}
+				}
+				if len(mergedHeaders) > 0 {
+					server[field] = mergedHeaders
+				}
+				continue
+			}
+			server[field] = value
 		}
 	}
 	servers["obstudio"] = server
@@ -820,7 +956,7 @@ func upsertCodexMCPServer(path string, server codexMCPServer, privateWrites ...b
 
 	content := string(data)
 	if server.URL != "" {
-		server.Headers, err = preservedCodexMCPHeaders(content, server.URL)
+		server.Headers, err = preservedCodexMCPHeaders(content)
 		if err != nil {
 			return fmt.Errorf("inspect existing codex MCP headers in %q: %w", path, err)
 		}
@@ -931,7 +1067,7 @@ func renderCodexManagedBlock(server codexMCPServer) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-func preservedCodexMCPHeaders(content, desiredURL string) ([]codexMCPHeader, error) {
+func preservedCodexMCPHeaders(content string) ([]codexMCPHeader, error) {
 	if strings.TrimSpace(content) == "" {
 		return nil, nil
 	}
@@ -952,7 +1088,6 @@ func preservedCodexMCPHeaders(content, desiredURL string) ([]codexMCPHeader, err
 	headerTables := 0
 	inlineHeaderTables := 0
 	urlAssignments := 0
-	existingURL := ""
 	headers := make([]codexMCPHeader, 0)
 	headerNames := make(map[string]struct{})
 
@@ -1008,8 +1143,7 @@ func preservedCodexMCPHeaders(content, desiredURL string) ([]codexMCPHeader, err
 				if urlAssignments > 1 {
 					return nil, errors.New("mcp_servers.obstudio.url is defined more than once")
 				}
-				existingURL, err = parseCodexTOMLString(valueText)
-				if err != nil {
+				if _, err := parseCodexTOMLString(valueText); err != nil {
 					return nil, fmt.Errorf("invalid mcp_servers.obstudio.url: %w", err)
 				}
 			case "http_headers":
@@ -1049,9 +1183,10 @@ func preservedCodexMCPHeaders(content, desiredURL string) ([]codexMCPHeader, err
 	if headerTables > 0 && inlineHeaderTables > 0 {
 		return nil, errors.New("mcp_servers.obstudio.http_headers uses both inline and table forms")
 	}
-	if urlAssignments == 0 || existingURL != desiredURL {
-		return nil, nil
-	}
+	// Always preserve the user's existing non-Authorization headers across an
+	// upsert. The obstudio MCP URL is always loopback and only ever moves by port
+	// on the same local server, so no URL gate is needed. Authorization is
+	// stripped unconditionally below.
 
 	preserved := make([]codexMCPHeader, 0, len(headers))
 	for _, header := range headers {

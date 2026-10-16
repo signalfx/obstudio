@@ -245,7 +245,7 @@ Create `.observe/dashboards.md` as a human-readable companion:
 
 1. `cp .observe/terraform/terraform.tfvars.example .observe/terraform/terraform.tfvars`
 2. Fill in `realm` and `api_token`
-3. Preview locally: open Splunk Observability Studio **Dashboards** tab (localhost:3000)
+3. Preview locally: open Splunk Observability Studio **Dashboards** tab (localhost:17900)
 4. Push to Splunk: `$splunk-dashboard-publish` (REST-direct, creates only gaps)
    or `cd .observe/terraform && terraform init && terraform apply`
 

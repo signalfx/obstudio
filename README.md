@@ -45,7 +45,7 @@ and [example prompts](docs/examples.md) for common tasks.
 ## Splunk Observability Studio
 
 Send OTLP data to `127.0.0.1:4317` or `http://127.0.0.1:4318`, then open
-`http://127.0.0.1:3000`. Splunk Observability Studio provides focused views for
+`http://127.0.0.1:17900`. Splunk Observability Studio provides focused views for
 services, traces, metrics, logs, semantic-convention validation, dashboard
 previews, and optional Splunk Observability Cloud export. See the
 [Splunk Observability Studio guide](observer/README.md) for runtime

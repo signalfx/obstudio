@@ -4857,7 +4857,7 @@ func TestUpsertJSONMCPServerPreservesExistingEntries(t *testing.T) {
 	if err := upsertJSONMCPServer(path, "mcpServers", map[string]any{
 		"type": "http",
 		"url":  "http://127.0.0.1:3000/mcp",
-	}, nil, nil); err != nil {
+	}, nil); err != nil {
 		t.Fatalf("upsertJSONMCPServer returned error: %v", err)
 	}
 
@@ -4948,10 +4948,24 @@ func TestConfigureMCPUsesKiroRemoteURLSchema(t *testing.T) {
 	if got, ok := server["type"]; ok {
 		t.Fatalf("Kiro remote config should omit undocumented type field, got %#v", got)
 	}
-	for _, field := range []string{"command", "args", "headers", "env", "oauth", "oauthScopes"} {
+	// command/args are not preserve fields, so the stdio→remote conversion drops
+	// them. The headers block held only Authorization, which is stripped
+	// unconditionally, leaving no headers to carry across.
+	for _, field := range []string{"command", "args", "headers"} {
 		if got, ok := server[field]; ok {
 			t.Fatalf("Kiro remote config should remove stale %s field, got %#v", field, got)
 		}
+	}
+	// env/oauth/oauthScopes are preserve fields, so they always carry across the
+	// upsert (the obstudio MCP endpoint is always the same local server).
+	if got, ok := server["env"].(map[string]any); !ok || got["OBSERVER_MODE"] != "stale" {
+		t.Fatalf("Kiro env field should be preserved across upsert, got %#v", server["env"])
+	}
+	if got, ok := server["oauth"].(map[string]any); !ok || got["clientId"] != "stale" {
+		t.Fatalf("Kiro oauth field should be preserved across upsert, got %#v", server["oauth"])
+	}
+	if got, ok := server["oauthScopes"].([]any); !ok || len(got) != 1 || got[0] != "stale.scope" {
+		t.Fatalf("Kiro oauthScopes field should be preserved across upsert, got %#v", server["oauthScopes"])
 	}
 	if got := server["disabled"]; got != true {
 		t.Fatalf("Kiro disabled policy = %#v, want true", got)
@@ -5205,6 +5219,110 @@ func TestConfigureCodexMCPRefreshPreservesSameURLHeaders(t *testing.T) {
 				t.Fatalf("Codex Authorization was not removed:\n%s", text)
 			}
 		})
+	}
+}
+
+func TestConfigureMCPPreservesJSONHeadersAcrossUpsert(t *testing.T) {
+	t.Parallel()
+
+	// The fixed-port move rewrites http://127.0.0.1:3000 → :17900. The obstudio
+	// MCP URL is always loopback, so an upsert always preserves the user's custom
+	// headers across it while unconditionally stripping Authorization.
+	const (
+		existingURL = "http://127.0.0.1:3000/mcp"
+		newURL      = "http://127.0.0.1:17900/mcp"
+	)
+
+	configPath := filepath.Join(t.TempDir(), "mcp.json")
+	target := targets["cursor"].mcpConfig
+	initial := map[string]any{
+		string(target.serversKey): map[string]any{
+			"obstudio": map[string]any{
+				"url": existingURL,
+				"headers": map[string]any{
+					"authorization":   "Bearer stale-token",
+					"X-Observer-Test": "preserved",
+				},
+			},
+		},
+	}
+	data, err := json.Marshal(initial)
+	if err != nil {
+		t.Fatalf("marshal initial MCP config: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		t.Fatalf("write initial MCP config: %v", err)
+	}
+
+	target.path = func() string { return configPath }
+	if err := configureMCP(target, "/tmp/obstudio", newURL); err != nil {
+		t.Fatalf("configureMCP returned error: %v", err)
+	}
+
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read MCP config: %v", err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal MCP config: %v", err)
+	}
+	servers, _ := config[string(target.serversKey)].(map[string]any)
+	server, _ := servers["obstudio"].(map[string]any)
+	headers, hasHeaders := server["headers"].(map[string]any)
+
+	// Authorization must always be stripped.
+	for name := range headers {
+		if strings.EqualFold(name, "Authorization") {
+			t.Fatalf("stale Authorization was preserved in %#v", headers)
+		}
+	}
+	// The custom non-auth header is always preserved across the upsert.
+	if !hasHeaders || headers["X-Observer-Test"] != "preserved" {
+		t.Fatalf("custom header dropped across upsert; headers = %#v", server["headers"])
+	}
+}
+
+func TestConfigureCodexMCPPreservesHeadersAcrossUpsert(t *testing.T) {
+	t.Parallel()
+
+	const (
+		existingURL = "http://127.0.0.1:3000/mcp"
+		newURL      = "http://127.0.0.1:17900/mcp"
+	)
+
+	content := strings.Join([]string{
+		`model = "gpt-5.4"`,
+		``,
+		`[mcp_servers.obstudio]`,
+		`enabled = true`,
+		`url = "` + existingURL + `"`,
+		`http_headers = { authorization = "Bearer stale-token", "X-Observer-Test" = 'preserved' }`,
+		``,
+	}, "\n")
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write initial Codex MCP config: %v", err)
+	}
+	target := targets["codex"].mcpConfig
+	target.path = func() string { return configPath }
+	if err := configureMCP(target, "/tmp/obstudio", newURL); err != nil {
+		t.Fatalf("configureMCP returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read Codex MCP config: %v", err)
+	}
+	text := string(data)
+	// Authorization must always be stripped.
+	if strings.Contains(strings.ToLower(text), "authorization") {
+		t.Fatalf("Codex Authorization was not removed:\n%s", text)
+	}
+	// The custom non-auth header is always preserved across the upsert.
+	if !strings.Contains(text, `"X-Observer-Test" = 'preserved'`) {
+		t.Fatalf("custom Codex header dropped across upsert:\n%s", text)
 	}
 }
 
@@ -6328,7 +6446,7 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 	run := exec.Command(installedBinary)
 	runEnv := append(os.Environ(), smokeHomeEnv(homeDir)...)
 	runEnv = append(runEnv,
-		fmt.Sprintf("PORT=%d", observerPort),
+		fmt.Sprintf("%s=%d", observerPortEnv, observerPort),
 		fmt.Sprintf("OTLP_HTTP_PORT=%d", otlpHTTPPort),
 		fmt.Sprintf("OTLP_GRPC_PORT=%d", otlpGRPCPort),
 	)

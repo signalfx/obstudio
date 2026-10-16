@@ -7,8 +7,8 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | splunk-dashboard |
-| Run ID | 20260923T184518633298Z |
-| Agent model | gpt-5.5 |
+| Run ID | 20261016T212524306386Z |
+| Agent model | gpt-6.1-sol |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
 | Workers | 1 |
@@ -18,23 +18,25 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-red/qual/dashboard | dashboards/checkout-red | 1 | 100% (8/8), avg score 100 | 252.8K | 4.9m | - | - | - |
+| with_skill | dashboards/checkout-red/qual/dashboard | dashboards/checkout-red | 1 | 0% (0/1), avg score 0 | 192.6K | 3.1m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-red/qual/dashboard | dashboards/checkout-red | with_skill | codex | cumulative | measured | 1/1 recognized | 242272 | 210304 | 0 | 10515 | 4626 | unknown | 252787 |
+| with_skill | dashboards/checkout-red/qual/dashboard | dashboards/checkout-red | with_skill | codex | cumulative | measured | 1/1 recognized | 184198 | 139776 | 0 | 8354 | 3080 | unknown | 192552 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-red/qual/dashboard | dashboards/checkout-red | with_skill | codex | cumulative | measured | 1/1 recognized | 143410 | 112896 | 0 | 4213 | 1891 | unknown | 147623 |
+| with_skill | dashboards/checkout-red/qual/dashboard | dashboards/checkout-red | with_skill | codex | unknown | absent | 0/1 recognized; 0/1 observed | unknown | unknown | unknown | unknown | unknown | unknown | unknown |
 
 ## Rubric Failures
 
-No rubric failures.
+| Mode | Service | Side | Prompt | Result | Evidence |
+|---|---|---|---|---|---|
+| with_skill | dashboards/checkout-red | with_skill | generate | rubric:rubric-run FAIL | Reading additional input from stdin... |
 
 ## Result JSON
 

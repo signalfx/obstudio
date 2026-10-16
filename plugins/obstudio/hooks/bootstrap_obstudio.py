@@ -466,6 +466,22 @@ def bootstrap_locked(
         log_path = None
         process_started = False
         if local_obstudio_requested:
+            # Port-cutover upgrade: a prior plugin-managed observer may still be
+            # running on the OLD port (saved in bootstrap-state), holding the
+            # shared OTLP ingest ports. Retire it before starting the new one on
+            # plugin_health_url, otherwise the fresh observer can never bind OTLP
+            # and the health check loops to failure.
+            prior_health_url = string_state_value(read_bootstrap_state(state_path), "healthUrl")
+            prior_health: dict[str, object] | None = None
+            prior_live_pid = ""
+            retired_prior_owned = False
+            if prior_health_url and prior_health_url != plugin_health_url:
+                prior_health = fetch_obstudio_health(prior_health_url)
+                if prior_health is not None:
+                    prior_live_pid = find_pid_listening_on_url(prior_health_url)
+                    if bootstrap_state_proves_managed_owner(state_path, prior_live_pid, prior_health):
+                        terminate_managed_process(prior_live_pid or prior_managed_pid, prior_health_url)
+                        retired_prior_owned = True
             live_health = fetch_obstudio_health(plugin_health_url)
             if live_health is not None:
                 live_pid = find_pid_listening_on_url(plugin_health_url)
@@ -477,7 +493,7 @@ def bootstrap_locked(
                 )
                 if managed_owner and not health_payload_version_matches_release(live_health, release_version):
                     terminate_managed_process(live_pid or prior_managed_pid, plugin_health_url)
-                    process, log_path = start_obstudio_background(obstudio_binary, plugin_data)
+                    process, log_path = start_obstudio_background(obstudio_binary, plugin_data, plugin_health_url)
                     try:
                         live_health = verify_local_obstudio_health(plugin_health_url)
                         ensure_process_running(process)
@@ -488,12 +504,26 @@ def bootstrap_locked(
                     live_pid = ""
                     process_started = True
             else:
+                # A healthy observer is still at the prior endpoint but was NOT
+                # retired by the retire block above (because it is not provably
+                # plugin-owned), so it is foreign. It will hold the shared OTLP
+                # ports and block the new observer; surface an actionable blocker
+                # instead of the generic "did not become healthy".
+                if prior_health is not None and not retired_prior_owned:
+                    foreign_owner = string_state_value(prior_health, "owner") or "unknown"
+                    raise RuntimeError(
+                        "a different Splunk Observability Studio instance "
+                        f"(owner={foreign_owner}, pid={prior_live_pid or 'unknown'}) is still running at the "
+                        f"previous endpoint {prior_health_url} and is holding the shared OTLP ingest ports, so "
+                        f"the plugin cannot start its managed Splunk Observability Studio service at {plugin_health_url}. "
+                        f"Stop that process (pid {prior_live_pid or 'unknown'}) and restart this session."
+                    )
                 if is_tcp_port_open(plugin_health_url):
                     raise RuntimeError(
                         f"local Splunk Observability Studio port is already occupied at {plugin_health_url} "
                         "but the health endpoint is not reporting Splunk Observability Studio; stop the existing process or clear the stale shared-observer state"
                     )
-                process, log_path = start_obstudio_background(obstudio_binary, plugin_data)
+                process, log_path = start_obstudio_background(obstudio_binary, plugin_data, plugin_health_url)
                 try:
                     live_health = verify_local_obstudio_health(plugin_health_url)
                     ensure_process_running(process)
@@ -1245,15 +1275,21 @@ def sha256_zip_member(zf: zipfile.ZipFile, member_name: str) -> str:
     return digest.hexdigest()
 
 
-def start_obstudio_background(obstudio_binary: Path, plugin_data: Path) -> tuple[subprocess.Popen[str], Path]:
+def start_obstudio_background(
+    obstudio_binary: Path,
+    plugin_data: Path,
+    health_url: str = OBSTUDIO_HEALTH_URL,
+) -> tuple[subprocess.Popen[str], Path]:
     log_dir = plugin_data / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / "obstudio.log"
     env = os.environ.copy()
-    for key in ("HOST", "PORT", "OTLP_PORT", "OTLP_HTTP_PORT", "OTLP_GRPC_PORT"):
+    for key in ("HOST", "PORT", "OBSTUDIO_PORT", "OTLP_PORT", "OTLP_HTTP_PORT", "OTLP_GRPC_PORT"):
         env.pop(key, None)
     env["HOST"] = "127.0.0.1"
-    env["PORT"] = "3000"
+    port = urllib.parse.urlparse(health_url).port
+    if port is not None:
+        env["OBSTUDIO_PORT"] = str(port)
     env["OTLP_HTTP_PORT"] = "4318"
     env["OTLP_GRPC_PORT"] = "4317"
     env["OBSTUDIO_OWNER"] = plugin_owner()

@@ -18,15 +18,14 @@ test('currentVsCodeTarget maps supported runtime pairs to VS Code targets', () =
 	assert.equal(currentVsCodeTarget('win32', 'x64'), 'win32-x64');
 });
 
-test('formatPortConflictMessage names the managed UI setting for configurable ports', () => {
+test('formatPortConflictMessage guides freeing the fixed UI port when no setting applies', () => {
 	assert.equal(
 		formatPortConflictMessage({
 			owner: 'nginx (PID 42)',
-			port: 3000,
+			port: 17900,
 			role: 'Splunk Observability Studio UI',
-			settingName: 'managedObserverPort',
 		}),
-		'Splunk Observability Studio UI port 3000 is already in use by "nginx (PID 42)". Stop the other process or change observability-studio.managedObserverPort.',
+		'Splunk Observability Studio UI port 17900 is already in use by "nginx (PID 42)". Stop the other process using the fixed Splunk Observability Studio UI endpoint, then run Splunk Observability Studio: Start or reload the window.',
 	);
 });
 
@@ -37,7 +36,19 @@ test('formatPortConflictMessage explains stale observer ownership for fixed OTLP
 			port: 4318,
 			role: 'OTLP/HTTP',
 		}),
-		'OTLP/HTTP port 4318 is already in use by "obstudio (PID 99)". Another Splunk Observability Studio instance or a stale local-service process may still be running. Close the other VS Code window or terminate the stale local-service process before restarting Splunk Observability Studio.',
+		'OTLP/HTTP port 4318 is already in use by "obstudio (PID 99)". Only one Splunk Observability Studio instance can run at a time. Terminate that process, then run Splunk Observability Studio: Start or reload the window.',
+	);
+});
+
+test('formatPortConflictMessage offers the setting override for a stale shared observer', () => {
+	assert.equal(
+		formatPortConflictMessage({
+			owner: 'obstudio-17900 (PID 94901)',
+			port: 17900,
+			role: 'Splunk Observability Studio UI',
+			settingName: 'sharedObserverUrl',
+		}),
+		'Splunk Observability Studio UI port 17900 is already in use by "obstudio-17900 (PID 94901)". Only one Splunk Observability Studio instance can run at a time. Terminate that process or change observability-studio.sharedObserverUrl, then run Splunk Observability Studio: Start or reload the window.',
 	);
 });
 

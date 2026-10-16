@@ -21,6 +21,7 @@
     "Writes variables.tf with realm, api_token marked sensitive = true, and service_name, plus a terraform.tfvars.example, and never hard-codes a real token.",
     "Writes .observe/dashboards.preview.json as valid JSON with schemaVersion 1 and a groups -> dashboards -> charts tree whose chartType values come from the time_series|single_value|list|heatmap|text|table vocabulary and whose layout matches the Terraform grid placement.",
     "Writes a .observe/dashboards.md report explaining the panel classification rationale and hands off to terraform apply or the dashboard publish skill without performing any network call.",
-    "Does not claim in the final response that the generated Terraform or .observe/dashboards.preview.json was already validated, verified, or checked (for example 'verified locally'); unlike splunk-configure, this skill has no bundled validator script and does not run terraform itself, so it directs the user to run terraform validate/plan or use $splunk-dashboard-publish next instead of asserting prior verification."
+    "Does not claim in the final response that the generated Terraform or .observe/dashboards.preview.json was already validated, verified, or checked (for example 'verified locally'); unlike splunk-configure, this skill has no bundled validator script and does not run terraform itself, so it directs the user to run terraform validate/plan or use $splunk-dashboard-publish next instead of asserting prior verification.",
+    "Any local Splunk Observability Studio Dashboards preview reference it gives uses localhost:17900 and never the retired UI port 3000."
   ]
 }
