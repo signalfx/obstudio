@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -226,6 +227,11 @@ func run(config runConfig) error {
 	repositoryCorrelationModeResolver := mcp.RepositoryCorrelationModeResolver(func(provider string) string {
 		return providerRepositoryCorrelationMode(tokenTelemetryStatePath(), provider)
 	})
+	skillsFS, skillsErr := fs.Sub(embeddedSkills, "_skills")
+	var skillCatalog *mcp.SkillCatalog
+	if skillsErr == nil {
+		skillCatalog = mcp.NewSkillCatalog(skillsFS)
+	}
 	mcp.Register(
 		mux,
 		s,
@@ -235,6 +241,7 @@ func run(config runConfig) error {
 		splunkTracesController,
 		repositoryCorrelationModeResolver,
 		freeAccountSubmitter,
+		skillCatalog,
 	)
 	webCleanup := web.Register(mux, s, v)
 
@@ -293,6 +300,7 @@ func run(config runConfig) error {
 		splunkTracesController,
 		repositoryCorrelationModeResolver,
 		freeAccountSubmitter,
+		skillCatalog,
 	)
 
 	sig := make(chan os.Signal, 1)

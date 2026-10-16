@@ -7,30 +7,30 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261015T051846028835Z |
-| Agent model | gpt-6.1-sol |
-| Judge model | gpt-6.1-sol |
+| Run ID | 20261016T061548674738Z |
+| Agent model | - |
+| Judge model | - |
 | Rubric enabled | True |
 | Workers | 1 |
-| Config | evals/codex-evals.local-http.toml |
+| Config | evals/.workspace/skill-observability-proof/evals.toml |
 
 ## Rubric Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/native-genai-demo/qual/instrument | go/native-genai-demo | 1 | 100% (8/8), avg score 100 | 4.7M | 16.5m | - | - | - |
+| with_skill | go/chi-basic/qual/instrument | go/chi-basic | 1 | 100% (8/8), avg score 100 | 3.8M | 24.6m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/native-genai-demo/qual/instrument | go/native-genai-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 4695911 | 4526976 | 0 | 46141 | 10408 | unknown | 4742052 |
+| with_skill | go/chi-basic/qual/instrument | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 3725965 | 3550848 | 0 | 29342 | 8349 | unknown | 3755307 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/native-genai-demo/qual/instrument | go/native-genai-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 909022 | 791808 | 0 | 6778 | 1426 | unknown | 915800 |
+| with_skill | go/chi-basic/qual/instrument | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 544952 | 462208 | 0 | 5788 | 1455 | unknown | 550740 |
 
 ## Rubric Failures
 

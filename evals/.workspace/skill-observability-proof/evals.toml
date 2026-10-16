@@ -1,0 +1,10 @@
+[run]
+mode = "with_skill"
+[rubric]
+enabled = true
+[runtime]
+enabled = false
+[agent]
+backend = "codex"
+timeout = 1800
+extra_args = ["--config", 'model_reasoning_effort="xhigh"', "--config", "sandbox_workspace_write.network_access=true"]

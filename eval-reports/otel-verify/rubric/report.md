@@ -7,30 +7,30 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-verify |
-| Run ID | 20261015T054221676783Z |
-| Agent model | gpt-6.1-sol |
-| Judge model | gpt-6.1-sol |
+| Run ID | 20261016T061549808263Z |
+| Agent model | - |
+| Judge model | - |
 | Rubric enabled | True |
 | Workers | 1 |
-| Config | evals/codex-evals.local-http.toml |
+| Config | evals/.workspace/skill-observability-proof/evals.toml |
 
 ## Rubric Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/native-genai-demo/qual/verify | go/native-genai-demo | 1 | 100% (7/7), avg score 100 | 2.6M | 15.4m | - | - | - |
+| with_skill | go/chi-basic/qual/verify | go/chi-basic | 1 | 100% (6/6), avg score 99 | 2.0M | 15.3m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/native-genai-demo/qual/verify | go/native-genai-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 2588971 | 2450432 | 0 | 30924 | 5346 | unknown | 2619895 |
+| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1995450 | 1897984 | 0 | 17227 | 4264 | unknown | 2012677 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/native-genai-demo/qual/verify | go/native-genai-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1040202 | 918656 | 0 | 6030 | 1993 | unknown | 1046232 |
+| with_skill | go/chi-basic/qual/verify | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 539261 | 449920 | 0 | 6052 | 2305 | unknown | 545313 |
 
 ## Rubric Failures
 

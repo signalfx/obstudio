@@ -337,3 +337,19 @@ proof.
 Kafka coverage is organized by processing pattern rather than by every
 framework combination: direct producer/consumer, batch consumer, listener
 container, and Kafka Streams.
+
+## Skill stage path checks
+
+`kind: "skill_workflow"` is an optional sanity check for ordinary workflow
+journals. Select `workflow_skill`, `required_stages`, `before` pairs,
+`forbidden_branches` (`stage=branch`), and accepted `outcomes` (default `passed`).
+The default journal pattern is `.observe/skill-runs/*.json`; exactly one matching
+invocation is required. `evidence_paths` checks the actual artifact bytes against
+journal SHA-256 digests. `executed_stages` additionally requires a successful,
+measured executable event and a matching direct recorder invocation in the
+independent agent command trace. Shell aliases/expansions are not independent
+command proof. Checkpoints remain agent-reported even when path checks pass.
+
+See `go/chi-basic/eval/sanity/stage-path-audit.json`. Run this alongside the
+existing artifact checks and semantic rubrics; a path score does not establish
+instrumentation correctness or prove a skill instruction caused a failure.

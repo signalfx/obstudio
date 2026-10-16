@@ -24,7 +24,7 @@ WRAPPER_SPEC.loader.exec_module(WRAPPER_MODULE)
 
 class JsonApprovalFlowGuidanceTest(unittest.TestCase):
     def test_requires_bound_approval_before_application_edits(self) -> None:
-        skill = SKILL.read_text(encoding="utf-8")
+        skill = read_skill_contract()
         text = skill + FLOW.read_text(encoding="utf-8")
         self.assertIn("./references/json-approval-handoff.md", skill)
         required = (
@@ -39,7 +39,7 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
             self.assertIn(value, text)
 
     def test_saved_selection_adoption_continues_same_instrumentation_run(self) -> None:
-        skill = " ".join(SKILL.read_text(encoding="utf-8").split())
+        skill = " ".join(read_skill_contract().split())
         flow = " ".join(FLOW.read_text(encoding="utf-8").split())
 
         for value in (
@@ -83,7 +83,7 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         self.assertIn(".observe/otel-instrumentation.html", text)
 
     def test_inline_genai_work_does_not_bypass_selection(self) -> None:
-        normalized = " ".join(SKILL.read_text(encoding="utf-8").split())
+        normalized = " ".join(read_skill_contract().split())
         self.assertIn(
             "Implement exactly the selected IDs plus executable dependencies added by `select`",
             normalized,
@@ -108,7 +108,7 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
 
     def test_html_reports_use_returned_loopback_links(self) -> None:
         text = " ".join(
-            (SKILL.read_text(encoding="utf-8") + FLOW.read_text(encoding="utf-8")).split()
+            (read_skill_contract() + FLOW.read_text(encoding="utf-8")).split()
         )
 
         self.assertIn(
@@ -132,6 +132,17 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         ):
             self.assertEqual(WRAPPER_MODULE.main(), 1)
         self.assertIn("OpenTelemetry report helper is missing", error.getvalue())
+
+
+
+
+def read_skill_contract():
+    import re
+    text = SKILL.read_text(encoding="utf-8")
+    return text + "\n" + "\n".join(
+        (SKILL.parent / target).read_text(encoding="utf-8")
+        for target in re.findall(r"\]\((references/stages/[a-z-]+\.md)\)", text)
+    )
 
 
 if __name__ == "__main__":

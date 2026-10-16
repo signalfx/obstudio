@@ -4,6 +4,7 @@ import ast
 import hashlib
 import json
 from pathlib import Path
+from skill_contract import read_contract
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,7 +38,7 @@ CHI_DECISION_INSTRUMENT_EVAL = (
 
 
 def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+    return read_contract(path)
 
 
 def _eval_contract(path: Path) -> str:

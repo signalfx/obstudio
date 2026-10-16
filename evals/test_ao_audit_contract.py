@@ -1,14 +1,15 @@
 """Focused checks for AO audit evidence and local gateway selection guidance."""
 
 from pathlib import Path
+from skill_contract import read_contract
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_ao_audit_requires_early_compatibility_evidence_and_gateway_candidate():
-    canonical = (REPO_ROOT / "skills/otel-audit/SKILL.md").read_text()
-    bundled = (REPO_ROOT / "plugins/obstudio/skills/otel-audit/SKILL.md").read_text()
+    canonical = read_contract(REPO_ROOT / "skills/otel-audit/SKILL.md")
+    bundled = read_contract(REPO_ROOT / "plugins/obstudio/skills/otel-audit/SKILL.md")
     assert canonical == bundled
 
     discovery = canonical.split("### Step 1 -- Repository Discovery", 1)[1].split(
@@ -43,7 +44,7 @@ def test_ao_audit_requires_early_compatibility_evidence_and_gateway_candidate():
 
 
 def test_ao_route_dependency_closure_includes_nested_retrieval_producer():
-    canonical = (REPO_ROOT / "skills/otel-audit/SKILL.md").read_text()
+    canonical = read_contract(REPO_ROOT / "skills/otel-audit/SKILL.md")
     contract = canonical.split("An AO routing finding's transitive dependency closure", 1)[1].split(
         "For a new live AO sink", 1
     )[0]
@@ -59,8 +60,8 @@ def test_ao_route_dependency_closure_includes_nested_retrieval_producer():
 def test_ao_audit_reports_destination_scoped_header_contracts():
     import json
 
-    canonical = (REPO_ROOT / "skills/otel-audit/SKILL.md").read_text()
-    bundled = (REPO_ROOT / "plugins/obstudio/skills/otel-audit/SKILL.md").read_text()
+    canonical = read_contract(REPO_ROOT / "skills/otel-audit/SKILL.md")
+    bundled = read_contract(REPO_ROOT / "plugins/obstudio/skills/otel-audit/SKILL.md")
     assert canonical == bundled
     contract = canonical.split("For AO/native routing assessments", 1)[1].split(
         "For each inspected creator", 1

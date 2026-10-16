@@ -6,6 +6,8 @@ from pathlib import Path
 from pytest_codex_evals.definitions import GradeCheckResult, GradeResult, SanityCheck, SanityEvalCase
 from pytest_codex_evals.trace import TraceSummary
 
+from .workflow import grade_workflow
+
 from .shared import contains, guard_checks, missing_values
 
 
@@ -15,12 +17,15 @@ def grade_sanity(case: SanityEvalCase, run_dir: Path, final_message: str, trace:
     for check in case.checks:
         if check.applies_to not in ("both", side):
             continue
-        results.append(run_check(check, service_dir, final_message))
+        results.append(run_check(check, service_dir, final_message, trace))
     return GradeResult(checks=results)
 
 
-def run_check(check: SanityCheck, service_dir: Path, final_message: str) -> GradeCheckResult:
+def run_check(check: SanityCheck, service_dir: Path, final_message: str, trace: TraceSummary | None = None) -> GradeCheckResult:
     kind = check.kind
+    if kind == "skill_workflow":
+        passed, evidence = grade_workflow(check, service_dir, trace)
+        return result(check, passed, evidence)
     if kind == "final_contains_all":
         missing = missing_values(final_message, check.values)
         return result(check, not missing, "Missing: " + ", ".join(missing) if missing else "All values present")

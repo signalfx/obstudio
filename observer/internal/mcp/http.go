@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -103,10 +104,22 @@ func (h *httpHandler) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	params, _ := toMap(req.Params)
+	meta, _ := toMap(params["_meta"])
+	_, hasProtocol := meta["io.modelcontextprotocol/protocolVersion"]
+	modern := hasProtocol || r.Header.Get("MCP-Protocol-Version") == modernProtocol
+	if modern {
+		if err := validateModernHeaders(r, req); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(rpcError(req.ID, -32020, err.Error()))
+			return
+		}
+	}
 	sessionID := strings.TrimSpace(r.Header.Get("Mcp-Session-Id"))
 	// Keep direct POST compatibility for existing clients that never open an SSE
 	// stream or send a session header after initialize.
-	if req.Method != "initialize" && sessionID != "" && !h.sessionExists(sessionID) {
+	if !modern && req.Method != "initialize" && sessionID != "" && !h.sessionExists(sessionID) {
 		http.NotFound(w, r)
 		return
 	}
@@ -117,13 +130,20 @@ func (h *httpHandler) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Method == "initialize" {
+	if !modern && req.Method == "initialize" {
 		sessionID = generateSessionID()
 		h.sessions.Store(sessionID, struct{}{})
 		w.Header().Set("Mcp-Session-Id", sessionID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	if modern && resp.Error != nil {
+		status := http.StatusBadRequest
+		if resp.Error.Code == -32601 {
+			status = http.StatusNotFound
+		}
+		w.WriteHeader(status)
+	}
 	json.NewEncoder(w).Encode(resp)
 }
 
@@ -197,4 +217,35 @@ func generateSessionID() string {
 		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b)
+}
+
+// Modern metadata is request-scoped; legacy sessions remain independent.
+func validateModernHeaders(r *http.Request, req jsonRPCRequest) error {
+	params, _ := toMap(req.Params)
+	meta, _ := toMap(params["_meta"])
+	expected := map[string]string{"MCP-Protocol-Version": strArg(meta, "io.modelcontextprotocol/protocolVersion"), "Mcp-Method": req.Method}
+	switch req.Method {
+	case "tools/call", "prompts/get":
+		expected["Mcp-Name"] = strArg(params, "name")
+	case "resources/read":
+		expected["Mcp-Name"] = strArg(params, "uri")
+	}
+	for key, want := range expected {
+		values := r.Header.Values(key)
+		if len(values) != 1 || values[0] == "" || want == "" {
+			return fmt.Errorf("Missing or ambiguous MCP request header: %s", key)
+		}
+		value := values[0]
+		if key == "Mcp-Name" && strings.HasPrefix(value, "=?base64?") && strings.HasSuffix(value, "?=") {
+			decoded, err := base64.StdEncoding.DecodeString(strings.TrimSuffix(strings.TrimPrefix(value, "=?base64?"), "?="))
+			if err != nil {
+				return fmt.Errorf("Invalid encoded MCP request header: %s", key)
+			}
+			value = string(decoded)
+		}
+		if value != want {
+			return fmt.Errorf("MCP request header mismatch: %s", key)
+		}
+	}
+	return nil
 }

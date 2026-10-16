@@ -7,6 +7,9 @@ from pathlib import Path
 
 
 def shared_tool_path() -> Path:
+    projected = Path(__file__).resolve().parents[1] / "references/shared/scripts/observe_report.py"
+    if projected.is_file():
+        return projected
     return (
         Path(__file__).resolve().parents[2]
         / "references"

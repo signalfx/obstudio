@@ -1,4 +1,5 @@
 from pathlib import Path
+from skill_contract import read_contract
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -7,7 +8,7 @@ REPORT_FLOW = ROOT / "skills" / "references" / "report-flow-contract.md"
 
 
 def normalized(path: Path) -> str:
-    return " ".join(path.read_text(encoding="utf-8").split())
+    return " ".join(read_contract(path).split())
 
 
 def test_audit_renderer_owns_the_canonical_reader_projection() -> None:

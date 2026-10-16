@@ -36,9 +36,19 @@
     "otel-instrument",
     "otel-verify"
   ],
+  "scripts/skill_workflow.py": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
   "signalflow-patterns.md": [
     "splunk-configure",
     "splunk-dashboard"
+  ],
+  "skill-workflow-observability.md": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
   ],
   "splunk-agent-observability.md": [
     "otel-audit",
@@ -53,5 +63,10 @@
     "splunk-dashboard",
     "splunk-dashboard-publish",
     "splunk-detector-publish"
+  ],
+  "workflows.json": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
   ]
 }

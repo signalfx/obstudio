@@ -348,6 +348,21 @@ function setObservedCanvasWidth(width: number): void {
   );
 }
 
+describe("GenAI token measurement coverage", () => {
+  afterEach(cleanup);
+  it.each([
+    [false, "unknown"],
+    [true, "0 (In: 0 | Out: 0)"],
+    [undefined, "0 (In: 0 | Out: 0)"],
+  ] as const)("renders tokenUsageObserved=%s distinctly", (observed, expected) => {
+    const spans = [makeSpan({ spanId: "workflow", attributes: { "gen_ai.operation.name": "invoke_workflow" } })];
+    const summary = { ...makeGenAISummary(spans), tokens: { input: 0, output: 0, total: 0 }, tokenUsageObserved: observed };
+    render(<TraceWaterfall spans={spans} genAI={summary} selectedSpanId={null} onSelectSpan={vi.fn()} traceDurationMs={1000} validationIndex={emptyValidationIndex} />);
+    expect(screen.getByText("Tokens:").parentElement?.textContent).toBe(`Tokens:${expected}`);
+    expect(screen.getByRole("region", { name: "GenAI trace overview" })).toBeTruthy();
+  });
+});
+
 describe("TraceWaterfall row interaction", () => {
   afterEach(cleanup);
 
