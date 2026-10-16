@@ -421,38 +421,51 @@ test('agent integration configuration rejects every Authorization header', () =>
 	}
 });
 
-test('agent integration fingerprints refresh only an unchanged extension-owned endpoint', () => {
-	const desiredMcpUrl = 'http://127.0.0.1:3000/mcp';
+test('agent integration refresh gates on ownership, independent of the target URL', () => {
+	// The fingerprint obstudio recorded when it last wrote this config at :3000.
+	const storedUrl = 'http://127.0.0.1:3000/mcp';
 	const original = {
 		fingerprintMaterial: JSON.stringify({
 			headers: { Authorization: 'Bearer prior-control-token' },
 			type: 'http',
-			url: desiredMcpUrl,
+			url: storedUrl,
 		}),
-		mcpUrl: desiredMcpUrl,
+		mcpUrl: storedUrl,
 	};
 	const fingerprint = createAgentIntegrationConfigFingerprint(original);
 
+	// Secrets never leak into the fingerprint.
 	assert.equal(JSON.stringify(fingerprint).includes('prior-control-token'), false);
-	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, original, desiredMcpUrl), true);
+
+	// Owned + on-disk unchanged: refreshes. The function no longer takes a target
+	// URL, so an owned config left at a stale :3000 (shape drift or URL-moved to a
+	// new fixed :17900 target) still qualifies for a silent rewrite.
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, original), true);
+
+	// User hand-edited the managed material: digest differs → bail (visible prompt).
 	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, {
 		...original,
 		fingerprintMaterial: original.fingerprintMaterial.replace('prior-control-token', 'user-control-token'),
-	}, desiredMcpUrl), false);
+	}), false);
 	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, {
 		...original,
 		fingerprintMaterial: original.fingerprintMaterial.replace('"type":"http"', '"disabled":true,"type":"http"'),
-	}, desiredMcpUrl), false);
+	}), false);
+
+	// On-disk url differs from the recorded fingerprint url (not an obstudio-owned
+	// state) → bail.
 	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, {
 		...original,
 		mcpUrl: 'http://127.0.0.1:4000/mcp',
-	}, desiredMcpUrl), false);
-	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, original, 'http://127.0.0.1:4000/mcp'), false);
-	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(undefined, original, desiredMcpUrl), false);
+	}), false);
+
+	// Missing current config / missing fingerprint / malformed digest → bail.
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(fingerprint, undefined), false);
+	assert.equal(shouldRefreshOwnedAgentIntegrationConfig(undefined, original), false);
 	assert.equal(shouldRefreshOwnedAgentIntegrationConfig({
 		...fingerprint,
 		configurationDigest: 'not-a-digest',
-	}, original, desiredMcpUrl), false);
+	}, original), false);
 });
 
 test('Codex TOML parsing treats array tables as distinct scope boundaries', () => {
@@ -2304,6 +2317,48 @@ test('automatic agent refresh removes stale authentication before prompting', ()
 		/await configureDetectedAgentIntegrations\([\s\S]*?observerEndpoints\?\.mcpUrl === mcpUrl,[\s\S]*?shouldRefresh/,
 	);
 	assert.doesNotMatch(refreshHandling, /controlToken|healthProof/);
+});
+
+test('agent integration prompt collapses to two honest enable/update variants', () => {
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+	const offerStart = source.indexOf('async function maybeOfferDetectedAgentIntegrations(');
+	const offerEnd = source.indexOf('\nasync function configureAgentMCP(', offerStart);
+	assert.notEqual(offerStart, -1);
+	assert.notEqual(offerEnd, -1);
+	const offerHandling = source.slice(offerStart, offerEnd);
+
+	// Owned configs migrate silently (refreshOwnedAgentIntegrationConfig), so the
+	// visible prompt only fires for 'missing' or UNOWNED-'different' specs. ENABLE
+	// covers all-missing; everything else (incl. mixed) folds into UPDATE. The
+	// install action is monolithic, so wording describes the action, not the delta.
+	assert.match(
+		offerHandling,
+		/const states = shownSpecs\.map\(\(spec\) => getAgentIntegrationConfigState\(spec, mcpUrl\)\)/,
+	);
+	assert.match(offerHandling, /const allMissing = states\.every\(\(state\) => state === 'missing'\)/);
+	assert.match(offerHandling, /const actionWord = allMissing \? 'Enable' : 'Update'/);
+
+	// Exactly two variants — the retired three-branch logic and its strings are gone.
+	assert.doesNotMatch(offerHandling, /const allDifferent/);
+	assert.doesNotMatch(offerHandling, /moved — update/);
+	assert.doesNotMatch(offerHandling, /Configure detected agent integrations/);
+
+	// ENABLE copy (all-missing). `detail` is invisible on a non-modal toast, so
+	// the informative sentence is folded into the message itself.
+	assert.match(offerHandling, /Enable the \$\{labels\[0\]\} integration for Splunk Observability Studio\? Installs the obstudio MCP server and bundled skills\./);
+	assert.match(offerHandling, /Enable detected agent integrations for Splunk Observability Studio\? Installs the obstudio MCP server and bundled skills for \$\{labelList\}\./);
+
+	// UPDATE copy (anything already present, incl. mixed) — detail folded in too.
+	assert.match(offerHandling, /Update the \$\{labels\[0\]\} integration for Splunk Observability Studio\? Updates its obstudio MCP server and bundled skills\./);
+	assert.match(offerHandling, /Update detected agent integrations for Splunk Observability Studio\? Updates the obstudio MCP server and bundled skills for \$\{labelList\}\./);
+
+	// Copy never narrates header preservation or carries a stale {mcpUrl} reconfigure line.
+	assert.doesNotMatch(offerHandling, /Reconfigure (it|them|\$\{labels)/);
+	assert.doesNotMatch(offerHandling, /header/i);
+
+	// The confirmation button label follows the computed action word.
+	assert.match(offerHandling, /showInformationMessage\([\s\S]*?actionWord,[\s\S]*?'Not Now'/);
+	assert.match(offerHandling, /if \(choice === actionWord\)/);
 });
 
 test('shared startup validates health without a credential or feature probe', () => {

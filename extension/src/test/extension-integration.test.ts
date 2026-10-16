@@ -574,7 +574,7 @@ it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t
 	const child = spawn(binaryPath, [], {
 		env: {
 			...process.env,
-			PORT: String(port),
+			OBSTUDIO_PORT: String(port),
 			OTLP_GRPC_PORT: '13580',
 			OTLP_HTTP_PORT: '13581',
 		},
@@ -645,7 +645,7 @@ it('integration: packaged binary enables validator when bundled weaver is presen
 	const child = spawn(binaryPath, [], {
 		env: {
 			...process.env,
-			PORT: String(port),
+			OBSTUDIO_PORT: String(port),
 			OTLP_GRPC_PORT: '13583',
 			OTLP_HTTP_PORT: '13584',
 		},
@@ -790,7 +790,7 @@ it('integration: installed VSIX smoke test starts the packaged observer and acce
 		child = spawn(binaryPath, [], {
 			env: {
 				...process.env,
-				PORT: String(port),
+				OBSTUDIO_PORT: String(port),
 				OTLP_GRPC_PORT: String(otlpGrpcPort),
 				OTLP_HTTP_PORT: String(otlpHttpPort),
 			},

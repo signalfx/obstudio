@@ -39,6 +39,19 @@ const (
 	observerPublicMCPURLMaxLength            = 2048
 	dockerRuntimeEvalMode                    = "docker-runtime-eval"
 	dockerRuntimeEvalAllowNonLoopbackBindEnv = "OBSTUDIO_DOCKER_RUNTIME_EVAL_ALLOW_NON_LOOPBACK"
+
+	// defaultObserverHTTPPort is the fixed default UI/REST/MCP-HTTP port. It is
+	// deliberately uncommon: above typical dev-server defaults (3000/8080), below
+	// the Linux ephemeral range floor (32768), and holds no IANA assignment, so a
+	// bare 17900 is almost always free. The port is fixed (not auto-scanned) so
+	// write-once consumers — MCP agent configs that pin an HTTP URL once — stay
+	// valid across restarts. Override with --port or OBSTUDIO_PORT.
+	defaultObserverHTTPPort = "17900"
+	// observerPortEnv is the namespaced override for the UI/REST/MCP-HTTP port.
+	// Bare PORT is intentionally NOT read: it is the var developers most often
+	// already export (Heroku/foreman/PaaS lineage), which would silently bind the
+	// wrong port. obstudio owns its port, so it namespaces it like OTLP_*/OBSTUDIO_*.
+	observerPortEnv = "OBSTUDIO_PORT"
 )
 
 var splunkEnvFilePrecedenceKeys = []string{
@@ -73,6 +86,12 @@ type runConfig struct {
 	otlpHTTPPort     string
 	envFile          string
 	publicMCPURL     string
+	// portExplicit is true when the UI port came from an explicit source
+	// (--port flag or OBSTUDIO_PORT env) rather than the fixed default. It
+	// governs the singleton behavior: an unpinned launch that collides with an
+	// already-running obstudio defers (exit 0) as an attach signal, whereas an
+	// explicitly pinned launch fails loud on any bind conflict.
+	portExplicit bool
 }
 
 func main() {
@@ -103,7 +122,9 @@ func newRootCmd(config *runConfig) *cobra.Command {
 	}
 
 	root.Flags().StringVar(&config.host, "host", "", "Bind address for Splunk Observability Studio UI, MCP HTTP endpoint, and OTLP/HTTP; also the OTLP/gRPC default")
+	root.Flags().StringVar(&config.observerHTTPPort, "port", "", "Splunk Observability Studio web UI, REST API, and MCP HTTP port (default "+defaultObserverHTTPPort+"; last resort only — bundled skills pin the default, so free the port instead of moving it)")
 	root.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Splunk Observability Studio web UI, REST API, and MCP HTTP port")
+	_ = root.Flags().MarkDeprecated("observer-http-port", "use --port instead")
 	root.Flags().StringVar(&config.envFile, "env-file", "", "Load KEY=VALUE settings from an env file before startup")
 
 	root.AddCommand(newInstallCmd())
@@ -188,6 +209,15 @@ func run(config runConfig) error {
 		otlp.WithTracesExporter(splunkTracesController),
 	)
 	if err != nil {
+		// The OTLP ports (4317/4318) are the singleton lock: they are fixed and
+		// shared across the one obstudio instance. If they are already bound and
+		// the UI port was NOT explicitly pinned, another obstudio already owns
+		// the singleton — defer to it with an attach signal (exit 0), never
+		// crash. The extension decodes exit-0 as "attach to the running one".
+		if !config.portExplicit && isAddrInUseError(err) {
+			fmt.Fprintln(os.Stderr, "obstudio already running (OTLP ports already in use); deferring to the existing instance")
+			return nil
+		}
 		log.Fatalf("failed to start OTLP receiver: %v", err)
 	}
 
@@ -241,6 +271,24 @@ func run(config runConfig) error {
 	srv := &http.Server{Addr: mainAddr, Handler: mux, ConnContext: rcv.HTTPConnContext}
 	mainListener, err := listenObserverHTTP("tcp", mainAddr)
 	if err != nil {
+		// We reached here having bound the OTLP ports, so this process owns the
+		// singleton — a UI-port conflict is therefore a FOREIGN process holding
+		// the port, not another obstudio (that case was handled at the OTLP
+		// bind above). Fail loud with actionable guidance rather than scanning
+		// for an alternate port; a moving UI port silently invalidates the
+		// write-once MCP agent configs that pin it.
+		if isAddrInUseError(err) {
+			rcv.Shutdown(ctx)
+			splunkExportController.Shutdown(ctx)
+			splunkTracesController.Shutdown(ctx)
+			validatorManager.Shutdown(ctx)
+			webCleanup()
+			log.Fatalf(
+				"port %s is already in use by another process. Free that port so obstudio can use its default — the bundled skills all expect %s. "+
+					"Only as a last resort, change obstudio's port (this breaks every bundled skill, which pin the default): set %s=<port> in %s or pass --port=<port>.",
+				port, port, observerPortEnv, defaultEnvFilePath(),
+			)
+		}
 		log.Fatalf("failed to start HTTP server: %v", err)
 	}
 
@@ -282,6 +330,7 @@ func run(config runConfig) error {
 	}()
 
 	fmt.Fprint(os.Stderr, renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr))
+	warnStaleMCPPortConfigs(os.Stderr, port)
 
 	go mcp.RunStdio(
 		s,
@@ -467,14 +516,16 @@ func parseEnvLine(line string) (string, string, bool, error) {
 
 func resolveRunConfig(config runConfig) runConfig {
 	host := valueOrEnv(config.host, "HOST", "127.0.0.1")
+	portExplicit := config.observerHTTPPort != "" || os.Getenv(observerPortEnv) != ""
 	return runConfig{
 		host:             host,
-		observerHTTPPort: valueOrEnv(config.observerHTTPPort, "PORT", "3000"),
+		observerHTTPPort: valueOrEnv(config.observerHTTPPort, observerPortEnv, defaultObserverHTTPPort),
 		otlpHTTPPort:     valueOrEnv(config.otlpHTTPPort, "OTLP_HTTP_PORT", envOr("OTLP_PORT", "4318")),
 		otlpGRPCHost:     valueOrEnv(config.otlpGRPCHost, "OTLP_GRPC_HOST", host),
 		otlpGRPCPort:     valueOrEnv(config.otlpGRPCPort, "OTLP_GRPC_PORT", "4317"),
 		envFile:          config.envFile,
 		publicMCPURL:     valueOrEnv(config.publicMCPURL, observerPublicMCPURLEnv, ""),
+		portExplicit:     portExplicit,
 	}
 }
 
@@ -784,6 +835,20 @@ func valueOrEnv(value, envKey, fallback string) string {
 		return value
 	}
 	return envOr(envKey, fallback)
+}
+
+// isAddrInUseError reports whether err (or any error it wraps) indicates a TCP
+// listener could not bind because the address is already in use. It is cross-OS:
+// errors.Is matches the syscall errno on both Unix (EADDRINUSE) and Windows
+// (WSAEADDRINUSE, which the syscall package exposes as EADDRINUSE). The
+// shared-port bind that gates the singleton decision is a stdlib net.Listen in
+// our own ConnTracker, wrapped only with %w, so the syscall errno is always
+// preserved up the chain — no string-matching fallback is needed.
+func isAddrInUseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, syscall.EADDRINUSE)
 }
 
 func validateRunConfig(config runConfig) error {

@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261016T001759182684Z |
+| Run ID | 20261019T213416883812Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -33,7 +33,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/kafka-producer-consumer/qual/instrument | java/kafka-producer-consumer | 2 | evals/java/kafka-producer-consumer/eval/qual/instrument.json | 0 | 5 | 0 |
 | java/kafka-streams/qual/incident-readiness | java/kafka-streams | 1 | evals/java/kafka-streams/eval/qual/incident-readiness.json | 0 | 6 | 0 |
 | java/kafka-streams/qual/instrument | java/kafka-streams | 2 | evals/java/kafka-streams/eval/qual/instrument.json | 0 | 6 | 0 |
-| java/springboot-basic/qual/instrument | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/instrument.json | 0 | 10 | 0 |
+| java/springboot-basic/qual/instrument | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/instrument.json | 0 | 11 | 0 |
 | java/springboot-basic/qual/logging-compatible-plan | java/springboot-basic | 1 | evals/java/springboot-basic/eval/qual/logging-compatible-plan.json | 0 | 6 | 0 |
 | node/express-basic/qual/dependency-log-compatibility | node/express-basic | 1 | evals/node/express-basic/eval/qual/dependency-log-compatibility.json | 0 | 6 | 0 |
 | node/express-basic/qual/instrument | node/express-basic | 2 | evals/node/express-basic/eval/qual/instrument.json | 0 | 10 | 0 |

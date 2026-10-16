@@ -591,13 +591,29 @@ func TestPrepareManagedLaunchRejectsNonLoopbackGRPCHost(t *testing.T) {
 }
 
 func TestResolveManagedRunConfigUsesChildEnvironmentPrecedence(t *testing.T) {
-	t.Setenv("PORT", "invalid")
-	resolved := resolveManagedRunConfig(runConfig{}, []string{"PORT=4123"})
+	t.Setenv(observerPortEnv, "invalid")
+	resolved := resolveManagedRunConfig(runConfig{}, []string{observerPortEnv + "=4123"})
 	if resolved.observerHTTPPort != "4123" {
 		t.Fatalf("resolved port = %q", resolved.observerHTTPPort)
 	}
 	if err := validateRunConfig(resolved); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestResolveManagedRunConfigIgnoresBarePortAndDefaultsToFixedPort(t *testing.T) {
+	t.Setenv(observerPortEnv, "")
+	t.Setenv("PORT", "4123")
+	resolved := resolveManagedRunConfig(runConfig{}, []string{"PORT=4124"})
+	if resolved.observerHTTPPort != defaultObserverHTTPPort {
+		t.Fatalf("resolved port = %q, want %q", resolved.observerHTTPPort, defaultObserverHTTPPort)
+	}
+}
+
+func TestCurrentManagedEnvironmentCapturesObserverPort(t *testing.T) {
+	t.Setenv(observerPortEnv, "4123")
+	if !slices.Contains(currentManagedEnvironment(), observerPortEnv+"=4123") {
+		t.Fatalf("managed environment = %v", currentManagedEnvironment())
 	}
 }
 
