@@ -26,6 +26,7 @@ from .definitions import (
 from .report import source_input_digests, write_session_results
 from .runner import new_run_id, new_run_root, run_case
 from .schema_resources import schema_validator
+from .telemetry import configure_telemetry
 
 
 RUNS_ATTR = "_codex_eval_runs"
@@ -39,6 +40,7 @@ PROGRESS_IS_WORKER = False
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     group = parser.getgroup("codex-evals")
+    group.addoption("--codex-eval-telemetry", action="store_true", default=False, help="Export parent eval-run telemetry using standard OTel settings")
     group.addoption("--codex-eval-config", default="codex-evals.toml", help="Path to codex eval TOML config")
     group.addoption(
         "--codex-eval-kind",
@@ -71,6 +73,26 @@ def pytest_configure(config: pytest.Config) -> None:
     else:
         run_id = new_run_id()
     setattr(config, RUN_ID_ATTR, run_id)
+    if config.getoption("--codex-eval-telemetry"):
+        try:
+            root = infer_repo_root(config.rootpath)
+            names = {p.parent.name for p in (root / "skills").glob("*/SKILL.md")}
+        except AssertionError:
+            names = set()
+        selected = selected_skill_dir(config)
+        if selected is not None:
+            names.add(selected.name)
+        telemetry = configure_telemetry(enabled=True, allowed_skills=names)
+        config._codex_eval_telemetry_status = telemetry.signal_status
+        restore = telemetry.activate()
+        config.add_cleanup(restore)
+        config.add_cleanup(telemetry.shutdown)
+
+
+def pytest_report_header(config: pytest.Config):
+    status = getattr(config, "_codex_eval_telemetry_status", {})
+    if status:
+        return "Parent eval telemetry: " + ", ".join(f"{signal}={value}" for signal, value in status.items())
 
 
 def pytest_configure_node(node) -> None:

@@ -180,6 +180,7 @@ type tokenUsageTask struct {
 	CorrelationStatus           string             `json:"correlationStatus"`
 	Provider                    string             `json:"provider"`
 	SkillNames                  []string           `json:"skillNames"`
+	SkillAttribution            string             `json:"skillAttribution,omitempty"`
 	ModelNames                  []string           `json:"modelNames"`
 	RequestCount                int                `json:"requestCount"`
 	ProviderEventCount          int                `json:"providerEventCount"`
@@ -191,20 +192,26 @@ type tokenUsageTask struct {
 }
 
 type tokenUsageOverviewResult struct {
-	Scope                       string                       `json:"scope"`
-	Retention                   string                       `json:"retention"`
-	MeasurementSource           string                       `json:"measurementSource"`
-	Status                      string                       `json:"status"`
-	AccountingStatus            string                       `json:"accountingStatus"`
-	RepositoryCorrelationStatus string                       `json:"repositoryCorrelationStatus"`
-	RepositoryFilter            *tokenUsageRepositoryFilter  `json:"repositoryFilter,omitempty"`
-	RepositoryCoverage          tokenUsageRepositoryCoverage `json:"repositoryCoverage"`
-	Providers                   []string                     `json:"providers"`
-	Usage                       tokenUsageValues             `json:"usage"`
-	Coverage                    tokenUsageCoverage           `json:"coverage"`
-	HighestUsageTask            *tokenUsageTask              `json:"highestUsageTask"`
-	Tasks                       []tokenUsageTask             `json:"tasks"`
-	Traces                      []tokenUsageTrace            `json:"traces"`
+	SharedRequestUsage          *tokenUsageValues               `json:"sharedRequestUsage"`
+	UnattributedRequestUsage    *tokenUsageValues               `json:"unattributedRequestUsage"`
+	RequestAttributionScope     string                          `json:"requestAttributionScope"`
+	SkillActivations            []store.ProviderSkillActivation `json:"skillActivations"`
+	SkillInjections             []store.ProviderSkillInjection  `json:"skillInjections"`
+	SkillAttribution            string                          `json:"skillAttribution"`
+	Scope                       string                          `json:"scope"`
+	Retention                   string                          `json:"retention"`
+	MeasurementSource           string                          `json:"measurementSource"`
+	Status                      string                          `json:"status"`
+	AccountingStatus            string                          `json:"accountingStatus"`
+	RepositoryCorrelationStatus string                          `json:"repositoryCorrelationStatus"`
+	RepositoryFilter            *tokenUsageRepositoryFilter     `json:"repositoryFilter,omitempty"`
+	RepositoryCoverage          tokenUsageRepositoryCoverage    `json:"repositoryCoverage"`
+	Providers                   []string                        `json:"providers"`
+	Usage                       tokenUsageValues                `json:"usage"`
+	Coverage                    tokenUsageCoverage              `json:"coverage"`
+	HighestUsageTask            *tokenUsageTask                 `json:"highestUsageTask"`
+	Tasks                       []tokenUsageTask                `json:"tasks"`
+	Traces                      []tokenUsageTrace               `json:"traces"`
 }
 
 type tokenUsageRecord struct {
@@ -253,6 +260,53 @@ func (d *Dispatcher) tokenUsageOverview(args map[string]any) toolResult {
 		RepositoryFilter:            repositoryFilter,
 		Tasks:                       []tokenUsageTask{},
 		Traces:                      []tokenUsageTrace{},
+		SkillActivations:            []store.ProviderSkillActivation{},
+		SkillInjections:             []store.ProviderSkillInjection{},
+		SkillAttribution:            "task_associated",
+		RequestAttributionScope:     "retained native request logs only; shared/unattributed subtotals overlap task totals and are not additional usage",
+	}
+	if strArg(args, "skillName") != "" {
+		result.SkillAttribution = "request_or_metric_series_only"
+	}
+	if repositoryFilter == nil && strArg(args, "traceId") == "" && strArg(args, "spanName") == "" && strArg(args, "traceIdPrefix") == "" {
+		for _, activation := range d.store.SnapshotProviderSkillActivations() {
+			if wanted := strArg(args, "skillName"); wanted != "" && !strings.EqualFold(wanted, activation.SkillName) {
+				continue
+			}
+			if wanted := strArg(args, "provider"); wanted != "" && wanted != activation.Provider {
+				continue
+			}
+			if wanted := conversationIDArg(args); wanted != "" && wanted != activation.ConversationID {
+				continue
+			}
+			if wanted := strArg(args, "taskId"); wanted != "" && wanted != activation.TaskID {
+				continue
+			}
+			if wanted := strArg(args, "serviceName"); wanted != "" && !strings.EqualFold(wanted, activation.ServiceName) {
+				continue
+			}
+			result.SkillActivations = append(result.SkillActivations, activation)
+		}
+		if conversationIDArg(args) == "" && strArg(args, "taskId") == "" {
+			for _, injection := range d.store.SnapshotProviderSkillInjections() {
+				if wanted := strArg(args, "skillName"); wanted != "" && !strings.EqualFold(wanted, injection.SkillName) {
+					continue
+				}
+				if wanted := strArg(args, "provider"); wanted != "" && wanted != injection.Provider {
+					continue
+				}
+				if wanted := strArg(args, "serviceName"); wanted != "" && !strings.EqualFold(wanted, injection.ServiceName) {
+					continue
+				}
+				result.SkillInjections = append(result.SkillInjections, injection)
+			}
+		}
+	}
+	if n := tokenUsageLimit(args); len(result.SkillActivations) > n {
+		result.SkillActivations = result.SkillActivations[len(result.SkillActivations)-n:]
+	}
+	if n := tokenUsageLimit(args); len(result.SkillInjections) > n {
+		result.SkillInjections = result.SkillInjections[len(result.SkillInjections)-n:]
 	}
 	var aggregate tokenUsageAccumulator
 	providerSet := make(map[string]struct{})
@@ -262,6 +316,29 @@ func (d *Dispatcher) tokenUsageOverview(args map[string]any) toolResult {
 		groupProviderSpansByTraceID(d.store.SnapshotTraceQuerySpans()),
 		d.store.SnapshotProviderTaskSpansByTraceID(),
 	)
+	if strArg(args, "skillName") == "" && repositoryFilter == nil {
+		for _, class := range []string{"shared", "unattributed"} {
+			requestArgs := make(map[string]any, len(args)+1)
+			for key, value := range args {
+				requestArgs[key] = value
+			}
+			requestArgs["_skillRequestClass"] = class
+			requests := buildProviderLogTasks(logs, providerSpansByTraceID, requestArgs, d.store.ProviderUsageLogUnavailableThrough())
+			if len(requests) == 0 {
+				continue
+			}
+			var subtotal tokenUsageAccumulator
+			for _, request := range requests {
+				subtotal.addTask(request.records)
+			}
+			values := subtotal.values()
+			if class == "shared" {
+				result.SharedRequestUsage = &values
+			} else {
+				result.UnattributedRequestUsage = &values
+			}
+		}
+	}
 	logTasks := buildProviderLogTasks(
 		logs,
 		providerSpansByTraceID,

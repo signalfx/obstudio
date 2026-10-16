@@ -38,7 +38,7 @@ func buildProviderMetricTasks(
 	args map[string]any,
 	unavailableThrough time.Time,
 ) []providerLogTaskBuild {
-	if strArg(args, "spanName") != "" || strArg(args, "skillName") != "" {
+	if strArg(args, "spanName") != "" {
 		return nil
 	}
 	providerFilter := strings.ToLower(strings.TrimSpace(strArg(args, "provider")))
@@ -59,6 +59,13 @@ func buildProviderMetricTasks(
 	for _, point := range metrics {
 		if store.ClassifyProviderUsageMetric(point) != store.ProviderUsageMetricClaude {
 			continue
+		}
+		if skillName := strArg(args, "skillName"); skillName != "" {
+			skills := make(map[string]struct{})
+			addSkillNames(skills, point.Attributes)
+			if len(skills) != 1 || !containsFold(sortedSet(skills), skillName) {
+				continue
+			}
 		}
 		if serviceName != "" && !strings.EqualFold(point.Resource.ServiceName, serviceName) {
 			continue
@@ -90,7 +97,13 @@ func buildProviderMetricTasks(
 		if len(points) == 0 {
 			continue
 		}
-		built = append(built, buildClaudeMetricTask(points, unavailableThrough))
+		task := buildClaudeMetricTask(points, unavailableThrough)
+		if skillName := strArg(args, "skillName"); skillName != "" {
+			task.task.SkillNames = []string{skillName}
+			task.task.SkillAttribution = "metric_series"
+			task.task.Normalization += "; skill-filtered metric series, not complete skill execution accounting"
+		}
+		built = append(built, task)
 	}
 	return sortProviderTaskBuilds(built)
 }

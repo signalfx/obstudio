@@ -648,7 +648,7 @@ func buildToolDefs(withSplunk bool, freeAccountEnabled ...bool) []toolDef {
 					"conversationId": {Type: "string", Description: "Optional exact Codex conversation/thread ID or Claude session ID. For a codex://threads/... URL, use its trailing ID."},
 					"threadId":       {Type: "string", Description: "Backward-compatible alias for conversationId when an agent maps a codex://threads/... URL to threadId."},
 					"provider":       {Type: "string", Enum: []string{"codex", "claude"}, Description: "Optional provider-native telemetry filter."},
-					"skillName":      {Type: "string", Description: "Optional exact skill.name filter when the provider emits a skill marker, such as otel-audit."},
+					"skillName":      {Type: "string", Description: "Exact skill.name filter on native request attributes or token metric series. Task-wide skill markers alone do not attribute tokens. skillActivations and skillInjections report loading evidence separately from execution success."},
 					"repositoryName": {Type: "string", Description: "Optional case-insensitive repository name filter. Use this for a bare name such as entity-model-service or to include linked worktrees."},
 					"repositoryPath": {Type: "string", Description: "Optional absolute repository or workspace path filter. Canonical repository paths and provider worktree paths are both matched when retained."},
 				},

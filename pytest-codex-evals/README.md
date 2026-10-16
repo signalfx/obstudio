@@ -18,6 +18,29 @@ rubric grading, optional Docker runtime checks, and aggregate reports.
   Splunk Observability Studio-compatible API and Docker Compose.
 - Separate raw JSON execution output and kind-specific Markdown/benchmark reports.
 
+## Optional parent-run telemetry
+
+Run the normal eval command with `--codex-eval-telemetry` to export administrative
+run spans, outcome and duration metrics, observed token breakdowns, and one
+content-free completion log per side. For local Studio, load the example profile:
+
+```bash
+uv run --locked --env-file telemetry.env.example pytest --codex-eval-telemetry ...
+```
+
+Set the standard OTel endpoint variables to match your receiver, including any
+non-default port. `OTEL_SERVICE_NAME` and `OTEL_RESOURCE_ATTRIBUTES` override the
+default `obstudio-skill-evals` service and `local` environment. Explicit disabled
+signals remain disabled; other exporters remain operator-owned. New log export
+requires a loopback HTTP/protobuf endpoint and no generic OTLP headers. Move
+cloud credentials to trace/metric-specific headers before enabling local logs.
+
+Telemetry is off by default and never changes child-agent or judge settings.
+Existing progress output and JSON reports remain unchanged. Metrics separate
+baseline, agent and judge phases; missing tokens are not measured zeroes.
+These measurements describe eval runs, not the completion of an interactive
+skill or every nested skill. No prompt, transcript or tool content is exported.
+
 ## Install
 
 Install from this repository while the plugin is developed:

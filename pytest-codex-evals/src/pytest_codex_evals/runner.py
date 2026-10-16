@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 import time
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from .eval_files import (
 from .graders import grade_side
 from .graders.rubric import run_rubric_grade
 from .trace import TraceUsage, UsageProvider
+from .telemetry import current_run, instrument_run
 
 
 def new_run_id() -> str:
@@ -104,6 +106,7 @@ def run_case(
         shutil.rmtree(exec_case_root, ignore_errors=True)
 
 
+@instrument_run
 def run_side(
     *,
     repo_root: Path,
@@ -126,16 +129,22 @@ def run_side(
     prepare_side_workspace(repo_root, case, side, exec_dir, skill_dir)
 
     agent_start = time.monotonic()
-    agent_result = backend.run_agent(
-        prompt=prompt,
-        exec_dir=exec_dir,
-        model=model,
-        timeout=agent_timeout,
-    )
+    telemetry_run = current_run()
+    with telemetry_run.agent() if telemetry_run else nullcontext():
+        agent_result = backend.run_agent(
+            prompt=prompt,
+            exec_dir=exec_dir,
+            model=model,
+            timeout=agent_timeout,
+        )
+        if telemetry_run:
+            telemetry_run.execution = "success" if agent_result.returncode == 0 else "error"
     agent_duration_seconds = time.monotonic() - agent_start
 
     trace = backend.parse_trace(agent_result.trace_path)
     agent_usage = token_usage_from_trace_usage(trace.usage)
+    if telemetry_run:
+        telemetry_run.usage(agent_usage, "agent")
     agent_tokens = flat_token_total(agent_usage)
     final_message = agent_result.final_message_path.read_text(encoding="utf-8", errors="replace")
     grade = grade_side(
@@ -210,6 +219,10 @@ def run_side(
         rubric_usage=rubric_usage,
         errors=errors,
     )
+    if telemetry_run:
+        telemetry_run.usage(rubric_usage, "judge")
+        if rubric_duration_seconds:
+            telemetry_run.phase_duration("judge", rubric_duration_seconds, "error" if errors else "success")
     (artifact_dir / "summary.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")
     return result
 
