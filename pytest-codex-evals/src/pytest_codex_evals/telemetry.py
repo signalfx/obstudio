@@ -13,7 +13,6 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 from opentelemetry import metrics, trace
-from opentelemetry._logs import get_logger_provider
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -106,9 +105,6 @@ def _owned_or_existing(signal, supplied, resource, owners):
             return None
         if supplied is not None:
             return supplied
-        existing = get_logger_provider()
-        if type(existing).__name__ != "ProxyLoggerProvider":
-            return existing
         provider = LoggerProvider(resource=resource, shutdown_on_exit=False)
         provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=endpoint), schedule_delay_millis=int(os.environ.get("OTEL_BLRP_SCHEDULE_DELAY", "100"))))
     elif signal == "traces":

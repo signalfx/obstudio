@@ -9,8 +9,8 @@
 			"name": "Skill evals with local telemetry",
 			"type": "node-terminal",
 			"request": "launch",
-			"cwd": "${workspaceFolder}/pytest-codex-evals",
-			"command": "uv run --locked pytest --codex-eval-telemetry",
+			"cwd": "${workspaceFolder}/evals",
+			"command": "uv run --locked pytest \"${input:skillEvalPath}\" --skill \"${input:skillSource}\" --codex-eval-config codex-evals.toml --codex-eval-kind rubric --codex-eval-telemetry",
 			"env": {
 				"OTEL_SERVICE_NAME": "obstudio-skill-evals",
 				"OTEL_RESOURCE_ATTRIBUTES": "deployment.environment.name=local",
@@ -57,6 +57,20 @@
 			"skipFiles": [
 				"<node_internals>/**"
 			]
+		}
+	],
+	"inputs": [
+		{
+			"id": "skillEvalPath",
+			"type": "promptString",
+			"description": "Eval file or directory relative to evals/",
+			"default": "dashboards/checkout-configure/eval/qual/configure.json"
+		},
+		{
+			"id": "skillSource",
+			"type": "promptString",
+			"description": "Skill directory relative to evals/ or an absolute path",
+			"default": "../skills/splunk-configure"
 		}
 	],
 	"compounds": [

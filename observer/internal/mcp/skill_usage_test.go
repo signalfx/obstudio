@@ -86,6 +86,30 @@ func TestSkillTokenFilterExcludesConflictingRequestMarkers(t *testing.T) {
 	}
 }
 
+func TestSkillRequestSequenceIsScopedToConversation(t *testing.T) {
+	for _, traceDerived := range []bool{false, true} {
+		t.Run(map[bool]string{false: "native", true: "trace-derived"}[traceDerived], func(t *testing.T) {
+			s := store.New()
+			now := time.Now()
+			for _, skill := range []string{"alpha", "beta"} {
+				attrs := map[string]any{"event.name": "codex.sse_event", "event.kind": "response.completed", "event.sequence": int64(1), "skill.name": skill, "input_token_count": int64(5), "output_token_count": int64(2), "total_token_count": int64(7)}
+				if traceDerived {
+					s.AddSpansForConnection("host", []store.Span{{TraceID: skill, SpanID: "root", Name: "codex.turn", StartTime: now, EndTime: now.Add(time.Second), Attributes: map[string]any{"conversation.id": skill, "turn.id": skill + "-turn"}, Resource: store.Resource{ServiceName: "codex"}}})
+				} else {
+					attrs["conversation.id"] = skill
+				}
+				s.AddLogsForConnection("host", []store.LogRecord{{Timestamp: now, TraceID: skill, Attributes: attrs, Resource: store.Resource{ServiceName: "codex"}}})
+			}
+			for _, skill := range []string{"alpha", "beta"} {
+				got := callTokenUsageOverview(t, NewDispatcher(s), map[string]any{"skillName": skill, "conversationId": skill})
+				if toMapAny(got["usage"])["inputTokens"] != float64(5) {
+					t.Fatalf("independent sequence collided: %+v", got)
+				}
+			}
+		})
+	}
+}
+
 func TestSkillActivationRemainsVisibleWithoutUsage(t *testing.T) {
 	s := store.New()
 	s.AddLogsForConnection("host", []store.LogRecord{{Timestamp: time.Now(), Body: "claude_code.skill_activated", Attributes: map[string]any{"skill.name": "alpha", "invocation_trigger": "nested-skill"}}})

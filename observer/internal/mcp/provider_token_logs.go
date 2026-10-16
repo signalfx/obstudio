@@ -138,6 +138,17 @@ type providerTraceIndex struct {
 	evaluationIdentities map[string]struct{}
 }
 
+func skillRequestIdentity(event providerLogTokenEvent, index providerTraceIndex) string {
+	event = index.correlate(event)
+	event = enrichProviderTokenEvent(event, index.metadataForEvent(event))
+	taskID := event.taskID
+	if event.fallbackTask && event.conversationID == "" {
+		taskID = event.traceID
+	}
+	key, _ := json.Marshal([]string{event.provider, event.conversationID, taskID, event.dedupeKey})
+	return string(key)
+}
+
 func buildProviderLogTasks(
 	logs []store.LogRecord,
 	spansByTraceID map[string][]store.Span,
@@ -173,7 +184,7 @@ func buildProviderLogTasks(
 			names := make(map[string]struct{})
 			addSkillNames(names, record.Attributes)
 			encoded, _ := json.Marshal(sortedSet(names))
-			key := event.provider + "\x00" + event.dedupeKey
+			key := skillRequestIdentity(event, traceIndex)
 			if previous, exists := seenSkills[key]; exists && previous != string(encoded) {
 				ambiguousSkills[key] = true
 			}
@@ -189,14 +200,14 @@ func buildProviderLogTasks(
 		if skillName != "" {
 			requestSkills := make(map[string]struct{})
 			addSkillNames(requestSkills, logRecord.Attributes)
-			if ambiguousSkills[event.provider+"\x00"+event.dedupeKey] || len(requestSkills) != 1 || !containsFold(sortedSet(requestSkills), skillName) {
+			if ambiguousSkills[skillRequestIdentity(event, traceIndex)] || len(requestSkills) != 1 || !containsFold(sortedSet(requestSkills), skillName) {
 				continue
 			}
 		}
 		if requestClass != "" {
 			requestSkills := make(map[string]struct{})
 			addSkillNames(requestSkills, logRecord.Attributes)
-			ambiguous := ambiguousSkills[event.provider+"\x00"+event.dedupeKey]
+			ambiguous := ambiguousSkills[skillRequestIdentity(event, traceIndex)]
 			if (requestClass == "unattributed" && (len(requestSkills) != 0 || ambiguous)) || (requestClass == "shared" && len(requestSkills) < 2 && !ambiguous) {
 				continue
 			}

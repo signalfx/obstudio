@@ -202,6 +202,9 @@ def test_late_failures_preserve_exit_and_close_root(tmp_path, monkeypatch, signa
 
 def test_parent_profile_exports_all_signals_on_nondefault_port_and_drains(tmp_path, monkeypatch):
     received = []
+    remote_records = InMemoryLogRecordExporter()
+    remote_provider = LoggerProvider(shutdown_on_exit=False)
+    remote_provider.add_log_record_processor(SimpleLogRecordProcessor(remote_records))
     class Receiver(BaseHTTPRequestHandler):
         def do_POST(self):
             received.append((self.path, self.rfile.read(int(self.headers["Content-Length"]))))
@@ -215,6 +218,7 @@ def test_parent_profile_exports_all_signals_on_nondefault_port_and_drains(tmp_pa
     thread.start()
     base = f"http://127.0.0.1:{server.server_port}"
     with monkeypatch.context() as local:
+        local.setattr("opentelemetry._logs._internal._LOGGER_PROVIDER", remote_provider)
         local.setenv("OTEL_SDK_DISABLED", "false")
         local.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", base)
         local.setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
@@ -256,6 +260,8 @@ def test_parent_profile_exports_all_signals_on_nondefault_port_and_drains(tmp_pa
             obj = ExportMetricsServiceRequest.FromString(wire)
             resources.extend(r.resource for r in obj.resource_metrics)
     assert len(spans) == 2 and len(logs) == 1
+    assert not remote_records.get_finished_logs()
+    remote_provider.shutdown()
     root = next(s for s in spans if s.name == "skill.eval.run")
     assert logs[0].trace_id == root.trace_id and logs[0].span_id == root.span_id
     for resource in resources:
