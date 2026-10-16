@@ -1,0 +1,1173 @@
+{
+  "protocol_sha256": "9ce785ab84a160d7c54b1b8f6f0d554c67f9aea528f2e33dbd3d6e959cfd2abb",
+  "cli": "codex 0.162.0-alpha.17.2",
+  "observed_model": "gpt-6.1-sol",
+  "reasoning_effort": "xhigh",
+  "method": "Manual classification of final reports against predeclared source-backed expectations, not a self-reported skill pass; arithmetic and source/report hashes checked by script. One paired run per app; closed-set precision/recall only. Extra findings listed, excluded from scores. No statistical or causal accuracy improvement claim.",
+  "results": [
+    {
+      "application": "go-chi-basic",
+      "version": "original",
+      "report_sha256": "403d9d99d2e9c69ef7644506c77af10e52906baf8770f96c1e1cdcd2532024a2",
+      "run": {
+        "started_utc": "2026-10-16T17:48:34.585110+00:00",
+        "seconds": 431.186,
+        "exit_code": 0
+      },
+      "route_inventory": [
+        {
+          "method": "GET",
+          "path": "/health"
+        },
+        {
+          "method": "GET",
+          "path": "/tasks"
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/{id}"
+        },
+        {
+          "method": "POST",
+          "path": "/tasks"
+        },
+        {
+          "method": "PATCH",
+          "path": "/tasks/{id}"
+        },
+        {
+          "method": "DELETE",
+          "path": "/tasks/{id}"
+        }
+      ],
+      "units": [
+        {
+          "id": "server-tracing",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-002"
+          ]
+        },
+        {
+          "id": "trace-export",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-001"
+          ]
+        },
+        {
+          "id": "request-metrics",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-002"
+          ]
+        },
+        {
+          "id": "genai",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        },
+        {
+          "id": "database",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        }
+      ],
+      "scores": {
+        "tp": 3,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "accuracy": 1.0
+      },
+      "reported_genai_ownership": false,
+      "coverage_evidence": {
+        "meta": {
+          "audit_id": "go-chi-basic-20261016",
+          "service_name": "go-chi-basic",
+          "commit": "uncommitted (repository has no HEAD commit)",
+          "language": "go",
+          "framework": "chi v5 / net/http",
+          "date": "2026-10-16",
+          "status": "Partial",
+          "genai_ownership_detected": false
+        },
+        "source_and_provider_facts": [
+          {
+            "check": "Manifest",
+            "finding": "Go module github.com/signalfx/obstudio/demo/go-chi-basic; configured minimum Go 1.23; chi/v5 v5.2.4 is the only dependency. No OTel packages or go.sum.",
+            "source": "go.mod:1-5"
+          },
+          {
+            "check": "Entry point",
+            "finding": "Single native HTTP API process; main builds chi and calls net/http ListenAndServe on :8000. No worker, queue, datastore, outbound client or secondary runtime.",
+            "source": "main.go:27-111"
+          },
+          {
+            "check": "GenAI ownership",
+            "finding": "No",
+            "source": "go.mod:1-5; main.go:1-117; .observe/evidence/source-scan.json"
+          },
+          {
+            "check": "Trace provider topology",
+            "finding": "no provider: no SDK/import, TracerProvider construction, global registration, span creation, external bootstrap, resource, exporter or shutdown reachable from main.",
+            "source": "main.go:1-117; go.mod:1-5"
+          },
+          {
+            "check": "Metric provider topology",
+            "finding": "no provider: no MeterProvider, reader/exporter, custom instrument, lazy helper or runtime.Start reachable from main.",
+            "source": "main.go:1-117; go.mod:1-5"
+          },
+          {
+            "check": "Log provider topology",
+            "finding": "no provider; logs classification not configured. No application logging API, call, formatter, sink, OTel bridge or LoggerProvider exists. net/http can use its internal default stderr logger, which is not a source-configured application logging integration. trace.jsonl and stderr.log are not referenced by application code and are not emission proof. No supported application logger was detected, so no default local-log bridge finding is created.",
+            "source": "main.go:3-10,27-117; go.mod:5; .observe/evidence/source-scan.json"
+          },
+          {
+            "check": "Dependency instrumentation selection",
+            "finding": "Missing otelhttp is actionable for detected net/http and chi. The map-listed official otelchi module returns 404 from the Go module proxy and is absent from the official contrib inventory at revision 80c9316336ebb4f4c67d8e1011a3add889213fb7. Select official otelhttp plus supported route tags; a community wrapper is unnecessary. No SQL, Redis, gRPC, Kafka or cloud-SDK instrumentation is applicable to application dependencies.",
+            "source": ".observe/evidence/package-metadata.json; https://github.com/open-telemetry/opentelemetry-go-contrib/blob/80c9316336ebb4f4c67d8e1011a3add889213fb7/instrumentation/README.md; go.mod:5"
+          }
+        ]
+      },
+      "finding_inventory": [
+        {
+          "id": "OTEL-001",
+          "title": "Make service telemetry identifiable and exportable",
+          "gap": "The only dependency is chi. main constructs the router and calls ListenAndServe without an SDK, resource, propagator, exporter, configured launch profile or provider teardown. No provider exists for traces, metrics or logs; no external bootstrap is evidenced."
+        },
+        {
+          "id": "OTEL-002",
+          "title": "Expose route latency, traffic and response outcomes",
+          "gap": "All six routes use uninstrumented chi/net/http. otelhttp is missing, and no middleware sets bounded route names or emits HTTP spans/metrics. The skill map names otelchi, but that claimed official module has no release and is absent from the inspected official instrumentation inventory."
+        },
+        {
+          "id": "OTEL-003",
+          "title": "Identify malformed requests and failed JSON writes",
+          "gap": "Decode failures at both mutation routes return 400 without recording the error. writeJSON discards Encode errors and receives no request context. Status-only HTTP telemetry cannot explain the JSON failure or reliably identify a write that fails after the status was committed."
+        },
+        {
+          "id": "OTEL-004",
+          "title": "Show Go memory and goroutine pressure",
+          "gap": "The service stores tasks in a growing process-local slice and serializes access with a mutex, but no runtime metrics or MeterProvider are present. Route latency alone will not show memory or goroutine pressure."
+        }
+      ],
+      "findings_outside_closed_set": [
+        "OTEL-003",
+        "OTEL-004"
+      ]
+    },
+    {
+      "application": "go-chi-basic",
+      "version": "candidate",
+      "report_sha256": "9e385eec32efe2a73011832d0ac83a683d9ab6ef46af8ad1ea12ba10306cd2f5",
+      "run": {
+        "started_utc": "2026-10-16T17:48:34.585438+00:00",
+        "seconds": 563.734,
+        "exit_code": 0
+      },
+      "route_inventory": [
+        {
+          "method": "GET",
+          "path": "/health"
+        },
+        {
+          "method": "GET",
+          "path": "/tasks"
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/{id}"
+        },
+        {
+          "method": "POST",
+          "path": "/tasks"
+        },
+        {
+          "method": "PATCH",
+          "path": "/tasks/{id}"
+        },
+        {
+          "method": "DELETE",
+          "path": "/tasks/{id}"
+        }
+      ],
+      "units": [
+        {
+          "id": "server-tracing",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-002"
+          ]
+        },
+        {
+          "id": "trace-export",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-001"
+          ]
+        },
+        {
+          "id": "request-metrics",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-002"
+          ]
+        },
+        {
+          "id": "genai",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        },
+        {
+          "id": "database",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        }
+      ],
+      "scores": {
+        "tp": 3,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "accuracy": 1.0
+      },
+      "reported_genai_ownership": false,
+      "coverage_evidence": {
+        "meta": {
+          "audit_id": "go-chi-basic-20261016",
+          "service_name": "go-chi-basic",
+          "commit": "unavailable: no valid Git HEAD",
+          "language": "go",
+          "framework": "chi v5.2.4 / net/http",
+          "date": "2026-10-16",
+          "status": "Partial",
+          "genai_ownership_detected": false
+        },
+        "source_and_provider_facts": [
+          {
+            "check": "Manifest",
+            "finding": "Go 1.23 module github.com/signalfx/obstudio/demo/go-chi-basic; only external dependency is github.com/go-chi/chi/v5 v5.2.4. No OTel modules.",
+            "source": "go.mod:1-5"
+          },
+          {
+            "check": "Entry point",
+            "finding": "main constructs Chi and calls http.ListenAndServe(\":8000\", r); all application code is in this one file.",
+            "source": "main.go:27-110"
+          },
+          {
+            "check": "GenAI ownership",
+            "finding": "No",
+            "source": "main.go:1-117; go.mod:1-5; .observe/evidence/source-scan.json"
+          },
+          {
+            "check": "Trace provider topology",
+            "finding": "no provider: main has no SDK initialization, tracer, span source, exporter, propagator registration or shutdown; no external bootstrap is evidenced.",
+            "source": "main.go:3-10; main.go:27-110; go.mod"
+          },
+          {
+            "check": "Metric provider topology",
+            "finding": "no provider: no meter, metric instruments, reader/exporter or runtime instrumentation reachable from main. Current metric inventory is empty.",
+            "source": "main.go; go.mod"
+          },
+          {
+            "check": "Log provider topology",
+            "finding": "no provider; logs classified not configured. No log/slog, third-party logging stack, application log calls, bridge, formatter, stdout/file sink or OTLP pipeline is present. New logging is a recommended adoption item, not a missing bridge on an existing stack.",
+            "source": "main.go:3-10; main.go:27-117; go.mod"
+          },
+          {
+            "check": "Dependency instrumentation map",
+            "finding": "net/http has official otelhttp span/metric instrumentation. The map-listed official otelchi import is absent from the inspected upstream tree (404); choose official otelhttp plus Chi route-context glue, without double spans. No database/client/RPC/broker dependencies exist.",
+            "source": "go.mod:5; main.go:5-9; .observe/evidence/library-metadata.json; https://github.com/open-telemetry/opentelemetry-go-contrib/blob/main/instrumentation/README.md"
+          }
+        ]
+      },
+      "finding_inventory": [
+        {
+          "id": "OTEL-001",
+          "title": "Make telemetry export reliable",
+          "gap": "main starts Chi directly without tracer or meter providers, OTLP exporters, service resources, context propagation, or flush/shutdown handling. There is no checked-in telemetry launch configuration."
+        },
+        {
+          "id": "OTEL-002",
+          "title": "See request latency and failures by route",
+          "gap": "All six Chi routes are served without otelhttp or other HTTP instrumentation; neither request spans nor route-level latency, request counts, status distributions or body-size metrics exist."
+        },
+        {
+          "id": "OTEL-003",
+          "title": "See Go memory and goroutine pressure",
+          "gap": "The service uses an in-process task slice and shared mutex but exports no Go runtime metrics. Growth or resource pressure has no service-associated chart."
+        },
+        {
+          "id": "OTEL-004",
+          "title": "Connect error diagnostics to request traces",
+          "gap": "The application has no logging API or log calls. Invalid-body and not-found branches return only JSON, and listen/encoder errors are discarded. There is no local OTLP log provider, exporter, bridge or trace correlation."
+        }
+      ],
+      "findings_outside_closed_set": [
+        "OTEL-003",
+        "OTEL-004"
+      ]
+    },
+    {
+      "application": "go-chi-partial",
+      "version": "original",
+      "report_sha256": "8e35609f4713b20cb7f73279976ec2d2a63206d19077c36d9bfaeb199593f81c",
+      "run": {
+        "started_utc": "2026-10-16T17:55:45.788577+00:00",
+        "seconds": 659.627,
+        "exit_code": 0
+      },
+      "route_inventory": [
+        {
+          "method": "GET",
+          "path": "/health"
+        },
+        {
+          "method": "GET",
+          "path": "/tasks"
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/{id}"
+        },
+        {
+          "method": "POST",
+          "path": "/tasks"
+        },
+        {
+          "method": "PATCH",
+          "path": "/tasks/{id}"
+        },
+        {
+          "method": "POST",
+          "path": "/tasks/{id}/reserve"
+        },
+        {
+          "method": "DELETE",
+          "path": "/tasks/{id}"
+        }
+      ],
+      "units": [
+        {
+          "id": "server-tracing",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        },
+        {
+          "id": "trace-export",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        },
+        {
+          "id": "request-metrics",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-005"
+          ]
+        },
+        {
+          "id": "route-template",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-004"
+          ]
+        },
+        {
+          "id": "span-cardinality",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-006"
+          ]
+        },
+        {
+          "id": "export-endpoint",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-001"
+          ]
+        },
+        {
+          "id": "shutdown",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-008"
+          ]
+        },
+        {
+          "id": "genai",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        }
+      ],
+      "scores": {
+        "tp": 5,
+        "fp": 0,
+        "tn": 3,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "accuracy": 1.0
+      },
+      "reported_genai_ownership": false,
+      "coverage_evidence": {
+        "meta": {
+          "audit_id": "go-chi-partial-20261016",
+          "service_name": "go-chi-partial",
+          "commit": "unavailable: supplied checkout has no HEAD",
+          "language": "go",
+          "framework": "chi",
+          "date": "2026-10-16",
+          "status": "Partial",
+          "genai_ownership_detected": false
+        },
+        "source_and_provider_facts": [
+          {
+            "check": "Manifest",
+            "finding": "Go module with chi and explicit OTel trace/http dependencies; no AI dependencies. Minimum Go 1.25.0; installed pins retained.",
+            "source": "go.mod:1-10; go.sum"
+          },
+          {
+            "check": "Entry point",
+            "finding": "main.main invokes initTracing before routing and serving on :8000. Exactly one service process.",
+            "source": "main.go:36-151"
+          },
+          {
+            "check": "GenAI ownership",
+            "finding": "No",
+            "source": "go.mod; main.go; .observe/evidence/repository-scan.json"
+          },
+          {
+            "check": "Trace provider topology",
+            "finding": "source-active: main -> initTracing -> sdktrace.NewTracerProvider(WithBatcher(exp), WithResource(res)) -> global SetTracerProvider -> otelhttp and task lookup. Exactly one trace provider/HTTP trace exporter; no external bootstrap found.",
+            "source": "main.go:38,55-57,150,154-169"
+          },
+          {
+            "check": "Metric provider topology",
+            "finding": "no provider: global metric API only; otelhttp instrument constructors are reachable but recording/export is inactive. sdk/metric checksum lines do not construct a provider.",
+            "source": "go.mod:23; go.sum:42-43; main.go:150-169; .observe/evidence/otelhttp-config.go:55-69"
+          },
+          {
+            "check": "Log provider topology",
+            "finding": "no provider; classification not configured. Two app call sites use standard log stderr; no bridge, appender, handler, exporter, trace-ID formatter, span event or explicit opt-out. No direct official standard-log bridge found; propose the supported slog adapter plus one otelslog handler.",
+            "source": "main.go:7,149,159-160; .observe/evidence/contrib-bridges.json; .observe/evidence/std-slog-doc.html"
+          },
+          {
+            "check": "Dependency coverage",
+            "finding": "chi: missing route enrichment (otelchi unavailable as listed); net/http: otelhttp installed and source-active for traces, metrics inactive. All task operations use in-process slice/mutex; no service DB, Redis, gRPC, outbound HTTP, Kafka, AWS or background worker calls. Indirect grpc dependencies belong to OTLP transport dependencies, not an owned gRPC service.",
+            "source": "go.mod; main.go:27-33,40-147,150-169"
+          }
+        ]
+      },
+      "finding_inventory": [
+        {
+          "id": "OTEL-001",
+          "title": "Send telemetry to the configured receiver",
+          "gap": "initTracing forces collector.example.com:4318 and insecure OTLP/HTTP, overriding standard endpoint choices. No launch profile supplies resolved per-signal settings."
+        },
+        {
+          "id": "OTEL-002",
+          "title": "Give every signal a consistent service identity",
+          "gap": "resource.New(ctx) is called with no detectors or attributes and supplied explicitly to the tracer provider; it creates an empty resource, not resource.Default(). OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES are not read by that path."
+        },
+        {
+          "id": "OTEL-003",
+          "title": "Join requests to upstream traces",
+          "gap": "No otel.SetTextMapPropagator or per-handler propagator is configured. otelhttp uses the default global propagator, so incoming W3C parent context is not extracted by this process."
+        },
+        {
+          "id": "OTEL-004",
+          "title": "Distinguish all seven HTTP routes",
+          "gap": "Every route is wrapped with the same chi-partial SERVER span name and no source-owned chi route bridge. otelchi is absent; the skill-listed official contrib otelchi path is unavailable in current registry metadata. Existing otelhttp already owns server spans and must remain the single producer."
+        },
+        {
+          "id": "OTEL-005",
+          "title": "Enable route rate, error and latency charts",
+          "gap": "otelhttp registers three histogram instruments but no SDK MeterProvider, reader or metric exporter is installed. The global metric API has no recording provider; metric dependencies/checksums alone do not emit data."
+        },
+        {
+          "id": "OTEL-006",
+          "title": "Use one stable task-lookup span name",
+          "gap": "GET /tasks/{id} calls otel.Tracer inside the handler and creates GetTask-<id>. This fragments span-name aggregation by unbounded task IDs."
+        },
+        {
+          "id": "OTEL-007",
+          "title": "Explain validation and task-operation failures",
+          "gap": "Handlers return invalid JSON, not-found and two reservation-conflict responses without bounded diagnostic attributes; decoded errors are discarded and writeJSON ignores Encode failures. The custom lookup span never distinguishes found from not_found."
+        },
+        {
+          "id": "OTEL-008",
+          "title": "Drain telemetry when the process exits",
+          "gap": "initTracing discards its provider handle; no ForceFlush/Shutdown exists. ListenAndServe errors are ignored, no termination-signal cleanup runs, and log.Fatalf bypasses deferred cleanup on exporter failure."
+        },
+        {
+          "id": "OTEL-009",
+          "title": "Receive application logs locally with trace correlation",
+          "gap": "The standard log package writes startup and fatal messages to stderr only. No OTEL_LOGS_EXPORTER opt-out, LoggerProvider, log processor/exporter, context bridge or signal-specific logs endpoint is configured. Trace spans are not LogRecords."
+        }
+      ],
+      "findings_outside_closed_set": [
+        "OTEL-002",
+        "OTEL-003",
+        "OTEL-007",
+        "OTEL-009"
+      ]
+    },
+    {
+      "application": "go-chi-partial",
+      "version": "candidate",
+      "report_sha256": "ae5b45a60f750ca8abefcda43e2b776bd1f86692962ade173312575986324e4c",
+      "run": {
+        "started_utc": "2026-10-16T17:57:58.322967+00:00",
+        "seconds": 501.484,
+        "exit_code": 0
+      },
+      "route_inventory": [
+        {
+          "method": "GET",
+          "path": "/health",
+          "source": "main.go:42"
+        },
+        {
+          "method": "GET",
+          "path": "/tasks",
+          "source": "main.go:46"
+        },
+        {
+          "method": "GET",
+          "path": "/tasks/{id}",
+          "source": "main.go:52"
+        },
+        {
+          "method": "POST",
+          "path": "/tasks",
+          "source": "main.go:70"
+        },
+        {
+          "method": "PATCH",
+          "path": "/tasks/{id}",
+          "source": "main.go:86"
+        },
+        {
+          "method": "POST",
+          "path": "/tasks/{id}/reserve",
+          "source": "main.go:113"
+        },
+        {
+          "method": "DELETE",
+          "path": "/tasks/{id}",
+          "source": "main.go:135"
+        }
+      ],
+      "units": [
+        {
+          "id": "server-tracing",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        },
+        {
+          "id": "trace-export",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        },
+        {
+          "id": "request-metrics",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-006"
+          ]
+        },
+        {
+          "id": "route-template",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-004"
+          ]
+        },
+        {
+          "id": "span-cardinality",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-005"
+          ]
+        },
+        {
+          "id": "export-endpoint",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-001"
+          ]
+        },
+        {
+          "id": "shutdown",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-008"
+          ]
+        },
+        {
+          "id": "genai",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        }
+      ],
+      "scores": {
+        "tp": 5,
+        "fp": 0,
+        "tn": 3,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "accuracy": 1.0
+      },
+      "reported_genai_ownership": false,
+      "coverage_evidence": {
+        "meta": {
+          "audit_id": "go-chi-partial-20261016",
+          "service_name": "go-chi-partial",
+          "commit": "uncommitted (no HEAD; source hashes in evidence)",
+          "language": "go",
+          "framework": "chi/v5",
+          "date": "2026-10-16",
+          "status": "Partial",
+          "genai_ownership_detected": false
+        },
+        "source_and_provider_facts": [
+          {
+            "check": "Manifest",
+            "finding": "Go module; go directive 1.25.0. chi/v5 v5.2.4, otelhttp v0.68.0, OTel API/trace SDK/HTTP trace exporter v1.45.0. Indirect gRPC/protobuf packages are exporter transitive dependencies, not application RPC surfaces.",
+            "source": "go.mod; go.sum"
+          },
+          {
+            "check": "Entry point",
+            "finding": "One main process: initTracing -> chi routes -> outer otelhttp handler -> HTTP :8000. In-memory mutex-protected task slice; no datastore/outbound business client or worker.",
+            "source": "main.go:27-40,149-169"
+          },
+          {
+            "check": "GenAI ownership",
+            "finding": "No",
+            "source": "go.mod; main.go"
+          },
+          {
+            "check": "Provider topology \u2014 traces",
+            "finding": "source-active: main calls initTracing once before serving; one sdktrace.NewTracerProvider with WithBatcher(exp), global SetTracerProvider; one HTTP trace exporter. No multiple initialization or extra processor was found. No shutdown/flush.",
+            "source": "main.go:36-38,154-169"
+          },
+          {
+            "check": "Provider topology \u2014 metrics",
+            "finding": "no provider: API dependency and otelhttp metric call sites exist, but no MeterProvider, reader or metric exporter is constructed. Three automatic histograms are inactive with respect to source-owned export.",
+            "source": "main.go:150,154-169; go.mod:26; .observe/evidence/otelhttp-config.go:50-68"
+          },
+          {
+            "check": "Provider topology \u2014 logs",
+            "finding": "no provider; logs classification: not configured. Standard log writes stderr. No bridge, LoggerProvider, OTLP log exporter, explicit none, or log endpoint is in application configuration. Tooling trace.jsonl/stderr.log are agent-run artifacts, not application telemetry.",
+            "source": "main.go:7,149,159-160; go.mod; .observe/evidence/discovery-notes.md"
+          }
+        ]
+      },
+      "finding_inventory": [
+        {
+          "id": "OTEL-001",
+          "title": "Make telemetry destinations configurable",
+          "gap": "initTracing hardcodes collector.example.com:4318 and WithInsecure on the HTTP trace exporter. This bypasses standard endpoint and transport choices; exporter construction is not successful delivery evidence."
+        },
+        {
+          "id": "OTEL-002",
+          "title": "Give telemetry a reliable service identity",
+          "gap": "resource.New(ctx) has no detectors or attributes. SDK v1.45 WithResource merges resource.Environment(), so operator OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES can already work; with no such configuration there is no application service.name default. Version/environment are not configured in this checkout."
+        },
+        {
+          "id": "OTEL-003",
+          "title": "Continue incoming distributed traces",
+          "gap": "No otel.SetTextMapPropagator or otelhttp.WithPropagators call is reachable. otelhttp takes the unconfigured global propagator; passing r.Context to GetTask preserves its local parent but does not extract an upstream W3C parent."
+        },
+        {
+          "id": "OTEL-004",
+          "title": "Identify each HTTP route in traces",
+          "gap": "otelhttp.NewHandler(r,\"chi-partial\") wraps every route with the same operation name and no route-aware formatter/enrichment. chi v5.2.4 sets Pattern on a WithContext request copy; the outer wrapper cannot be assumed to receive the resolved route. otelchi is absent, and the library-map official otelchi path could not be verified in the current official contrib tree."
+        },
+        {
+          "id": "OTEL-005",
+          "title": "Use one stable task-lookup span name",
+          "gap": "The GET task handler acquires otel.Tracer(\"task-service\") per request and creates GetTask-%d, producing a separate operation name for each task ID."
+        },
+        {
+          "id": "OTEL-006",
+          "title": "Export the HTTP measurements already provided",
+          "gap": "otelhttp contains three automatic HTTP histograms, but main initializes only a TracerProvider. There is no SDK MeterProvider, reader, metric exporter or custom metric registration. The indirect otel/metric API dependency does not establish recording/export."
+        },
+        {
+          "id": "OTEL-007",
+          "title": "Explain validation and reservation outcomes",
+          "gap": "HTTP status is already captured by otelhttp. Decoder failures return 400 without RecordError, and the two reservation conflicts both return 409 with no bounded telemetry reason. The GetTask child ends without a not-found outcome. No per-outcome metric dimension is added."
+        },
+        {
+          "id": "OTEL-008",
+          "title": "Drain telemetry when the process stops",
+          "gap": "initTracing returns no cleanup handle; its local batch provider has no Shutdown or ForceFlush call. main ignores ListenAndServe errors and has no termination cleanup path for pending telemetry."
+        },
+        {
+          "id": "OTEL-009",
+          "title": "Make application logs searchable locally",
+          "gap": "The application uses standard log.Println/Fatalf to stderr. No LoggerProvider, OTLP log exporter, bridge, request-context fields or explicit log-export opt-out is present in source configuration. These stderr records and the tooling stderr.log file are not received OTLP LogRecords."
+        }
+      ],
+      "findings_outside_closed_set": [
+        "OTEL-002",
+        "OTEL-003",
+        "OTEL-007",
+        "OTEL-009"
+      ]
+    },
+    {
+      "application": "python-checkout",
+      "version": "original",
+      "report_sha256": "b92c2aa22e533d2cea22978468a42d13abac128ac65281d1079ea3230745c825",
+      "run": {
+        "started_utc": "2026-10-16T18:06:19.814540+00:00",
+        "seconds": 502.832,
+        "exit_code": 0
+      },
+      "route_inventory": [
+        {
+          "method": "GET",
+          "path": "/health",
+          "source": "app.py:27-29"
+        },
+        {
+          "method": "GET",
+          "path": "/cart",
+          "source": "app.py:32-35"
+        },
+        {
+          "method": "POST",
+          "path": "/checkout",
+          "source": "app.py:38-44"
+        },
+        {
+          "method": "POST",
+          "path": "/payment",
+          "source": "app.py:47-59"
+        },
+        {
+          "method": "GET",
+          "path": "/openapi.json",
+          "source": "app.py:8 (FastAPI default documentation route; framework-derived, not runtime-enumerated)"
+        },
+        {
+          "method": "HEAD",
+          "path": "/openapi.json",
+          "source": "app.py:8 (FastAPI default documentation route; framework-derived, not runtime-enumerated)"
+        },
+        {
+          "method": "GET",
+          "path": "/docs",
+          "source": "app.py:8 (FastAPI default documentation route; framework-derived, not runtime-enumerated)"
+        },
+        {
+          "method": "HEAD",
+          "path": "/docs",
+          "source": "app.py:8 (FastAPI default documentation route; framework-derived, not runtime-enumerated)"
+        },
+        {
+          "method": "GET",
+          "path": "/docs/oauth2-redirect",
+          "source": "app.py:8 (FastAPI default documentation route; framework-derived, not runtime-enumerated)"
+        },
+        {
+          "method": "HEAD",
+          "path": "/docs/oauth2-redirect",
+          "source": "app.py:8 (FastAPI default documentation route; framework-derived, not runtime-enumerated)"
+        },
+        {
+          "method": "GET",
+          "path": "/redoc",
+          "source": "app.py:8 (FastAPI default documentation route; framework-derived, not runtime-enumerated)"
+        },
+        {
+          "method": "HEAD",
+          "path": "/redoc",
+          "source": "app.py:8 (FastAPI default documentation route; framework-derived, not runtime-enumerated)"
+        }
+      ],
+      "units": [
+        {
+          "id": "server-tracing",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-002"
+          ]
+        },
+        {
+          "id": "trace-export",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-001"
+          ]
+        },
+        {
+          "id": "request-metrics",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-002"
+          ]
+        },
+        {
+          "id": "genai",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        },
+        {
+          "id": "external-payment-client",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        }
+      ],
+      "scores": {
+        "tp": 3,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "accuracy": 1.0
+      },
+      "reported_genai_ownership": false,
+      "coverage_evidence": {
+        "meta": {
+          "audit_id": "checkout-20261016",
+          "service_name": "checkout",
+          "commit": "unavailable (unborn repository; no HEAD)",
+          "language": "python",
+          "framework": "FastAPI / Uvicorn",
+          "date": "2026-10-16",
+          "status": "Partial",
+          "genai_ownership_detected": false
+        },
+        "source_and_provider_facts": [
+          {
+            "check": "Manifest",
+            "finding": "Python project python-checkout-red-demo version 0.1.0; requires Python >=3.11, FastAPI >=0.115, HTTPX >=0.28, Uvicorn[standard] >=0.34; no declared OTel dependency.",
+            "source": "pyproject.toml:1-10"
+          },
+          {
+            "check": "Entry point",
+            "finding": "API runtime is uv run uvicorn app:app; FastAPI instantiated at module scope. --reload adds a supervisor/serving-process ownership concern, not proof of provider initialization.",
+            "source": "Makefile:6-7; app.py:8"
+          },
+          {
+            "check": "Topology scanner",
+            "finding": "Bundled scan_python_otel_topology.py ran successfully; only candidate was OTEL_SERVICE_NAME at Makefile:7. Reconciled all candidates against both real entrypoints: no explicit/lazy provider, registration, exporter, resource, bootstrap or cleanup exists.",
+            "source": "app.py:1-59; load_demo.py:1-24; Makefile:7-10; .observe/evidence/python-otel-topology.json"
+          },
+          {
+            "check": "GenAI ownership",
+            "finding": "No",
+            "source": "pyproject.toml:1-10; app.py:1-59; load_demo.py:1-24"
+          }
+        ]
+      },
+      "finding_inventory": [
+        {
+          "id": "OTEL-001",
+          "title": "Connect telemetry to a consistent service identity",
+          "gap": "Makefile sets only OTEL_SERVICE_NAME=checkout. Neither process constructs or bootstraps tracing, metrics or logs providers, exporters, propagation or cleanup; the inline assignment also replaces an operator service-name value."
+        },
+        {
+          "id": "OTEL-002",
+          "title": "Expose route latency, throughput and payment failures",
+          "gap": "All four business routes lack server spans and standard HTTP metrics. The simulated payment failure is already an HTTP 502, so its error rate needs no custom payment-error counter."
+        },
+        {
+          "id": "OTEL-003",
+          "title": "Keep correlated application logs in local Studio",
+          "gap": "The supported Uvicorn stdlib logging stack has console sinks but no LoggerProvider, OTLP exporter or bridge. No OTEL_LOGS_EXPORTER opt-out or operator logs destination is configured. Default Uvicorn logger propagation stops before a root-only bridge."
+        },
+        {
+          "id": "OTEL-004",
+          "title": "Connect demo client requests to server traces",
+          "gap": "httpx is a declared dependency used only by the separate load_demo.py process. opentelemetry-instrumentation-httpx and client providers are absent; the API itself makes no outbound HTTP calls."
+        }
+      ],
+      "findings_outside_closed_set": [
+        "OTEL-003",
+        "OTEL-004"
+      ]
+    },
+    {
+      "application": "python-checkout",
+      "version": "candidate",
+      "report_sha256": "169bdae88f58f39d2fbcd349692bf5124d3fb0f0bf2abd7b949e45e234d8e8f5",
+      "run": {
+        "started_utc": "2026-10-16T18:06:45.417197+00:00",
+        "seconds": 539.904,
+        "exit_code": 0
+      },
+      "route_inventory": [
+        {
+          "method": "GET",
+          "path": "/health"
+        },
+        {
+          "method": "GET",
+          "path": "/cart"
+        },
+        {
+          "method": "POST",
+          "path": "/checkout"
+        },
+        {
+          "method": "POST",
+          "path": "/payment"
+        },
+        {
+          "method": "GET",
+          "path": "/openapi.json"
+        },
+        {
+          "method": "GET",
+          "path": "/docs"
+        },
+        {
+          "method": "GET",
+          "path": "/docs/oauth2-redirect"
+        },
+        {
+          "method": "GET",
+          "path": "/redoc"
+        },
+        {
+          "method": "HEAD",
+          "path": "/openapi.json"
+        },
+        {
+          "method": "HEAD",
+          "path": "/docs"
+        },
+        {
+          "method": "HEAD",
+          "path": "/docs/oauth2-redirect"
+        },
+        {
+          "method": "HEAD",
+          "path": "/redoc"
+        }
+      ],
+      "units": [
+        {
+          "id": "server-tracing",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-002"
+          ]
+        },
+        {
+          "id": "trace-export",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-001"
+          ]
+        },
+        {
+          "id": "request-metrics",
+          "expected_gap": true,
+          "reported_gap": true,
+          "classification": "tp",
+          "finding_ids": [
+            "OTEL-002"
+          ]
+        },
+        {
+          "id": "genai",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        },
+        {
+          "id": "external-payment-client",
+          "expected_gap": false,
+          "reported_gap": false,
+          "classification": "tn",
+          "finding_ids": []
+        }
+      ],
+      "scores": {
+        "tp": 3,
+        "fp": 0,
+        "tn": 2,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "accuracy": 1.0
+      },
+      "reported_genai_ownership": false,
+      "coverage_evidence": {
+        "meta": {
+          "audit_id": "checkout-20261016",
+          "service_name": "checkout",
+          "commit": "unavailable (no HEAD commit)",
+          "language": "python",
+          "framework": "FastAPI / Uvicorn",
+          "date": "2026-10-16",
+          "status": "Partial",
+          "genai_ownership_detected": false
+        },
+        "source_and_provider_facts": [
+          {
+            "check": "Manifest",
+            "finding": "Python >=3.11; fastapi>=0.115, httpx>=0.28, uvicorn[standard]>=0.34; no declared OpenTelemetry SDK/exporter/instrumentation packages. Open-ended ranges can bring a transitive OTel API but do not configure providers.",
+            "source": "pyproject.toml:1-10"
+          },
+          {
+            "check": "Entry point",
+            "finding": "API: app:app launched by uv Uvicorn; a separate load client uses load_demo.run.",
+            "source": "app.py:8; Makefile:7; load_demo.py:8-24"
+          },
+          {
+            "check": "GenAI ownership",
+            "finding": "No",
+            "source": "pyproject.toml:6-10; app.py:1-59; load_demo.py:1-24"
+          },
+          {
+            "check": "Provider topology",
+            "finding": "Fresh: API traces=no provider; metrics=no provider; logs=no provider. No lazy SDK helper, external bootstrap, exporter or shutdown is reachable. Load process also has no providers. OTEL_SERVICE_NAME alone does not enable any signal. All current span/metric/OTLP log inventories are empty.",
+            "source": "Makefile:7,9-10; app.py:1-59; load_demo.py:1-24; .observe/evidence/python-otel-topology.json"
+          }
+        ]
+      },
+      "finding_inventory": [
+        {
+          "id": "OTEL-001",
+          "title": "Enable telemetry with a stable service identity",
+          "gap": "Makefile sets OTEL_SERVICE_NAME=checkout but starts plain Uvicorn. No reachable trace or metric provider, exporter, propagator setup or shutdown exists; the assignment also overwrites an incoming service-name override."
+        },
+        {
+          "id": "OTEL-002",
+          "title": "Expose route traffic, latency and payment failures",
+          "gap": "opentelemetry-instrumentation-fastapi and its ASGI metrics integration are absent. The four app routes have no SERVER spans or HTTP metrics. Payment failures are already HTTP 502; missing orders and validation are 404 and 422."
+        },
+        {
+          "id": "OTEL-003",
+          "title": "Make runtime logs searchable beside request traces",
+          "gap": "The uv Uvicorn launch uses the standard Python logging stack, but no LoggerProvider, OTLP exporter, bridge or trace correlation is configured. Uvicorn default named loggers do not propagate to root."
+        },
+        {
+          "id": "OTEL-004",
+          "title": "Connect load-generator requests to server traces",
+          "gap": "opentelemetry-instrumentation-httpx is absent from the separate load_demo.py process. The API itself has no HTTPX calls."
+        }
+      ],
+      "findings_outside_closed_set": [
+        "OTEL-003",
+        "OTEL-004"
+      ]
+    }
+  ],
+  "aggregate": {
+    "original": {
+      "tp": 11,
+      "fp": 0,
+      "tn": 7,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "accuracy": 1.0
+    },
+    "candidate": {
+      "tp": 11,
+      "fp": 0,
+      "tn": 7,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "accuracy": 1.0
+    }
+  },
+  "supplemental_posthoc_check": {
+    "application": "go-chi-partial",
+    "finding_id": "OTEL-002",
+    "claim": "Whether SDK 1.45 WithResource(resource.New(ctx)) merges OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES.",
+    "original": "Claims environment fields are not read by that path.",
+    "candidate": "Correctly identifies the SDK environment merge, while retaining the real missing application-default identity gap.",
+    "independent_result": "Go SDK 1.45 in-memory resource probe passed: service.name, service.version, deployment.environment.name all retained. This is a configuration probe, not an application telemetry capture.",
+    "included_in_primary_scores": false,
+    "causal_inference": "None. One stochastic paired run does not establish that staging caused this answer difference.",
+    "reproduction": {
+      "go_mod": "module resource-probe\n\ngo 1.25.0\n\nrequire (\n\tgo.opentelemetry.io/otel v1.45.0\n\tgo.opentelemetry.io/otel/sdk v1.45.0\n)\n\nrequire (\n\tgithub.com/cespare/xxhash/v2 v2.3.0 // indirect\n\tgithub.com/go-logr/logr v1.4.4 // indirect\n\tgithub.com/go-logr/stdr v1.2.2 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgo.opentelemetry.io/auto/sdk v1.2.1 // indirect\n\tgo.opentelemetry.io/otel/metric v1.45.0 // indirect\n\tgo.opentelemetry.io/otel/trace v1.45.0 // indirect\n\tgolang.org/x/sys v0.47.0 // indirect\n)\n",
+      "test_source": "package probe\n\nimport (\n \"context\"\n \"testing\"\n \"go.opentelemetry.io/otel/attribute\"\n \"go.opentelemetry.io/otel/sdk/resource\"\n sdktrace \"go.opentelemetry.io/otel/sdk/trace\"\n \"go.opentelemetry.io/otel/sdk/trace/tracetest\"\n)\n\n// Same resource.New and WithResource calls as chi-partial's initTracing.\n// The independent in-memory sink makes this a configuration probe, not OTLP proof.\nfunc TestExplicitResourceStillMergesEnvironment(t *testing.T) {\n t.Setenv(\"OTEL_SERVICE_NAME\", \"independent-resource-probe\")\n t.Setenv(\"OTEL_RESOURCE_ATTRIBUTES\", \"service.version=frozen-probe,deployment.environment.name=demo\")\n r,err:=resource.New(context.Background());if err!=nil{t.Fatal(err)}\n if len(r.Attributes())!=0{t.Fatal(\"source resource should be empty before SDK merge\")}\n sink:=tracetest.NewInMemoryExporter()\n tp:=sdktrace.NewTracerProvider(sdktrace.WithResource(r),sdktrace.WithSyncer(sink))\n defer tp.Shutdown(context.Background())\n _,span:=tp.Tracer(\"source-config-probe\").Start(context.Background(),\"resource construction probe\");span.End()\n spans:=sink.GetSpans();if len(spans)!=1{t.Fatalf(\"captured %d\",len(spans))}\n for k,want:=range map[string]string{\"service.name\":\"independent-resource-probe\",\"service.version\":\"frozen-probe\",\"deployment.environment.name\":\"demo\"}{got,ok:=spans[0].Resource.Set().Value(attribute.Key(k));if !ok||got.AsString()!=want{t.Fatalf(\"%s=%v wanted %s\",k,got,want)};t.Logf(\"%s=%s\",k,got.AsString())}\n}\n",
+      "command": "go test -v ./...",
+      "output": "=== RUN   TestExplicitResourceStillMergesEnvironment\n    resource_test.go:24: service.name=independent-resource-probe\n    resource_test.go:24: service.version=frozen-probe\n    resource_test.go:24: deployment.environment.name=demo\n--- PASS: TestExplicitResourceStillMergesEnvironment (0.00s)\nPASS\nok  \tresource-probe\t0.285s\n"
+    }
+  }
+}

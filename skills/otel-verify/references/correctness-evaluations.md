@@ -5,7 +5,11 @@ for `observer_skill_correctness_evaluate`, for example
 `.observe/otel-correctness.json`. Discover the tool before calling it. Keep the
 existing application tests, canonical report schemas, approval scope, and offline
 verification behavior. Do not require Studio or change application code merely
-to obtain this optional score.
+to obtain this optional score. If the host does not advertise the tool and
+`OBSTUDIO_SKILL_MCP_ENDPOINT` explicitly identifies a loopback MCP endpoint,
+discover it with HTTP JSON-RPC `tools/list`, then use `tools/call` with the
+unchanged contract. Respect `none`; do not guess endpoints or change host
+configuration. Record discovery/transport failure as an unavailable prerequisite.
 
 ## Expectations and evidence
 
@@ -17,11 +21,22 @@ establish correctness. Do not generate a contract by copying observed signals
 and calling the resulting match proof; do not weaken expectations to make a run
 pass. Source/configuration review and rubric judgment remain separate evidence.
 
-Bind `runId` to the recorded skill invocation, `auditSha256` and optional
-`instrumentationSha256` to the canonical report digests, and `sourceRevision` to
-the tested source's `service.version`. Preserve the supplied finding/scenario
-mapping and rule definitions. These digests identify inputs; the MCP tool does
-not read local files or authenticate their contents.
+Use the completed invocation identified by the supplied `runId`. A contract may
+intentionally evaluate a previous audit or instrumentation run; it does not have
+to target the current verification invocation. Preserve that run ID and its
+witness binding. Do not reject a capture solely because it predates this
+verification run or rebind it to a new invocation. Check its actual report,
+source/service version, scenario, retained witness and capture manifests instead.
+Discover and invoke the available evaluator before substituting a local stale
+judgment for these checks. If the target really is the still-running verification
+invocation, finish its normal workflow before grading it; never claim an
+unfinished invocation is complete.
+
+Bind `auditSha256` and optional `instrumentationSha256` to the canonical report
+digests, and `sourceRevision` to the tested source's `service.version`. Preserve
+the supplied finding/scenario mapping and rule definitions. These digests
+identify inputs; the MCP tool does not read local files or authenticate their
+contents.
 
 The tool evaluates an atomic snapshot of retained application telemetry. Its
 input contains 1–8 scenarios and at most 32 uniquely named rules overall. Each

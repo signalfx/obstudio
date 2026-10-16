@@ -1,0 +1,864 @@
+{
+  "schema_version": 1,
+  "method": "Fresh copy of evals/go/chi-basic; ordinary CLI skill prompts outside eval runner; independently frozen acceptance and separate real-process SDK/OTLP capture. Contract expectations are never copied from observed signal values.",
+  "frozen_expectations_sha256": "5ab097942c9d1acbc6500e7acaf27fe20ce0ccef10a1884c096785e275ef1352",
+  "native_runs": [
+    {
+      "prompt": "$otel-audit",
+      "started_utc": "2026-10-16T17:49:09.825191+00:00",
+      "seconds": 420.073,
+      "exit_code": 0,
+      "cli_trace_sha256": "d4e1ac67c6a02d422417157d81406e1831977c8b86f82c8e014d0e44ffaa8595",
+      "final_message_sha256": "317ff8141fc3dd5e6d86ebe0f2c359b2014b2ee8abcea499a0f2803397644021",
+      "label": "otel-audit"
+    },
+    {
+      "prompt": "$otel-instrument",
+      "started_utc": "2026-10-16T17:56:10.191660+00:00",
+      "seconds": 1045.32,
+      "exit_code": 0,
+      "cli_trace_sha256": "39c1d44867e1966b37684aeafb5e82c4590e5ea978b509cbd33b905878ac49d5",
+      "final_message_sha256": "ebc1455899556d08a3ca99ebe1a78ba6a995a7eb45accb45f086ba581176cf5f",
+      "label": "otel-instrument"
+    },
+    {
+      "prompt": "$otel-verify",
+      "started_utc": "2026-10-16T18:15:14.561577+00:00",
+      "seconds": 619.753,
+      "exit_code": 0,
+      "cli_trace_sha256": "ed35429db0c7db13af22095d87a981e042f0e9127116aaf8444c91f3ea5776c8",
+      "final_message_sha256": "3c5c971d4e7a074703bd86c0f88f899e4ca4a9f53c6b0b1111d19f15b436d0b9",
+      "label": "otel-verify-attempt1"
+    },
+    {
+      "prompt": "$otel-verify",
+      "started_utc": "2026-10-16T18:27:45.360674+00:00",
+      "seconds": 348.595,
+      "exit_code": 0,
+      "cli_trace_sha256": "99cc6939f048e88d702c271f406a185df5a8439a2077936e9250a32c4507e771",
+      "final_message_sha256": "299479b7950a09ed05eb694ea2eb5b47f3353d6418b7e946f0dac26b0a283315",
+      "label": "otel-verify"
+    }
+  ],
+  "workflows": [
+    {
+      "runId": "add7a886331489fb1d6e973cac8b9ee5",
+      "skill": "otel-instrument",
+      "startedAt": "2026-10-16T17:56:55.638746Z",
+      "endedAt": null,
+      "status": "passed",
+      "skillDigest": "sha256:1c94143eace2e6b26d9c531ae93de9bee0981b52178f70c8ac3d3fb2dd8daca1",
+      "contractDigest": "sha256:930b7f5ab3d0aa8a2ff7e7151b47fae0ebd62b64596eb20c9280bfc187350ecf",
+      "stages": [
+        {
+          "stage": "preflight",
+          "status": "passed",
+          "source": "checkpoint",
+          "durationMs": null,
+          "exitCode": null
+        },
+        {
+          "stage": "scope",
+          "status": "passed",
+          "source": "checkpoint",
+          "durationMs": null,
+          "exitCode": null
+        },
+        {
+          "stage": "plan",
+          "status": "passed",
+          "source": "checkpoint",
+          "durationMs": null,
+          "exitCode": null
+        },
+        {
+          "stage": "apply",
+          "status": "passed",
+          "source": "checkpoint",
+          "durationMs": null,
+          "exitCode": null
+        },
+        {
+          "stage": "verify",
+          "status": "failed",
+          "source": "executed",
+          "durationMs": 51966.288166,
+          "exitCode": 1
+        },
+        {
+          "stage": "verify",
+          "status": "failed",
+          "source": "executed",
+          "durationMs": 12925.628290999999,
+          "exitCode": 1
+        },
+        {
+          "stage": "verify",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 24703.021917000002,
+          "exitCode": 0
+        },
+        {
+          "stage": "report",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 154.831,
+          "exitCode": 0
+        },
+        {
+          "stage": "report",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 155.24170900000001,
+          "exitCode": 0
+        }
+      ]
+    },
+    {
+      "runId": "bc6c6e9ff03f81c1d0635719fa68f9cb",
+      "skill": "otel-verify",
+      "startedAt": "2026-10-16T18:07:44.731459Z",
+      "endedAt": null,
+      "status": "passed",
+      "skillDigest": "sha256:fe842512f8f70f7e07d8c90c8863376c4e817008123013c5f3c845712a0caf82",
+      "contractDigest": "sha256:930b7f5ab3d0aa8a2ff7e7151b47fae0ebd62b64596eb20c9280bfc187350ecf",
+      "stages": [
+        {
+          "stage": "inputs",
+          "status": "passed",
+          "source": "checkpoint",
+          "durationMs": null,
+          "exitCode": null
+        },
+        {
+          "stage": "build",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 3301.7297909999998,
+          "exitCode": 0
+        },
+        {
+          "stage": "signals",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 79341.409125,
+          "exitCode": 0
+        },
+        {
+          "stage": "report",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 229.84225,
+          "exitCode": 0
+        }
+      ]
+    },
+    {
+      "runId": "e1fabdc345367fe9b59b0c0745277205",
+      "skill": "otel-verify",
+      "startedAt": "2026-10-16T18:15:43.613479Z",
+      "endedAt": null,
+      "status": "passed",
+      "skillDigest": "sha256:fe842512f8f70f7e07d8c90c8863376c4e817008123013c5f3c845712a0caf82",
+      "contractDigest": "sha256:930b7f5ab3d0aa8a2ff7e7151b47fae0ebd62b64596eb20c9280bfc187350ecf",
+      "stages": [
+        {
+          "stage": "inputs",
+          "status": "passed",
+          "source": "checkpoint",
+          "durationMs": null,
+          "exitCode": null
+        },
+        {
+          "stage": "build",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 1742.906083,
+          "exitCode": 0
+        },
+        {
+          "stage": "signals",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 52688.688542,
+          "exitCode": 0
+        },
+        {
+          "stage": "signals",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 12308.251457999999,
+          "exitCode": 0
+        },
+        {
+          "stage": "report",
+          "status": "failed",
+          "source": "executed",
+          "durationMs": 233.406167,
+          "exitCode": 1
+        },
+        {
+          "stage": "report",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 174.66129199965508,
+          "exitCode": 0
+        }
+      ]
+    },
+    {
+      "runId": "f27990a6c5a369f8d82df294b2a4fe81",
+      "skill": "otel-audit",
+      "startedAt": "2026-10-16T17:49:29.387676Z",
+      "endedAt": null,
+      "status": "passed",
+      "skillDigest": "sha256:81768099dfde2f8b26f465a74421a29ac8c3ba87ea5d477795bc4775f2b66841",
+      "contractDigest": "sha256:930b7f5ab3d0aa8a2ff7e7151b47fae0ebd62b64596eb20c9280bfc187350ecf",
+      "stages": [
+        {
+          "stage": "discover",
+          "status": "passed",
+          "source": "checkpoint",
+          "durationMs": null,
+          "exitCode": null
+        },
+        {
+          "stage": "assess",
+          "status": "passed",
+          "source": "checkpoint",
+          "durationMs": null,
+          "exitCode": null
+        },
+        {
+          "stage": "assess",
+          "status": "passed",
+          "source": "checkpoint",
+          "durationMs": null,
+          "exitCode": null
+        },
+        {
+          "stage": "report",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 471.22508400000004,
+          "exitCode": 0
+        }
+      ]
+    },
+    {
+      "runId": "fec9f21fc81ca2defbad15f72db16025",
+      "skill": "otel-verify",
+      "startedAt": "2026-10-16T18:28:18.564566Z",
+      "endedAt": null,
+      "status": "passed",
+      "skillDigest": "sha256:8eb5da3ce5dc2b5171cacf9a5d0b56c38a061018faa026e6f9ce97a88933e2f4",
+      "contractDigest": "sha256:930b7f5ab3d0aa8a2ff7e7151b47fae0ebd62b64596eb20c9280bfc187350ecf",
+      "stages": [
+        {
+          "stage": "inputs",
+          "status": "passed",
+          "source": "checkpoint",
+          "durationMs": null,
+          "exitCode": null
+        },
+        {
+          "stage": "build",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 1924.621708,
+          "exitCode": 0
+        },
+        {
+          "stage": "signals",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 63092.921917,
+          "exitCode": 0
+        },
+        {
+          "stage": "signals",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 31810.643209,
+          "exitCode": 0
+        },
+        {
+          "stage": "report",
+          "status": "passed",
+          "source": "executed",
+          "durationMs": 324.254042,
+          "exitCode": 0
+        }
+      ]
+    }
+  ],
+  "ordinary_verifier_reported": {
+    "telemetry_items_passed": 26,
+    "scenarios_passed": 21,
+    "scope_note": "The independent new MCP contracts below cover two server-span scenarios, not all 26 items."
+  },
+  "initial_handoff_defect": "First standalone verifier passed its ordinary app checks but skipped optional scoring solely because the contract identified a prior instrumentation run. Guidance and matching rubric were changed; the rerun invoked the evaluator with the exact supplied contract.",
+  "native_mcp_call": {
+    "server": "studio",
+    "tool": "observer_skill_correctness_evaluate",
+    "arguments_unchanged": true
+  },
+  "positive": {
+    "source_files": {
+      "go.mod": "c1ab8c42637c0a72fdd1c3d4893f3a3f0530de1b180c058e674202868da1d198",
+      "go.sum": "fba822f75cbaa61169ae3b6bc7092cbef83737949abd71dae25c5e3a5d3b6bcd",
+      "otel.go": "37065af58673d8056087c1a6e0b8c1bc538f729847766dae519ab48fad7967d5",
+      "main.go": "14510cb18b7fbfb49fd0855ad8c53477989a555017d5c804e189e0a9b03f292a"
+    },
+    "source_revision": "sha256:2e61cbb041a69b48378a815a88ba11dca6daa07b01ddd51a98702237ef7ae4b7",
+    "binary_sha256": "312a22e703a4820e43e5768ae248e88e82e7e3a53c3771f55c8c42dcd7111438",
+    "build_profile": "go build -ldflags \"-X main.approvedLocalLogsEndpoint=http://127.0.0.1:4348/v1/logs\" -o app .",
+    "audit_sha256": "sha256:900ea1afb03057e74cc5a2c2add32dca4a1e79d5bcf5acd3a3cfe25dc811f34d",
+    "instrumentation_sha256": "sha256:00ebc6e39574c500da675f2a2a0cbbebf8176037ed8e4228626c15e98effeb28",
+    "scenarios": [
+      {
+        "capturedLogs": 0,
+        "capturedSpanIds": [
+          "1b05054719dc014b"
+        ],
+        "id": "http.tasks.create.success",
+        "status": 201,
+        "traceId": "64f2d4974158dfab6ceab22c925f4e25",
+        "witnessSpanId": "2fb25ce0124196c4"
+      },
+      {
+        "capturedLogs": 1,
+        "capturedSpanIds": [
+          "25b7a2984a2f8430"
+        ],
+        "id": "http.tasks.create.invalid_json",
+        "status": 400,
+        "traceId": "4ebccb1267a3fe8674b0a526c045f6d8",
+        "witnessSpanId": "960a645afc01a7a8"
+      }
+    ],
+    "observed_application_spans": [
+      {
+        "traceId": "64f2d4974158dfab6ceab22c925f4e25",
+        "spanId": "1b05054719dc014b",
+        "parentSpanId": "2fb25ce0124196c4",
+        "name": "POST /tasks",
+        "kind": 2,
+        "startTimeUnixNano": "1792174513624113000",
+        "endTimeUnixNano": "1792174513624561625",
+        "status": {},
+        "attributes": {
+          "http.request.method": "POST",
+          "url.scheme": "http",
+          "network.protocol.version": "1.1",
+          "http.route": "/tasks",
+          "http.response.status_code": 201
+        },
+        "resource": {
+          "deployment.environment.name": "demo",
+          "service.name": "skills-correctness-demo",
+          "service.version": "sha256:2e61cbb041a69b48378a815a88ba11dca6daa07b01ddd51a98702237ef7ae4b7",
+          "telemetry.sdk.language": "go",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.38.0"
+        },
+        "scope": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+      },
+      {
+        "traceId": "4ebccb1267a3fe8674b0a526c045f6d8",
+        "spanId": "25b7a2984a2f8430",
+        "parentSpanId": "960a645afc01a7a8",
+        "name": "POST /tasks",
+        "kind": 2,
+        "startTimeUnixNano": "1792174513624779000",
+        "endTimeUnixNano": "1792174513624935708",
+        "status": {},
+        "attributes": {
+          "http.request.method": "POST",
+          "url.scheme": "http",
+          "network.protocol.version": "1.1",
+          "http.route": "/tasks",
+          "http.response.status_code": 400
+        },
+        "resource": {
+          "deployment.environment.name": "demo",
+          "service.name": "skills-correctness-demo",
+          "service.version": "sha256:2e61cbb041a69b48378a815a88ba11dca6daa07b01ddd51a98702237ef7ae4b7",
+          "telemetry.sdk.language": "go",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.38.0"
+        },
+        "scope": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+      }
+    ],
+    "contract": {
+      "runId": "add7a886331489fb1d6e973cac8b9ee5",
+      "auditSha256": "sha256:900ea1afb03057e74cc5a2c2add32dca4a1e79d5bcf5acd3a3cfe25dc811f34d",
+      "instrumentationSha256": "sha256:00ebc6e39574c500da675f2a2a0cbbebf8176037ed8e4228626c15e98effeb28",
+      "sourceRevision": "sha256:2e61cbb041a69b48378a815a88ba11dca6daa07b01ddd51a98702237ef7ae4b7",
+      "scenarios": [
+        {
+          "id": "http.tasks.create.success",
+          "traceId": "64f2d4974158dfab6ceab22c925f4e25",
+          "witnessSpanId": "2fb25ce0124196c4",
+          "serviceName": "skills-correctness-demo",
+          "rules": [
+            {
+              "name": "positive.http.tasks.create.success.server",
+              "findingId": "OTEL-002",
+              "claim": "instrumentation",
+              "signal": "span",
+              "signalName": "POST /tasks",
+              "count": 1,
+              "kind": "SERVER",
+              "attributes": {
+                "http.route": "/tasks",
+                "http.request.method": "POST",
+                "http.response.status_code": 201
+              }
+            }
+          ]
+        },
+        {
+          "id": "http.tasks.create.invalid_json",
+          "traceId": "4ebccb1267a3fe8674b0a526c045f6d8",
+          "witnessSpanId": "960a645afc01a7a8",
+          "serviceName": "skills-correctness-demo",
+          "rules": [
+            {
+              "name": "positive.http.tasks.create.invalid_json.server",
+              "findingId": "OTEL-002",
+              "claim": "instrumentation",
+              "signal": "span",
+              "signalName": "POST /tasks",
+              "count": 1,
+              "kind": "SERVER",
+              "attributes": {
+                "http.route": "/tasks",
+                "http.request.method": "POST",
+                "http.response.status_code": 400
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "evaluation": {
+      "evaluationDigest": "sha256:7e6b332dce5ae58b5e2f5e2e7404fb7de9777d977fdafcf83cd3326fcc1ba6be",
+      "limitations": "Checks compare retained application telemetry with caller-supplied contracts. Report digests are bindings, not file validation. The harness declares source revision, execution mode and capture completeness; these are not authenticated. A pass proves only the tested scenario contract. It does not establish audit completeness, source correctness, cloud receipt, or independence of the contract author. Unknown results emit no numeric score or passing event.",
+      "newSpans": 1,
+      "results": [
+        {
+          "name": "positive.http.tasks.create.success.server",
+          "findingId": "OTEL-002",
+          "scenarioId": "http.tasks.create.success",
+          "claim": "instrumentation",
+          "signal": "span",
+          "outcome": "pass",
+          "score": 1,
+          "proofMode": "app_runtime",
+          "expectedCount": 1,
+          "observedCount": 1,
+          "violations": [],
+          "explanation": "span contract conforms: true; observed 1, expected 1 in the declared complete scenario capture. Violations: []. Claim: instrumentation. Proof mode: producer-declared app_runtime."
+        },
+        {
+          "name": "positive.http.tasks.create.invalid_json.server",
+          "findingId": "OTEL-002",
+          "scenarioId": "http.tasks.create.invalid_json",
+          "claim": "instrumentation",
+          "signal": "span",
+          "outcome": "pass",
+          "score": 1,
+          "proofMode": "app_runtime",
+          "expectedCount": 1,
+          "observedCount": 1,
+          "violations": [],
+          "explanation": "span contract conforms: true; observed 1, expected 1 in the declared complete scenario capture. Violations: []. Claim: instrumentation. Proof mode: producer-declared app_runtime."
+        }
+      ],
+      "runId": "add7a886331489fb1d6e973cac8b9ee5"
+    },
+    "raw_packets_sha256": "fc388c21e8436520c34968fc1f7efc91a53f86c3c805ccba4c594f50fe3bc4c6"
+  },
+  "wrong_route_control": {
+    "source_files": {
+      "go.mod": "c1ab8c42637c0a72fdd1c3d4893f3a3f0530de1b180c058e674202868da1d198",
+      "go.sum": "fba822f75cbaa61169ae3b6bc7092cbef83737949abd71dae25c5e3a5d3b6bcd",
+      "otel.go": "561ade5990bb60d922c2f57ab5fbbedd91c142e96a9d1045d65b7784d041b6b0",
+      "main.go": "14510cb18b7fbfb49fd0855ad8c53477989a555017d5c804e189e0a9b03f292a"
+    },
+    "source_revision": "sha256:0614885a1214d3fc16ddaae50d7b686711c7f386c36ee7eac20c2b221a5a6f6e",
+    "binary_sha256": "26f80621a1e989011f0f1c7bce922539f84772b74133949cb73da982f015efba",
+    "build_profile": "go build -ldflags \"-X main.approvedLocalLogsEndpoint=http://127.0.0.1:4349/v1/logs\" -o app .",
+    "audit_sha256": "sha256:900ea1afb03057e74cc5a2c2add32dca4a1e79d5bcf5acd3a3cfe25dc811f34d",
+    "instrumentation_sha256": "sha256:00ebc6e39574c500da675f2a2a0cbbebf8176037ed8e4228626c15e98effeb28",
+    "scenarios": [
+      {
+        "capturedLogs": 0,
+        "capturedSpanIds": [
+          "7c8d22d240552f58"
+        ],
+        "id": "http.tasks.create.success",
+        "status": 201,
+        "traceId": "e9f99a62a2e7bac75ddcaf2a6d8310bb",
+        "witnessSpanId": "19c6b365b1c58e44"
+      },
+      {
+        "capturedLogs": 1,
+        "capturedSpanIds": [
+          "a97020ea58d6d686"
+        ],
+        "id": "http.tasks.create.invalid_json",
+        "status": 400,
+        "traceId": "112839f1978ccd53f118af62a3e301bb",
+        "witnessSpanId": "483f157bb67e97de"
+      }
+    ],
+    "observed_application_spans": [
+      {
+        "traceId": "e9f99a62a2e7bac75ddcaf2a6d8310bb",
+        "spanId": "7c8d22d240552f58",
+        "parentSpanId": "19c6b365b1c58e44",
+        "name": "POST /tasks",
+        "kind": 2,
+        "startTimeUnixNano": "1792175640433128000",
+        "endTimeUnixNano": "1792175640433355917",
+        "status": {},
+        "attributes": {
+          "http.request.method": "POST",
+          "url.scheme": "http",
+          "network.protocol.version": "1.1",
+          "http.route": "/deliberately-broken",
+          "http.response.status_code": 201
+        },
+        "resource": {
+          "deployment.environment.name": "demo",
+          "service.name": "skills-correctness-demo",
+          "service.version": "sha256:0614885a1214d3fc16ddaae50d7b686711c7f386c36ee7eac20c2b221a5a6f6e",
+          "telemetry.sdk.language": "go",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.38.0"
+        },
+        "scope": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+      },
+      {
+        "traceId": "112839f1978ccd53f118af62a3e301bb",
+        "spanId": "a97020ea58d6d686",
+        "parentSpanId": "483f157bb67e97de",
+        "name": "POST /tasks",
+        "kind": 2,
+        "startTimeUnixNano": "1792175640433512000",
+        "endTimeUnixNano": "1792175640433576458",
+        "status": {},
+        "attributes": {
+          "http.request.method": "POST",
+          "url.scheme": "http",
+          "network.protocol.version": "1.1",
+          "http.route": "/deliberately-broken",
+          "http.response.status_code": 400
+        },
+        "resource": {
+          "deployment.environment.name": "demo",
+          "service.name": "skills-correctness-demo",
+          "service.version": "sha256:0614885a1214d3fc16ddaae50d7b686711c7f386c36ee7eac20c2b221a5a6f6e",
+          "telemetry.sdk.language": "go",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.38.0"
+        },
+        "scope": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+      }
+    ],
+    "contract": {
+      "runId": "add7a886331489fb1d6e973cac8b9ee5",
+      "auditSha256": "sha256:900ea1afb03057e74cc5a2c2add32dca4a1e79d5bcf5acd3a3cfe25dc811f34d",
+      "instrumentationSha256": "sha256:00ebc6e39574c500da675f2a2a0cbbebf8176037ed8e4228626c15e98effeb28",
+      "sourceRevision": "sha256:0614885a1214d3fc16ddaae50d7b686711c7f386c36ee7eac20c2b221a5a6f6e",
+      "scenarios": [
+        {
+          "id": "http.tasks.create.success",
+          "traceId": "e9f99a62a2e7bac75ddcaf2a6d8310bb",
+          "witnessSpanId": "19c6b365b1c58e44",
+          "serviceName": "skills-correctness-demo",
+          "rules": [
+            {
+              "name": "wrong-route.http.tasks.create.success.server",
+              "findingId": "OTEL-002",
+              "claim": "instrumentation",
+              "signal": "span",
+              "signalName": "POST /tasks",
+              "count": 1,
+              "kind": "SERVER",
+              "attributes": {
+                "http.route": "/tasks",
+                "http.request.method": "POST",
+                "http.response.status_code": 201
+              }
+            },
+            {
+              "name": "wrong-route.http.tasks.create.success.server.known-gap",
+              "findingId": "OTEL-002",
+              "claim": "audit_gap",
+              "signal": "span",
+              "signalName": "POST /tasks",
+              "count": 1,
+              "kind": "SERVER",
+              "attributes": {
+                "http.route": "/tasks",
+                "http.request.method": "POST",
+                "http.response.status_code": 201
+              }
+            }
+          ]
+        },
+        {
+          "id": "http.tasks.create.invalid_json",
+          "traceId": "112839f1978ccd53f118af62a3e301bb",
+          "witnessSpanId": "483f157bb67e97de",
+          "serviceName": "skills-correctness-demo",
+          "rules": [
+            {
+              "name": "wrong-route.http.tasks.create.invalid_json.server",
+              "findingId": "OTEL-002",
+              "claim": "instrumentation",
+              "signal": "span",
+              "signalName": "POST /tasks",
+              "count": 1,
+              "kind": "SERVER",
+              "attributes": {
+                "http.route": "/tasks",
+                "http.request.method": "POST",
+                "http.response.status_code": 400
+              }
+            },
+            {
+              "name": "wrong-route.http.tasks.create.invalid_json.server.known-gap",
+              "findingId": "OTEL-002",
+              "claim": "audit_gap",
+              "signal": "span",
+              "signalName": "POST /tasks",
+              "count": 1,
+              "kind": "SERVER",
+              "attributes": {
+                "http.route": "/tasks",
+                "http.request.method": "POST",
+                "http.response.status_code": 400
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "evaluation": {
+      "evaluationDigest": "sha256:30f6813da661f5bad963fc093ee4141ef8b7eb6adda961d9b268fe2864a2e746",
+      "limitations": "Checks compare retained application telemetry with caller-supplied contracts. Report digests are bindings, not file validation. The harness declares source revision, execution mode and capture completeness; these are not authenticated. A pass proves only the tested scenario contract. It does not establish audit completeness, source correctness, cloud receipt, or independence of the contract author. Unknown results emit no numeric score or passing event.",
+      "newSpans": 1,
+      "results": [
+        {
+          "name": "wrong-route.http.tasks.create.success.server",
+          "findingId": "OTEL-002",
+          "scenarioId": "http.tasks.create.success",
+          "claim": "instrumentation",
+          "signal": "span",
+          "outcome": "fail",
+          "score": 0,
+          "proofMode": "app_runtime",
+          "expectedCount": 1,
+          "observedCount": 1,
+          "violations": [
+            "span.attribute.http.route"
+          ],
+          "explanation": "span contract conforms: false; observed 1, expected 1 in the declared complete scenario capture. Violations: [span.attribute.http.route]. Claim: instrumentation. Proof mode: producer-declared app_runtime."
+        },
+        {
+          "name": "wrong-route.http.tasks.create.success.server.known-gap",
+          "findingId": "OTEL-002",
+          "scenarioId": "http.tasks.create.success",
+          "claim": "audit_gap",
+          "signal": "span",
+          "outcome": "pass",
+          "score": 1,
+          "proofMode": "app_runtime",
+          "expectedCount": 1,
+          "observedCount": 1,
+          "violations": [
+            "span.attribute.http.route"
+          ],
+          "explanation": "span contract conforms: false; observed 1, expected 1 in the declared complete scenario capture. Violations: [span.attribute.http.route]. Claim: audit_gap. Proof mode: producer-declared app_runtime."
+        },
+        {
+          "name": "wrong-route.http.tasks.create.invalid_json.server",
+          "findingId": "OTEL-002",
+          "scenarioId": "http.tasks.create.invalid_json",
+          "claim": "instrumentation",
+          "signal": "span",
+          "outcome": "fail",
+          "score": 0,
+          "proofMode": "app_runtime",
+          "expectedCount": 1,
+          "observedCount": 1,
+          "violations": [
+            "span.attribute.http.route"
+          ],
+          "explanation": "span contract conforms: false; observed 1, expected 1 in the declared complete scenario capture. Violations: [span.attribute.http.route]. Claim: instrumentation. Proof mode: producer-declared app_runtime."
+        },
+        {
+          "name": "wrong-route.http.tasks.create.invalid_json.server.known-gap",
+          "findingId": "OTEL-002",
+          "scenarioId": "http.tasks.create.invalid_json",
+          "claim": "audit_gap",
+          "signal": "span",
+          "outcome": "pass",
+          "score": 1,
+          "proofMode": "app_runtime",
+          "expectedCount": 1,
+          "observedCount": 1,
+          "violations": [
+            "span.attribute.http.route"
+          ],
+          "explanation": "span contract conforms: false; observed 1, expected 1 in the declared complete scenario capture. Violations: [span.attribute.http.route]. Claim: audit_gap. Proof mode: producer-declared app_runtime."
+        }
+      ],
+      "runId": "add7a886331489fb1d6e973cac8b9ee5"
+    },
+    "raw_packets_sha256": "d141b5881c5b356d5929168dbf40c3f0e7b857a310b78e3cac655663f90725be"
+  },
+  "changed_control_source_files": [
+    "otel.go"
+  ],
+  "mutation": "Only http.route value in routeTelemetry changed to /deliberately-broken in a throwaway app copy; expected rules preserved. Receiver build profile differs only to isolate capture ports.",
+  "unknown_source_request": {
+    "runId": "add7a886331489fb1d6e973cac8b9ee5",
+    "auditSha256": "sha256:900ea1afb03057e74cc5a2c2add32dca4a1e79d5bcf5acd3a3cfe25dc811f34d",
+    "instrumentationSha256": "sha256:00ebc6e39574c500da675f2a2a0cbbebf8176037ed8e4228626c15e98effeb28",
+    "sourceRevision": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "scenarios": [
+      {
+        "id": "http.tasks.create.success",
+        "traceId": "64f2d4974158dfab6ceab22c925f4e25",
+        "witnessSpanId": "2fb25ce0124196c4",
+        "serviceName": "skills-correctness-demo",
+        "rules": [
+          {
+            "name": "positive.http.tasks.create.success.server",
+            "findingId": "OTEL-002",
+            "claim": "instrumentation",
+            "signal": "span",
+            "signalName": "POST /tasks",
+            "count": 1,
+            "kind": "SERVER",
+            "attributes": {
+              "http.route": "/tasks",
+              "http.request.method": "POST",
+              "http.response.status_code": 201
+            }
+          }
+        ]
+      },
+      {
+        "id": "http.tasks.create.invalid_json",
+        "traceId": "4ebccb1267a3fe8674b0a526c045f6d8",
+        "witnessSpanId": "960a645afc01a7a8",
+        "serviceName": "skills-correctness-demo",
+        "rules": [
+          {
+            "name": "positive.http.tasks.create.invalid_json.server",
+            "findingId": "OTEL-002",
+            "claim": "instrumentation",
+            "signal": "span",
+            "signalName": "POST /tasks",
+            "count": 1,
+            "kind": "SERVER",
+            "attributes": {
+              "http.route": "/tasks",
+              "http.request.method": "POST",
+              "http.response.status_code": 400
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "unknown_source_result": {
+    "evaluationDigest": "sha256:74d2ce4955e4a9d099ad04752b76f5894b4b7d41029da436d8d5c44861ea1edb",
+    "limitations": "Checks compare retained application telemetry with caller-supplied contracts. Report digests are bindings, not file validation. The harness declares source revision, execution mode and capture completeness; these are not authenticated. A pass proves only the tested scenario contract. It does not establish audit completeness, source correctness, cloud receipt, or independence of the contract author. Unknown results emit no numeric score or passing event.",
+    "newSpans": 0,
+    "results": [
+      {
+        "name": "positive.http.tasks.create.success.server",
+        "findingId": "OTEL-002",
+        "scenarioId": "http.tasks.create.success",
+        "claim": "instrumentation",
+        "signal": "span",
+        "outcome": "unknown",
+        "score": null,
+        "proofMode": "app_runtime",
+        "expectedCount": 1,
+        "observedCount": null,
+        "violations": [],
+        "explanation": "Application trace contains mismatched source/service, invalid timing or recorder evidence"
+      },
+      {
+        "name": "positive.http.tasks.create.invalid_json.server",
+        "findingId": "OTEL-002",
+        "scenarioId": "http.tasks.create.invalid_json",
+        "claim": "instrumentation",
+        "signal": "span",
+        "outcome": "unknown",
+        "score": null,
+        "proofMode": "app_runtime",
+        "expectedCount": 1,
+        "observedCount": null,
+        "violations": [],
+        "explanation": "Log source revision does not match"
+      }
+    ],
+    "runId": "add7a886331489fb1d6e973cac8b9ee5"
+  },
+  "positive_replay": {
+    "evaluationDigest": "sha256:7e6b332dce5ae58b5e2f5e2e7404fb7de9777d977fdafcf83cd3326fcc1ba6be",
+    "limitations": "Checks compare retained application telemetry with caller-supplied contracts. Report digests are bindings, not file validation. The harness declares source revision, execution mode and capture completeness; these are not authenticated. A pass proves only the tested scenario contract. It does not establish audit completeness, source correctness, cloud receipt, or independence of the contract author. Unknown results emit no numeric score or passing event.",
+    "newSpans": 0,
+    "results": [
+      {
+        "name": "positive.http.tasks.create.success.server",
+        "findingId": "OTEL-002",
+        "scenarioId": "http.tasks.create.success",
+        "claim": "instrumentation",
+        "signal": "span",
+        "outcome": "pass",
+        "score": 1,
+        "proofMode": "app_runtime",
+        "expectedCount": 1,
+        "observedCount": 1,
+        "violations": [],
+        "explanation": "span contract conforms: true; observed 1, expected 1 in the declared complete scenario capture. Violations: []. Claim: instrumentation. Proof mode: producer-declared app_runtime."
+      },
+      {
+        "name": "positive.http.tasks.create.invalid_json.server",
+        "findingId": "OTEL-002",
+        "scenarioId": "http.tasks.create.invalid_json",
+        "claim": "instrumentation",
+        "signal": "span",
+        "outcome": "pass",
+        "score": 1,
+        "proofMode": "app_runtime",
+        "expectedCount": 1,
+        "observedCount": 1,
+        "violations": [],
+        "explanation": "span contract conforms: true; observed 1, expected 1 in the declared complete scenario capture. Violations: []. Claim: instrumentation. Proof mode: producer-declared app_runtime."
+      }
+    ],
+    "runId": "add7a886331489fb1d6e973cac8b9ee5"
+  },
+  "provider_configuration_unchanged": true,
+  "capture_program_sha256": "a8369a33225d1407eab769733afd80b99ef6ed62364785ba22cbd394e4f35453",
+  "limitations": [
+    "The producer declares app_runtime, source and complete capture; the evaluator cannot authenticate those declarations. Source hashes were independently checked by orchestration.",
+    "The controlled audit-gap checks validate only the supplied telemetry predicate in the deliberately broken copy, not accuracy of the entire original audit or all findings.",
+    "Aggregate metrics and log assertions remain ordinary verifier coverage; the new independent contracts here assert server spans only. Zero scenario-correlated metric points does not mean the app emitted no aggregate metrics.",
+    "A separate real harness-liveness gauge retains this bounded local Studio session during inspection. It is excluded from skill usage and correctness evidence.",
+    "Native loading used local .agents discovery links. SEP-2640 client activation and cloud delivery were not demonstrated."
+  ]
+}

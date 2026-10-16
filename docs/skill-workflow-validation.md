@@ -274,3 +274,154 @@ Checkpoints, root outcomes and digest identity remain recorder reports rather
 than independent evidence of everything the host or model did. Missing telemetry
 cannot be graded as success. Bounded Studio memory can evict observations; replay
 can restore retained local journals, and explicit Clear still clears telemetry.
+
+## Measured audit accuracy across three applications
+
+The [protocol](skill-workflow-accuracy-protocol.json) froze 18 source-backed
+binary gap checks before the six audit executions. It compares the original
+skill at `f56299311afa7c62c9896de1aa76d4ff5a22106f` with the staged skill at
+`adce7109604135e53bc7a276b498cb057004251a`. Subsequent measurement commits do
+not change those audit skill bytes. Each side received identical source files and
+only `$otel-audit`, with Codex `0.162.0-alpha.17.2`, observed model
+`gpt-6.1-sol`, and `xhigh` reasoning. There was one paired run per application.
+
+| Application | Known gaps / negative controls | Original precision / recall | Staged precision / recall |
+|---|---:|---:|---:|
+| Go chi-basic | 3 / 2 | 100% / 100% | 100% / 100% |
+| Go chi-partial | 5 / 3 | 100% / 100% | 100% / 100% |
+| Python checkout-red-demo | 3 / 2 | 100% / 100% | 100% / 100% |
+| Combined | 11 / 7 | 100% / 100% | 100% / 100% |
+
+Both sides classified all 18 checks correctly: 11 true positives, seven true
+negatives, no false positives or false negatives. This measures preserved
+performance on this small set, **not an accuracy improvement**. Precision is
+closed-set gap precision, not precision across every generated recommendation.
+The [results](skill-workflow-accuracy-results.json) retain manual labels,
+finding IDs, relevant report evidence, all finding summaries, source/report
+hashes, and command timings. Findings outside the predefined units are listed
+and excluded from the scores. Their correctness was not comprehensively graded.
+
+A separate observation, discovered after reading the reports, concerned
+chi-partial's resource configuration. Original finding `OTEL-002` says its
+SDK setup does not read `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES`.
+The staged report correctly observes that SDK 1.45's `WithResource` merges
+`resource.Environment()`. An independent Go SDK 1.45 in-memory probe reproduced
+the exact `resource.New(ctx)` and `WithResource(res)` construction and confirmed
+`service.name`, `service.version`, and `deployment.environment.name` survive.
+The actual missing application-default identity remains a gap on both sides.
+This configuration probe passed; it does not constitute application OTLP proof.
+It is a post-hoc correction, excluded from the primary scores, and one
+stochastic comparison cannot establish that the stage refactor caused it.
+
+The commands used the isolated authenticated Codex home from the rubric runs,
+`--ignore-user-config --sandbox danger-full-access`, explicit per-process
+`otel.exporter="none"` and `otel.trace_exporter="none"`, and
+`OBSTUDIO_SKILL_MCP_ENDPOINT=none`. The audit subjects wrote reports/evidence under `.observe`; orchestration saved
+CLI output separately. Source hashes were checked before scoring. No benchmark telemetry
+was published into the ordinary demonstration Studio. The complete local
+orchestration and raw CLI outputs are under
+`.workspace/skill-observability-proof/followup/`; the protocol and expectation
+files were committed before scoring. Raw elapsed times vary in both directions;
+concurrent runs do not isolate latency overhead. A single small sample is not
+statistical evidence of broader accuracy, repeatability, or performance gains.
+
+## Ordinary demo pipeline with independent correctness contracts
+
+A fresh copy of Go chi-basic, outside the eval runner, received only the ordinary
+`$otel-audit`, `$otel-instrument`, and `$otel-verify` prompts. The
+[acceptance expectations](skill-workflow-demo-expectations.json) were fixed
+before audit or instrumentation output existed. The audit selected four findings;
+instrumentation and the final ordinary verifier reported all 26 telemetry items
+and 21 scenarios passing. The two new independent contracts specifically cover
+`OTEL-002`: POST `/tasks` returning 201 and malformed JSON returning 400, with
+one SERVER span named `POST /tasks` and exact route/method/status attributes.
+They do not independently grade all 26 items.
+
+The first standalone verification passed its ordinary checks but skipped the
+optional evaluator because the supplied contract targeted an earlier
+instrumentation invocation. That was a real handoff defect. The verification
+reference now preserves the supplied completed target run and tests actual
+source/report/witness bindings, rather than treating a different current run ID
+as stale. It also explains discovery through an explicitly configured loopback
+MCP endpoint when a host does not advertise the tool, while respecting `none`.
+The matching rubric adds a semantic prior-invocation/offline regression case.
+The rerun invoked `observer_skill_correctness_evaluate` through its native MCP
+tool, with arguments checked to be exactly the supplied contract. Its two rules
+passed and its report retained the immutable MCP receipt.
+
+The [capture fixture](../observer/internal/mcp/testdata/skill-correctness-runtime-capture/main.go)
+is a separate POSIX runtime harness. It launches the actual compiled app,
+propagates real SDK witness contexts through HTTP, asserts the two responses,
+collects the app's SDK OTLP exports, and waits for synchronous shutdown before
+constructing manifests from captured records. It does not construct app spans.
+The application source digest becomes `service.version`; source bytes were
+checked unchanged across verification. This demo's generated local-log policy
+supports a build-time endpoint binding; the capture build uses
+`-ldflags '-X main.approvedLocalLogsEndpoint=http://127.0.0.1:4348/v1/logs'`
+so all app signals pass through the independent receiver. This is an explicit
+test profile, not a generic requirement for application instrumentation.
+
+From `observer/`, the capture invocation has this form (replace paths, run ID,
+and source digest with the recorded values):
+
+```sh
+go run ./internal/mcp/testdata/skill-correctness-runtime-capture -binary /absolute/demo-app -dir /absolute/demo -out /absolute/capture -run <completed-instrumentation-run-id> -version sha256:<tested-source-digest> -expect /absolute/scenario-requests.json -port 4348
+```
+
+The scenario request file preserves the frozen method/path/body/status values;
+its IDs are mapped to the audit's `http.tasks.create.success` and
+`http.tasks.create.invalid_json`. Studio is isolated at `127.0.0.1:3007`, with
+OTLP on 4337/4338. The helper keeps its connection alive and emits a separate
+real harness-liveness gauge to retain the bounded session while inspection
+continues. That gauge is not app correctness or skill usage evidence. App
+aggregate metrics lack per-scenario verification labels, so the new contracts
+here assert spans only; zero scenario-correlated metric points does not mean no
+aggregate metrics were exported. Ordinary verification also checked metrics/logs.
+
+The [result ledger](skill-workflow-demo-results.json) includes source and binary
+hashes, exact contracts, raw observed span fields, workflow histories and receipts:
+
+| Capture / check | Result |
+|---|---|
+| Original instrumented app, two fixed scenarios | Both instrumentation contracts pass |
+| Throwaway copy with only the emitted `http.route` value deliberately broken | Both instrumentation contracts fail specifically on `span.attribute.http.route` |
+| Same controlled fault evaluated as a known gap | Both predicate-scoped `audit_gap` checks pass |
+| Supplied source revision deliberately mismatched | Two unknown results, null scores, no numeric events |
+| Replay original passing contract | Identical receipt; no duplicate evaluation span |
+
+The controlled audit-gap checks concern that predicate in the deliberately
+broken copy, not correctness of the entire original audit. Receipts remain
+producer-declared runtime evidence; authenticated execution/provenance is not
+implemented. The final native verification run was
+`fec9f21fc81ca2defbad15f72db16025`; its supplied target remained completed
+instrumentation run `add7a886331489fb1d6e973cac8b9ee5`. Initial test/report failures
+remain in their original workflow histories. Provider tokens remain unknown in
+Studio. Global Codex and Claude telemetry configuration hashes were unchanged.
+Native loading used local discovery links; no SEP client activation or cloud
+receipt is claimed.
+
+The handoff-fix rubric command is the same exact `make eval-rubric` command
+above. Run `20261016T182808983321Z` passed **8/8**, score **100**, preserving all
+previous criteria. It ran with recorder export disabled, separately from the
+ordinary Studio demonstration. Final checks for this measurement follow-up:
+
+| Command | Result |
+|---|---|
+| `make test` | Pass, full Go suite |
+| `cd observer && go vet ./internal/mcp/testdata/skill-correctness-runtime-capture` | Pass |
+| `make eval-validation SKILL=skills/otel-instrument` | 631 passed, 1 skipped; refreshed the Observer fixture source receipt |
+| `make eval-validation SKILL=skills/otel-verify` | 577 passed, 1 skipped |
+| `make test-interactive-otel-scripts` | Pass, including 184 guidance checks |
+| `make agent-policy-check` | Pass, 49 policy tests and 8 guideline checks |
+| `make test-eval-harness` | 722 passed, 1 skipped; all 26 source manifests verified |
+| `quick_validate.py skills/otel-verify` using isolated uv PyYAML | Skill is valid |
+
+The first eval-harness attempt correctly rejected the old instrumentation
+validation receipt after the capture fixture was added. Its owning validation
+was rerun; no receipt was hand-edited. A capture-preparation command also retried
+with the digest helper's correct positional audit argument before app execution.
+No new UI code or editor integration was changed. Existing browser rendering
+was inspected with real passing/failing application evaluations; screenshots and
+raw CLI/OTLP artifacts are retained locally in
+`.workspace/skill-observability-proof/followup/`. No new Windows, editor-host,
+Claude execution, Docker, cloud, or provider-token test is claimed.
