@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -154,17 +155,51 @@ func buildProviderLogTasks(
 	exactTaskID := strings.TrimSpace(strArg(args, "taskId"))
 	exactConversationID := conversationIDArg(args)
 	skillName := strings.TrimSpace(strArg(args, "skillName"))
+	requestClass := strArg(args, "_skillRequestClass")
 	taskIDPrefix := strings.ToLower(strings.TrimSpace(strArg(args, "traceIdPrefix")))
 	traceIndex := buildProviderTraceIndex(spansByTraceID)
 	groups := make(map[string][]providerLogTokenEvent)
 	groupOrder := make([]string, 0)
 	seenByGroup := make(map[string]map[string]providerLogTokenEvent)
 	conflictingDuplicates := make(map[string]struct{})
+	ambiguousSkills := map[string]bool{}
+	if skillName != "" || requestClass != "" {
+		seenSkills := make(map[string]string)
+		for _, record := range logs {
+			event, ok := providerTokenEvent(record)
+			if !ok || !event.stableIdentity {
+				continue
+			}
+			names := make(map[string]struct{})
+			addSkillNames(names, record.Attributes)
+			encoded, _ := json.Marshal(sortedSet(names))
+			key := event.provider + "\x00" + event.dedupeKey
+			if previous, exists := seenSkills[key]; exists && previous != string(encoded) {
+				ambiguousSkills[key] = true
+			}
+			seenSkills[key] = string(encoded)
+		}
+	}
 
 	for _, logRecord := range logs {
 		event, ok := providerTokenEvent(logRecord)
 		if !ok || (providerFilter != "" && event.provider != providerFilter) {
 			continue
+		}
+		if skillName != "" {
+			requestSkills := make(map[string]struct{})
+			addSkillNames(requestSkills, logRecord.Attributes)
+			if ambiguousSkills[event.provider+"\x00"+event.dedupeKey] || len(requestSkills) != 1 || !containsFold(sortedSet(requestSkills), skillName) {
+				continue
+			}
+		}
+		if requestClass != "" {
+			requestSkills := make(map[string]struct{})
+			addSkillNames(requestSkills, logRecord.Attributes)
+			ambiguous := ambiguousSkills[event.provider+"\x00"+event.dedupeKey]
+			if (requestClass == "unattributed" && (len(requestSkills) != 0 || ambiguous)) || (requestClass == "shared" && len(requestSkills) < 2 && !ambiguous) {
+				continue
+			}
 		}
 		if traceIndex.referencesEvaluationIdentity(event) {
 			continue
@@ -227,11 +262,12 @@ func buildProviderLogTasks(
 		})
 		providerEventCount := len(events)
 		metadata := traceIndex.metadataForEvent(events[0])
-		events, usageReconciled := reconcileProviderTaskEvents(
-			events,
-			metadata,
-			providerLogWindowComplete(metadata, unavailableThrough),
-		)
+		usageReconciled := false
+		if skillName == "" && requestClass == "" {
+			events, usageReconciled = reconcileProviderTaskEvents(
+				events, metadata, providerLogWindowComplete(metadata, unavailableThrough),
+			)
+		}
 		if _, conflicting := conflictingDuplicates[groupKey]; conflicting &&
 			(len(events) == 0 || !strings.Contains(events[0].source, "span")) {
 			usageReconciled = false
@@ -261,6 +297,12 @@ func buildProviderLogTasks(
 		last := events[len(events)-1]
 		status := aggregate.status()
 		measurementSource, normalization := providerTaskEventProvenance(events)
+		skillAttribution := "task_associated"
+		if skillName != "" {
+			skillAttribution = "request"
+			normalization += "; skill-filtered retained request usage, not complete skill execution accounting"
+			skills = map[string]struct{}{skillName: {}}
+		}
 		correlationEvent := first
 		correlationEvent.source = measurementSource
 		correlationStatus := providerTaskCorrelationStatus(correlationEvent, metadata, usageReconciled)
@@ -305,6 +347,7 @@ func buildProviderLogTasks(
 				CorrelationStatus:           correlationStatus,
 				Provider:                    first.provider,
 				SkillNames:                  sortedSet(skills),
+				SkillAttribution:            skillAttribution,
 				ModelNames:                  sortedSet(models),
 				RequestCount:                len(events),
 				ProviderEventCount:          providerEventCount,
@@ -372,6 +415,9 @@ func mergeProviderSpanGroups(primary, retained map[string][]store.Span) map[stri
 }
 
 func buildProviderSpanTasks(spansByTraceID map[string][]store.Span, args map[string]any, excludedTaskKeys map[string]struct{}) []providerLogTaskBuild {
+	if strArg(args, "skillName") != "" {
+		return nil
+	}
 	if strArg(args, "spanName") != "" {
 		return nil
 	}

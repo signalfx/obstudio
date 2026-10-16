@@ -6,6 +6,23 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
+			"name": "Skill evals with local telemetry",
+			"type": "node-terminal",
+			"request": "launch",
+			"cwd": "${workspaceFolder}/pytest-codex-evals",
+			"command": "uv run --locked pytest --codex-eval-telemetry",
+			"env": {
+				"OTEL_SERVICE_NAME": "obstudio-skill-evals",
+				"OTEL_RESOURCE_ATTRIBUTES": "deployment.environment.name=local",
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
+				"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+				"OTEL_LOGS_EXPORTER": "otlp",
+				"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/v1/logs",
+				"OTEL_METRIC_EXPORT_INTERVAL": "1000",
+				"OTEL_BSP_SCHEDULE_DELAY": "100"
+			}
+		},
+		{
 			"name": "Run Extension",
 			"type": "extensionHost",
 			"request": "launch",

@@ -352,6 +352,9 @@ type Store struct {
 	providerUsageLogs              ringBuffer[LogRecord]
 	providerUsageMetrics           ringBuffer[MetricDataPoint]
 	providerRepositoryCorrelations ringBuffer[ProviderRepositoryCorrelation]
+	providerSkillActivations       ringBuffer[ProviderSkillActivation]
+	providerSkillInjections        ringBuffer[ProviderSkillInjection]
+	providerSkillKeys              map[string]struct{}
 	// Set after completed provider task snapshots are dropped or compacted by
 	// their dedicated task/span retention budgets.
 	providerTaskHistoryEvicted bool
@@ -506,6 +509,9 @@ func New() *Store {
 		providerUsageLogs:                     newRingBuffer[LogRecord](DefaultProviderUsageLogCap),
 		providerUsageMetrics:                  newRingBuffer[MetricDataPoint](DefaultProviderUsageMetricCap),
 		providerRepositoryCorrelations:        newRingBuffer[ProviderRepositoryCorrelation](DefaultProviderRepositoryCorrelationCap),
+		providerSkillActivations:              newRingBuffer[ProviderSkillActivation](defaultProviderSkillCap),
+		providerSkillInjections:               newRingBuffer[ProviderSkillInjection](defaultProviderSkillCap),
+		providerSkillKeys:                     make(map[string]struct{}),
 		providerUsageLogUnavailableThrough:    unavailableThrough,
 		providerUsageMetricUnavailableThrough: unavailableThrough,
 		providerRepositoryCorrelationUnavailableThrough: unavailableThrough,
@@ -558,6 +564,9 @@ func (s *Store) AddMetricsForConnection(connID string, metrics []MetricDataPoint
 		}
 	}
 	s.metrics.push(metrics)
+	for _, point := range metrics {
+		s.retainSkillInjection(point)
+	}
 	providerMetrics := retainedProviderUsageMetrics(metrics)
 	for _, evicted := range s.providerUsageMetrics.pushWithEvicted(providerMetrics) {
 		evictedAt := providerUsageMetricPointTime(evicted)
@@ -603,6 +612,7 @@ func (s *Store) AddLogsForConnection(connID string, logs []LogRecord) {
 	providerLogs := make([]LogRecord, 0)
 	providerRepositoryCorrelations := make([]ProviderRepositoryCorrelation, 0)
 	for _, record := range logs {
+		s.retainSkillActivation(record)
 		if correlation, ok := ProviderRepositoryCorrelationFromLog(record); ok {
 			providerRepositoryCorrelations = append(providerRepositoryCorrelations, correlation)
 		}
@@ -662,6 +672,9 @@ func (s *Store) Clear() {
 	s.providerTasks.clear()
 	s.providerUsageLogs.clear()
 	s.providerUsageMetrics.clear()
+	s.providerSkillActivations.clear()
+	s.providerSkillInjections.clear()
+	clear(s.providerSkillKeys)
 	s.providerRepositoryCorrelations.clear()
 	s.providerTaskHistoryEvicted = false
 	s.providerUsageLogUnavailableThrough = time.Now()
