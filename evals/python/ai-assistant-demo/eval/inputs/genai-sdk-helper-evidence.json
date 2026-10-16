@@ -135,8 +135,8 @@
     "proposed_startup": "Source the profile before application import and SDK/provider initialization; no startup loader is implemented or exercised in this fixture.",
     "proposed_routing": {
       "mode": "local_studio_gateway",
-      "SPLUNK_AO_API_URL": "http://127.0.0.1:3000",
-      "SPLUNK_AO_CONSOLE_URL": "http://127.0.0.1:3000",
+      "SPLUNK_AO_API_URL": "http://127.0.0.1:17900",
+      "SPLUNK_AO_CONSOLE_URL": "http://127.0.0.1:17900",
       "SPLUNK_AO_API_KEY": "local-gateway",
       "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"
     },

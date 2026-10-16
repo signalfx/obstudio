@@ -1759,7 +1759,9 @@ class ReleaseBinarySelectionTest(unittest.TestCase):
                 "checksum",
                 "0.1.0",
             )
-            start_obstudio_background.assert_called_once_with(verified_binary, plugin_data)
+            start_obstudio_background.assert_called_once_with(
+                verified_binary, plugin_data, "http://127.0.0.1:3000/api/health"
+            )
             state = json.loads(state_path.read_text(encoding="utf-8"))
         self.assertEqual(state["obstudioBinary"], str(verified_binary))
 
@@ -1817,6 +1819,7 @@ class StartObstudioBackgroundTest(unittest.TestCase):
                     {
                         "HOST": "0.0.0.0",
                         "PORT": "9999",
+                        "OBSTUDIO_PORT": "9999",
                         "OTLP_PORT": "9998",
                         "OTLP_HTTP_PORT": "9997",
                         "OTLP_GRPC_PORT": "9996",
@@ -1824,12 +1827,20 @@ class StartObstudioBackgroundTest(unittest.TestCase):
                 ),
                 mock.patch.object(BOOTSTRAP.subprocess, "Popen", side_effect=fake_popen),
             ):
-                process, log_path = BOOTSTRAP.start_obstudio_background(binary, Path(tempdir))
+                process, log_path = BOOTSTRAP.start_obstudio_background(
+                    binary,
+                    Path(tempdir),
+                    "http://127.0.0.1:17900/api/health",
+                )
 
         self.assertEqual(process.pid, 1234)
         self.assertEqual(captured["command"], [str(binary)])
         self.assertEqual(captured["kwargs"]["env"]["HOST"], "127.0.0.1")
-        self.assertEqual(captured["kwargs"]["env"]["PORT"], "3000")
+        # Binary reads only OBSTUDIO_PORT; it is derived from the health URL the
+        # caller passed (not the dead bare PORT), and an inherited OBSTUDIO_PORT
+        # is scrubbed first so it cannot leak.
+        self.assertEqual(captured["kwargs"]["env"]["OBSTUDIO_PORT"], "17900")
+        self.assertNotIn("PORT", captured["kwargs"]["env"])
         self.assertNotIn("OTLP_PORT", captured["kwargs"]["env"])
         self.assertEqual(captured["kwargs"]["env"]["OTLP_HTTP_PORT"], "4318")
         self.assertEqual(captured["kwargs"]["env"]["OTLP_GRPC_PORT"], "4317")
@@ -1999,13 +2010,231 @@ class MainOwnershipFlowTest(unittest.TestCase):
                 self.assertEqual(BOOTSTRAP.main(), 0)
 
             terminate_managed_process.assert_called_once_with("4321", "http://127.0.0.1:3000/api/health")
-            start_obstudio_background.assert_called_once_with(binary, plugin_data)
+            start_obstudio_background.assert_called_once_with(
+                binary, plugin_data, "http://127.0.0.1:3000/api/health"
+            )
             state = json.loads(state_path.read_text(encoding="utf-8"))
         self.assertEqual(state["pluginVersion"], "0.2.0")
         self.assertEqual(state["releaseVersion"], "0.2.0")
         self.assertEqual(state["owner"], "codex-plugin")
         self.assertEqual(state["mode"], "managed")
         self.assertEqual(state["pid"], "5555")
+
+    def test_prior_managed_observer_on_old_port_is_retired_before_new_start(self):
+        # Port-cutover upgrade: prior plugin-managed observer is still healthy on
+        # the OLD port (:3000, saved in bootstrap-state) while the new plugin
+        # targets :17900. The hook must retire the owned old-port observer to free
+        # the shared OTLP ports before starting the new one.
+        class FakeProcess:
+            pid = 6060
+
+            def poll(self):
+                return None
+
+        def fake_health(url):
+            if url == "http://127.0.0.1:3000/api/health":
+                return {
+                    "kind": "obstudio",
+                    "apiVersion": "v1",
+                    "owner": "codex-plugin",
+                    "mode": "managed",
+                    "version": "0.1.0",
+                }
+            return None
+
+        def fake_pid(url):
+            return "4321" if url == "http://127.0.0.1:3000/api/health" else ""
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            plugin_root = tempdir_path / "plugin"
+            plugin_data = tempdir_path / "data"
+            codex_home = tempdir_path / "home"
+            config_path = codex_home / ".codex" / "config.toml"
+            binary = tempdir_path / "obstudio"
+            state_path = plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE
+            (plugin_root / ".codex-plugin").mkdir(parents=True)
+            plugin_data.mkdir()
+            config_path.parent.mkdir(parents=True)
+            binary.write_text("binary", encoding="utf-8")
+            (plugin_root / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps({"version": "0.2.0"}),
+                encoding="utf-8",
+            )
+            (plugin_root / ".mcp.json").write_text(
+                json.dumps(
+                    {"mcpServers": {"obstudio": {"type": "http", "url": "http://127.0.0.1:17900/mcp"}}}
+                ),
+                encoding="utf-8",
+            )
+            config_path.write_text(
+                "\n".join(
+                    [
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK,
+                        "[mcp_servers.obstudio]",
+                        "enabled = true",
+                        'url = "http://127.0.0.1:17900/mcp"',
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK.replace("# BEGIN", "# END"),
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "pluginVersion": "0.1.0",
+                        "releaseVersion": "0.1.0",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "pid": "4321",
+                        "healthUrl": "http://127.0.0.1:3000/api/health",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
+                mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
+                mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "fetch_expected_checksum",
+                    return_value=("obstudio_0.2.0_linux_amd64.zip", "checksum"),
+                ),
+                mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary),
+                mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", side_effect=fake_health),
+                mock.patch.object(BOOTSTRAP, "find_pid_listening_on_url", side_effect=fake_pid),
+                mock.patch.object(BOOTSTRAP, "terminate_managed_process") as terminate_managed_process,
+                mock.patch.object(BOOTSTRAP, "is_tcp_port_open", return_value=False),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "start_obstudio_background",
+                    return_value=(FakeProcess(), plugin_data / "logs" / "obstudio.log"),
+                ) as start_obstudio_background,
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "verify_local_obstudio_health",
+                    return_value={
+                        "kind": "obstudio",
+                        "apiVersion": "v1",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "version": "0.2.0",
+                    },
+                ),
+                mock.patch.object(BOOTSTRAP, "emit_context"),
+            ):
+                self.assertEqual(BOOTSTRAP.main(), 0)
+
+            # Old :3000 observer retired first, new observer started on :17900.
+            terminate_managed_process.assert_called_once_with("4321", "http://127.0.0.1:3000/api/health")
+            start_obstudio_background.assert_called_once_with(
+                binary, plugin_data, "http://127.0.0.1:17900/api/health"
+            )
+
+    def test_foreign_observer_on_old_port_raises_actionable_error(self):
+        # Port-cutover upgrade where the old-port observer is NOT ours (foreign
+        # owner). We must not kill it; instead fail with an actionable message
+        # naming the owner, pid, and endpoint — not the generic health failure.
+        import contextlib
+        import io
+
+        def fake_health(url):
+            if url == "http://127.0.0.1:3000/api/health":
+                return {
+                    "kind": "obstudio",
+                    "apiVersion": "v1",
+                    "owner": "vscode-extension",
+                    "mode": "managed",
+                    "version": "0.1.0",
+                }
+            return None
+
+        def fake_pid(url):
+            return "7777" if url == "http://127.0.0.1:3000/api/health" else ""
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            plugin_root = tempdir_path / "plugin"
+            plugin_data = tempdir_path / "data"
+            codex_home = tempdir_path / "home"
+            config_path = codex_home / ".codex" / "config.toml"
+            binary = tempdir_path / "obstudio"
+            state_path = plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE
+            (plugin_root / ".codex-plugin").mkdir(parents=True)
+            plugin_data.mkdir()
+            config_path.parent.mkdir(parents=True)
+            binary.write_text("binary", encoding="utf-8")
+            (plugin_root / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps({"version": "0.2.0"}),
+                encoding="utf-8",
+            )
+            (plugin_root / ".mcp.json").write_text(
+                json.dumps(
+                    {"mcpServers": {"obstudio": {"type": "http", "url": "http://127.0.0.1:17900/mcp"}}}
+                ),
+                encoding="utf-8",
+            )
+            config_path.write_text(
+                "\n".join(
+                    [
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK,
+                        "[mcp_servers.obstudio]",
+                        "enabled = true",
+                        'url = "http://127.0.0.1:17900/mcp"',
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK.replace("# BEGIN", "# END"),
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "pluginVersion": "0.1.0",
+                        "releaseVersion": "0.1.0",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "pid": "4321",
+                        "healthUrl": "http://127.0.0.1:3000/api/health",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
+                mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
+                mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "fetch_expected_checksum",
+                    return_value=("obstudio_0.2.0_linux_amd64.zip", "checksum"),
+                ),
+                mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary),
+                mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", side_effect=fake_health),
+                mock.patch.object(BOOTSTRAP, "find_pid_listening_on_url", side_effect=fake_pid),
+                mock.patch.object(BOOTSTRAP, "terminate_managed_process") as terminate_managed_process,
+                mock.patch.object(BOOTSTRAP, "is_tcp_port_open", return_value=False),
+                mock.patch.object(BOOTSTRAP, "start_obstudio_background") as start_obstudio_background,
+                mock.patch.object(BOOTSTRAP, "emit_error"),
+                mock.patch.object(BOOTSTRAP, "emit_context"),
+            ):
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr):
+                    self.assertEqual(BOOTSTRAP.main(), 2)
+
+            # Foreign observer is NOT retired, and no new observer is spawned.
+            terminate_managed_process.assert_not_called()
+            start_obstudio_background.assert_not_called()
+            message = stderr.getvalue()
+            self.assertIn("vscode-extension", message)
+            self.assertIn("7777", message)
+            self.assertIn("http://127.0.0.1:3000/api/health", message)
 
 
 class ParseObstudioVersionTest(unittest.TestCase):

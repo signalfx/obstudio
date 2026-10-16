@@ -693,11 +693,11 @@ diff or trace IDs printed in stdout is not evidence of OTLP log export.
    sanitized body/category and known severity inside an active span. Also emit
    one record outside a span to prove the expected absence of correlation.
 2. Query the local REST endpoint and inspect the Explorer's **Logs** view at
-   `http://localhost:3000`. For example, after setting `proof_body` to the
+   `http://localhost:17900`. For example, after setting `proof_body` to the
    unique message:
 
    ```bash
-   curl -fsS http://localhost:3000/api/query/logs | \
+   curl -fsS http://localhost:17900/api/query/logs | \
      jq --arg body "$proof_body" \
        '[.[] | select(.body == $body)] |
         {count: length,

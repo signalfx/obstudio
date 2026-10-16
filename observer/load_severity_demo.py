@@ -5,7 +5,7 @@ import urllib.request
 
 
 def main() -> None:
-    ui_port = os.environ.get("PORT", "3000")
+    ui_port = os.environ.get("OBSTUDIO_PORT", "17900")
     otlp_port = os.environ.get("OTLP_HTTP_PORT", "4318")
     host = os.environ.get("HOST", "127.0.0.1")
     ui_base = f"http://{host}:{ui_port}"
