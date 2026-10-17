@@ -586,9 +586,14 @@ quality pass: audit 12/13 (score 95), instrumentation 8/9 (94), verification 6/9
 (88). Fixes made the ownership declaration visible in the audit summary,
 qualified empty inventories and proof limits early, preserved required final
 response headings and summaries, supplied absolute preformatted links, and
-finished evidence reconciliation before publication. Corrected broad audit and
-verification tasks each passed every criterion (13/13 and 9/9, score 100).
-Those broader runs preceded the final selection-preservation adjustment. The
+finished evidence reconciliation before publication. Corrected broad tasks each
+passed every criterion: audit 13/13 (score 100), instrumentation 9/9 (98), and
+verification 9/9 (100). The instrumentation run is `20261017T022146320185Z`;
+audit and verification are `20261017T021301634223Z` in their respective skill
+directories. All used `CASE=go/chi-basic`, with `PROMPT=direct` for audit and
+instrumentation and `PROMPT=canonical-proof-packet` for verification, plus the
+same config/home arguments as the commands below. These broader runs preceded
+the final selection-preservation adjustment. The
 final focused publication cases and their exact current-source manifests are
 published under `eval-reports/otel-{audit,instrument,verify}/rubric/`.
 
