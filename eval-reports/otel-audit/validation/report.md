@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20261015T054232482625Z |
+| Run ID | 20261017T022742556506Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -17,7 +17,9 @@ This report validates eval JSON, eval directory availability, and skill source a
 
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
-| go/chi-basic/qual/audit | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/audit.json | 0 | 11 | 0 |
+| go/chi-basic/qual/audit | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/audit.json | 0 | 13 | 0 |
+| go/chi-basic/qual/mcp-report-audit | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/mcp-report-audit.json | 0 | 6 | 0 |
+| go/chi-basic/sanity/stage-path-audit | go/chi-basic | 1 | evals/go/chi-basic/eval/sanity/stage-path-audit.json | 2 | 0 | 0 |
 | go/chi-partial/qual/audit | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/audit.json | 0 | 6 | 0 |
 | go/kvstore/qual/audit | go/kvstore | 2 | evals/go/kvstore/eval/qual/audit.json | 0 | 6 | 0 |
 | go/native-genai-demo/qual/audit | go/native-genai-demo | 1 | evals/go/native-genai-demo/eval/qual/audit.json | 0 | 6 | 0 |

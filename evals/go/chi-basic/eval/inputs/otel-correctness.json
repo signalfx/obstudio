@@ -1,0 +1,21 @@
+{
+  "runId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "auditSha256": "sha256:539e9f76793ac0bb264be190f93042e32d930ebda8769c0569ada5ea82c10b10",
+  "sourceRevision": "fixture",
+  "scenarios": [{
+    "id": "http.health.success",
+    "traceId": "cccccccccccccccccccccccccccccccc",
+    "witnessSpanId": "dddddddddddddddd",
+    "serviceName": "go-chi-basic",
+    "rules": [{
+      "name": "health.server.correctness",
+      "findingId": "OTEL-001",
+      "claim": "instrumentation",
+      "signal": "span",
+      "signalName": "GET /health",
+      "count": 1,
+      "kind": "SERVER",
+      "attributes": {"http.route": "/health"}
+    }]
+  }]
+}

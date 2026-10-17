@@ -9,6 +9,7 @@ from .base import BaseEvalCase, BaseEvalDefinition
 
 
 SanityCheckKind = Literal[
+    "skill_workflow",
     "final_contains_all",
     "final_contains_any",
     "file_exists",
@@ -33,6 +34,13 @@ class SanityCheck(BaseModel):
     command: list[str] = Field(default_factory=list)
     cwd: str | None = None
     timeout_seconds: int = 30
+    workflow_skill: str | None = None
+    required_stages: list[str] = Field(default_factory=list)
+    forbidden_branches: list[str] = Field(default_factory=list)
+    before: list[list[str]] = Field(default_factory=list)
+    executed_stages: list[str] = Field(default_factory=list)
+    evidence_paths: list[str] = Field(default_factory=list)
+    outcomes: list[str] = Field(default_factory=lambda: ["passed"])
     applies_to: Literal["both", "with_skill", "baseline"] = "with_skill"
 
 

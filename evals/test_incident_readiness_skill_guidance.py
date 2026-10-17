@@ -1,6 +1,7 @@
 """Deterministic checks for incident-readiness skill guidance."""
 
 from pathlib import Path
+from skill_contract import read_contract
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -12,7 +13,7 @@ SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
 
 def _read(path: Path) -> str:
     assert path.exists(), f"Expected file not found: {path}"
-    return path.read_text()
+    return read_contract(path)
 
 
 def _squash(text: str) -> str:

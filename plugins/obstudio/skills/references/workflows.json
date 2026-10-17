@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "skills": {
+    "otel-audit": {
+      "stages": [
+        {
+          "id": "discover",
+          "branches": [
+            "go",
+            "python",
+            "node",
+            "java",
+            "other"
+          ]
+        },
+        {
+          "id": "assess",
+          "after": [
+            "discover"
+          ],
+          "branches": [
+            "fresh",
+            "incremental",
+            "mixed"
+          ]
+        },
+        {
+          "id": "report",
+          "after": [
+            "assess"
+          ]
+        }
+      ]
+    },
+    "otel-instrument": {
+      "stages": [
+        {
+          "id": "preflight"
+        },
+        {
+          "id": "scope",
+          "after": [
+            "preflight"
+          ],
+          "branches": [
+            "explicit",
+            "saved",
+            "all",
+            "blocked"
+          ]
+        },
+        {
+          "id": "plan",
+          "after": [
+            "scope"
+          ],
+          "branches": [
+            "fresh",
+            "incremental",
+            "targeted"
+          ]
+        },
+        {
+          "id": "apply",
+          "after": [
+            "plan"
+          ]
+        },
+        {
+          "id": "verify",
+          "after": [
+            "apply"
+          ],
+          "branches": [
+            "focused",
+            "full_runtime",
+            "blocked"
+          ]
+        },
+        {
+          "id": "report",
+          "after": [
+            "verify"
+          ]
+        }
+      ]
+    },
+    "otel-verify": {
+      "stages": [
+        {
+          "id": "inputs",
+          "branches": [
+            "canonical",
+            "missing",
+            "stale"
+          ]
+        },
+        {
+          "id": "build",
+          "after": [
+            "inputs"
+          ],
+          "branches": [
+            "passed",
+            "blocked"
+          ]
+        },
+        {
+          "id": "signals",
+          "after": [
+            "build"
+          ],
+          "branches": [
+            "focused",
+            "full_runtime",
+            "contract_only",
+            "blocked"
+          ]
+        },
+        {
+          "id": "report",
+          "after": [
+            "signals"
+          ]
+        }
+      ]
+    }
+  }
+}

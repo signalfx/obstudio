@@ -28,13 +28,14 @@ type GenAITokenUsage struct {
 }
 
 type GenAITraceSummary struct {
-	IsGenAI    bool            `json:"isGenAI"`
-	Tokens     GenAITokenUsage `json:"tokens"`
-	ToolCalls  int             `json:"toolCalls"`
-	LLMCalls   int             `json:"llmCalls"`
-	ModelNames []string        `json:"modelNames"`
-	FlowNodes  []GenAIFlowNode `json:"flowNodes"`
-	FlowEdges  []GenAIFlowEdge `json:"flowEdges"`
+	IsGenAI            bool            `json:"isGenAI"`
+	Tokens             GenAITokenUsage `json:"tokens"`
+	TokenUsageObserved bool            `json:"tokenUsageObserved"`
+	ToolCalls          int             `json:"toolCalls"`
+	LLMCalls           int             `json:"llmCalls"`
+	ModelNames         []string        `json:"modelNames"`
+	FlowNodes          []GenAIFlowNode `json:"flowNodes"`
+	FlowEdges          []GenAIFlowEdge `json:"flowEdges"`
 }
 
 type GenAIFlowNode struct {
@@ -170,10 +171,16 @@ func buildGenAITraceSummary(spans []Span) *GenAITraceSummary {
 	nodes := buildGenAIFlowNodes(spans, maxGenAIFlowNodeSpanListSize())
 
 	var tokens GenAITokenUsage
+	tokenUsageObserved := false
 	toolCalls := 0
 	llmCalls := 0
 	for _, span := range genAISpans {
 		tokens = addTokenUsage(tokens, getGenAITokenUsage(span))
+		for _, keys := range [][]string{genAIInputTokenKeys, genAIOutputTokenKeys, genAITotalTokenKeys} {
+			if _, ok := firstNumericAttributeValue(span.Attributes, keys); ok {
+				tokenUsageObserved = true
+			}
+		}
 		if isGenAIEvaluationOnlySpan(span) {
 			continue
 		}
@@ -185,13 +192,14 @@ func buildGenAITraceSummary(spans []Span) *GenAITraceSummary {
 		}
 	}
 	return &GenAITraceSummary{
-		IsGenAI:    true,
-		Tokens:     tokens,
-		ToolCalls:  toolCalls,
-		LLMCalls:   llmCalls,
-		ModelNames: getGenAITraceModelNames(genAISpans),
-		FlowNodes:  nodes,
-		FlowEdges:  buildGenAIFlowEdges(nodes),
+		IsGenAI:            true,
+		Tokens:             tokens,
+		TokenUsageObserved: tokenUsageObserved,
+		ToolCalls:          toolCalls,
+		LLMCalls:           llmCalls,
+		ModelNames:         getGenAITraceModelNames(genAISpans),
+		FlowNodes:          nodes,
+		FlowEdges:          buildGenAIFlowEdges(nodes),
 	}
 }
 

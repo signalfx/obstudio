@@ -4,6 +4,7 @@ import ast
 import copy
 import json
 from pathlib import Path
+from skill_contract import read_contract
 import runpy
 import subprocess
 import sys
@@ -26,7 +27,7 @@ SPLUNK_AO_REF = SKILLS_DIR / "references" / "splunk-agent-observability.md"
 
 def _read(path: Path) -> str:
     assert path.exists(), f"Expected file not found: {path}"
-    return path.read_text()
+    return read_contract(path)
 
 
 def test_language_without_compatible_ao_sdk_has_native_full_profile_path():

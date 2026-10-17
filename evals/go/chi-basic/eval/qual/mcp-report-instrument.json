@@ -1,0 +1,28 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "mcp-report-publication",
+      "eval_inputs": [
+        "eval/inputs/otel-audit.json",
+        "eval/inputs/otel-selection.json",
+        "eval/inputs/otel-instrumentation.json",
+        "eval/inputs/otel-verify.json",
+        "eval/inputs/canonical-verify-evidence.txt"
+      ],
+      "task": "Report publication only. Copy the four supplied canonical JSON files from ./service/eval/inputs to ./service/.observe, preserving their values and exact digest bindings. Do not audit, instrument or rerun application tests; do not modify application code or configuration. Publish the supplied otel-instrumentation.json using observer_instrumentation_report_write when advertised. First submit an in-memory copy with an invalid schema_version and confirm it is rejected without replacing valid report files; then publish the original valid object. If MCP is actually unavailable, use the bundled report writer and distinguish that prerequisite from invalid input; do not bypass validation with manual Markdown or HTML. Keep the original input proof classification and describe report validation separately from independent application verification. Return a compact receipt and links, preserving the skill final-response contract where applicable."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service/.observe canonical files, generated views and any report-writer receipts.",
+    "Read ./trace.jsonl and ./last_message.md for actual MCP/local writer calls and failure handling."
+  ],
+  "rubric": [
+    "Uses the matching advertised report-writing MCP tool, or records a concrete unavailable prerequisite and uses the bundled deterministic local writer. Does not manually author duplicate Markdown/HTML after successful publication.",
+    "Confirms the intentionally invalid schema is rejected and preserves the valid source packet; does not suppress validation or claim the invalid request succeeded.",
+    "Preserves canonical JSON values, selected finding scope and audit/selection/instrumentation digest bindings; does not edit application code or invent test execution.",
+    "Produces the applicable canonical JSON and HTML, plus instrumentation/verification Markdown as applicable; downstream publication preserves existing audit HTML and human selection.",
+    "Keeps report validation and the automatically recorded report operation distinct from independently verified application correctness, full audit execution and model token usage. Does not turn missing witnesses into numeric passing scores.",
+    "Preserves substantive fixture evidence and the existing reader/final-response contract; reports actual tool/runtime/server availability without guessing ports, changing host settings or repeatedly retrying a denied bind."
+  ]
+}

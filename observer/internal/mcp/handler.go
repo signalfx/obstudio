@@ -111,6 +111,7 @@ const (
 )
 
 type jsonSchema struct {
+	Items                *jsonSchema           `json:"items,omitempty"`
 	Type                 string                `json:"type"`
 	AdditionalProperties *bool                 `json:"additionalProperties,omitempty"`
 	Required             []string              `json:"required,omitempty"`
@@ -147,6 +148,7 @@ type RepositoryCorrelationModeResolver func(provider string) string
 
 // Dispatcher handles MCP JSON-RPC method dispatch independent of transport.
 type Dispatcher struct {
+	skillCatalog                      *SkillCatalog
 	store                             *store.Store
 	validationService                 *validator.Service
 	splunkMetricsCtrl                 *otlp.SplunkMetricsExportController
@@ -164,8 +166,11 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 	var splunkTracesCtrl *otlp.SplunkTracesExportController
 	var repositoryCorrelationModeResolver RepositoryCorrelationModeResolver
 	var freeAccountSubmitter freeaccount.Submitter
+	var skillCatalog *SkillCatalog
 	for _, param := range params {
 		switch value := param.(type) {
+		case *SkillCatalog:
+			skillCatalog = value
 		case *validator.Store:
 			if value != nil {
 				validationStore = value
@@ -195,7 +200,8 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 	if validationStore == nil {
 		validationStore = validator.NewStore()
 	}
-	return &Dispatcher{
+	d := &Dispatcher{
+		skillCatalog:                      skillCatalog,
 		store:                             s,
 		validationService:                 validator.NewService(validationStore, runner),
 		splunkMetricsCtrl:                 splunkMetricsCtrl,
@@ -204,6 +210,13 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 		freeAccount:                       freeAccountSubmitter,
 		tools:                             buildToolDefs(splunkMetricsCtrl != nil, freeAccountSubmitter != nil),
 	}
+	if skillCatalog != nil && len(skillCatalog.names) > 0 {
+		d.tools = append(d.tools, workflowTools()...)
+	}
+	if d.reportWriterAvailable() {
+		d.tools = append(d.tools, reportTools()...)
+	}
+	return d
 }
 
 // Dispatch processes a single JSON-RPC request and returns a response.
@@ -215,8 +228,46 @@ func (d *Dispatcher) Dispatch(req jsonRPCRequest) (jsonRPCResponse, bool) {
 
 // DispatchContext processes a single JSON-RPC request using the transport's
 // lifecycle context. Callers without one should use Dispatch.
-func (d *Dispatcher) DispatchContext(ctx context.Context, req jsonRPCRequest) (jsonRPCResponse, bool) {
+func (d *Dispatcher) DispatchContext(ctx context.Context, req jsonRPCRequest) (response jsonRPCResponse, handled bool) {
+	params, _ := toMap(req.Params)
+	meta, _ := toMap(params["_meta"])
+	protocol := strArg(meta, "io.modelcontextprotocol/protocolVersion")
+	_, hasProtocol := meta["io.modelcontextprotocol/protocolVersion"]
+	if hasProtocol {
+		if protocol == "" {
+			return rpcError(req.ID, -32602, "Invalid protocol version metadata"), true
+		}
+		if protocol != modernProtocol {
+			result := rpcError(req.ID, -32022, "Unsupported protocol version")
+			result.Error.Data = map[string]any{"supported": append([]string{modernProtocol}, supportedVersions...), "requested": protocol}
+			return result, true
+		}
+		if err := validateSkillMetadata(params, false); err != nil {
+			return rpcError(req.ID, -32602, err.Error()), true
+		}
+		defer func() {
+			if response.Error == nil && response.Result != nil {
+				raw, err := json.Marshal(response.Result)
+				var result map[string]any
+				if err == nil && json.Unmarshal(raw, &result) == nil {
+					result["resultType"] = "complete"
+					metadata, _ := toMap(result["_meta"])
+					if metadata == nil {
+						metadata = map[string]any{}
+					}
+					metadata["io.modelcontextprotocol/serverInfo"] = map[string]any{"name": "obstudio", "version": "dev"}
+					result["_meta"] = metadata
+					if req.Method == "tools/list" {
+						result = cacheResult(result)
+					}
+					response.Result = result
+				}
+			}
+		}()
+	}
 	switch req.Method {
+	case "server/discover", "skills/list", "skills/get", "resources/list", "resources/read", "resources/directory/read":
+		return d.skillRequest(req), true
 	case "initialize":
 		return d.handleInitialize(req), true
 	case "notifications/initialized":
@@ -238,9 +289,13 @@ func (d *Dispatcher) handleInitialize(req jsonRPCRequest) jsonRPCResponse {
 	clientVersion, _ := params["protocolVersion"].(string)
 	negotiated := negotiateVersion(clientVersion)
 
+	capabilities := map[string]any{"tools": map[string]any{"listChanged": false}}
+	if d.skillCatalog != nil && len(d.skillCatalog.names) > 0 {
+		capabilities["resources"] = map[string]any{}
+	}
 	return rpcResult(req.ID, map[string]any{
 		"protocolVersion": negotiated,
-		"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
+		"capabilities":    capabilities,
 		"serverInfo":      map[string]any{"name": "obstudio", "version": "0.1.0"},
 	})
 }
@@ -259,6 +314,31 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, req jsonRPCRequest) js
 
 	var result toolResult
 	switch toolName {
+	case "observer_audit_report_write", "observer_instrumentation_report_write", "observer_verification_report_write":
+		if !d.reportWriterAvailable() {
+			return rpcError(req.ID, -32602, "Unknown tool: "+toolName)
+		}
+		result = d.writeReport(ctx, toolName, args)
+	case "observer_skill_correctness_evaluate":
+		if d.skillCatalog == nil || len(d.skillCatalog.names) == 0 {
+			return rpcError(req.ID, -32602, "Unknown tool: "+toolName)
+		}
+		result = d.skillCorrectnessEvaluate(args)
+	case "observer_skill_workflow_evaluate":
+		if d.skillCatalog == nil || len(d.skillCatalog.names) == 0 {
+			return rpcError(req.ID, -32602, "Unknown tool: "+toolName)
+		}
+		result = d.skillWorkflowEvaluate(args)
+	case "observer_skill_workflow_record":
+		if d.skillCatalog == nil || len(d.skillCatalog.names) == 0 {
+			return rpcError(req.ID, -32602, "Unknown tool: "+toolName)
+		}
+		result = d.skillWorkflowRecord(args)
+	case "observer_skill_workflows":
+		if d.skillCatalog == nil || len(d.skillCatalog.names) == 0 {
+			return rpcError(req.ID, -32602, "Unknown tool: "+toolName)
+		}
+		result = d.skillWorkflows(args)
 	case "observer_metrics_overview":
 		result = d.metricsOverview(args)
 	case "observer_metric_detail":

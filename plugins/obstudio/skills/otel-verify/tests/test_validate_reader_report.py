@@ -132,7 +132,7 @@ class ValidateReaderReportTest(unittest.TestCase):
             "| OTel item | Type | Added or modified | Working status | "
             "How it was tested | Evidence |"
         )
-        skill = SKILL.read_text(encoding="utf-8")
+        skill = read_skill_contract()
         self.assertGreaterEqual(skill.count(expected_header), 2)
         self.assertNotIn(stale_header, skill)
 
@@ -493,6 +493,17 @@ Finding-level scenarios remain authoritative.
             "Working status 'Not proven'",
             contradictory.stderr,
         )
+
+
+
+
+def read_skill_contract():
+    import re
+    text = SKILL.read_text(encoding="utf-8")
+    return text + "\n" + "\n".join(
+        (SKILL.parent / target).read_text(encoding="utf-8")
+        for target in re.findall(r"\]\((references/stages/[a-z-]+\.md)\)", text)
+    )
 
 
 if __name__ == "__main__":

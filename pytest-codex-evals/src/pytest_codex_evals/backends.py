@@ -819,6 +819,22 @@ def _complete_claude_tool_results(
             action.result = block.get("content")
             action.output = _claude_tool_result_text(action.result)
             action.completion_order = order
+            if action.kind == "command":
+                action.exit_code = None
+                detail = event.get("tool_use_result") if len(blocks) == 1 else None
+                detail = detail if isinstance(detail, dict) else {}
+                background = action.input.get("run_in_background") is True or detail.get("backgroundTaskId") or detail.get("task_id") or detail.get("interrupted") is True
+                code = block.get("exit_code", detail.get("exit_code", detail.get("exitCode")))
+                if not background and type(code) is int:
+                    if code != 0:
+                        action.status = "failed"
+                        action.exit_code = code
+                    elif block.get("is_error") is not True:
+                        action.exit_code = 0
+                elif not background and code is None and block.get("is_error") is False:
+                    # A completed foreground Bash tool result independently
+                    # establishes success; an absent/error result does not.
+                    action.exit_code = 0
 
 
 def _claude_command_text(action: ActionEvent) -> str | None:

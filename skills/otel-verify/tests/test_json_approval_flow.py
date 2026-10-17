@@ -24,7 +24,7 @@ WRAPPER_SPEC.loader.exec_module(WRAPPER_MODULE)
 
 class JsonApprovalFlowGuidanceTest(unittest.TestCase):
     def test_consumes_the_same_bound_selection(self) -> None:
-        skill = SKILL.read_text(encoding="utf-8")
+        skill = read_skill_contract()
         text = skill + FLOW.read_text(encoding="utf-8")
         self.assertIn("./references/json-approval-handoff.md", skill)
         required = (
@@ -61,7 +61,7 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
 
     def test_scenario_references_are_selection_scoped(self) -> None:
         normalized = " ".join(
-            (SKILL.read_text(encoding="utf-8") + FLOW.read_text(encoding="utf-8")).split()
+            (read_skill_contract() + FLOW.read_text(encoding="utf-8")).split()
         )
         self.assertIn(
             "verify exactly the approved findings in audit order and their referenced scenarios",
@@ -87,7 +87,7 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
 
     def test_final_response_uses_loopback_links_for_html_only(self) -> None:
         text = " ".join(
-            (SKILL.read_text(encoding="utf-8") + FLOW.read_text(encoding="utf-8")).split()
+            (read_skill_contract() + FLOW.read_text(encoding="utf-8")).split()
         )
 
         self.assertIn(
@@ -115,6 +115,17 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         ):
             self.assertEqual(WRAPPER_MODULE.main(), 1)
         self.assertIn("OpenTelemetry report helper is missing", error.getvalue())
+
+
+
+
+def read_skill_contract():
+    import re
+    text = SKILL.read_text(encoding="utf-8")
+    return text + "\n" + "\n".join(
+        (SKILL.parent / target).read_text(encoding="utf-8")
+        for target in re.findall(r"\]\((references/stages/[a-z-]+\.md)\)", text)
+    )
 
 
 if __name__ == "__main__":

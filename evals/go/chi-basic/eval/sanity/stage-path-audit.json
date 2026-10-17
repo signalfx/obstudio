@@ -1,0 +1,27 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "stage-path",
+      "task": "Use $otel-audit on ./service. Keep application code unchanged. Allow the local workflow journal alongside the canonical audit JSON and HTML, and attach .observe/otel-audit.json as report-stage evidence."
+    }
+  ],
+  "checks": [
+    {
+      "id": "audit-stage-path",
+      "description": "Records the Go audit path in order and binds its report checkpoint to the real audit artifact.",
+      "kind": "skill_workflow",
+      "workflow_skill": "otel-audit",
+      "required_stages": ["discover", "assess", "report"],
+      "before": [["discover", "assess"], ["assess", "report"]],
+      "forbidden_branches": ["discover=python", "discover=node", "discover=java"],
+      "evidence_paths": [".observe/otel-audit.json"]
+    },
+    {
+      "id": "audit-reader",
+      "description": "Independently confirms the normal audit report was produced.",
+      "kind": "file_exists",
+      "path": ".observe/otel.html"
+    }
+  ]
+}

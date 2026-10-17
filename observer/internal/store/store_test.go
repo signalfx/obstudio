@@ -4971,3 +4971,20 @@ func contains(s, substr string) bool {
 	}
 	return false
 }
+
+func TestGenAITokenMeasurementCoverageDistinguishesUnknownFromZero(t *testing.T) {
+	span := newTestSpan("coverage", "workflow", "invoke_workflow", time.Now(), 100)
+	span.Attributes = map[string]any{"gen_ai.operation.name": "invoke_workflow"}
+	if buildGenAITraceSummary([]Span{span}).TokenUsageObserved {
+		t.Fatal("absent usage treated as zero measurement")
+	}
+	span.Attributes["gen_ai.usage.input_tokens"] = 0
+	if !buildGenAITraceSummary([]Span{span}).TokenUsageObserved {
+		t.Fatal("explicit zero usage lost")
+	}
+	delete(span.Attributes, "gen_ai.usage.input_tokens")
+	span.Attributes["gen_ai.usage.input_tokens"] = "unavailable"
+	if buildGenAITraceSummary([]Span{span}).TokenUsageObserved {
+		t.Fatal("invalid usage treated as a measurement")
+	}
+}

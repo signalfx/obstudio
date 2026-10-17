@@ -1,0 +1,36 @@
+package main
+
+import (
+ "context"
+ "encoding/json"
+ "os"
+ "testing"
+
+ "go.opentelemetry.io/otel/attribute"
+ "go.opentelemetry.io/otel/codes"
+ "go.opentelemetry.io/otel/propagation"
+ "go.opentelemetry.io/otel/trace"
+ "go.opentelemetry.io/otel/sdk/trace/tracetest"
+)
+
+func TestFrozenTruth(t *testing.T) {
+ t.Setenv("OTEL_SERVICE_NAME", "independent-audit-truth")
+ t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "service.version=truth-1,deployment.environment.name=test")
+ sink := tracetest.NewInMemoryExporter()
+ provider := newProvider(sink)
+ tracer := provider.Tracer("independent-probe")
+ CASE_CALL
+ spans := sink.GetSpans()
+ CASE_ASSERT
+ evidence := []map[string]any{}
+ for _, s := range spans {
+  name, ok := s.Resource.Set().Value(attribute.Key("service.name"))
+  if !ok || name.AsString() != "independent-audit-truth" { t.Fatal("environment service name missing") }
+  version, ok := s.Resource.Set().Value(attribute.Key("service.version"))
+  if !ok || version.AsString() != "truth-1" { t.Fatal("environment version missing") }
+  evidence = append(evidence, map[string]any{"name":s.Name,"kind":s.SpanKind.String(),"traceId":s.SpanContext.TraceID().String(),"spanId":s.SpanContext.SpanID().String(),"parentId":s.Parent.SpanID().String(),"status":s.Status.Code.String(),"events":len(s.Events),"attributes":s.Attributes,"resource":s.Resource.Attributes()})
+ }
+ if err := provider.Shutdown(context.Background()); err != nil { t.Fatal(err) }
+ raw, err := json.MarshalIndent(evidence, "", "  "); if err != nil { t.Fatal(err) }
+ if err := os.WriteFile("sdk-evidence.json", raw, 0600); err != nil { t.Fatal(err) }
+}

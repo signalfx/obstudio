@@ -11,6 +11,7 @@ import subprocess
 import sys
 import warnings
 from pathlib import Path
+from skill_contract import read_contract
 from urllib.parse import urlsplit, urlunsplit
 
 import pytest
@@ -23,7 +24,7 @@ LANGUAGES = SKILLS / "otel-instrument" / "references" / "languages"
 
 def _read(path: Path) -> str:
     assert path.is_file(), f"Expected file not found: {path}"
-    return path.read_text(encoding="utf-8")
+    return read_contract(path)
 
 
 def _normalized(path: Path) -> str:

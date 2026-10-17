@@ -170,6 +170,7 @@ export interface GenAIFlowEdge {
 }
 
 export interface GenAITraceSummary {
+  tokenUsageObserved?: boolean;
   isGenAI: boolean;
   tokens: GenAITokenUsage;
   toolCalls: number;

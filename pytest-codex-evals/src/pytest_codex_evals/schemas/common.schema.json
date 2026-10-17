@@ -43,7 +43,8 @@
             "command_succeeds",
             "command_stdout_contains_all",
             "command_stdout_contains_any",
-            "command_stdout_contains_none"
+            "command_stdout_contains_none",
+            "skill_workflow"
           ]
         },
         "path": { "type": "string" },
@@ -52,6 +53,13 @@
         "command": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
         "cwd": { "type": "string" },
         "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 300, "default": 30 },
+        "workflow_skill": { "type": "string" },
+        "required_stages": { "type": "array", "items": { "type": "string" } },
+        "forbidden_branches": { "type": "array", "items": { "type": "string" } },
+        "executed_stages": { "type": "array", "items": { "type": "string" } },
+        "evidence_paths": { "type": "array", "items": { "type": "string" } },
+        "outcomes": { "type": "array", "items": { "type": "string" } },
+        "before": { "type": "array", "items": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 2 } },
         "applies_to": { "type": "string", "enum": ["both", "with_skill", "baseline"], "default": "with_skill" }
       }
     },

@@ -111,7 +111,7 @@ export function GenAITraceOverview({
       <div className="genai-summary" aria-label="GenAI trace summary">
         <SummaryValue
           label="Tokens"
-          value={`${formatCount(summary.tokens.total)} (In: ${formatCount(summary.tokens.input)} | Out: ${formatCount(summary.tokens.output)})`}
+          value={summary.tokenUsageObserved === false ? "unknown" : `${formatCount(summary.tokens.total)} (In: ${formatCount(summary.tokens.input)} | Out: ${formatCount(summary.tokens.output)})`}
         />
         <SummaryValue label="Tool calls" value={formatCount(summary.toolCalls)} />
         <SummaryValue label="LLM calls" value={formatCount(summary.llmCalls)} />
