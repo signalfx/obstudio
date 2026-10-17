@@ -1,5 +1,13 @@
 ### 8. Produce Verification Artifacts
 
+Read `../references/mcp-reporting.md` before publication. Prefer
+`observer_verification_report_write` with the bound verification JSON and
+structured reader context. The server generates the compatibility Markdown and
+refreshes instrumentation views without rewriting audit HTML. This is report
+validation, not test execution or independent correctness evaluation; perform
+the existing signal checks and optional correctness-tool reconciliation first.
+Do not manually duplicate the generated documents after successful publication.
+
 In canonical flow, write `.observe/otel-verify.json` using
 `./references/json-approval-handoff.md`. Preserve exact selected finding,
 scenario, and instrumentation-item order; bind it to the exact normalized

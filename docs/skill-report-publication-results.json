@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "scope": "Re-publication of existing ordinary demo application evidence. No new audit, instrumentation, application execution or independent correctness reproduction in this publication demonstration.",
+  "sources": {
+    "observer/internal/mcp/report_writer.go": "sha256:93341d0177b8a338cf41eb4d4b1459ff690fb6381fcfa1c6da7d6a36496a6d58",
+    "skills/references/scripts/report_writer.py": "sha256:b68cecb3f3e5133171b2451ac3b9c28f614abc2263e36246371b174cd9bc2933",
+    "skills/references/scripts/observe_report.py": "sha256:dc6d5048a117595bd658e7f4ff7f91e11cd512693ee0e37d09080578574e4325"
+  },
+  "checks": {
+    "canonical_json_values_preserved": true,
+    "downstream_audit_html_byte_preserved": true,
+    "verification_replay_receipt_preserved": true,
+    "every_mcp_operation_measured": true,
+    "no_full_skill_execution_inferred": true
+  },
+  "operations": [
+    {
+      "kind": "audit",
+      "validated": true,
+      "report_result": "Partial",
+      "receipt": "sha256:c9b98ec200b06794e76eeead817711f74d55374ec540d42073488b91adac9bac",
+      "reused": false,
+      "files": {
+        "otel-audit.json": "sha256:b0da53d6bf4f058a3b2590049a163681d6dfb5688cc970aabbcfc5fe2bd1ed51",
+        "otel.html": "sha256:337e6aac0bec3991415e5bebd8e31b3aff4d42a8b4be5b44a77809e227dd83e9"
+      },
+      "operation": {
+        "trace_id": "306c228eb87598c162650b2372e4f1da",
+        "name": "execute_tool observer_audit_report_write",
+        "duration_ms": 307.16,
+        "scope": "obstudio.report-writer",
+        "status": "ok",
+        "is_genai": true,
+        "token_usage_observed": false,
+        "proof_scope": "report_validation_only"
+      }
+    },
+    {
+      "kind": "instrumentation",
+      "validated": true,
+      "report_result": "Pass",
+      "receipt": "sha256:e345ee38632e7ffb3dc849088e18a036e78bea923410155815e900f585d20d6a",
+      "reused": true,
+      "files": {
+        "otel-instrumentation.details.json": "sha256:676ef48af6c8a2b93be784da3c07373189a1bbe3db65ab9779f58766211d2e31",
+        "otel-instrumentation.html": "sha256:3135fa062246fe11c27fdd99f5f098347a99ce992196faf6419f9a24ff59602f",
+        "otel-instrumentation.json": "sha256:f7369f5358e7978c2791979b22ac9eae401657a9b7ddcc2afa2f815bac0e6b75",
+        "otel-instrumentation.md": "sha256:c67406f1df9b432b009bef2a7ddf8b66fbe09ed96078bfdca3a5564737c33f8c"
+      },
+      "operation": {
+        "trace_id": "e0aa0b541cfa805edf422502fe274baa",
+        "name": "execute_tool observer_instrumentation_report_write",
+        "duration_ms": 208.364,
+        "scope": "obstudio.report-writer",
+        "status": "ok",
+        "is_genai": true,
+        "token_usage_observed": false,
+        "proof_scope": "report_validation_only"
+      }
+    },
+    {
+      "kind": "verification",
+      "validated": true,
+      "report_result": "Pass",
+      "receipt": "sha256:878f1f7e851c88daf96f2e4c595c9ef123e60073a3dcb485b070e23f501a451d",
+      "reused": true,
+      "files": {
+        "otel-instrumentation.html": "sha256:3135fa062246fe11c27fdd99f5f098347a99ce992196faf6419f9a24ff59602f",
+        "otel-instrumentation.md": "sha256:c67406f1df9b432b009bef2a7ddf8b66fbe09ed96078bfdca3a5564737c33f8c",
+        "otel-verify.details.json": "sha256:676ef48af6c8a2b93be784da3c07373189a1bbe3db65ab9779f58766211d2e31",
+        "otel-verify.json": "sha256:cd8aff48a50169c698d3af1a01b60b77a83b482b9938fb48263ef3cb699c1a73",
+        "otel-verify.md": "sha256:2181e73bb10db50529f33fbda950e87ecc67b03266309e7066960c453d1d6bcd"
+      },
+      "operation": {
+        "trace_id": "9b973ca29bc1aa6319205174fcfa021c",
+        "name": "execute_tool observer_verification_report_write",
+        "duration_ms": 211.032,
+        "scope": "obstudio.report-writer",
+        "status": "ok",
+        "is_genai": true,
+        "token_usage_observed": false,
+        "proof_scope": "report_validation_only"
+      }
+    },
+    {
+      "kind": "replay",
+      "validated": true,
+      "report_result": "Pass",
+      "receipt": "sha256:878f1f7e851c88daf96f2e4c595c9ef123e60073a3dcb485b070e23f501a451d",
+      "reused": true,
+      "files": {
+        "otel-instrumentation.html": "sha256:3135fa062246fe11c27fdd99f5f098347a99ce992196faf6419f9a24ff59602f",
+        "otel-instrumentation.md": "sha256:c67406f1df9b432b009bef2a7ddf8b66fbe09ed96078bfdca3a5564737c33f8c",
+        "otel-verify.details.json": "sha256:676ef48af6c8a2b93be784da3c07373189a1bbe3db65ab9779f58766211d2e31",
+        "otel-verify.json": "sha256:cd8aff48a50169c698d3af1a01b60b77a83b482b9938fb48263ef3cb699c1a73",
+        "otel-verify.md": "sha256:2181e73bb10db50529f33fbda950e87ecc67b03266309e7066960c453d1d6bcd"
+      },
+      "operation": {
+        "trace_id": "b3a36b314d44656f2cb1f9c2a66d351f",
+        "name": "execute_tool observer_verification_report_write",
+        "duration_ms": 207.711,
+        "scope": "obstudio.report-writer",
+        "status": "ok",
+        "is_genai": true,
+        "token_usage_observed": false,
+        "proof_scope": "report_validation_only"
+      }
+    }
+  ],
+  "native_claude_tool_smoke": {
+    "is_error": false,
+    "duration_ms": 33523,
+    "turns": 4,
+    "receipt": "sha256:8292929360ee848cca82230386a8231dbfa8dc908db246bc009ab32eb8c2763c",
+    "operation_trace_id": "caa1d921a8d8c2cfcc30ae0eeed31bec",
+    "scope": "Native Claude MCP tool invocation, not a complete audit or SEP activation. Executed before the final selection-preservation fix."
+  },
+  "token_savings": {
+    "measured": false,
+    "reason": "No controlled before/after model-token comparison. Existing deterministic HTML bytes are not token savings."
+  }
+}

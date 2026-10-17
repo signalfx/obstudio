@@ -19,7 +19,8 @@
   "judge_inputs": [
     "Inspect ./service for resulting files when present.",
     "Read ./last_message.md for the agent final response.",
-    "Read ./grade.json for run guard checks."
+    "Read ./grade.json for run guard checks.",
+    "Inspect the report publication tool calls or bundled writer commands and returned receipts; distinguish server-rendered validation from independent application correctness."
   ],
   "rubric": [
     "Confirms target process, runtime shape, service.name source, and environment dimension before editing.",
@@ -29,6 +30,7 @@
     "Scopes implementation to approved OTEL-001 and does not add the unselected OTEL-002 task.created business metric or other drive-by signals.",
     "Writes canonical .observe/otel-selection.json preserving requested ID OTEL-001 separately from dependency-closed approved IDs, then writes bound .observe/otel-instrumentation.json that records selected finding ID OTEL-001, implementation status, changed signals, validation evidence, and verification handoff without rewriting the audit baseline.",
     "Retains .observe/otel-instrumentation.md as the complete compatibility report, renders .observe/otel-instrumentation.html with one concise verification status followed by every selected finding's change, observability improvement, item proof, and coverage, leaves .observe/otel.html audit-only, and runs otel-verify or records the exact blocker.",
-    "Read ./trace.jsonl for recorder calls and stage-reference reads. Follows the mandatory stage references before their affected operations. When metadata writes are authorized and Python is available, attempts the shared workflow recorder and records only stages actually reached, with honest blocked/skipped reasons. Keeps agent checkpoints separate from measured executable stages, leaves tokens unknown without provider evidence, and continues the primary task if recording/export is unavailable. Does not change native provider telemetry settings, fabricate success for unreached stages, or violate user file-write limits or the skill final-response contract for observability."
+    "Read ./trace.jsonl for recorder calls and stage-reference reads. Follows the mandatory stage references before their affected operations. When metadata writes are authorized and Python is available, attempts the shared workflow recorder and records only stages actually reached, with honest blocked/skipped reasons. Keeps agent checkpoints separate from measured executable stages, leaves tokens unknown without provider evidence, and continues the primary task if recording/export is unavailable. Does not change native provider telemetry settings, fabricate success for unreached stages, or violate user file-write limits or the skill final-response contract for observability.",
+    "Uses the advertised MCP report writer when available, submitting the canonical JSON and applicable structured reader details once rather than independently rewriting Markdown/HTML. Treats its receipt as report publication/validation, not proof that application tests ran or audit findings are independently correct. If the tool, transport, server filesystem or Python runtime is unavailable, uses the bundled local writer/compatible existing path without changing scope or host/provider configuration; never uses fallback to bypass stale bindings or invalid report inputs. Preserves the existing report files, digest bindings, substantive evidence and final-response contract."
   ]
 }

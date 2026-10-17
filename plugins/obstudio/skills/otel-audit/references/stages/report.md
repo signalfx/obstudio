@@ -1,5 +1,11 @@
 ### Step 3 -- Report
 
+Read `../references/mcp-reporting.md` before publishing. Prefer
+`observer_audit_report_write` for canonical JSON validation, persistence and HTML
+generation; retain the source-derived evidence requirements below. Its compact
+receipt replaces manual artifact writing and `finalize-audit` when MCP succeeds.
+Use its report server URL with the same final-response contract.
+
 Library selection guidance must remain release-neutral. Assess current official
 package metadata and the project's runtime, peer, SDK/exporter/bridge and lock
 constraints; name the latest compatible proposed set or the preserved installed

@@ -25,6 +25,11 @@
     "otel-instrument",
     "otel-verify"
   ],
+  "mcp-reporting.md": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
   "report-flow-contract.md": [
     "otel-audit",
     "otel-instrument",
@@ -32,6 +37,11 @@
     "splunk-configure"
   ],
   "scripts/observe_report.py": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
+  "scripts/report_writer.py": [
     "otel-audit",
     "otel-instrument",
     "otel-verify"

@@ -1,5 +1,13 @@
 ### Implementation Report And Handoff
 
+Read `../references/mcp-reporting.md` before publishing canonical reports. Prefer
+`observer_instrumentation_report_write`: submit the bound JSON and structured
+reader context once; let the server validate, write and render all views. Retain
+the source/proof requirements below, including applicable GenAI closure, signal
+roles and runtime receipts. Do not independently author a second Markdown/HTML
+projection after successful publication. Direct baseline mode and unavailable
+tools retain the documented local path.
+
 Check the three GenAI evidence tables before finalizing, including explicit
 INTERNAL-agent provider, tool input/output message mappings and lifecycle rows.
 Keep proposals separate from executed proof; correct omissions in the plan

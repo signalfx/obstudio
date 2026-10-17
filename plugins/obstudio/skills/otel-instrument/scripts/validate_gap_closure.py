@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import importlib.util
 import re
 import sys
@@ -158,7 +159,7 @@ def split_row(line: str) -> list[str]:
     if value.endswith("|") and not value.endswith(r"\|"):
         value = value[:-1]
     return [
-        cell.replace(r"\|", "|").strip()
+        html.unescape(cell.replace(r"\|", "|").strip())
         for cell in re.split(r"(?<!\\)\|", value)
     ]
 

@@ -213,6 +213,9 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 	if skillCatalog != nil && len(skillCatalog.names) > 0 {
 		d.tools = append(d.tools, workflowTools()...)
 	}
+	if d.reportWriterAvailable() {
+		d.tools = append(d.tools, reportTools()...)
+	}
 	return d
 }
 
@@ -311,6 +314,11 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, req jsonRPCRequest) js
 
 	var result toolResult
 	switch toolName {
+	case "observer_audit_report_write", "observer_instrumentation_report_write", "observer_verification_report_write":
+		if !d.reportWriterAvailable() {
+			return rpcError(req.ID, -32602, "Unknown tool: "+toolName)
+		}
+		result = d.writeReport(ctx, toolName, args)
 	case "observer_skill_correctness_evaluate":
 		if d.skillCatalog == nil || len(d.skillCatalog.names) == 0 {
 			return rpcError(req.ID, -32602, "Unknown tool: "+toolName)

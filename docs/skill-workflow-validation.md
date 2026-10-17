@@ -554,3 +554,117 @@ skill bytes used by the completed benchmark were unchanged by this merge.
 ```sh
 go -C observer test ./cmd/obstudio -run 'Test(CopilotTargetUsesVSCodeUserMCPJSON|CopilotMCPConfigPathResolvesPerOS|ConfigureMCPCopilot.*)$' -count=1 -v
 ```
+
+## MCP report writer follow-up (2026-10-16)
+
+The three canonical report stages now prefer server-owned publication. The new
+MCP tools reuse the existing canonical schema/binding normalizers and HTML
+renderer, generate Markdown from structured inputs, and return compact receipts
+and absolute report links. Existing local commands and direct baseline
+instrumentation remain supported. No application code, provider telemetry
+configuration or user-owned host settings were changed by this follow-up.
+
+`docs/skill-report-publication-results.json` records the source hashes, artifact
+digests and four measured operations for re-publication of the ordinary demo's
+existing evidence: audit, instrumentation, verification and verification replay.
+The demonstration checks canonical JSON equality, downstream audit HTML byte
+preservation and an identical replay receipt. It does not rerun the application
+or provide new correctness proof for that application. All four operations are
+recognized as GenAI tool operations, have measured server durations, and expose
+`tokenUsageObserved: false`. Their scope is `report_validation_only`.
+
+Native Claude also successfully invoked the audit-writing tool using a private
+per-process MCP configuration: four turns, approximately 34 seconds. That smoke
+test preceded the final selection-preservation fix and establishes native tool
+invocation, not a complete Claude audit or SEP activation. HTTP and stdio tests
+exercise the final implementation directly, including unavailable Python,
+discovery isolation, cancellation, retained workflow links, replay and a real
+restricted loopback HTML server that survives worker cleanup.
+
+The first model-backed runs exposed report-contract regressions rather than a
+quality pass: audit 12/13 (score 95), instrumentation 8/9 (94), verification 6/9
+(88). Fixes made the ownership declaration visible in the audit summary,
+qualified empty inventories and proof limits early, preserved required final
+response headings and summaries, supplied absolute preformatted links, and
+finished evidence reconciliation before publication. Corrected broad audit and
+verification tasks each passed every criterion (13/13 and 9/9, score 100).
+Those broader runs preceded the final selection-preservation adjustment. The
+final focused publication cases and their exact current-source manifests are
+published under `eval-reports/otel-{audit,instrument,verify}/rubric/`.
+
+| Final publication case | Criteria passed | Judge score | Run ID |
+|---|---:|---:|---|
+| Audit | 6/6 | 100 | `20261017T022719447823Z` |
+| Instrumentation | 6/6 | 98 | `20261017T022719447865Z` |
+| Verification | 6/6 | 100 | `20261017T022719447868Z` |
+
+All criteria pass; the instrumentation judge's soft score is 98, so these
+results must not be described as three scores of 100. These new publication
+cases are not a matched before/after score comparison.
+
+Each focused case rejects an intentionally invalid schema, then publishes the
+original bound fixture without modifying application code or inventing test
+execution. The original broad rubric criteria were retained, and a new
+publication criterion was added; none was relaxed to accept the new writer.
+One representative Go case per skill is not evidence of general statistical
+non-regression across applications, hosts or model versions.
+
+Commands ran from the repository root with the eval venv, cached Go/Node/npm,
+local tools on PATH and `UV_NO_CONFIG=1`. Model-backed runs used the isolated
+authenticated home from earlier demonstrations and the committed local proof
+configuration at `evals/.workspace/report-mcp-tools/final-evals.toml`. Its
+machine-specific launcher adds the loopback MCP server to writable Codex tasks
+only; read-only judges do not receive that mutation capability. No global
+configuration was changed. Reproduction requires a running server with the
+current skill catalog and a launcher available at the configured command path.
+
+```sh
+make eval-rubric SKILL=skills/otel-audit CASE=go/chi-basic/eval/qual/mcp-report-audit.json EVAL_CONFIG=.workspace/report-mcp-tools/final-evals.toml EVAL_CODEX_HOME=/Users/tithumma/code/splunk/obstudio/.workspace/codex-evals/codex-home
+make eval-rubric SKILL=skills/otel-instrument CASE=go/chi-basic/eval/qual/mcp-report-instrument.json EVAL_CONFIG=.workspace/report-mcp-tools/final-evals.toml EVAL_CODEX_HOME=/Users/tithumma/code/splunk/obstudio/.workspace/codex-evals/codex-home
+make eval-rubric SKILL=skills/otel-verify CASE=go/chi-basic/eval/qual/mcp-report-verify.json EVAL_CONFIG=.workspace/report-mcp-tools/final-evals.toml EVAL_CODEX_HOME=/Users/tithumma/code/splunk/obstudio/.workspace/codex-evals/codex-home
+```
+
+Deterministic checks on the final report-writing source:
+
+| Command | Result |
+|---|---|
+| `go -C observer test ./...` | Pass |
+| `go -C observer vet ./...` | Pass |
+| `go -C observer test -race ./internal/mcp -run 'TestReportWriter\|TestWorkflowReplayMetricsAndHonestIncompleteState' -count=1` | Pass |
+| `make build` | Pass, embedded skill staging, client assets and binary |
+| `make test-interactive-otel-scripts` | 157 shared, 1 audit, 117 instrumentation, 17 verification unit tests; 184 guidance checks passed |
+| `make eval-validation SKILL=skills/otel-audit` | 624 passed, 1 skipped |
+| `make eval-validation SKILL=skills/otel-instrument` | 644 passed, 1 skipped |
+| `make eval-validation SKILL=skills/otel-verify` | 590 passed, 1 skipped |
+| `make agent-policy-check check-obstudio-plugin-skills` | 49 policy and 8 guideline tests passed; policy and generated plugin parity passed |
+| `make test-eval-harness` | 737 passed, 1 skipped; all 26 retained report manifests verified |
+| `claude plugin validate ./plugins/obstudio --strict` and `claude plugin validate .` | Both passed |
+
+Freshness-required sanity reruns also passed: `make eval-sanity
+SKILL=skills/otel-audit CASE=go/chi-basic/eval/sanity/stage-path-audit.json` (one
+prompt, run `20261017T022719447849Z`) and `make eval-sanity
+SKILL=skills/otel-instrument CASE=sanity/skill-smoke/eval/sanity/instrument.json`
+(two prompts, run `20261017T022719447843Z`). Both used the same
+`EVAL_CONFIG` and `EVAL_CODEX_HOME` arguments as the rubric commands above, with
+`OBSTUDIO_SKILL_MCP_ENDPOINT=http://127.0.0.1:3011/mcp`.
+
+Initial attempts lacked the Node/npm launcher on PATH; subsequent commands used
+the cached npm CLI through the bundled Node runtime. A renderer metadata change
+also correctly invalidated frozen AO source/browser snapshots. The report-writer
+adapter now adds that declaration without changing the shared renderer or
+rewriting historical snapshots. Corrected complete checks pass.
+
+Browser interaction and responsive visual inspection were deferred while the Mac
+was locked, in accordance with the workspace instructions. HTML generation,
+selection retention and existing renderer interaction tests run through the
+terminal, but they do not replace new browser visual proof. No cloud delivery,
+new full application runtime run, or full language/editor matrix was attempted
+for this reporting change. Python must be available on the MCP server; per-file
+atomic replacement does not make a multi-file publication transactional, and
+operation telemetry retains the existing in-memory lifetime.
+
+Token reduction is **unmeasured**. Avoided duplicate model-authored Markdown is
+the expected saving; previously deterministic HTML bytes are not token savings.
+Canonical evidence, required final responses, new tool schemas and instructions
+still consume context. CLI usage recorded by the eval harness is not native
+provider OTel and is not attributed as Studio-measured skill token usage.

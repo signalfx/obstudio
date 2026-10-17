@@ -7,22 +7,22 @@
 | Mode | with_skill |
 | Eval kind | sanity |
 | Skill | otel-instrument |
-| Run ID | 20261016T065942092071Z |
+| Run ID | 20261017T022719447843Z |
 | Agent model | - |
 | Workers | 1 |
-| Config | evals/.workspace/skill-observability-proof/evals.toml |
+| Config | evals/.workspace/report-mcp-tools/final-evals.toml |
 
 ## Sanity Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | 2 | 100% (6/6) | 67.6K | 18.8s | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | 2 | 100% (6/6) | 67.8K | 23.3s | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | with_skill | codex | cumulative | measured | 2/2 recognized | 67386 | 35456 | 0 | 170 | 63 | unknown | 67556 |
+| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | with_skill | codex | cumulative | measured | 2/2 recognized | 67488 | 51584 | 0 | 334 | 221 | unknown | 67822 |
 
 ## Sanity Failures
 

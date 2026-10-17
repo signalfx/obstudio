@@ -3,14 +3,17 @@
   "prompts": [
     {
       "id": "decision-gated",
-      "eval_inputs": ["eval/inputs/otel-audit.json"],
+      "eval_inputs": [
+        "eval/inputs/otel-audit.json"
+      ],
       "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json. Record the manual decision OTEL-003=metric-counter, then use the bundled selection flow to write schema-v2 ./service/.observe/otel-selection.json requesting executable OTEL-002. Instrument only the unlocked task.created metric branch. The manual decision ID must remain outside requested_ids and approved_ids, and the unchosen OTEL-004 trace branch must remain untouched. Write and validate the bound canonical instrumentation JSON plus compatibility Markdown and HTML."
     }
   ],
   "judge_inputs": [
     "Inspect ./service for resulting files when present.",
     "Read ./last_message.md for the agent final response.",
-    "Read ./grade.json for run guard checks."
+    "Read ./grade.json for run guard checks.",
+    "Inspect the report publication tool calls or bundled writer commands and returned receipts; distinguish server-rendered validation from independent application correctness."
   ],
   "rubric": [
     "Writes selection schema v2 with decision_answers exactly OTEL-003=metric-counter, requested_ids and approved_ids containing only executable OTEL-002, and keeps the manual OTEL-003 ID outside both executable ID lists.",

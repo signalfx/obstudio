@@ -1,0 +1,11 @@
+[run]
+mode="with_skill"
+[rubric]
+enabled=true
+[runtime]
+enabled=false
+[agent]
+backend="codex"
+command="/Users/tithumma/code/splunk/obstudio-skills-stages-20261015/.workspace/report-mcp-tools/bin/codex-final"
+timeout=1800
+extra_args=["--config", 'model_reasoning_effort="xhigh"', "--config", "sandbox_workspace_write.network_access=true"]

@@ -7,10 +7,10 @@
 | Mode | with_skill |
 | Eval kind | sanity |
 | Skill | otel-audit |
-| Run ID | 20261016T065118862857Z |
+| Run ID | 20261017T022719447849Z |
 | Agent model | - |
 | Workers | 1 |
-| Config | evals/.workspace/skill-observability-proof/evals.toml |
+| Config | evals/.workspace/report-mcp-tools/final-evals.toml |
 
 ## Sanity Summary
 
@@ -22,7 +22,7 @@
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/sanity/stage-path-audit | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1792689 | 1546624 | 0 | 16342 | 3406 | unknown | 1809031 |
+| with_skill | go/chi-basic/sanity/stage-path-audit | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1811815 | 1664512 | 0 | 19319 | 6489 | unknown | 1831134 |
 
 ## Sanity Failures
 

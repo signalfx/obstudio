@@ -49,6 +49,59 @@ scope/approval rules, producer choices, and optional offline operation.
   compare recorded steps with a declared contract; they identify improvement
   candidates, not automatic proof that skill prose caused a failure.
 
+## MCP-owned report publication
+
+The audit, instrumentation and verification report stages prefer
+`observer_audit_report_write`, `observer_instrumentation_report_write` and
+`observer_verification_report_write`. The agent supplies the canonical report
+object, an absolute repository directory on the server filesystem, and structured
+reader context. The server owns validation, canonical JSON publication, Markdown
+projection, HTML rendering and the restricted loopback report server. Existing
+schemas and the required final response remain intact. Findings, source inspection,
+application changes, tests and independent correctness checks remain separate work.
+
+```mermaid
+flowchart LR
+  S[Skill report stage] --> P[Canonical JSON and reader context]
+  P --> M[MCP report writer]
+  M --> V[Existing binding and schema validators]
+  V --> R[JSON Markdown and HTML artifacts]
+  M --> T[Measured report operation span]
+  T -. optional retained run link .-> W[Skill workflow]
+  R --> C[Compact receipt and report links]
+```
+
+Each invocation automatically records an `execute_tool` operation in scope
+`obstudio.report-writer`, including errors. A supplied retained `runId` links the
+operation to the matching skill workflow. Without one, the operation still has
+its own server-generated trace. It establishes report publication, not the start,
+duration or completion of the entire skill. A client can still omit publication;
+only workflows whose authoritative output passes through these tools have this
+server-observed reporting boundary. No provider OTel configuration is required
+for these server measurements, and no provider tokens are inferred.
+
+The implementation reuses the bundled Python normalizers and HTML renderer,
+adding deterministic Markdown generation rather than maintaining a second schema
+implementation in Go. A compatible Python runtime is therefore required on the
+server. Existing local report commands and the same standalone writer remain
+available when MCP or the server filesystem is unavailable. Invalid or stale
+evidence is an input error, not a reason to bypass validation through the fallback.
+Direct baseline instrumentation without a canonical audit keeps its existing path.
+
+Unchanged requests reuse artifact receipts; every MCP invocation is still a
+separate measured operation. Downstream writes preserve audit HTML and selection.
+The writer validates and renders before changing canonical files, serializes
+cooperating writers, checks input identities and rejects symlink output paths.
+Each file replacement is atomic; the complete multi-file publication is not a
+filesystem transaction. Interrupted publication reports a failure and requires
+inspection before retrying. Artifacts persist on disk; operation spans use the
+existing bounded in-memory retention.
+
+This should reduce model-authored report formatting and duplicate prose. Existing
+HTML was already deterministic, so its byte size is not a token saving. Structured
+evidence and required final-response content still consume tokens; tool discovery
+also has overhead. No controlled before/after token reduction has been measured.
+
 ## Compatibility and acceptance
 
 SEP-2640 is Final (merged September 13, 2026). The implementation targets the

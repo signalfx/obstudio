@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 from collections import Counter
 import importlib.util
 import json
@@ -84,7 +85,7 @@ def split_row(line: str) -> tuple[str, ...]:
     if text.endswith("|") and not text.endswith(r"\|"):
         text = text[:-1]
     return tuple(
-        cell.replace(r"\|", "|").strip()
+        html.unescape(cell.replace(r"\|", "|").strip())
         for cell in re.split(r"(?<!\\)\|", text)
     )
 
