@@ -33,6 +33,20 @@ and its evidence into the repair plan; rerun its actual check after repair
 before replacing that failure with a passing result. Older passing probes for
 other assertions do not supersede it. `validate-flow` proves artifact shape
 and binding, not semantic correctness or successful verification.
+For selected GenAI work, compare the audited operation role with the actual
+model/tool control flow before editing. A model-directed tool/result feedback
+loop owns an agent invocation even when its existing creator is labeled
+`invoke_workflow`. Preserve the covering producer/provider and span topology;
+repair the operation and source-backed agent identity on that span through its
+supported hook. Preserve safe legacy consumer fields or document a migration
+for a semantic/name change; do not add duplicate workflow/agent nodes or retain
+a wrong operation solely because an existing test expects it. If the audit
+omits or contradicts that role, refresh the affected audit closure and rebind
+the authorized selection before implementation; never silently change an
+unselected contract. Exercise no-tool, tool-feedback and failure turns and
+prove each owns one agent span with its actual model/tool children, applicable
+agent duration and unchanged business results. Fixed pipelines and inference
+facades keep their independently source-backed roles.
 When any selected finding uses
 `finding_group: splunk-agent-observability`, or the repository contains a
 `splunk_ao` dependency/import, also read

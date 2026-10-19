@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-verify |
-| Run ID | 20261015T054232482618Z |
+| Run ID | 20261019T210156263092Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -30,3 +30,4 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/ai-assistant-demo/qual/verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/verify.json | 0 | 6 | 0 |
 | python/existing-otel-agent-demo/qual/route-recovery-verify | python/existing-otel-agent-demo | 1 | evals/python/existing-otel-agent-demo/eval/qual/route-recovery-verify.json | 0 | 5 | 0 |
 | python/existing-otel-agent-demo/qual/verify | python/existing-otel-agent-demo | 1 | evals/python/existing-otel-agent-demo/eval/qual/verify.json | 0 | 7 | 0 |
+| python/model-directed-agent/qual/verify | python/model-directed-agent | 1 | evals/python/model-directed-agent/eval/qual/verify.json | 0 | 4 | 0 |

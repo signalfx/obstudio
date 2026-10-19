@@ -26,6 +26,18 @@ Before writing verification artifacts, read
 Contract plus Reader-First Report Order. When `.observe/otel-audit.json` exists,
 also read `./references/json-approval-handoff.md`; it owns canonical scope,
 schema, digest binding, status rollup, and the HTML refresh.
+Independently reconcile each selected GenAI orchestration role with the source
+control flow before accepting the audit or test expectations. A custom
+model-directed tool/result feedback loop is an agent invocation; an existing
+`invoke_workflow` label or a passing test asserting that label cannot prove
+correct agent coverage. For no-tool, tool-feedback and failure turns, compare
+the received canonical span's operation, actual agent identity, parentage,
+call counts, status and selected agent-duration measurement with executed app
+code. Require one agent node at that boundary, without an extra workflow for
+the same turn. Distinguish genuine staged workflows and single inference
+facades. When source behavior contradicts a bound audit contract, report the
+role defect and its affected proof as incomplete/failed; do not rewrite source,
+rebind old proof or mark the agent covered from schema validation alone.
 Always read `../references/local-otlp-receiver.md` before choosing a local
 export target. When selected or bound findings use
 `finding_group: splunk-agent-observability`, or the repository contains a

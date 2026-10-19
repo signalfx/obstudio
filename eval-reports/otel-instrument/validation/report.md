@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261016T001759182684Z |
+| Run ID | 20261019T210112017102Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -63,6 +63,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/flask-basic/runtime/instrument | python/flask-basic | 1 | evals/python/flask-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
 | python/galileo-agent-demo/qual/instrument | python/galileo-agent-demo | 2 | evals/python/galileo-agent-demo/eval/qual/instrument.json | 0 | 6 | 0 |
 | python/mcp-ai-tool-demo/qual/instrument | python/mcp-ai-tool-demo | 1 | evals/python/mcp-ai-tool-demo/eval/qual/instrument.json | 0 | 7 | 0 |
+| python/model-directed-agent/qual/instrument | python/model-directed-agent | 1 | evals/python/model-directed-agent/eval/qual/instrument.json | 0 | 4 | 0 |
 | python/splunk-ao-integration-demo/qual/instrument | python/splunk-ao-integration-demo | 1 | evals/python/splunk-ao-integration-demo/eval/qual/instrument.json | 0 | 6 | 0 |
 | python/splunk-ao-langchain-demo/qual/instrument | python/splunk-ao-langchain-demo | 1 | evals/python/splunk-ao-langchain-demo/eval/qual/instrument.json | 0 | 6 | 0 |
 | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/eval/sanity/instrument.json | 0 | 0 | 0 |

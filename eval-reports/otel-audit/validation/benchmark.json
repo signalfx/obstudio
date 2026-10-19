@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261015T054232482625Z",
+    "run_id": "20261019T205428251156Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "",
@@ -499,6 +499,22 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/model-directed-agent/qual/audit",
+      "case": "python/model-directed-agent",
+      "language": "python",
+      "service": "model-directed-agent",
+      "prompt_count": 1,
+      "prompts": [
+        "agent-role-from-behavior"
+      ],
+      "definition_path": "evals/python/model-directed-agent/eval/qual/audit.json",
+      "eval_dir": "evals/python/model-directed-agent",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
       "id": "python/splunk-ao-integration-demo/qual/audit",
       "case": "python/splunk-ao-integration-demo",
       "language": "python",
@@ -549,16 +565,16 @@
     }
   ],
   "summary": {
-    "eval_count": 32,
-    "case_count": 46,
-    "prompt_count": 46,
+    "eval_count": 33,
+    "case_count": 47,
+    "prompt_count": 47,
     "sanity_check_count": 0,
-    "rubric_check_count": 274,
+    "rubric_check_count": 279,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 4,
-    "digest": "b4f9c808a9bd2e396a59c8b041ceb1eb42da770b909958e301d38d134a00feb2",
+    "digest": "f4795d8b4771295188bba94f970170bae3234deb088f934323b4603e5c5d037c",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -569,7 +585,7 @@
       "evals/go/chi-basic/eval/qual/audit.json": "180f8c26072e09fcd71d07ba4cb332c5b03e80b8c5b03614f59eab5aa9d5a192",
       "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
-      "skills/otel-audit/SKILL.md": "8e8655c64590b43218ccf5e195f710af85ddfe5dfd31777b4f9dca885e985bb5",
+      "skills/otel-audit/SKILL.md": "40bfc7551d5574edfb8ebb837641b093c8dc9444ae5566b2cbd5696a0216e5cb",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
       "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
       "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
@@ -750,6 +766,19 @@
       "evals/python/mcp-ai-tool-demo/eval/qual/audit.json": "59431a4ce48c1d680d3259c85356a9f755516e417da94381f5a85435601411c7",
       "evals/python/mcp-ai-tool-demo/load_demo.py": "5bec26d9d8fd272dbdd779ab2dfb7bbb7134648ee65960537516354fcb428660",
       "evals/python/mcp-ai-tool-demo/pyproject.toml": "d0aed70f07d1a77a413afe435daa70c5e403da903e07511ba23b0232fc0e4375",
+      "evals/python/model-directed-agent/README.md": "1b1282a70b755a72015ab7142e945c563eed7de5ecec52d79c107facf4bf23b9",
+      "evals/python/model-directed-agent/agent.py": "bfce5cfd1ca2b3915974cdfc4036a85a1dd10cef65c539708e463eddb6f9469f",
+      "evals/python/model-directed-agent/app.py": "cb0af805218d3cbe2d70c2fbce44d36bd44a5d3cba5cb3adebf280a9ada4c525",
+      "evals/python/model-directed-agent/chat_core.py": "c228f81a2dbc7e9b66ea1ff7b0280ffbe2879c0421deeb5c0e20ed21655465db",
+      "evals/python/model-directed-agent/eval/inputs/prior-audit.json": "42877c4ee140fb8e61e0534addf21e4b086836272120273b1b54d9926c839bad",
+      "evals/python/model-directed-agent/eval/qual/audit.json": "492caa234f35abf70d4a16bcc538844e9ee033dfdf8e23025719f185899859ca",
+      "evals/python/model-directed-agent/historical_check.py": "3420a0435ce493657b3f7eb695332d6b348c42e8c836e9696064fbc044bc0ccf",
+      "evals/python/model-directed-agent/otel_setup.py": "8251fca417bd890cb0548de1baa228bfd8d64c98aac3b94f9b4a4f6e5fb987ce",
+      "evals/python/model-directed-agent/probe.py": "6fbc3180a8591f89db88327069b7e1004493a3317b348017b8b06d9cd8b91d8d",
+      "evals/python/model-directed-agent/recommendations.py": "d120cd0c2154d963b5cb04ef6605831ca3f7703347fb1d0b6c0ef4bbdc3ea2f5",
+      "evals/python/model-directed-agent/requirements.txt": "b69934b598a12af6c7a0458eba13b445a8b1c30209f355f60403125e8fa3bc89",
+      "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
+      "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
       "evals/python/splunk-ao-integration-demo/decorator_app.py": "65cbdeb9ba515386d6f122ae085bd299f640952cf3e338c76bc285c8df01cd56",
       "evals/python/splunk-ao-integration-demo/eval/qual/audit.json": "b0131ecd6235022f8276935e6cc777e27036d3b8c06e91cad9f142ffa0f88600",
       "evals/python/splunk-ao-integration-demo/existing_otel_app.py": "11103e93e200d4f35bb2e3c230ca06da3cbc9180af105baa2a4caa9bec9c81d4",
@@ -1109,6 +1138,15 @@
         "prompt_id": "mcp-readiness",
         "eval_kind": "rubric",
         "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/model-directed-agent/eval/qual/audit.json",
+        "fixture_dir": "evals/python/model-directed-agent",
+        "prompt_id": "agent-role-from-behavior",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/prior-audit.json"
+        ]
       },
       {
         "definition_path": "evals/python/splunk-ao-integration-demo/eval/qual/audit.json",

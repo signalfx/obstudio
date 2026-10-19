@@ -25,6 +25,13 @@ what is missing, and any anti-patterns. This skill is read-only for application
 code: it writes `.observe/otel-audit.json` and `.observe/otel.html` but does
 not modify service code, dependencies, configuration, or tests.
 
+An existing audit is a baseline to reconcile, not a completed new scan. On a
+new audit request, inspect the current entrypoints and their reachable source
+before reusing its classifications. Successful rendering, recent timestamps,
+and unchanged source bytes do not prove that an earlier semantic decision was
+correct. Preserve stable finding IDs and existing selections/overlays; record
+new or corrected source findings in the audit rather than rebinding old proof.
+
 Resolve every reference and script path from the directory containing the
 loaded `otel-audit/SKILL.md`. Here, `../references/<file>` means the shared
 sibling under the parent skills directory, while `references/<file>` and
@@ -563,6 +570,26 @@ representative trace must show one GenAI node per logical operation, expected
 LLM and tool counts, stable model/tool names, correct workflow/agent parent
 shape, and no wrapper-only spans counted as GenAI work.
 Classify each orchestration boundary from source before choosing its operation.
+Recognize a custom agent without requiring an agent framework: when a model
+selects actions/tools, the application dispatches them, feeds their results
+back into the model, and continues until a terminal answer, the owning turn is
+an agent invocation. Trace the actual offered tools, dispatch and feedback
+edges; a file name, tool declaration, retry loop or single model call alone is
+insufficient. A fixed application-defined sequence of dependent stages can be
+a workflow; a single inference facade is neither an agent nor a separate
+workflow merely because it wraps a model request.
+Record a `GenAI operation roles` Audit Evidence row mapping each actual
+orchestration entrypoint to its behavioral evidence, source-backed identity,
+semantic role, existing creator/label and covered-or-repair decision. Keep the
+role assessment separate from the current instrumentation inventory. Existing
+`invoke_workflow`, span names, comments, tests and prior audit prose can be
+wrong: preserving their producer does not establish semantic correctness.
+When a covering creator labels an agent as a workflow, retain that creator
+and author a selectable same-span operation/agent-identity repair, its consumer
+compatibility plan and agent lifecycle/duration acceptance. Do not add a second
+agent wrapper to keep a misleading workflow node. Carry the agent role through
+readiness, expected telemetry, scenarios and summary, including no-tool and
+failure turns; inventory the current incorrect label truthfully until repaired.
 Do not require both `invoke_workflow` and `invoke_agent` for one standalone
 agent invocation merely because it calls models or tools. A separate workflow
 requires evidence of an application-defined coordinated process at its own

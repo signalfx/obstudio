@@ -1,0 +1,14 @@
+# Focused agent-role regression runs; keep the normal eval model defaults unchanged.
+[run]
+mode = "with_skill"
+[rubric]
+enabled = true
+[runtime]
+enabled = false
+[models]
+agent = "gpt-6.1-sol"
+judge = "gpt-6.1-sol"
+[agent]
+extra_args = ["--config", 'model_reasoning_effort="high"', "--config", "sandbox_workspace_write.network_access=true"]
+timeout = 2400
+judge_timeout = 900

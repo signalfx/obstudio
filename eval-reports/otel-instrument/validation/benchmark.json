@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261016T001759182684Z",
+    "run_id": "20261019T210112017102Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "",
@@ -775,6 +775,22 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/model-directed-agent/qual/instrument",
+      "case": "python/model-directed-agent",
+      "language": "python",
+      "service": "model-directed-agent",
+      "prompt_count": 1,
+      "prompts": [
+        "repair-mislabeled-agent"
+      ],
+      "definition_path": "evals/python/model-directed-agent/eval/qual/instrument.json",
+      "eval_dir": "evals/python/model-directed-agent",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 4,
+      "runtime_check_count": 0
+    },
+    {
       "id": "python/splunk-ao-integration-demo/qual/instrument",
       "case": "python/splunk-ao-integration-demo",
       "language": "python",
@@ -825,16 +841,16 @@
     }
   ],
   "summary": {
-    "eval_count": 49,
-    "case_count": 67,
-    "prompt_count": 67,
+    "eval_count": 50,
+    "case_count": 68,
+    "prompt_count": 68,
     "sanity_check_count": 0,
-    "rubric_check_count": 410,
+    "rubric_check_count": 414,
     "runtime_check_count": 9
   },
   "source": {
     "digest_version": 4,
-    "digest": "48dc1caba7fc548ec89f403a7a21f46d050436adf10d64d10a5d97813908010e",
+    "digest": "950ac6cfaa5f4dc4b97f21a580d6ea993a16840adf9771bc99c2867b02a63360",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -847,7 +863,7 @@
       "evals/go/chi-basic/eval/qual/benchmark-instrument.json": "ca365bb19d97128b41e3e89b17ed52d73e360a49e42cdb0ed5c87d68c90728e0",
       "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
-      "skills/otel-instrument/SKILL.md": "01064514b5d40f1d6b9b1dc6576af6afd9544424230eef81f51a6047ea9fbad8",
+      "skills/otel-instrument/SKILL.md": "03c0a25d2cbfda95dc4fad183c653a5ce71f2402eb8a85ebad7aa357164336f1",
       "skills/otel-instrument/references/json-approval-handoff.md": "826c227489a30d4aa605ee3adfe37c292b64cb71d8fea6ac659a2ae10a33c3ac",
       "skills/otel-instrument/references/languages/go.md": "62ba4d47f1685230a1eec2ce6929c9b3c9f3b8228f62af729367a1db45fa4d5d",
       "skills/otel-instrument/references/languages/java.md": "b35913ebfd94b8e56673c0db2c9deccf61c08770e7975306d839eb9eebb5e1d4",
@@ -1088,11 +1104,11 @@
       "skills/connect-splunk-observability-cloud/agents/openai.yaml": "206b920092a097ec7ab0f92b97d457a6e794bdddcc7f2def837955ff8a756407",
       "skills/create-splunk-free-account/SKILL.md": "1ea265ff983db6013c15f96e008b35d83c68eb8b7d041d0bf3660dfbb877d53b",
       "skills/create-splunk-free-account/agents/openai.yaml": "7767ebaee1f22c7cc76c22ff75676dcaf24e02821939b7229cc80a8b66e0a237",
-      "skills/otel-audit/SKILL.md": "8e8655c64590b43218ccf5e195f710af85ddfe5dfd31777b4f9dca885e985bb5",
+      "skills/otel-audit/SKILL.md": "40bfc7551d5574edfb8ebb837641b093c8dc9444ae5566b2cbd5696a0216e5cb",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
       "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
       "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
-      "skills/otel-verify/SKILL.md": "970032bc0dbae3a956eb27e869e06eb2e10355cc2ef62af9a501e0c90c1e765a",
+      "skills/otel-verify/SKILL.md": "1e6dc13fd6703efb4855c8cd69c41ea7b1673ab78e67110604385a8e83972c84",
       "skills/otel-verify/references/app-code-test-authoring.md": "d535a0acb3d123ee01eb5b39c3247378b4900f4977672021022dd0fe3885f91f",
       "skills/otel-verify/references/explorer-witness.md": "ee76d5856b1c0858a6bcb22e4c9c4526ddf550f2ae3122ea01ea21d505b8931a",
       "skills/otel-verify/references/json-approval-handoff.md": "e8c258074665349efecdc5d7e9b25fd0ab6217e3cdc40ae21a434c2c5d11f763",
@@ -1316,6 +1332,19 @@
       "evals/python/mcp-ai-tool-demo/eval/qual/instrument.json": "c3911248d1c775a028240e61fd66cb2491d65cd6b94346b52bf86be62d3cc224",
       "evals/python/mcp-ai-tool-demo/load_demo.py": "5bec26d9d8fd272dbdd779ab2dfb7bbb7134648ee65960537516354fcb428660",
       "evals/python/mcp-ai-tool-demo/pyproject.toml": "d0aed70f07d1a77a413afe435daa70c5e403da903e07511ba23b0232fc0e4375",
+      "evals/python/model-directed-agent/README.md": "1b1282a70b755a72015ab7142e945c563eed7de5ecec52d79c107facf4bf23b9",
+      "evals/python/model-directed-agent/agent.py": "bfce5cfd1ca2b3915974cdfc4036a85a1dd10cef65c539708e463eddb6f9469f",
+      "evals/python/model-directed-agent/app.py": "cb0af805218d3cbe2d70c2fbce44d36bd44a5d3cba5cb3adebf280a9ada4c525",
+      "evals/python/model-directed-agent/chat_core.py": "c228f81a2dbc7e9b66ea1ff7b0280ffbe2879c0421deeb5c0e20ed21655465db",
+      "evals/python/model-directed-agent/eval/inputs/agent-audit.json": "467ff03f4b658f584689eeb9511b90689ef949cf267db803593edc0b6cdce1d7",
+      "evals/python/model-directed-agent/eval/qual/instrument.json": "6de7dd9958a8deacbecc2cc69e51c75d26157663f4dc447ecd71b201b6bfa090",
+      "evals/python/model-directed-agent/historical_check.py": "3420a0435ce493657b3f7eb695332d6b348c42e8c836e9696064fbc044bc0ccf",
+      "evals/python/model-directed-agent/otel_setup.py": "8251fca417bd890cb0548de1baa228bfd8d64c98aac3b94f9b4a4f6e5fb987ce",
+      "evals/python/model-directed-agent/probe.py": "6fbc3180a8591f89db88327069b7e1004493a3317b348017b8b06d9cd8b91d8d",
+      "evals/python/model-directed-agent/recommendations.py": "d120cd0c2154d963b5cb04ef6605831ca3f7703347fb1d0b6c0ef4bbdc3ea2f5",
+      "evals/python/model-directed-agent/requirements.txt": "b69934b598a12af6c7a0458eba13b445a8b1c30209f355f60403125e8fa3bc89",
+      "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
+      "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
       "evals/python/splunk-ao-integration-demo/decorator_app.py": "65cbdeb9ba515386d6f122ae085bd299f640952cf3e338c76bc285c8df01cd56",
       "evals/python/splunk-ao-integration-demo/eval/qual/instrument.json": "73dab129274a7d9b54646433e17ebad5b0b66a43d0e08b3293ba251281f03038",
       "evals/python/splunk-ao-integration-demo/existing_otel_app.py": "11103e93e200d4f35bb2e3c230ca06da3cbc9180af105baa2a4caa9bec9c81d4",
@@ -1880,6 +1909,15 @@
         "prompt_id": "direct",
         "eval_kind": "rubric",
         "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/model-directed-agent/eval/qual/instrument.json",
+        "fixture_dir": "evals/python/model-directed-agent",
+        "prompt_id": "repair-mislabeled-agent",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/agent-audit.json"
+        ]
       },
       {
         "definition_path": "evals/python/splunk-ao-integration-demo/eval/qual/instrument.json",

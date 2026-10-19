@@ -1,0 +1,22 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "agent-role-from-behavior",
+      "task": "Create ./service/.observe and copy eval/inputs/prior-audit.json to .observe/otel-audit.json as the prior baseline. Use $otel-audit to audit ./service, including the CLI, web runtime and separately callable roles.py operations. Reconcile current source with existing instrumentation and historical tests; save canonical .observe/otel-audit.json and rendered .observe/otel.html. Remain read-only for source, tests, dependencies and configuration. Do not start the application, call models, install dependencies or use browser/UI actions. Prior span/test names are evidence to assess, not answers. Distinguish the source-owned operation roles and map any semantic coverage repair to an executable finding with exact existing-producer ownership, consumer compatibility, expected fields, duration and per-path acceptance. Preserve other current signals and truthful local/runtime proof limits.",
+      "eval_inputs": [
+        "eval/inputs/prior-audit.json"
+      ]
+    }
+  ],
+  "judge_inputs": [
+    "Inspect original fixture control flow and generated canonical audit/HTML, not only actor prose. Grade actual role decisions and their executable closure."
+  ],
+  "rubric": [
+    "Recognizes chat_core.run_turn as the SmashBot model-directed agent from tools offered to the model, actual TOOL_IMPLEMENTATIONS dispatch, returned tool messages and repeated model requests until final reply, without requiring a framework. GenAI ownership true alone does not pass; the agent appears explicitly in source-role evidence and readiness.",
+    "Inventories existing invoke_workflow smashbot_turn truthfully but identifies its agent semantic/identity mismatch. Authors a selectable same-producer repair with invoke_agent, source-backed gen_ai.agent.name, applicable gen_ai.invoke_agent.duration, consumer compatibility and no duplicate workflow/agent wrapper at the same turn.",
+    "Keeps roles.one_shot a single inference facade and recognizes summarize_then_translate as a separate fixed coordinated workflow from its actual dependent-stage dataflow. Does not turn either into the SmashBot agent or require a separate workflow around its agent loop.",
+    "Binds the agent repair to executable no-tool, tool-feedback and provider/tool failure scenarios with one agent node, actual model/tool parentage and call counts, status, duration and unchanged business results. Existing tests asserting workflow are not semantic proof. Current baseline inventory remains distinct from proposed telemetry.",
+    "Completes a current source audit rather than only validating/rerendering old artifacts, preserves application source and existing contracts, emits valid canonical JSON/HTML, and makes no native emission, local receiver or cloud proof claim from source or schema checks."
+  ]
+}
