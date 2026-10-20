@@ -251,6 +251,15 @@ inputs/results, parentage and errors, one operation per boundary and honest
 creation-time kind/sampling limits. Do not patch SDKs, inject a production fake
 logger, or disable all telemetry as the offline strategy.
 
+Before finalizing even a supplemental connection-only report, check its saved
+SDK decision explicitly: a public helper lacking initial CLIENT/attributes
+cannot cover an uncovered remote-model boundary. Name the app-owned decorator
+and public `tracer.start_as_current_span(..., kind=SpanKind.CLIENT,
+attributes=safe_request_fields)` pattern for that boundary, with sampler or
+`on_start` proof still required. Keep SDK helper decorators on supported agent
+and tool boundaries. Deferring the full semantic audit does not remove this
+source-proven local SDK capability decision from the connection report.
+
 For a Studio-routed native exporter, a failed resource relookup must not leave
 stale AO headers active on the ordinary local export path. Retain persisted
 selectors/last identities for recovery; omit only the unresolved AO routing
