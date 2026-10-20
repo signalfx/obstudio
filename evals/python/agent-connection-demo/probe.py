@@ -149,7 +149,7 @@ def run(gateway, directory, *, seeded=True, reuse_profile=False):
     return profile, native
 
 
-def assert_binding(packet, expected):
+def packet_spans(packet, expected):
     headers, request = packet
     pair = (headers.get("projectid"), headers.get("logstreamid"))
     assert pair == ((PROJECT, STREAM) if expected else (None, None))
@@ -158,8 +158,69 @@ def assert_binding(packet, expected):
         attributes = {a.key: a.value.string_value for a in resource.resource.attributes}
         assert (attributes.get("splunk_ao.project.id"), attributes.get("splunk_ao.logstream.id")) == pair
         spans.extend(s for scope in resource.scope_spans for s in scope.spans)
-    assert len(spans) == 4
     assert headers.get("x-app-tenant") == "keep-marker"
+    return spans
+
+
+class TurnCapture:
+    def __init__(self, native, *, allow_other_turns=False):
+        assert len(native) == 4
+        self.native = {(s["trace_id"], s["span_id"]): s for s in native}
+        assert len(self.native) == 4
+        self.trace_ids = {trace_id for trace_id, _ in self.native}
+        assert len(self.trace_ids) == 1
+        self.allow_other_turns = allow_other_turns
+        self.received = set()
+        self.packets = set()
+
+    def add(self, packet, expected):
+        spans = packet_spans(packet, expected)
+        encoded = packet[1].SerializeToString()
+        if encoded in self.packets:
+            return  # An identical HTTP retry is not an additional SDK span.
+        self.packets.add(encoded)
+        for span in spans:
+            key = (span.trace_id.hex(), span.span_id.hex())
+            if self.allow_other_turns and key[0] not in self.trace_ids:
+                continue
+            assert key in self.native, "wire span identity differs from native capture"
+            assert key not in self.received, "duplicate wire span"
+            original = self.native[key]
+            assert span.parent_span_id.hex() == (original["parent_id"] or ""), "wire parent differs from native capture"
+            assert span.name == original["name"], "wire operation name differs from native capture"
+            attributes = {a.key: a.value.string_value for a in span.attributes
+                          if a.value.WhichOneof("value") == "string_value"}
+            assert all(attributes.get(k) == v for k, v in original["attributes"].items()), "wire operation attributes differ from native capture"
+            self.received.add(key)
+
+    def complete(self):
+        return self.received == self.native.keys()
+
+
+def assert_binding(packets, expected, native):
+    capture = TurnCapture(native["spans"])
+    for packet in packets:
+        capture.add(packet, expected)
+    assert capture.complete(), "wire turn is incomplete or has a different trace identity"
+
+
+def wait_for_turn(gateway, start, expected, native, deadline):
+    capture = TurnCapture(native, allow_other_turns=True)
+    observed = TurnCapture(native, allow_other_turns=True)
+    while True:
+        while start < len(gateway.traces):
+            packet = gateway.traces[start]
+            start += 1
+            observed.add(packet, bool(packet[0].get("projectid")))
+            if bool(packet[0].get("projectid")) == expected:
+                capture.add(packet, expected)
+        if capture.complete():
+            return True
+        if observed.complete():
+            return False
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.02)
 
 
 def same_pid_probe():
@@ -195,9 +256,11 @@ def same_pid_probe():
                     process.stdin.flush()
                     deadline = time.monotonic() + 10
                     while time.monotonic() < deadline:
-                        if len(stdout_path.read_text().splitlines()) == turns:
+                        capture = directory / "native.json"
+                        if (len(stdout_path.read_text().splitlines()) == turns and capture.exists()
+                                and len(json.loads(capture.read_text())["spans"]) == 4 * turns):
                             assert json.loads(stdout_path.read_text().splitlines()[-1]) == {"answer": "Documentation for returns"}
-                            return
+                            return json.loads(capture.read_text())["spans"][-4:]
                         assert process.poll() is None
                         time.sleep(0.02)
                     raise AssertionError("interactive business turn did not finish")
@@ -206,15 +269,10 @@ def same_pid_probe():
                     deadline = time.monotonic() + 15
                     while time.monotonic() < deadline:
                         start = len(gateway.traces)
-                        turn()
-                        wait_until = time.monotonic() + 0.5
-                        while len(gateway.traces) == start and time.monotonic() < wait_until:
-                            time.sleep(0.02)
-                        if len(gateway.traces) > start:
-                            packet = gateway.traces[-1]
-                            if bool(packet[0].get("projectid")) == expected:
-                                assert_binding(packet, expected)
-                                return {"pid": process.pid, "binding": expected, "turns": turns}
+                        native_turn = turn()
+                        if wait_for_turn(gateway, start, expected, native_turn, deadline):
+                            return {"pid": process.pid, "binding": expected, "turns": turns,
+                                    "trace_id": native_turn[0]["trace_id"]}
                         time.sleep(0.1)
                     raise AssertionError("running launcher never activated the expected complete binding")
 
@@ -265,11 +323,8 @@ def main():
                 directory = Path(temp)
                 profile, native = run(gateway, directory, seeded=existing)
                 if connected:
-                    assert gateway.forwarded == 1
-                    assert len(gateway.traces) == 1
-                    assert_binding(gateway.traces[0], True)
-                    spans = [s for _, p in gateway.traces for r in p.resource_spans for scope in r.scope_spans for s in scope.spans]
-                    assert len(spans) == 4
+                    assert gateway.forwarded >= 1
+                    assert_binding(gateway.traces, True, native)
                     assert f"projectid={PROJECT}" in dotenv_values(profile)["OTEL_EXPORTER_OTLP_TRACES_HEADERS"]
                     creates = [p for method, p in gateway.requests if method == "POST" and p.startswith("/ao/api/")]
                     assert len(creates) == (0 if existing else 2)
@@ -281,16 +336,16 @@ def main():
                         assert not gateway.traces
                     else:
                         assert gateway.traces
-                        assert_binding(gateway.traces[-1], True)
+                        assert_binding(gateway.traces, True, native)
                 if not stopped:
                     assert gateway.metrics and gateway.logs
                 if label == "reconnect":
                     gateway.connected = True
                     gateway.resource_available = False
                     start = len(gateway.traces)
-                    run(gateway, directory, reuse_profile=True)
-                    assert gateway.forwarded == 1 and len(gateway.traces) == start + 1
-                    assert_binding(gateway.traces[-1], True)
+                    _, restarted_native = run(gateway, directory, reuse_profile=True)
+                    assert gateway.forwarded >= 1 and len(gateway.traces) > start
+                    assert_binding(gateway.traces[start:], True, restarted_native)
                     assert not [p for method, p in gateway.requests if method == "POST" and p.startswith("/ao/api/")]
                 results.append({"case": label, "pass": True, "native_spans": len(native["spans"]), "resource_calls": gateway.requests,
                                 "local_receipt": not stopped, "synthetic_forwarded_batches": gateway.forwarded})

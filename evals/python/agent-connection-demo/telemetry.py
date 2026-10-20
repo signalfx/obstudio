@@ -17,9 +17,27 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcess
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 
+def span_record(span):
+    return {"name": span.name, "trace_id": f"{span.context.trace_id:032x}",
+            "span_id": f"{span.context.span_id:016x}",
+            "parent_id": f"{span.parent.span_id:016x}" if span.parent else None,
+            "attributes": dict(span.attributes)}
+
+
+class NativeSpanExporter(InMemorySpanExporter):
+    def export(self, spans):
+        result = super().export(spans)
+        if os.getenv("LOCAL_CAPTURE_FILE"):
+            capture = Path(os.environ["LOCAL_CAPTURE_FILE"])
+            temporary = capture.with_suffix(".tmp")
+            temporary.write_text(json.dumps({"spans": [span_record(s) for s in self.get_finished_spans()]}))
+            temporary.replace(capture)
+        return result
+
+
 def configure():
     resource = Resource.create({"service.name": "agent-connection-demo"})
-    spans = InMemorySpanExporter()
+    spans = NativeSpanExporter()
     tp = TracerProvider(resource=resource)
     tp.add_span_processor(SimpleSpanProcessor(spans))
     tp.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
@@ -45,9 +63,7 @@ def configure():
             record = {
                 "providers_retained": {"traces": trace.get_tracer_provider() is tp,
                                        "metrics": metrics.get_meter_provider() is mp},
-                "spans": [{"name": s.name, "trace_id": f"{s.context.trace_id:032x}", "span_id": f"{s.context.span_id:016x}",
-                           "parent_id": f"{s.parent.span_id:016x}" if s.parent else None, "attributes": dict(s.attributes)}
-                          for s in spans.get_finished_spans()],
+                "spans": [span_record(s) for s in spans.get_finished_spans()],
                 "metrics": [{"name": m.name, "values": [p.value for p in m.data.data_points]}
                             for r in native.resource_metrics for scope in r.scope_metrics for m in scope.metrics],
                 "logs": [{"body": r.log_record.body, "trace_id": f"{r.log_record.trace_id:032x}"}

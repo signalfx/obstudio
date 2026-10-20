@@ -76,6 +76,11 @@ def test_gateway_contract_resolver_discovery_and_preflight(tmp_path, layout):
     "test_public_wrapper_and_request_hook_use_actual_wire_binding",
     "test_cached_restart_forwards_without_resource_lookup",
     "test_wire_oracle_still_rejects_missing_headers_and_resource_mismatch",
+    "test_public_views_cannot_rewrite_identity_topology_or_operations",
+    "test_split_wire_batches_are_collected_for_the_native_turn",
+    "test_missing_overlapping_and_duplicate_spans_are_rejected",
+    "test_same_pid_selects_the_native_turn_from_a_multi_turn_batch",
+    "test_complete_unbound_turn_allows_another_recovery_attempt",
 ])
 def test_connection_probe_public_wire_contract(case):
     check = Path(__file__).parent / "python/agent-connection-demo/checks/probe_regressions.py"

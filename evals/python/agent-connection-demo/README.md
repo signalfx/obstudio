@@ -18,6 +18,11 @@ Reconnect also starts a new process with the retained binding while the resource
 API stays unavailable and OTLP forwarding works. Acceptance uses actual HTTP
 headers/protobuf Resources and the fixture's public provider-identity receipt,
 without inspecting an exporter's private fields or a delegate's member names.
+The original native exporter writes an atomic span snapshot before routing, so
+the probe compares received trace/span/parent identities, names and operation
+attributes with the same business turn. A turn may span multiple HTTP batches
+or share a batch with another turn. Exact request retries are deduplicated;
+missing spans, overlapping batches and duplicate span records are rejected.
 
 Run `python gateway_contract_check.py --resolver PATH` with the bundled
 `resolve_ao_resources.py` CLI before the application probe. This checks the
