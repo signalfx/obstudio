@@ -555,6 +555,17 @@ work or unavailable remote proof explicitly rather than claiming full readiness:
 - the selected application routing mode is configured and exercised; and
 - a fresh application trace is observed in the intended project and stream.
 
+For existing native OTel, apply the shared reference's Native trace binding
+and recovery contract. Capture actual headers and completed span Resources:
+`projectid` must equal `splunk_ao.project.id`, and `logstreamid` must equal
+`splunk_ao.logstream.id`, using the selected resolved UUIDs. A header-only test
+does not prove payload binding. Require a real-launcher test starting with only
+selected names and already-existing resources, an initially unavailable API,
+then recovery in the same app PID with zero creates and no manual setup.
+Separately test resolved bindings through an outage without erasing them.
+Preseeding IDs or restarting between states cannot prove names-only recovery.
+Only exact fresh cloud trace readback proves end-to-end AO visibility.
+
 For Galileo, verify its native project/log-stream client and actual consumed
 vendor configuration, then its installed native processor/logger/export path.
 Preserve nondefault selectors, API/console/auth and legitimate native OTel

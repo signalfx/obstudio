@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -99,11 +100,13 @@ class Gateway:
                     return self.reply(200, {})
                 if path == "/v1/traces":
                     pair = (headers.get("projectid"), headers.get("logstreamid"))
-                    if any(pair) and (not owner.connected or not owner.bound or pair != (PROJECT, STREAM)):
-                        return self.reply(409, {"error": "route is not validated for this connection"})
+                    if any(pair) and pair != (PROJECT, STREAM):
+                        return self.reply(409, {"error": "invalid route"})
                     if self.headers.get("Content-Encoding") == "gzip":
                         body = gzip.decompress(body)
                     owner.traces.append((headers, ExportTraceServiceRequest.FromString(body)))
+                    if any(pair) and not owner.connected:
+                        return self.reply(503, {"error": "cloud disconnected; retained locally"})
                     owner.forwarded += int(pair == (PROJECT, STREAM))
                     return self.reply(200, {})
                 return self.reply(404, {})
@@ -142,8 +145,12 @@ def run(gateway, directory, *, seeded=True, reuse_profile=False):
         " p=trace.get_tracer_provider(); result=[]\n"
         " for processor in getattr(getattr(p,'_active_span_processor',None),'_span_processors',()):\n"
         "  exporter=getattr(processor,'span_exporter',None)\n"
-        "  if exporter is not None and type(exporter).__name__=='OTLPSpanExporter':\n"
-        "   result.append({str(k).lower():v for k,v in exporter._headers.items() if str(k).lower() in ('projectid','logstreamid','x-app-tenant')})\n"
+        "  seen=set()\n"
+        "  while exporter is not None and id(exporter) not in seen:\n"
+        "   seen.add(id(exporter))\n"
+        "   if type(exporter).__name__=='OTLPSpanExporter':\n"
+        "    result.append({str(k).lower():v for k,v in exporter._headers.items() if str(k).lower() in ('projectid','logstreamid','x-app-tenant')}); break\n"
+        "   exporter=getattr(exporter,'delegate',getattr(exporter,'_delegate',None))\n"
         f" Path({str(observed)!r}).write_text(json.dumps(result))\n"
         "atexit.register(observe)\n"
         f"sys.argv=['launch.py','--profile',{str(profile)!r}]\n"
@@ -163,6 +170,102 @@ def run(gateway, directory, *, seeded=True, reuse_profile=False):
     assert len(config) == 1 and config[0].get("x-app-tenant") == "keep-marker"
     assert dotenv_values(profile)["APPLICATION_KEEP_SETTING"] == "preserve-me"
     return profile, config[0], native
+
+
+def assert_binding(packet, expected):
+    headers, request = packet
+    pair = (headers.get("projectid"), headers.get("logstreamid"))
+    assert pair == ((PROJECT, STREAM) if expected else (None, None))
+    spans = []
+    for resource in request.resource_spans:
+        attributes = {a.key: a.value.string_value for a in resource.resource.attributes}
+        assert (attributes.get("splunk_ao.project.id"), attributes.get("splunk_ao.logstream.id")) == pair
+        spans.extend(s for scope in resource.scope_spans for s in scope.spans)
+    assert len(spans) == 4
+    assert headers.get("x-app-tenant") == "keep-marker"
+
+
+def same_pid_probe():
+    gateway = Gateway(connected=False)
+    process = None
+    try:
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            profile = directory / "runtime.env"
+            profile.write_text(
+                f"AGENT_RESOURCE_API_URL={gateway.origin}\nAGENT_PROJECT=original-project\nAGENT_STREAM=production\n"
+                f"OTEL_EXPORTER_OTLP_ENDPOINT={gateway.origin}\n"
+                "OTEL_EXPORTER_OTLP_TRACES_HEADERS=X-App-Tenant=keep-marker\n"
+                "OTEL_EXPORTER_OTLP_TRACES_TIMEOUT=0.2\nOTEL_BSP_SCHEDULE_DELAY=100\n"
+                "OTEL_METRIC_EXPORT_INTERVAL=100\nAGENT_INTERACTIVE=1\n"
+                f"LOCAL_CAPTURE_FILE={directory / 'native.json'}\n"
+            )
+            environment = {k: v for k, v in os.environ.items() if not k.startswith(
+                ("OTEL_", "SPLUNK_AO_", "GALILEO_", "AGENT_", "LOCAL_CAPTURE_FILE"))}
+            stdout_path = directory / "stdout"
+            with stdout_path.open("w") as stdout, (directory / "stderr").open("w") as stderr:
+                process = subprocess.Popen(
+                    [sys.executable, "launch.py", "--profile", str(profile)], cwd=ROOT,
+                    env=environment, stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, text=True,
+                )
+                turns = 0
+
+                def turn():
+                    nonlocal turns
+                    assert process.poll() is None
+                    turns += 1
+                    process.stdin.write("turn\n")
+                    process.stdin.flush()
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline:
+                        if len(stdout_path.read_text().splitlines()) == turns:
+                            assert json.loads(stdout_path.read_text().splitlines()[-1]) == {"answer": "Documentation for returns"}
+                            return
+                        assert process.poll() is None
+                        time.sleep(0.02)
+                    raise AssertionError("interactive business turn did not finish")
+
+                def phase(expected):
+                    deadline = time.monotonic() + 15
+                    while time.monotonic() < deadline:
+                        start = len(gateway.traces)
+                        turn()
+                        wait_until = time.monotonic() + 0.5
+                        while len(gateway.traces) == start and time.monotonic() < wait_until:
+                            time.sleep(0.02)
+                        if len(gateway.traces) > start:
+                            packet = gateway.traces[-1]
+                            if bool(packet[0].get("projectid")) == expected:
+                                assert_binding(packet, expected)
+                                return {"pid": process.pid, "binding": expected, "turns": turns}
+                        time.sleep(0.1)
+                    raise AssertionError("running launcher never activated the expected complete binding")
+
+                states = [phase(False)]
+                gateway.connected = True
+                states.append(phase(True))
+                gateway.connected = False
+                states.append(phase(True))
+                gateway.connected = True
+                states.append(phase(True))
+                assert process.poll() is None
+                process.stdin.write("quit\n")
+                process.stdin.flush()
+                assert process.wait(timeout=15) == 0
+            assert len({state["pid"] for state in states}) == 1
+            assert not [path for method, path in gateway.requests if method == "POST" and path.startswith("/ao/api/")]
+            assert gateway.metrics and gateway.logs
+            native = json.loads((directory / "native.json").read_text())
+            assert len(native["spans"]) == 4 * turns
+            assert native["metrics"] == [{"name": "agent.turns", "values": [turns]}]
+            assert len(native["logs"]) == turns
+            return {"case": "names-only-same-pid", "pass": True, "states": states,
+                    "zero_creates": True, "resource_calls": gateway.requests, "live_cloud_proof": False}
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.wait()
+        gateway.close()
 
 
 def main():
@@ -187,17 +290,22 @@ def main():
                     assert headers.get("projectid") == PROJECT and headers.get("logstreamid") == STREAM
                     assert gateway.forwarded == 1 and gateway.bound
                     assert len(gateway.traces) == 1
+                    assert_binding(gateway.traces[0], True)
                     spans = [s for _, p in gateway.traces for r in p.resource_spans for scope in r.scope_spans for s in scope.spans]
                     assert len(spans) == 4
                     assert f"projectid={PROJECT}" in dotenv_values(profile)["OTEL_EXPORTER_OTLP_TRACES_HEADERS"]
                     creates = [p for method, p in gateway.requests if method == "POST" and p.startswith("/ao/api/")]
                     assert len(creates) == (0 if existing else 2)
                 else:
-                    assert "projectid" not in headers and "logstreamid" not in headers
+                    assert headers.get("projectid") == PROJECT and headers.get("logstreamid") == STREAM
                     assert f"projectid={PROJECT}" in dotenv_values(profile)["OTEL_EXPORTER_OTLP_TRACES_HEADERS"]
                     assert gateway.forwarded == 0
                     assert not [p for method, p in gateway.requests if method == "POST" and p.startswith("/ao/api/")]
-                    assert len(gateway.traces) == (0 if stopped else 1)
+                    if stopped:
+                        assert not gateway.traces
+                    else:
+                        assert gateway.traces
+                        assert_binding(gateway.traces[-1], True)
                 if not stopped:
                     assert gateway.metrics and gateway.logs
                 if label == "reconnect":
@@ -211,6 +319,7 @@ def main():
         finally:
             if not stopped:
                 gateway.close()
+    results.append(same_pid_probe())
     destination = ROOT / ".observe" / "connection-probe.json"
     destination.parent.mkdir(exist_ok=True)
     destination.write_text(json.dumps({"status": "PASS", "cases": results, "live_cloud_proof": False}, indent=2))

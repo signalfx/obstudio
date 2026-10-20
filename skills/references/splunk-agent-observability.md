@@ -260,20 +260,27 @@ attributes=safe_request_fields)` pattern for that boundary, with sampler or
 and tool boundaries. Deferring the full semantic audit does not remove this
 source-proven local SDK capability decision from the connection report.
 
-For a Studio-routed native exporter, a failed resource relookup must not leave
-stale AO headers active on the ordinary local export path. Retain persisted
-selectors/last identities for recovery; omit only the unresolved AO routing
-pair from the effective local-only exporter configuration, preserving its
-endpoint/protocol, harmless headers and unrelated sinks. Do not send invented
-or unvalidated resource metadata. A Galileo or explicit direct-cloud path is
-independent of Studio connection state and retains its own configuration.
+For a Studio-routed native exporter, distinguish unresolved names or rejected
+identities from temporary transport availability. Persist the user's selected
+names even when those resources already exist but their IDs are not yet known.
+A 503/timeout cannot establish absence or invalidate a previously resolved
+binding for the same destination. Keep its UUID headers and trace resource
+metadata active while Studio is disconnected; never construct an exporter with
+an empty route that remains cached after connection. Explicit invalid IDs,
+wrong-parent resources, ambiguity or a changed cloud organization require
+resolution or an honest routing failure, never a default stream.
 
 If Studio itself is unavailable, prove business behavior and native/in-memory
-emission independently, but mark local OTLP receipt blocked. After reconnect,
-resolve/revalidate identities through that active gateway before routed export;
-reuse existing resources with zero duplicate creates. Test separate launches
-or a supported transition, pin one producer/route per invocation, and rule out
-duplicate spans/exports. No automatic runtime Studio discovery is needed.
+emission independently, but mark local OTLP receipt blocked. For selected names
+without resolved IDs, integrate bounded retry of normal resource calls into the
+running application through its configured API origin. Once available, reuse
+exact existing names and activate the complete binding without an app restart,
+re-instrumentation or a manual setup command. A separate CLI may be an operator
+utility; it cannot be the only normal recovery path. Keep lookup failures out
+of the business request path and preserve local telemetry while unresolved.
+Test the same application PID across disconnected, connected, disconnected and
+reconnected states; pin one producer/route per invocation and rule out duplicate
+spans/exports. No automatic runtime Studio discovery is needed.
 Report local emission, local receipt, resource resolution, routed forwarding
 and exact cloud trace visibility separately for each tested state.
 
@@ -1019,6 +1026,48 @@ actual launch profile as:
 OTEL_EXPORTER_OTLP_TRACES_HEADERS=projectid=<project-uuid>,logstreamid=<agent-stream-uuid>
 ```
 
+### Native trace binding and recovery
+
+User-selected project and Agent Stream names are selectors, not UUIDs. Existing
+resources with matching names must be reused, with the stream scoped to its
+project. Resolve their actual IDs through normal configured resource APIs;
+never put names or fabricated IDs in routing headers. Hand resolved IDs through
+the consumed application profile or an application-owned binding cache.
+The resource helper's optional `--native-otel-binding` output supplies the
+matching header and trace-resource mappings after successful resolution.
+
+On existing native OTel, a complete binding includes both the exporter headers
+above and trace Resource attributes `splunk_ao.project.id=<project-uuid>` and
+`splunk_ao.logstream.id=<agent-stream-uuid>`. Derive all four values from one
+validated pair. This mapping is required for the selected native AO integration,
+not a reason to replace existing producers or add a vendor SDK. Keep metric and
+local-log Resources unchanged; SDK-owned paths retain supported SDK routing.
+
+Known valid IDs can configure this complete binding before cloud connection.
+Do not gate it on a successful startup gateway lookup or strip it merely
+because Studio is disconnected. With names only, retry resolution automatically
+and atomically activate headers and trace metadata for subsequent operations
+in the same running process. An env-file rewrite alone does not update a live
+exporter or its immutable Resource. Preserve one provider and one selected
+export path: use supported SDK reconfiguration, or a public native
+`SpanExporter` delegate with export-time `ReadableSpan` views carrying a merged
+trace Resource. Keep the original trace/span/parent IDs, timestamps, attributes,
+events, links, scope, kind and status. Preserve the configured endpoint,
+protocol and harmless headers, respecting installed exporter env/constructor
+precedence. Do not mutate private span/provider fields or global Resources.
+Snapshot one complete binding per export so header IDs and payload IDs agree;
+do not multiply exports or claim replay of spans already delivered only locally.
+
+The credential-free recovery test must start the real launcher with only the
+user-selected names and existing fake resources, return 503 initially, then
+enable the API while retaining the same app PID. Require automatic exact-name
+reuse, zero creates, correct headers plus both Resource attributes on subsequent
+agent/model/tool spans, and consistent identities after another outage. Also
+test initially resolved IDs with an unavailable API: a transient 503 must not
+erase their complete binding. Unknown/wrong-project IDs remain failures. Live
+acceptance additionally requires exact fresh trace-ID readback in the selected
+cloud project and stream; local receipt and successful forwarding are separate.
+
 Merge harmless existing trace headers, reject conflicting resource selectors,
 and preserve the compatible explicit endpoint and protocol, including a
 non-default port. Use trace-specific settings so AO routing/auth does not leak
@@ -1047,17 +1096,16 @@ and exporter with sentinel harmless global and trace-specific headers.
 The current Studio receiver recognizes this ID pair on `/v1/traces`,
 `/otel/v1/traces` and `/v2/trace/otlp`. Successful normal resource resolution
 through the same gateway confirms the route for its active cloud connection.
-An ID copied from another connection is insufficient until resolved there.
-Persisted UUID headers also do not restore the gateway's in-memory route after
-its restart or active cloud connection change. Before treating routed delivery
-as restored, run read-only project and scoped stream relookup through that
-active gateway, using the persisted IDs with reuse-only semantics (or exact
-name lookup). This deployment/resource bootstrap must not create duplicates,
-replace the exporter, or make ordinary application instrumentation depend on a
-reachable gateway. If relookup is unavailable, keep existing telemetry active
-and report routed forwarding as unproven/failed. Test a cleared route followed
-by relookup and repeated export, preserving IDs and zero additional creates;
-headers alone before relookup must not be accepted as recovery proof.
+An ID copied from another organization is insufficient until resolved there.
+Studio's current receiver reads the routing pair from each request; normal
+resource calls resolve identities rather than registering an in-memory route.
+Connecting Studio to the same destination enables forwarding of subsequent
+already-bound requests. Previously resolved bindings do not need a successful
+resource relookup on each app launch. For names-only configuration, the
+application recovery path above resolves the existing pair and updates the
+live export binding. A changed destination or explicitly rejected identity
+requires fresh resolution. Neither recovery path may duplicate resources,
+replace the provider, or gate ordinary application behavior on the gateway.
 The gateway retains local telemetry and uses its routed AO forwarding branch;
 ordinary OTLP receipt without the pair does not select an Agent Stream. Check
 rejected-span/partial-success responses, not only HTTP success. Resource

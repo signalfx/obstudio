@@ -31,6 +31,95 @@ def resource(resource_id: str, name: str, parent: str | None = None) -> SimpleNa
     return SimpleNamespace(**fields)
 
 
+class NativeTraceBindingTests(unittest.TestCase):
+    project_id = "11111111-1111-4111-8111-111111111111"
+    stream_id = "22222222-2222-4222-8222-222222222222"
+
+    def evidence(self):
+        return {
+            "status": "resolved",
+            "project": {"id": self.project_id, "name": "user-project"},
+            "agent_stream": {
+                "id": self.stream_id, "project_id": self.project_id,
+                "name": "user-stream",
+            },
+        }
+
+    def test_one_resolved_pair_supplies_matching_headers_and_resource_fields(self):
+        evidence = self.evidence()
+        before = json.dumps(evidence, sort_keys=True)
+        with patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_HEADERS": "x-operator=keep"}):
+            result = MODULE.native_trace_binding(evidence)
+            self.assertEqual(os.environ["OTEL_EXPORTER_OTLP_HEADERS"], "x-operator=keep")
+        self.assertEqual(result, {
+            "headers": {"projectid": self.project_id, "logstreamid": self.stream_id},
+            "resource_attributes": {
+                "splunk_ao.project.id": self.project_id,
+                "splunk_ao.logstream.id": self.stream_id,
+            },
+        })
+        self.assertEqual(json.dumps(evidence, sort_keys=True), before)
+        result["headers"]["projectid"] = "changed"
+        self.assertEqual(MODULE.native_trace_binding(evidence)["headers"]["projectid"], self.project_id)
+
+    def test_unresolved_names_invalid_ids_and_wrong_parent_cannot_bind(self):
+        cases = []
+        for value in ("", "user-project", "11111111111141118111111111111111", None):
+            evidence = self.evidence()
+            evidence["project"]["id"] = value
+            evidence["agent_stream"]["project_id"] = value
+            cases.append(evidence)
+        for status in ("resolving", "failed"):
+            evidence = self.evidence()
+            evidence["status"] = status
+            cases.append(evidence)
+        evidence = self.evidence()
+        evidence["agent_stream"]["project_id"] = self.stream_id
+        cases.append(evidence)
+        cases.extend([{}, {"status": "resolved"}])
+        for evidence in cases:
+            with self.subTest(evidence=evidence):
+                with self.assertRaisesRegex(ValueError, "^invalid_native_trace_binding$"):
+                    MODULE.native_trace_binding(evidence)
+
+    def test_cli_native_mapping_is_additive_and_uses_resolved_resources(self):
+        projects = Client([resource(self.project_id, "user-project")])
+        streams = Client([resource(self.stream_id, "user-stream", self.project_id)])
+        output = io.StringIO()
+        with patch.object(MODULE, "_studio_clients", return_value=(projects, streams)):
+            with contextlib.redirect_stdout(output):
+                code = MODULE.main([
+                    "--studio-api-origin", "http://127.0.0.1:9999",
+                    "--project-name", "user-project",
+                    "--agent-stream-name", "user-stream",
+                    "--reuse-only", "--native-otel-binding",
+                ])
+        evidence = json.loads(output.getvalue())
+        self.assertEqual(code, 0)
+        self.assertEqual(evidence["native_otel_binding"], MODULE.native_trace_binding(evidence))
+        self.assertEqual(projects.create_calls + streams.create_calls, [])
+
+    def test_cli_default_does_not_change_sdk_resource_evidence(self):
+        projects = Client([resource("project-1", "user-project")])
+        streams = Client([resource("stream-1", "user-stream", "project-1")])
+        for native in (False, True):
+            output, errors = io.StringIO(), io.StringIO()
+            with patch.object(MODULE, "_studio_clients", return_value=(projects, streams)):
+                with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                    code = MODULE.main([
+                        "--studio-api-origin", "http://127.0.0.1:9999",
+                        "--project-name", "user-project",
+                        "--agent-stream-name", "user-stream",
+                        *(["--native-otel-binding"] if native else []),
+                    ])
+            evidence = json.loads(output.getvalue())
+            self.assertNotIn("native_otel_binding", evidence)
+            self.assertEqual(code, 1 if native else 0)
+            self.assertEqual(evidence["status"], "failed" if native else "resolved")
+            if native:
+                self.assertEqual(evidence["error"], "invalid_native_trace_binding")
+
+
 class HTTPError(Exception):
     def __init__(self, status: int) -> None:
         self.status_code = status

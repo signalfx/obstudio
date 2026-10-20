@@ -239,6 +239,13 @@ Markdown reports.
   existing resources, create missing selected named resources, and recover
   duplicate races through bounded exact relookup. A resource input changes
   the selection digest but never adds unselected findings.
+  Follow the shared reference's Native trace binding and recovery contract:
+  selected names must resolve/reuse automatically when the API becomes
+  available in the same running app PID. Include UUID routing headers and
+  `splunk_ao.project.id` / `splunk_ao.logstream.id` on native trace Resources
+  from one resolved pair. Preserve valid known bindings through a temporary
+  disconnected Studio; neither a manual setup command nor restart is normal
+  recovery. Keep SDK-owned routing and unrelated signal Resources intact.
   Treat blank audit resource fields as an env/config fallback. Read the same
   profile the real application launch uses, including native vendor aliases.
   Galileo uses its supported GALILEO_* settings/constructor arguments; do not

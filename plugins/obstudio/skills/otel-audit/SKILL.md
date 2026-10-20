@@ -1000,6 +1000,14 @@ runner that instrumentation should update/load, with user-supplied selection
 values taking precedence. Record missing or unsupported profile wiring as a
 gap. Audit remains read-only for env files and cloud resources.
 Distinguish ordinary local OTLP receipt from AO resource and delivery evidence.
+For existing native OTel, assess the shared reference's Native trace binding
+and recovery contract. User-selected existing resource names still need real
+IDs; inspect whether normal startup/runtime resolves them and configures both
+UUID trace headers and `splunk_ao.project.id` / `splunk_ao.logstream.id` trace
+Resource fields. Flag startup-only or manual-only setup, permanent header
+stripping after 503, and absent payload binding. Author a names-only,
+existing-resources, same-PID disconnected-to-connected recovery scenario with
+zero creates and exact cloud trace readback; do not claim unqueried IDs exist.
 For non-Galileo AO routes without destination settings, an available cloud-compatible Studio
 gateway is the default local destination. Its absence must not block source
 instrumentation or credential-free tests. An existing direct-cloud route
