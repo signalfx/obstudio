@@ -146,15 +146,18 @@ class ExportHeaderTests(unittest.TestCase):
                 {"OTEL_LOGS_EXPORTER": "otlp", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": origin + "/selected/logs",
                  "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "Authorization=log-marker,X-Log-Tenant=chosen"},
                 {"OTEL_LOGS_EXPORTER": "none", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": origin + "/selected/logs"},
+                {"OTEL_EXPORTER_OTLP_LOGS_HEADERS": "Authorization=log-marker,X-Log-Tenant=chosen"},
+                {"OTEL_LOGS_EXPORTER": "otlp", "OTEL_EXPORTER_OTLP_ENDPOINT": origin + "/collector/",
+                 "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "Authorization=log-marker,X-Log-Tenant=chosen"},
+                {"OTEL_EXPORTER_OTLP_ENDPOINT": origin + "/collector", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": origin + "/selected/logs",
+                 "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "Authorization=log-marker,X-Log-Tenant=chosen"},
             ]:
                 with self.subTest(overrides=overrides):
                     received.clear()
                     environment = {k: v for k, v in os.environ.items() if not k.startswith("OTEL_")}
-                    environment.update(
-                        OTEL_EXPORTER_OTLP_ENDPOINT=origin,
-                        OTEL_EXPORTER_OTLP_HEADERS="Authorization=generic-marker,X-App-Tenant=keep",
-                        **overrides,
-                    )
+                    environment.update(OTEL_EXPORTER_OTLP_ENDPOINT=origin,
+                                       OTEL_EXPORTER_OTLP_HEADERS="Authorization=generic-marker,X-App-Tenant=keep")
+                    environment.update(overrides)
                     script = (
                         "import sys\n"
                         f"sys.path.insert(0,{str(FIXTURE)!r})\n"
@@ -172,13 +175,15 @@ class ExportHeaderTests(unittest.TestCase):
                                             capture_output=True, text=True, timeout=20)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     bypath = {path: {k.lower(): v for k, v in headers.items()} for path, headers, size in received if size}
-                    selected = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT" in overrides
+                    selected = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT" in overrides or "OTEL_EXPORTER_OTLP_LOGS_HEADERS" in overrides
                     disabled = overrides.get("OTEL_LOGS_EXPORTER") == "none"
-                    logpath = "/selected/logs" if selected else "/v1/logs"
-                    self.assertEqual(set(bypath), {"/v1/traces", "/v1/metrics"} | (set() if disabled else {logpath}))
+                    basepath = "/collector" if "/collector" in environment["OTEL_EXPORTER_OTLP_ENDPOINT"] else ""
+                    logpath = ("/selected/logs" if "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT" in overrides
+                               else basepath + "/v1/logs" if selected else "/v1/logs")
+                    self.assertEqual(set(bypath), {basepath + "/v1/traces", basepath + "/v1/metrics"} | (set() if disabled else {logpath}))
                     for signal_name in ("traces", "metrics"):
                         expected = overrides.get(f"OTEL_EXPORTER_OTLP_{signal_name.upper()}_HEADERS", "Authorization=generic-marker").split("=", 1)[1]
-                        self.assertEqual(bypath["/v1/" + signal_name]["authorization"], expected)
+                        self.assertEqual(bypath[basepath + "/v1/" + signal_name]["authorization"], expected)
                     if disabled:
                         continue
                     if selected:
@@ -221,6 +226,16 @@ class ExportHeaderTests(unittest.TestCase):
                 session=ANY,
             )
             self.assertIsInstance(exporter.call_args.kwargs["session"], otel_setup._LocalLogSession)
+            self.assertEqual(dict(os.environ), before)
+
+    def test_log_headers_use_explicit_base_without_changing_operator_environment(self):
+        with patch.dict(os.environ, {
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "https://collector.invalid/prefix/",
+            "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "Authorization=synthetic",
+        }, clear=True), patch.object(otel_setup, "OTLPLogExporter") as exporter:
+            before = dict(os.environ)
+            otel_setup._local_log_exporter()
+            exporter.assert_called_once_with()
             self.assertEqual(dict(os.environ), before)
 
     def test_implicit_trace_metric_destinations_reject_headers_before_any_provider(self):

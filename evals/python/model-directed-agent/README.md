@@ -15,7 +15,11 @@ exporter header guards and the four-case native telemetry probe. Real local
 HTTP receipts also check generic and signal-specific trace/metric headers
 without leaking inherited destination headers into the implicit local log request.
 An explicit `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` uses the SDK's normal generic or
-log-specific header configuration; `OTEL_LOGS_EXPORTER=none` opts out. These checks
+log-specific header configuration. Log-specific headers also select an explicit
+base `OTEL_EXPORTER_OTLP_ENDPOINT`, with the SDK appending `/v1/logs` and
+preserving its path prefix; the logs-specific endpoint takes precedence.
+Without either logs override, generic configuration retains the isolated local
+log default. `OTEL_LOGS_EXPORTER=none` opts out. These checks
 use fake model responses and make no cloud calls. The probe's default mode
 preserves the fixture's intentionally incorrect workflow label; `--expect-agent`
 remains the acceptance check after a selected role repair.

@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261020T200855159694Z |
+| Run ID | 20261020T210914152057Z |
 | Agent model | gpt-6.1-sol |
 | Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
@@ -18,36 +18,35 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | 1 | 100% (5/5), avg score 100 | 3.1M | 12.0m | - | - | - |
-| with_skill | python/existing-otel-agent-demo/qual/instrument | python/existing-otel-agent-demo | 4 | 91% (29/32), avg score 95 | 24.5M | 1.6h | - | - | - |
-| with_skill | python/model-directed-agent/qual/instrument | python/model-directed-agent | 1 | 100% (4/4), avg score 100 | 4.0M | 16.4m | - | - | - |
-| with_skill | python/model-directed-agent/qual/resource-table-instrument | python/model-directed-agent | 1 | 100% (6/6), avg score 96 | 8.2M | 30.4m | - | - | - |
+| with_skill | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | 1 | 100% (5/5), avg score 100 | 4.4M | 16.3m | - | - | - |
+| with_skill | python/existing-otel-agent-demo/qual/instrument | python/existing-otel-agent-demo | 4 | 97% (31/32), avg score 97 | 22.6M | 1.4h | - | - | - |
+| with_skill | python/model-directed-agent/qual/instrument | python/model-directed-agent | 1 | 100% (4/4), avg score 100 | 2.9M | 11.1m | - | - | - |
+| with_skill | python/model-directed-agent/qual/resource-table-instrument | python/model-directed-agent | 1 | 83% (5/6), avg score 94 | 8.2M | 24.6m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 3039375 | 2900608 | 0 | 27257 | 7530 | unknown | 3066632 |
-| with_skill | python/existing-otel-agent-demo/qual/instrument | python/existing-otel-agent-demo | with_skill | codex | cumulative | measured | 4/4 recognized | 24261232 | 23521024 | 0 | 227684 | 85373 | unknown | 24488916 |
-| with_skill | python/model-directed-agent/qual/instrument | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 3989997 | 3822592 | 0 | 40476 | 11241 | unknown | 4030473 |
-| with_skill | python/model-directed-agent/qual/resource-table-instrument | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 8148909 | 7916928 | 0 | 71726 | 28673 | unknown | 8220635 |
+| with_skill | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 4378505 | 4224640 | 0 | 39628 | 13133 | unknown | 4418133 |
+| with_skill | python/existing-otel-agent-demo/qual/instrument | python/existing-otel-agent-demo | with_skill | codex | cumulative | measured | 4/4 recognized | 22403820 | 21660032 | 0 | 199927 | 67828 | unknown | 22603747 |
+| with_skill | python/model-directed-agent/qual/instrument | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 2868459 | 2716416 | 0 | 25934 | 4643 | unknown | 2894393 |
+| with_skill | python/model-directed-agent/qual/resource-table-instrument | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 8154138 | 7938688 | 0 | 56769 | 18893 | unknown | 8210907 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 744331 | 640640 | 0 | 3646 | 444 | unknown | 747977 |
-| with_skill | python/existing-otel-agent-demo/qual/instrument | python/existing-otel-agent-demo | with_skill | codex | cumulative | measured | 4/4 recognized | 3459507 | 3111168 | 0 | 29749 | 9313 | unknown | 3489256 |
-| with_skill | python/model-directed-agent/qual/instrument | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 612344 | 529024 | 0 | 3374 | 674 | unknown | 615718 |
-| with_skill | python/model-directed-agent/qual/resource-table-instrument | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 1327002 | 1197952 | 0 | 7889 | 3265 | unknown | 1334891 |
+| with_skill | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 884779 | 787840 | 0 | 3677 | 709 | unknown | 888456 |
+| with_skill | python/existing-otel-agent-demo/qual/instrument | python/existing-otel-agent-demo | with_skill | codex | cumulative | measured | 4/4 recognized | 3652602 | 3302656 | 0 | 29378 | 8687 | unknown | 3681980 |
+| with_skill | python/model-directed-agent/qual/instrument | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 673599 | 569600 | 0 | 2964 | 502 | unknown | 676563 |
+| with_skill | python/model-directed-agent/qual/resource-table-instrument | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 1356263 | 1237376 | 0 | 8280 | 3893 | unknown | 1364543 |
 
 ## Rubric Failures
 
 | Mode | Service | Side | Prompt | Result | Evidence |
 |---|---|---|---|---|---|
-| with_skill | python/existing-otel-agent-demo | with_skill | preserve-genai-instrument | rubric:rubric-3 FAIL | service/instrumentation.py:31, :55 and :169. Read-only reproduction retained HIDDEN_SENTINEL in captured messages for 'hidden_reasoning=HIDDEN_SENTINEL; question=shipment'. Sanitizing JSON with sixteen 2000-character fields produced 16614 UTF-8 bytes; retrieval.query.text receives this directly despite declared 1024... |
-| with_skill | python/existing-otel-agent-demo | with_skill | preserve-logs-instrument | rubric:rubric-3 FAIL | service/instrumentation.py:62-72 returns parsed scalar strings without applying the redaction rules. Evaluating _enrich with inputs.prompt=json.dumps("private-prompt-sentinel"), then encoding and decoding native OTLP, retained the sentinel; equivalent quoted identity and secret/reasoning strings also leaked. See ser... |
-| with_skill | python/existing-otel-agent-demo | with_skill | preserve-logs-instrument | rubric:rubric-8 FAIL | service/.observe/otel-verify.json:376 and :402 list resources-existing trace IDs instead of those in service/.observe/evidence/public-app.json and rejected-app.json. Source hashes and complete schema copies were independently checked; the saved comparisons themselves remain valid. |
+| with_skill | python/existing-otel-agent-demo | with_skill | preserve-logs-instrument | rubric:rubric-3 FAIL | service/content_capture.py:15-51; service/tests/test_instrumentation.py. Evaluator reproduction through configure/app.run_agent and native protobuf encode/decode retained thought-sentinel on workflow, agent, retrieval and model spans, including gen_ai.input.messages and gen_ai.retrieval.query.text. |
+| with_skill | python/model-directed-agent | with_skill | native-agent-resource-defaults | rubric:rubric-6 FAIL | receiver-and-api-unavailable asserts business success, zero receipts and any exporter error, without capturing completed spans, metric points or LogRecords. Its recorded output shows only a metrics timeout, so native agent/model/tool emission in that mode remains unproven. Other recovery cases demonstrate stable UUI... |
 
 ## Result JSON
 

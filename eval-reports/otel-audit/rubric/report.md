@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-audit |
-| Run ID | 20261020T200853939788Z |
+| Run ID | 20261020T210914084855Z |
 | Agent model | gpt-6.1-sol |
 | Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
@@ -18,36 +18,32 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/existing-otel-agent-demo/qual/audit | python/existing-otel-agent-demo | 1 | 86% (6/7), avg score 91 | 5.1M | 15.6m | - | - | - |
-| with_skill | python/model-directed-agent/qual/audit | python/model-directed-agent | 1 | 100% (5/5), avg score 100 | 4.2M | 13.1m | - | - | - |
-| with_skill | python/model-directed-agent/qual/connection-modes-audit | python/model-directed-agent | 1 | 100% (5/5), avg score 100 | 962.1K | 7.9m | - | - | - |
-| with_skill | python/model-directed-agent/qual/resource-table-audit | python/model-directed-agent | 1 | 71% (5/7), avg score 93 | 4.4M | 16.3m | - | - | - |
+| with_skill | python/existing-otel-agent-demo/qual/audit | python/existing-otel-agent-demo | 1 | 100% (7/7), avg score 100 | 4.5M | 15.9m | - | - | - |
+| with_skill | python/model-directed-agent/qual/audit | python/model-directed-agent | 1 | 100% (5/5), avg score 100 | 3.5M | 13.4m | - | - | - |
+| with_skill | python/model-directed-agent/qual/connection-modes-audit | python/model-directed-agent | 1 | 100% (5/5), avg score 100 | 949.4K | 8.3m | - | - | - |
+| with_skill | python/model-directed-agent/qual/resource-table-audit | python/model-directed-agent | 1 | 100% (7/7), avg score 98 | 3.4M | 15.6m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/existing-otel-agent-demo/qual/audit | python/existing-otel-agent-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 5037335 | 4835456 | 0 | 36504 | 9784 | unknown | 5073839 |
-| with_skill | python/model-directed-agent/qual/audit | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 4136032 | 3961344 | 0 | 30869 | 3011 | unknown | 4166901 |
-| with_skill | python/model-directed-agent/qual/connection-modes-audit | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 943813 | 851840 | 0 | 18246 | 2480 | unknown | 962059 |
-| with_skill | python/model-directed-agent/qual/resource-table-audit | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 4385364 | 4179328 | 0 | 37414 | 4010 | unknown | 4422778 |
+| with_skill | python/existing-otel-agent-demo/qual/audit | python/existing-otel-agent-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 4436015 | 4240512 | 0 | 37754 | 10345 | unknown | 4473769 |
+| with_skill | python/model-directed-agent/qual/audit | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 3506503 | 3339008 | 0 | 30889 | 5073 | unknown | 3537392 |
+| with_skill | python/model-directed-agent/qual/connection-modes-audit | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 929698 | 833536 | 0 | 19707 | 2498 | unknown | 949405 |
+| with_skill | python/model-directed-agent/qual/resource-table-audit | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 3361554 | 3170944 | 0 | 36863 | 4736 | unknown | 3398417 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/existing-otel-agent-demo/qual/audit | python/existing-otel-agent-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 771944 | 681856 | 0 | 4814 | 916 | unknown | 776758 |
-| with_skill | python/model-directed-agent/qual/audit | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 888458 | 800640 | 0 | 3913 | 625 | unknown | 892371 |
-| with_skill | python/model-directed-agent/qual/connection-modes-audit | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 586671 | 507648 | 0 | 3187 | 500 | unknown | 589858 |
-| with_skill | python/model-directed-agent/qual/resource-table-audit | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 1343574 | 1229824 | 0 | 5647 | 1388 | unknown | 1349221 |
+| with_skill | python/existing-otel-agent-demo/qual/audit | python/existing-otel-agent-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 884720 | 797952 | 0 | 5052 | 1095 | unknown | 889772 |
+| with_skill | python/model-directed-agent/qual/audit | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 880138 | 777216 | 0 | 4693 | 853 | unknown | 884831 |
+| with_skill | python/model-directed-agent/qual/connection-modes-audit | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 629053 | 545792 | 0 | 2813 | 213 | unknown | 631866 |
+| with_skill | python/model-directed-agent/qual/resource-table-audit | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 1263267 | 1150720 | 0 | 5409 | 1110 | unknown | 1268676 |
 
 ## Rubric Failures
 
-| Mode | Service | Side | Prompt | Result | Evidence |
-|---|---|---|---|---|---|
-| with_skill | python/existing-otel-agent-demo | with_skill | active-signal-matrix-audit | rubric:rubric-2 FAIL | service/.observe/mode-audit.json modes.metrics and modes.logs: operation_ledger[*].proposed and OTEL-001/OTEL-005.required_fix contain 'exclude those keys from creator registration'. TRACE-001.required_fix specifies integration-owned provider state; service/app.py:117 limits ExistingTraceProducer construction to gen... |
-| with_skill | python/model-directed-agent | with_skill | agent-resource-table-audit | rubric:rubric-2 FAIL | service/.observe/agent-resource-cases.json: fresh_native_fallback.producer_decision and routing.exporter_per_request_trace_routing. |
-| with_skill | python/model-directed-agent | with_skill | agent-resource-table-audit | rubric:rubric-6 FAIL | Validator passes 16 findings and 27 scenarios; HTML matches normalized canonical JSON; all 13 recorded file hashes match. Supplemental fresh_native_fallback routing and non_agent_control.routing.header_contracts contain the inconsistencies. |
+No rubric failures.
 
 ## Result JSON
 

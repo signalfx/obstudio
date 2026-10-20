@@ -89,9 +89,13 @@ def _local_log_exporter() -> OTLPLogExporter:
         # An operator-selected destination uses the SDK's normal header rules.
         return OTLPLogExporter(endpoint=endpoint)
     if os.environ.get("OTEL_EXPORTER_OTLP_LOGS_HEADERS", "").strip():
+        if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip():
+            # The SDK appends /v1/logs to the base, including its path prefix.
+            return OTLPLogExporter()
         raise RuntimeError(
-            "set OTEL_EXPORTER_OTLP_LOGS_ENDPOINT before using log-specific "
-            "headers; refusing the implicit local log destination."
+            "set OTEL_EXPORTER_OTLP_LOGS_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT "
+            "before using log-specific headers; refusing the implicit local "
+            "log destination."
         )
     # SDK versions differ in whether explicit headers replace or merge generic
     # values. The supported session boundary isolates the final local request.
