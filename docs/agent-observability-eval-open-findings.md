@@ -63,6 +63,17 @@ without independently capturing completed native spans, metric points or
 LogRecords. Signal emission during that outage remains unproven. Closing this
 gap requires independent native/in-memory observations in the outage case.
 
+The full instrumentation run `20261020T214331268302Z` adds a typed-part
+counterexample in `preserve-genai-instrument` (7/8, `rubric-3`). Its generated
+`service/safe_content.py:17-35` redacts sensitive field names but preserves
+`{"type":"reasoning","content":"hidden-reasoning-sentinel"}`, including when
+JSON-encoded inside the actual prompt. An independent copied-runtime replay
+preserved the business result while exposing the sentinel on completed
+retrieval, chat, agent and workflow spans and in the encoded native OTLP payload.
+Evidence is retained in
+`.workspace/combined-review-67a2503-20261020/fresh-reasoning-repro.json`.
+The connection-probe corrections do not resolve this sanitizer failure.
+
 ## Closure requirements
 
 Keep each finding open until a focused correction and regression exercise the

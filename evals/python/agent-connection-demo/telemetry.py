@@ -43,6 +43,8 @@ def configure():
             lp.force_flush()
             native = reader.get_metrics_data()
             record = {
+                "providers_retained": {"traces": trace.get_tracer_provider() is tp,
+                                       "metrics": metrics.get_meter_provider() is mp},
                 "spans": [{"name": s.name, "trace_id": f"{s.context.trace_id:032x}", "span_id": f"{s.context.span_id:016x}",
                            "parent_id": f"{s.parent.span_id:016x}" if s.parent else None, "attributes": dict(s.attributes)}
                           for s in spans.get_finished_spans()],

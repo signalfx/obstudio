@@ -70,3 +70,17 @@ def test_gateway_contract_resolver_discovery_and_preflight(tmp_path, layout):
     else:
         assert found.is_file()
         assert found.read_bytes() == resolver.read_bytes()
+
+
+@pytest.mark.parametrize("case", [
+    "test_public_wrapper_and_request_hook_use_actual_wire_binding",
+    "test_cached_restart_forwards_without_resource_lookup",
+    "test_wire_oracle_still_rejects_missing_headers_and_resource_mismatch",
+])
+def test_connection_probe_public_wire_contract(case):
+    check = Path(__file__).parent / "python/agent-connection-demo/checks/probe_regressions.py"
+    result = subprocess.run(
+        [sys.executable, str(check), f"ProbeTests.{case}"],
+        capture_output=True, text=True, timeout=20,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

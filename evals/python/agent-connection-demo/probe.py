@@ -29,7 +29,7 @@ class Gateway:
         self.project = existing
         self.stream = existing
         self.uncertain = uncertain
-        self.bound = False
+        self.resource_available = True
         self.requests = []
         self.traces = []
         self.metrics = []
@@ -61,7 +61,7 @@ class Gateway:
                 if path.startswith("/ao/api/"):
                     if self.headers.get("X-SF-Token") != "local-gateway":
                         return self.reply(401, {})
-                    if not owner.connected:
+                    if not owner.connected or not owner.resource_available:
                         return self.reply(503, {"error": "cloud disconnected"})
                     project = {"id": PROJECT, "name": "original-project"}
                     stream = {"id": STREAM, "name": "production", "project_id": PROJECT}
@@ -82,7 +82,6 @@ class Gateway:
                         if self.command == "POST":
                             owner.stream = True
                             return self.reply(201, stream)
-                        owner.bound = owner.project and owner.stream
                         if path.endswith("/paginated"):
                             return self.reply(200, {"log_streams": [stream] if owner.stream else [], "paginated": False, "next_starting_token": None})
                         return self.reply(200 if owner.stream else 404, stream if owner.stream else {})
@@ -125,7 +124,6 @@ class Gateway:
 def run(gateway, directory, *, seeded=True, reuse_profile=False):
     profile = directory / "runtime.env"
     capture = directory / "native.json"
-    observed = directory / "exporter.json"
     if not reuse_profile:
         pair = f"projectid={PROJECT},logstreamid={STREAM}," if seeded else ""
         profile.write_text(
@@ -136,28 +134,8 @@ def run(gateway, directory, *, seeded=True, reuse_profile=False):
             "OTEL_EXPORTER_OTLP_LOGS_TIMEOUT=0.2\nOTEL_METRIC_EXPORT_TIMEOUT=200\n"
             f"LOCAL_CAPTURE_FILE={capture}\nAPPLICATION_KEEP_SETTING=preserve-me\n"
         )
-    wrapper = directory / "run.py"
-    wrapper.write_text(
-        "import atexit,json,runpy,sys\nfrom pathlib import Path\n"
-        "from opentelemetry import trace\n"
-        f"sys.path.insert(0,{str(ROOT)!r})\n"
-        "def observe():\n"
-        " p=trace.get_tracer_provider(); result=[]\n"
-        " for processor in getattr(getattr(p,'_active_span_processor',None),'_span_processors',()):\n"
-        "  exporter=getattr(processor,'span_exporter',None)\n"
-        "  seen=set()\n"
-        "  while exporter is not None and id(exporter) not in seen:\n"
-        "   seen.add(id(exporter))\n"
-        "   if type(exporter).__name__=='OTLPSpanExporter':\n"
-        "    result.append({str(k).lower():v for k,v in exporter._headers.items() if str(k).lower() in ('projectid','logstreamid','x-app-tenant')}); break\n"
-        "   exporter=getattr(exporter,'delegate',getattr(exporter,'_delegate',None))\n"
-        f" Path({str(observed)!r}).write_text(json.dumps(result))\n"
-        "atexit.register(observe)\n"
-        f"sys.argv=['launch.py','--profile',{str(profile)!r}]\n"
-        f"runpy.run_path({str(ROOT / 'launch.py')!r},run_name='__main__')\n"
-    )
     environment = {k: v for k, v in os.environ.items() if not k.startswith(("OTEL_", "SPLUNK_AO_", "GALILEO_", "AGENT_", "LOCAL_CAPTURE_FILE"))}
-    process = subprocess.run([sys.executable, str(wrapper)], cwd=ROOT, env=environment, capture_output=True, text=True, timeout=20)
+    process = subprocess.run([sys.executable, "launch.py", "--profile", str(profile)], cwd=ROOT, env=environment, capture_output=True, text=True, timeout=20)
     assert process.returncode == 0, process.stderr[-1500:]
     assert json.loads(process.stdout.strip().splitlines()[-1]) == {"answer": "Documentation for returns"}
     native = json.loads(capture.read_text())
@@ -166,10 +144,9 @@ def run(gateway, directory, *, seeded=True, reuse_profile=False):
     assert all(s["parent_id"] == agent["span_id"] for s in native["spans"] if s is not agent)
     assert native["metrics"] == [{"name": "agent.turns", "values": [1]}]
     assert len(native["logs"]) == 1 and native["logs"][0]["trace_id"] == agent["trace_id"]
-    config = json.loads(observed.read_text())
-    assert len(config) == 1 and config[0].get("x-app-tenant") == "keep-marker"
+    assert native["providers_retained"] == {"traces": True, "metrics": True}
     assert dotenv_values(profile)["APPLICATION_KEEP_SETTING"] == "preserve-me"
-    return profile, config[0], native
+    return profile, native
 
 
 def assert_binding(packet, expected):
@@ -256,6 +233,7 @@ def same_pid_probe():
             assert not [path for method, path in gateway.requests if method == "POST" and path.startswith("/ao/api/")]
             assert gateway.metrics and gateway.logs
             native = json.loads((directory / "native.json").read_text())
+            assert native["providers_retained"] == {"traces": True, "metrics": True}
             assert len(native["spans"]) == 4 * turns
             assert native["metrics"] == [{"name": "agent.turns", "values": [turns]}]
             assert len(native["logs"]) == turns
@@ -285,10 +263,9 @@ def main():
                 gateway.close()
             with tempfile.TemporaryDirectory() as temp:
                 directory = Path(temp)
-                profile, headers, native = run(gateway, directory, seeded=existing)
+                profile, native = run(gateway, directory, seeded=existing)
                 if connected:
-                    assert headers.get("projectid") == PROJECT and headers.get("logstreamid") == STREAM
-                    assert gateway.forwarded == 1 and gateway.bound
+                    assert gateway.forwarded == 1
                     assert len(gateway.traces) == 1
                     assert_binding(gateway.traces[0], True)
                     spans = [s for _, p in gateway.traces for r in p.resource_spans for scope in r.scope_spans for s in scope.spans]
@@ -297,7 +274,6 @@ def main():
                     creates = [p for method, p in gateway.requests if method == "POST" and p.startswith("/ao/api/")]
                     assert len(creates) == (0 if existing else 2)
                 else:
-                    assert headers.get("projectid") == PROJECT and headers.get("logstreamid") == STREAM
                     assert f"projectid={PROJECT}" in dotenv_values(profile)["OTEL_EXPORTER_OTLP_TRACES_HEADERS"]
                     assert gateway.forwarded == 0
                     assert not [p for method, p in gateway.requests if method == "POST" and p.startswith("/ao/api/")]
@@ -310,9 +286,11 @@ def main():
                     assert gateway.metrics and gateway.logs
                 if label == "reconnect":
                     gateway.connected = True
-                    gateway.bound = False
-                    _, headers, _ = run(gateway, directory, reuse_profile=True)
-                    assert headers.get("projectid") == PROJECT and gateway.forwarded == 1 and gateway.bound
+                    gateway.resource_available = False
+                    start = len(gateway.traces)
+                    run(gateway, directory, reuse_profile=True)
+                    assert gateway.forwarded == 1 and len(gateway.traces) == start + 1
+                    assert_binding(gateway.traces[-1], True)
                     assert not [p for method, p in gateway.requests if method == "POST" and p.startswith("/ao/api/")]
                 results.append({"case": label, "pass": True, "native_spans": len(native["spans"]), "resource_calls": gateway.requests,
                                 "local_receipt": not stopped, "synthetic_forwarded_batches": gateway.forwarded})

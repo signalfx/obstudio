@@ -14,6 +14,10 @@ probe checks names-only recovery and retention of valid headers plus trace
 Resource IDs across a temporary outage. The probe uses local numeric-loopback
 HTTP resource/OTLP boundaries and real SDK records, including a lost create
 response after commit. Its cloud is synthetic; no receipt proves live Splunk.
+Reconnect also starts a new process with the retained binding while the resource
+API stays unavailable and OTLP forwarding works. Acceptance uses actual HTTP
+headers/protobuf Resources and the fixture's public provider-identity receipt,
+without inspecting an exporter's private fields or a delegate's member names.
 
 Run `python gateway_contract_check.py --resolver PATH` with the bundled
 `resolve_ao_resources.py` CLI before the application probe. This checks the
