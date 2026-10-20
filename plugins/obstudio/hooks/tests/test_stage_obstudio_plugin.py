@@ -217,8 +217,47 @@ class StageObstudioPluginTest(unittest.TestCase):
                 encoding="utf-8",
             )
             STAGE.check_codex_marketplace_ref("1.2.3", marketplace_path)
+            with self.assertRaisesRegex(RuntimeError, "is newer than plugin version"):
+                STAGE.check_codex_marketplace_ref("1.2.2", marketplace_path)
+
+    def test_check_codex_marketplace_ref_allows_ref_lagging_prepared_manifests(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            marketplace_path = self._write_codex_marketplace(tempdir, "v1.2.3")
+            STAGE.check_codex_marketplace_ref("1.2.4", marketplace_path)
+            STAGE.check_codex_marketplace_ref("1.3.0-rc.1", marketplace_path)
+            STAGE.check_codex_marketplace_ref("2.0.0", marketplace_path)
+
+    def test_check_codex_marketplace_ref_rejects_non_release_refs_and_other_sources(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            for ref in ("main", "1.2.3", "latest"):
+                marketplace_path = self._write_codex_marketplace(tempdir, ref)
+                with self.assertRaisesRegex(RuntimeError, "must be a vMAJOR.MINOR.PATCH release tag"):
+                    STAGE.check_codex_marketplace_ref("1.2.3", marketplace_path)
+            marketplace_path = self._write_codex_marketplace(tempdir, "v1.2.3", path="./elsewhere")
             with self.assertRaisesRegex(RuntimeError, "Codex marketplace source must match"):
-                STAGE.check_codex_marketplace_ref("1.2.4", marketplace_path)
+                STAGE.check_codex_marketplace_ref("1.2.3", marketplace_path)
+
+    def _write_codex_marketplace(self, tempdir, ref, path="./plugins/obstudio"):
+        marketplace_path = Path(tempdir) / "marketplace.json"
+        marketplace_path.write_text(
+            json.dumps(
+                {
+                    "plugins": [
+                        {
+                            "name": "obstudio",
+                            "source": {
+                                "source": "git-subdir",
+                                "url": "https://github.com/signalfx/obstudio.git",
+                                "path": path,
+                                "ref": ref,
+                            },
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        return marketplace_path
 
     def test_package_target_requires_tag_and_stamps_versioned_archives(self):
         root = Path(__file__).resolve().parents[4]

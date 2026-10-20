@@ -325,11 +325,24 @@ def check_codex_marketplace_ref(
         "path": "./plugins/obstudio",
         "ref": f"v{plugin_version}",
     }
-    if source != expected:
+    ref = source.get("ref") if isinstance(source, dict) else None
+    if not isinstance(source, dict) or {**source, "ref": expected["ref"]} != expected:
         raise RuntimeError(
             f"Codex marketplace source must match the plugin release in {target}: "
             f"expected {expected!r}, got {source!r}"
         )
+    # Manifests are bumped before the tag exists, so the ref may lag until the sync PR merges.
+    if not isinstance(ref, str) or not ref.startswith("v") or not SEMVER_PATTERN.fullmatch(ref[1:]):
+        raise RuntimeError(f"Codex marketplace ref must be a vMAJOR.MINOR.PATCH release tag in {target}: {ref!r}")
+    if _semver_core(ref[1:]) > _semver_core(plugin_version):
+        raise RuntimeError(
+            f"Codex marketplace ref {ref!r} is newer than plugin version {plugin_version!r} in {target}"
+        )
+
+
+def _semver_core(version: str) -> tuple[int, int, int]:
+    major, minor, patch = re.split(r"[-+]", version, maxsplit=1)[0].split(".")
+    return int(major), int(minor), int(patch)
 
 
 def checksum_for_archive(checksums_file: Path, archive_name: str) -> str:
