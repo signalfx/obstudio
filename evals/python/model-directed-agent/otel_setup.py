@@ -25,6 +25,8 @@ from __future__ import annotations
 import os
 import threading
 
+from requests import Session
+
 from opentelemetry import metrics, trace
 from opentelemetry._logs import set_logger_provider
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
@@ -40,6 +42,25 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 LOCAL_OBSERVER_LOGS_ENDPOINT = "http://localhost:4318/v1/logs"
+
+
+class _LocalLogSession(Session):
+    """Keep SDK-inherited destination headers out of the local log request."""
+
+    def __init__(self):
+        super().__init__()
+        self.trust_env = False
+
+    def prepare_request(self, request):
+        prepared = super().prepare_request(request)
+        transport_headers = {
+            "accept", "accept-encoding", "connection", "content-encoding",
+            "content-length", "content-type", "user-agent",
+        }
+        for name in list(prepared.headers):
+            if name.lower() not in transport_headers:
+                del prepared.headers[name]
+        return prepared
 
 
 def _use_default_local_log_export() -> bool:
@@ -76,17 +97,19 @@ def _local_log_exporter() -> OTLPLogExporter:
             "select the official exporter matching "
             f"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL={protocol!r}"
         )
-    # Reject generic headers even when signal-specific log headers exist: SDKs
-    # may merge both and leak a cloud credential into the local log request.
-    if any(os.environ.get(key, "").strip() for key in (
-        "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
-    )):
+    if os.environ.get("OTEL_EXPORTER_OTLP_LOGS_HEADERS", "").strip():
         raise RuntimeError(
-            "remove generic and log-specific OTLP headers before enabling "
-            "local logs; keep remote credentials in their selected signal configuration."
+            "remove log-specific OTLP headers before enabling local logs; "
+            "keep remote credentials in their selected signal configuration."
         )
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
-    return OTLPLogExporter(endpoint=endpoint or LOCAL_OBSERVER_LOGS_ENDPOINT)
+    # SDK versions differ in whether explicit headers replace or merge generic
+    # values. The supported session boundary isolates the final local request.
+    return OTLPLogExporter(
+        endpoint=endpoint or LOCAL_OBSERVER_LOGS_ENDPOINT,
+        headers={"Content-Type": "application/x-protobuf"},
+        session=_LocalLogSession(),
+    )
 
 
 def _validate_export_headers(signal: str) -> None:

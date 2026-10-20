@@ -75,64 +75,64 @@
         "name": "GET /",
         "source": "opentelemetry-instrumentation-flask / FlaskInstrumentor",
         "type": "auto",
-        "status": "source-active before serving; prior Oct 12 evidence only; no current Oct 19 receiver receipt",
-        "evidence": "app.py:36-48,.observe/evidence/otlp-smashbot.md"
+        "status": "configured before Flask serving; source only, current receiver receipt not proven",
+        "evidence": "app.py:36-48"
       },
       {
         "name": "GET /static/<path:filename>",
         "source": "opentelemetry-instrumentation-flask / FlaskInstrumentor",
         "type": "auto",
-        "status": "source-active before serving; prior Oct 12 evidence only; no current Oct 19 receiver receipt",
-        "evidence": "app.py:36-48,.observe/evidence/otlp-smashbot.md"
+        "status": "configured before Flask serving; source only, current receiver receipt not proven",
+        "evidence": "app.py:36-48"
       },
       {
         "name": "POST /chat",
         "source": "opentelemetry-instrumentation-flask / FlaskInstrumentor",
         "type": "auto",
-        "status": "source-active before serving; prior Oct 12 evidence only; no current Oct 19 receiver receipt",
-        "evidence": "app.py:36-48,.observe/evidence/otlp-smashbot.md"
+        "status": "configured before Flask serving; source only, current receiver receipt not proven",
+        "evidence": "app.py:36-48"
       },
       {
         "name": "POST /reset",
         "source": "opentelemetry-instrumentation-flask / FlaskInstrumentor",
         "type": "auto",
-        "status": "source-active before serving; prior Oct 12 evidence only; no current Oct 19 receiver receipt",
-        "evidence": "app.py:36-48,.observe/evidence/otlp-smashbot.md"
+        "status": "configured before Flask serving; source only, current receiver receipt not proven",
+        "evidence": "app.py:36-48"
       },
       {
         "name": "invoke_workflow smashbot_turn",
         "source": "chat_core._tracer.start_as_current_span",
         "type": "custom GenAI workflow",
-        "status": "source-active in Flask; source-defined but inactive in CLI; historical Oct 12 trace evidence only",
+        "status": "configured in Flask; source-defined but inactive in CLI; no runtime capture supplied",
         "evidence": "chat_core.py:42,207-278"
       },
       {
         "name": "chat {model}",
         "source": "chat_core._tracer.start_as_current_span",
         "type": "custom GenAI inference",
-        "status": "source-active in Flask; source-defined but inactive in CLI; historical Oct 12 trace evidence only",
+        "status": "configured in Flask; source-defined but inactive in CLI; no runtime capture supplied",
         "evidence": "chat_core.py:158-204"
       },
       {
         "name": "execute_tool recommend_smash_burgers",
         "source": "chat_core._dispatch_tool_call",
         "type": "custom GenAI tool",
-        "status": "source-active in Flask; source-defined but inactive in CLI; historical Oct 12 trace evidence only",
+        "status": "configured in Flask; source-defined but inactive in CLI; no runtime capture supplied",
         "evidence": "chat_core.py:122-155"
       }
     ],
     "metrics": [
       {
         "name": "http.server.duration",
-        "source": "opentelemetry-instrumentation-flask 0.62b1 (live evidence)",
+        "source": "FlaskInstrumentor in app.py; metric availability depends on installed SDK version and is not runtime-proven",
         "type": "Histogram",
-        "evidence": ".observe/evidence/otlp-smashbot.md"
+        "evidence": "otel_setup.py; app.py; chat_core.py (source only; no captured runtime evidence supplied)"
       },
       {
         "name": "http.server.active_requests",
-        "source": "opentelemetry-instrumentation-flask 0.62b1 (live evidence)",
+        "source": "FlaskInstrumentor in app.py; metric availability depends on installed SDK version and is not runtime-proven",
         "type": "Sum",
-        "evidence": ".observe/evidence/otlp-smashbot.md"
+        "evidence": "otel_setup.py; app.py; chat_core.py (source only; no captured runtime evidence supplied)"
       },
       {
         "name": "gen_ai.client.token.usage",
@@ -154,9 +154,9 @@
       },
       {
         "name": "otel.sdk.log.created",
-        "source": "OpenTelemetry SDK log instrumentation (live evidence)",
+        "source": "LoggerProvider in otel_setup.py; SDK internal metric availability is not runtime-proven",
         "type": "Counter",
-        "evidence": ".observe/evidence/otlp-smashbot.md"
+        "evidence": "otel_setup.py; app.py; chat_core.py (source only; no captured runtime evidence supplied)"
       }
     ],
     "logs": [
@@ -166,11 +166,11 @@
         "type": "OTLP log bridge",
         "status": "local-otlp-default; source-active in Flask; none opt-out honored",
         "endpoint": "http://localhost:4318/v1/logs (http/protobuf)",
-        "correlation": "trace context injection enabled; live access-log example lacks trace_id/span_id",
+        "correlation": "trace context injection configured; actual OTLP log correlation not proven",
         "sinks": "existing stderr sink retained",
-        "evidence": "otel_setup.py:68-88,110-134,app.py:44-48,.observe/evidence/otlp-smashbot.md",
+        "evidence": "otel_setup.py:130-208; app.py:36-48 (source configuration only)",
         "integration": "opentelemetry-instrumentation-logging LoggingInstrumentor",
-        "detail": "Local OTLP logs pipeline with existing stderr sink; trace context injection enabled; saved evidence shows Werkzeug access records without trace_id/span_id; no application error log is emitted from the /chat failure handler."
+        "detail": "Local OTLP logs pipeline with existing stderr sink; trace context injection enabled; no log capture is supplied, so Werkzeug OTLP receipt and correlation are not proven; no application error log is emitted from the /chat failure handler."
       }
     ],
     "incident_readiness": []
@@ -257,8 +257,8 @@
       {
         "id": "py.local",
         "surface": "SmashBot Flask app, CLI, and shared chat core",
-        "config_evidence": "requirements.txt,README.md:25-63,app.py:26-48,agent.py:18-28,test_otel_instrumentation.py:1-7",
-        "runner": "python3 app.py for web runtime; python3 agent.py for CLI runtime; python3 test_otel_instrumentation.py for focused fake-client signals",
+        "config_evidence": "requirements.txt,README.md:1-17,app.py:26-48,agent.py:18-28,historical_check.py:1-7",
+        "runner": "python3 app.py for web runtime; python3 agent.py for CLI runtime; python3 historical_check.py for focused fake-client signals",
         "scope": "repository Python application",
         "prerequisites": "Python and requirements installed; use the existing fake OpenAI client/test seam and isolated process environments for provider/endpoint branches. No live OpenAI key or credits are required for focused call-site tests. A local Splunk Observability Studio receiver is only needed for local-delivery proof; in-memory providers can prove signal shape without network credentials. For endpoint/protocol checks, start an isolated OTLP/HTTP fixture on 127.0.0.1:14318; do not query Studio from application startup. The normally advertised Studio receiver remains 127.0.0.1:4318."
       }

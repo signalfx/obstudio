@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-verify |
-| Run ID | 20261020T034152007435Z |
+| Run ID | 20261020T191134928139Z |
 | Agent model | gpt-6.1-sol |
 | Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/model-directed-agent/qual/connection-modes-verify | python/model-directed-agent | 1 | 100% (5/5), avg score 100 | 985.7K | 8.1m | - | - | - |
+| with_skill | python/model-directed-agent/qual/connection-modes-verify | python/model-directed-agent | 1 | 100% (5/5), avg score 100 | 1.1M | 8.4m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/model-directed-agent/qual/connection-modes-verify | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 965710 | 883968 | 0 | 19998 | 4334 | unknown | 985708 |
+| with_skill | python/model-directed-agent/qual/connection-modes-verify | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 1113853 | 1030656 | 0 | 19347 | 3062 | unknown | 1133200 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/model-directed-agent/qual/connection-modes-verify | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 515228 | 433536 | 0 | 2286 | 322 | unknown | 517514 |
+| with_skill | python/model-directed-agent/qual/connection-modes-verify | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 736577 | 663424 | 0 | 2847 | 546 | unknown | 739424 |
 
 ## Rubric Failures
 

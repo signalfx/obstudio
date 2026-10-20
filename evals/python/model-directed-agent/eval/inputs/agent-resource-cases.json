@@ -54,8 +54,22 @@
       "studio_process": "not running; connection refused; local/in-memory execution still possible"
     },
     "reconnected": {
-      "resource_selectors": "previously persisted identities; active gateway route cache must be revalidated",
-      "resources": "existing selected names/IDs, not permission to create duplicates"
+      "resource_selectors": "Separate hypothetical deployment states below; these assumptions support acceptance planning, not claims of observed runtime validation.",
+      "validated_binding": "Previously resolved project/stream UUIDs with confirmed ownership and association; complete trace headers and Resource IDs persisted for the same unchanged organization, destination and selected resources.",
+      "names_only": "Selected project/stream names exist, but this process has no resolved UUID pair; the configured resource API becomes available after startup.",
+      "destination_changed": "Organization, destination or selected resource identity differs from the binding provenance; prior UUID ownership in the new scope is unproven.",
+      "rejected_identity": "A resource identity or association has been explicitly rejected, rather than a transient API outage.",
+      "resources": "Existing selected resources do not authorize duplicate creation; no actual resource/cloud receipts are supplied."
+    }
+  },
+  "native_startup_cases": {
+    "prevalidated_new_process_api_outage": {
+      "applies_to": "Existing native OTel route, including the native fallback once configured; not evidence that a backend-dependent vendor SDK supports this startup.",
+      "app_process": "A new application process consumes a persisted complete binding from a previously successful ownership/association check.",
+      "binding_scope": "Same unchanged organization, destination and selected resources; both UUID headers and matching trace Resource IDs were persisted.",
+      "resource_api": "Separate variants return HTTP503 or refuse the connection at process start.",
+      "local_otlp": "A separate numeric-loopback local OTLP receiver is running; no cloud delivery proof is supplied.",
+      "evidence_limit": "Hypothetical acceptance input only. The supplied source snapshots have no binding loader or executed startup/export receipt."
     }
   }
 }

@@ -84,7 +84,7 @@ class Gateway:
                             return self.reply(201, stream)
                         owner.bound = owner.project and owner.stream
                         if path.endswith("/paginated"):
-                            return self.reply(200, {"log_streams": [stream] if owner.stream else [], "next_starting_token": None})
+                            return self.reply(200, {"log_streams": [stream] if owner.stream else [], "paginated": False, "next_starting_token": None})
                         return self.reply(200 if owner.stream else 404, stream if owner.stream else {})
                     return self.reply(404, {})
                 headers = {k.lower(): v for k, v in self.headers.items()}

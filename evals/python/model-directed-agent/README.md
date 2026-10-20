@@ -11,7 +11,9 @@ selected resource work is separate from the existing role-repair-only scope. Use
 
 Run `python checks/review_regressions.py` in that environment for web/CLI
 history recovery after a failed tool round, JSON input validation, local
-exporter header guards and the four-case native telemetry probe. These checks
+exporter header guards and the four-case native telemetry probe. Real local
+HTTP receipts also check generic and signal-specific trace/metric headers
+without leaking inherited destination headers into the local log request. These checks
 use fake model responses and make no cloud calls. The probe's default mode
 preserves the fixture's intentionally incorrect workflow label; `--expect-agent`
 remains the acceptance check after a selected role repair.

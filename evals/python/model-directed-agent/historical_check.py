@@ -4,7 +4,7 @@ Uses in-memory OTel exporters and a stubbed OpenAI client so no live API key or
 credits are needed. Proves the workflow / chat / tool spans and the token and
 call-count metrics emit with the expected GenAI semantic-convention attributes.
 
-Run: python3 test_otel_instrumentation.py
+Run: python3 historical_check.py
 """
 
 from __future__ import annotations
