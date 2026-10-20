@@ -78,18 +78,37 @@ def _local_log_exporter() -> OTLPLogExporter:
         )
     # Reject generic headers even when signal-specific log headers exist: SDKs
     # may merge both and leak a cloud credential into the local log request.
-    if os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip():
+    if any(os.environ.get(key, "").strip() for key in (
+        "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
+    )):
         raise RuntimeError(
-            "move generic OTLP headers to trace/metric signal variables and "
-            "remove OTEL_EXPORTER_OTLP_HEADERS before enabling local logs."
+            "remove generic and log-specific OTLP headers before enabling "
+            "local logs; keep remote credentials in their selected signal configuration."
         )
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
     return OTLPLogExporter(endpoint=endpoint or LOCAL_OBSERVER_LOGS_ENDPOINT)
 
 
+def _validate_export_headers(signal: str) -> None:
+    """Require an explicit destination before the SDK consumes header values."""
+    prefix = f"OTEL_EXPORTER_OTLP_{signal}_"
+    headers = any(os.environ.get(key, "").strip() for key in (
+        "OTEL_EXPORTER_OTLP_HEADERS", prefix + "HEADERS",
+    ))
+    endpoint = (os.environ.get(prefix + "ENDPOINT", "").strip()
+                or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip())
+    if headers and not endpoint:
+        raise RuntimeError(
+            f"set an explicit {prefix}ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT "
+            "before using headers; refusing the SDK's implicit local destination."
+        )
+
+
 def configure_opentelemetry():
     """Configure providers and return ``(install_logging_bridge, shutdown)``."""
-    # Resolve fail-closed log policy before registering any global provider.
+    # Validate destinations before constructing exporters or publishing providers.
+    _validate_export_headers("TRACES")
+    _validate_export_headers("METRICS")
     use_local_log_export = _use_default_local_log_export()
     log_exporter = _local_log_exporter() if use_local_log_export else None
 

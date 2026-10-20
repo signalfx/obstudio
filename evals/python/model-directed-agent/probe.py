@@ -28,7 +28,7 @@ def run(expect_agent: bool) -> None:
 
     captured = []
     errors = []
-    for case in ("no_tool", "tool_feedback", "provider_failure"):
+    for case in ("no_tool", "tool_feedback", "provider_failure", "tool_failure"):
         calls = []
 
         def create(**kwargs):
@@ -37,11 +37,15 @@ def run(expect_agent: bool) -> None:
                 raise RuntimeError("synthetic provider unavailable")
             tool_calls = None
             content = "Synthetic final reply"
-            if case == "tool_feedback" and len(calls) == 1:
+            if case in ("tool_feedback", "tool_failure") and len(calls) == 1:
                 content = None
                 tool_calls = [NS(id="call_synthetic", type="function", function=NS(
-                    name="recommend_smash_burgers", arguments='{"city":"Austin"}'
+                    name="recommend_smash_burgers",
+                    arguments='{}' if case == "tool_failure" else '{"city":"Austin"}'
                 ))]
+            if case == "tool_failure" and len(calls) > 1:
+                assert kwargs["messages"][-1]["role"] == "tool"
+                assert "Invalid arguments" in json.loads(kwargs["messages"][-1]["content"])["error"]
             return NS(id="response_synthetic", model="gpt-4o-mini",
                       usage=NS(prompt_tokens=11, completion_tokens=7, total_tokens=18),
                       choices=[NS(index=0, finish_reason="tool_calls" if tool_calls else "stop",
@@ -65,6 +69,11 @@ def run(expect_agent: bool) -> None:
                     "attributes": dict(s.attributes), "status": s.status.status_code.name}
                    for s in spans]
         captured.append({"case": case, "actual_model_calls": len(calls), "spans": records})
+        if case == "tool_failure":
+            failed_tools = [s for s in records if s["attributes"].get("gen_ai.operation.name") == "execute_tool"]
+            assert len(failed_tools) == 1
+            assert failed_tools[0]["status"] == "ERROR"
+            assert failed_tools[0]["attributes"].get("error.type") == "invalid_arguments"
         if not expect_agent:
             continue
         agents = [s for s in spans if s.attributes.get("gen_ai.operation.name") == "invoke_agent"]
@@ -78,7 +87,7 @@ def run(expect_agent: bool) -> None:
             errors.append(f"{case}: duplicate workflow at the same agent boundary")
         models = [s for s in spans if s.attributes.get("gen_ai.operation.name") == "chat"]
         tools = [s for s in spans if s.attributes.get("gen_ai.operation.name") == "execute_tool"]
-        if len(models) != len(calls) or len(tools) != (1 if case == "tool_feedback" else 0):
+        if len(models) != len(calls) or len(tools) != (1 if case in ("tool_feedback", "tool_failure") else 0):
             errors.append(f"{case}: duplicate/missing model or tool nodes")
         if any(s.parent is None or s.parent.span_id != agent.context.span_id for s in models + tools):
             errors.append(f"{case}: wrong model/tool parent")
@@ -105,8 +114,8 @@ def run(expect_agent: bool) -> None:
     duration = [m for m in measurements if m["name"] == "gen_ai.invoke_agent.duration"]
     if expect_agent and (len(duration) != 1 or duration[0]["kind"] != "Histogram"
                          or duration[0]["unit"] != "s"
-                         or sum(p["count"] for p in duration[0]["points"]) != 3):
-        errors.append("agent duration: expected Histogram s with three observations")
+                         or sum(p["count"] for p in duration[0]["points"]) != 4):
+        errors.append("agent duration: expected Histogram s with four observations")
     if expect_agent and duration:
         if any(p["attributes"].get("gen_ai.agent.name") != "SmashBot" for p in duration[0]["points"]):
             errors.append("agent duration: missing source-applicable agent name")
@@ -119,7 +128,7 @@ def run(expect_agent: bool) -> None:
     traces.shutdown()
     if errors:
         raise AssertionError("; ".join(errors))
-    print("PASS: original app executed three cases; native telemetry saved to", output)
+    print("PASS: original app executed four cases; native telemetry saved to", output)
 
 
 if __name__ == "__main__":

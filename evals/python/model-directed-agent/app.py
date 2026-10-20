@@ -71,7 +71,9 @@ def index():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json(silent=True) or {}
-    user_input = (data.get("message") or "").strip()
+    if not isinstance(data, dict) or not isinstance(data.get("message"), str):
+        return jsonify({"error": "Please enter a message."}), 400
+    user_input = data["message"].strip()
     if not user_input:
         return jsonify({"error": "Please enter a message."}), 400
 
@@ -89,13 +91,14 @@ def chat():
         )
 
     messages = _get_messages()
+    previous_length = len(messages)
     messages.append({"role": "user", "content": user_input})
 
     try:
         reply = run_turn(client, get_model(), messages)
     except Exception as exc:  # noqa: BLE001 - surface any API error to the client
-        # Roll back the user turn so a retry doesn't duplicate it.
-        messages.pop()
+        # A failed turn may have appended assistant tool requests and results.
+        del messages[previous_length:]
         return jsonify({"error": f"Something went wrong: {exc}"}), 502
 
     return jsonify({"reply": reply})

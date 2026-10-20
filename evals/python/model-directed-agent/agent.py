@@ -52,11 +52,13 @@ def main() -> None:
             print("SmashBot: Catch you later! 🍔")
             break
 
+        previous_length = len(messages)
         messages.append({"role": "user", "content": user_input})
 
         try:
             reply = run_turn(client, model, messages)
         except Exception as exc:  # noqa: BLE001 - surface any API error to the user
+            del messages[previous_length:]
             print(f"SmashBot: Sorry, something went wrong: {exc}\n")
             continue
 
