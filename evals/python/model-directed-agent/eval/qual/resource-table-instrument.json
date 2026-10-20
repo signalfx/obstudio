@@ -1,0 +1,19 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "native-agent-resource-defaults",
+      "task": "Use $otel-audit ./service, then use the bundled selection flow to select the resulting project, dedicated stream and runtime-routing configuration findings and their required executable prerequisites. Implement that selected work with $otel-instrument. Preserve existing native OTel creators/providers/exporters and legitimate sinks; do not install splunk-ao or migrate to another producer. Use actual supported native libraries in an isolated compatible environment and numeric-loopback fake resource/OTLP boundaries; no live model/cloud credentials or browser/UI. Execute the written resource bootstrap and actual application launch/profile to prove both-existing, both-missing, mixed, repeat reuse, wrong project, unknown IDs, duplicate-create recovery and lookup/create failure isolation. Real resolved UUIDs must reach the actual existing HTTP trace exporter through loaded trace-specific headers before export, preserving endpoint/protocol/nondefault port and harmless inherited headers while keeping those route/auth fields out of metrics/local logs. Inspect actual emitted payloads and headers, source startup/flush/shutdown and one canonical operation per boundary. Keep independently supplied role or coverage changes outside selected scope unless they are actual routing prerequisites. Record exact local commands and remaining remote proof; fake receipt is not real cloud visibility."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect actual source/configuration diff, canonical audit/selection/report digests, real local bootstrap/API/export requests, and executed app startup/profile tests."
+  ],
+  "rubric": [
+    "Audit makes project, dedicated stream and routing default configuration findings even for a bare native OTel agent with no AO import/request/configuration; selection contains those IDs and justified executable prerequisites with canonical bindings.",
+    "Implements resource resolution through supported SDK-free interfaces, preserving native producers/providers/exporters and real endpoints/protocol/nondefault port. No splunk-ao dependency, second provider or duplicate destination export is introduced. Any startup repair is limited to source-proven prerequisites.",
+    "Actually executes written bootstrap and local HTTP API cases for reuse/create/mixed/repeat, ownership, lookup-only IDs, duplicate/uncertain outcome relookup, lookup/create failures and ordinary-telemetry continuation. Fake SDK modules or replacement resolver logic do not prove the actual path.",
+    "Actual application launch loads persisted resolved UUIDs into OTEL_EXPORTER_OTLP_TRACES_HEADERS or the existing supported constructor hook before export; captured native trace HTTP requests contain correct projectid/logstreamid for the chosen Studio contract. Tests preserve harmless generic fallback/trace-specific precedence and prove no route/auth leakage into metrics/logs. Unused example env assignments or direct environment injection that bypasses the written launcher are insufficient.",
+    "Native operation/export receipts, flush/shutdown and source-bound reports prove local configuration/runtime outcomes without inventing model or remote resource/trace visibility. Remote exact destination trace proof remains explicitly Not proven or Blocked; report unselected gaps separately and do not claim full readiness from unit/source/HTTP acknowledgement."
+  ]
+}

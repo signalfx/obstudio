@@ -1,0 +1,22 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "agent-resource-table-verify",
+      "eval_inputs": [
+        "eval/inputs/agent-resource-cases.json"
+      ],
+      "task": "Use $otel-verify ./service. Also independently assess the source-only cases in eval/inputs/agent-resource-cases.json; write .observe/agent-resource-cases.json with distinct configuration, native/local delivery and exact remote trace proof outcomes per case. Use compatible isolated Python and fake provider responses to execute the original historical_check.py and probe.py --expect-agent. No source/test/configuration/SDK edits or live cloud/model calls. Source snapshots have no runtime captures: report their evidence limits honestly. Standalone verification has no audit/selection that authorizes repairs."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect original source and source cases, actual commands/native records, verification artifacts and immutable probe.py."
+  ],
+  "rubric": [
+    "Independently identifies SmashBot as agent and executes historical and independent agent checks without modifying originals; the existing workflow/identity/duration defect remains Failed/incomplete even if historical test passes.",
+    "Reports actual service project, dedicated stream, routing and exact remote trace evidence separately even though no AO request/import exists; missing setup is a readiness gap. No generic receiver or passing semantic test closes these outcomes.",
+    "Assesses fresh AO, existing native OTel, existing AO, fresh unsupported-SDK native fallback, Galileo and Galileo-plus-native independently against the matrix; maintains producer preservation and resource support for each. Non-agent control does not acquire a mandatory product resource requirement.",
+    "Galileo cases require native vendor clients/selectors and native export evidence, preserve production and the mixed OTLP sink, and do not falsely require Studio headers/SPLUNK_AO configuration. Native OTel requires actual loaded trace-header config from resolved identities. No missing SDK compatibility or cloud credential excuses silently omitting resource outcomes.",
+    "Keeps source-only cases and absent native/cloud evidence Not proven, Not configured or Blocked as warranted; never claims actual resource creation or transport from source. Produces source-bound verification/report artifacts while leaving source, probes, dependencies and configuration unchanged."
+  ]
+}

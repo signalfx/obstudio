@@ -1,0 +1,44 @@
+{
+  "kind": "independent-source-cases",
+  "limits": "These are separate source snapshots, not executed app runtimes or live resource/SDK proof. No credentials or resource receipts are supplied. Existing configured names are selectors, not verified resources.",
+  "cases": {
+    "fresh_ao": {
+      "runtime": "Python >=3.11; no telemetry setup or active vendor integration",
+      "source": "def run_agent(client, messages, tools):\n    while True:\n        response = client.complete(messages=messages, tools=list(tools))\n        messages.append(response.message)\n        if not response.tool_calls:\n            return response.text\n        for call in response.tool_calls:\n            result = tools[call.name](**call.arguments)\n            messages.append({\"role\": \"tool\", \"tool_call_id\": call.id, \"content\": result})\n"
+    },
+    "native_otel": {
+      "runtime": "Python >=3.11",
+      "source": "from opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter\nprovider=TracerProvider()\nprovider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))\ntrace.set_tracer_provider(provider)\ndef run_agent(client, messages, tools):\n    while True:\n        response = client.complete(messages=messages, tools=list(tools))\n        messages.append(response.message)\n        if not response.tool_calls:\n            return response.text\n        for call in response.tool_calls:\n            result = tools[call.name](**call.arguments)\n            messages.append({\"role\": \"tool\", \"tool_call_id\": call.id, \"content\": result})\n"
+    },
+    "galileo": {
+      "runtime": "Existing supported galileo[otel] SDK; native destination is configured by GALILEO_* settings",
+      "source": "import os\nfrom galileo.otel import GalileoSpanProcessor, add_galileo_span_processor\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nprovider=TracerProvider()\nadd_galileo_span_processor(provider, GalileoSpanProcessor(project=os.getenv(\"GALILEO_PROJECT\")))\ntrace.set_tracer_provider(provider)\ndef run_agent(client, messages, tools):\n    while True:\n        response = client.complete(messages=messages, tools=list(tools))\n        messages.append(response.message)\n        if not response.tool_calls:\n            return response.text\n        for call in response.tool_calls:\n            result = tools[call.name](**call.arguments)\n            messages.append({\"role\": \"tool\", \"tool_call_id\": call.id, \"content\": result})\n",
+      "launch_profile": {
+        "GALILEO_PROJECT": "support",
+        "GALILEO_LOG_STREAM": "production",
+        "GALILEO_CONSOLE_URL": "https://app.galileo.ai"
+      }
+    },
+    "galileo_plus_native": {
+      "runtime": "Existing Galileo SDK and distinct operator-owned OTLP sink",
+      "source": "import os\nfrom galileo.otel import GalileoSpanProcessor, add_galileo_span_processor\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter\nprovider=TracerProvider()\nadd_galileo_span_processor(provider, GalileoSpanProcessor(project=os.getenv(\"GALILEO_PROJECT\")))\nprovider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=os.environ[\"INTERNAL_TRACE_ENDPOINT\"])))\ntrace.set_tracer_provider(provider)\ndef run_agent(client, messages, tools):\n    while True:\n        response = client.complete(messages=messages, tools=list(tools))\n        messages.append(response.message)\n        if not response.tool_calls:\n            return response.text\n        for call in response.tool_calls:\n            result = tools[call.name](**call.arguments)\n            messages.append({\"role\": \"tool\", \"tool_call_id\": call.id, \"content\": result})\n",
+      "launch_profile": {
+        "GALILEO_PROJECT": "support",
+        "GALILEO_LOG_STREAM": "production",
+        "INTERNAL_TRACE_ENDPOINT": "http://127.0.0.1:55318/v1/traces"
+      }
+    },
+    "existing_ao": {
+      "runtime": "Existing supported splunk-ao SDK; no resource selectors in the launch profile",
+      "source": "from splunk_ao import log\ndef run_agent(client, messages, tools):\n    while True:\n        response = client.complete(messages=messages, tools=list(tools))\n        messages.append(response.message)\n        if not response.tool_calls:\n            return response.text\n        for call in response.tool_calls:\n            result = tools[call.name](**call.arguments)\n            messages.append({\"role\": \"tool\", \"tool_call_id\": call.id, \"content\": result})\n\nrun_agent = log(run_agent)\n"
+    },
+    "fresh_native_fallback": {
+      "runtime": "Go; bounded supplied support evidence establishes native OpenTelemetry support but no compatible AO creator SDK in this environment",
+      "source": "func RunAgent(ctx context.Context, model Model, tools map[string]Tool, history []Message) (string, error) {\n for {\n  reply, err := model.Complete(ctx, history, tools)\n  if err != nil { return \"\", err }; history = append(history, reply.Message)\n  if len(reply.Calls) == 0 { return reply.Text, nil }\n  for _, call := range reply.Calls { value, err := tools[call.Name](ctx, call.Arguments); if err != nil { return \"\", err }; history = append(history, ToolResult(call.ID, value)) }\n }\n}\n"
+    },
+    "non_agent_control": {
+      "runtime": "Python; no vendor integration or resource setup",
+      "source": "def summarize(client, text):\n    return client.complete(messages=[{\"role\":\"user\", \"content\":text}]).text\n"
+    }
+  }
+}

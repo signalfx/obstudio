@@ -117,7 +117,10 @@ Scan the repository to determine language, framework, and existing instrumentati
   AI-owned session/stream including MCP when present, retrieval/RAG, streaming,
   token/context, prompt/response parser, safety/policy, AI-derived data,
   model/config rollout, or AI-owned cache/session evidence.
-  When the user asks about Splunk Agent Observability coverage, routing, or
+  For every source-owned agent runtime, read
+  `../references/splunk-agent-observability.md` and assess project, dedicated
+  stream and routing even with existing native OTel, Galileo or an unavailable
+  AO SDK. Also read it when the user asks about AO coverage, routing, or
   product resources, or the repository contains Agent Observability project,
   Agent Stream, dataset, prompt, annotation, evaluator, integration, routing
   configuration, or any `splunk_ao` dependency/import, also read
@@ -142,12 +145,14 @@ Scan the repository to determine language, framework, and existing instrumentati
   AO routing finding's `required_fix` and acceptance criteria: a
   `.env.studio.example` or repository-native named profile filled from an
   actually discovered same-namespace loopback API origin during instrumentation.
-  For existing non-AO applications, plan SDK-free resource resolution and merge
+  For existing native OTel applications without Galileo, plan SDK-free resource resolution and merge
   the target-supported project/stream headers into the existing trace exporter;
   preserve its endpoint/protocol and unrelated headers. Current Studio uses
   `projectid`/`logstreamid`; public standalone AO docs use
   `projectid`/`agentstreamid`. Do not prescribe a new SDK or second AO exporter.
-  Require the SDK API/console/auth profile only when an SDK path is selected;
+  For Galileo, assess its native project/log-stream clients and export settings;
+  do not propose a Studio route or Splunk AO dependency by default.
+  Require the AO SDK API/console/auth profile only when that SDK path is selected;
   isolate its inherited direct-cloud settings in that profile. Require real
   project/stream resolution before export. Describe missing wiring even when the gateway is currently
   unavailable; mark endpoint and delivery proof unverified instead of filling
@@ -811,10 +816,12 @@ satisfy that row's required workflow, model, tool, token, memory, evaluation,
 or AI-path signals. Use `missing` when none of the required GenAI signals
 exists, even if unrelated OTel metrics are source-active.
 
-**Splunk AO Runtime Coverage Contract** -- when AO is detected, requested, or
-selected as the default producer for a fresh agent,
-assess every in-scope GenAI runtime independently before writing findings.
-Enumerate interactive/API, worker, and evaluation/test entry points from the
+**Splunk AO Runtime Coverage Contract** -- assess every source-owned agent
+runtime by default, plus other GenAI runtimes with detected or requested AO
+integration. A bare audit request is sufficient for an agent's project, stream
+and routing assessment; native OTel, Galileo, missing SDK imports and absent
+cloud credentials do not exclude it. Respect explicit user exclusions.
+Assess every in-scope GenAI runtime independently. Enumerate interactive/API, worker, and evaluation/test entry points from the
 source scan. For each, record runtime-specific canonical `genai_readiness`
 surfaces and an Audit Evidence row naming the entry point and reachable AO setup (or
 the searched registration/configuration call sites when no setup is reachable).
@@ -838,21 +845,17 @@ selectable `finding_group: splunk-agent-observability` findings, with the
 project -> Agent Stream ->
 routing prerequisite chain described below. Existing evaluation
 resources may be reused only when source proves their intended live binding;
-do not claim they are absent globally or force duplicate resources. When
-adoption has no explicitly selected product target, use `fix all` and describe
-it as opt-in live AO configuration, not a broken existing route.
-When the user explicitly requests Agent Observability coverage, deployment,
-or routing, use `instrument_mode: default` for safe, source-backed AO project,
-Agent Stream, and live-routing gaps in that requested scope. Do not leave
-those requested gaps in `fix all` merely because no cloud credentials are
-present during a read-only audit. Keep incidental AO adoption, including a fresh
-default SDK choice without an explicit product-target request, in `fix all`.
-Still author its source-backed project, Agent Stream and runtime-routing
-findings; a missing SDK import does not exclude that assessment.
-Missing secret
-values alone are not code defects or external blockers. Do not impose AO
-adoption on repositories with neither existing/intended AO instrumentation nor
-a user AO request. A fresh default Splunk AO producer is intended instrumentation,
+do not claim they are absent globally or force duplicate resources. Use
+`instrument_mode: default` for safe source-backed project, stream and routing
+gaps for every agent, including fresh AO, native OTel fallback, existing native
+OTel, Galileo and existing AO runtimes. Do not hide them in `fix all` or omit
+them because the prompt contains only the skill command. A compatible fresh
+agent uses AO SDK creators; native OTel retains its creators and gains supported
+trace routing; Galileo retains native project/log-stream APIs and export.
+Record covered bindings with exact runtime evidence instead of inventing new
+work. Missing secret values do not erase configuration gaps; state the exact
+live-proof prerequisite. Non-agent applications with neither existing/intended
+AO nor a user AO request retain ordinary OTel scope. A default resource plan is
 not evidence that any cloud resource already exists or is globally absent.
 Keep missing ordinary workflow/model/tool OTel signals untagged and separate;
 content capture and lifecycle findings require their own source-backed gaps.
@@ -886,7 +889,9 @@ them as AO findings.
 Before `finalize-audit`, apply this AO acceptance gate to each live-routing
 finding, not only to a generic provider finding:
 
-1. Name the selected destination. Preserve any configured supported AO API
+1. Name the selected destination. Galileo uses its supported native resource
+   and export configuration; the AO gateway defaults below apply to native OTel
+   or AO SDK routes, not that vendor destination. Preserve any configured supported AO API
    and direct-cloud endpoint. When AO destination settings are absent, prefer
    an available Splunk Observability Studio cloud-compatible gateway as the
    default local route. Its availability is a delivery prerequisite for that
@@ -931,8 +936,8 @@ empty AO cards just to make the subsection appear.
 **Deterministic gap section contract** -- the canonical audit has exactly one
 actionable gap source: `findings`. Record GenAI detail in canonical
 `genai_readiness` rows, promote service-owned OTel telemetry closure rows into
-`findings`, and keep the HTML decision view focused on those findings. When
-Splunk Agent Observability is in scope, follow
+`findings`, and keep the HTML decision view focused on those findings. For every
+source-owned agent, or when other Splunk Agent Observability work is in scope, follow
 `../references/splunk-agent-observability.md` and put source-backed actionable
 product or routing gaps in the same `findings` array with
 `finding_group: splunk-agent-observability`. Never add a top-level
@@ -995,7 +1000,7 @@ runner that instrumentation should update/load, with user-supplied selection
 values taking precedence. Record missing or unsupported profile wiring as a
 gap. Audit remains read-only for env files and cloud resources.
 Distinguish ordinary local OTLP receipt from AO resource and delivery evidence.
-When AO destination settings are absent, an available cloud-compatible Studio
+For non-Galileo AO routes without destination settings, an available cloud-compatible Studio
 gateway is the default local destination. Its absence must not block source
 instrumentation or credential-free tests. An existing direct-cloud route
 remains valid. Assess normal SDK resource calls, supported per-request

@@ -43,6 +43,14 @@ export target. When selected or bound findings use
 `finding_group: splunk-agent-observability`, or the repository contains a
 `splunk_ao` dependency/import, also read
 `../references/splunk-agent-observability.md`.
+For every source-owned agent, independently assess project, dedicated stream
+and runtime routing using the Agent Resource And Producer Decision matrix in
+`../references/splunk-agent-observability.md`, including native OTel fallback,
+existing native OTel, existing AO and Galileo plus native OTel. An old audit
+omitting these requirements is an audit coverage gap, not proof of completeness.
+Keep canonical selected checks bound to their selection; report omitted or
+unselected resource/delivery gaps separately without rebinding evidence or
+modifying source/configuration. Standalone verification assesses all three.
 When the selected scope or application owns GenAI operations, also read
 `../references/genai-readiness.md` and apply its GenAI Instrumentation Selection
 and Required GenAI Coverage Profile. Verify the chosen producer's span creation
@@ -539,12 +547,23 @@ not an instrumentation failure.
   discovery/route-registration APIs. Normal SDK authentication and resource
   calls to the configured cloud-compatible endpoint are allowed.
 
-For selected Splunk Agent Observability work, verify four outcomes separately:
+For each assessed agent, report four outcomes separately, marking unselected
+work or unavailable remote proof explicitly rather than claiming full readiness:
 
 - the project is resolved or created through a supported product path;
 - the dedicated Agent Stream is resolved or created;
 - the selected application routing mode is configured and exercised; and
 - a fresh application trace is observed in the intended project and stream.
+
+For Galileo, verify its native project/log-stream client and actual consumed
+vendor configuration, then its installed native processor/logger/export path.
+Preserve nondefault selectors, API/console/auth and legitimate native OTel
+sinks; do not require Splunk AO variables or Studio trace headers for that path.
+Local fakes must exercise the real installed Galileo SDK and application
+startup/exporter, not a fake vendor module. Apply the same resource lookup,
+creation, repeat, association, ID, race and failure checks through supported
+Galileo APIs. Missing live credentials/API permission may block exact remote
+trace readback; report that outcome separately from local runtime proof.
 
 For selected resource provisioning, inspect the configured `ao_target` and
 exercise the application's actual provisioning step with credential-free API
@@ -574,7 +593,7 @@ runtime that passes its own resource names explicitly. Prove explicit-ID
 plumbing when supported, or state the source-backed name-only limitation;
 passing an ID string to a name lookup does not prove ID support.
 
-For a non-AO application, verify the actual launch consumes the resolved IDs
+For a native OTel application without Galileo, verify the actual launch consumes the resolved IDs
 through the existing exporter's supported trace-header hook: current Studio
 uses `projectid`/`logstreamid`, public standalone AO docs use
 `projectid`/`agentstreamid`. Verify the exact target contract and authentication,

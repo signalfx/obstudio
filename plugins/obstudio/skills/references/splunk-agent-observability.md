@@ -1,11 +1,35 @@
 # Splunk Agent Observability Findings
 
-Use this reference when the user asks whether a GenAI or agent application can
+Use this reference for every source-owned agent runtime, or when the user asks whether a GenAI application can
 populate Splunk Agent Observability, when an audit finds existing Agent
 Observability routing or resource configuration, or when a selected finding
 has `finding_group: splunk-agent-observability`.
 Also use it when a fresh agent's selected default producer is Splunk AO, even
 before the SDK is installed or configured.
+
+## Agent Resource And Producer Decision
+
+Project, dedicated Agent Stream and routing are default readiness requirements
+for every agent. Read Galileo's native log stream as its stream binding; the
+shared AO finding group describes configuration work, not a required SDK or a
+destination migration. Respect explicit user exclusions and saved selections.
+Use this matrix before authoring findings or changing a runtime:
+
+| Source-owned agent runtime | Producer and destination | Resource and routing work |
+|---|---|---|
+| Fresh with compatible AO SDK | AO SDK creators/framework integration for supported operations; native OTel only for uncovered signals or a proven SDK limitation | Resolve/create project and stream with supported SDK clients; persist consumed configuration and use native SDK export. |
+| Fresh without compatible or established AO SDK support | Native OTel with the full GenAI coverage profile | SDK-free resource resolution and supported trace-specific exporter headers; no invented SDK, runtime upgrade or sidecar. |
+| Existing native OTel, including metrics/logs/export-only setups | Preserve producers, providers, exporters and ordinary signal destinations | SDK-free project/stream resolution and trace-header configuration on the selected existing exporter. |
+| Existing Galileo, with or without native OTel | Preserve Galileo native instrumentation/export plus legitimate existing OTel sinks; fill only uncovered operations/signals | Supported Galileo project/log-stream clients and consumed vendor configuration; no automatic Splunk AO dependency or additional Studio route. |
+| Existing AO SDK | Preserve SDK creators and export; fill version-specific gaps without duplicates | Reuse valid resource bindings, resolve/create missing ones and repair native SDK routing. |
+
+Audit records each runtime's chosen row and evidence for project binding, stream
+binding and routing. Covered bindings cite reachable source/configuration;
+missing app-owned bindings get separate `default` configuration findings with
+project -> stream -> route dependencies. Names, credentials and an explicit AO
+request are not prerequisites for authoring that plan. Non-agent inference or
+workflow code alone does not establish mandatory product adoption. Audit never
+creates resources. Instrumentation implements only the validated selected scope.
 
 ## One Findings Ledger
 
@@ -40,11 +64,10 @@ validated API evidence establishes both a concrete gap and a safe action. Do
 not turn the Agent Observability navigation into a generic checklist and do not
 claim that spans create Agent Observability resources.
 
-A fresh default Splunk AO producer establishes intended AO instrumentation.
-Inspect that runtime's actual launch profile and author separate source-backed
+An agent runtime establishes intended project/stream support independently of
+its producer. Inspect its actual launch profile and author separate source-backed
 project binding, dedicated Agent Stream binding and routing findings where
-missing, with `ao_target_scope: resource-routing`. Keep incidental product
-adoption in `fix all`; an explicit AO target/routing request uses `default`.
+missing, with `ao_target_scope: resource-routing` and `instrument_mode: default`.
 Missing imports or credentials do not erase the intended-runtime assessment.
 Disclose proposed service-derived names and offer optional supplied selectors
 and reuse-only behavior. Do not infer global resource absence or create resources
@@ -171,7 +194,8 @@ If the SDK discards status information, a read-only relookup may establish
 the uncertain outcome, but an unresolved lookup must retain the original
 failure and must not cause a second create.
 
-For Python, `otel-instrument/scripts/resolve_ao_resources.py` provides this
+For Python AO SDK or native OTel paths without Galileo,
+`otel-instrument/scripts/resolve_ao_resources.py` provides this
 provisioning path using the existing SDK, or the explicit SDK-free
 `--studio-api-origin` HTTP mode for an existing non-AO application. Run it with
 the project-managed Python environment after validating selected resource
@@ -194,6 +218,11 @@ gateway was previously unavailable; retry the configured API when that
 prerequisite recovers. Keep ordinary OTel active if AO resolution fails.
 
 ## Configured Runtime Destination
+
+Galileo native resource/export configuration follows **Existing Galileo
+Applications** below; do not apply these AO gateway/cloud profiles to that
+destination. An explicitly selected additional AO destination has its own
+profile and must preserve Galileo.
 
 For local development, default to an available Splunk Observability Studio
 cloud-compatible gateway. Preserve an explicit operator destination or a user
@@ -281,7 +310,7 @@ prerequisite, not a reason to request a cloud token for the application.
 
 ### Configuration Profiles
 
-For existing non-AO applications, use the repository's normal profile/loader
+For existing native OTel applications without Galileo, use the repository's normal profile/loader
 to supply the resource setup command's explicit discovered API origin and
 selectors, then persist the resolved IDs in the existing exporter's supported
 trace-specific header configuration. Preserve the compatible endpoint,
@@ -1087,6 +1116,28 @@ span processor/exporter, a span-producing wrapper or callback bridge, and Galile
 resource configuration are separate capabilities. Do not treat the
 presence of Galileo as permission to install `splunk-ao`, and never patch the
 installed Galileo package or generated client.
+
+Project and stream support still applies. Use the installed Galileo version's
+native resource APIs, such as `galileo.projects.Projects` and
+`galileo.log_streams.LogStreams`, and its existing processor/logger/context
+configuration. Inspect signatures, pagination, name/ID support and errors before
+implementing ordered lookup/create/reuse. The AO resource helper's default SDK
+mode imports `splunk_ao`; do not invoke it for Galileo or install Splunk AO to
+make it work. Use a supported Galileo client or application-owned adapter with
+the same idempotency, association and failure-isolation acceptance above.
+Persist selectors actually consumed by the runtime, for example supported
+`GALILEO_PROJECT` and `GALILEO_LOG_STREAM` or explicit constructor/context
+arguments, through its real launch profile. Preserve configured nondefault
+stream names, API/console/auth settings and supported ID semantics. Do not
+assume environment overrides a source-hardcoded constructor argument.
+The native processor/exporter supplies the destination binding; verify its
+actual outgoing headers/body/resource metadata rather than replacing it with
+`OTEL_EXPORTER_OTLP_TRACES_HEADERS` or adding a Studio sink by default.
+Classify missing bindings as default configuration findings under the shared
+ledger; the target remains Galileo. Test the actual installed SDK with local
+API/export fakes, not a replacement `galileo` module. Require a fresh trace in
+the configured Galileo project/stream for live delivery proof. Any separately
+requested Studio destination retains its own selection and preserves this path.
 
 Keep missing application-owned spans, metrics, events, resources, attributes,
 and lifecycle handling as ordinary OTel findings. They remain independent of

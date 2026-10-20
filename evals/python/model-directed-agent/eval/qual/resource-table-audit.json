@@ -1,0 +1,23 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "agent-resource-table-audit",
+      "eval_inputs": [
+        "eval/inputs/agent-resource-cases.json"
+      ],
+      "task": "Use $otel-audit ./service. Also assess each independent source case in eval/inputs/agent-resource-cases.json and save a supplemental .observe/agent-resource-cases.json with its source-owned role, producer/destination choice, project/stream/routing assessment and remaining proof. Keep the actual service canonical audit and HTML distinct from those source cases. Remain read-only for application source, configuration, dependencies and tests; no models, cloud, resource provisioning, browser or UI actions. Do not reuse old classifications without inspecting source. No resource names, library choices or destination changes are supplied by this request."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect original actual app source, each independent source case, canonical audit/HTML, supplemental JSON and actor commands. Merely repeating a policy table is not source-bound assessment."
+  ],
+  "rubric": [
+    "Recognizes actual SmashBot model-directed behavior and preserves existing native OTel ownership. Even without an explicit AO request, authors separate default project, dedicated stream and runtime-routing configuration findings in canonical findings, with matching readiness/evidence, dependency closure, SDK-free resource resolution and loaded-profile/header acceptance. Existing OTel, missing SDK/imports, missing names or cloud credentials never make those requirements out of scope.",
+    "Separately assesses fresh_ao, existing_ao and fresh_native_fallback: fresh compatible SDK choice uses supported AO creators and default resource/routing work; existing AO keeps its creator and native resource/export path; Go fallback uses native OTel plus SDK-free resources/routing rather than dropping project/stream, inventing a SDK or adding a Python sidecar. Separates proposed/current support evidence from unavailable installed proof.",
+    "For native_otel, preserves existing producer/provider/exporter and endpoint/protocol, plans resource-before-export and actual loaded trace-specific projectid/logstreamid headers for Studio, distinguishes destination-specific standalone headers, and does not install splunk-ao or add duplicate export. Identifies any explicit incompatible destination as a scoped decision rather than silently replacing it.",
+    "For galileo and galileo_plus_native, retains Galileo-native resource clients and consumed GALILEO selectors/constructor configuration plus native export; production stream survives. Plans supported native lookup/create/reuse/association and actual SDK export proof without replacing vendor clients with the AO helper, requiring SPLUNK_AO settings, forcing Studio headers or installing splunk-ao. Mixed case also preserves the independent OTLP destination and rules out duplicate logical spans/exports.",
+    "Plans ordered idempotent project/stream lookup/create/reuse, IDs as lookup-only, ownership and association, repeat/conflict/uncertain-create recovery, source-consumed profile/configuration and truthful failure isolation. Separates resource resolution, native/local export and exact fresh destination trace visibility; no source/example/acknowledgement is cloud proof.",
+    "Does not impose agent resource adoption on non_agent_control or create duplicate workflow/agent boundaries; source cases remain separate from live findings. Canonical JSON/HTML remain valid and source/config/tests remain unchanged. Every table row has an evidence-backed decision or exact unavailable-proof reason, not a blanket Pass."
+  ]
+}
