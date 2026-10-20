@@ -61,6 +61,34 @@ latest Observer with a warning. When a healthy shared Observer is already
 running at another version, the host reports the mismatch and reuses it rather
 than interrupting another host.
 
+## Security
+
+Nothing is downloaded or started until you review and trust the SessionStart
+hook. If you trust it, the hook downloads a Splunk Observability Studio release
+binary from the `signalfx/obstudio` GitHub releases, verifies it against the
+published `checksums.txt`, and starts a local process bound to loopback
+addresses (`127.0.0.1` ports 17900, 4317, and 4318). Do not trust the hook if
+you do not want managed binary download or local process startup. Skills that
+edit files or run project commands remain subject to your host's approval
+policy. See [`SECURITY.md`](./SECURITY.md) for the full trust model.
+
+## Privacy
+
+The plugin does not upload workspace contents to Splunk Observability Cloud.
+Token telemetry and repository correlation stay off unless you opt in with
+`obstudio token-telemetry enable`. The Splunk publish skills call Splunk
+Observability Cloud APIs only when you invoke them with credentials you
+provide, and OTLP data received by the local instance stays local unless you
+configure forwarding. Your host and model provider have their own privacy
+behavior. See [`PRIVACY.md`](./PRIVACY.md) for the data flows.
+
+## Support and security contact
+
+The plugin is maintained by the Splunk Observability Studio team at Splunk. For
+support, or to report a security concern, email bkovuri@splunk.com. For
+non-security bugs, you can also open an issue in the
+[repository](https://github.com/signalfx/obstudio).
+
 ## Maintainer workflow
 
 Shared workflow skill sources are canonical in the top-level `skills/`

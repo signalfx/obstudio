@@ -76,3 +76,11 @@ running and reported as requiring recovery.
 Use your agent's plugin and MCP settings to disable the integration. Manage the
 Splunk Observability Studio process separately with the product lifecycle
 commands.
+
+## Reporting a security concern
+
+The plugin is maintained by the Splunk Observability Studio team at Splunk.
+Report suspected vulnerabilities or other security concerns by email to
+bkovuri@splunk.com. Include the plugin version, the host (Codex or Claude Code),
+and steps to reproduce. Please do not open a public issue for a vulnerability
+that has not been fixed.
