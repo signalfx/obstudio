@@ -168,7 +168,7 @@
         "endpoint": "http://localhost:4318/v1/logs (http/protobuf)",
         "correlation": "trace context injection configured; actual OTLP log correlation not proven",
         "sinks": "existing stderr sink retained",
-        "evidence": "otel_setup.py:130-208; app.py:36-48 (source configuration only)",
+        "evidence": "otel_setup.py:120-198; app.py:36-48 (source configuration only)",
         "integration": "opentelemetry-instrumentation-logging LoggingInstrumentor",
         "detail": "Local OTLP logs pipeline with existing stderr sink; trace context injection enabled; no log capture is supplied, so Werkzeug OTLP receipt and correlation are not proven; no application error log is emitted from the /chat failure handler."
       }

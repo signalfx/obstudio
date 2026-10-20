@@ -8,13 +8,26 @@ import subprocess
 import sys
 import unittest
 
-from probe import Gateway, PROJECT, STREAM
+def default_resolver():
+    fixture = Path(__file__).resolve().parent
+    relative = Path("otel-instrument/scripts/resolve_ao_resources.py")
+    # Support both the canonical fixture and the harness's isolated service copy.
+    for candidate in (
+        fixture.parent / ".agents/skills" / relative,
+        fixture.parents[2] / "skills" / relative,
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
 
-RESOLVER = Path(__file__).resolve().parents[3] / "skills/otel-instrument/scripts/resolve_ao_resources.py"
+
+RESOLVER = default_resolver()
 
 
 class GatewayContractTests(unittest.TestCase):
     def test_real_cli_resolves_reuses_creates_and_recovers_uncertain_create(self):
+        from probe import Gateway, PROJECT, STREAM
+
         for existing, uncertain in [(True, False), (False, False), (False, True)]:
             with self.subTest(existing=existing, uncertain=uncertain):
                 gateway = Gateway(existing=existing, uncertain=uncertain)
@@ -47,5 +60,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--resolver", type=Path, default=RESOLVER)
     args, remaining = parser.parse_known_args()
+    if args.resolver is None or not args.resolver.is_file():
+        parser.error("provide --resolver pointing to the loaded skill's resolve_ao_resources.py")
     RESOLVER = args.resolver.resolve()
     unittest.main(argv=[sys.argv[0], *remaining], verbosity=2)

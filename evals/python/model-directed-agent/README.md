@@ -13,7 +13,9 @@ Run `python checks/review_regressions.py` in that environment for web/CLI
 history recovery after a failed tool round, JSON input validation, local
 exporter header guards and the four-case native telemetry probe. Real local
 HTTP receipts also check generic and signal-specific trace/metric headers
-without leaking inherited destination headers into the local log request. These checks
+without leaking inherited destination headers into the implicit local log request.
+An explicit `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` uses the SDK's normal generic or
+log-specific header configuration; `OTEL_LOGS_EXPORTER=none` opts out. These checks
 use fake model responses and make no cloud calls. The probe's default mode
 preserves the fixture's intentionally incorrect workflow label; `--expect-agent`
 remains the acceptance check after a selected role repair.

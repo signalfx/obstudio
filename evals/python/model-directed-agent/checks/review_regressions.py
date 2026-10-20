@@ -117,7 +117,7 @@ class ConversationTests(unittest.TestCase):
 
 
 class ExportHeaderTests(unittest.TestCase):
-    def test_real_startup_and_wire_keep_generic_headers_on_traces_and_metrics_only(self):
+    def test_real_startup_and_wire_preserve_selected_destinations_and_headers(self):
         received = []
 
         class Receiver(BaseHTTPRequestHandler):
@@ -137,8 +137,16 @@ class ExportHeaderTests(unittest.TestCase):
         thread.start()
         origin = f"http://127.0.0.1:{server.server_port}"
         try:
-            for overrides in [{}, {"OTEL_EXPORTER_OTLP_TRACES_HEADERS": "Authorization=trace-marker"},
-                              {"OTEL_EXPORTER_OTLP_METRICS_HEADERS": "Authorization=metric-marker"}]:
+            for overrides in [
+                {},
+                {"OTEL_EXPORTER_OTLP_TRACES_HEADERS": "Authorization=trace-marker"},
+                {"OTEL_EXPORTER_OTLP_METRICS_HEADERS": "Authorization=metric-marker"},
+                {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": origin + "/selected/logs"},
+                {"OTEL_LOGS_EXPORTER": "otlp", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": origin + "/selected/logs"},
+                {"OTEL_LOGS_EXPORTER": "otlp", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": origin + "/selected/logs",
+                 "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "Authorization=log-marker,X-Log-Tenant=chosen"},
+                {"OTEL_LOGS_EXPORTER": "none", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": origin + "/selected/logs"},
+            ]:
                 with self.subTest(overrides=overrides):
                     received.clear()
                     environment = {k: v for k, v in os.environ.items() if not k.startswith("OTEL_")}
@@ -164,14 +172,27 @@ class ExportHeaderTests(unittest.TestCase):
                                             capture_output=True, text=True, timeout=20)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     bypath = {path: {k.lower(): v for k, v in headers.items()} for path, headers, size in received if size}
-                    self.assertEqual(set(bypath), {"/v1/traces", "/v1/metrics", "/v1/logs"})
+                    selected = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT" in overrides
+                    disabled = overrides.get("OTEL_LOGS_EXPORTER") == "none"
+                    logpath = "/selected/logs" if selected else "/v1/logs"
+                    self.assertEqual(set(bypath), {"/v1/traces", "/v1/metrics"} | (set() if disabled else {logpath}))
                     for signal_name in ("traces", "metrics"):
                         expected = overrides.get(f"OTEL_EXPORTER_OTLP_{signal_name.upper()}_HEADERS", "Authorization=generic-marker").split("=", 1)[1]
                         self.assertEqual(bypath["/v1/" + signal_name]["authorization"], expected)
-                    self.assertNotIn("authorization", bypath["/v1/logs"])
-                    self.assertNotIn("x-app-tenant", bypath["/v1/logs"])
-                    self.assertNotIn("projectid", bypath["/v1/logs"])
-                    self.assertNotIn("logstreamid", bypath["/v1/logs"])
+                    if disabled:
+                        continue
+                    if selected:
+                        expected = "log-marker" if "OTEL_EXPORTER_OTLP_LOGS_HEADERS" in overrides else "generic-marker"
+                        self.assertEqual(bypath[logpath]["authorization"], expected)
+                        if "OTEL_EXPORTER_OTLP_LOGS_HEADERS" in overrides:
+                            self.assertEqual(bypath[logpath]["x-log-tenant"], "chosen")
+                        else:
+                            self.assertEqual(bypath[logpath]["x-app-tenant"], "keep")
+                    else:
+                        self.assertNotIn("authorization", bypath[logpath])
+                        self.assertNotIn("x-app-tenant", bypath[logpath])
+                    self.assertNotIn("projectid", bypath[logpath])
+                    self.assertNotIn("logstreamid", bypath[logpath])
         finally:
             server.shutdown()
             server.server_close()

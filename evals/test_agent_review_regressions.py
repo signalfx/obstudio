@@ -1,8 +1,12 @@
 """Keep the supplied agent audit evidence reproducible from its fixture."""
 
+import ast
 import json
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import sys
 
 import pytest
 
@@ -32,3 +36,37 @@ def test_supplied_audit_source_references_exist_and_fit_line_bounds(name):
     inspect(audit)
     for environment in audit["verification"]["environments"]:
         assert "historical_check.py" in environment["runner"]
+
+
+@pytest.mark.parametrize("layout", ["canonical", "isolated", "missing"])
+def test_gateway_contract_resolver_discovery_and_preflight(tmp_path, layout):
+    root = Path(__file__).resolve().parents[1]
+    fixture = root / "evals/python/agent-connection-demo"
+    resolver = root / "skills/otel-instrument/scripts/resolve_ao_resources.py"
+    if layout == "canonical":
+        service = fixture
+    else:
+        service = tmp_path / "service"
+        service.mkdir()
+        for name in ["gateway_contract_check.py", "probe.py"]:
+            shutil.copy2(fixture / name, service / name)
+        if layout == "isolated":
+            staged = tmp_path / ".agents/skills/otel-instrument/scripts"
+            staged.mkdir(parents=True)
+            shutil.copy2(resolver, staged / resolver.name)
+    check = service / "gateway_contract_check.py"
+    tree = ast.parse(check.read_text())
+    discovery = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "default_resolver")
+    namespace = {"__file__": str(check), "Path": Path}
+    exec(compile(ast.Module(body=[discovery], type_ignores=[]), str(check), "exec"), namespace)
+    found = namespace["default_resolver"]()
+    if layout == "missing":
+        assert found is None
+        result = subprocess.run([sys.executable, str(check)], capture_output=True, text=True, timeout=5)
+        assert result.returncode == 2
+        assert "provide --resolver" in result.stderr
+        assert "Traceback" not in result.stderr
+        assert "subTest" not in result.stderr
+    else:
+        assert found.is_file()
+        assert found.read_bytes() == resolver.read_bytes()

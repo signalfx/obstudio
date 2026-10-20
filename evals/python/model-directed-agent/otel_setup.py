@@ -64,25 +64,12 @@ class _LocalLogSession(Session):
 
 
 def _use_default_local_log_export() -> bool:
-    """Decide whether to own the local OTLP log pipeline.
-
-    We own it only when the exporter is absent or explicitly ``otlp`` and the
-    logs endpoint is absent or exactly the detected local receiver. Any other
-    explicit exporter stays operator-owned; a non-local endpoint on the
-    otlp/absent branch is a fail-closed boundary conflict.
-    """
+    """Own the OTLP log pipeline unless another exporter is selected."""
     configured = os.environ.get("OTEL_LOGS_EXPORTER")
     if configured is not None and configured.strip():
         if configured.strip().lower() != "otlp":
             return False
 
-    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
-    if endpoint and endpoint != LOCAL_OBSERVER_LOGS_ENDPOINT:
-        raise RuntimeError(
-            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local "
-            "Splunk Observability Studio receiver; refusing to create a log "
-            "provider or bridge."
-        )
     return True
 
 
@@ -97,16 +84,19 @@ def _local_log_exporter() -> OTLPLogExporter:
             "select the official exporter matching "
             f"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL={protocol!r}"
         )
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
+    if endpoint:
+        # An operator-selected destination uses the SDK's normal header rules.
+        return OTLPLogExporter(endpoint=endpoint)
     if os.environ.get("OTEL_EXPORTER_OTLP_LOGS_HEADERS", "").strip():
         raise RuntimeError(
-            "remove log-specific OTLP headers before enabling local logs; "
-            "keep remote credentials in their selected signal configuration."
+            "set OTEL_EXPORTER_OTLP_LOGS_ENDPOINT before using log-specific "
+            "headers; refusing the implicit local log destination."
         )
-    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
     # SDK versions differ in whether explicit headers replace or merge generic
     # values. The supported session boundary isolates the final local request.
     return OTLPLogExporter(
-        endpoint=endpoint or LOCAL_OBSERVER_LOGS_ENDPOINT,
+        endpoint=LOCAL_OBSERVER_LOGS_ENDPOINT,
         headers={"Content-Type": "application/x-protobuf"},
         session=_LocalLogSession(),
     )
