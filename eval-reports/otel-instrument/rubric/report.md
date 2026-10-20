@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261019T212712494927Z |
+| Run ID | 20261020T034337894192Z |
 | Agent model | gpt-6.1-sol |
 | Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/model-directed-agent/qual/instrument | python/model-directed-agent | 1 | 100% (4/4), avg score 100 | 3.9M | 13.1m | - | - | - |
+| with_skill | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | 1 | 100% (5/5), avg score 100 | 2.6M | 10.4m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/model-directed-agent/qual/instrument | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 3847842 | 3682048 | 0 | 30596 | 7052 | unknown | 3878438 |
+| with_skill | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 2580885 | 2450304 | 0 | 24272 | 6054 | unknown | 2605157 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/model-directed-agent/qual/instrument | python/model-directed-agent | with_skill | codex | cumulative | measured | 1/1 recognized | 1114156 | 1005696 | 0 | 3619 | 613 | unknown | 1117775 |
+| with_skill | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 668735 | 587904 | 0 | 3551 | 351 | unknown | 672286 |
 
 ## Rubric Failures
 

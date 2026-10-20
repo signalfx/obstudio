@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261019T210156263092Z",
+    "run_id": "20261020T034421183362Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "",
@@ -230,6 +230,38 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/model-directed-agent/qual/connection-modes-verify",
+      "case": "python/model-directed-agent",
+      "language": "python",
+      "service": "model-directed-agent",
+      "prompt_count": 1,
+      "prompts": [
+        "studio-connection-modes"
+      ],
+      "definition_path": "evals/python/model-directed-agent/eval/qual/connection-modes-verify.json",
+      "eval_dir": "evals/python/model-directed-agent",
+      "skill_path": "skills/otel-verify",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/model-directed-agent/qual/resource-table-verify",
+      "case": "python/model-directed-agent",
+      "language": "python",
+      "service": "model-directed-agent",
+      "prompt_count": 1,
+      "prompts": [
+        "agent-resource-table-verify"
+      ],
+      "definition_path": "evals/python/model-directed-agent/eval/qual/resource-table-verify.json",
+      "eval_dir": "evals/python/model-directed-agent",
+      "skill_path": "skills/otel-verify",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
       "id": "python/model-directed-agent/qual/verify",
       "case": "python/model-directed-agent",
       "language": "python",
@@ -247,16 +279,16 @@
     }
   ],
   "summary": {
-    "eval_count": 14,
-    "case_count": 14,
-    "prompt_count": 14,
+    "eval_count": 16,
+    "case_count": 16,
+    "prompt_count": 16,
     "sanity_check_count": 0,
-    "rubric_check_count": 78,
+    "rubric_check_count": 89,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 4,
-    "digest": "4ffb69e5a429c460e00bb35c2bd719f0c05cdcdf0db72d0745c9691f6ef02145",
+    "digest": "24c7c79ed83513fc86bd54a69f42a3ab820ea20f1df30aaa81bbeddfff562059",
     "eval_kinds": [
       "rubric"
     ],
@@ -271,7 +303,7 @@
       "evals/go/chi-basic/eval/qual/verify.json": "225a5744d2a38aeaadcb3003221d2f2e9f5d960fc05d12636eab5241afcce5d2",
       "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
-      "skills/otel-verify/SKILL.md": "1e6dc13fd6703efb4855c8cd69c41ea7b1673ab78e67110604385a8e83972c84",
+      "skills/otel-verify/SKILL.md": "7bbcbf73c7d008f4dd1675e2fafa390aedbc07ca72c0cd50266659c8ac80c2de",
       "skills/otel-verify/references/app-code-test-authoring.md": "d535a0acb3d123ee01eb5b39c3247378b4900f4977672021022dd0fe3885f91f",
       "skills/otel-verify/references/explorer-witness.md": "ee76d5856b1c0858a6bcb22e4c9c4526ddf550f2ae3122ea01ea21d505b8931a",
       "skills/otel-verify/references/json-approval-handoff.md": "e8c258074665349efecdc5d7e9b25fd0ab6217e3cdc40ae21a434c2c5d11f763",
@@ -284,14 +316,14 @@
       "skills/references/consumers.json": "abb97d53704c51d5a49a3de02505f8b1bba0fc13c51b7913b9cf0d186040aa19",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
-      "skills/references/genai-readiness.md": "8bf8e571e6a7619b760cc8260b8c1ddbc9fa06c7d20c17110979bbaf79ca5347",
+      "skills/references/genai-readiness.md": "5feb6e901228690da4e0f27ad808d04f1a099f2db266f516832de3ff408cece1",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
       "skills/references/report-flow-contract.md": "be4af921d9faf71ca9c206a91ba091db5d8bc878dc87ab6b844bc39cc455eb0e",
       "skills/references/scripts/observe_report.py": "dc6d5048a117595bd658e7f4ff7f91e11cd512693ee0e37d09080578574e4325",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
-      "skills/references/splunk-agent-observability.md": "5cd943644b06bb353d81be383c8ff64a14e56509242caff8a10d6e4e8aead69e",
+      "skills/references/splunk-agent-observability.md": "20670782d0b05e08550fca412de00e2ec1c76c6c3738878964dde51283be95f5",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "39e6e35f16272b4f33f202b03dd13823284d4067fb50ebba48fb80bb67f4ce16",
@@ -370,18 +402,22 @@
       "evals/python/existing-otel-agent-demo/eval/inputs/genai-schema-evidence.json": "cb2d154a37cd662e4ddbcae6d30f7ce5588524d660d6ce19abdf42adc5032a5d",
       "evals/python/existing-otel-agent-demo/eval/inputs/python-preflight-requirements.txt": "9bc8378353b95a0405d8b052226aa3075aa7f7f32d30c29c235b0a343df6fa3f",
       "evals/python/existing-otel-agent-demo/eval/qual/verify.json": "81f5c0217247d8ac7265a08ed82479a3d9ddbc4ba6fa04e261a2fbca3984052e",
-      "evals/python/model-directed-agent/README.md": "1b1282a70b755a72015ab7142e945c563eed7de5ecec52d79c107facf4bf23b9",
+      "evals/python/model-directed-agent/README.md": "7ca0bb96f0fcfe4c05d18dbfd6e5e4e12244ee397c9245ca0a95abeda1f936b3",
       "evals/python/model-directed-agent/agent.py": "bfce5cfd1ca2b3915974cdfc4036a85a1dd10cef65c539708e463eddb6f9469f",
       "evals/python/model-directed-agent/app.py": "cb0af805218d3cbe2d70c2fbce44d36bd44a5d3cba5cb3adebf280a9ada4c525",
       "evals/python/model-directed-agent/chat_core.py": "c228f81a2dbc7e9b66ea1ff7b0280ffbe2879c0421deeb5c0e20ed21655465db",
-      "evals/python/model-directed-agent/eval/qual/verify.json": "4b0db81186ae03896112577bc669116059ed6e5cbf7028b512e289ab9c4c94b0",
+      "evals/python/model-directed-agent/eval/inputs/agent-resource-cases.json": "305bd0fdafd98ba4cd6a8e6298cd1108871347ee4c3fecc9666bdfb28623810b",
+      "evals/python/model-directed-agent/eval/inputs/sdk-local-routing-evidence.json": "2b10f295f7cf2049bd168f3d30d89d12756f63c1ec3c47c42753610cf5b710e1",
+      "evals/python/model-directed-agent/eval/qual/connection-modes-verify.json": "ece499d79509d26418d505285ac38862b8d36851f1c53c241fe1aa1e9e4365f7",
       "evals/python/model-directed-agent/historical_check.py": "3420a0435ce493657b3f7eb695332d6b348c42e8c836e9696064fbc044bc0ccf",
       "evals/python/model-directed-agent/otel_setup.py": "8251fca417bd890cb0548de1baa228bfd8d64c98aac3b94f9b4a4f6e5fb987ce",
       "evals/python/model-directed-agent/probe.py": "6fbc3180a8591f89db88327069b7e1004493a3317b348017b8b06d9cd8b91d8d",
       "evals/python/model-directed-agent/recommendations.py": "d120cd0c2154d963b5cb04ef6605831ca3f7703347fb1d0b6c0ef4bbdc3ea2f5",
       "evals/python/model-directed-agent/requirements.txt": "b69934b598a12af6c7a0458eba13b445a8b1c30209f355f60403125e8fa3bc89",
       "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
-      "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81"
+      "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
+      "evals/python/model-directed-agent/eval/qual/resource-table-verify.json": "b5fc80892b9526fb60343aa8edda4606e58005a9440bb3ef71e4b5874d90aa60",
+      "evals/python/model-directed-agent/eval/qual/verify.json": "4b0db81186ae03896112577bc669116059ed6e5cbf7028b512e289ab9c4c94b0"
     },
     "skill_path": "skills/otel-verify",
     "shared_reference_consumers": [
@@ -557,6 +593,25 @@
         "eval_inputs": [
           "eval/inputs/genai-schema-evidence.json",
           "eval/inputs/python-preflight-requirements.txt"
+        ]
+      },
+      {
+        "definition_path": "evals/python/model-directed-agent/eval/qual/connection-modes-verify.json",
+        "fixture_dir": "evals/python/model-directed-agent",
+        "prompt_id": "studio-connection-modes",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/agent-resource-cases.json",
+          "eval/inputs/sdk-local-routing-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/model-directed-agent/eval/qual/resource-table-verify.json",
+        "fixture_dir": "evals/python/model-directed-agent",
+        "prompt_id": "agent-resource-table-verify",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/agent-resource-cases.json"
         ]
       },
       {

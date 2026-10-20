@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | sanity |
 | Skill | otel-audit |
-| Run ID | 20261019T214916080040Z |
+| Run ID | 20261020T035024308189Z |
 | Agent model | gpt-6.1-sol |
 | Workers | 1 |
 | Config | evals/codex-evals.agent-role.toml |
@@ -16,13 +16,13 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | sanity/skill-smoke/sanity/audit | sanity/skill-smoke | 2 | 100% (6/6) | 174.1K | 17.0s | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/audit | sanity/skill-smoke | 2 | 100% (6/6) | 175.0K | 19.2s | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | sanity/skill-smoke/sanity/audit | sanity/skill-smoke | with_skill | codex | cumulative | measured | 2/2 recognized | 173966 | 101888 | 0 | 162 | 55 | unknown | 174128 |
+| with_skill | sanity/skill-smoke/sanity/audit | sanity/skill-smoke | with_skill | codex | cumulative | measured | 2/2 recognized | 174646 | 102144 | 0 | 307 | 174 | unknown | 174953 |
 
 ## Sanity Failures
 
