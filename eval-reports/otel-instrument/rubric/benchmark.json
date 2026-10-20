@@ -7,92 +7,92 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "otel-instrument",
-    "run_id": "20261015T051846028835Z",
+    "run_id": "20261019T181503344566Z",
     "agent_model": "gpt-6.1-sol",
     "judge_model": "gpt-6.1-sol",
     "rubric_enabled": true,
     "runtime_enabled": false,
     "workers": "1",
-    "config_path": "evals/codex-evals.local-http.toml"
+    "config_path": "evals/codex-evals.model-override.toml"
   },
   "summary": {
-    "eval_count": 1,
-    "prompt_count": 1,
-    "failure_count": 0,
+    "eval_count": 2,
+    "prompt_count": 3,
+    "failure_count": 4,
     "with_skill": {
-      "prompt_count": 1,
-      "command_count": 43,
-      "duration_seconds": 990.414,
-      "agent_duration_seconds": 852.691,
-      "tokens": 5657852,
-      "agent_tokens": 4742052,
+      "prompt_count": 3,
+      "command_count": 84,
+      "duration_seconds": 1243.38,
+      "agent_duration_seconds": 1025.234,
+      "tokens": 3493280,
+      "agent_tokens": 2618653,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
-        "usage_record_count": 1,
-        "selected_record_count": 1,
-        "input_tokens": 4695911,
-        "cached_input_tokens": 4526976,
+        "usage_record_count": 3,
+        "selected_record_count": 3,
+        "input_tokens": 2572962,
+        "cached_input_tokens": 2320128,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 46141,
-        "reasoning_output_tokens": 10408,
+        "output_tokens": 45691,
+        "reasoning_output_tokens": 6619,
         "provider_total_tokens": null,
-        "derived_total_tokens": 4742052,
-        "effective_total_tokens": 4742052,
+        "derived_total_tokens": 2618653,
+        "effective_total_tokens": 2618653,
         "coverage": {
-          "record_count": 1,
-          "modeled_count": 1,
-          "observed_count": 1,
-          "recognized_count": 1,
-          "preferred_total_count": 1,
+          "record_count": 3,
+          "modeled_count": 3,
+          "observed_count": 3,
+          "recognized_count": 3,
+          "preferred_total_count": 3,
           "field_counts": {
-            "input_tokens": 1,
-            "cached_input_tokens": 1,
-            "cache_creation_input_tokens": 1,
-            "output_tokens": 1,
-            "reasoning_output_tokens": 1,
+            "input_tokens": 3,
+            "cached_input_tokens": 3,
+            "cache_creation_input_tokens": 3,
+            "output_tokens": 3,
+            "reasoning_output_tokens": 3,
             "provider_total_tokens": 0,
-            "derived_total_tokens": 1
+            "derived_total_tokens": 3
           }
         }
       },
       "rubric": {
-        "passed": 8,
-        "total": 8,
-        "average_score": 100.0
+        "passed": 24,
+        "total": 28,
+        "average_score": 88.0
       },
-      "rubric_tokens": 915800,
-      "rubric_duration_seconds": 137.621,
+      "rubric_tokens": 874627,
+      "rubric_duration_seconds": 218.007,
       "rubric_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
-        "usage_record_count": 1,
-        "selected_record_count": 1,
-        "input_tokens": 909022,
-        "cached_input_tokens": 791808,
+        "usage_record_count": 3,
+        "selected_record_count": 3,
+        "input_tokens": 866341,
+        "cached_input_tokens": 751616,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 6778,
-        "reasoning_output_tokens": 1426,
+        "output_tokens": 8286,
+        "reasoning_output_tokens": 1433,
         "provider_total_tokens": null,
-        "derived_total_tokens": 915800,
-        "effective_total_tokens": 915800,
+        "derived_total_tokens": 874627,
+        "effective_total_tokens": 874627,
         "coverage": {
-          "record_count": 1,
-          "modeled_count": 1,
-          "observed_count": 1,
-          "recognized_count": 1,
-          "preferred_total_count": 1,
+          "record_count": 3,
+          "modeled_count": 3,
+          "observed_count": 3,
+          "recognized_count": 3,
+          "preferred_total_count": 3,
           "field_counts": {
-            "input_tokens": 1,
-            "cached_input_tokens": 1,
-            "cache_creation_input_tokens": 1,
-            "output_tokens": 1,
-            "reasoning_output_tokens": 1,
+            "input_tokens": 3,
+            "cached_input_tokens": 3,
+            "cache_creation_input_tokens": 3,
+            "output_tokens": 3,
+            "reasoning_output_tokens": 3,
             "provider_total_tokens": 0,
-            "derived_total_tokens": 1
+            "derived_total_tokens": 3
           }
         }
       }
@@ -101,21 +101,117 @@
   },
   "evals": [
     {
-      "id": "go/native-genai-demo/qual/instrument",
-      "case": "go/native-genai-demo",
-      "language": "go",
-      "service": "native-genai-demo",
+      "id": "java/springboot-basic/qual/instrument",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "runtime-preserving"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 57,
+        "duration_seconds": 818.618,
+        "agent_duration_seconds": 668.757,
+        "tokens": 2311857,
+        "agent_tokens": 1951646,
+        "error_count": 0,
+        "agent_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 2,
+          "selected_record_count": 2,
+          "input_tokens": 1922618,
+          "cached_input_tokens": 1743744,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 29028,
+          "reasoning_output_tokens": 4883,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 1951646,
+          "effective_total_tokens": 1951646,
+          "coverage": {
+            "record_count": 2,
+            "modeled_count": 2,
+            "observed_count": 2,
+            "recognized_count": 2,
+            "preferred_total_count": 2,
+            "field_counts": {
+              "input_tokens": 2,
+              "cached_input_tokens": 2,
+              "cache_creation_input_tokens": 2,
+              "output_tokens": 2,
+              "reasoning_output_tokens": 2,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 2
+            }
+          }
+        },
+        "rubric": {
+          "passed": 18,
+          "total": 22,
+          "average_score": 76.0
+        },
+        "rubric_tokens": 360211,
+        "rubric_duration_seconds": 149.773,
+        "rubric_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 2,
+          "selected_record_count": 2,
+          "input_tokens": 354211,
+          "cached_input_tokens": 304256,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 6000,
+          "reasoning_output_tokens": 1330,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 360211,
+          "effective_total_tokens": 360211,
+          "coverage": {
+            "record_count": 2,
+            "modeled_count": 2,
+            "observed_count": 2,
+            "recognized_count": 2,
+            "preferred_total_count": 2,
+            "field_counts": {
+              "input_tokens": 2,
+              "cached_input_tokens": 2,
+              "cache_creation_input_tokens": 2,
+              "output_tokens": 2,
+              "reasoning_output_tokens": 2,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 2
+            }
+          }
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20261019T181503344566Z/results/java/springboot-basic/qual-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20261019T181503344566Z/results/java/springboot-basic/qual-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20261019T181503344566Z/results/java/springboot-basic/qual-instrument/with_baseline.json"
+      }
+    },
+    {
+      "id": "java/springboot-basic/qual/logging-compatible-plan",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
       "prompt_count": 1,
       "prompts": [
-        "instrument-native-go-fallback"
+        "java-compatible-log-plan"
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 43,
-        "duration_seconds": 990.414,
-        "agent_duration_seconds": 852.691,
-        "tokens": 5657852,
-        "agent_tokens": 4742052,
+        "command_count": 27,
+        "duration_seconds": 424.762,
+        "agent_duration_seconds": 356.477,
+        "tokens": 1181423,
+        "agent_tokens": 667007,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -123,14 +219,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 4695911,
-          "cached_input_tokens": 4526976,
+          "input_tokens": 650344,
+          "cached_input_tokens": 576384,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 46141,
-          "reasoning_output_tokens": 10408,
+          "output_tokens": 16663,
+          "reasoning_output_tokens": 1736,
           "provider_total_tokens": null,
-          "derived_total_tokens": 4742052,
-          "effective_total_tokens": 4742052,
+          "derived_total_tokens": 667007,
+          "effective_total_tokens": 667007,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -149,26 +245,26 @@
           }
         },
         "rubric": {
-          "passed": 8,
-          "total": 8,
+          "passed": 6,
+          "total": 6,
           "average_score": 100.0
         },
-        "rubric_tokens": 915800,
-        "rubric_duration_seconds": 137.621,
+        "rubric_tokens": 514416,
+        "rubric_duration_seconds": 68.234,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 909022,
-          "cached_input_tokens": 791808,
+          "input_tokens": 512130,
+          "cached_input_tokens": 447360,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 6778,
-          "reasoning_output_tokens": 1426,
+          "output_tokens": 2286,
+          "reasoning_output_tokens": 103,
           "provider_total_tokens": null,
-          "derived_total_tokens": 915800,
-          "effective_total_tokens": 915800,
+          "derived_total_tokens": 514416,
+          "effective_total_tokens": 514416,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -190,37 +286,69 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20261015T051846028835Z/results/go/native-genai-demo/qual-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20261015T051846028835Z/results/go/native-genai-demo/qual-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20261015T051846028835Z/results/go/native-genai-demo/qual-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20261019T181503344566Z/results/java/springboot-basic/qual-logging-compatible-plan/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20261019T181503344566Z/results/java/springboot-basic/qual-logging-compatible-plan/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20261019T181503344566Z/results/java/springboot-basic/qual-logging-compatible-plan/with_baseline.json"
       }
     }
   ],
-  "failures": [],
+  "failures": [
+    {
+      "service": "java/springboot-basic",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-5 FAIL",
+      "evidence": "run-otel.sh and .env.example use springboot-basic. .observe/otel-verify.md explicitly reports no captured LogRecords or runtime proof of severity, correlation, duplication, or sink preservation.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-7 FAIL",
+      "evidence": "Lines 147-148 accept arbitrary signal-specific logs endpoints; lines 153-154 accept any generic HTTP host. An in-memory guard probe reached the Java launch boundary for https://remote.invalid/v1/logs, http://remote.invalid:4318, and a remote generic HTTPS endpoint paired with explicit local logs. Generic headers were correctly rejected.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "rubric",
+      "result": "rubric:rubric-5 FAIL",
+      "evidence": "The launcher defaults service.name to springboot-basic rather than java-springboot-basic. TaskController.create retains WARN body 'runtime request completed', but .observe/otel-verify.md reports no received LogRecord or trace/span correlation evidence.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "rubric",
+      "result": "rubric:rubric-7 FAIL",
+      "evidence": "service/run-otel.sh accepts explicit logs endpoints without locality validation and accepts any http:// generic hostname. In-memory invocation probes reached the Java execution boundary with https://remote.example/v1/logs, http://remote.example:4318, and a remote HTTPS generic endpoint paired with local logs. Generic headers are rejected, but endpoint requirements remain unmet.",
+      "mode": "with_skill"
+    }
+  ],
   "source": {
     "digest_version": 4,
-    "digest": "b426be099b41007944dc9552f3f9e54cc47fca93a28538b47cbbe100230b60de",
+    "digest": "cbbc9335f2a86a6baf1dd09c8bff840d0b9a0cf774bed9960dd9d8f666728ca2",
     "eval_kinds": [
       "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
-      "evals/codex-evals.local-http.toml": "b81f3989f6416848e1fa5353089588a0e74b84b434b9a5e50f5f94246fa9dbc9",
-      "evals/go/native-genai-demo/README.md": "853f6a873bddbf273efd915b14c9e2ef4372c1c4a622f628cb525f70085d69e1",
-      "evals/go/native-genai-demo/eval/inputs/genai-profile-evidence.json": "aa816ae1e830e83a99289d326264d53e050cccd0c50648d49c3f2f8627ce7343",
-      "evals/go/native-genai-demo/eval/inputs/native-module-evidence.json": "450d81069099780c28e3a105394662a5713d004cf23a7f1f92289a8b252b996c",
-      "evals/go/native-genai-demo/eval/inputs/nativeprobe/main.go": "2a2dcfeffb8bb6a370f8dc342e18d3432514cf849b423107b728940173be64ca",
-      "evals/go/native-genai-demo/eval/inputs/schemacheck/main.go": "c0049f5ecbd169dfc0ac6a576b126054a49feabdd46c7f96c3eb1717beefc3c8",
-      "evals/go/native-genai-demo/eval/qual/instrument.json": "18bbc0abdfccdbe765fdcc0106b9cc12a267482827a2bc2188b83f7a6b15e73f",
-      "evals/go/native-genai-demo/go.mod": "b2b828937bb1b3f44774b3a912db72b6642f92ba0bfd55e03d2c1c48c42268f1",
-      "evals/go/native-genai-demo/go.sum": "bb817b2d8c6107d7a75a150775fc87b46632dc25b56cb60ad251fb1e619fc862",
-      "evals/go/native-genai-demo/main.go": "7ff08c72f55f98255c93762056f8816f2a4351975365e2c03dfc3b1f39bee09f",
-      "evals/go/native-genai-demo/main_test.go": "a0f03b2b02fb3611808b500c198dd96d1fe9eaeda4372ceed389998b8449c23e",
-      "evals/go/native-genai-demo/telemetry.go": "1a6a265bbf7e72ab6b1a4cbfe5c99bfac66af61dd4bd9e1eddb4dfe392e0a22d",
+      "evals/codex-evals.model-override.toml": "c7970ebc775726a79f5263ebfcbc51a22c3ef4122083d2554d47db96064e30af",
+      "evals/java/springboot-basic/eval/qual/instrument.json": "bd87f069be1b79361a0ffa3a4d51fbd14728bfe1e18e799430b0538d1016d6c8",
+      "evals/java/springboot-basic/pom.xml": "2b6e5f88faf91bf8891d728bd51bc6737ca8919bd657caaaa416ff3c6550f625",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/Task.java": "97437951adcb1592b1f4e48af10f799501858ed40949575f8278d9a644f80cfc",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "a32f9883586bd13b5ecf6f015f587b25ac696a55423398a01e3fe1619f9020fa",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "2aeefcee33840914b4118f0b6615205c37ae50ecf5cb774c32a6f5d9431f62c5",
+      "evals/java/springboot-basic/src/main/resources/application.properties": "80bbb064ac6230150fdb6db61f2ce53248fbf798026e4828c3cb5d4c5f9998fd",
       "skills/otel-instrument/SKILL.md": "01064514b5d40f1d6b9b1dc6576af6afd9544424230eef81f51a6047ea9fbad8",
       "skills/otel-instrument/references/json-approval-handoff.md": "826c227489a30d4aa605ee3adfe37c292b64cb71d8fea6ac659a2ae10a33c3ac",
       "skills/otel-instrument/references/languages/go.md": "62ba4d47f1685230a1eec2ce6929c9b3c9f3b8228f62af729367a1db45fa4d5d",
-      "skills/otel-instrument/references/languages/java.md": "b35913ebfd94b8e56673c0db2c9deccf61c08770e7975306d839eb9eebb5e1d4",
+      "skills/otel-instrument/references/languages/java.md": "4d87147cd6b823f589d2f6c44d2404a92e8a42f9989ad983ff5f19b453871032",
       "skills/otel-instrument/references/languages/node.md": "3e86dadec6b8ebf1e6c344c7528772e08d8ec25706bd6b6962edfa37f407c63c",
       "skills/otel-instrument/references/languages/python.md": "d8ffc96d962c1ddbe85acce44f1781de6bfe264adf9b4917479b7a2ac71e2f76",
       "skills/otel-instrument/references/project-runtime-validation.md": "cdbac8880d21bf8b47c7865c8ef21648e7701ca3c6dceb512d666281815ccc38",
@@ -244,7 +372,9 @@
       "skills/references/splunk-agent-observability.md": "5cd943644b06bb353d81be383c8ff64a14e56509242caff8a10d6e4e8aead69e",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "39e6e35f16272b4f33f202b03dd13823284d4067fb50ebba48fb80bb67f4ce16"
+      "skills/references/tests/test_observe_report.py": "39e6e35f16272b4f33f202b03dd13823284d4067fb50ebba48fb80bb67f4ce16",
+      "evals/java/springboot-basic/eval/inputs/java-compatible-logging-candidates.json": "6bee5f8959ff583cfa8b03922f5afbc59175a7f8aedf880241a13ce0b5c1d9c6",
+      "evals/java/springboot-basic/eval/qual/logging-compatible-plan.json": "2a82993aadd1a7859203250a38f5d8e757fb5459093b61a1d2bcab1917911144"
     },
     "skill_path": "skills/otel-instrument",
     "shared_reference_consumers": [
@@ -258,18 +388,29 @@
     ],
     "selections": [
       {
-        "definition_path": "evals/go/native-genai-demo/eval/qual/instrument.json",
-        "fixture_dir": "evals/go/native-genai-demo",
-        "prompt_id": "instrument-native-go-fallback",
+        "definition_path": "evals/java/springboot-basic/eval/qual/instrument.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/instrument.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "runtime-preserving",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-compatible-plan.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "java-compatible-log-plan",
         "eval_kind": "rubric",
         "eval_inputs": [
-          "eval/inputs/genai-profile-evidence.json",
-          "eval/inputs/native-module-evidence.json",
-          "eval/inputs/nativeprobe/main.go",
-          "eval/inputs/schemacheck/main.go"
+          "eval/inputs/java-compatible-logging-candidates.json"
         ]
       }
     ],
-    "config_path": "evals/codex-evals.local-http.toml"
+    "config_path": "evals/codex-evals.model-override.toml"
   }
 }

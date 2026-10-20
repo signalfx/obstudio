@@ -17,7 +17,7 @@ EVAL = (
     / "qual"
     / "connect-splunk-observability-cloud.json"
 )
-CLOUD_URL = "http://127.0.0.1:3000/?tab=cloud"
+CLOUD_URL = "http://127.0.0.1:17900/?tab=cloud"
 
 
 def _normalized(path: Path) -> str:
@@ -102,8 +102,8 @@ def test_connection_skill_eval_covers_browser_and_terminal_handoffs() -> None:
     assert "standalone Codex client" in task
     assert "prior Free Edition signup turn ended with its approved registration confirmation" in task
     assert "no host-provided browser capability" in task
-    assert '"rest":"http://0.0.0.0:3000"' in task
-    assert '"rest":"http://127.0.0.1:3000"' in task
+    assert '"rest":"http://0.0.0.0:17900"' in task
+    assert '"rest":"http://127.0.0.1:17900"' in task
     assert "exactly one read-only observer_status call with no arguments" in rubric
     assert "reads only endpoints.rest" in rubric
     assert CLOUD_URL in rubric

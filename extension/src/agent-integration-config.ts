@@ -24,21 +24,26 @@ export function createAgentIntegrationConfigFingerprint(
 export function shouldRefreshOwnedAgentIntegrationConfig(
 	stored: unknown,
 	current: AgentIntegrationManagedConfig | undefined,
-	desiredMcpUrl: string,
 ): boolean {
 	if (typeof stored !== 'object' || stored === null || current === undefined) {
 		return false;
 	}
 	const candidate = stored as Partial<AgentIntegrationConfigFingerprint>;
 	if (candidate.version !== 1
-		|| candidate.mcpUrl !== desiredMcpUrl
-		|| current.mcpUrl !== desiredMcpUrl
+		|| typeof candidate.mcpUrl !== 'string'
 		|| typeof candidate.configurationDigest !== 'string'
 		|| !/^[a-f0-9]{64}$/.test(candidate.configurationDigest)) {
 		return false;
 	}
-	return createAgentIntegrationConfigFingerprint(current).configurationDigest
-		=== candidate.configurationDigest;
+	// Ownership proof: the on-disk config is byte-identical to what obstudio last
+	// wrote (at whatever URL that was). This is intentionally independent of the
+	// current-vs-target URL, so an owned config left at a stale URL (e.g. a :3000
+	// we wrote before the move to the fixed :17900) still qualifies for a silent
+	// rewrite. A user hand-edit changes the digest, failing the proof, and falls
+	// through to the visible Update prompt.
+	return candidate.mcpUrl === current.mcpUrl
+		&& createAgentIntegrationConfigFingerprint(current).configurationDigest
+			=== candidate.configurationDigest;
 }
 
 export function caseInsensitiveHeaderValue(
