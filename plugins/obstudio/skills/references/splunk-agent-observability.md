@@ -219,6 +219,55 @@ prerequisite recovers. Keep ordinary OTel active if AO resolution fails.
 
 ## Configured Runtime Destination
 
+### Connected And Disconnected Studio
+
+Exercise the selected runtime with cloud connected, Studio running without a
+cloud connection, and Studio unavailable. Audit keeps project, stream and
+routing requirements visible in every state; connectivity is separate from
+producer selection and source/configuration readiness.
+
+With cloud connected, resolve real resources before enabling AO export. With
+Studio running but disconnected, persist the intended resource selectors and
+implement/test provisioning, while reporting real resolution and AO delivery
+as blocked. Application behavior and ordinary local traces, metrics and logs
+must continue. Do not count SDK fail-open business success with zero local
+agent spans as working instrumentation. Never invent IDs, treat 503/auth or
+transport failure as absence, install a different vendor SDK, or silently
+switch to direct cloud.
+
+Use the selected SDK's supported resource-independent local creation/export
+path where available. For Python, inspect whether public typed span helpers
+such as `splunk_ao.otel.start_splunk_ao_span` can use the local OTel provider
+without initializing an AO logger or resolving cloud resources. If SDK `@log`
+cannot do that, record the exact limitation and use the existing per-function
+application-owned decorator fallback around a supported SDK helper; apply the
+public OTel exception only to a source-proven unsupported boundary. Include that
+decision in the saved connection-mode report: if both the integration and SDK
+helper lack a required initial kind or attribute, name an application-owned
+function decorator using public OTel for that uncovered boundary, reusing the
+registered provider and selected sinks. Retain SDK creators on supported
+boundaries; disconnected Studio alone never justifies this exception. Keep real
+inputs/results, parentage and errors, one operation per boundary and honest
+creation-time kind/sampling limits. Do not patch SDKs, inject a production fake
+logger, or disable all telemetry as the offline strategy.
+
+For a Studio-routed native exporter, a failed resource relookup must not leave
+stale AO headers active on the ordinary local export path. Retain persisted
+selectors/last identities for recovery; omit only the unresolved AO routing
+pair from the effective local-only exporter configuration, preserving its
+endpoint/protocol, harmless headers and unrelated sinks. Do not send invented
+or unvalidated resource metadata. A Galileo or explicit direct-cloud path is
+independent of Studio connection state and retains its own configuration.
+
+If Studio itself is unavailable, prove business behavior and native/in-memory
+emission independently, but mark local OTLP receipt blocked. After reconnect,
+resolve/revalidate identities through that active gateway before routed export;
+reuse existing resources with zero duplicate creates. Test separate launches
+or a supported transition, pin one producer/route per invocation, and rule out
+duplicate spans/exports. No automatic runtime Studio discovery is needed.
+Report local emission, local receipt, resource resolution, routed forwarding
+and exact cloud trace visibility separately for each tested state.
+
 Galileo native resource/export configuration follows **Existing Galileo
 Applications** below; do not apply these AO gateway/cloud profiles to that
 destination. An explicitly selected additional AO destination has its own

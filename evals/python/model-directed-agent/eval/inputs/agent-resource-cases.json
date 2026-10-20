@@ -40,5 +40,22 @@
       "runtime": "Python; no vendor integration or resource setup",
       "source": "def summarize(client, text):\n    return client.complete(messages=[{\"role\":\"user\", \"content\":text}]).text\n"
     }
+  },
+  "studio_states": {
+    "connected": {
+      "resource_api": "configured, permitted supported project/stream lookups; no actual resource or cloud receipts supplied"
+    },
+    "disconnected": {
+      "studio_process": "running; ordinary local OTLP available",
+      "resource_lookup_http_status": 503,
+      "resource_response": "no usable binding supplied"
+    },
+    "unavailable": {
+      "studio_process": "not running; connection refused; local/in-memory execution still possible"
+    },
+    "reconnected": {
+      "resource_selectors": "previously persisted identities; active gateway route cache must be revalidated",
+      "resources": "existing selected names/IDs, not permission to create duplicates"
+    }
   }
 }

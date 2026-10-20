@@ -1,0 +1,22 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "native-connection-modes",
+      "eval_inputs": [
+        "eval/inputs/otel-audit.json"
+      ],
+      "task": "Implement the supplied selected connection-mode configuration contract with $otel-instrument. First copy eval/inputs/otel-audit.json to .observe/otel-audit.json, validate it, retain its exact bytes/SHA under .observe/evidence before ANY source/config/lock/test edits, and select AO-003 with its prerequisites through the bundled flow. Only after this snapshot/selection may you restore dependencies or write implementation files. The audit is a fixed input: never rewrite/re-finalize it or regenerate its selection to change acceptance. Preserve app.py, telemetry.py and probe.py byte-for-byte. Implement only owned launcher/setup/profile changes and any added focused tests; do not add vendor dependencies or replace native producers/providers. AGENT_RESOURCE_API_URL, AGENT_PROJECT and AGENT_STREAM are existing native configuration aliases. Use the bundled SDK-free helper public CLI or an owned equivalent that proves the same contract; deployed app startup must not depend on a personal Codex skill path or query Studio status/discovery. Run immutable python probe.py with an isolated compatible interpreter, inspect actual SDK/HTTP/native records and preserve original business output/three signals. Cover all six probe cases, including stale persisted IDs during503/unavailable and a POST that commits then loses its response; use bounded scoped relookup, no duplicate creates and no direct-cloud fallback. Keep receiver, resource and real-cloud proof separate; every synthetic boundary remains local test evidence, not cloud success. No browser, live cloud/model calls or user credential requests."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect original immutable app/telemetry/probe, actual owned bootstrap/profile changes, commands and probe JSON, canonical audit bytes across trace chronology and bound artifact statuses."
+  ],
+  "rubric": [
+    "Snapshots the fixed supplied audit before any implementation/config/lock/test edit, selects only AO003 with AO001/002 dependencies through supported flow, and keeps audit bytes/acceptance unchanged through final reports. No post-edit re-finalization/reselection or re-bound proof.",
+    "Uses real supported SDK-free resource HTTP resolution and existing exporter with native aliases, persisted actual returned IDs and merge-preserved harmless headers. No vendor SDK, personal skill runtime dependency, new provider, invented IDs, endpoint/protocol migration or metric/log header leakage.",
+    "Runs unchanged probe.py successfully. Actual local API/protobuf evidence proves connected existing zero creates, connected missing ordered creation, and a committed create with a lost response recovered by bounded exact relookup without repeating POST. No fake SDK, replacement probe/resolver or fabricated receipts.",
+    "Running-disconnected503 and Studio-unavailable preserve selectors/last persisted IDs but omit stale pair from effective actual trace exporter, keeping harmless header, business result and native four-span/counter/log proof. Disconnected has actual local three-signal receipt; unavailable correctly has none. No creates on failed lookup, all-telemetry disablement or false cloud status.",
+    "After reconnect, real bootstrap relookup binds existing identities before routed export with zero additional creates; native operation tree, correlated log/counter and one export per destination remain intact. Actual statuses distinguish local/native/receiver, resource bindings, synthetic forwarding and unavailable live cloud proof; reports remain source/selection bound and unchanged sources are verified."
+  ]
+}

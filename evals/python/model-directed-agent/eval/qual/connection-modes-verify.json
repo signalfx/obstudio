@@ -1,0 +1,23 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "studio-connection-modes",
+      "eval_inputs": [
+        "eval/inputs/agent-resource-cases.json",
+        "eval/inputs/sdk-local-routing-evidence.json"
+      ],
+      "task": "Use $otel-verify for this supplemental captured-source review only: Verify the claimed resource/routing readiness of each independent source case and each studio_states entry in the supplied inputs. Do not perform a new full service/GenAI semantic-field audit or rewrite canonical audit/selection/instrumentation artifacts. Save .observe/connection-modes.json and .observe/connection-modes.md with per-case/per-state decisions, safe implementation/verification actions and exact remaining proof. The SDK evidence is a dated source/API capture, not an installed or cloud proof claim for these apps. No dependencies, apps, services, browser or model/cloud calls; preserve application/eval inputs. Assess local SDK creation versus backend-dependent SDK logging independently. Do not recommend a production monkeypatch, fake logger, dummy IDs or a destination migration."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect each supplied source case and dated SDK API capture, actual saved mode decisions and evidence limits, not only policy prose."
+  ],
+  "rubric": [
+    "Assesses all six agent producer cases plus non-agent control across connected, disconnected, unavailable and reconnected states, keeping default agent resource requirements independent of connection/SDK presence and leaving the non-agent control outside forced adoption.",
+    "Connected mode requires resolved project/stream association, consumed correct routing and exact fresh destination trace proof; source captures, fake IDs or acknowledgements are never actual product visibility. Running-disconnected separates working ordinary local telemetry from blocked real resources/AO delivery and never creates after failed lookups or silently changes to direct cloud.",
+    "Uses captured SDK source correctly: backend-dependent @log can return business output after failed logger initialization while emitting no spans. That is not working local instrumentation. Identifies supported SDK public local span helper plus app-owned function decorator, with exact signature/creation-kind/sampling limitations and the existing per-boundary public OTel exception when needed. No production SDK edits or test-only fake logger injection.",
+    "For native Studio routing, retains persisted identities but omits unresolved/stale AO pair only from the effective local-only trace configuration, preserves endpoint/protocol/harmless headers/other sinks, and requires ordinary local telemetry/business proof. Galileo and explicit direct destinations stay independent of Studio state with native vendor configuration.",
+    "Unavailable Studio blocks receiver proof but not code/business/native in-memory checks. Reconnection requires active-gateway identity relookup, stable existing identities and zero duplicate creates before export, one producer/route per invocation and no duplicates. Reports source/configuration, local emission/receipt, resource binding and exact remote trace proof separately and never fabricates runtime results."
+  ]
+}
