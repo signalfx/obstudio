@@ -7,6 +7,11 @@ log-endpoint fixes alone do not resolve these findings. A later passing model
 sample does not erase the earlier failures or establish a fixed-version
 reliability rate.
 
+Historical evidence links below point to the merged `5cc7b78` snapshot. Raw
+review receipts and full generated reports are no longer kept in the current
+source tree. The six executable sanitizer samples remain in the compact
+[regression fixture](../evals/fixtures/agent_sanitizers.json).
+
 ## Failure adjudication
 
 The pre-correction archived counterexamples are valid failures of the intended
@@ -36,7 +41,7 @@ preserved in the archive.
 
 ## Observed failure rates before this correction
 
-The [tracked history archive](../evals/evidence/agent-observability-eval-history.json)
+The [tracked history archive](https://github.com/signalfx/obstudio/blob/5cc7b78f3beaf92a245ae8436cb727d9b9d8c18e/docs/evidence/agent-observability-eval-history.json)
 contains all **19 retained graded runs / 69 task grades** for the fifteen-task
 cohort ending at run `20261020T224014321690Z`, whose source packet was committed
 as `ab8d7e8`, including partial reruns: **412/431 checks**, with
@@ -91,7 +96,7 @@ grades, not 2/3; the other task failures concerned routing closure and concrete
 part validation. The resource-table audit's `rubric-2` likewise failed **1/4**;
 its other failures concerned applicability and cached-launch acceptance.
 
-The eval evidence fixtures embed all failed check notes/evidence, every check ID/boolean,
+The historical snapshot embeds all failed check notes/evidence, every check ID/boolean,
 four independent reproduction receipts, four original failing sanitizer source
 snapshots and the baseline report summaries/failures. SHA-256 values retain
 provenance. This content survives a squash merge without the original commit
@@ -100,7 +105,7 @@ no historical grade is changed or relabelled.
 
 ## Correction-round adjudication
 
-The [correction evidence](../evals/evidence/agent-observability-correction-runs.json)
+The [correction evidence](https://github.com/signalfx/obstudio/blob/5cc7b78f3beaf92a245ae8436cb727d9b9d8c18e/docs/evidence/agent-observability-correction-runs.json)
 retains new raw grades, both non-agent report objects, repaired runtime source
 and independent replay receipts. The first updated audit run was **23/24**, instrumentation **53/53**
 (including all four preservation modes and the focused repair), and verification
@@ -249,7 +254,7 @@ fails, while the corrected code passes on SDK 1.27.0, 1.44.0 and 1.45.1.
 All eleven fixture regression methods now run through normal harness validation
 using declared development dependencies.
 
-The [tracked review receipt](../evals/evidence/agent-stdlib-logging-review.json) preserves
+The [tracked review receipt](https://github.com/signalfx/obstudio/blob/5cc7b78f3beaf92a245ae8436cb727d9b9d8c18e/docs/evidence/agent-stdlib-logging-review.json) preserves
 the original absence failure, intermediate duplicate failure, exact source
 snapshots/hashes, dependency versions and positive matrix logs. Its replay
 cases identify the twelve-profile and fourteen-profile source revisions
@@ -318,7 +323,7 @@ explicit remote-model, in-process tool and existing-native-producer controls,
 plus the actual prior deferral excerpt as untrusted report data. Requirements
 were strengthened; neither original failed grade was overwritten.
 
-The [closure receipt](../evals/evidence/agent-report-closure-corrections.json) retains
+The [closure receipt](https://github.com/signalfx/obstudio/blob/5cc7b78f3beaf92a245ae8436cb727d9b9d8c18e/docs/evidence/agent-report-closure-corrections.json) retains
 both failed reports, original rubric definitions and inputs, grades/hashes, focused public
 API replay source/results and correction-source receipts after a squash.
 Through all eleven retained correction rounds, the resource-table audit task
@@ -386,7 +391,7 @@ lookup-to-export path copied from the agent template. Its checker accepted
 both because it checked selected foreign API tokens and N/A flags/references
 without closing the actual acceptance clauses. These are report defects, not
 grounds to relax the rubric. The
-[retained receipt](../evals/evidence/agent-routing-acceptance-review.json) embeds the
+[retained receipt](https://github.com/signalfx/obstudio/blob/5cc7b78f3beaf92a245ae8436cb727d9b9d8c18e/docs/evidence/agent-routing-acceptance-review.json) embeds the
 failed report, checker, checker receipt, grade, original qualifier and source
 cases with SHA-256 values.
 
@@ -433,7 +438,7 @@ sweep: **15 tasks, 10 fully passing, 86/93 checks**. All four preservation modes
 passed the changed resource/API criterion (`rubric-6`). Overall grades were
 generic 8/8, GenAI 7/8, metrics 8/8, and logs 6/8.
 
-The tracked archive embeds those three baseline report summaries and all seven
+The historical snapshot embeds those three baseline report summaries and all seven
 failed criteria with evidence; the commit is provenance, not the only copy.
 Full local actor artifacts additionally remain under
 `.workspace/codex-evals/<skill>/<run-id>/cases/`.
@@ -451,7 +456,7 @@ Full local actor artifacts additionally remain under
 ## Reproduction and source locations
 
 The logs and GenAI safety/provenance failures were independently reproduced.
-Their receipts are embedded in the tracked archive; the original local paths are
+Their receipts are embedded in the historical snapshot; the original local paths are
 `.workspace/claude-review-fixes-pass2-20261020/independent-new-failure-repro.json`
 and `independent-genai-failure-repro.json`.
 
