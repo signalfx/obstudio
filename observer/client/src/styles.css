@@ -7586,6 +7586,53 @@ code {
   font-size: var(--font-meta);
 }
 
+.cloud-usage-data {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 20px 24px;
+}
+
+.cloud-setup-stack > .cloud-usage-data {
+  margin-top: 0;
+}
+
+.cloud-usage-data h2 {
+  margin: 0;
+  color: var(--row-primary-text);
+  font-size: var(--font-title);
+}
+
+.cloud-usage-data p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+}
+
+.cloud-usage-data__switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: var(--font-body);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cloud-usage-data__switch input {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: inherit;
+}
+
+.cloud-usage-data__switch:has(input:disabled) {
+  cursor: progress;
+  opacity: 0.7;
+}
+
 .cloud-switch {
   display: inline-flex;
   align-items: center;

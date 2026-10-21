@@ -7,6 +7,7 @@ import type {
   ObserverHostTelemetryMessage,
   ObserverHostTelemetrySubscription,
 } from "../host/transport";
+import { onConfigRefresh } from "./configSignal";
 import { useTelemetry } from "./useTelemetry";
 
 const hostTransportMock = vi.hoisted(() => ({
@@ -311,5 +312,53 @@ describe("useTelemetry", () => {
     await waitFor(() => {
       expect(reloadSpy).toHaveBeenCalledTimes(1);
     });
+  });
+  it("routes the config signal and reconnects to the config refresh notifier, not to telemetry state", async () => {
+    const listener = vi.fn();
+    const unsubscribe = onConfigRefresh(listener);
+    try {
+      render(<Harness />);
+      await waitFor(() => {
+        expect(MockWebSocket.instances.length).toBe(1);
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId("snapshot").textContent).toContain('"traceCount":1');
+      });
+      const before = screen.getByTestId("snapshot").textContent;
+
+      const ws = MockWebSocket.instances.at(-1);
+      act(() => ws?.onmessage?.({ data: JSON.stringify({ type: "update", signal: "config" }) }));
+      expect(listener).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("snapshot").textContent).toBe(before);
+
+      act(() => ws?.onclose?.());
+      await waitFor(() => {
+        expect(MockWebSocket.instances.length).toBe(2);
+        expect(listener).toHaveBeenCalledTimes(3);
+      }, { timeout: 3000 });
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("refreshes config when the IDE host reports a connection", async () => {
+    let hostListener: ((message: ObserverHostTelemetryMessage) => void) | undefined;
+    hostTransportMock.subscribe.mockImplementation(
+      (l: (message: ObserverHostTelemetryMessage) => void) => {
+        hostListener = l;
+        return { dispose: vi.fn(), pause: vi.fn(), resume: vi.fn() };
+      },
+    );
+    const listener = vi.fn();
+    const unsubscribe = onConfigRefresh(listener);
+    try {
+      render(<Harness />);
+      await waitFor(() => expect(hostTransportMock.subscribe).toHaveBeenCalledTimes(1));
+      act(() => hostListener?.({ type: "connected" }));
+      expect(listener).toHaveBeenCalledTimes(1);
+      act(() => hostListener?.({ type: "update", signal: "config" }));
+      expect(listener).toHaveBeenCalledTimes(2);
+    } finally {
+      unsubscribe();
+    }
   });
 });
