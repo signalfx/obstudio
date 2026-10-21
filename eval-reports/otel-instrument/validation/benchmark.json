@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261021T054213800912Z",
+    "run_id": "20261021T225019977490Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "",
@@ -883,7 +883,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "b272eebcdfa6522daa9ce8a0684493c96b90a70d63456d048df6bcfe074c2f98",
+    "digest": "0fd8413983267abe197ce63ade99b65cd02c7ca580b5580791523dfda8013455",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1197,8 +1197,8 @@
       "evals/go/native-genai-demo/eval/inputs/nativeprobe/main.go": "2a2dcfeffb8bb6a370f8dc342e18d3432514cf849b423107b728940173be64ca",
       "evals/go/native-genai-demo/eval/inputs/schemacheck/main.go": "c0049f5ecbd169dfc0ac6a576b126054a49feabdd46c7f96c3eb1717beefc3c8",
       "evals/go/native-genai-demo/eval/qual/instrument.json": "18bbc0abdfccdbe765fdcc0106b9cc12a267482827a2bc2188b83f7a6b15e73f",
-      "evals/go/native-genai-demo/go.mod": "b2b828937bb1b3f44774b3a912db72b6642f92ba0bfd55e03d2c1c48c42268f1",
-      "evals/go/native-genai-demo/go.sum": "bb817b2d8c6107d7a75a150775fc87b46632dc25b56cb60ad251fb1e619fc862",
+      "evals/go/native-genai-demo/go.mod": "81fbdf643df4bcdee512f33b7fd9b3cddfda49488da4eca00f5d77d516633e09",
+      "evals/go/native-genai-demo/go.sum": "5ab9f296e66959a6a223bacf165f6540fa2b49f63dc8a7698a8cdbc93978c04d",
       "evals/go/native-genai-demo/main.go": "7ff08c72f55f98255c93762056f8816f2a4351975365e2c03dfc3b1f39bee09f",
       "evals/go/native-genai-demo/main_test.go": "a0f03b2b02fb3611808b500c198dd96d1fe9eaeda4372ceed389998b8449c23e",
       "evals/go/native-genai-demo/telemetry.go": "1a6a265bbf7e72ab6b1a4cbfe5c99bfac66af61dd4bd9e1eddb4dfe392e0a22d",
