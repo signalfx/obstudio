@@ -115,7 +115,7 @@ func decodeTree(root *yaml.Node) (Settings, []Diagnostic) {
 		}
 		_, secNode := lookup(root, sec)
 		if secNode == nil {
-			diags = append(diags, Diagnostic{Key: d.path(), Kind: DiagAbsent})
+			diags = append(diags, absent(d))
 			continue
 		}
 		if secNode.Kind != yaml.MappingNode {
@@ -125,7 +125,7 @@ func decodeTree(root *yaml.Node) (Settings, []Diagnostic) {
 		}
 		_, valNode := lookup(secNode, defName(d))
 		if valNode == nil {
-			diags = append(diags, Diagnostic{Key: d.path(), Kind: DiagAbsent})
+			diags = append(diags, absent(d))
 			continue
 		}
 		v, diag := decodeValue(valNode, d)
@@ -136,6 +136,10 @@ func decodeTree(root *yaml.Node) (Settings, []Diagnostic) {
 		d.assign(&settings, v)
 	}
 	return settings, append(diags, unknownKeys(root)...)
+}
+
+func absent(d def) Diagnostic {
+	return Diagnostic{Key: d.path(), Kind: DiagAbsent, Message: d.path() + ": is not set"}
 }
 
 func unknownKeys(root *yaml.Node) []Diagnostic {
