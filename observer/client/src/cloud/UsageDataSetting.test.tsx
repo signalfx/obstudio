@@ -136,6 +136,7 @@ describe("UsageDataSetting", () => {
     ["a network error", () => Promise.reject(new Error("offline"))],
     ["a 404", () => json(404, {})],
     ["a document without the setting", () => json(200, { type: "object", properties: {} })],
+    ["an HTML page from an older observer", () => new Response("<!doctype html><html></html>", { status: 200, headers: { "Content-Type": "text/html" } })],
   ])("is unavailable after %s for the definitions and recovers on a later refresh", async (_name, firstDefinitions) => {
     let definitions: () => Response | Promise<Response> = firstDefinitions;
     serve((path) => (path === "/api/config/definitions" ? definitions() : value(true)));

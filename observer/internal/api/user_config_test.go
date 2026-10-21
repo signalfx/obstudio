@@ -132,8 +132,22 @@ func TestUserConfigGetShape(t *testing.T) {
 // OPTIONS /api/ preflight pattern matches the path.
 func assertNotRegistered(t *testing.T, mux *http.ServeMux, method, path string) {
 	t.Helper()
-	if w := serve(mux, method, path, "{}"); w.Code != 404 && w.Code != 405 {
+	w := serve(mux, method, path, "{}")
+	if w.Code != 404 && w.Code != 405 {
 		t.Errorf("%s %s = %d, want no handler", method, path, w.Code)
+	}
+	body := w.Body.Bytes()
+	var doc map[string]json.RawMessage
+	if json.Unmarshal(body, &doc) == nil {
+		if _, ok := doc["telemetry"]; ok {
+			t.Errorf("%s %s returned a config body", method, path)
+		}
+		if _, ok := doc["fingerprint"]; ok {
+			t.Errorf("%s %s returned a status body", method, path)
+		}
+	}
+	if bytes.Equal(body, userconfig.DefinitionsDocument()) {
+		t.Errorf("%s %s returned the definitions document", method, path)
 	}
 }
 
@@ -142,8 +156,11 @@ func TestUserConfigRoutesAbsentWithoutManager(t *testing.T) {
 	for _, rt := range [][2]string{{"GET", "/api/config"}, {"POST", "/api/config"}, {"GET", "/api/config/definitions"}, {"POST", "/api/config/telemetry"}} {
 		assertNotRegistered(t, mux, rt[0], rt[1])
 	}
-	withManager := configMux(&fakeUserConfig{snaps: []userconfig.Snapshot{snapshotWith(true)}})
-	assertNotRegistered(t, withManager, "POST", "/api/config/telemetry")
+	f := &fakeUserConfig{snaps: []userconfig.Snapshot{snapshotWith(true)}}
+	assertNotRegistered(t, configMux(f), "POST", "/api/config/telemetry")
+	if _, updates := f.calls(); updates != 0 {
+		t.Errorf("old route called Update %d times", updates)
+	}
 }
 
 func TestUserConfigPostLocalNoOrigin(t *testing.T) {
