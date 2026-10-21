@@ -113,4 +113,4 @@ tooling or project configuration, not to plugin telemetry code.
 The privacy policy for this plugin is the
 [Cisco Online Privacy Statement](https://www.cisco.com/c/en/us/about/legal/privacy-full.html).
 For questions about the data flows in this document, email
-bkovuri@splunk.com.
+bkovuri@cisco.com.

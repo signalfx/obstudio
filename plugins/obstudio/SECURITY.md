@@ -79,8 +79,8 @@ commands.
 
 ## Reporting a security concern
 
-The plugin is maintained by the Splunk Observability Studio team at Splunk.
+The plugin is maintained by the Splunk Observability Studio team at Cisco.
 Report suspected vulnerabilities or other security concerns by email to
-bkovuri@splunk.com. Include the plugin version, the host (Codex or Claude Code),
+bkovuri@cisco.com. Include the plugin version, the host (Codex or Claude Code),
 and steps to reproduce. Please do not open a public issue for a vulnerability
 that has not been fixed.

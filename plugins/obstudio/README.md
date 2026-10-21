@@ -84,8 +84,8 @@ behavior. See [`PRIVACY.md`](./PRIVACY.md) for the data flows.
 
 ## Support and security contact
 
-The plugin is maintained by the Splunk Observability Studio team at Splunk. For
-support, or to report a security concern, email bkovuri@splunk.com. For
+The plugin is maintained by the Splunk Observability Studio team at Cisco. For
+support, or to report a security concern, email bkovuri@cisco.com. For
 non-security bugs, you can also open an issue in the
 [repository](https://github.com/signalfx/obstudio).
 
