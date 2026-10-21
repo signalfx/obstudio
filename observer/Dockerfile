@@ -4,7 +4,7 @@ COPY observer/bin/obstudio /usr/local/bin/obstudio
 RUN useradd --system --uid 10001 --create-home obstudio
 
 ENV HOST=0.0.0.0
-ENV PORT=3000
+ENV OBSTUDIO_PORT=3000
 ENV OTLP_HTTP_PORT=4318
 ENV OTLP_GRPC_HOST=127.0.0.1
 ENV OTLP_GRPC_PORT=4317

@@ -20,7 +20,7 @@ import urllib.request
 
 HOST = os.environ.get("HOST", "127.0.0.1")
 OTLP_PORT = os.environ.get("OTLP_HTTP_PORT", "4318")
-UI_PORT = os.environ.get("PORT", "3000")
+UI_PORT = os.environ.get("OBSTUDIO_PORT", "17900")
 OTLP_TRACES = f"http://{HOST}:{OTLP_PORT}/v1/traces"
 OTLP_METRICS = f"http://{HOST}:{OTLP_PORT}/v1/metrics"
 OTLP_LOGS = f"http://{HOST}:{OTLP_PORT}/v1/logs"

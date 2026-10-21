@@ -33,6 +33,30 @@ and its evidence into the repair plan; rerun its actual check after repair
 before replacing that failure with a passing result. Older passing probes for
 other assertions do not supersede it. `validate-flow` proves artifact shape
 and binding, not semantic correctness or successful verification.
+For selected GenAI work, compare the audited operation role with the actual
+model/tool control flow before editing. A model-directed tool/result feedback
+loop owns an agent invocation even when its existing creator is labeled
+`invoke_workflow`. Preserve the covering producer/provider and span topology;
+repair the operation and source-backed agent identity on that span through its
+supported hook. Preserve safe legacy consumer fields or document a migration
+for a semantic/name change; do not add duplicate workflow/agent nodes or retain
+a wrong operation solely because an existing test expects it. If the audit
+omits or contradicts that role, refresh the affected audit closure and rebind
+the authorized selection before implementation; never silently change an
+unselected contract. Exercise no-tool, tool-feedback and failure turns and
+prove each owns one agent span with its actual model/tool children, applicable
+agent duration and unchanged business results. Fixed pipelines and inference
+facades keep their independently source-backed roles.
+For every source-owned agent runtime, read
+`../references/splunk-agent-observability.md` and apply its Agent Resource And
+Producer Decision matrix. Project, stream and routing are default assessment
+requirements even with existing native OTel or Galileo; preserve Galileo's
+native resource clients and exporter. For a bare/broad request without saved scope, refresh an audit that omits
+these rows or excludes them solely because no AO request/SDK exists, then
+materialize its selection through the canonical flow. An explicit saved
+selection or user exclusion still limits implementation; retain its bound audit
+and report omitted/unselected resource gaps separately without adding IDs or
+rebinding old evidence.
 When any selected finding uses
 `finding_group: splunk-agent-observability`, or the repository contains a
 `splunk_ao` dependency/import, also read
@@ -71,6 +95,15 @@ dependency, runtime-config, or test edit, read and follow
 `./references/json-approval-handoff.md`. Do not proceed without a validated,
 nonempty executable selection. A valid answer-only handoff persists
 `decision_answers` but authorizes no code edits.
+Before the first application/configuration edit, retain the selected audit's
+exact bytes and SHA-256 as evidence. After implementation and tests, compare
+the canonical audit with that snapshot before writing bound results. Do not
+rewrite findings, scenarios or acceptance, re-finalize the audit, or regenerate
+selection after edits to make implementation pass. Implement the original
+selected contract or report its remaining gap. If the agent changed the audit,
+recover its own changes from the snapshot and rerun against the original
+contract; never overwrite concurrent user changes or rebind old proof to a
+changed audit. Report an externally changed contract as stale instead.
 Selection precedence is current-request exact `--ids`, then an existing or
 embedded repository selection, then an explicitly supplied saved-audit
 candidate, then an automatically adopted saved audit only when no repository
@@ -180,17 +213,20 @@ Markdown reports.
   a separate AO section or create a second selection ledger. The implemented
   application or deployment uses the selected destination mode. Preserve
   configured supported AO APIs, operator destinations, and direct-cloud
-  requests. When AO destination settings are absent, default the local route
+  requests. A Galileo native destination uses its supported vendor settings.
+  For non-Galileo AO work without destination settings, default the local route
   to an available cloud-compatible Studio gateway. Its absence must not block
   source instrumentation, SDK imports, local tests, or implementation of the
-  supported resource-creation branch. For existing non-AO applications, use
+  supported resource-creation branch. For existing native OTel without Galileo, use
   SDK-free resource APIs and the existing exporter's trace-specific headers
   under the shared AO reference; do not introduce a vendor SDK dependency,
-  replacement provider or second AO export path. For an SDK-owned path, use
-  normal AO SDK resource calls and per-request routing, not a Studio-specific application adapter or
-  global destination registration. Local receiver receipt is not cloud proof.
-  Resolve absent AO settings independently of any existing OTel endpoint and
-  provide the Studio-only example profile described in
+  replacement provider or second AO export path. For Galileo, use native
+  resource clients, consumed vendor selectors and the existing native exporter;
+  do not apply Studio headers or AO SDK keys to that path. For an AO SDK-owned
+  path, use normal AO SDK resource calls and per-request routing, not a
+  Studio-specific application adapter or global destination registration. Local receiver receipt is not cloud proof.
+  For non-Galileo AO routes, resolve absent settings independently of an existing
+  OTel endpoint and provide the Studio-only example profile described in
   `../references/splunk-agent-observability.md`. Preserve explicit active
   destinations and prove mode isolation, resource-before-export ordering,
   and resource-resolution failure without live cloud credentials.
@@ -203,9 +239,17 @@ Markdown reports.
   existing resources, create missing selected named resources, and recover
   duplicate races through bounded exact relookup. A resource input changes
   the selection digest but never adds unselected findings.
+  Follow the shared reference's Native trace binding and recovery contract:
+  selected names must resolve/reuse automatically when the API becomes
+  available in the same running app PID. Include UUID routing headers and
+  `splunk_ao.project.id` / `splunk_ao.logstream.id` on native trace Resources
+  from one resolved pair. Preserve valid known bindings through a temporary
+  disconnected Studio; neither a manual setup command nor restart is normal
+  recovery. Keep SDK-owned routing and unrelated signal Resources intact.
   Treat blank audit resource fields as an env/config fallback. Read the same
-  profile the real application launch uses, including its existing native AO
-  aliases. Supported SDK selectors are `SPLUNK_AO_PROJECT` or
+  profile the real application launch uses, including native vendor aliases.
+  Galileo uses its supported GALILEO_* settings/constructor arguments; do not
+  translate them into SPLUNK_AO_* settings. On the AO SDK path, selectors are `SPLUNK_AO_PROJECT` or
   `SPLUNK_AO_PROJECT_ID`, and `SPLUNK_AO_AGENT_STREAM` or
   `SPLUNK_AO_AGENT_STREAM_ID`; supplied selection values override those
   resource settings. Apply fallback independently to each resource: preserve
@@ -1756,6 +1800,11 @@ At minimum:
    content. A `redacted` label, sanitizer-only assertion, or blanking all content
    is insufficient. If a value cannot be safely transformed before any writer
    captures it, omit that value and report the remaining content gap.
+   Apply the representation-sensitive cases in the shared GenAI capture
+   contract: decoded JSON scalars, protected labelled values, reasoning-part
+   discriminators and final serialized aggregate bounds. Keep the original
+   failing receipt and prove the repaired case on the real owning spans and
+   exports; a different passing prompt does not close the counterexample.
    Build an exact signal closure matrix and execute every changed span name and
    metric call site that should still emit, plus explicit absence proof for
    every removed signal. Do not infer coverage for create, batch, update,

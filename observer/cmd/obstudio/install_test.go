@@ -141,8 +141,182 @@ func TestConfigureMCPCopilotLocalEmitsStdioType(t *testing.T) {
 	if got := server["command"]; got != "/usr/local/bin/obstudio" {
 		t.Fatalf("Copilot local config command = %#v, want /usr/local/bin/obstudio", got)
 	}
+	if args, ok := server["args"].([]any); !ok || len(args) != 0 {
+		t.Fatalf("Copilot local config args = %#v, want empty array", server["args"])
+	}
 	if _, ok := server["url"]; ok {
 		t.Fatalf("Copilot local config should not include url field, got %#v", server["url"])
+	}
+}
+
+func TestCopilotMCPConfigPathResolvesPerOS(t *testing.T) {
+	// os.UserConfigDir() switches on runtime.GOOS, a compile-time constant: a
+	// darwin test binary can only ever execute the darwin branch, no matter
+	// what env vars are set. This asserts the branch matching the host OS;
+	// the other OSes are covered by the CI matrix (observer-smoke job).
+	tmp := t.TempDir()
+
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("AppData", tmp)
+		want := filepath.Join(tmp, "Code", "User", "mcp.json")
+		if got := targets["copilot"].mcpConfig.path(); got != want {
+			t.Fatalf("Copilot MCP config path = %q, want %q", got, want)
+		}
+	case "darwin":
+		t.Setenv("HOME", tmp)
+		want := filepath.Join(tmp, "Library", "Application Support", "Code", "User", "mcp.json")
+		if got := targets["copilot"].mcpConfig.path(); got != want {
+			t.Fatalf("Copilot MCP config path = %q, want %q", got, want)
+		}
+	default: // unix-like, including linux
+		t.Run("xdg_config_home_set", func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", tmp)
+			want := filepath.Join(tmp, "Code", "User", "mcp.json")
+			if got := targets["copilot"].mcpConfig.path(); got != want {
+				t.Fatalf("Copilot MCP config path = %q, want %q", got, want)
+			}
+		})
+		t.Run("xdg_config_home_unset", func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", "")
+			t.Setenv("HOME", tmp)
+			want := filepath.Join(tmp, ".config", "Code", "User", "mcp.json")
+			if got := targets["copilot"].mcpConfig.path(); got != want {
+				t.Fatalf("Copilot MCP config path = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestConfigureMCPCopilotWritesToResolvedVSCodePath(t *testing.T) {
+	tmp := t.TempDir()
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("AppData", tmp)
+	case "darwin":
+		t.Setenv("HOME", tmp)
+	default:
+		t.Setenv("XDG_CONFIG_HOME", tmp)
+	}
+
+	target := targets["copilot"].mcpConfig // deliberately not overriding target.path
+	wantPath := target.path()
+
+	if err := configureMCP(target, "/usr/local/bin/obstudio", ""); err != nil {
+		t.Fatalf("configureMCP returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Fatalf("read Copilot MCP config at resolved path %q: %v", wantPath, err)
+	}
+	var config struct {
+		Servers map[string]map[string]any `json:"servers"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal Copilot MCP config: %v", err)
+	}
+	server := config.Servers["obstudio"]
+	if server == nil {
+		t.Fatalf("obstudio entry missing from servers: %#v", config.Servers)
+	}
+	if got := server["type"]; got != "stdio" {
+		t.Fatalf("Copilot config type = %#v, want %q", got, "stdio")
+	}
+	if got := server["command"]; got != "/usr/local/bin/obstudio" {
+		t.Fatalf("Copilot config command = %#v, want /usr/local/bin/obstudio", got)
+	}
+}
+
+func TestConfigureMCPCopilotRemoteEmitsHTTPType(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "mcp.json")
+	target := targets["copilot"].mcpConfig
+	target.path = func() string { return configPath }
+
+	const mcpURL = "http://127.0.0.1:3000/mcp"
+	if err := configureMCP(target, "/usr/local/bin/obstudio", mcpURL); err != nil {
+		t.Fatalf("configureMCP returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read Copilot MCP config: %v", err)
+	}
+	var config struct {
+		Servers map[string]map[string]any `json:"servers"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal Copilot MCP config: %v", err)
+	}
+	server := config.Servers["obstudio"]
+	if server == nil {
+		t.Fatalf("obstudio entry missing from servers: %#v", config.Servers)
+	}
+	if got := server["type"]; got != "http" {
+		t.Fatalf("Copilot remote config type = %#v, want %q", got, "http")
+	}
+	if got := server["url"]; got != mcpURL {
+		t.Fatalf("Copilot remote config url = %#v, want %q", got, mcpURL)
+	}
+	if _, ok := server["command"]; ok {
+		t.Fatalf("Copilot remote config should not include command field, got %#v", server["command"])
+	}
+	if _, ok := server["args"]; ok {
+		t.Fatalf("Copilot remote config should not include args field, got %#v", server["args"])
+	}
+}
+
+func TestConfigureMCPCopilotPreservesExistingVSCodeConfig(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "mcp.json")
+	target := targets["copilot"].mcpConfig
+	target.path = func() string { return configPath }
+
+	initial := map[string]any{
+		"inputs": []any{
+			map[string]any{"id": "api-key", "type": "promptString"},
+		},
+		"servers": map[string]any{
+			"other-server": map[string]any{
+				"type":    "stdio",
+				"command": "/usr/local/bin/other",
+			},
+		},
+	}
+	data, err := json.Marshal(initial)
+	if err != nil {
+		t.Fatalf("marshal initial Copilot MCP config: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		t.Fatalf("write initial Copilot MCP config: %v", err)
+	}
+
+	if err := configureMCP(target, "/usr/local/bin/obstudio", ""); err != nil {
+		t.Fatalf("configureMCP returned error: %v", err)
+	}
+
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read Copilot MCP config: %v", err)
+	}
+	var config struct {
+		Inputs  []any                     `json:"inputs"`
+		Servers map[string]map[string]any `json:"servers"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal Copilot MCP config: %v", err)
+	}
+	if len(config.Inputs) != 1 {
+		t.Fatalf("expected inputs to be preserved, got %#v", config.Inputs)
+	}
+	if config.Servers["other-server"] == nil {
+		t.Fatalf("expected other-server entry to be preserved, got %#v", config.Servers)
+	}
+	if config.Servers["obstudio"] == nil {
+		t.Fatalf("expected obstudio entry to be added, got %#v", config.Servers)
 	}
 }
 
@@ -5034,6 +5208,175 @@ func TestConfigureCodexMCPRefreshPreservesSameURLHeaders(t *testing.T) {
 	}
 }
 
+func TestIsLegacyPortMigration(t *testing.T) {
+	t.Parallel()
+
+	const target = "http://127.0.0.1:17900/mcp"
+	cases := []struct {
+		existing string
+		want     bool
+	}{
+		{"http://127.0.0.1:3000/mcp", true},
+		{"http://127.0.0.1:3000/mcp/", true},
+		{"HTTP://LOCALHOST:3000/mcp", false},
+		{"http://127.0.0.1:4000/mcp", false},
+		{"http://127.0.0.1/mcp", false},
+		{"https://127.0.0.1:3000/mcp", false},
+		{"http://other-host:3000/mcp", false},
+		{"http://127.0.0.1:3000/other", false},
+		{"http://127.0.0.1:17900/mcp", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := isLegacyPortMigration(tc.existing, target); got != tc.want {
+			t.Errorf("isLegacyPortMigration(%q, %q) = %v, want %v", tc.existing, target, got, tc.want)
+		}
+	}
+	if !isLegacyPortMigration("http://LocalHost:3000/mcp", "http://localhost:17900/mcp/") {
+		t.Errorf("host case and trailing slash should not defeat the :3000 migration")
+	}
+	if isLegacyPortMigration("http://127.0.0.1:17900/mcp", "http://127.0.0.1:3000/mcp") {
+		t.Errorf("the migration exception must only apply from :3000, not to it")
+	}
+}
+
+// sameURLFieldCases covers the URL gate on same-URL preserve fields: they carry
+// over only when the existing URL matches the target or is the retired :3000
+// URL for the same server.
+var sameURLFieldCases = []struct {
+	name        string
+	existingURL string
+	preserved   bool
+}{
+	{"same URL", "http://127.0.0.1:17900/mcp", true},
+	{"legacy :3000 migration", "http://127.0.0.1:3000/mcp", true},
+	{"different non-3000 port", "http://127.0.0.1:4000/mcp", false},
+	{"different host", "https://other-host/mcp", false},
+}
+
+func TestConfigureMCPSameURLFieldsFollowURLGate(t *testing.T) {
+	t.Parallel()
+
+	const newURL = "http://127.0.0.1:17900/mcp"
+	for _, targetName := range []string{"cursor", "kiro"} {
+		for _, tc := range sameURLFieldCases {
+			targetName, tc := targetName, tc
+			t.Run(targetName+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				configPath := filepath.Join(t.TempDir(), "mcp.json")
+				target := targets[targetName].mcpConfig
+				existing := map[string]any{
+					"url": tc.existingURL,
+					"headers": map[string]any{
+						"authorization": "Bearer stale-token",
+						"X-API-Key":     "custom",
+					},
+				}
+				if targetName == "kiro" {
+					existing["env"] = map[string]any{"OBSERVER_MODE": "custom"}
+					existing["oauth"] = map[string]any{"clientId": "custom"}
+					existing["oauthScopes"] = []any{"custom.scope"}
+					existing["disabled"] = true
+					existing["timeout"] = 45_000
+				}
+				data, err := json.Marshal(map[string]any{string(target.serversKey): map[string]any{"obstudio": existing}})
+				if err != nil {
+					t.Fatalf("marshal initial MCP config: %v", err)
+				}
+				if err := os.WriteFile(configPath, data, 0o600); err != nil {
+					t.Fatalf("write initial MCP config: %v", err)
+				}
+
+				target.path = func() string { return configPath }
+				if err := configureMCP(target, "/tmp/obstudio", newURL); err != nil {
+					t.Fatalf("configureMCP returned error: %v", err)
+				}
+
+				data, err = os.ReadFile(configPath)
+				if err != nil {
+					t.Fatalf("read MCP config: %v", err)
+				}
+				var config map[string]any
+				if err := json.Unmarshal(data, &config); err != nil {
+					t.Fatalf("unmarshal MCP config: %v", err)
+				}
+				servers, _ := config[string(target.serversKey)].(map[string]any)
+				server, _ := servers["obstudio"].(map[string]any)
+				if got := server["url"]; got != newURL {
+					t.Fatalf("url = %#v, want %s", got, newURL)
+				}
+
+				headers, _ := server["headers"].(map[string]any)
+				for name := range headers {
+					if strings.EqualFold(name, "Authorization") {
+						t.Fatalf("Authorization was preserved in %#v", headers)
+					}
+				}
+				if got := headers["X-API-Key"] == "custom"; got != tc.preserved {
+					t.Fatalf("custom header preserved = %v, want %v; headers = %#v", got, tc.preserved, server["headers"])
+				}
+				if targetName != "kiro" {
+					return
+				}
+				for _, field := range []string{"env", "oauth", "oauthScopes"} {
+					if _, got := server[field]; got != tc.preserved {
+						t.Fatalf("Kiro %s preserved = %v, want %v; server = %#v", field, got, tc.preserved, server)
+					}
+				}
+				// preserveFields carry over regardless of URL.
+				if server["disabled"] != true || server["timeout"] != float64(45_000) {
+					t.Fatalf("Kiro preserveFields dropped: disabled=%#v timeout=%#v", server["disabled"], server["timeout"])
+				}
+			})
+		}
+	}
+}
+
+func TestConfigureCodexMCPHeadersFollowURLGate(t *testing.T) {
+	t.Parallel()
+
+	const newURL = "http://127.0.0.1:17900/mcp"
+	for _, tc := range sameURLFieldCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			content := strings.Join([]string{
+				`model = "gpt-5.4"`,
+				``,
+				`[mcp_servers.obstudio]`,
+				`enabled = true`,
+				`url = "` + tc.existingURL + `"`,
+				`http_headers = { authorization = "Bearer stale-token", "X-API-Key" = 'custom' }`,
+				``,
+			}, "\n")
+
+			configPath := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+				t.Fatalf("write initial Codex MCP config: %v", err)
+			}
+			target := targets["codex"].mcpConfig
+			target.path = func() string { return configPath }
+			if err := configureMCP(target, "/tmp/obstudio", newURL); err != nil {
+				t.Fatalf("configureMCP returned error: %v", err)
+			}
+
+			data, err := os.ReadFile(configPath)
+			if err != nil {
+				t.Fatalf("read Codex MCP config: %v", err)
+			}
+			text := string(data)
+			if strings.Contains(strings.ToLower(text), "authorization") {
+				t.Fatalf("Codex Authorization was not removed:\n%s", text)
+			}
+			if got := strings.Contains(text, `"X-API-Key" = 'custom'`); got != tc.preserved {
+				t.Fatalf("Codex custom header preserved = %v, want %v:\n%s", got, tc.preserved, text)
+			}
+		})
+	}
+}
+
 func TestConfigureCodexMCPReplacesLocalServerWithMultilineArgs(t *testing.T) {
 	t.Parallel()
 
@@ -6154,7 +6497,7 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 	run := exec.Command(installedBinary)
 	runEnv := append(os.Environ(), smokeHomeEnv(homeDir)...)
 	runEnv = append(runEnv,
-		fmt.Sprintf("PORT=%d", observerPort),
+		fmt.Sprintf("%s=%d", observerPortEnv, observerPort),
 		fmt.Sprintf("OTLP_HTTP_PORT=%d", otlpHTTPPort),
 		fmt.Sprintf("OTLP_GRPC_PORT=%d", otlpGRPCPort),
 	)

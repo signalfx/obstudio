@@ -2,7 +2,8 @@
 
 > **Status:** Historical design proposal. For current commands, supported
 > agents, and distribution instructions, use the root `README.md` and
-> `docs/USER.md`.
+> `docs/USER.md`. The `:3000` ports below are historical; the default local
+> UI/REST/MCP port is now `17900`.
 
 ## The Layering Principle
 

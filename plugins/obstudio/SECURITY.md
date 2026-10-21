@@ -31,16 +31,16 @@ endpoint and ports.
 ## Local listener exposure
 
 The managed Splunk Observability Studio instance is intended to bind
-loopback-local endpoints, including `127.0.0.1:3000`, `127.0.0.1:4317`, and
+loopback-local endpoints, including `127.0.0.1:17900`, `127.0.0.1:4317`, and
 `127.0.0.1:4318`. The UI, REST API, MCP endpoint, and OTLP receivers should not
 be exposed on public interfaces by default.
 
-The bundled MCP server config points to `http://127.0.0.1:3000/mcp`. Splunk
+The bundled MCP server config points to `http://127.0.0.1:17900/mcp`. Splunk
 Observability Studio command skills do not automatically follow non-default MCP
 endpoints; they verify or control only the default loopback instance at
-`127.0.0.1:3000`.
+`127.0.0.1:17900`.
 
-Health checks use `http://127.0.0.1:3000/api/health`, not the MCP endpoint.
+Health checks use `http://127.0.0.1:17900/api/health`, not the MCP endpoint.
 When either host needs a shell-based host-local health or control check, it
 should request the narrow permission required by that host before probing. If
 permission is denied or the endpoint cannot be verified from the available

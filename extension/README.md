@@ -91,10 +91,18 @@ validator and inspect actionable findings by signal and severity.
 | **Splunk Observability Studio: Stop** | Stop the extension-owned process. |
 | **Splunk Observability Studio: Restart** | Restart the extension-owned process or reconnect another local instance. |
 
+The extension-managed Splunk Observability Studio uses the fixed port `17900`
+for its UI, REST API, and MCP HTTP endpoint, with OTLP receivers fixed at
+`4318` and `4317`. The port is not a VS Code setting: `obstudio` is
+editor-agnostic, so a per-editor setting could not stay in sync with CLI or
+other-editor launches. If `17900` is taken, free it (or attach to the existing
+instance via `sharedObserverUrl`) rather than moving obstudio — the bundled
+skills all pin `17900`. Only as a last-resort break-glass option, and knowing it
+breaks those skills, can you run on a different port by setting `OBSTUDIO_PORT`
+in `~/.obstudio/env` or passing `--port` to the binary.
+
 Extension settings use the `observability-studio.` prefix:
 
-- `managedObserverPort` moves the extension-managed UI, REST API, and MCP
-  endpoint. Its OTLP receivers remain fixed at `4318` and `4317`.
 - `sharedObserverUrl` reuses another Splunk Observability Studio instance
   running on this machine. Use `localhost` or `127.0.0.1` in the URL. It must
   report the same version bundled with the extension; send telemetry to that
@@ -114,10 +122,12 @@ contracts.
 
 ## Troubleshooting
 
-- If Splunk Observability Studio cannot start, check the selected UI/MCP port
-  and the fixed OTLP ports `4318` and `4317`. Changing `managedObserverPort`
-  does not move the OTLP receivers; stop the conflicting process or reuse
-  another local instance.
+- If Splunk Observability Studio cannot start, check the fixed UI/MCP port
+  `17900` and the fixed OTLP ports `4318` and `4317`. If a foreign process holds
+  `17900`, free it — or reuse the running instance via `sharedObserverUrl`. The
+  bundled skills pin `17900`, so moving obstudio (`OBSTUDIO_PORT` in
+  `~/.obstudio/env` or `--port`) is a last-resort break-glass action that breaks
+  those skills.
 - If `sharedObserverUrl` does not connect, confirm that the configured local
   Splunk Observability Studio is reachable and its version matches the extension.
 - After enabling an integration, fully restart the agent and start a new task.

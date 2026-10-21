@@ -161,14 +161,13 @@ const agentIntegrationConfigurationOperations = new Set<Promise<boolean>>();
 const agentIntegrationConfigFingerprints = new Map<AgentIntegrationTarget, AgentIntegrationConfigFingerprint>();
 let agentIntegrationPromptMcpUrl: string | undefined;
 let agentIntegrationRefreshOperation: { key: string; promise: Promise<string[]> } | undefined;
-let recentAgentIntegrationPrompts: Array<{ detail?: string; message: string }> = [];
+let recentAgentIntegrationPrompts: Array<{ message: string }> = [];
 const observerLifecycleState = createObserverLifecycleState();
 let lastObserverPanelRenderKey: string | undefined;
 
 const observerPanelViewType = 'observabilityStudioObserver';
 const observerPanelTitle = 'Splunk Observability Studio – Telemetry Explorer';
 const sharedObserverUrlSetting = 'sharedObserverUrl';
-const managedObserverPortSetting = 'managedObserverPort';
 const sisCimdOAuthIssuerSetting = 'sisCimdOAuthIssuer';
 const sisCimdOAuthClientIdSetting = 'sisCimdOAuthClientId';
 const sisCimdOAuthRedirectUriSetting = 'sisCimdOAuthRedirectUri';
@@ -180,7 +179,17 @@ const sisCimdOAuthDevelopmentCaBundlePathSetting = 'sisCimdOAuthDevelopmentCaBun
 const sisCimdOAuthDefaultIssuer = 'https://127.0.0.1:9090/test-tenant/sis/v1/rg/cimd-demo';
 const sisCimdOAuthDefaultClientId = 'https://127.0.0.1:9192/oauth/client-metadata.json';
 const managedObserverHost = '127.0.0.1';
-const defaultManagedObserverPort = 3000;
+// The managed UI/REST/MCP-HTTP port is FIXED at 17900 to match the binary's
+// own default (observer/cmd/obstudio: defaultObserverHTTPPort). It is no longer
+// a user setting: obstudio is editor-agnostic, so a VS Code setting could never
+// stay in sync with CLI/other-editor launches, and a fixed known port keeps
+// write-once MCP agent configs valid. The extension does NOT pass this port to
+// the spawned binary — the binary resolves 17900 itself — so an already-running
+// obstudio can defer-and-attach rather than being told to fail loud. The
+// mutable var exists solely so host tests can isolate onto a free port via the
+// internal test command below.
+const defaultManagedObserverPort = 17900;
+let managedObserverPort = defaultManagedObserverPort;
 const managedObserverStateFileName = 'managed-control.json';
 const observerKind = 'obstudio';
 const observerAPIVersion = 'v1';
@@ -364,17 +373,19 @@ function observerRestartRequiredError(
 	const pidLabel = retirement.pid === undefined
 		? 'PID unavailable'
 		: `PID ${retirement.pid}`;
-	const restartMessage = retirement.version === undefined
-		? `Splunk Observability Studio on ${portLabel} (${pidLabel}) could not be verified as bundled version ${bundleVersion}. `
-			+ 'Cloud controls are unavailable until it is stopped.'
-		: `Splunk Observability Studio ${retirement.version} on ${portLabel} (${pidLabel}) does not match bundled version ${bundleVersion}. `
-			+ 'Cloud controls are unavailable until it is stopped.';
+	// The conflicting instance may be a CLI, another editor, or a terminal — not a
+	// VS Code window — so restarting VS Code won't necessarily clear it. Direct the
+	// user to terminate the process by PID (or by port when the PID is unknown).
+	const terminateAction = retirement.pid === undefined
+		? `Terminate the other Splunk Observability Studio instance on ${portLabel}, then run Splunk Observability Studio: Start or reload the window.`
+		: `Terminate the process (${pidLabel}), then run Splunk Observability Studio: Start or reload the window.`;
+	const identityClause = retirement.version === undefined
+		? `Splunk Observability Studio on ${portLabel} (${pidLabel}) could not be verified as bundled version ${bundleVersion}.`
+		: `Splunk Observability Studio ${retirement.version} on ${portLabel} (${pidLabel}) does not match bundled version ${bundleVersion}.`;
+	const restartMessage = `${identityClause} Only one Splunk Observability Studio instance can run at a time. ${terminateAction}`;
 	const restartError = new Error(restartMessage);
 	Object.assign(restartError, {
-		startupHint: 'Restart VS Code, then run Splunk Observability Studio: Start. '
-			+ (retirement.pid === undefined
-				? 'If it remains running, stop Splunk Observability Studio on the displayed port and retry.'
-				: 'If it remains running, stop the displayed PID and retry.'),
+		startupHint: terminateAction,
 		startupTitle: 'Restart required',
 	});
 	return restartError;
@@ -442,10 +453,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 	);
 	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
-		if (
-			!event.affectsConfiguration(`observability-studio.${sharedObserverUrlSetting}`)
-			&& !event.affectsConfiguration(`observability-studio.${managedObserverPortSetting}`)
-		) {
+		if (!event.affectsConfiguration(`observability-studio.${sharedObserverUrlSetting}`)) {
 			return;
 		}
 		void enqueueObserverConfigurationRestart(context).catch((error) => {
@@ -740,6 +748,19 @@ export async function activate(context: vscode.ExtensionContext) {
 					observerOtlpGrpcPort = nextGrpcPort;
 					observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHttpPort}`;
 					observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
+				},
+			),
+			vscode.commands.registerCommand(
+				'observability-studio.internal.setManagedObserverPortForTest',
+				(value?: unknown) => {
+					// The UI port is read only at the next managed start, so this
+					// may be set at any lifecycle point (unlike the OTLP ports,
+					// which are bound live). Tests set it before stopping/starting.
+					if (value === undefined) {
+						managedObserverPort = defaultManagedObserverPort;
+						return;
+					}
+					managedObserverPort = parseInternalTestPort(value, defaultManagedObserverPort);
 				},
 			),
 			vscode.commands.registerCommand(
@@ -1284,13 +1305,12 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			observerPort = await ensurePortAvailable({
 				port: managedPort,
 				role: 'Splunk Observability Studio UI',
-				settingName: managedObserverPortSetting,
 			});
 		} catch (error) {
 			const wrappedError = new Error(
 				`Cannot use ${managedObserverBaseUrl}: ${getErrorMessage(error)} ` +
-				`Configure observability-studio.${managedObserverPortSetting} or ` +
-				`observability-studio.${sharedObserverUrlSetting}.`,
+				`Free port ${managedPort}, or set observability-studio.${sharedObserverUrlSetting} ` +
+				`to reuse an existing Splunk Observability Studio.`,
 			);
 			if (typeof error === 'object' && error !== null && typeof (error as StartupHintCarrier).startupHint === 'string') {
 				Object.assign(wrappedError, { startupHint: (error as StartupHintCarrier).startupHint });
@@ -1325,7 +1345,6 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			OTLP_PORT: String(otlpHttpPort),
 			OTLP_HTTP_PORT: String(otlpHttpPort),
 			OTLP_GRPC_PORT: String(otlpGrpcPort),
-			PORT: String(observerPort),
 			OBSTUDIO_OWNER: extensionManagedObserverOwner,
 			OBSTUDIO_MODE: extensionManagedObserverMode,
 			// Pass the workspace root so the preview resolver locates
@@ -1340,6 +1359,18 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		delete managedObserverEnvironment.OBSTUDIO_CONTROL_TOKEN;
 		delete managedObserverEnvironment.OBSTUDIO_HEALTH_PROOF_SECRET;
 		delete managedObserverEnvironment.OBSTUDIO_PUBLIC_MCP_URL;
+		// The binary defaults the UI port to the fixed 17900 on its own. In
+		// production we deliberately do NOT pin OBSTUDIO_PORT: an unpinned binary
+		// that finds the OTLP ports already bound defers (exit 0) so a running
+		// obstudio can be reused, whereas a pinned port makes it fail loud. We
+		// drop any inherited OBSTUDIO_PORT for the same reason. Only when a host
+		// test has isolated onto a non-default free port do we pin it, so the
+		// spawned binary binds the exact port the extension reserved.
+		delete managedObserverEnvironment.OBSTUDIO_PORT;
+		delete managedObserverEnvironment.PORT;
+		if (observerPort !== defaultManagedObserverPort) {
+			managedObserverEnvironment.OBSTUDIO_PORT = String(observerPort);
+		}
 		try {
 			startedProcess = cp.spawn(backend.command, backend.args, {
 				cwd: backend.cwd,
@@ -3247,18 +3278,7 @@ function parseInternalTestPort(value: unknown, fallback: number): number {
 }
 
 function getConfiguredManagedObserverPort(): number {
-	const configured = vscode.workspace.getConfiguration('observability-studio').get<number>(managedObserverPortSetting);
-	if (typeof configured === 'number' && Number.isInteger(configured) && configured > 0 && configured <= 65_535) {
-		if (configured === observerOtlpHttpPort || configured === observerOtlpGrpcPort) {
-			const signal = configured === observerOtlpHttpPort ? 'OTLP/HTTP' : 'OTLP/gRPC';
-			throw new Error(
-				`observability-studio.${managedObserverPortSetting} cannot use port ${configured}; ` +
-				`${signal} already uses that port.`,
-			);
-		}
-		return configured;
-	}
-	return defaultManagedObserverPort;
+	return managedObserverPort;
 }
 
 function appendObserverOutput(text: string): void {
@@ -3610,7 +3630,6 @@ function refreshOwnedAgentIntegrationConfig(
 			&& shouldRefreshOwnedAgentIntegrationConfig(
 				getStoredAgentIntegrationConfigFingerprint(context, spec.target),
 				readAgentIntegrationManagedConfig(spec),
-				mcpUrl,
 			)
 		);
 		const refreshable = specs.filter(shouldRefresh);
@@ -3696,20 +3715,36 @@ async function maybeOfferDetectedAgentIntegrations(context: vscode.ExtensionCont
 
 		const labels = shownSpecs.map((spec) => spec.label);
 		const labelList = formatAgentLabelList(labels);
-		const promptMessage = shownSpecs.length === 1
-			? `Enable ${labels[0]} integration for Splunk Observability Studio?`
-			: 'Enable detected agent integrations for Splunk Observability Studio?';
-		const promptDetail = shownSpecs.length === 1
-			? `Install bundled skills and configure ${labels[0]} to use the local Splunk Observability Studio service at ${mcpUrl}.`
-			: `Install bundled skills and configure ${labelList} to use the local Splunk Observability Studio service at ${mcpUrl}.`;
+		// Two variants only. Owned configs (incl. a stale :3000 we wrote before the
+		// move to the fixed :17900) migrate silently via refreshOwnedAgentIntegration-
+		// Config above, so this visible prompt only fires for 'missing' specs (never
+		// configured) or UNOWNED 'different' specs (user hand-edited). ENABLE covers
+		// the all-missing case; everything else — including a mix of missing and
+		// unowned-different — folds into UPDATE. The install action is monolithic
+		// (full MCP-config write + skills reinstall) and does not vary by the detected
+		// delta, so the wording describes the ACTION, not what changed.
+		const states = shownSpecs.map((spec) => getAgentIntegrationConfigState(spec, mcpUrl));
+		const allMissing = states.every((state) => state === 'missing');
+		const actionWord = allMissing ? 'Enable' : 'Update';
+		let promptMessage: string;
+		// `detail` only renders in MODAL dialogs; this prompt is a non-modal toast,
+		// so a detail sentence would be invisible to users. The informative text is
+		// folded into `promptMessage` as a second sentence instead.
+		if (allMissing) {
+			promptMessage = shownSpecs.length === 1
+				? `Enable the ${labels[0]} integration for Splunk Observability Studio? Installs the obstudio MCP server and bundled skills.`
+				: `Enable detected agent integrations for Splunk Observability Studio? Installs the obstudio MCP server and bundled skills for ${labelList}.`;
+		} else {
+			promptMessage = shownSpecs.length === 1
+				? `Update the ${labels[0]} integration for Splunk Observability Studio? Updates its obstudio MCP server and bundled skills.`
+				: `Update detected agent integrations for Splunk Observability Studio? Updates the obstudio MCP server and bundled skills for ${labelList}.`;
+		}
 		recentAgentIntegrationPrompts = [...recentAgentIntegrationPrompts.slice(-9), {
-			detail: promptDetail,
 			message: promptMessage,
 		}];
 		const choice = await vscode.window.showInformationMessage(
 			promptMessage,
-			{ detail: promptDetail },
-			'Enable',
+			actionWord,
 			'Not Now',
 		);
 		if (
@@ -3718,7 +3753,7 @@ async function maybeOfferDetectedAgentIntegrations(context: vscode.ExtensionCont
 		) {
 			return;
 		}
-		if (choice === 'Enable') {
+		if (choice === actionWord) {
 			let promptInstall: Promise<string[]>;
 			promptInstall = configureDetectedAgentIntegrations(
 				context,

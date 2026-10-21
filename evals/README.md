@@ -163,6 +163,12 @@ Codex login check for those backends.
 
 ## Commands
 
+The default `dev` dependency group supplies the model-directed fixture's Flask,
+OpenAI client and OTel instrumentors for deterministic regression tests.
+`test_agent_review_regressions.py` executes its real startup, stdlib-to-OTLP
+logging, header isolation and conversation rollback checks using loopback
+receivers and stub model responses.
+
 | Target | Purpose |
 |---|---|
 | `make test-eval-harness` | Validate every eval JSON and fixture |

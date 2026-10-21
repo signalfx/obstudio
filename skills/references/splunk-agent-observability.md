@@ -1,11 +1,35 @@
 # Splunk Agent Observability Findings
 
-Use this reference when the user asks whether a GenAI or agent application can
+Use this reference for every source-owned agent runtime, or when the user asks whether a GenAI application can
 populate Splunk Agent Observability, when an audit finds existing Agent
 Observability routing or resource configuration, or when a selected finding
 has `finding_group: splunk-agent-observability`.
 Also use it when a fresh agent's selected default producer is Splunk AO, even
 before the SDK is installed or configured.
+
+## Agent Resource And Producer Decision
+
+Project, dedicated Agent Stream and routing are default readiness requirements
+for every agent. Read Galileo's native log stream as its stream binding; the
+shared AO finding group describes configuration work, not a required SDK or a
+destination migration. Respect explicit user exclusions and saved selections.
+Use this matrix before authoring findings or changing a runtime:
+
+| Source-owned agent runtime | Producer and destination | Resource and routing work |
+|---|---|---|
+| Fresh with compatible AO SDK | AO SDK creators/framework integration for supported operations; native OTel only for uncovered signals or a proven SDK limitation | Resolve/create project and stream with supported SDK clients; persist consumed configuration and use native SDK export. |
+| Fresh without compatible or established AO SDK support | Native OTel with the full GenAI coverage profile | SDK-free resource resolution and supported trace-specific exporter headers; no invented SDK, runtime upgrade or sidecar. |
+| Existing native OTel, including metrics/logs/export-only setups | Preserve producers, providers, exporters and ordinary signal destinations | SDK-free project/stream resolution and trace-header configuration on the selected existing exporter. |
+| Existing Galileo, with or without native OTel | Preserve Galileo native instrumentation/export plus legitimate existing OTel sinks; fill only uncovered operations/signals | Supported Galileo project/log-stream clients and consumed vendor configuration; no automatic Splunk AO dependency or additional Studio route. |
+| Existing AO SDK | Preserve SDK creators and export; fill version-specific gaps without duplicates | Reuse valid resource bindings, resolve/create missing ones and repair native SDK routing. |
+
+Audit records each runtime's chosen row and evidence for project binding, stream
+binding and routing. Covered bindings cite reachable source/configuration;
+missing app-owned bindings get separate `default` configuration findings with
+project -> stream -> route dependencies. Names, credentials and an explicit AO
+request are not prerequisites for authoring that plan. Non-agent inference or
+workflow code alone does not establish mandatory product adoption. Audit never
+creates resources. Instrumentation implements only the validated selected scope.
 
 ## One Findings Ledger
 
@@ -40,11 +64,10 @@ validated API evidence establishes both a concrete gap and a safe action. Do
 not turn the Agent Observability navigation into a generic checklist and do not
 claim that spans create Agent Observability resources.
 
-A fresh default Splunk AO producer establishes intended AO instrumentation.
-Inspect that runtime's actual launch profile and author separate source-backed
+An agent runtime establishes intended project/stream support independently of
+its producer. Inspect its actual launch profile and author separate source-backed
 project binding, dedicated Agent Stream binding and routing findings where
-missing, with `ao_target_scope: resource-routing`. Keep incidental product
-adoption in `fix all`; an explicit AO target/routing request uses `default`.
+missing, with `ao_target_scope: resource-routing` and `instrument_mode: default`.
 Missing imports or credentials do not erase the intended-runtime assessment.
 Disclose proposed service-derived names and offer optional supplied selectors
 and reuse-only behavior. Do not infer global resource absence or create resources
@@ -171,7 +194,8 @@ If the SDK discards status information, a read-only relookup may establish
 the uncertain outcome, but an unresolved lookup must retain the original
 failure and must not cause a second create.
 
-For Python, `otel-instrument/scripts/resolve_ao_resources.py` provides this
+For Python AO SDK or native OTel paths without Galileo,
+`otel-instrument/scripts/resolve_ao_resources.py` provides this
 provisioning path using the existing SDK, or the explicit SDK-free
 `--studio-api-origin` HTTP mode for an existing non-AO application. Run it with
 the project-managed Python environment after validating selected resource
@@ -194,6 +218,76 @@ gateway was previously unavailable; retry the configured API when that
 prerequisite recovers. Keep ordinary OTel active if AO resolution fails.
 
 ## Configured Runtime Destination
+
+### Connected And Disconnected Studio
+
+Exercise the selected runtime with cloud connected, Studio running without a
+cloud connection, and Studio unavailable. Audit keeps project, stream and
+routing requirements visible in every state; connectivity is separate from
+producer selection and source/configuration readiness.
+
+With cloud connected, resolve real resources before enabling AO export. With
+Studio running but disconnected, persist the intended resource selectors and
+implement/test provisioning, while reporting real resolution and AO delivery
+as blocked. Application behavior and ordinary local traces, metrics and logs
+must continue. Do not count SDK fail-open business success with zero local
+agent spans as working instrumentation. Never invent IDs, treat 503/auth or
+transport failure as absence, install a different vendor SDK, or silently
+switch to direct cloud.
+
+Use the selected SDK's supported resource-independent local creation/export
+path where available. For Python, inspect whether public typed span helpers
+such as `splunk_ao.otel.start_splunk_ao_span` can use the local OTel provider
+without initializing an AO logger or resolving cloud resources. If SDK `@log`
+cannot do that, record the exact limitation and use the existing per-function
+application-owned decorator fallback around a supported SDK helper; apply the
+public OTel exception only to a source-proven unsupported boundary. Include that
+decision in the saved connection-mode report: if both the integration and SDK
+helper lack a required initial kind or attribute, name an application-owned
+function decorator using public OTel for that uncovered boundary, reusing the
+registered provider and selected sinks. Retain SDK creators on supported
+boundaries; disconnected Studio alone never justifies this exception. Keep real
+inputs/results, parentage and errors, one operation per boundary and honest
+creation-time kind/sampling limits. Do not patch SDKs, inject a production fake
+logger, or disable all telemetry as the offline strategy.
+
+Before finalizing even a supplemental connection-only report, check its saved
+SDK decision explicitly: a public helper lacking initial CLIENT/attributes
+cannot cover an uncovered remote-model boundary. Name the app-owned decorator
+and public `tracer.start_as_current_span(..., kind=SpanKind.CLIENT,
+attributes=safe_request_fields)` pattern for that boundary, with sampler or
+`on_start` proof still required. Keep SDK helper decorators on supported agent
+and tool boundaries. Deferring the full semantic audit does not remove this
+source-proven local SDK capability decision from the connection report.
+
+For a Studio-routed native exporter, distinguish unresolved names or rejected
+identities from temporary transport availability. Persist the user's selected
+names even when those resources already exist but their IDs are not yet known.
+A 503/timeout cannot establish absence or invalidate a previously resolved
+binding for the same destination. Keep its UUID headers and trace resource
+metadata active while Studio is disconnected; never construct an exporter with
+an empty route that remains cached after connection. Explicit invalid IDs,
+wrong-parent resources, ambiguity or a changed cloud organization require
+resolution or an honest routing failure, never a default stream.
+
+If Studio itself is unavailable, prove business behavior and native/in-memory
+emission independently, but mark local OTLP receipt blocked. For selected names
+without resolved IDs, integrate bounded retry of normal resource calls into the
+running application through its configured API origin. Once available, reuse
+exact existing names and activate the complete binding without an app restart,
+re-instrumentation or a manual setup command. A separate CLI may be an operator
+utility; it cannot be the only normal recovery path. Keep lookup failures out
+of the business request path and preserve local telemetry while unresolved.
+Test the same application PID across disconnected, connected, disconnected and
+reconnected states; pin one producer/route per invocation and rule out duplicate
+spans/exports. No automatic runtime Studio discovery is needed.
+Report local emission, local receipt, resource resolution, routed forwarding
+and exact cloud trace visibility separately for each tested state.
+
+Galileo native resource/export configuration follows **Existing Galileo
+Applications** below; do not apply these AO gateway/cloud profiles to that
+destination. An explicitly selected additional AO destination has its own
+profile and must preserve Galileo.
 
 For local development, default to an available Splunk Observability Studio
 cloud-compatible gateway. Preserve an explicit operator destination or a user
@@ -281,7 +375,7 @@ prerequisite, not a reason to request a cloud token for the application.
 
 ### Configuration Profiles
 
-For existing non-AO applications, use the repository's normal profile/loader
+For existing native OTel applications without Galileo, use the repository's normal profile/loader
 to supply the resource setup command's explicit discovered API origin and
 selectors, then persist the resolved IDs in the existing exporter's supported
 trace-specific header configuration. Preserve the compatible endpoint,
@@ -632,6 +726,12 @@ exit; check the final emitted span for overwrites rather than assuming earlier
 setters survive. Bind the helper to the actual registered provider, configure
 the supported AO processor/exporter where selected, and prove owned flush and
 shutdown. An unrelated provider or unregistered local provider proves no export.
+SDK creation and transport ownership are separate: the supported helper on a
+registered application OTel provider and compatible selected OTLP sink remains
+SDK-created instrumentation. Do not require a private SDK logger sink or call
+it native-only merely because the provider/exporter uses OTel APIs. Name the
+actual SDK creator and supported registration, keep any selected AO
+processor/exporter, and retain exact per-operation compatibility exceptions.
 
 Inspect creation-time capability too. If the chosen helper opens a name-only
 span before yielding or writing schema-derived attributes, the sampler and
@@ -932,6 +1032,104 @@ actual launch profile as:
 OTEL_EXPORTER_OTLP_TRACES_HEADERS=projectid=<project-uuid>,logstreamid=<agent-stream-uuid>
 ```
 
+### Native trace binding and recovery
+
+User-selected project and Agent Stream names are selectors, not UUIDs. Existing
+resources with matching names must be reused, with the stream scoped to its
+project. Resolve their actual IDs through normal configured resource APIs;
+never put names or fabricated IDs in routing headers. Hand resolved IDs through
+the consumed application profile or an application-owned binding cache.
+The resource helper's optional `--native-otel-binding` output supplies the
+matching header and trace-resource mappings after successful resolution.
+
+On existing native OTel, a complete binding includes both the exporter headers
+above and trace Resource attributes `splunk_ao.project.id=<project-uuid>` and
+`splunk_ao.logstream.id=<agent-stream-uuid>`. Derive all four values from one
+validated pair. This mapping is required for the selected native AO integration,
+not a reason to replace existing producers or add a vendor SDK. Keep metric and
+local-log Resources unchanged; SDK-owned paths retain supported SDK routing.
+
+Known valid IDs can configure this complete binding before cloud connection.
+Do not gate it on a successful startup gateway lookup or strip it merely
+because Studio is disconnected. With names only, retry resolution automatically
+and atomically activate headers and trace metadata for subsequent operations
+in the same running process. An env-file rewrite alone does not update a live
+exporter or its immutable Resource. Preserve one provider and one selected
+export path: use supported SDK reconfiguration, or a public native
+`SpanExporter` delegate with export-time `ReadableSpan` views carrying a merged
+trace Resource. Keep the original trace/span/parent IDs, timestamps, attributes,
+events, links, scope, kind and status. Preserve the configured endpoint,
+protocol and harmless headers, respecting installed exporter env/constructor
+precedence. Do not mutate private span/provider fields or global Resources.
+Snapshot one complete binding per export so header IDs and payload IDs agree;
+do not multiply exports or claim replay of spans already delivered only locally.
+
+`SpanExporter.export` and `ReadableSpan` above are the **Python** carrier
+example. Bind another language's routing and profile plan to its inspected
+public exporter/span interfaces; do not transplant these Python API names into
+Go or another runtime. Record exact unavailable interface/version proof rather
+than presenting Python signatures as a supported language-specific fix.
+For example, the [Go SDK exporter/span interfaces](https://pkg.go.dev/go.opentelemetry.io/otel/sdk/trace#SpanExporter)
+use `ExportSpans(context.Context, []sdktrace.ReadOnlySpan) error` and
+`ReadOnlySpan.Resource()`. Verify the installed interface and lifecycle before
+choosing a carrier; this documentation example is not a Go deployment proof.
+
+For a native AO binding, keep these acceptance scenarios separate in audit
+plans. Instrumentation and verification execute or report each selected,
+applicable scenario; one recovery observation cannot close another scenario.
+
+- **Names-only running process:** the credential-free recovery test must start
+  the real launcher with only the user-selected names and existing fake
+  resources, return 503 initially, then enable the API while retaining the same
+  app PID. Require automatic exact-name reuse, zero creates and atomic correct
+  headers plus both trace Resource attributes on subsequent agent/model/tool
+  spans, including another temporary outage.
+  Require finite per-request timeout and capped retry frequency/backoff,
+  continuing business/native telemetry during a prolonged outage, and pending
+  retry cancellation at shutdown. Cap retry work, not the application's
+  lifetime opportunity to recover after a late Studio connection. Record
+  source-backed settings or the precise missing-bound proof/acceptance when
+  source-only; do not invent numeric runtime limits. Test the actual owned
+  resolver loop, not only a standalone helper.
+- **Previously validated binding at process startup:** start a new app process
+  with a persisted complete binding whose ownership and association were
+  validated for the same unchanged destination. Keep the resource API at 503 or
+  connection refused. The first exported batch must retain its UUID headers and
+  matching trace Resource IDs without requiring a successful resource relookup.
+  Preserve business/local signals and zero creates. This is a distinct launch
+  acceptance case, not proof supplied by same-PID reconnect or an env-file diff.
+- **Changed or rejected identity:** a changed destination, unknown/wrong-project
+  ID or explicitly rejected association requires fresh scoped resolution before
+  selecting that route. Preserve unrelated telemetry and distinguish lookup
+  failure from resource absence.
+
+For names-only setup, the normal application startup owns resource resolution
+and running-process recovery; an ID file generated by a separate command alone
+does not close that path. Previously validated complete bindings retain their
+distinct no-successful-relookup startup acceptance above.
+
+For an existing native trace provider/exporter, make resource routing
+independently selectable from missing agent/model/tool/retrieval semantics.
+Depend only on its project/stream binding and actual startup/export prerequisites.
+A mode without a trace pipeline may need that capability first; this does not
+authorize pulling every GenAI operation gap into the routing dependency closure.
+
+For each selected resource success, creation/recovery or lookup-failure case,
+carry the real API result through the written application bootstrap, consumed
+profile and existing exporter. Capture both the resource journal and that
+application's resulting headers/payloads or isolated failure. Include a create
+that commits before its response is lost, proving scoped relookup without a
+second POST through that same caller. Standalone helper tests plus an
+independently seeded profile do not prove this integration;
+malformed-profile tests do not prove behavior after an actual API lookup fails.
+Audit plans must name this chain, and verification must leave missing links
+Not proven rather than substituting a different test boundary.
+
+A retained valid binding is not fresh resource-resolution evidence. Mark any
+unexecuted applicable scenario Not proven. Live acceptance additionally
+requires exact fresh trace-ID readback in the selected cloud project and
+stream; local receipt and successful forwarding are separate.
+
 Merge harmless existing trace headers, reject conflicting resource selectors,
 and preserve the compatible explicit endpoint and protocol, including a
 non-default port. Use trace-specific settings so AO routing/auth does not leak
@@ -960,17 +1158,16 @@ and exporter with sentinel harmless global and trace-specific headers.
 The current Studio receiver recognizes this ID pair on `/v1/traces`,
 `/otel/v1/traces` and `/v2/trace/otlp`. Successful normal resource resolution
 through the same gateway confirms the route for its active cloud connection.
-An ID copied from another connection is insufficient until resolved there.
-Persisted UUID headers also do not restore the gateway's in-memory route after
-its restart or active cloud connection change. Before treating routed delivery
-as restored, run read-only project and scoped stream relookup through that
-active gateway, using the persisted IDs with reuse-only semantics (or exact
-name lookup). This deployment/resource bootstrap must not create duplicates,
-replace the exporter, or make ordinary application instrumentation depend on a
-reachable gateway. If relookup is unavailable, keep existing telemetry active
-and report routed forwarding as unproven/failed. Test a cleared route followed
-by relookup and repeated export, preserving IDs and zero additional creates;
-headers alone before relookup must not be accepted as recovery proof.
+An ID copied from another organization is insufficient until resolved there.
+Studio's current receiver reads the routing pair from each request; normal
+resource calls resolve identities rather than registering an in-memory route.
+Connecting Studio to the same destination enables forwarding of subsequent
+already-bound requests. Previously resolved bindings do not need a successful
+resource relookup on each app launch. For names-only configuration, the
+application recovery path above resolves the existing pair and updates the
+live export binding. A changed destination or explicitly rejected identity
+requires fresh resolution. Neither recovery path may duplicate resources,
+replace the provider, or gate ordinary application behavior on the gateway.
 The gateway retains local telemetry and uses its routed AO forwarding branch;
 ordinary OTLP receipt without the pair does not select an Agent Stream. Check
 rejected-span/partial-success responses, not only HTTP success. Resource
@@ -1087,6 +1284,28 @@ span processor/exporter, a span-producing wrapper or callback bridge, and Galile
 resource configuration are separate capabilities. Do not treat the
 presence of Galileo as permission to install `splunk-ao`, and never patch the
 installed Galileo package or generated client.
+
+Project and stream support still applies. Use the installed Galileo version's
+native resource APIs, such as `galileo.projects.Projects` and
+`galileo.log_streams.LogStreams`, and its existing processor/logger/context
+configuration. Inspect signatures, pagination, name/ID support and errors before
+implementing ordered lookup/create/reuse. The AO resource helper's default SDK
+mode imports `splunk_ao`; do not invoke it for Galileo or install Splunk AO to
+make it work. Use a supported Galileo client or application-owned adapter with
+the same idempotency, association and failure-isolation acceptance above.
+Persist selectors actually consumed by the runtime, for example supported
+`GALILEO_PROJECT` and `GALILEO_LOG_STREAM` or explicit constructor/context
+arguments, through its real launch profile. Preserve configured nondefault
+stream names, API/console/auth settings and supported ID semantics. Do not
+assume environment overrides a source-hardcoded constructor argument.
+The native processor/exporter supplies the destination binding; verify its
+actual outgoing headers/body/resource metadata rather than replacing it with
+`OTEL_EXPORTER_OTLP_TRACES_HEADERS` or adding a Studio sink by default.
+Classify missing bindings as default configuration findings under the shared
+ledger; the target remains Galileo. Test the actual installed SDK with local
+API/export fakes, not a replacement `galileo` module. Require a fresh trace in
+the configured Galileo project/stream for live delivery proof. Any separately
+requested Studio destination retains its own selection and preserves this path.
 
 Keep missing application-owned spans, metrics, events, resources, attributes,
 and lifecycle handling as ordinary OTel findings. They remain independent of

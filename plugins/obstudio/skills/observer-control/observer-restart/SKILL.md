@@ -27,8 +27,8 @@ start a second copy.
 
 Endpoint checks are limited to the Splunk Observability Studio loopback endpoints:
 
-- health: `http://127.0.0.1:3000/api/health`
-- listener inspection: `127.0.0.1:3000`, `127.0.0.1:4317`, and
+- health: `http://127.0.0.1:17900/api/health`
+- listener inspection: `127.0.0.1:17900`, `127.0.0.1:4317`, and
   `127.0.0.1:4318`
 
 ## Steps
@@ -37,13 +37,13 @@ Endpoint checks are limited to the Splunk Observability Studio loopback endpoint
 2. If Splunk Observability Studio MCP is configured to a non-default endpoint, report:
    `Splunk Observability Studio MCP is configured to a non-default endpoint: <url>. For safety,
    this command skill only verifies or controls the default loopback Splunk Observability Studio
-   at 127.0.0.1:3000. I will not probe or control the custom endpoint. Use the
+   at 127.0.0.1:17900. I will not probe or control the custom endpoint. Use the
    MCP server directly, update the config back to the default local Splunk Observability Studio,
    or manually verify the custom Splunk Observability Studio.`
 3. Before probing host-local endpoints or inspecting local listeners from a
    shell command, request narrow elevated/outside-sandbox permission. Do not
    first try the check from inside the sandbox.
-4. Check only `http://127.0.0.1:3000/api/health` for Splunk Observability Studio health. Do not
+4. Check only `http://127.0.0.1:17900/api/health` for Splunk Observability Studio health. Do not
    use the MCP endpoint as a health check and do not follow alternate hosts
    from MCP or user config.
 5. If elevated access is denied or the endpoint cannot be verified from the
@@ -59,7 +59,7 @@ Endpoint checks are limited to the Splunk Observability Studio loopback endpoint
 9. If it is `managed`, restart only the process that the current plugin
    started, even when the health endpoint is currently good.
 10. If startup fails because one of the expected ports is already in use,
-   inspect only `127.0.0.1:3000`, `127.0.0.1:4317`, and `127.0.0.1:4318`.
+   inspect only `127.0.0.1:17900`, `127.0.0.1:4317`, and `127.0.0.1:4318`.
 11. If the ports belong to another binary, or ownership cannot be determined,
    treat it as `shared` or `external`; do not kill or restart it. Report the
    conflicting PID/port and recommend manual recovery.

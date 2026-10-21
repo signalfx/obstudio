@@ -45,7 +45,7 @@ never collect or transmit the access token itself.
    is exactly:
 
    ```text
-   http://127.0.0.1:3000/?tab=cloud
+   http://127.0.0.1:17900/?tab=cloud
    ```
 
    Use the port already reported by the running Splunk Observability Studio. Never allocate,

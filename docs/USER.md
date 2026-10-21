@@ -33,7 +33,7 @@ Start one background instance, then connect integrations to its MCP endpoint:
 ```bash
 cd obstudio_<version>_<os>_<arch>
 ./obstudio start
-./obstudio install --target=codex --shared-url=http://127.0.0.1:3000/mcp
+./obstudio install --target=codex --shared-url=http://127.0.0.1:17900/mcp
 ```
 
 The shared instance must be running when you pass `--shared-url`. If it is
@@ -45,6 +45,14 @@ Keep `--shared-url` when using a shared instance. Use this mode when multiple
 configured agents may run concurrently because only one agent-started instance
 can use the default ports at a time.
 
+> **Concurrent agents must use `--shared-url` (HTTP), not stdio.** A stdio MCP
+> integration spawns its own `obstudio`. Only the first such process binds the
+> ports; every later one detects the already-running instance and exits cleanly
+> (exit 0) *before* the MCP handshake, so a second stdio agent sees its server
+> die at startup — silently. Point concurrent agents at the shared HTTP endpoint
+> `http://127.0.0.1:17900/mcp` instead. The fixed `17900` port keeps that URL
+> valid across restarts.
+
 ## Agent targets
 
 Use `--target=windsurf` for Windsurf or Devin Desktop.
@@ -52,7 +60,7 @@ Use `--target=windsurf` for Windsurf or Devin Desktop.
 To connect every supported target to the running shared instance:
 
 ```bash
-./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot --shared-url=http://127.0.0.1:3000/mcp
+./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot --shared-url=http://127.0.0.1:17900/mcp
 ```
 
 | Target | Skill command |

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -39,7 +40,7 @@ const (
 	codexManagedBlockStart = "# BEGIN OBSTUDIO MCP CONFIG"
 	codexManagedBlockEnd   = "# END OBSTUDIO MCP CONFIG"
 
-	defaultSharedObserverBaseURL      = "http://127.0.0.1:3000"
+	defaultSharedObserverBaseURL      = "http://127.0.0.1:17900"
 	defaultSharedObserverMCPURL       = defaultSharedObserverBaseURL + "/mcp"
 	defaultSharedObserverHealth       = defaultSharedObserverBaseURL + "/api/health"
 	sharedObserverHealthTimeout       = 750 * time.Millisecond
@@ -153,6 +154,145 @@ var targets = map[string]agentTarget{
 			preserveSameURLFields: []string{"headers"},
 		},
 	},
+}
+
+// configuredObstudioMCPURL extracts the obstudio MCP server URL recorded in a
+// target's agent config file, if any. It returns the URL and true only when an
+// HTTP(S) "url" entry is present (the shared-server install mode); stdio
+// command-mode entries have no URL and return ("", false). Parse failures are
+// treated as "no URL" — the nudge is best-effort and must never block startup.
+func configuredObstudioMCPURL(t mcpConfigTarget) (string, bool) {
+	path := t.path()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	switch t.format {
+	case mcpConfigJSON:
+		var config map[string]any
+		if err := json.Unmarshal(data, &config); err != nil {
+			return "", false
+		}
+		servers, ok := config[string(t.serversKey)].(map[string]any)
+		if !ok {
+			return "", false
+		}
+		server, ok := servers["obstudio"].(map[string]any)
+		if !ok {
+			return "", false
+		}
+		rawURL, ok := server["url"].(string)
+		if !ok || strings.TrimSpace(rawURL) == "" {
+			return "", false
+		}
+		return strings.TrimSpace(rawURL), true
+	case mcpConfigTOML:
+		url, err := codexObstudioURL(string(data))
+		if err != nil || strings.TrimSpace(url) == "" {
+			return "", false
+		}
+		return strings.TrimSpace(url), true
+	default:
+		return "", false
+	}
+}
+
+// codexObstudioURL returns the url assigned to mcp_servers.obstudio in a codex
+// config, or "" if none. It reuses the same preserved-header parser machinery
+// by scanning for the url assignment inside the obstudio section.
+func codexObstudioURL(content string) (string, error) {
+	if strings.TrimSpace(content) == "" {
+		return "", nil
+	}
+	lines := strings.Split(content, "\n")
+	codeLines, err := codexTOMLCodeLines(lines)
+	if err != nil {
+		return "", err
+	}
+	inObstudio := false
+	for _, codeLine := range codeLines {
+		structural := tomlStructuralLine(codeLine)
+		if structural == "" {
+			continue
+		}
+		if tablePath, ok := parseCodexTOMLTablePath(structural); ok {
+			inObstudio = slices.Equal(tablePath, []string{"mcp_servers", "obstudio"})
+			continue
+		}
+		if isTOMLTableHeader(structural) {
+			inObstudio = false
+			continue
+		}
+		if !inObstudio {
+			continue
+		}
+		keyText, valueText, ok := splitCodexTOMLAssignment(structural)
+		if !ok {
+			continue
+		}
+		key, keyErr := parseCodexTOMLKey(keyText)
+		if keyErr != nil || key != "url" {
+			continue
+		}
+		return parseCodexTOMLString(valueText)
+	}
+	return "", nil
+}
+
+// warnStaleMCPPortConfigs scans the known agent-config paths for obstudio MCP
+// entries that pin a loopback HTTP URL on a port other than the running port,
+// and prints a one-time nudge to re-run install. It is best-effort: any read or
+// parse error for a given target is silently skipped. currentPort is the port
+// this obstudio process is actually serving on.
+func warnStaleMCPPortConfigs(w io.Writer, currentPort string) {
+	names := make([]string, 0, len(targets))
+	for name := range targets {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	stale := make([]string, 0, len(names))
+	for _, name := range names {
+		rawURL, ok := configuredObstudioMCPURL(targets[name].mcpConfig)
+		if !ok {
+			continue
+		}
+		parsed, err := url.Parse(rawURL)
+		if err != nil || !isLoopbackSharedObserverHost(parsed.Hostname()) {
+			continue
+		}
+		port := parsed.Port()
+		if port == "" || port == currentPort {
+			continue
+		}
+		stale = append(stale, fmt.Sprintf("%s (%s)", name, rawURL))
+	}
+	if len(stale) == 0 {
+		return
+	}
+	fmt.Fprintf(
+		w,
+		"\n[obstudio] Some agent MCP configs point at an old port; this instance serves :%s.\n"+
+			"           Stale: %s\n"+
+			"           Update them with: obstudio install --target=%s\n\n",
+		currentPort,
+		strings.Join(stale, ", "),
+		staleTargetList(stale),
+	)
+}
+
+// staleTargetList renders the comma-joined target names from the "name (url)"
+// entries produced by warnStaleMCPPortConfigs, for the install --target hint.
+func staleTargetList(entries []string) string {
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if idx := strings.IndexByte(entry, ' '); idx > 0 {
+			names = append(names, entry[:idx])
+		} else {
+			names = append(names, entry)
+		}
+	}
+	return strings.Join(names, ",")
 }
 
 func supportedTargets() string {
@@ -738,7 +878,7 @@ func upsertJSONMCPServer(path string, serversKey mcpServersKey, server map[strin
 	if existing, ok := servers["obstudio"].(map[string]any); ok {
 		existingURL, existingHasURL := existing["url"].(string)
 		serverURL, serverHasURL := server["url"].(string)
-		if existingHasURL && serverHasURL && existingURL != "" && existingURL == serverURL {
+		if existingHasURL && serverHasURL && existingURL != "" && (existingURL == serverURL || isLegacyPortMigration(existingURL, serverURL)) {
 			for _, field := range preserveSameURLFields {
 				if value, exists := existing[field]; exists {
 					if field == "headers" {
@@ -1049,7 +1189,7 @@ func preservedCodexMCPHeaders(content, desiredURL string) ([]codexMCPHeader, err
 	if headerTables > 0 && inlineHeaderTables > 0 {
 		return nil, errors.New("mcp_servers.obstudio.http_headers uses both inline and table forms")
 	}
-	if urlAssignments == 0 || existingURL != desiredURL {
+	if urlAssignments == 0 || (existingURL != desiredURL && !isLegacyPortMigration(existingURL, desiredURL)) {
 		return nil, nil
 	}
 
@@ -1468,6 +1608,30 @@ func validateSharedURL(raw, source string) error {
 		return fmt.Errorf("invalid %s: host must be loopback", source)
 	}
 	return nil
+}
+
+// legacyDefaultObserverPort is the shared observer's retired default port.
+const legacyDefaultObserverPort = "3000"
+
+// isLegacyPortMigration reports whether existing is target with only the port
+// changed from the retired default :3000, so same-URL fields (headers, Kiro
+// env/oauth) survive the :3000 -> :17900 default-port move but are never
+// carried onto a different server.
+func isLegacyPortMigration(existing, target string) bool {
+	e, err := url.Parse(existing)
+	if err != nil {
+		return false
+	}
+	t, err := url.Parse(target)
+	if err != nil {
+		return false
+	}
+	return e.Port() == legacyDefaultObserverPort &&
+		t.Port() != "" && t.Port() != legacyDefaultObserverPort &&
+		strings.EqualFold(e.Scheme, t.Scheme) &&
+		strings.EqualFold(e.Hostname(), t.Hostname()) &&
+		strings.TrimRight(e.Path, "/") == strings.TrimRight(t.Path, "/") &&
+		e.RawQuery == t.RawQuery && e.User == nil && t.User == nil
 }
 
 func isLoopbackSharedObserverHost(hostname string) bool {

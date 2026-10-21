@@ -65,7 +65,7 @@ func TestMain(m *testing.M) {
 	// Start the binary.
 	cmd = exec.Command(binaryPath)
 	cmd.Env = append(os.Environ(),
-		"PORT="+restPort,
+		"OBSTUDIO_PORT="+restPort,
 		"OTLP_HTTP_PORT="+otlpHTTPPort,
 		"OTLP_GRPC_PORT="+otlpGRPCPort,
 		"HOST=127.0.0.1",
