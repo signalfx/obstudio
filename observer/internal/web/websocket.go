@@ -12,6 +12,12 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/validator"
 )
 
+const signalConfig = "config"
+
+// bypassesPause reports signals that must reach a paused view: they are not
+// part of the telemetry stream the user paused.
+func bypassesPause(sig string) bool { return sig == "validation" || sig == signalConfig }
+
 const (
 	throttleInterval = 100 * time.Millisecond
 	writeWait        = 10 * time.Second
@@ -78,6 +84,13 @@ func broadcastSignal(s *store.Store, v *validator.Store, sig string) {
 	for _, c := range snapshot {
 		c.onSignal(sig)
 	}
+}
+
+// NotifyConfigChanged tells every subscribed connection that the user
+// settings changed. The message carries no data; clients refetch the
+// settings.
+func NotifyConfigChanged() {
+	broadcastSignal(nil, nil, signalConfig)
 }
 
 // broadcastReload tells every open tab to reload, bypassing the
@@ -247,14 +260,14 @@ func (c *conn) onSignal(sig string) {
 	}
 
 	signals := []string{sig}
-	if sig != "validation" {
+	if !bypassesPause(sig) {
 		signals = append(signals, "stats")
 	}
 
 	if c.paused {
-		if sig == "validation" {
+		if bypassesPause(sig) {
 			c.mu.Unlock()
-			c.throttledPush("validation", true)
+			c.throttledPush(sig, true)
 			return
 		}
 		if !c.pausedNotified {

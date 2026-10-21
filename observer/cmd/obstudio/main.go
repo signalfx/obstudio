@@ -227,6 +227,11 @@ func run(config runConfig) error {
 	if observerMode == managedObserverMode && !managedLaunchAuthorized {
 		observerMode = "standalone"
 	}
+	userConfig := openUserConfig()
+	if userConfig.manager != nil {
+		// Deferred so it runs after srv.Shutdown has drained the handlers.
+		defer userConfig.manager.Close()
+	}
 	stopManaged := make(chan struct{}, 1)
 	freeAccountSubmitter := freeaccount.New(freeaccount.Config{})
 	mux := http.NewServeMux()
@@ -248,7 +253,7 @@ func run(config runConfig) error {
 		MCPURL: observerState.MCPURL,
 	}, splunkExportController, splunkTracesController,
 		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController),
-		freeAccountSubmitter)
+		freeAccountSubmitter, userConfig.api, userConfig.status)
 	mux.Handle("POST /otel/v1/traces", rcv.HTTPHandler())
 	mux.Handle("POST /v2/trace/otlp", rcv.HTTPHandler())
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
@@ -266,6 +271,7 @@ func run(config runConfig) error {
 		splunkTracesController,
 		repositoryCorrelationModeResolver,
 		freeAccountSubmitter,
+		userConfig.status,
 	)
 	webCleanup := web.Register(mux, s, v)
 

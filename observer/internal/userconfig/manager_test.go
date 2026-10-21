@@ -924,12 +924,17 @@ func TestPanicRecoveredStaysSubscribed(t *testing.T) {
 		p <- e
 	})
 	q := record(h.m)
-	for _, v := range []string{"false", "true"} {
+	// Each change waits for delivery, so the mailboxes never coalesce the two.
+	for i, v := range []string{"false", "true"} {
 		external(t, path, scaffoldWith(v), false)
 		h.m.reload()
+		if e := q.next(t); e.Generation != uint64(i+1) {
+			t.Fatalf("Q got generation %d", e.Generation)
+		}
+		if i == 0 {
+			eventually(t, func() bool { return calls.Load() == 1 }, "P's first call")
+		}
 	}
-	q.next(t)
-	q.next(t)
 	select {
 	case e := <-p:
 		if e.Generation != 2 {

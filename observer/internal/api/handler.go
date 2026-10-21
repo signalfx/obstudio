@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/audit"
+	"github.com/signalfx/obstudio/observer/internal/configstatus"
 	"github.com/signalfx/obstudio/observer/internal/dashboards"
 	"github.com/signalfx/obstudio/observer/internal/freeaccount"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
@@ -58,6 +59,8 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	var splunkExportRefresher SplunkExportConfigurationRefresher
 	var freeAccountSubmitter freeaccount.Submitter
 	var endpointConfig EndpointConfig
+	var userConfig UserConfig
+	var configStatus *configstatus.Builder
 	info := ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
@@ -68,6 +71,14 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	}
 	for _, param := range params {
 		switch value := param.(type) {
+		case UserConfig:
+			if value != nil {
+				userConfig = value
+			}
+		case *configstatus.Builder:
+			if value != nil {
+				configStatus = value
+			}
 		case *validator.Store:
 			if value != nil {
 				validationStore = value
@@ -139,6 +150,12 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	}
 	if freeAccountSubmitter != nil {
 		newFreeAccountAPI(freeAccountSubmitter).register(mux)
+	}
+	if userConfig != nil {
+		registerUserConfigRoutes(mux, userConfig)
+	}
+	if configStatus != nil {
+		registerConfigStatusRoute(mux, configStatus)
 	}
 	registerSISCIMDLoginRoutes(mux)
 	registerO11yOAuthRoutes(mux)
