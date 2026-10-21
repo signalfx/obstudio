@@ -7590,7 +7590,7 @@ code {
   display: grid;
   gap: 8px;
   margin-top: 20px;
-  padding: 20px 24px;
+  padding: 20px;
 }
 
 .cloud-setup-stack > .cloud-usage-data {
@@ -7825,6 +7825,10 @@ code {
   }
 
   .cloud-free-account__prompt {
+    padding: 18px;
+  }
+
+  .cloud-usage-data {
     padding: 18px;
   }
 
