@@ -212,7 +212,19 @@ runs. Audit and verification select
 Instrumentation selects those model-directed cases, the connection fixture,
 all four preservation modes, the focused content repair, and
 `python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json`.
-Exact invocations and final deterministic results are provided in the handover.
+The exact selected rubric commands are below; `EVAL_AUTH_HOME` denotes the
+private authenticated evaluation home. Temporary login copies used for these
+runs were removed after all model jobs completed. Audit's latest scoped result
+is 24/24, instrumentation is 61/61 and verification is 22/22; earlier failed
+outcomes remain in the archive.
+
+```sh
+make eval-rubric SKILL=skills/otel-audit EVAL_CONFIG=codex-evals.agent-role.toml EVAL_WORKERS=4 EVAL_CODEX_HOME="$EVAL_AUTH_HOME" EVAL_PATTERN='python/model-directed-agent/eval/qual python/existing-otel-agent-demo/eval/qual/audit.json'
+make eval-rubric SKILL=skills/otel-instrument EVAL_CONFIG=codex-evals.agent-role.toml EVAL_WORKERS=9 EVAL_CODEX_HOME="$EVAL_AUTH_HOME" EVAL_PATTERN='python/model-directed-agent/eval/qual python/agent-connection-demo/eval/qual python/existing-otel-agent-demo/eval/qual/instrument.json python/existing-otel-agent-demo/eval/qual/content-redaction-instrument.json python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json'
+make eval-rubric SKILL=skills/otel-verify EVAL_CONFIG=codex-evals.agent-role.toml EVAL_WORKERS=4 EVAL_CODEX_HOME="$EVAL_AUTH_HOME" EVAL_PATTERN='python/model-directed-agent/eval/qual python/existing-otel-agent-demo/eval/qual/verify.json'
+```
+
+Final deterministic commands and results are provided in the handover.
 
 ## Combined review: stdlib logging compatibility
 
