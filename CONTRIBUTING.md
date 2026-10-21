@@ -303,17 +303,25 @@ calls, or offline PR comments.
 
 ## Releases
 
-Releases are automated via GitHub Actions and GoReleaser. To cut a release:
+Releases are automated via GitHub Actions and GoReleaser. The plugin manifest
+versions must be committed to `main` before the tag and plugin ZIPs exist, so
+a release is two steps:
 
-```sh
-git tag v0.2.0
-git push origin v0.2.0
-```
+1. Run the [Prepare Release](.github/workflows/prepare-release.yml) workflow
+   from the Actions tab with the new version (for example `0.2.0`). It opens a
+   PR that sets both plugin manifest versions to `v0.2.0`.
+2. Review and merge that PR. [tag-release.yml](.github/workflows/tag-release.yml)
+   tags the merge commit `v0.2.0` and dispatches the release workflow.
 
-This triggers [.github/workflows/release.yml](.github/workflows/release.yml),
-which cross-compiles for linux/darwin/windows, builds platform-specific VSIX
-packages, creates a GitHub Release, uploads both archive types, and publishes
-the VSIX packages to Open VSX.
+Do not push release tags by hand. If you do, or tag a commit that is not on
+`main`, the first job in [release.yml](.github/workflows/release.yml) fails
+the release before anything is built because the manifest versions do not match
+the tag. If the tag was created but the release workflow did not start, run
+`gh workflow run release.yml --ref v0.2.0`.
+
+The release workflow cross-compiles for linux/darwin/windows, builds
+platform-specific VSIX packages, creates a GitHub Release, uploads both archive
+types, and publishes the VSIX packages to Open VSX.
 
 Kiro and Cursor use [Open VSX](https://open-vsx.org/) for extension discovery.
 The release workflow verifies the `OVSX_PAT` repository secret before it
@@ -332,10 +340,12 @@ See [.goreleaser.yaml](.goreleaser.yaml) for the full release configuration.
 
 GoReleaser publishes one `checksums.txt` containing SHA-256 hashes for the
 Observer runtime archives, Claude and Codex plugin archives, and VSIX packages.
-Its follow-up sync PR updates both plugin manifest versions and the Claude
-marketplace's versioned archive URL and SHA-256 from that manifest. Review and
-merge that PR to advance the published Claude marketplace entry. The Codex
-repo-local marketplace remains a path source.
+Its follow-up sync PR updates the Claude marketplace's versioned archive URL
+and SHA-256 from that manifest, and pins the Codex marketplace source to the
+release tag. It does not change plugin manifest versions; those were set by the
+prepare-release PR. Review and merge the sync PR to advance the published
+marketplace entries. Until it merges, the Codex marketplace ref may point at the
+previous release tag.
 
 For Claude development, temporarily change `.claude-plugin/marketplace.json`
 to use `"source": "./plugins/obstudio"` when testing the local marketplace;
