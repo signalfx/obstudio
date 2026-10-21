@@ -137,9 +137,6 @@ func TestTelemetryFixesInvalidValue(t *testing.T) {
 	assertHoldsLiteral(t, path, false)
 
 	t.Run("enabled line removed", func(t *testing.T) {
-		// Removing the only key leaves "telemetry:" with a null value, which
-		// the file layer currently treats as a non-mapping section.
-		t.Skip("pending spec clarification: null section value")
 		_, path := telemetryHome(t)
 		writeConfig(t, path, scaffoldWith("  enabled: true\n", ""))
 		r := runTelemetry("telemetry", "enable")
@@ -226,9 +223,6 @@ func TestTelemetryStatusMatrix(t *testing.T) {
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
-			if row.name == "line removed" {
-				t.Skip("pending spec clarification: null section value")
-			}
 			_, path := telemetryHome(t)
 			if row.content != nil {
 				writeConfig(t, path, *row.content)

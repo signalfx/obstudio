@@ -116,9 +116,6 @@ func TestStateTable(t *testing.T) {
 	}
 	for _, r := range rows {
 		t.Run(r.name, func(t *testing.T) {
-			if r.name == "line removed" {
-				t.Skip("pending spec clarification: null section value")
-			}
 			if r.unixOnly && (runtime.GOOS == "windows" || os.Geteuid() == 0) {
 				t.Skip("needs Unix permissions and a non-root user")
 			}
@@ -229,9 +226,10 @@ func TestFingerprintStability(t *testing.T) {
 		t.Error("a different value at the same site changed the fingerprint")
 	}
 	different := map[string]string{
-		"maybe":       f1,
-		"not mapping": fp(noSection() + "telemetry: true\n"),
-		"broken":      fp("telemetry: [unclosed"),
+		"maybe":        f1,
+		"line removed": fp(scaffoldWith("  enabled: true\n", "")),
+		"not mapping":  fp(noSection() + "telemetry: true\n"),
+		"broken":       fp("telemetry: [unclosed"),
 	}
 	seen := map[string]string{}
 	for name, f := range different {

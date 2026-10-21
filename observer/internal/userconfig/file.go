@@ -118,6 +118,10 @@ func decodeTree(root *yaml.Node) (Settings, []Diagnostic) {
 			diags = append(diags, absent(d))
 			continue
 		}
+		if isNullScalar(secNode) {
+			diags = append(diags, absent(d))
+			continue
+		}
 		if secNode.Kind != yaml.MappingNode {
 			badSections[sec] = true
 			diags = append(diags, Diagnostic{Key: sec, Kind: DiagInvalid, Line: secNode.Line, Message: sec + ": is not a mapping"})
@@ -136,6 +140,12 @@ func decodeTree(root *yaml.Node) (Settings, []Diagnostic) {
 		d.assign(&settings, v)
 	}
 	return settings, append(diags, unknownKeys(root)...)
+}
+
+// isNullScalar reports a key left with no value, such as a section whose
+// only entry was deleted; it reads as empty rather than malformed.
+func isNullScalar(n *yaml.Node) bool {
+	return n.Kind == yaml.ScalarNode && n.ShortTag() == "!!null"
 }
 
 func absent(d def) Diagnostic {
@@ -337,6 +347,11 @@ func applyChanges(data []byte, entries []change) ([]byte, error) {
 		if secNode == nil {
 			secNode = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 			root.Content = append(root.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: sec}, secNode)
+		} else if isNullScalar(secNode) {
+			*secNode = yaml.Node{
+				Kind: yaml.MappingNode, Tag: "!!map",
+				HeadComment: secNode.HeadComment, LineComment: secNode.LineComment, FootComment: secNode.FootComment,
+			}
 		} else if secNode.Kind != yaml.MappingNode {
 			return nil, fmt.Errorf("%w: %s", ErrNotMapping, sec)
 		}

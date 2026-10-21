@@ -213,12 +213,6 @@ func TestParseMatrix(t *testing.T) {
 	}
 	for _, r := range rows {
 		t.Run(r.name, func(t *testing.T) {
-			if r.name == "key line removed" {
-				// Removing the only key leaves "telemetry:" with a null value,
-				// which the non-mapping section rule reports on the section.
-				// Skipped until the spec settles which rule applies.
-				t.Skip("pending spec clarification: null section value")
-			}
 			path := writeFile(t, r.content)
 			s, diags, err := Load(path)
 			if err != nil {
@@ -664,6 +658,24 @@ func TestWriteInsertsMissingSection(t *testing.T) {
 	}
 	if !strings.Contains(readFile(t, path), "# keep") {
 		t.Error("comment lost")
+	}
+}
+
+func TestWriteFillsNullSection(t *testing.T) {
+	content := strings.Replace(Scaffold(), "  enabled: true\n", "", 1)
+	path := writeFile(t, content)
+	if err := Write(path, TelemetryEnabled, true); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	s, diags := mustLoad(t, path)
+	if !s.Telemetry.Enabled || len(diags) != 0 {
+		t.Errorf("after write: %+v %v", s, diags)
+	}
+	out := readFile(t, path)
+	for _, l := range strings.Split(content, "\n") {
+		if l = strings.TrimSpace(l); strings.HasPrefix(l, "#") && !strings.Contains(out, l) {
+			t.Errorf("comment %q lost:\n%s", l, out)
+		}
 	}
 }
 
