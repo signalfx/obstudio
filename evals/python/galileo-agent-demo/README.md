@@ -29,3 +29,11 @@ imports its OTLP exporter. Its transport dependencies use the compatible OTel
 family below 1.45: Galileo's exporter accesses the inherited requests session,
 which the newer transport removed. This keeps the real existing exporter
 runnable without patching the SDK or changing application ownership.
+
+## Replay agent entrypoint
+
+`python agent.py` reuses the web startup's Galileo provider with an offline
+model replay. The model selects a tool and consumes its returned message before
+the final answer. This is a distinct agent boundary; the existing streaming
+route remains a fixed workflow. Audit both entrypoints and their native
+project/stream bindings without adding a duplicate workflow around the agent.

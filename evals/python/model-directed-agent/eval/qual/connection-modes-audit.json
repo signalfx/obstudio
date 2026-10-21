@@ -1,0 +1,23 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "studio-connection-modes",
+      "eval_inputs": [
+        "eval/inputs/agent-resource-cases.json",
+        "eval/inputs/sdk-local-routing-evidence.json"
+      ],
+      "task": "Use $otel-audit for this supplemental captured-source review only: Assess project, stream and runtime-routing readiness of each independent source case and each studio_states entry in the supplied inputs. Do not perform a new full service/GenAI semantic-field audit or rewrite canonical audit/selection/instrumentation artifacts. Save .observe/connection-modes.json and .observe/connection-modes.md with per-case/per-state decisions, safe implementation/verification actions and exact remaining proof. The SDK evidence is a dated source/API capture, not an installed or cloud proof claim for these apps. No dependencies, apps, services, browser or model/cloud calls; preserve application/eval inputs. Assess local SDK creation versus backend-dependent SDK logging independently. Do not recommend a production monkeypatch, fake logger, dummy IDs or a destination migration. Include distinct acceptance scenarios for the supplied previously validated complete binding, names-only configuration and changed/rejected identities. Do not conflate retaining a valid route with proving a fresh resource lookup. Also assess native_startup_cases independently: define a distinct new-process acceptance case for the prevalidated persisted binding with its resource API unavailable and local OTLP receiver available. Keep it separate from same-PID names-only activation and distinguish retained routing from fresh resource-resolution evidence."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect each supplied source case and dated SDK API capture, actual saved mode decisions and evidence limits, not only policy prose."
+  ],
+  "rubric": [
+    "Assesses all six agent producer cases plus non-agent control across connected, disconnected, unavailable and reconnected states, keeping default agent resource requirements independent of connection/SDK presence and leaving the non-agent control outside forced adoption.",
+    "Connected mode requires resolved project/stream association, consumed correct routing and exact fresh destination trace proof; source captures, fake IDs or acknowledgements are never actual product visibility. Running-disconnected separates working ordinary local telemetry from blocked real resources/AO delivery and never creates after failed lookups or silently changes to direct cloud.",
+    "Uses captured SDK source correctly: backend-dependent @log can return business output after failed logger initialization while emitting no spans. That is not working local instrumentation. Identifies supported SDK public local span helper plus app-owned function decorator, with exact signature/creation-kind/sampling limitations and the existing per-boundary public OTel exception when needed. No production SDK edits or test-only fake logger injection.",
+    "For native Studio routing, retains valid resolved same-destination headers and trace Resources through transient503. Names-only startup automatically retries normal resource calls and activates the complete binding in the same PID with zero creates when existing resources become available; preserves endpoint/protocol/harmless headers/other sinks and proves business/local telemetry. Galileo and explicit direct destinations stay independent of Studio state with native vendor configuration.",
+    "Unavailable Studio blocks receiver proof but not code/business/native in-memory checks. For selected names without IDs, reconnect automatically resolves exact existing resources and updates headers plus trace Resources in the same PID with zero creates; already-valid same-destination bindings can forward subsequent requests without relookup or restart. A changed organization or rejected identity requires fresh resolution. Keep one producer/route per invocation and no duplicate canonical operations. Reports source/configuration, local emission/receipt, resource binding and exact remote trace proof separately and never fabricates runtime results. Explicitly includes the supplied new-process/API-outage case: the first subsequent native export retains the complete already-validated same-destination binding without successful resource relookup, with business/local signals preserved; this is a distinct acceptance scenario rather than a same-PID recovery claim."
+  ]
+}
