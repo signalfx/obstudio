@@ -130,6 +130,7 @@ func newRootCmd(config *runConfig) *cobra.Command {
 	root.AddCommand(newInstallCmd())
 	root.AddCommand(newLifecycleCommands()...)
 	root.AddCommand(newTokenTelemetryCommand())
+	root.AddCommand(newTelemetryCommand())
 	return root
 }
 
