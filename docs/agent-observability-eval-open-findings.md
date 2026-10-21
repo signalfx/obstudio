@@ -36,7 +36,7 @@ preserved in the archive.
 
 ## Observed failure rates before this correction
 
-The [tracked history archive](evidence/agent-observability-eval-history.json)
+The [tracked history archive](../evals/evidence/agent-observability-eval-history.json)
 contains all **19 retained graded runs / 69 task grades** for the fifteen-task
 cohort ending at run `20261020T224014321690Z`, whose source packet was committed
 as `ab8d7e8`, including partial reruns: **412/431 checks**, with
@@ -91,7 +91,7 @@ grades, not 2/3; the other task failures concerned routing closure and concrete
 part validation. The resource-table audit's `rubric-2` likewise failed **1/4**;
 its other failures concerned applicability and cached-launch acceptance.
 
-The archive embeds all failed check notes/evidence, every check ID/boolean,
+The eval evidence fixtures embed all failed check notes/evidence, every check ID/boolean,
 four independent reproduction receipts, four original failing sanitizer source
 snapshots and the baseline report summaries/failures. SHA-256 values retain
 provenance. This content survives a squash merge without the original commit
@@ -100,7 +100,7 @@ no historical grade is changed or relabelled.
 
 ## Correction-round adjudication
 
-The [correction evidence](evidence/agent-observability-correction-runs.json)
+The [correction evidence](../evals/evidence/agent-observability-correction-runs.json)
 retains new raw grades, both non-agent report objects, repaired runtime source
 and independent replay receipts. The first updated audit run was **23/24**, instrumentation **53/53**
 (including all four preservation modes and the focused repair), and verification
@@ -249,7 +249,7 @@ fails, while the corrected code passes on SDK 1.27.0, 1.44.0 and 1.45.1.
 All eleven fixture regression methods now run through normal harness validation
 using declared development dependencies.
 
-The [tracked review receipt](evidence/agent-stdlib-logging-review.json) preserves
+The [tracked review receipt](../evals/evidence/agent-stdlib-logging-review.json) preserves
 the original absence failure, intermediate duplicate failure, exact source
 snapshots/hashes, dependency versions and positive matrix logs. Its replay
 cases identify the twelve-profile and fourteen-profile source revisions
@@ -272,8 +272,8 @@ The partial, read-only Claude review of `27bca13` found three confirmed
 fixture defects: `/chat` echoed raw provider exceptions, non-string model tool
 cities escaped the handled `invalid_arguments` path, and both supplied audits
 cited reset-handler lines for the serving entry point. Original-code negative
-controls reproduce all three; the tracked
-[follow-up receipt](evidence/agent-fixture-review-followup.json) retains sources,
+controls reproduce all three; the historical
+[follow-up receipt](https://github.com/signalfx/obstudio/blob/5cc7b78f3beaf92a245ae8436cb727d9b9d8c18e/docs/evidence/agent-fixture-review-followup.json) retains sources,
 raw logs and SHA-256 values. An initial HTTP test used an unavailable transport
 import; that setup error is preserved separately from the successful
 transport-independent error-object replay.
@@ -318,7 +318,7 @@ explicit remote-model, in-process tool and existing-native-producer controls,
 plus the actual prior deferral excerpt as untrusted report data. Requirements
 were strengthened; neither original failed grade was overwritten.
 
-The [closure receipt](evidence/agent-report-closure-corrections.json) retains
+The [closure receipt](../evals/evidence/agent-report-closure-corrections.json) retains
 both failed reports, original rubric definitions and inputs, grades/hashes, focused public
 API replay source/results and correction-source receipts after a squash.
 Through all eleven retained correction rounds, the resource-table audit task
@@ -386,7 +386,7 @@ lookup-to-export path copied from the agent template. Its checker accepted
 both because it checked selected foreign API tokens and N/A flags/references
 without closing the actual acceptance clauses. These are report defects, not
 grounds to relax the rubric. The
-[retained receipt](evidence/agent-routing-acceptance-review.json) embeds the
+[retained receipt](../evals/evidence/agent-routing-acceptance-review.json) embeds the
 failed report, checker, checker receipt, grade, original qualifier and source
 cases with SHA-256 values.
 

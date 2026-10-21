@@ -15,7 +15,23 @@ import pytest
 
 
 FIXTURE = Path(__file__).parent / "python/model-directed-agent"
+EVIDENCE = Path(__file__).parent / "evidence"
 REFERENCE = re.compile(r"(?<![\w/])((?:[\w.-]+/)*[\w.-]+\.(?:py|md|txt))(?::(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*))?")
+
+
+@pytest.mark.parametrize("name", [
+    "agent-observability-correction-runs.json",
+    "agent-observability-eval-history.json",
+    "agent-report-closure-corrections.json",
+    "agent-routing-acceptance-review.json",
+    "agent-stdlib-logging-review.json",
+])
+def test_retained_evidence_is_an_eval_fixture_with_a_valid_documentation_link(name):
+    root = Path(__file__).parents[1]
+    assert (EVIDENCE / name).is_file()
+    assert not (root / "docs/evidence" / name).exists()
+    document = (root / "docs/agent-observability-eval-open-findings.md").read_text()
+    assert f"(../evals/evidence/{name})" in document
 
 
 @pytest.mark.parametrize("name", ["agent-audit", "prior-audit"])
@@ -114,7 +130,7 @@ def test_model_directed_application_regressions_use_real_sdk_and_stdlib_logs():
         )], env=environment, capture_output=True, text=True, timeout=10,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    receipt = json.loads((FIXTURE.parents[2] / "docs/evidence/agent-stdlib-logging-review.json").read_text())
+    receipt = json.loads((EVIDENCE / "agent-stdlib-logging-review.json").read_text())
     for key in ("baseline_setup_source", "regression_check_source"):
         source = receipt[key]
         assert hashlib.sha256(source["text"].encode()).hexdigest() == source["sha256"]
@@ -145,7 +161,7 @@ def test_connection_probe_public_wire_contract(case):
 
 
 def test_retained_eval_history_counts_include_partial_runs_and_failed_criteria():
-    archive = Path(__file__).parents[1] / "docs/evidence/agent-observability-eval-history.json"
+    archive = EVIDENCE / "agent-observability-eval-history.json"
     history = json.loads(archive.read_text())
     expected = history["selection"]["tasks_by_skill"]
     identities = set()
@@ -190,7 +206,7 @@ def test_retained_eval_history_counts_include_partial_runs_and_failed_criteria()
 
 def test_retained_failure_evidence_survives_without_git_or_local_run_directories():
     root = Path(__file__).parents[1]
-    history = json.loads((root / "docs/evidence/agent-observability-eval-history.json").read_text())
+    history = json.loads((EVIDENCE / "agent-observability-eval-history.json").read_text())
     for receipt in history["independent_reproductions"]:
         assert hashlib.sha256(receipt["raw_json"].encode()).hexdigest() == receipt["original_sha256"]
         assert json.loads(receipt["raw_json"])
@@ -207,7 +223,7 @@ def test_retained_failure_evidence_survives_without_git_or_local_run_directories
     assert sum(summary["with_skill"]["rubric"]["total"] for summary in summaries) == 93
     assert sum(len(report["failures"]) for report in baseline) == 7
     document = (root / "docs/agent-observability-eval-open-findings.md").read_text()
-    assert "evidence/agent-observability-eval-history.json" in document
+    assert "../evals/evidence/agent-observability-eval-history.json" in document
     for rate in history["task_rates"]:
         complete, all_runs = rate["complete"], rate["all"]
         assert (f"| {rate['skill']} / `{rate['task']}` | {complete['failed_tasks']}/{complete['runs']} | "
@@ -239,7 +255,7 @@ def test_content_counterexamples_retain_observed_representation_failures():
 
 @pytest.mark.parametrize("snapshot_index", range(4))
 def test_archived_sanitizer_failures_replay_from_tracked_data(snapshot_index):
-    archive = Path(__file__).parents[1] / "docs/evidence/agent-observability-eval-history.json"
+    archive = EVIDENCE / "agent-observability-eval-history.json"
     source = json.loads(archive.read_text())["failing_source_snapshots"][snapshot_index]
     tree = ast.parse(source["text"])
     allowed = {
@@ -275,7 +291,7 @@ def test_archived_sanitizer_failures_replay_from_tracked_data(snapshot_index):
 
 
 def test_correction_adjudications_retain_raw_grades_and_effective_applicability():
-    archive = Path(__file__).parents[1] / "docs/evidence/agent-observability-correction-runs.json"
+    archive = EVIDENCE / "agent-observability-correction-runs.json"
     history = json.loads(archive.read_text())
     first = history["rounds"][0]
     for decision in first["adjudications"]:
@@ -322,7 +338,7 @@ def test_correction_adjudications_retain_raw_grades_and_effective_applicability(
 
 
 def test_correction_archive_counts_every_grade_and_retains_recovery_sources():
-    archive = Path(__file__).parents[1] / "docs/evidence/agent-observability-correction-runs.json"
+    archive = EVIDENCE / "agent-observability-correction-runs.json"
     history = json.loads(archive.read_text())
     for phase in history["rounds"]:
         for run in phase["runs"]:
@@ -352,7 +368,7 @@ def test_correction_archive_counts_every_grade_and_retains_recovery_sources():
 
 def test_correction_closure_notes_match_raw_audit_history_and_current_reports():
     root = Path(__file__).parents[1]
-    history = json.loads((root / "docs/evidence/agent-observability-correction-runs.json").read_text())
+    history = json.loads((EVIDENCE / "agent-observability-correction-runs.json").read_text())
     document = (root / "docs/agent-observability-eval-open-findings.md").read_text()
     audit = [run for phase in history["rounds"] for run in phase["runs"]
              if run["skill"] == "otel-audit"]
@@ -393,8 +409,7 @@ def test_correction_closure_notes_match_raw_audit_history_and_current_reports():
 
 
 def test_routing_acceptance_review_retains_actual_failed_rows_and_checker_blind_spots():
-    root = Path(__file__).parents[1]
-    receipt = json.loads((root / "docs/evidence/agent-routing-acceptance-review.json").read_text())
+    receipt = json.loads((EVIDENCE / "agent-routing-acceptance-review.json").read_text())
     files = receipt["original_files"]
     for source in files.values():
         assert hashlib.sha256(source["text"].encode()).hexdigest() == source["sha256"]
@@ -446,7 +461,7 @@ def test_routing_acceptance_review_retains_actual_failed_rows_and_checker_blind_
 
 @pytest.mark.parametrize("source_index", range(2))
 def test_fresh_genai_and_logs_samples_fix_exact_original_quoted_scalars(source_index):
-    archive = Path(__file__).parents[1] / "docs/evidence/agent-observability-correction-runs.json"
+    archive = EVIDENCE / "agent-observability-correction-runs.json"
     source = json.loads(archive.read_text())["fresh_content_sources"][source_index]
     assert hashlib.sha256(source["text"].encode()).hexdigest() == source["sha256"]
     tree = ast.parse(source["text"])
