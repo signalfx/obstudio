@@ -306,10 +306,23 @@ were strengthened; neither original failed grade was overwritten.
 The [closure receipt](evidence/agent-report-closure-corrections.json) retains
 both failed reports, original rubric definitions and inputs, grades/hashes, focused public
 API replay source/results and correction-source receipts after a squash.
-Through the seven retained correction rounds, the resource-table audit task
-failed **4/7** runs (different criteria/failure families across revisions), and
-Studio connection verification failed **1/7**. These descriptive rates include
-the two failures above; the raw grades and source manifests expose each change.
+Through all eight retained correction rounds, the resource-table audit task
+failed **4/8** runs, and Studio connection verification failed **1/8**. These
+descriptive rates include the two failures above; the raw grades and source
+manifests expose each change. All post-correction audit failures belong to the
+resource-table task:
+
+| Post-correction audit task | Runs with a failed criterion / retained runs | Failed criteria, in run order |
+|---|---:|---|
+| `active-signal-matrix-audit` | 0/8 | None |
+| `agent-resource-table-audit` | 4/8 | rubric-6; rubric-2; rubric-2 + rubric-7; rubric-4 |
+| `agent-role-from-behavior` | 0/8 | None |
+| `studio-connection-modes` | 0/8 | None |
+
+The rotating criteria identify a concentrated compliance risk in the seven-case,
+four-state resource matrix. They are iterative-history observations across
+revisions, not a fixed-version flake rate. A later pass does not close a prior
+counterexample without its focused correction and regression.
 The corrected SDK connection case passed **5/5**, including all four controls.
 The complete owning-skill audit/verifier reruns passed **8/8 tasks, 46/46
 checks**: audit **24/24**, verification **22/22**. The Galileo mismatch mutation
@@ -319,6 +332,20 @@ The latest current-source reports therefore contain **17 tasks, 107/107 checks**
 from those scoped runs. This is a report set, not a new coordinated seventeen-
 task sweep. Every raw grade, including the preceding 105/107 cohort, remains
 retained without duplicating the unchanged instrument grades.
+
+| Current rubric report | Run ID |
+|---|---|
+| Audit | `20261021T032714172870Z` |
+| Instrument | `20261021T030000987717Z` |
+| Verify | `20261021T032656650895Z` |
+
+Audit and verification come from the final scoped batch; instrumentation comes
+from the preceding complete batch that scored 15/17 overall. Three consecutive
+complete correction cohorts passed 17/17 before the later fixture and guidance
+edits: shared-language/recovery acceptance, stdlib logging, and public-handler
+reuse. Those runs are prior stability evidence at their recorded source
+revisions; none establishes a coordinated seventeen-task sweep at the final
+tree.
 
 ## Completed evidence baseline
 
@@ -398,3 +425,16 @@ fresh full-scope results. Local correction does not establish that every future
 generated app is safe or that live-cloud delivery has been verified. The
 archives preserve both failing and corrected source snapshots so a later
 reviewer can replay the evidence after a squash merge.
+
+For `agent-resource-table-audit`, closure must address the rotating failure
+families above, including non-agent applicability, language/producer ownership,
+bounded same-process recovery and destination-specific routing. The complete
+matrix remains the integration check. If smaller tasks are added to localize
+these failures, retain a combined check for contradictions between cases and
+states, including the existing mutation controls. Splitting must not discard
+those checks or reinterpret historical failures as passes. No task split has
+been implemented in this correction.
+
+A coordinated final-tree claim requires a new complete seventeen-task sweep
+against that recorded tree with every grade retained. The current scoped
+report set does not satisfy that claim; no such new sweep is reported here.

@@ -350,6 +350,34 @@ def test_correction_archive_counts_every_grade_and_retains_recovery_sources():
     assert all(history["bounded_recovery_integration"]["fixture_match"].values())
 
 
+def test_correction_closure_notes_match_raw_audit_history_and_current_reports():
+    root = Path(__file__).parents[1]
+    history = json.loads((root / "docs/evidence/agent-observability-correction-runs.json").read_text())
+    document = (root / "docs/agent-observability-eval-open-findings.md").read_text()
+    audit = [run for phase in history["rounds"] for run in phase["runs"]
+             if run["skill"] == "otel-audit"]
+    tasks = sorted({entry["task"] for run in audit for entry in run["grades"]})
+    for task in tasks:
+        grades = [entry["grade"] for run in audit for entry in run["grades"]
+                  if entry["task"] == task]
+        failed = [[check["id"] for check in grade["checks"] if not check["pass"]]
+                  for grade in grades]
+        failures = [checks for checks in failed if checks]
+        criteria = "; ".join(" + ".join(checks) for checks in failures) or "None"
+        assert f"| `{task}` | {len(failures)}/{len(grades)} | {criteria} |" in document
+    latest = {}
+    for phase in history["rounds"]:
+        for run in phase["runs"]:
+            latest[run["skill"]] = run
+    for skill, label in (("otel-audit", "Audit"), ("otel-instrument", "Instrument"),
+                         ("otel-verify", "Verify")):
+        report = json.loads((root / f"eval-reports/{skill}/rubric/benchmark.json").read_text())
+        run_id = report["metadata"]["run_id"]
+        assert latest[skill]["run_id"] == run_id
+        assert f"| {label} | `{run_id}` |" in document
+    assert "no such new sweep is reported here" in document
+
+
 @pytest.mark.parametrize("source_index", range(2))
 def test_fresh_genai_and_logs_samples_fix_exact_original_quoted_scalars(source_index):
     archive = Path(__file__).parents[1] / "docs/evidence/agent-observability-correction-runs.json"
