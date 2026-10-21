@@ -1,0 +1,63 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (MAJOR.MINOR.PATCH[-prerelease][+build]), with or without a leading v"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare-release:
+    name: Open plugin version bump PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate release version
+        id: release
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v${VERSION#v}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "::error::Tag ${tag} already exists"
+            exit 1
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump committed plugin manifests to release version
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          python3 plugins/obstudio/scripts/stage_obstudio_plugin.py \
+            --bump-manifests --release-tag "$RELEASE_TAG"
+          python3 plugins/obstudio/scripts/stage_obstudio_plugin.py \
+            --check-manifest-versions --release-tag "$RELEASE_TAG"
+
+      - name: Open release preparation PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: bot/prepare-release-${{ steps.release.outputs.tag }}
+          base: main
+          delete-branch: true
+          commit-message: "chore(release): prepare ${{ steps.release.outputs.tag }}"
+          title: "Release ${{ steps.release.outputs.tag }}"
+          body: |
+            Sets both plugin manifest versions to `${{ steps.release.outputs.tag }}` so the release tag and plugin ZIPs are created from manifests that already carry the release version.
+
+            **Merging this PR cuts the release.** [tag-release.yml](${{ github.server_url }}/${{ github.repository }}/blob/main/.github/workflows/tag-release.yml) tags the merge commit `${{ steps.release.outputs.tag }}` and dispatches [release.yml](${{ github.server_url }}/${{ github.repository }}/blob/main/.github/workflows/release.yml). After the release publishes, a follow-up sync PR points the Claude and Codex marketplaces at it.
+
+            Files updated:
+            - `plugins/obstudio/.claude-plugin/plugin.json`
+            - `plugins/obstudio/.codex-plugin/plugin.json`

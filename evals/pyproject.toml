@@ -9,10 +9,19 @@ dependencies = [
   "pytest-codex-evals",
   "pytest>=8.0.0",
   "pytest-xdist>=3.6.0",
+  "python-dotenv>=1",
 ]
 
 [tool.uv.sources]
 pytest-codex-evals = { path = "../pytest-codex-evals", editable = true }
+
+[dependency-groups]
+dev = [
+  "flask>=3.0.0",
+  "openai>=1.30.0",
+  "opentelemetry-instrumentation-flask>=0.48b0",
+  "opentelemetry-instrumentation-logging>=0.48b0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["."]

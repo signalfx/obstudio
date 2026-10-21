@@ -1,0 +1,21 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "repair-mislabeled-agent",
+      "eval_inputs": [
+        "eval/inputs/agent-audit.json"
+      ],
+      "task": "Create ./service/.observe and copy eval/inputs/agent-audit.json to .observe/otel-audit.json. Use $otel-instrument --ids OTEL-002 ./service to implement the selected agent-lifecycle repair and run internal verification. Use a compatible isolated Python environment and synthetic fake provider responses; no cloud keys, live model calls, AO SDK adoption or UI. Existing providers/exports and business behavior stay owned by the app. Run python probe.py --expect-agent and the repaired historical instrumentation test; probe.py is an independent oracle and must remain byte-identical. Record real commands and native records, not planned assertions. Keep unselected metrics/logging/transport/content changes outside this selected repair; report unavailable receiver proof truthfully."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect actual source diff, probe-native.json and actor commands/results, bound artifacts and the immutable probe.py."
+  ],
+  "rubric": [
+    "Repairs the existing run_turn creator to a source-named invoke_agent boundary without a duplicate workflow/agent wrapper or replaced provider/exporter/SDK. Preserves safe existing span/metric aliases or documents/test migrations.",
+    "Runs real no-tool, tool-feedback and provider-error paths through original app code, preserving exact returned values, argument/result mutations and exception semantics; fixes historical tests rather than accepting their workflow expectation.",
+    "Native records show exactly one SmashBot agent per turn with correct model/tool parents, attempted call aggregates and failure status/type. Selected agent duration histogram has seconds units, correct source-applicable dimensions and one observation on each actual exit.",
+    "Runs unchanged probe.py --expect-agent successfully and keeps proof source-bound; writes valid audit/selection/instrumentation/verification artifacts. Does not fabricate model, OTLP/cloud or runtime evidence and leaves unselected telemetry contracts intact."
+  ]
+}

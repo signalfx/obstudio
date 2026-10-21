@@ -1,0 +1,75 @@
+{
+  "kind": "independent-source-cases",
+  "limits": "These are separate source snapshots, not executed app runtimes or live resource/SDK proof. No credentials or resource receipts are supplied. Existing configured names are selectors, not verified resources.",
+  "cases": {
+    "fresh_ao": {
+      "runtime": "Python >=3.11; no telemetry setup or active vendor integration",
+      "source": "def run_agent(client, messages, tools):\n    while True:\n        response = client.complete(messages=messages, tools=list(tools))\n        messages.append(response.message)\n        if not response.tool_calls:\n            return response.text\n        for call in response.tool_calls:\n            result = tools[call.name](**call.arguments)\n            messages.append({\"role\": \"tool\", \"tool_call_id\": call.id, \"content\": result})\n"
+    },
+    "native_otel": {
+      "runtime": "Python >=3.11",
+      "source": "from opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter\nprovider=TracerProvider()\nprovider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))\ntrace.set_tracer_provider(provider)\ndef run_agent(client, messages, tools):\n    while True:\n        response = client.complete(messages=messages, tools=list(tools))\n        messages.append(response.message)\n        if not response.tool_calls:\n            return response.text\n        for call in response.tool_calls:\n            result = tools[call.name](**call.arguments)\n            messages.append({\"role\": \"tool\", \"tool_call_id\": call.id, \"content\": result})\n"
+    },
+    "galileo": {
+      "runtime": "Existing supported galileo[otel] SDK; native destination is configured by GALILEO_* settings",
+      "source": "import os\nfrom galileo.otel import GalileoSpanProcessor, add_galileo_span_processor\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nprovider=TracerProvider()\nadd_galileo_span_processor(provider, GalileoSpanProcessor(project=os.getenv(\"GALILEO_PROJECT\")))\ntrace.set_tracer_provider(provider)\ndef run_agent(client, messages, tools):\n    while True:\n        response = client.complete(messages=messages, tools=list(tools))\n        messages.append(response.message)\n        if not response.tool_calls:\n            return response.text\n        for call in response.tool_calls:\n            result = tools[call.name](**call.arguments)\n            messages.append({\"role\": \"tool\", \"tool_call_id\": call.id, \"content\": result})\n",
+      "launch_profile": {
+        "GALILEO_PROJECT": "support",
+        "GALILEO_LOG_STREAM": "production",
+        "GALILEO_CONSOLE_URL": "https://app.galileo.ai"
+      }
+    },
+    "galileo_plus_native": {
+      "runtime": "Existing Galileo SDK and distinct operator-owned OTLP sink",
+      "source": "import os\nfrom galileo.otel import GalileoSpanProcessor, add_galileo_span_processor\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter\nprovider=TracerProvider()\nadd_galileo_span_processor(provider, GalileoSpanProcessor(project=os.getenv(\"GALILEO_PROJECT\")))\nprovider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=os.environ[\"INTERNAL_TRACE_ENDPOINT\"])))\ntrace.set_tracer_provider(provider)\ndef run_agent(client, messages, tools):\n    while True:\n        response = client.complete(messages=messages, tools=list(tools))\n        messages.append(response.message)\n        if not response.tool_calls:\n            return response.text\n        for call in response.tool_calls:\n            result = tools[call.name](**call.arguments)\n            messages.append({\"role\": \"tool\", \"tool_call_id\": call.id, \"content\": result})\n",
+      "launch_profile": {
+        "GALILEO_PROJECT": "support",
+        "GALILEO_LOG_STREAM": "production",
+        "INTERNAL_TRACE_ENDPOINT": "http://127.0.0.1:55318/v1/traces"
+      }
+    },
+    "existing_ao": {
+      "runtime": "Existing supported splunk-ao SDK; no resource selectors in the launch profile",
+      "source": "from splunk_ao import log\ndef run_agent(client, messages, tools):\n    while True:\n        response = client.complete(messages=messages, tools=list(tools))\n        messages.append(response.message)\n        if not response.tool_calls:\n            return response.text\n        for call in response.tool_calls:\n            result = tools[call.name](**call.arguments)\n            messages.append({\"role\": \"tool\", \"tool_call_id\": call.id, \"content\": result})\n\nrun_agent = log(run_agent)\n"
+    },
+    "fresh_native_fallback": {
+      "runtime": "Go; bounded supplied support evidence establishes native OpenTelemetry support but no compatible AO creator SDK in this environment",
+      "source": "func RunAgent(ctx context.Context, model Model, tools map[string]Tool, history []Message) (string, error) {\n for {\n  reply, err := model.Complete(ctx, history, tools)\n  if err != nil { return \"\", err }; history = append(history, reply.Message)\n  if len(reply.Calls) == 0 { return reply.Text, nil }\n  for _, call := range reply.Calls { value, err := tools[call.Name](ctx, call.Arguments); if err != nil { return \"\", err }; history = append(history, ToolResult(call.ID, value)) }\n }\n}\n"
+    },
+    "non_agent_control": {
+      "runtime": "Python; no vendor integration or resource setup",
+      "source": "def summarize(client, text):\n    return client.complete(messages=[{\"role\":\"user\", \"content\":text}]).text\n"
+    }
+  },
+  "studio_states": {
+    "connected": {
+      "resource_api": "configured, permitted supported project/stream lookups; no actual resource or cloud receipts supplied"
+    },
+    "disconnected": {
+      "studio_process": "running; ordinary local OTLP available",
+      "resource_lookup_http_status": 503,
+      "resource_response": "no usable binding supplied"
+    },
+    "unavailable": {
+      "studio_process": "not running; connection refused; local/in-memory execution still possible"
+    },
+    "reconnected": {
+      "resource_selectors": "Separate hypothetical deployment states below; these assumptions support acceptance planning, not claims of observed runtime validation.",
+      "validated_binding": "Previously resolved project/stream UUIDs with confirmed ownership and association; complete trace headers and Resource IDs persisted for the same unchanged organization, destination and selected resources.",
+      "names_only": "Selected project/stream names exist, but this process has no resolved UUID pair; the configured resource API becomes available after startup.",
+      "destination_changed": "Organization, destination or selected resource identity differs from the binding provenance; prior UUID ownership in the new scope is unproven.",
+      "rejected_identity": "A resource identity or association has been explicitly rejected, rather than a transient API outage.",
+      "resources": "Existing selected resources do not authorize duplicate creation; no actual resource/cloud receipts are supplied."
+    }
+  },
+  "native_startup_cases": {
+    "prevalidated_new_process_api_outage": {
+      "applies_to": "Existing native OTel route, including the native fallback once configured; not evidence that a backend-dependent vendor SDK supports this startup.",
+      "app_process": "A new application process consumes a persisted complete binding from a previously successful ownership/association check.",
+      "binding_scope": "Same unchanged organization, destination and selected resources; both UUID headers and matching trace Resource IDs were persisted.",
+      "resource_api": "Separate variants return HTTP503 or refuse the connection at process start.",
+      "local_otlp": "A separate numeric-loopback local OTLP receiver is running; no cloud delivery proof is supplied.",
+      "evidence_limit": "Hypothetical acceptance input only. The supplied source snapshots have no binding loader or executed startup/export receipt."
+    }
+  }
+}

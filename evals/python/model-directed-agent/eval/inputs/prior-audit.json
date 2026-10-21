@@ -1,0 +1,297 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "smashbot-prior-workflow",
+    "service_name": "smashbot",
+    "commit": "uncommitted",
+    "language": "python",
+    "framework": "flask",
+    "date": "2026-10-19",
+    "status": "Partial",
+    "genai_ownership_detected": true,
+    "genai_semconv_provenance": "Official OpenTelemetry GenAI semantic conventions live checked 2026-10-19: gen-ai-spans.md (input/output, retrieval, tool schema and conditional identity fields), gen-ai-metrics.md (workflow, inference, tool and operation duration), gen-ai-token-metrics.md, and current typed content schemas. Main branch snapshot date used because GitHub page did not expose a commit SHA through the inspected view."
+  },
+  "summary": [
+    "The shared turn has an existing workflow span and model/tool children; workflow duration is missing."
+  ],
+  "flow": "audit -> select -> instrument -> verify -> configure/dashboard -> publish",
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "Python dependencies include OpenAI, Flask, dotenv, OTel SDK, OTLP HTTP exporter, Flask instrumentation, and logging instrumentation.",
+      "source": "requirements.txt"
+    },
+    {
+      "check": "Entry point",
+      "finding": "Flask app loads .env, configures source OTel providers before Flask construction, installs the log bridge after the console handler, and installs FlaskInstrumentor before serving on 127.0.0.1:5000.",
+      "source": "app.py:26-48,116-117"
+    },
+    {
+      "check": "CLI entry point",
+      "finding": "Terminal entry point loads dotenv in main and runs the shared chat loop without configuring OTel providers.",
+      "source": "agent.py:18-28,57-67"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "chat_core.py:13-43,122-278; recommendations.py:14-84; app.py:50-63"
+    },
+    {
+      "check": "Route source",
+      "finding": "GET /, GET /static/<path:filename>, POST /chat, POST /reset",
+      "source": "app.py"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Python app.py and Python agent.py documented in README; requirements.txt dependencies; no pinned runtime.",
+      "source": "README.md; requirements.txt; agent.py; app.py"
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/"
+    },
+    {
+      "method": "GET",
+      "path": "/static/<path:filename>"
+    },
+    {
+      "method": "POST",
+      "path": "/chat"
+    },
+    {
+      "method": "POST",
+      "path": "/reset"
+    }
+  ],
+  "signal_flow": {
+    "component_flow_map": "chat_core.run_turn [GAP: GenAI workflow lifecycle] -> model/tool [SOURCE-COVERED]"
+  },
+  "current_instrumentation": {
+    "spans": [
+      {
+        "name": "GET /",
+        "source": "opentelemetry-instrumentation-flask / FlaskInstrumentor",
+        "type": "auto",
+        "status": "configured before Flask serving; source only, current receiver receipt not proven",
+        "evidence": "app.py:36-48"
+      },
+      {
+        "name": "GET /static/<path:filename>",
+        "source": "opentelemetry-instrumentation-flask / FlaskInstrumentor",
+        "type": "auto",
+        "status": "configured before Flask serving; source only, current receiver receipt not proven",
+        "evidence": "app.py:36-48"
+      },
+      {
+        "name": "POST /chat",
+        "source": "opentelemetry-instrumentation-flask / FlaskInstrumentor",
+        "type": "auto",
+        "status": "configured before Flask serving; source only, current receiver receipt not proven",
+        "evidence": "app.py:36-48"
+      },
+      {
+        "name": "POST /reset",
+        "source": "opentelemetry-instrumentation-flask / FlaskInstrumentor",
+        "type": "auto",
+        "status": "configured before Flask serving; source only, current receiver receipt not proven",
+        "evidence": "app.py:36-48"
+      },
+      {
+        "name": "invoke_workflow smashbot_turn",
+        "source": "chat_core._tracer.start_as_current_span",
+        "type": "custom GenAI workflow",
+        "status": "configured in Flask; source-defined but inactive in CLI; no runtime capture supplied",
+        "evidence": "chat_core.py:42,207-278"
+      },
+      {
+        "name": "chat {model}",
+        "source": "chat_core._tracer.start_as_current_span",
+        "type": "custom GenAI inference",
+        "status": "configured in Flask; source-defined but inactive in CLI; no runtime capture supplied",
+        "evidence": "chat_core.py:158-204"
+      },
+      {
+        "name": "execute_tool recommend_smash_burgers",
+        "source": "chat_core._dispatch_tool_call",
+        "type": "custom GenAI tool",
+        "status": "configured in Flask; source-defined but inactive in CLI; no runtime capture supplied",
+        "evidence": "chat_core.py:122-155"
+      }
+    ],
+    "metrics": [
+      {
+        "name": "http.server.duration",
+        "source": "FlaskInstrumentor in app.py; metric availability depends on installed SDK version and is not runtime-proven",
+        "type": "Histogram",
+        "evidence": "otel_setup.py; app.py; chat_core.py (source only; no captured runtime evidence supplied)"
+      },
+      {
+        "name": "http.server.active_requests",
+        "source": "FlaskInstrumentor in app.py; metric availability depends on installed SDK version and is not runtime-proven",
+        "type": "Sum",
+        "evidence": "otel_setup.py; app.py; chat_core.py (source only; no captured runtime evidence supplied)"
+      },
+      {
+        "name": "gen_ai.client.token.usage",
+        "source": "chat_core._token_usage",
+        "type": "Counter; legacy convention retained",
+        "evidence": "chat_core.py:24-29,182-203"
+      },
+      {
+        "name": "assistant.llm.calls",
+        "source": "chat_core._llm_calls",
+        "type": "Counter",
+        "evidence": "chat_core.py:30-35,274-276"
+      },
+      {
+        "name": "assistant.tool.calls",
+        "source": "chat_core._tool_calls",
+        "type": "Counter",
+        "evidence": "chat_core.py:36-40,274-276"
+      },
+      {
+        "name": "otel.sdk.log.created",
+        "source": "LoggerProvider in otel_setup.py; SDK internal metric availability is not runtime-proven",
+        "type": "Counter",
+        "evidence": "otel_setup.py; app.py; chat_core.py (source only; no captured runtime evidence supplied)"
+      }
+    ],
+    "logs": [
+      {
+        "name": "Python stdlib/Werkzeug log records via LoggingInstrumentor",
+        "source": "otel_setup.py LoggerProvider + BatchLogRecordProcessor + OTLPLogExporter; app.py installs after app.logger handler exists",
+        "type": "OTLP log bridge",
+        "status": "local-otlp-default; source-active in Flask; none opt-out honored",
+        "endpoint": "http://localhost:4318/v1/logs (http/protobuf)",
+        "correlation": "trace context injection configured; actual OTLP log correlation not proven",
+        "sinks": "existing stderr sink retained",
+        "evidence": "otel_setup.py:131-225; app.py:36-48 (source configuration only)",
+        "integration": "opentelemetry-instrumentation-logging LoggingInstrumentor",
+        "detail": "Local OTLP logs pipeline with existing stderr sink; trace context injection enabled; no log capture is supplied, so Werkzeug OTLP receipt and correlation are not proven; no application error log is emitted from the /chat failure handler."
+      }
+    ],
+    "incident_readiness": []
+  },
+  "genai_readiness": [
+    {
+      "surface": "GenAI workflow lifecycle",
+      "evidence": "chat_core.py:207-278; source only, no runtime capture supplied",
+      "current_status": "partial",
+      "required_signals": "Stable invoke_workflow smashbot_turn span and child-parent context (present); gen_ai.invoke_workflow.duration; ERROR status and error.type on failed turns; workflow call aggregates on all exits. Applicable redacted gen_ai.input.messages and gen_ai.output.messages on the same workflow span; system instructions remain embedded in input messages. Preserve actual opaque web conversation ID as span-only gen_ai.conversation.id when supplied; snapshot messages before in-place mutation.",
+      "owner": "App-owned + patchable",
+      "source_files": [
+        "chat_core.py",
+        "app.py"
+      ],
+      "acceptance_criteria": "The live workflow span retains the stable smashbot_turn identity, parents each child operation, records failure status, and has one duration datapoint per turn. Same-span sanitized inputs/outputs match actual turn values; no output on failure; enforce 16 messages, 64 parts/message, 8192 UTF-8 bytes/content attribute. For a supplied session, conversation.id exactly matches the app-owned opaque sid and is absent from metrics/names; capture input before mutation.",
+      "semconv_source": "open-telemetry/semantic-conventions-genai main, live checked 2026-10-12; workflow operation and metrics docs",
+      "status": "partial",
+      "impact": "The live workflow span retains the stable smashbot_turn identity, parents each child operation, records failure status, and has one duration datapoint per turn.",
+      "finding_id": "OTEL-002"
+    }
+  ],
+  "findings": [
+    {
+      "id": "OTEL-002",
+      "title": "Workflow turns lack duration and failure outcome metrics",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "GenAI workflow lifecycle",
+      "gap": "The workflow span is present, but run_turn exits on model/tool failure before setting workflow error status, failed call aggregates, or any workflow duration metric.",
+      "impact": "Operators can see a child error span but cannot chart workflow latency or distinguish a failed turn from a successful workflow at the workflow boundary.",
+      "product_outcome": "Operators should see one workflow duration and outcome for every SmashBot turn, including failed turns.",
+      "required_fix": "Record gen_ai.invoke_workflow.duration for every turn and set workflow ERROR plus bounded error.type when a child operation fails. Record call aggregates on all exits and keep them on the owning workflow span. Also enrich this existing workflow span with applicable redacted typed gen_ai.input.messages and gen_ai.output.messages from actual run_turn inputs/reply; system-role instructions remain in messages because they are not separately supplied. Set capture mode redacted before export with limits of 16 messages, 64 parts/message, 8192 UTF-8 bytes/content attribute; prove sentinel absence and value equality. Preserve the source-provided conversation ID from the web session as gen_ai.conversation.id on the workflow span (span-only; omit in CLI when unavailable). Snapshot ordered input messages before run_turn mutates the list, sanitize before export, and set gen_ai.output.messages only from the actual returned reply. For structured GenAI attributes on the observed OTel Python span API, construct valid typed values, sanitize first, then compact-JSON serialize before span.set_attribute; keep operation and sampler-relevant identity fields available in start_as_current_span attributes=. Use the proposed shared `genai_content.py:sanitize_genai_content(...)` for all applicable content before any OTel span attribute/exporter; this source hook is not implemented yet.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "genai.workflow.failure",
+        "genai.workflow.content"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "chat_core.py:207-278",
+        "otel_setup.py; app.py; chat_core.py (source only; no captured runtime evidence supplied)"
+      ],
+      "acceptance_criteria": [
+        "Each turn records gen_ai.invoke_workflow.duration once.",
+        "Failed turns set ERROR and error.type on invoke_workflow smashbot_turn.",
+        "LLM/tool call counts include failed calls and remain on the workflow span, not the HTTP root span.",
+        "On successful turns, same workflow span has sanitized input messages equal to the ordered values received by run_turn and output messages equal to the returned reply; on failed turns, output is absent. The proposed shared `genai_content.py:sanitize_genai_content(...)` redacts before any OTel span attribute/exporter and stays within 16 messages, 64 parts/message, and 8192 UTF-8 bytes/content attribute.",
+        "When the web runtime supplies its opaque session ID, the workflow span carries that source value as gen_ai.conversation.id; no new ID is created, and no ID is placed in metric dimensions or span names. The captured input is the pre-mutation ordered snapshot.",
+        "Probe the span creator/on_start path separately: operation and stable identity fields are present at creation, while later content enrichment remains on the same span; decode JSON-string content and compare exact sanitized values."
+      ],
+      "constraints": [],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "gen_ai.invoke_workflow.duration",
+          "attributes": [
+            "gen_ai.workflow.name",
+            "error.type"
+          ],
+          "product_view": "Workflow latency and failure charts"
+        },
+        {
+          "type": "span",
+          "name": "invoke_workflow smashbot_turn",
+          "attributes": [
+            "gen_ai.operation.name",
+            "gen_ai.workflow.name",
+            "error.type",
+            "gen_ai.conversation.id",
+            "gen_ai.input.messages",
+            "gen_ai.output.messages"
+          ],
+          "product_view": "Workflow error attribution in trace waterfall; Redacted workflow context in trace details"
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding and run $otel-instrument to close GenAI workflow lifecycle."
+      ]
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "py.local",
+        "surface": "SmashBot Flask app, CLI, and shared chat core",
+        "config_evidence": "requirements.txt,README.md:1-17,app.py:26-48,agent.py:18-28,historical_check.py:1-7",
+        "runner": "python3 app.py for web runtime; python3 agent.py for CLI runtime; python3 historical_check.py for focused fake-client signals",
+        "scope": "repository Python application",
+        "prerequisites": "Python and requirements installed; use the existing fake OpenAI client/test seam and isolated process environments for provider/endpoint branches. No live OpenAI key or credits are required for focused call-site tests. A local Splunk Observability Studio receiver is only needed for local-delivery proof; in-memory providers can prove signal shape without network credentials. For endpoint/protocol checks, start an isolated OTLP/HTTP fixture on 127.0.0.1:14318; do not query Studio from application startup. The normally advertised Studio receiver remains 127.0.0.1:4318."
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "genai.workflow.failure",
+        "trigger": "A model or tool failure exits run_turn before normal aggregation.",
+        "entrypoint": "chat_core.py:207-278",
+        "expected_signals": "invoke_workflow smashbot_turn span ERROR with error.type, gen_ai.invoke_workflow.duration, and call counts that include failed calls.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Workflow span is ERROR and ends on all paths; duration is recorded once; call counts include provider/tool failures and remain on the workflow rather than the HTTP root span.",
+        "environments": [
+          "py.local"
+        ]
+      },
+      {
+        "id": "genai.workflow.content",
+        "trigger": "Run one successful turn with ordered system/user/tool history and a fake provider response.",
+        "entrypoint": "chat_core.py:207-278",
+        "expected_signals": "Existing invoke_workflow smashbot_turn span with sanitized gen_ai.input.messages from the pre-mutation input snapshot, gen_ai.output.messages from the returned reply, and gen_ai.conversation.id only when source-provided.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Decode current typed-parts JSON and compare to actual pre-mutation input and returned reply after redaction. Preserve message order and tool-call identity; enforce max 16 messages, 64 parts/message, 8192 UTF-8 bytes/content attribute; assert sensitive sentinel absent from span attributes/events and exporter payload. Use start_as_current_span attributes= to prove sampling-relevant operation/identity values reach creation; serialize nested message/document structures as valid compact JSON strings after redaction, then decode and compare.",
+        "environments": [
+          "py.local"
+        ]
+      }
+    ]
+  },
+  "anti_patterns": [],
+  "recommendation": [
+    "Select the workflow finding and run $otel-instrument."
+  ]
+}
