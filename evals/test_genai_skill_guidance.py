@@ -29,6 +29,40 @@ def _read(path: Path) -> str:
     return path.read_text()
 
 
+def test_formal_names_only_acceptance_includes_retry_work_bounds():
+    text = _read(SPLUNK_AO_REF)
+    scenario = text.split("- **Names-only running process:**", 1)[1].split(
+        "- **Previously validated binding at process startup:**", 1
+    )[0]
+    scenario = " ".join(scenario.split())
+    for requirement in (
+        "finite per-request timeout", "capped retry frequency/backoff",
+        "business/native telemetry during a prolonged outage",
+        "retry cancellation at shutdown", "not the application's lifetime",
+        "do not invent numeric runtime limits", "actual owned resolver loop",
+    ):
+        assert requirement in scenario
+
+
+def test_sdk_creation_and_native_carriers_are_scoped_by_runtime():
+    text = _read(SPLUNK_AO_REF)
+    helpers = text.split("### Public Schema Span Helpers", 1)[1].split(
+        "### Per-Operation Public OTel Compatibility Exception", 1
+    )[0]
+    helpers = " ".join(helpers.split())
+    assert "SDK creation and transport ownership are separate" in helpers
+    assert "remains SDK-created instrumentation" in helpers
+    assert "Do not require a private SDK logger sink" in helpers
+    carrier = text.split("`SpanExporter.export` and `ReadableSpan` above", 1)[1].split(
+        "For a native AO binding", 1
+    )[0]
+    carrier = " ".join(carrier.split())
+    assert "**Python** carrier example" in carrier
+    assert "do not transplant these Python API names into Go" in carrier
+    assert "ExportSpans(context.Context, []sdktrace.ReadOnlySpan) error" in carrier
+    assert "https://pkg.go.dev/go.opentelemetry.io/otel/sdk/trace#SpanExporter" in carrier
+
+
 def test_language_without_compatible_ao_sdk_has_native_full_profile_path():
     text = " ".join(_read(GENAI_REF).split())
     fallback = next(line for line in _read(GENAI_REF).splitlines()
@@ -437,9 +471,10 @@ def test_audit_requires_process_relative_ao_runtime_coverage():
         "missing project binding, dedicated runtime Agent Stream binding",
         "separate readiness surfaces with distinct `surface` names",
         "selectable `finding_group: splunk-agent-observability` findings",
-        "no explicitly selected product target, use `fix all`",
-        "explicitly requests Agent Observability coverage, deployment",
-        "use `instrument_mode: default` for safe, source-backed AO project",
+        "A bare audit request is sufficient",
+        "Use `instrument_mode: default` for safe source-backed project, stream and routing",
+        "including fresh AO, native OTel fallback, existing native OTel, Galileo and existing AO runtimes",
+        "Galileo retains native project/log-stream APIs and export",
         "Every missing or partial app-owned AO configuration row",
         "unresolved AO-group finding with the same `area`",
         "covered row must cite reachable setup for that exact runtime",

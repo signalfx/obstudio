@@ -1,0 +1,18 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "reject-green-workflow-test",
+      "task": "Use $otel-verify to check whether ./service instruments its source-owned SmashBot agent correctly. Run the historical historical_check.py and python probe.py --expect-agent with synthetic providers in a compatible isolated Python environment. Preserve application code, tests, probe.py, dependencies and launch configuration; temporary environments and .observe proof artifacts are permitted. Do not call real providers/cloud or use UI. Reconcile original source behavior, native records and both test outcomes independently and report actual agent coverage with precise remaining defects. No canonical audit or selection is supplied; this is standalone verification of existing instrumentation, not authorization to implement repairs."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect original code, unchanged probes, actual command results and native .observe records. A passing historical workflow test is not sufficient."
+  ],
+  "rubric": [
+    "Identifies the model-directed tool feedback loop as the SmashBot agent independently of current invoke_workflow label or absent framework.",
+    "Actually executes the existing green historical test and the independent failing agent-role probe. Reports the agent semantic/identity/duration defect as failed/incomplete rather than claiming coverage from GenAI ownership, child spans or the historical test.",
+    "Keeps source/tests/probe/configuration unchanged, never repairs instrumentation or invents/rebinds passing proof. Distinguishes source/native in-memory evidence from any unperformed OTLP/cloud runtime check.",
+    "Names the affected canonical root operation and precise missing invoke_agent/agent identity/duration requirements while preserving valid inference/tool evidence and actual business outputs. Produces a truthful standalone verification report with real command and result evidence."
+  ]
+}

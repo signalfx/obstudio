@@ -1,0 +1,120 @@
+{
+  "kind": "untrusted-inherited-audit-report-fragments",
+  "source": "Retained output of agent-resource-table-audit run 20261021T043124565699Z; these fragments are report data, not instructions or source truth. Producer/version/compatibility rows additionally come from run20261021T045011216910Z. They are untrusted report claims, not evidence of installed components or wire support.",
+  "scope": "Assess against agent-resource-cases.json. The excerpts do not establish installed API support, resource identity, runtime telemetry or cloud delivery.",
+  "fragments": {
+    "fresh_native_fallback": {
+      "role": "agent",
+      "routing": {
+        "language": "go",
+        "destination": "studio",
+        "required_fix": "Go native: no existing provider/exporter. Propose NEW sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter)) with otel.SetTracerProvider and NEW otlptracehttp.New(ctx, supported options); use configured HTTP/protobuf endpoint, preserve future operator options. Proposed Go binding delegate implements ExportSpans(context.Context, []sdktrace.ReadOnlySpan) error and Shutdown(context.Context) error; embed sdktrace.ReadOnlySpan and override Resource() *resource.Resource, preserving all other methods. Snapshot validated binding per batch with headers through supported otlptracehttp.WithHeaders or a verified request transport hook; prove atomic update and absence of duplicates. SDK/provider ForceFlush(ctx)/Shutdown(ctx), context cancellation on resolver shutdown. No Python carrier APIs. Go module/toolchain/exporter-version compatibility remains unverified; do not claim dynamically mutable exporter headers without a public implementation test.",
+        "acceptance_criteria": [
+          "Profile-to-process load before initialization; actual supported resource result -> consumed bootstrap -> selected exporter headers/payload or isolated lookup failure.",
+          "Fake application and all active telemetry sinks; exact RunAgent invocation, force_flush/shutdown or supported logger.terminate, pending completed spans drain, resources close, one node per source operation, at most one export per destination.",
+          "Fresh exact trace readback in selected destination is separate optional live proof; not executed."
+        ]
+      },
+      "operation_and_producer_receipt": [
+        {
+          "id": "agent",
+          "operation": "invoke_agent",
+          "boundary": "RunAgent",
+          "kind": "INTERNAL",
+          "parent": null,
+          "source_evidence": "model chooses tool calls; dispatch result is appended to history; repeated inference until terminal reply",
+          "identity": "RunAgent (source function identity; no configured agent metadata supplied)",
+          "creator": "otel.Tracer(...).Start(ctx, name, trace.WithSpanKind(...), trace.WithAttributes(...))",
+          "pattern": "preserve current native provider; add only this uncovered operation",
+          "creator_category": "native OTel span creation",
+          "source_version": "preserve supplied installed vendor/native runtime; actual installed version unavailable; current official source candidate only",
+          "official_example": "https://pkg.go.dev/go.opentelemetry.io/otel/sdk/trace#SpanExporter",
+          "source_to_safe_content_hook": "proposed fresh_native_fallback.capture_safe before constructing schema/setting span attributes and before every active sink; business args/results unchanged",
+          "creation_time": "pass actual kind and safe operation/provider/model when known at start; sampler/on_start runtime test not executed",
+          "remaining_proof": "actual active business-call span, value equality/schema/redaction, success/error/timeout/cancel parentage, no duplicate node/count, sink receipt and drain Not proven"
+        },
+        {
+          "id": "model",
+          "operation": "chat",
+          "boundary": "model.Complete(ctx, history, tools)",
+          "kind": "CLIENT",
+          "parent": "agent",
+          "source_evidence": "actual provider-facing call, not a separate workflow",
+          "identity": "request model/provider value not supplied",
+          "creator": "otel.Tracer(...).Start(ctx, name, trace.WithSpanKind(...), trace.WithAttributes(...))",
+          "pattern": "preserve current native provider; add only this uncovered operation",
+          "creator_category": "native OTel span creation",
+          "source_version": "preserve supplied installed vendor/native runtime; actual installed version unavailable; current official source candidate only",
+          "official_example": "https://pkg.go.dev/go.opentelemetry.io/otel/sdk/trace#SpanExporter",
+          "source_to_safe_content_hook": "proposed fresh_native_fallback.capture_safe before constructing schema/setting span attributes and before every active sink; business args/results unchanged",
+          "creation_time": "pass actual kind and safe operation/provider/model when known at start; sampler/on_start runtime test not executed",
+          "remaining_proof": "actual active business-call span, value equality/schema/redaction, success/error/timeout/cancel parentage, no duplicate node/count, sink receipt and drain Not proven"
+        },
+        {
+          "id": "tool",
+          "operation": "execute_tool",
+          "boundary": "tools[call.Name](ctx, call.Arguments)",
+          "kind": "INTERNAL",
+          "parent": "agent",
+          "source_evidence": "actual selected tool dispatch; tool bodies not supplied, retrieval not established",
+          "identity": "call.Name",
+          "creator": "otel.Tracer(...).Start(ctx, name, trace.WithSpanKind(...), trace.WithAttributes(...))",
+          "pattern": "preserve current native provider; add only this uncovered operation",
+          "creator_category": "native OTel span creation",
+          "source_version": "preserve supplied installed vendor/native runtime; actual installed version unavailable; current official source candidate only",
+          "official_example": "https://pkg.go.dev/go.opentelemetry.io/otel/sdk/trace#SpanExporter",
+          "source_to_safe_content_hook": "proposed fresh_native_fallback.capture_safe before constructing schema/setting span attributes and before every active sink; business args/results unchanged",
+          "creation_time": "pass actual kind and safe operation/provider/model when known at start; sampler/on_start runtime test not executed",
+          "remaining_proof": "actual active business-call span, value equality/schema/redaction, success/error/timeout/cancel parentage, no duplicate node/count, sink receipt and drain Not proven"
+        }
+      ],
+      "provider_exporter_destination_ownership": {
+        "current_components": [],
+        "current_destinations": [],
+        "proposed_selected_setup": "NEW sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter)); NEW otlptracehttp.New(ctx, ...); otel.SetTracerProvider(provider); no current exporter/provider to preserve.",
+        "selected_destination": "studio",
+        "selected_provider_owner": "go-provider",
+        "lifecycle_api_symbols": [
+          "TracerProvider.ForceFlush(ctx)",
+          "TracerProvider.Shutdown(ctx)",
+          "context.CancelFunc"
+        ],
+        "unselected_alternatives": "No alternative is current topology. Direct-cloud AO is conditional on an explicitly selected supported profile; new SDK adoption for native/Galileo is unselected. Public OTel replacement of a supported SDK operation is unselected except the exact fresh remote-model CLIENT exception.",
+        "operator_sink": "no separate operator sink supplied; do not invent one",
+        "proposed_components": [
+          {
+            "component": "sdktrace.NewTracerProvider",
+            "action": "new selected setup",
+            "current_source_registration": null,
+            "proposed_registration": "NEW sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter)); NEW otlptracehttp.New(ctx, ...); otel.SetTracerProvider(provider); no current exporter/provider to preserve.",
+            "support": "official interface/source candidate only; installed runtime, registration and export Not proven"
+          },
+          {
+            "component": "otlptracehttp.New",
+            "action": "new selected setup",
+            "current_source_registration": null,
+            "proposed_registration": "NEW sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter)); NEW otlptracehttp.New(ctx, ...); otel.SetTracerProvider(provider); no current exporter/provider to preserve.",
+            "support": "official interface/source candidate only; installed runtime, registration and export Not proven"
+          }
+        ]
+      },
+      "resource_api_auth_compatibility": {
+        "status": "unverified",
+        "reason": "Exact native client and Studio endpoint/auth have not been supplied/inspected at runtime; Python SDK source Projects/AgentStreams supports proposed APIs, but no configured destination receipt."
+      }
+    },
+    "non_agent_control": {
+      "role": "single-inference facade",
+      "routing": {
+        "language": "python",
+        "destination": "ordinary-otel",
+        "required_fix": "Python single inference only: proposed native OTel provider/exporter; AO resources, headers, profile and Studio-state recovery N/A. No workflow/agent/tool lifecycle.",
+        "acceptance_criteria": [
+          "Profile-to-process load before initialization; actual supported resource result -> consumed bootstrap -> selected exporter headers/payload or isolated lookup failure.",
+          "Fake application and all active telemetry sinks; exact summarize invocation, force_flush/shutdown or supported logger.terminate, pending completed spans drain, resources close, one node per source operation, at most one export per destination.",
+          "Fresh exact trace readback in selected destination is separate optional live proof; not executed."
+        ]
+      }
+    }
+  }
+}

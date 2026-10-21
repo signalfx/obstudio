@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20261015T054232482625Z |
+| Run ID | 20261021T054215889834Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -28,7 +28,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/springboot-basic/qual/audit | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/audit.json | 0 | 6 | 0 |
 | node/express-basic/qual/audit | node/express-basic | 2 | evals/node/express-basic/eval/qual/audit.json | 0 | 6 | 0 |
 | python/ai-assistant-demo/qual/ao-target-handoff-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-audit.json | 0 | 4 | 0 |
-| python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | evals/python/ai-assistant-demo/eval/qual/audit.json | 0 | 14 | 0 |
+| python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | evals/python/ai-assistant-demo/eval/qual/audit.json | 0 | 15 | 0 |
 | python/ai-assistant-demo/qual/audit-focused-decorator-logs | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/audit-focused-decorator-logs.json | 0 | 3 | 0 |
 | python/ai-assistant-demo/qual/audit-focused-metadata | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/audit-focused-metadata.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/content-coverage-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/content-coverage-audit.json | 0 | 4 | 0 |
@@ -44,8 +44,11 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/existing-otel-agent-demo/qual/route-recovery-audit | python/existing-otel-agent-demo | 1 | evals/python/existing-otel-agent-demo/eval/qual/route-recovery-audit.json | 0 | 5 | 0 |
 | python/fastapi-celery/qual/audit | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/audit.json | 0 | 5 | 0 |
 | python/flask-basic/qual/audit | python/flask-basic | 2 | evals/python/flask-basic/eval/qual/audit.json | 0 | 6 | 0 |
-| python/galileo-agent-demo/qual/audit | python/galileo-agent-demo | 1 | evals/python/galileo-agent-demo/eval/qual/audit.json | 0 | 6 | 0 |
+| python/galileo-agent-demo/qual/audit | python/galileo-agent-demo | 2 | evals/python/galileo-agent-demo/eval/qual/audit.json | 0 | 7 | 0 |
 | python/mcp-ai-tool-demo/qual/audit | python/mcp-ai-tool-demo | 2 | evals/python/mcp-ai-tool-demo/eval/qual/audit.json | 0 | 6 | 0 |
+| python/model-directed-agent/qual/audit | python/model-directed-agent | 1 | evals/python/model-directed-agent/eval/qual/audit.json | 0 | 5 | 0 |
+| python/model-directed-agent/qual/connection-modes-audit | python/model-directed-agent | 1 | evals/python/model-directed-agent/eval/qual/connection-modes-audit.json | 0 | 5 | 0 |
+| python/model-directed-agent/qual/resource-table-audit | python/model-directed-agent | 1 | evals/python/model-directed-agent/eval/qual/resource-table-audit.json | 0 | 7 | 0 |
 | python/splunk-ao-integration-demo/qual/audit | python/splunk-ao-integration-demo | 1 | evals/python/splunk-ao-integration-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | python/splunk-ao-langchain-demo/qual/audit | python/splunk-ao-langchain-demo | 1 | evals/python/splunk-ao-langchain-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | sanity/skill-smoke/sanity/audit | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/eval/sanity/audit.json | 0 | 0 | 0 |
