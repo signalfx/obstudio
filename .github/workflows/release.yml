@@ -3,13 +3,43 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Dispatched with `--ref <tag>` by tag-release.yml; tags pushed with GITHUB_TOKEN do not fire the push trigger.
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  verify-release-ref:
+    name: Verify release tag and plugin manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require a tag on main whose plugin manifests already carry its version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$REF_TYPE" != "tag" ]]; then
+            echo "::error::Releases must run from a tag ref, got ${REF_TYPE} '${RELEASE_TAG}'"
+            exit 1
+          fi
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$RELEASE_SHA" origin/main; then
+            echo "::error::${RELEASE_TAG} (${RELEASE_SHA}) is not on main; merge the prepare-release PR and tag from main"
+            exit 1
+          fi
+          python3 plugins/obstudio/scripts/stage_obstudio_plugin.py \
+            --check-manifest-versions --release-tag "$RELEASE_TAG"
+
   build-vsix:
     name: Build VSIX – ${{ matrix.target }}
+    needs: verify-release-ref
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

@@ -182,6 +182,42 @@ make build-pytest-plugin
 make publish-pytest-plugin
 ```
 
+## Agent Role Regression
+
+`python/model-directed-agent` reproduces a custom OpenAI assistant whose model
+selects a tool, receives its result, and decides whether to call again. Its
+existing OTel span and historical test label the turn `invoke_workflow`.
+An earlier audit reused that label and was only schema-validated and rendered;
+neither that validation nor the historical green test established the operation's
+semantic role. The audit did detect GenAI ownership, but omitted agent coverage.
+
+The three evals exercise the failure at different boundaries:
+
+| Skill | Required result |
+|---|---|
+| `otel-audit` | Reconcile the supplied prior report with source, identify the agent, and distinguish an independent one-shot facade and fixed two-stage workflow. |
+| `otel-instrument` | Repair the existing creator, preserve consumer compatibility, and pass the unchanged native probe for no-tool, tool-feedback, and provider-failure turns. |
+| `otel-verify` | Execute the unrepaired fixture, observe its historical test passing and agent probe failing, and report the missing agent semantics and duration truthfully. |
+
+The verification fixture deliberately remains incorrect. A passing rubric means
+the skill detects the defect; it does not mean that fixture is instrumented
+correctly. The native probe executes application code with fake provider
+responses and inspects actual spans, parentage, call counts and metric points.
+It must remain unchanged by the instrumenting agent. Local OTLP receipt and
+cloud delivery require their own evidence.
+
+After authenticating the isolated eval home, run:
+
+```bash
+make eval-rubric SKILL=skills/otel-audit CASE=python/model-directed-agent EVAL_CONFIG=codex-evals.agent-role.toml
+make eval-rubric SKILL=skills/otel-instrument CASE=python/model-directed-agent EVAL_CONFIG=codex-evals.agent-role.toml
+make eval-rubric SKILL=skills/otel-verify CASE=python/model-directed-agent EVAL_CONFIG=codex-evals.agent-role.toml
+```
+
+The dedicated tracked configuration keeps these runs reproducible without
+changing the normal eval model defaults. Regenerate affected validation and
+sanity reports too, then run `make test-eval-harness` to check report freshness.
+
 ## Outputs
 
 Full artifacts are ignored by git:
