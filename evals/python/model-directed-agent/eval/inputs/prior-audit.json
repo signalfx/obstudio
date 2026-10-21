@@ -25,7 +25,7 @@
     {
       "check": "Entry point",
       "finding": "Flask app loads .env, configures source OTel providers before Flask construction, installs the log bridge after the console handler, and installs FlaskInstrumentor before serving on 127.0.0.1:5000.",
-      "source": "app.py:26-48,113-114"
+      "source": "app.py:26-48,116-117"
     },
     {
       "check": "CLI entry point",
@@ -35,7 +35,7 @@
     {
       "check": "GenAI ownership",
       "finding": "Yes",
-      "source": "chat_core.py:13-43,122-278; recommendations.py:14-82; app.py:50-63"
+      "source": "chat_core.py:13-43,122-278; recommendations.py:14-84; app.py:50-63"
     },
     {
       "check": "Route source",

@@ -65,7 +65,9 @@ def recommend_smash_burgers(city: str, limit: int = 3) -> Dict[str, Any]:
         A dict with the resolved city, whether the list was curated, and the
         list of recommendations (each with a name and a short reason).
     """
-    normalized = (city or "").strip().lower()
+    if not isinstance(city, str):
+        raise TypeError("city must be a string")
+    normalized = city.strip().lower()
     curated = normalized in _CITY_RECOMMENDATIONS
 
     if curated:

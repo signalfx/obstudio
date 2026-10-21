@@ -96,10 +96,10 @@ def chat():
 
     try:
         reply = run_turn(client, get_model(), messages)
-    except Exception as exc:  # noqa: BLE001 - surface any API error to the client
+    except Exception:  # noqa: BLE001 - return a bounded failure response
         # A failed turn may have appended assistant tool requests and results.
         del messages[previous_length:]
-        return jsonify({"error": f"Something went wrong: {exc}"}), 502
+        return jsonify({"error": "The assistant is temporarily unavailable."}), 502
 
     return jsonify({"reply": reply})
 

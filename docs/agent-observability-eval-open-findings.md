@@ -185,10 +185,13 @@ correction round is in the tracked correction archive.
 | Shared language, SDK ownership and formal recovery acceptance | 17/17 | 107/107 |
 | Stdlib logging fixture and normal CI coverage | 17/17 | 107/107 |
 | Public logging handler reuse | 17/17 | 107/107 |
+| Claude fixture runtime and source-citation corrections | 15/17 | 105/107 |
+| Destination-scoped acceptance and SDK capability closure (audit/verify only) | 8/8 | 46/46 |
 
-These phases include concrete source or grading corrections between runs;
-they are not repeated samples of one unchanged version. The original failing
-grades remain failed in the archive. The unchanged-output N/A regrade is kept
+These phases include source or grading corrections between runs; some
+unaffected task inputs were repeated unchanged. Treat those repeated task
+failures as real counterexamples. The aggregate history does not estimate
+fixed-version reliability. The original failing grades remain failed in the archive. The unchanged-output N/A regrade is kept
 separately and is not substituted into the raw-check totals above.
 
 The actual generated recovery integration additionally records a **12-second
@@ -247,6 +250,75 @@ intermediate result does not substitute for the final source. Direct final-
 checkout replays additionally pass all eleven methods on all three SDKs.
 These are targeted local proofs, not a fixed-version reliability estimate
 or new live Cloud delivery evidence.
+
+## Claude fixture follow-up
+
+The partial, read-only Claude review of `27bca13` found three confirmed
+fixture defects: `/chat` echoed raw provider exceptions, non-string model tool
+cities escaped the handled `invalid_arguments` path, and both supplied audits
+cited reset-handler lines for the serving entry point. Original-code negative
+controls reproduce all three; the tracked
+[follow-up receipt](evidence/agent-fixture-review-followup.json) retains sources,
+raw logs and SHA-256 values. An initial HTTP test used an unavailable transport
+import; that setup error is preserved separately from the successful
+transport-independent error-object replay.
+
+HTTP failures now return a generic response. Tool-side city type validation
+raises `TypeError`, preserving the existing model-feedback and native error-span
+path. Citation validation now expands comma-chained ranges and proves the
+entry-point citation includes the actual `app.run` call. All thirteen fixture
+methods pass on SDK 1.27.0, 1.44.0 and 1.45.1, including fourteen real startup
+profiles, two HTTP exception classes and five wrong-city model-feedback cases.
+The logging receipt remains explicitly tied to `27bca13`; its historical source
+hashes are not rewritten to pretend these later changes were tested then.
+No shipped skill or rubric expectation changed in this fixture follow-up.
+The complete seventeen-task follow-up cohort scored **15/17 tasks,
+105/107 checks**: audit **23/24**, instrumentation **61/61**, verification
+**21/22**. Every preservation mode passed **8/8**. Two report failures remain
+failed in the archive and led to the next scoped guidance correction below;
+the preceding 107/107 cohort does not substitute for this result.
+
+## Destination and SDK capability closure
+
+The follow-up audit copied its shared names-only scenario into both Galileo
+routing rows, requiring Studio UUID trace headers and matching AO Resource IDs
+while its selected destination and `required_fix` correctly preserved Galileo.
+Its executed consistency checker accepted that contradiction. This is a valid
+report/guidance failure, not a reason to relax Galileo-native routing.
+
+The source-only connection verification deferred the captured helper's known
+creation-kind and initial-field facts and omitted a named function decorator.
+The API body starts a name-only span and attaches schema fields at exit. Real
+public OTel probes on SDK 1.27.0, 1.44.0 and 1.45.1 confirm INTERNAL creation
+and empty sampling/`on_start` attributes for that call pattern. Those are public
+API facts, not an executed AO helper or app/cloud receipt. The original
+`client.complete` snapshots do not independently establish remote transport;
+that unknown remains Conditional rather than inventing a CLIENT requirement.
+
+The audit guidance now scopes every inherited acceptance scenario to its
+selected destination. Its matching rubric adds an executed Galileo/Studio
+routing mutation. The verifier entrypoint now closes supplied API facts even
+in supplemental reports. Its matching rubric adds independent unknown-client,
+explicit remote-model, in-process tool and existing-native-producer controls,
+plus the actual prior deferral excerpt as untrusted report data. Requirements
+were strengthened; neither original failed grade was overwritten.
+
+The [closure receipt](evidence/agent-report-closure-corrections.json) retains
+both failed reports, original rubric definitions and inputs, grades/hashes, focused public
+API replay source/results and correction-source receipts after a squash.
+Through the seven retained correction rounds, the resource-table audit task
+failed **4/7** runs (different criteria/failure families across revisions), and
+Studio connection verification failed **1/7**. These descriptive rates include
+the two failures above; the raw grades and source manifests expose each change.
+The corrected SDK connection case passed **5/5**, including all four controls.
+The complete owning-skill audit/verifier reruns passed **8/8 tasks, 46/46
+checks**: audit **24/24**, verification **22/22**. The Galileo mismatch mutation
+is rejected and all four SDK capability controls pass. Instrument source and
+selected inputs did not change; its current **61/61** run remains valid.
+The latest current-source reports therefore contain **17 tasks, 107/107 checks**
+from those scoped runs. This is a report set, not a new coordinated seventeen-
+task sweep. Every raw grade, including the preceding 105/107 cohort, remains
+retained without duplicating the unchanged instrument grades.
 
 ## Completed evidence baseline
 

@@ -101,6 +101,69 @@ class ConversationTests(unittest.TestCase):
             self.assertTrue(response.is_json)
         build.assert_not_called()
 
+    def test_web_keeps_provider_exception_text_out_of_http_response(self):
+        from openai import AuthenticationError
+
+        failures = [RuntimeError("synthetic-private-provider-url"), AuthenticationError(
+            "synthetic-private-key", response=NS(
+                status_code=401, headers={}, request=NS(url="https://provider.invalid/v1")
+            ), body={"error": "synthetic-private-key"},
+        )]
+        with patch.object(web, "build_client", return_value=object()):
+            for failure in failures:
+                with self.subTest(failure=type(failure).__name__), patch.object(
+                    web, "run_turn", side_effect=failure
+                ):
+                    response = web.app.test_client().post("/chat", json={"message": "hello"})
+                    self.assertEqual(response.status_code, 502)
+                    self.assertEqual(response.json, {"error": "The assistant is temporarily unavailable."})
+
+    def test_wrong_city_types_reach_model_feedback_and_native_tool_errors(self):
+        script = '''
+import json,sys
+from types import SimpleNamespace as NS
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+sys.path.insert(0,sys.argv[1])
+exporter=InMemorySpanExporter()
+provider=TracerProvider()
+provider.add_span_processor(SimpleSpanProcessor(exporter))
+trace.set_tracer_provider(provider)
+import chat_core
+for city in [123,["Austin"],{},None,True]:
+    exporter.clear()
+    calls=[]
+    def create(**kwargs):
+        calls.append(kwargs)
+        tools=None
+        if len(calls)==1:
+            tools=[NS(id="invalid-city",type="function",function=NS(
+                name="recommend_smash_burgers",arguments=json.dumps({"city":city})))]
+        else:
+            feedback=kwargs["messages"][-1]
+            assert feedback["role"]=="tool"
+            assert "Invalid arguments" in json.loads(feedback["content"])["error"]
+        return NS(model="test-model",usage=None,choices=[NS(message=NS(
+            content=None if tools else "recovered",tool_calls=tools))])
+    messages=chat_core.new_conversation()+[{"role":"user","content":"recommend"}]
+    assert chat_core.run_turn(NS(chat=NS(completions=NS(create=create))),"test-model",messages)=="recovered"
+    assert len(calls)==2
+    spans=exporter.get_finished_spans()
+    tools=[s for s in spans if s.attributes.get("gen_ai.operation.name")=="execute_tool"]
+    assert len(tools)==1
+    assert tools[0].status.status_code.name=="ERROR"
+    assert tools[0].attributes["error.type"]=="invalid_arguments"
+    roots=[s for s in spans if s.parent is None]
+    assert len(roots)==1 and roots[0].status.status_code.name!="ERROR"
+    assert tools[0].parent.span_id==roots[0].context.span_id
+provider.shutdown()
+'''
+        result = subprocess.run([sys.executable, "-c", script, str(FIXTURE)],
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_probe_executes_invalid_tool_arguments(self):
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run(

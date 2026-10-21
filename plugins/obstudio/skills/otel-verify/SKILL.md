@@ -112,6 +112,16 @@ the presence of an annotation. Preserve framework/provider-owned operations
 without a duplicate decorator span and keep all remaining field gaps visible.
 
 
+For a supplemental SDK/connection source review, close the supplied API facts:
+exact helper signature, effective creation kind, initial attributes/sampling
+inputs, and exit-time updates. Read the reference's local span creation and function
+producer gates even when a full semantic audit is excluded. Name the justified
+app-owned function decorator and supported creator for uncovered boundaries.
+Use a public OTel exception only for a source-proven incompatible contract;
+keep unknown transport Conditional and preserve existing producers. Record
+unexecuted runtime proof separately from established source behavior.
+
+
 ## Contract
 
 - Default output: `.observe/otel-verify.md`; in canonical flow also write

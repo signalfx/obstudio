@@ -230,5 +230,7 @@
         "raw_log_sha256": "837a03705d18fa3561cef2a64a238b34a656d47f96e25b4a77cea0a67643fd9e"
       }
     ]
-  }
+  },
+  "source_scope_commit": "27bca1367c3baf49e12ec439e8969def73c15e99",
+  "source_scope_note": "source_files after hashes and embedded final sources describe the logging correction at this commit. Later Claude fixture changes have separate source snapshots and receipts; historical hashes are not rewritten."
 }

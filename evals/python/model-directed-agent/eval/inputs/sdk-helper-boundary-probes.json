@@ -1,0 +1,35 @@
+{
+  "kind": "independent-source-only-sdk-helper-boundary-probes",
+  "provenance": "Synthetic source snapshots for capability classification; no installed SDK, application execution, receiver or cloud proof. SDK behavior comes only from the separately supplied dated public source capture. Each case is independent.",
+  "prior_report_excerpt": "\nGets/caches a provider, gets splunk-ao-tracer, starts a name-only current span and writes schema attributes during exit. A local registered provider is separate from native AO logger initialization and from exporter delivery.\n\n- No installed SDK/import/dependency or execution receipt for these apps.\n- Context cache can retain a previously chosen provider; inspect/test registration and process lifecycle.\n- Initial call is name-only. This review does not score GenAI kind/field semantics or claim helper completeness.\n- No resource IDs, routing, receiver receipt or cloud evidence follows from helper use.\n- Capture source_path names python3.12/contextlib.py, consistent with a contextmanager wrapper. Its reported hash is not a verified src/splunk_ao/otel.py revision; use the embedded body with that provenance limit.\n\nRemaining acceptance: `sdk.helper.local_creation`; runtime **Not proven**. Evidence: `service/eval/inputs/sdk-local-routing-evidence.json#/symbols/0`.\n\n**sdk.backend_decorator:** Captured fail-open control flow is concrete; backend-dependent initialization, supported binding retention and native emission are not proven by the capture.\n\n_safe_prepare_call catches Exception from _prepare_call and returns None; _sync_log still calls the business function and returns its result when call_state is None, skipping finalization. Business failures are re-raised. _prepare_input is outside the shown safe preparation catch.",
+  "boundary_cases": [
+    {
+      "id": "unknown_transport",
+      "source": "def infer(client, messages):\n    return client.complete(messages=messages)\n",
+      "transport_evidence": "Client implementation is absent.",
+      "existing_producer": null
+    },
+    {
+      "id": "uncovered_remote_model",
+      "source": "def infer_remote(client, model, messages):\n    return client.chat.completions.create(model=model, messages=messages, temperature=0.2)\n",
+      "transport_evidence": "This source contract explicitly identifies client as the separate-process OpenAI HTTP client.",
+      "existing_producer": null,
+      "safe_initial_field_sources": {
+        "gen_ai.request.model": "model",
+        "gen_ai.request.temperature": 0.2
+      }
+    },
+    {
+      "id": "in_process_tool",
+      "source": "def inventory_tool(stock, item):\n    return stock.get(item, 0)\n",
+      "transport_evidence": "In-process dictionary read; no external call.",
+      "existing_producer": null
+    },
+    {
+      "id": "preserved_remote_producer",
+      "source": "def infer_remote(client, tracer, model, messages):\n    with tracer.start_as_current_span(\"chat\", kind=SpanKind.CLIENT, attributes={\"gen_ai.operation.name\":\"chat\", \"gen_ai.request.model\":model}):\n        return client.chat.completions.create(model=model, messages=messages)\n",
+      "transport_evidence": "Separate-process OpenAI HTTP client.",
+      "existing_producer": "Source owns one native public OTel CLIENT operation; other field and delivery proof is outside this narrow capability control."
+    }
+  ]
+}

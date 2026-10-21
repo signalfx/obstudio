@@ -841,9 +841,14 @@ Keep an unselected native/SDK alternative explicitly conditional rather than
 presenting both as current topology. Add an absent-exporter routing mutation
 to the same report consistency check.
 Resolve API names in every routing `required_fix` and acceptance row against
-that case's language ledger, not only its provider table. Apply all controls in
-the shared **Names-only running process** acceptance, including retry-work
-bounds and shutdown, rather than copying only its successful activation step.
+that case's language and selected destination ledger. For a selected Studio
+native binding, apply the shared **Names-only running process** controls,
+including retry-work bounds and shutdown. Galileo acceptance uses its supported
+native resource/configuration/export path and preserves separate operator sinks.
+Scope inherited scenarios and shared acceptance references to that destination
+too; a correct provider table cannot excuse active Studio UUID-header/Resource
+requirements in a Galileo row. Exercise the consistency check with that
+destination-mismatch mutation and reject it before finalizing.
 
 **Splunk AO Runtime Coverage Contract** -- assess every source-owned agent
 runtime by default, plus other GenAI runtimes with detected or requested AO

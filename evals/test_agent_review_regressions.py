@@ -15,7 +15,7 @@ import pytest
 
 
 FIXTURE = Path(__file__).parent / "python/model-directed-agent"
-REFERENCE = re.compile(r"(?<![\w/])((?:[\w.-]+/)*[\w.-]+\.(?:py|md|txt))(?::(\d+)(?:-(\d+))?)?")
+REFERENCE = re.compile(r"(?<![\w/])((?:[\w.-]+/)*[\w.-]+\.(?:py|md|txt))(?::(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*))?")
 
 
 @pytest.mark.parametrize("name", ["agent-audit", "prior-audit"])
@@ -30,13 +30,26 @@ def test_supplied_audit_source_references_exist_and_fit_line_bounds(name):
             for item in value:
                 inspect(item, field)
         elif isinstance(value, str) and field in {"source", "evidence", "config_evidence", "runner"}:
-            for filename, first, last in REFERENCE.findall(value):
+            for filename, locations in REFERENCE.findall(value):
                 source = FIXTURE / filename
                 assert source.is_file(), (name, field, filename)
-                if first:
+                for location in locations.split(",") if locations else []:
+                    first, _, last = location.partition("-")
                     assert 1 <= int(first) <= int(last or first) <= len(source.read_text().splitlines()), (name, field, value)
 
     inspect(audit)
+    serving = next(node for node in ast.walk(ast.parse((FIXTURE / "app.py").read_text()))
+                   if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                   and isinstance(node.func.value, ast.Name) and node.func.value.id == "app"
+                   and node.func.attr == "run")
+    entry = next(item for item in audit["evidence"] if item["check"] == "Entry point")
+    cited = set()
+    for filename, locations in REFERENCE.findall(entry["source"]):
+        if filename == "app.py":
+            for location in locations.split(",") if locations else []:
+                first, _, last = location.partition("-")
+                cited.update(range(int(first), int(last or first) + 1))
+    assert serving.lineno in cited, (name, "Entry point citation misses app.run", serving.lineno)
     for environment in audit["verification"]["environments"]:
         assert "historical_check.py" in environment["runner"]
 
@@ -321,8 +334,15 @@ def test_correction_archive_counts_every_grade_and_retains_recovery_sources():
                        for grade in grades)
             summary = run["summary"]["with_skill"]["rubric"]
             assert (sum(check["pass"] for check in checks), len(checks)) == (summary["passed"], summary["total"])
-    final = history["rounds"][-1]
-    assert {run["skill"]: len(run["grades"]) for run in final["runs"]} == {
+    latest = {}
+    retained = set()
+    for phase in history["rounds"]:
+        for run in phase["runs"]:
+            identity = (run["skill"], run["run_id"])
+            assert identity not in retained, identity
+            retained.add(identity)
+            latest[run["skill"]] = run
+    assert {skill: len(run["grades"]) for skill, run in latest.items()} == {
         "otel-audit": 4, "otel-instrument": 9, "otel-verify": 4,
     }
     for source in history["bounded_recovery_integration"]["files"]:
