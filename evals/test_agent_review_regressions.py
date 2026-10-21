@@ -375,7 +375,73 @@ def test_correction_closure_notes_match_raw_audit_history_and_current_reports():
         run_id = report["metadata"]["run_id"]
         assert latest[skill]["run_id"] == run_id
         assert f"| {label} | `{run_id}` |" in document
-    assert "no such new sweep is reported here" in document
+    cohort = next(phase for phase in history["rounds"]
+                  if phase["label"] == "merged-main coordinated source verification")
+    assert {run["skill"] for run in cohort["runs"]} == {"otel-audit", "otel-instrument", "otel-verify"}
+    source_files = {}
+    for run in cohort["runs"]:
+        for name, digest in run["source"]["files"].items():
+            assert name not in source_files or source_files[name] == digest
+            source_files[name] = digest
+    assert source_files == cohort["consistent_source_files"]
+    grades = [entry["grade"] for run in cohort["runs"] for entry in run["grades"]]
+    checks = [check for grade in grades for check in grade["checks"]]
+    assert (f"| Merged-main coordinated source verification | "
+            f"{sum(grade['overall_pass'] for grade in grades)}/{len(grades)} | "
+            f"{sum(check['pass'] for check in checks)}/{len(checks)} |") in document
+    assert "no clean coordinated sweep\nat the corrected source is claimed" in document
+
+
+def test_routing_acceptance_review_retains_actual_failed_rows_and_checker_blind_spots():
+    root = Path(__file__).parents[1]
+    receipt = json.loads((root / "docs/evidence/agent-routing-acceptance-review.json").read_text())
+    files = receipt["original_files"]
+    for source in files.values():
+        assert hashlib.sha256(source["text"].encode()).hexdigest() == source["sha256"]
+    grade = json.loads(files["rubric_grade.json"]["text"])
+    assert {check["id"] for check in grade["checks"] if not check["pass"]} == {"rubric-2", "rubric-6"}
+    assert not grade["overall_pass"]
+    report = json.loads(files["service/.observe/agent-resource-cases.json"]["text"])
+    go = report["cases"]["fresh_native_fallback"]["routing"]
+    assert "ExportSpans(context.Context" in go["required_fix"]
+    assert "force_flush/shutdown or supported logger.terminate" in " ".join(go["acceptance_criteria"])
+    ordinary = report["cases"]["non_agent_control"]
+    assert ordinary["project"]["status"] == ordinary["stream"]["status"] == "N/A"
+    assert not ordinary["routing"]["acceptance_refs"]
+    assert "actual supported resource result" in " ".join(ordinary["routing"]["acceptance_criteria"])
+    checked = json.loads(files["service/.observe/evidence/source-ledger-consistency.json"]["text"])
+    assert checked["status"] == "Pass" and not checked["baseline"]["errors"]
+    correction = receipt["first_correction"]["files"]
+    for source in correction.values():
+        assert hashlib.sha256(source["text"].encode()).hexdigest() == source["sha256"]
+    grade = json.loads(correction["rubric_grade.json"]["text"])
+    assert {check["id"] for check in grade["checks"] if not check["pass"]} == {"rubric-2"}
+    go = json.loads(correction["service/.observe/agent-resource-cases.json"]["text"])["cases"]["fresh_native_fallback"]
+    assert not go["provider_exporter_destination_ownership"]["current_components"]
+    assert all("preserve current native provider" in row["pattern"]
+               for row in go["operation_and_producer_receipt"])
+    candidate = receipt["owner_correction"]["files"]
+    for source in candidate.values():
+        assert hashlib.sha256(source["text"].encode()).hexdigest() == source["sha256"]
+    grade = json.loads(candidate["rubric_grade.json"]["text"])
+    assert grade["overall_pass"] and all(check["pass"] for check in grade["checks"])
+    checked = json.loads(candidate["service/.observe/source-ledger-consistency.json"]["text"])
+    assert checked["status"] == "Pass" and not checked["active_report_errors"]
+    assert checked["source_unchanged"]
+    assert len(checked["negative_controls"]) == 8
+    assert all(control["rejected"] for control in checked["negative_controls"])
+    replay = receipt["owner_correction"]["independent_replay"]
+    assert replay["returncode"] == 0 and replay["source_unchanged"]
+    assert replay["checked_paths"] == len(checked["checked_json_paths"]) == 763
+    go = json.loads(candidate["service/.observe/agent-resource-cases.json"]["text"])["source_ledger"]["fresh_native_fallback"]
+    assert not go["provider_exporter_destination_ownership"]["current_components"]
+    components = {row["id"]: row for row in go["provider_exporter_destination_ownership"]["proposed_components"]}
+    for row in go["operation_and_producer_receipt"]:
+        assert row["component_phase"] == row["provider_phase"] == "proposed"
+        assert components[row["creator_component_id"]]["phase"] == "proposed"
+        assert components[row["provider_component_id"]]["phase"] == "proposed"
+        assert row["runtime_version_receipt"]["provider_component_id"] == row["provider_component_id"]
+        assert row["runtime_version_receipt"]["provider_phase"] == "proposed"
 
 
 @pytest.mark.parametrize("source_index", range(2))

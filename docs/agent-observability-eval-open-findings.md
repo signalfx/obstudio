@@ -187,6 +187,9 @@ correction round is in the tracked correction archive.
 | Public logging handler reuse | 17/17 | 107/107 |
 | Claude fixture runtime and source-citation corrections | 15/17 | 105/107 |
 | Destination-scoped acceptance and SDK capability closure (audit/verify only) | 8/8 | 46/46 |
+| Merged-main coordinated source verification | 16/17 | 105/107 |
+| Routing acceptance applicability and lifecycle ownership (audit only) | 3/4 | 23/24 |
+| Operation and resource-client owner closure (audit only) | 4/4 | 24/24 |
 
 These phases include source or grading corrections between runs; some
 unaffected task inputs were repeated unchanged. Treat those repeated task
@@ -306,18 +309,18 @@ were strengthened; neither original failed grade was overwritten.
 The [closure receipt](evidence/agent-report-closure-corrections.json) retains
 both failed reports, original rubric definitions and inputs, grades/hashes, focused public
 API replay source/results and correction-source receipts after a squash.
-Through all eight retained correction rounds, the resource-table audit task
-failed **4/8** runs, and Studio connection verification failed **1/8**. These
+Through all eleven retained correction rounds, the resource-table audit task
+failed **6/11** runs, and Studio connection verification failed **1/9**. These
 descriptive rates include the two failures above; the raw grades and source
 manifests expose each change. All post-correction audit failures belong to the
 resource-table task:
 
 | Post-correction audit task | Runs with a failed criterion / retained runs | Failed criteria, in run order |
 |---|---:|---|
-| `active-signal-matrix-audit` | 0/8 | None |
-| `agent-resource-table-audit` | 4/8 | rubric-6; rubric-2; rubric-2 + rubric-7; rubric-4 |
-| `agent-role-from-behavior` | 0/8 | None |
-| `studio-connection-modes` | 0/8 | None |
+| `active-signal-matrix-audit` | 0/11 | None |
+| `agent-resource-table-audit` | 6/11 | rubric-6; rubric-2; rubric-2 + rubric-7; rubric-4; rubric-2 + rubric-6; rubric-2 |
+| `agent-role-from-behavior` | 0/11 | None |
+| `studio-connection-modes` | 0/11 | None |
 
 The rotating criteria identify a concentrated compliance risk in the seven-case,
 four-state resource matrix. They are iterative-history observations across
@@ -328,24 +331,88 @@ The complete owning-skill audit/verifier reruns passed **8/8 tasks, 46/46
 checks**: audit **24/24**, verification **22/22**. The Galileo mismatch mutation
 is rejected and all four SDK capability controls pass. Instrument source and
 selected inputs did not change; its current **61/61** run remains valid.
-The latest current-source reports therefore contain **17 tasks, 107/107 checks**
+That checkpoint's current-source reports therefore contained **17 tasks, 107/107 checks**
 from those scoped runs. This is a report set, not a new coordinated seventeen-
 task sweep. Every raw grade, including the preceding 105/107 cohort, remains
 retained without duplicating the unchanged instrument grades.
 
-| Current rubric report | Run ID |
+| Checkpoint rubric report | Run ID |
 |---|---|
 | Audit | `20261021T032714172870Z` |
 | Instrument | `20261021T030000987717Z` |
 | Verify | `20261021T032656650895Z` |
 
-Audit and verification come from the final scoped batch; instrumentation comes
+At that checkpoint, audit and verification came from the final scoped batch; instrumentation came
 from the preceding complete batch that scored 15/17 overall. Three consecutive
 complete correction cohorts passed 17/17 before the later fixture and guidance
 edits: shared-language/recovery acceptance, stdlib logging, and public-handler
 reuse. Those runs are prior stability evidence at their recorded source
 revisions; none establishes a coordinated seventeen-task sweep at the final
 tree.
+
+## Merged-main CI follow-up
+
+After merging `main`, all seventeen tasks ran against the source represented by
+`945f7a0431654210ba80e1b7d9291e7735699d8b`: **16/17 tasks, 105/107 checks**.
+Instrumentation passed **61/61**, including all four preservation modes, and
+verification passed **22/22**. Audit passed **22/24**. The archive retains all
+three runs, every raw grade and their consistent source-file digest union.
+The coordinated audit run is `20261021T043124565699Z`; the table below tracks
+the latest owning-skill results, including the later scoped audit correction.
+
+| Latest retained rubric report | Run ID |
+|---|---|
+| Audit | `20261021T051843575616Z` |
+| Instrument | `20261021T042942403248Z` |
+| Verify | `20261021T043122995424Z` |
+
+The resource-table audit failed two valid acceptance checks. Its Go routing
+fix named native Go interfaces, while active acceptance still required foreign
+SDK lifecycle alternatives. Its non-agent resource statuses were N/A, while
+active acceptance still required an undefined supported-resource-result /
+lookup-to-export path copied from the agent template. Its checker accepted
+both because it checked selected foreign API tokens and N/A flags/references
+without closing the actual acceptance clauses. These are report defects, not
+grounds to relax the rubric. The
+[retained receipt](evidence/agent-routing-acceptance-review.json) embeds the
+failed report, checker, checker receipt, grade, original qualifier and source
+cases with SHA-256 values.
+
+The audit correction builds acceptance from each case's applicable obligations
+and selected capability owners, retaining ordinary OTel startup/emission/drain
+proof for a non-agent. The consistency receipt must enumerate actual acceptance
+paths and inherited/state clauses. Two new report-copy controls keep the
+provider/fix correct while injecting a foreign lifecycle API or AO activation
+beneath N/A. Captured bad fragments are explicitly untrusted input. The full
+owning audit rerun passed **23/24 checks**, with the matrix **6/7**. Both original
+acceptance failures and their controls passed. One valid ownership contradiction
+remained: three Go operation rows claimed to preserve a current provider while
+the inventory was empty and the setup was correctly proposed as new. Its
+resource receipt also needed to distinguish a language-neutral HTTP candidate
+from Go client support. The receipt retains this report, checker artifacts and
+failed grade too.
+
+The next correction derives operation patterns and runtime/version receipts
+from the same current/proposed component IDs as the inventory, including
+resource-client evidence. Additional controls reject a false current-owner
+claim with an otherwise correct inventory, and unqualified foreign-client
+support. Captured method/auth/schema evidence may inform a scoped HTTP
+candidate; a Python SDK class name cannot establish an installed Go client.
+The owning audit rerun passed **4/4 tasks, 24/24 checks**, with the matrix
+**7/7**. An independent replay of the actual generated checker reproduced
+**763 checked paths and eight rejected controls**, including both acceptance
+defects, the current-owner contradiction and foreign-client support claim.
+The four new acceptance/owner mutations keep the correct inventory and routing
+fix unchanged. The receipt embeds the candidate report, checker, raw grade and
+replay output; the original 5/7 and intermediate 6/7 grades remain failed.
+
+The latest current-source report set is **17 tasks, 107/107 checks**: audit
+**24/24**, instrumentation **61/61**, verification **22/22**. It combines the
+scoped owner correction with the unchanged instrumentation/verifier evidence
+from the complete merged-source cohort. It is not a clean coordinated sweep
+at the corrected source or a fixed-version reliability estimate. The matrix's
+concentrated iterative-history failures remain a closure risk for future
+generation; a passing correction does not erase them.
 
 ## Completed evidence baseline
 
@@ -435,6 +502,7 @@ states, including the existing mutation controls. Splitting must not discard
 those checks or reinterpret historical failures as passes. No task split has
 been implemented in this correction.
 
-A coordinated final-tree claim requires a new complete seventeen-task sweep
-against that recorded tree with every grade retained. The current scoped
-report set does not satisfy that claim; no such new sweep is reported here.
+A clean coordinated final-tree claim requires a complete seventeen-task sweep
+against that recorded tree with every grade retained. The merged-source sweep
+above is complete and includes two failed checks; no clean coordinated sweep
+at the corrected source is claimed.

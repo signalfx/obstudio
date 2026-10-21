@@ -833,15 +833,36 @@ lifecycle; an unscoped "agent with model/tool children" rule invents operations
 even when its separate project/routing rows correctly say N/A. Exercise this
 consistency check with a report copy containing an absent operation/parent.
 Include current versus proposed providers, exporters and destinations in that
-ledger, with a source registration for each claimed existing component. Derive
-routing/profile text from those facts too. With no existing exporter, propose
+ledger, with a source registration for each claimed existing component. Bind
+each operation's pattern and runtime/version receipt to those same component
+IDs and their current/proposed phase; render the narrative from those facts.
+An empty current inventory cannot yield a preserve-current provider or installed
+runtime claim in an operation row. Apply this closure to resource-client support
+too: distinguish a captured language-neutral HTTP method/auth/schema contract
+from language-specific SDK/client support. A Python SDK class name alone cannot
+establish a Go client or its compatibility; absent wire/runtime evidence remains
+an explicit gap. Exercise mutations that keep the correct inventory but add a
+current-owner claim in an operation row, or unqualified foreign-client support
+in a resource receipt. Derive routing/profile text from those facts too. With no existing exporter, propose
 the selected SDK's new sink or a supported native exporter setup; do not tell
 the app to preserve, enrich or merge headers into a nonexistent exporter.
 Keep an unselected native/SDK alternative explicitly conditional rather than
 presenting both as current topology. Add an absent-exporter routing mutation
 to the same report consistency check.
-Resolve API names in every routing `required_fix` and acceptance row against
-that case's language and selected destination ledger. For a selected Studio
+Build each case's active acceptance from its applicable obligations and
+selected capability owners before rendering text. Do not copy a shared list of
+alternative SDK/native lifecycle calls into every row. Reconcile each active
+acceptance item, nested state clause and dereferenced shared scenario with the
+same role, language, destination and operation ledger as its `required_fix`.
+Record the checked JSON paths and owners in the consistency receipt; checking
+only status fields, `required_fix` or the injected examples leaves the actual
+acceptance unproven. An AO N/A decision removes resource lookup/binding
+activation requirements from active acceptance while retaining ordinary OTel
+startup, emission and drain proof. Unknown lifecycle APIs remain exact support
+gaps instead of foreign SDK alternatives. Exercise report-copy mutations that
+leave the header/provider/fix correct but add a foreign lifecycle API to active
+acceptance, or mandatory AO resource activation beneath an N/A decision; reject
+both. For a selected Studio
 native binding, apply the shared **Names-only running process** controls,
 including retry-work bounds and shutdown. Galileo acceptance uses its supported
 native resource/configuration/export path and preserves separate operator sinks.

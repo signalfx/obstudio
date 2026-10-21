@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261021T032719820909Z",
+    "run_id": "20261021T054215107114Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "",
@@ -288,7 +288,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "06ff42e7e26b9a1efe2d45a416e83e9da0b1c9b4de88e48cd2a6c0e995e39093",
+    "digest": "52825f26381f4d6618e579db219403a5d3c411af2a376dfe6026cb3ce3d063a4",
     "eval_kinds": [
       "rubric"
     ],
@@ -368,7 +368,7 @@
       "evals/python/ai-assistant-demo/eval/inputs/genai-default-scenarios.json": "2d4640f2f910a698de2a6155fff4fbfbbb8f66583d1986dd53dd4b825941ab6f",
       "evals/python/ai-assistant-demo/eval/inputs/genai-operation-metadata-verify-evidence.json": "8b5b7c2efb296148b7f65bf6977fee27a8c718b7ec14b60eaee2bc3462dc066c",
       "evals/python/ai-assistant-demo/eval/inputs/genai-required-evidence.json": "b0b3e76d7a66065b4a8d83e77cf207497221e738ba9852447eb441a9c7793c2d",
-      "evals/python/ai-assistant-demo/eval/inputs/genai-sdk-helper-evidence.json": "fdd74f3e9d4ed09bb8fe61ebd0b6e4593b429078d34fc41c4b9e35ddc4ce475e",
+      "evals/python/ai-assistant-demo/eval/inputs/genai-sdk-helper-evidence.json": "92155138ea76a440b6b0547f539301de6c591789394d45da8ef8c9f60b6dec29",
       "evals/python/ai-assistant-demo/eval/inputs/genai-sdk-source-snapshot.json": "9d4bb13d28c1892c96cf069f65fe129674e4dc5c86b21adb3823a82b2a378ef6",
       "evals/python/ai-assistant-demo/eval/inputs/genai-semconv-source-snapshot.json": "37dcf51de2138b706b7272c32e4215d280a94790b3d4bb454000ef66ef24e3ae",
       "evals/python/ai-assistant-demo/eval/inputs/genai-usage-namespace-verify-evidence.json": "973b266667512deecea1995086c69a761c5b2d5a910e53b2944071bd352f3f0a",
