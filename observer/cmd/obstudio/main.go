@@ -247,7 +247,8 @@ func run(config runConfig) error {
 		MCPURL: observerState.MCPURL,
 	}, splunkExportController, splunkTracesController,
 		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController),
-		freeAccountSubmitter)
+		freeAccountSubmitter,
+		newConfigManager())
 	mux.Handle("POST /otel/v1/traces", rcv.HTTPHandler())
 	mux.Handle("POST /v2/trace/otlp", rcv.HTTPHandler())
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
@@ -961,7 +962,8 @@ func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 			"  OTLP/HTTP receiver:  http://%s\n"+
 			"  OTLP/gRPC receiver:  %s\n"+
 			"  MCP endpoint:        http://%s/mcp\n"+
-			"  Agent setup:         obstudio install --target=<agent>[,<agent>...]\n"+
+			"  Config API:          %s/api/config\n"+
+			"  Agent setup:        obstudio install --target=<agent>[,<agent>...]\n"+
 			"\nEnvironment Variables\n"+
 			"  OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL: %s\n"+
 			"  OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL: %s\n\n",
@@ -969,6 +971,7 @@ func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 		otlpHTTPAddr,
 		otlpGRPCAddr,
 		mainAddr,
+		observerBrowserURL(mainAddr),
 		strings.TrimSpace(os.Getenv("OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL")),
 		strings.TrimSpace(os.Getenv("OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL")),
 	)

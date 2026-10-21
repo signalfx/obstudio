@@ -76,6 +76,9 @@ func TestRenderStartupBannerUsesFullProductName(t *testing.T) {
 	if !strings.HasPrefix(got, "\nSplunk Observability Studio (collector)\n") {
 		t.Fatalf("renderStartupBanner() = %q, want full product name", got)
 	}
+	if want := "  Config API:          http://127.0.0.1:3000/api/config\n"; !strings.Contains(got, want) {
+		t.Fatalf("renderStartupBanner() = %q, want line %q", got, want)
+	}
 }
 
 func TestSplunkExportConfigurationRefreshKeepsUnchangedExporters(t *testing.T) {
