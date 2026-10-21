@@ -816,6 +816,35 @@ satisfy that row's required workflow, model, tool, token, memory, evaluation,
 or AI-path signals. Use `missing` when none of the required GenAI signals
 exists, even if unrelated OTel metrics are source-active.
 
+For multiple modes or supplied source cases, derive a separate operation and
+signal ownership ledger from each reachable branch before composing reports.
+A metrics/logs-only branch has no trace producer to preserve: propose its
+missing trace capability while retaining its actual metric/log provider.
+Reconcile each ledger with findings, excluded work and provider-binding text;
+an operation cannot be both absent and excluded as already instrumented.
+Bind support receipts to that case's language, runtime and package; Python
+exporter evidence cannot establish a Go implementation. Carry a source-backed
+N/A decision through every resource, header, Studio-state and acceptance row
+for a non-agent control; do not leave mandatory AO work in a reused template.
+Generate field and lifecycle rows from the same case's operation ledger too.
+Before finalizing, check every proposed operation and parent against that
+ledger or its explicit N/A scope. A single-inference facade has a model
+lifecycle; an unscoped "agent with model/tool children" rule invents operations
+even when its separate project/routing rows correctly say N/A. Exercise this
+consistency check with a report copy containing an absent operation/parent.
+Include current versus proposed providers, exporters and destinations in that
+ledger, with a source registration for each claimed existing component. Derive
+routing/profile text from those facts too. With no existing exporter, propose
+the selected SDK's new sink or a supported native exporter setup; do not tell
+the app to preserve, enrich or merge headers into a nonexistent exporter.
+Keep an unselected native/SDK alternative explicitly conditional rather than
+presenting both as current topology. Add an absent-exporter routing mutation
+to the same report consistency check.
+Resolve API names in every routing `required_fix` and acceptance row against
+that case's language ledger, not only its provider table. Apply all controls in
+the shared **Names-only running process** acceptance, including retry-work
+bounds and shutdown, rather than copying only its successful activation step.
+
 **Splunk AO Runtime Coverage Contract** -- assess every source-owned agent
 runtime by default, plus other GenAI runtimes with detected or requested AO
 integration. A bare audit request is sufficient for an agent's project, stream

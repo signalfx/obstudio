@@ -462,6 +462,21 @@ Coverage rules:
   timeout, treat each as a separate path scenario unless source inspection
   proves identical telemetry.
 
+Bind each runtime claim to its own capture path, process/mode, destination,
+scenario and observed trace/span IDs. Resolve cited IDs against that exact
+capture and its decoded request metadata before finalizing; IDs copied from a
+Studio case cannot prove a public or rejected-export case. Add a negative
+association test when generating report evidence from several captures.
+When the receiver is unavailable, business success and an export error prove
+neither native emission nor delivery. Independently capture completed native
+spans, metric points and LogRecords through supported SDK test seams, or keep
+that emission claim Not proven. Preserve N/A applicability in every downstream
+state row; a non-agent N/A cannot become required/Blocked AO setup in a template.
+Interpret applicability with its explicit scope: a whole section marked N/A
+can retain a conditional catalog of checks without making them current work.
+Flag an active required/Blocked child outcome that contradicts that scope,
+not the mere presence of a key named `required` inside an N/A section.
+
 Use this status vocabulary:
 
 - `Verified: unit`: deterministic app-code assertion or in-memory exporter
@@ -564,6 +579,14 @@ selected names and already-existing resources, an initially unavailable API,
 then recovery in the same app PID with zero creates and no manual setup.
 Separately test resolved bindings through an outage without erasing them.
 Preseeding IDs or restarting between states cannot prove names-only recovery.
+Include finite per-request timeouts, a capped retry rate/backoff, business and
+local-telemetry progress during a prolonged outage, and cancellation of pending
+retries on shutdown in that acceptance. Bounded retry work does not require
+permanently stopping retries before Studio connects. Record actual configured
+bounds when source or captures supply them; otherwise name the missing bounds
+and their future assertion as Not proven. An automatic-recovery sentence alone
+does not assess these constraints, and source-only verification must not invent
+numeric runtime settings.
 Only exact fresh cloud trace readback proves end-to-end AO visibility.
 
 For Galileo, verify its native project/log-stream client and actual consumed

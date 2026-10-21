@@ -285,6 +285,29 @@ numeric proposed settings and hooks; fixture-only reviews mark configuration
 unproven and give the precise acceptance test. Require a sentinel-absence test
 over native records, attributes/events and wire payload as applicable.
 
+Use representation-sensitive negative cases for the selected capture policy.
+Parsing JSON is not sanitization: recurse into decoded scalar strings as well
+as containers, without repeatedly decoding the same scalar. Remove protected
+values, not only their labels, in source-shaped `hidden_reasoning=...` and
+`private_prompt=...` text. A typed part with `type: reasoning` is protected by
+its discriminator even though its payload key is merely `content`; inspect
+that semantic type before traversing ordinary fields. Apply the policy to
+inputs and produced outputs without changing business arguments/results.
+Validate the concrete schema selected by a known part's discriminator; a
+malformed known type must not fall through to a permissive `GenericPart`.
+Unknown extension types keep the inspected schema's explicit extension policy.
+
+Check UTF-8 limits on the final serialized value of every content attribute,
+including retrieval queries and embedded JSON. Per-leaf bounds alone do not
+bound an aggregate; truncate structured content before serialization and
+validate the result again. Add negative cases for quoted JSON scalars,
+protected labelled text, nested/JSON-encoded reasoning parts, malformed known
+parts and aggregate multibyte overflow. Assert protected-value absence and
+useful safe-content retention on completed native records and actual exports,
+not just a sanitizer's return. Audit specifies these acceptance cases;
+instrument implements and executes them; verification tests or reports their
+exact missing proof. Keep earlier failing receipts when a repair passes.
+
 **Lifecycle and delivery evidence**
 
 | Operation/scenario | Success/error/timeout/cancel terminal behavior | Parent/context and duplicate rule | Flush/close/terminate evidence | Captured proof or missing test |

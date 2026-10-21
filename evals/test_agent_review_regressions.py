@@ -1,6 +1,8 @@
 """Keep the supplied agent audit evidence reproducible from its fixture."""
 
 import ast
+from collections import Counter
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -89,3 +91,225 @@ def test_connection_probe_public_wire_contract(case):
         capture_output=True, text=True, timeout=20,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_retained_eval_history_counts_include_partial_runs_and_failed_criteria():
+    archive = Path(__file__).parents[1] / "docs/evidence/agent-observability-eval-history.json"
+    history = json.loads(archive.read_text())
+    expected = history["selection"]["tasks_by_skill"]
+    identities = set()
+    for run in history["runs"]:
+        tasks = sorted(grade["task"] for grade in run["grades"])
+        assert run["coverage"] == ("complete" if tasks == expected[run["skill"]] else "partial")
+        assert run["run_id"] <= history["selection"]["last_included_run_id"]
+        for grade in run["grades"]:
+            identity = (run["skill"], run["run_id"], grade["task"])
+            assert identity not in identities
+            identities.add(identity)
+            assert grade["overall_pass"] == all(check["pass"] for check in grade["checks"])
+            for check in grade["checks"]:
+                if not check["pass"]:
+                    assert check["notes"] and check["evidence"]
+
+    for scope, expected_counts in history["summary"].items():
+        runs = [run for run in history["runs"] if scope == "all" or run["coverage"] == "complete"]
+        grades = [grade for run in runs for grade in run["grades"]]
+        checks = [check for grade in grades for check in grade["checks"]]
+        assert expected_counts == {
+            "runs": len(runs), "task_grades": len(grades),
+            "fully_passing_task_grades": sum(grade["overall_pass"] for grade in grades),
+            "checks_passed": sum(check["pass"] for check in checks), "checks_total": len(checks),
+            "distinct_tasks": len({(run["skill"], grade["task"]) for run in runs for grade in run["grades"]}),
+            "distinct_tasks_with_failure": len({(run["skill"], grade["task"]) for run in runs for grade in run["grades"] if not grade["overall_pass"]}),
+        }
+    assert history["summary"]["complete"]["checks_total"] == 373
+    assert history["summary"]["all"]["checks_total"] == 431
+    for rate in history["task_rates"]:
+        pairs = [(run, grade) for run in history["runs"] if run["skill"] == rate["skill"]
+                 for grade in run["grades"] if grade["task"] == rate["task"]]
+        for scope in ("complete", "all"):
+            grades = [grade for run, grade in pairs if scope == "all" or run["coverage"] == "complete"]
+            assert rate[scope] == {"runs": len(grades), "failed_tasks": sum(not grade["overall_pass"] for grade in grades)}
+        failures = Counter(check["id"] for _, grade in pairs for check in grade["checks"] if not check["pass"])
+        assert {check["id"]: check["failures"] for check in rate["failed_criteria"]} == failures
+        for criterion in rate["failed_criteria"]:
+            assert criterion["run_ids"] == [run["run_id"] for run, grade in pairs
+                                            for check in grade["checks"] if check["id"] == criterion["id"] and not check["pass"]]
+
+
+def test_retained_failure_evidence_survives_without_git_or_local_run_directories():
+    root = Path(__file__).parents[1]
+    history = json.loads((root / "docs/evidence/agent-observability-eval-history.json").read_text())
+    for receipt in history["independent_reproductions"]:
+        assert hashlib.sha256(receipt["raw_json"].encode()).hexdigest() == receipt["original_sha256"]
+        assert json.loads(receipt["raw_json"])
+    for source in history["failing_source_snapshots"]:
+        assert hashlib.sha256(source["text"].encode()).hexdigest() == source["sha256"]
+        ast.parse(source["text"])
+        assert any(run["skill"] == source["skill"] and run["run_id"] == source["run_id"]
+                   and any(grade["task"] == source["task"] and not grade["overall_pass"] for grade in run["grades"])
+                   for run in history["runs"])
+    baseline = history["baseline"]["reports"]
+    summaries = [report["summary"] for report in baseline]
+    assert sum(summary["prompt_count"] for summary in summaries) == 15
+    assert sum(summary["with_skill"]["rubric"]["passed"] for summary in summaries) == 86
+    assert sum(summary["with_skill"]["rubric"]["total"] for summary in summaries) == 93
+    assert sum(len(report["failures"]) for report in baseline) == 7
+    document = (root / "docs/agent-observability-eval-open-findings.md").read_text()
+    assert "evidence/agent-observability-eval-history.json" in document
+    for rate in history["task_rates"]:
+        complete, all_runs = rate["complete"], rate["all"]
+        assert (f"| {rate['skill']} / `{rate['task']}` | {complete['failed_tasks']}/{complete['runs']} | "
+                f"{all_runs['failed_tasks']}/{all_runs['runs']} |") in document
+
+
+def test_content_counterexamples_retain_observed_representation_failures():
+    fixture = Path(__file__).parent / "python/existing-otel-agent-demo"
+    corpus = json.loads((fixture / "eval/inputs/content-counterexamples.json").read_text())
+    cases = {case["id"]: case for case in corpus["cases"]}
+    assert json.loads(cases["quoted-email"]["value"]) == "reader@example.invalid"
+    assert "reasoning=hidden-value" in json.loads(cases["quoted-labels"]["value"])
+    assert "hidden_reasoning=thought-sentinel" in cases["labelled-protected-values"]["value"]
+    for name in ("typed-reasoning", "json-typed-reasoning"):
+        value = cases[name]["value"]
+        if isinstance(value, str):
+            value = json.loads(value)
+        assert value["parts"] == [{"type": "reasoning", "content": "hidden-reasoning-sentinel"}]
+    recipe = cases["aggregate-unicode"]["value_recipe"]
+    value = {**recipe["prefix"], **{f"{recipe['field_prefix']}{index}": recipe["unit"] * recipe["repeat"]
+                                 for index in range(recipe["field_count"])}}
+    encoded = json.dumps(value, ensure_ascii=False).encode()
+    assert len(encoded) > cases["aggregate-unicode"]["max_serialized_attribute_bytes"]
+    assert corpus["malformed_known_parts"] == [
+        {"type": "text"}, {"type": "text", "content": 123},
+        {"type": "tool_call", "name": 123}, {"type": "tool_call_response"},
+    ]
+
+
+@pytest.mark.parametrize("snapshot_index", range(4))
+def test_archived_sanitizer_failures_replay_from_tracked_data(snapshot_index):
+    archive = Path(__file__).parents[1] / "docs/evidence/agent-observability-eval-history.json"
+    source = json.loads(archive.read_text())["failing_source_snapshots"][snapshot_index]
+    tree = ast.parse(source["text"])
+    allowed = {
+        "MAX_MESSAGES", "MAX_PARTS", "MAX_BYTES", "MAX_TEXT_BYTES", "MAX_ATTRIBUTE_BYTES",
+        "MAX_DEPTH", "MAX_ITEMS", "SENSITIVE", "LABELLED", "_PRIVATE", "_LABEL", "_EMAIL",
+        "EMAIL", "CREDENTIAL",
+    }
+    nodes = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            names = {item.id for target in node.targets for item in ast.walk(target) if isinstance(item, ast.Name)}
+            if names and names <= allowed:
+                nodes.append(node)
+        elif isinstance(node, ast.FunctionDef) and node.name in {"sanitize", "bounded"}:
+            nodes.append(node)
+    namespace = {"json": json, "re": re}
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), source["original_path"], "exec"), namespace)
+    sanitize = namespace["sanitize"]
+    if snapshot_index == 0:
+        assert "HIDDEN_SENTINEL" in sanitize("hidden_reasoning=HIDDEN_SENTINEL; question=shipment")
+        oversized = json.dumps({f"field_{index}": "a" * 2000 for index in range(16)})
+        assert len(sanitize(oversized).encode()) > 8192
+    elif snapshot_index == 1:
+        for scalar in ('"reader@example.invalid"', '"token=fixture-secret;reasoning=hidden"'):
+            assert sanitize(scalar) == scalar
+    elif snapshot_index == 2:
+        assert "thought-sentinel" in sanitize("hidden_reasoning=thought-sentinel")
+        assert "hidden-sentinel" in sanitize("private_prompt=hidden-sentinel")
+    else:
+        reasoning = {"type": "reasoning", "content": "hidden-reasoning-sentinel"}
+        assert "hidden-reasoning-sentinel" in json.dumps(sanitize(reasoning))
+        assert "hidden-reasoning-sentinel" in sanitize(json.dumps(reasoning))
+
+
+def test_correction_adjudications_retain_raw_grades_and_effective_applicability():
+    archive = Path(__file__).parents[1] / "docs/evidence/agent-observability-correction-runs.json"
+    history = json.loads(archive.read_text())
+    first = history["rounds"][0]
+    for decision in first["adjudications"]:
+        run = next(run for run in first["runs"] if run["skill"] == decision["skill"])
+        grade = next(grade["grade"] for grade in run["grades"] if grade["task"] == decision["task"])
+        assert not next(check["pass"] for check in grade["checks"] if check["id"] == decision["criterion"])
+        case = decision["non_agent_control"]
+        if decision["decision"] == "confirmed":
+            assert "no agent or workflow" in case["role"]
+            assert "one agent with model/tool children" in case["lifecycle_and_delivery"][0]["parent_duplicate_rule"]
+        else:
+            assert decision["decision"] == "false_positive"
+            assert case["provisioning_acceptance"]["status"] == "Not applicable"
+            assert case["provisioning_acceptance"]["required"]
+            for state in case["studio_states"].values():
+                for key in ("project_configuration", "stream_configuration", "routing_configuration"):
+                    assert state[key]["status"] == "Not applicable"
+    repaired = [receipt["proof"] for receipt in history["independent_replays"] if receipt["original_file"].startswith("repaired-")]
+    assert {proof["package_versions"]["opentelemetry-sdk"] for proof in repaired} == {"1.44.0", "1.45.1"}
+    for proof in repaired:
+        assert proof["pass"] and proof["native_span_count"] == proof["wire_span_count"] == 18
+        assert proof["wire_matches_native_ids"] and proof["wire_protected_absent"]
+        assert proof["original_owners_retained"]
+    for source in history["repaired_runtime_files"]:
+        assert hashlib.sha256(source["text"].encode()).hexdigest() == source["sha256"]
+    regrade = history["unchanged_actor_regrade"]
+    assert regrade["actor_service_unchanged"] and regrade["original_grade_unchanged"]
+    assert regrade["supplemental_grade"]["overall_pass"]
+    assert len(regrade["supplemental_grade"]["checks"]) == 6
+    assert all(check["pass"] for check in regrade["supplemental_grade"]["checks"])
+    original = next(grade for run in first["runs"] if run["skill"] == "otel-verify"
+                    for grade in run["grades"] if grade["task"] == regrade["task"])
+    assert original["sha256"] == regrade["original_grade_sha256"]
+    assert not original["grade"]["overall_pass"]
+    decision = next(item for item in first["adjudications"] if item["decision"] == "false_positive")
+    assert regrade["actor_service_manifest"]["key_files"][".observe/agent-resource-cases.json"] == decision["artifact_sha256"]
+    negative = history["applicability_negative_control"]
+    assert negative["changed_files"] == [".observe/agent-resource-cases.json"]
+    assert negative["source_files_unchanged"] and negative["judge_did_not_change_artifacts"]
+    assert not next(check["pass"] for check in negative["grade"]["checks"] if check["id"] == "rubric-3")
+    frozen = history["applicability_frozen_definition"]
+    assert hashlib.sha256(frozen["text"].encode()).hexdigest() == frozen["sha256"]
+    assert frozen["sha256"] == negative["rubric_definition_sha256"] == regrade["rubric_definition_sha256"]
+
+
+def test_correction_archive_counts_every_grade_and_retains_recovery_sources():
+    archive = Path(__file__).parents[1] / "docs/evidence/agent-observability-correction-runs.json"
+    history = json.loads(archive.read_text())
+    for phase in history["rounds"]:
+        for run in phase["runs"]:
+            grades = [entry["grade"] for entry in run["grades"]]
+            checks = [check for grade in grades for check in grade["checks"]]
+            assert len(grades) == run["summary"]["prompt_count"]
+            assert len({entry["task"] for entry in run["grades"]}) == len(grades)
+            assert all(grade["overall_pass"] == all(check["pass"] for check in grade["checks"])
+                       for grade in grades)
+            summary = run["summary"]["with_skill"]["rubric"]
+            assert (sum(check["pass"] for check in checks), len(checks)) == (summary["passed"], summary["total"])
+    final = history["rounds"][-1]
+    assert {run["skill"]: len(run["grades"]) for run in final["runs"]} == {
+        "otel-audit": 4, "otel-instrument": 9, "otel-verify": 4,
+    }
+    for source in history["bounded_recovery_integration"]["files"]:
+        assert hashlib.sha256(source["text"].encode()).hexdigest() == source["sha256"]
+    assert all(history["bounded_recovery_integration"]["fixture_match"].values())
+
+
+@pytest.mark.parametrize("source_index", range(2))
+def test_fresh_genai_and_logs_samples_fix_exact_original_quoted_scalars(source_index):
+    archive = Path(__file__).parents[1] / "docs/evidence/agent-observability-correction-runs.json"
+    source = json.loads(archive.read_text())["fresh_content_sources"][source_index]
+    assert hashlib.sha256(source["text"].encode()).hexdigest() == source["sha256"]
+    tree = ast.parse(source["text"])
+    constants = {"MAX_MESSAGES", "MAX_PARTS", "MAX_BYTES", "PROTECTED", "LABEL", "EMAIL",
+                 "PRIVATE", "LABELLED", "PRIVATE_TOKEN", "OMIT"}
+    nodes = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            names = {item.id for target in node.targets for item in ast.walk(target) if isinstance(item, ast.Name)}
+            if names and names <= constants:
+                nodes.append(node)
+        elif isinstance(node, ast.FunctionDef) and node.name in {"sanitize", "text", "utf8", "encode", "dumps"}:
+            nodes.append(node)
+    namespace = {"json": json, "re": re, "Any": object}
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), source["filename"], "exec"), namespace)
+    for scalar in ('"private-prompt-sentinel"', '"reader@example.invalid"', '"token=fixture-secret;reasoning=hidden"'):
+        result = namespace["sanitize"](scalar)
+        assert all(value not in str(result) for value in ("private-prompt-sentinel", "reader@example.invalid", "fixture-secret", "hidden"))

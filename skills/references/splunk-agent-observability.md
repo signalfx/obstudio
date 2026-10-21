@@ -726,6 +726,12 @@ exit; check the final emitted span for overwrites rather than assuming earlier
 setters survive. Bind the helper to the actual registered provider, configure
 the supported AO processor/exporter where selected, and prove owned flush and
 shutdown. An unrelated provider or unregistered local provider proves no export.
+SDK creation and transport ownership are separate: the supported helper on a
+registered application OTel provider and compatible selected OTLP sink remains
+SDK-created instrumentation. Do not require a private SDK logger sink or call
+it native-only merely because the provider/exporter uses OTel APIs. Name the
+actual SDK creator and supported registration, keep any selected AO
+processor/exporter, and retain exact per-operation compatibility exceptions.
 
 Inspect creation-time capability too. If the chosen helper opens a name-only
 span before yielding or writing schema-derived attributes, the sampler and
@@ -1058,6 +1064,16 @@ precedence. Do not mutate private span/provider fields or global Resources.
 Snapshot one complete binding per export so header IDs and payload IDs agree;
 do not multiply exports or claim replay of spans already delivered only locally.
 
+`SpanExporter.export` and `ReadableSpan` above are the **Python** carrier
+example. Bind another language's routing and profile plan to its inspected
+public exporter/span interfaces; do not transplant these Python API names into
+Go or another runtime. Record exact unavailable interface/version proof rather
+than presenting Python signatures as a supported language-specific fix.
+For example, the [Go SDK exporter/span interfaces](https://pkg.go.dev/go.opentelemetry.io/otel/sdk/trace#SpanExporter)
+use `ExportSpans(context.Context, []sdktrace.ReadOnlySpan) error` and
+`ReadOnlySpan.Resource()`. Verify the installed interface and lifecycle before
+choosing a carrier; this documentation example is not a Go deployment proof.
+
 For a native AO binding, keep these acceptance scenarios separate in audit
 plans. Instrumentation and verification execute or report each selected,
 applicable scenario; one recovery observation cannot close another scenario.
@@ -1068,6 +1084,13 @@ applicable scenario; one recovery observation cannot close another scenario.
   app PID. Require automatic exact-name reuse, zero creates and atomic correct
   headers plus both trace Resource attributes on subsequent agent/model/tool
   spans, including another temporary outage.
+  Require finite per-request timeout and capped retry frequency/backoff,
+  continuing business/native telemetry during a prolonged outage, and pending
+  retry cancellation at shutdown. Cap retry work, not the application's
+  lifetime opportunity to recover after a late Studio connection. Record
+  source-backed settings or the precise missing-bound proof/acceptance when
+  source-only; do not invent numeric runtime limits. Test the actual owned
+  resolver loop, not only a standalone helper.
 - **Previously validated binding at process startup:** start a new app process
   with a persisted complete binding whose ownership and association were
   validated for the same unchanged destination. Keep the resource API at 503 or

@@ -1800,6 +1800,11 @@ At minimum:
    content. A `redacted` label, sanitizer-only assertion, or blanking all content
    is insufficient. If a value cannot be safely transformed before any writer
    captures it, omit that value and report the remaining content gap.
+   Apply the representation-sensitive cases in the shared GenAI capture
+   contract: decoded JSON scalars, protected labelled values, reasoning-part
+   discriminators and final serialized aggregate bounds. Keep the original
+   failing receipt and prove the repaired case on the real owning spans and
+   exports; a different passing prompt does not close the counterexample.
    Build an exact signal closure matrix and execute every changed span name and
    metric call site that should still emit, plus explicit absence proof for
    every removed signal. Do not infer coverage for create, batch, update,
