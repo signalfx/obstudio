@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261016T190726010356Z",
+    "run_id": "20261021T054215107114Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "",
@@ -194,7 +194,7 @@
       "eval_dir": "evals/python/ai-assistant-demo",
       "skill_path": "skills/otel-verify",
       "sanity_check_count": 0,
-      "rubric_check_count": 6,
+      "rubric_check_count": 7,
       "runtime_check_count": 0
     },
     {
@@ -228,19 +228,67 @@
       "sanity_check_count": 0,
       "rubric_check_count": 7,
       "runtime_check_count": 0
+    },
+    {
+      "id": "python/model-directed-agent/qual/connection-modes-verify",
+      "case": "python/model-directed-agent",
+      "language": "python",
+      "service": "model-directed-agent",
+      "prompt_count": 1,
+      "prompts": [
+        "studio-connection-modes"
+      ],
+      "definition_path": "evals/python/model-directed-agent/eval/qual/connection-modes-verify.json",
+      "eval_dir": "evals/python/model-directed-agent",
+      "skill_path": "skills/otel-verify",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/model-directed-agent/qual/resource-table-verify",
+      "case": "python/model-directed-agent",
+      "language": "python",
+      "service": "model-directed-agent",
+      "prompt_count": 1,
+      "prompts": [
+        "agent-resource-table-verify"
+      ],
+      "definition_path": "evals/python/model-directed-agent/eval/qual/resource-table-verify.json",
+      "eval_dir": "evals/python/model-directed-agent",
+      "skill_path": "skills/otel-verify",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/model-directed-agent/qual/verify",
+      "case": "python/model-directed-agent",
+      "language": "python",
+      "service": "model-directed-agent",
+      "prompt_count": 1,
+      "prompts": [
+        "reject-green-workflow-test"
+      ],
+      "definition_path": "evals/python/model-directed-agent/eval/qual/verify.json",
+      "eval_dir": "evals/python/model-directed-agent",
+      "skill_path": "skills/otel-verify",
+      "sanity_check_count": 0,
+      "rubric_check_count": 4,
+      "runtime_check_count": 0
     }
   ],
   "summary": {
-    "eval_count": 13,
-    "case_count": 13,
-    "prompt_count": 13,
+    "eval_count": 16,
+    "case_count": 16,
+    "prompt_count": 16,
     "sanity_check_count": 0,
-    "rubric_check_count": 74,
+    "rubric_check_count": 90,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 4,
-    "digest": "6e48e7d1e8a06770daf5c57af42fc49479a639fb7c630abfe4517e165556f648",
+    "digest": "52825f26381f4d6618e579db219403a5d3c411af2a376dfe6026cb3ce3d063a4",
     "eval_kinds": [
       "rubric"
     ],
@@ -255,7 +303,7 @@
       "evals/go/chi-basic/eval/qual/verify.json": "225a5744d2a38aeaadcb3003221d2f2e9f5d960fc05d12636eab5241afcce5d2",
       "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
-      "skills/otel-verify/SKILL.md": "970032bc0dbae3a956eb27e869e06eb2e10355cc2ef62af9a501e0c90c1e765a",
+      "skills/otel-verify/SKILL.md": "5ae01fbc71ae78e7cc7699d241e890e8fb1ca4d529a670c8b8fcee71e8cf6900",
       "skills/otel-verify/references/app-code-test-authoring.md": "d535a0acb3d123ee01eb5b39c3247378b4900f4977672021022dd0fe3885f91f",
       "skills/otel-verify/references/explorer-witness.md": "ee76d5856b1c0858a6bcb22e4c9c4526ddf550f2ae3122ea01ea21d505b8931a",
       "skills/otel-verify/references/json-approval-handoff.md": "e8c258074665349efecdc5d7e9b25fd0ab6217e3cdc40ae21a434c2c5d11f763",
@@ -268,14 +316,14 @@
       "skills/references/consumers.json": "abb97d53704c51d5a49a3de02505f8b1bba0fc13c51b7913b9cf0d186040aa19",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
-      "skills/references/genai-readiness.md": "8bf8e571e6a7619b760cc8260b8c1ddbc9fa06c7d20c17110979bbaf79ca5347",
+      "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
       "skills/references/report-flow-contract.md": "be4af921d9faf71ca9c206a91ba091db5d8bc878dc87ab6b844bc39cc455eb0e",
       "skills/references/scripts/observe_report.py": "dc6d5048a117595bd658e7f4ff7f91e11cd512693ee0e37d09080578574e4325",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
-      "skills/references/splunk-agent-observability.md": "5cd943644b06bb353d81be383c8ff64a14e56509242caff8a10d6e4e8aead69e",
+      "skills/references/splunk-agent-observability.md": "e507d91e7fb6b829c28cd50ce9263189bf5d440c7aa9f0adc6a95334092a868b",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
       "skills/references/tests/test_observe_report.py": "39e6e35f16272b4f33f202b03dd13823284d4067fb50ebba48fb80bb67f4ce16",
@@ -332,7 +380,7 @@
       "evals/python/ai-assistant-demo/eval/qual/resource-selector-failures.json": "630135f49ec0d4334185aa8778f56f1ed24ca1372be34f50b0b2c45154f9efcd",
       "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json": "0aa217a1410c384a8afda2ab7608e19c93bb9e5ae5483a87e5bec66e8bf5ea1d",
       "evals/python/ai-assistant-demo/eval/qual/resource-selector-length-verify.json": "952fb1f6a120610e80de94a21d211892f3836a946cc800f794d755fef41a877c",
-      "evals/python/ai-assistant-demo/eval/inputs/ao-resource-resolver.py": "93885c6541d8655603287e1b5759b3098354d4858376668e88774ddfea46a7fc",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-resource-resolver.py": "1642b95bb4bcb8a2a9cd26191d8176dcf788430cdf9e707b882d5ac6a608182b",
       "evals/python/ai-assistant-demo/eval/qual/reuse-env-policy-verification.json": "549779746b1ff60c7949d40b6fb7ea08be4677205d190715cfa783174bffadc6",
       "evals/python/ai-assistant-demo/eval/inputs/genai-tool-enrichment-evidence.json": "5b991c48950fece0a6935a5ae652f90f8bf3479916c197c3885f6a3361de000e",
       "evals/python/ai-assistant-demo/eval/inputs/genai-tool-message-mapping.json": "4cbd7c4f59c8dd85096cfa1209528b65d29d5772095cc1fef0627e01dfc0c77c",
@@ -341,7 +389,7 @@
       "evals/python/ai-assistant-demo/eval/inputs/otel-instrumentation-ao.json": "706cfe5e4145b90adc0e7e1304fdef7d8026afcc152b07d724d46d1999cc5fc0",
       "evals/python/ai-assistant-demo/eval/inputs/otel-selection-ao.json": "3e56bb6f608c3ad9917aa4da9a5f585784cd0a15f0cbcfbc946fb84524c8c778",
       "evals/python/ai-assistant-demo/eval/inputs/otel-verify-ao.json": "1d5c603245a2c42847d7f186e78e233674c81fc16300c2279d167dce7a7b17ab",
-      "evals/python/ai-assistant-demo/eval/qual/verify.json": "38bb7faf17734c7cc773bb3f2c285b62f5b2d98a7161d0c62758eb44798eb77f",
+      "evals/python/ai-assistant-demo/eval/qual/verify.json": "713a2389afa3891dd52bb2b3fbcd5d57a762aefb9c795839276aa0e594bb89ef",
       "evals/python/existing-otel-agent-demo/Makefile": "a2beb661c8e836e44bb31e4c9430592848e522d2c48b2fa416a2363bcbea6a7a",
       "evals/python/existing-otel-agent-demo/README.md": "c3b4c2f4260c34551330992b92cd3156604399a0d54eda1d904eb943d42993cd",
       "evals/python/existing-otel-agent-demo/app.py": "bd65b5623b2f1997eb1523deadca5fce090f76f551609d7b3e0dff680c1e1d5f",
@@ -351,9 +399,28 @@
       "evals/python/existing-otel-agent-demo/eval/qual/route-recovery-verify.json": "bff6e2d54a3f68ea0924c347760780ea9a7250d173a0034563acc4993390e224",
       "evals/python/existing-otel-agent-demo/probe.py": "8cc9dd2ba1124e3bf5a20ee65c500c688a0db7429eed9396013485d46d0f737a",
       "evals/python/existing-otel-agent-demo/pyproject.toml": "dfc360d25da6e430e782c891bdbc92fb5d7b2ddf6a901629d09bc3a874635a25",
+      "evals/python/existing-otel-agent-demo/eval/inputs/content-counterexamples.json": "cb2a137c61432b814f6fca5d7094140c922989b75cdffaee67b131d87e18c76b",
       "evals/python/existing-otel-agent-demo/eval/inputs/genai-schema-evidence.json": "cb2d154a37cd662e4ddbcae6d30f7ce5588524d660d6ce19abdf42adc5032a5d",
       "evals/python/existing-otel-agent-demo/eval/inputs/python-preflight-requirements.txt": "9bc8378353b95a0405d8b052226aa3075aa7f7f32d30c29c235b0a343df6fa3f",
-      "evals/python/existing-otel-agent-demo/eval/qual/verify.json": "81f5c0217247d8ac7265a08ed82479a3d9ddbc4ba6fa04e261a2fbca3984052e"
+      "evals/python/existing-otel-agent-demo/eval/qual/verify.json": "73203448152dcccc42fbb6363cffea1103ff1956fe0b806cfec717cfcdb83a87",
+      "evals/python/model-directed-agent/README.md": "4df0874e3a6d9596a7362376aa7d143ae4a8537ba5de86033a468702f1e87519",
+      "evals/python/model-directed-agent/agent.py": "a9b953d189a35ac1e7518918651e5d8144754615d6592a5fdcb0e0d2d85da5dd",
+      "evals/python/model-directed-agent/app.py": "f3fefd95b7d2cc84ab2eb58b35b9fecd7b032930776f7052d3affcffbd11ffda",
+      "evals/python/model-directed-agent/chat_core.py": "c228f81a2dbc7e9b66ea1ff7b0280ffbe2879c0421deeb5c0e20ed21655465db",
+      "evals/python/model-directed-agent/checks/review_regressions.py": "6e5d2144c521fea6770844242f7bc4f0fbf2ed9c3cc350c0df8e1e8b528b5c2c",
+      "evals/python/model-directed-agent/eval/inputs/agent-resource-cases.json": "1dc1244eb619248ccfda204d8b4d03131aaccdeb7312b21e1fe4232025a9b7f2",
+      "evals/python/model-directed-agent/eval/inputs/sdk-helper-boundary-probes.json": "37aab9297e0e6233c0239e8d4aad4194dad8da1ab286da30dc58c1f08b2249de",
+      "evals/python/model-directed-agent/eval/inputs/sdk-local-routing-evidence.json": "2b10f295f7cf2049bd168f3d30d89d12756f63c1ec3c47c42753610cf5b710e1",
+      "evals/python/model-directed-agent/eval/qual/connection-modes-verify.json": "8f4e8fae7df7e680647be2f0bda3d6a372cef27400a9ffb4f481e0893535630c",
+      "evals/python/model-directed-agent/historical_check.py": "ef408c69e11dc0d60ab584ec881cbb3750a037bece37dfab357adb316a2426fa",
+      "evals/python/model-directed-agent/otel_setup.py": "d7d591e2ca3aeef688aa2df30e4c2d89286917102c22439864fbb5c6a9d53b12",
+      "evals/python/model-directed-agent/probe.py": "f190d42c2b2308660ba60c1f6d12d74207ef62b33162bc526cadbc12295db929",
+      "evals/python/model-directed-agent/recommendations.py": "c0704e3b6baba32477943c826d9e4a2fa9b94e9fcda3c20ad0f4b57179255a09",
+      "evals/python/model-directed-agent/requirements.txt": "fa39473fff95e58feb9dce8bbd6b7129b203f9d1e0209cd62d4a05b9130ac5d4",
+      "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
+      "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
+      "evals/python/model-directed-agent/eval/qual/resource-table-verify.json": "1b655b83cefa0af719b163ecaef8032c496a49e525a1098ac719529404151737",
+      "evals/python/model-directed-agent/eval/qual/verify.json": "4b0db81186ae03896112577bc669116059ed6e5cbf7028b512e289ab9c4c94b0"
     },
     "skill_path": "skills/otel-verify",
     "shared_reference_consumers": [
@@ -528,8 +595,36 @@
         "eval_kind": "rubric",
         "eval_inputs": [
           "eval/inputs/genai-schema-evidence.json",
-          "eval/inputs/python-preflight-requirements.txt"
+          "eval/inputs/python-preflight-requirements.txt",
+          "eval/inputs/content-counterexamples.json"
         ]
+      },
+      {
+        "definition_path": "evals/python/model-directed-agent/eval/qual/connection-modes-verify.json",
+        "fixture_dir": "evals/python/model-directed-agent",
+        "prompt_id": "studio-connection-modes",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/agent-resource-cases.json",
+          "eval/inputs/sdk-local-routing-evidence.json",
+          "eval/inputs/sdk-helper-boundary-probes.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/model-directed-agent/eval/qual/resource-table-verify.json",
+        "fixture_dir": "evals/python/model-directed-agent",
+        "prompt_id": "agent-resource-table-verify",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/agent-resource-cases.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/model-directed-agent/eval/qual/verify.json",
+        "fixture_dir": "evals/python/model-directed-agent",
+        "prompt_id": "reject-green-workflow-test",
+        "eval_kind": "rubric",
+        "eval_inputs": []
       }
     ],
     "config_path": "evals/codex-evals.validation.toml",

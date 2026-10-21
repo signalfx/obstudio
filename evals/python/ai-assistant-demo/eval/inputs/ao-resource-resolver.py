@@ -25,6 +25,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
 from urllib.parse import urlencode, urlsplit
+from uuid import UUID
 
 
 STUDIO_HTTP_TIMEOUT = 10
@@ -48,6 +49,33 @@ class StudioAPIError(Exception):
         self.status_code = status_code
         self.uncertain_create = uncertain_create
         super().__init__("studio_api_failed")
+
+
+def native_trace_binding(evidence: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Derive native HTTP headers and trace-only Resource fields from one pair.
+
+    This pure mapping does not resolve names, contact a gateway, change an
+    environment, or configure SDK-owned exporters.
+    """
+    try:
+        if evidence["status"] != "resolved":
+            raise ValueError()
+        project = evidence["project"]["id"]
+        stream = evidence["agent_stream"]["id"]
+        if evidence["agent_stream"]["project_id"] != project:
+            raise ValueError()
+        if any(not isinstance(value, str) or str(UUID(value)) != value.lower()
+               for value in (project, stream)):
+            raise ValueError()
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise ValueError("invalid_native_trace_binding") from None
+    return {
+        "headers": {"projectid": project, "logstreamid": stream},
+        "resource_attributes": {
+            "splunk_ao.project.id": project,
+            "splunk_ao.logstream.id": stream,
+        },
+    }
 
 
 def _status(error: Exception) -> int | None:
@@ -488,6 +516,10 @@ def main(argv: list[str] | None = None) -> int:
     stream.add_argument("--agent-stream-id", help="Otherwise use SPLUNK_AO_AGENT_STREAM_ID")
     parser.add_argument("--reuse-only", action="store_true")
     parser.add_argument(
+        "--native-otel-binding", action="store_true",
+        help="Include matching UUID headers and trace Resource fields for an existing native exporter",
+    )
+    parser.add_argument(
         "--studio-api-origin",
         help="Use SDK-free Studio HTTP at an explicitly discovered http://numeric-loopback:port origin",
     )
@@ -508,6 +540,11 @@ def main(argv: list[str] | None = None) -> int:
             agent_stream_name=stream_name, agent_stream_id=stream_id,
             reuse_only=args.reuse_only,
         )
+        if args.native_otel_binding:
+            try:
+                evidence["native_otel_binding"] = native_trace_binding(evidence)
+            except ValueError:
+                evidence.update(status="failed", error="invalid_native_trace_binding")
     except ResolutionError as error:
         evidence = error.evidence
     except ImportError:

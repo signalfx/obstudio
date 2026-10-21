@@ -28,7 +28,8 @@ its export destination:
 
 | Runtime evidence | Default instrumentation path |
 |---|---|
-| Existing OTel instrumentation for any signal, Galileo integration, framework bridge, or application spans | Preserve existing producers, providers and exporters. Enrich existing spans through supported hooks; add OTel spans, metrics and logs only for proven uncovered operations. Generic HTTP spans, a metrics-only or logs-only pipeline, and an active export-only provider all select this incremental path even when GenAI coverage is missing. Do not introduce Splunk AO instrumentation or a new SDK dependency to fill those gaps. |
+| Existing Galileo integration, including Galileo plus native OTel | Preserve Galileo's native creators, resource clients, configuration and export path plus legitimate existing OTel sinks. Fill uncovered OTel signals without duplicate operations. Resolve project and stream through the installed Galileo client's supported APIs; do not substitute Splunk AO configuration or Studio routing for that native destination. |
+| Existing OTel instrumentation for any signal, framework bridge, or application spans without Galileo | Preserve existing producers, providers and exporters. Enrich existing spans through supported hooks; add OTel spans, metrics and logs only for proven uncovered operations. Generic HTTP spans, a metrics-only or logs-only pipeline, and an active export-only provider all select this incremental path even when GenAI coverage is missing. Do not introduce Splunk AO instrumentation or a new SDK dependency to fill those gaps. |
 | Existing Splunk AO span creation | Preserve it and fill its version-specific gaps without duplicate operation spans. |
 | Agent runtime with no existing telemetry instrumentation and a compatible supported Splunk AO SDK for its language | Introduce Splunk AO instrumentation by default, using SDK `@log` for supported function boundaries. If its exact contract cannot meet requirements, assess the supported SDK creator and then the source-proven per-operation public OTel exception below. An unused dependency, evaluation-only import or ordinary stdout logger alone does not establish runtime OTel instrumentation. |
 | Agent runtime whose language has no compatible supported Splunk AO SDK | Use that language's supported native OpenTelemetry libraries and framework instrumentation. Add application-owned spans for remaining source-proven GenAI operations and apply the same Required GenAI Coverage Profile and both vendors' compatibility mappings. AO SDK absence does not block instrumentation or reduce semantic acceptance. |
@@ -48,10 +49,16 @@ path alongside any added operation. Do not disable an existing framework
 instrumentor or replace its spans to make a duplicate check pass. If supported
 enrichment cannot resolve a privacy or semantic defect, report the exact
 limitation and a manual decision rather than silently substituting a producer.
-Selected AO resource/routing work is independent of creator choice: non-AO
-applications can resolve/create resources and route their existing exporter
-through supported trace headers; follow **Existing OpenTelemetry Provider** in
-`splunk-agent-observability.md`.
+Every source-owned agent runtime requires project, dedicated Agent Stream and
+runtime-routing assessment, independently of creator choice or a separate AO
+request. Missing app-owned bindings are `default` configuration findings;
+existing native OTel and an incompatible AO SDK never exclude them. Follow
+`splunk-agent-observability.md`: native OTel uses SDK-free resource APIs and
+supported trace headers; Galileo uses its native project/log-stream APIs and
+export configuration; existing AO uses its supported SDK path. Preserve an
+explicit destination and any explicit user exclusion. Ordinary non-agent model
+or workflow code alone does not impose product adoption. This assessment does
+not claim that resources are absent globally or authorize audit-time creation.
 
 For a fresh Python agent, read the **Fresh Agent SDK Instrumentation** section
 of `splunk-agent-observability.md` before authoring the audit finding or code.
@@ -277,6 +284,29 @@ application limits, not OTel-prescribed limits. Plan-only reports must give
 numeric proposed settings and hooks; fixture-only reviews mark configuration
 unproven and give the precise acceptance test. Require a sentinel-absence test
 over native records, attributes/events and wire payload as applicable.
+
+Use representation-sensitive negative cases for the selected capture policy.
+Parsing JSON is not sanitization: recurse into decoded scalar strings as well
+as containers, without repeatedly decoding the same scalar. Remove protected
+values, not only their labels, in source-shaped `hidden_reasoning=...` and
+`private_prompt=...` text. A typed part with `type: reasoning` is protected by
+its discriminator even though its payload key is merely `content`; inspect
+that semantic type before traversing ordinary fields. Apply the policy to
+inputs and produced outputs without changing business arguments/results.
+Validate the concrete schema selected by a known part's discriminator; a
+malformed known type must not fall through to a permissive `GenericPart`.
+Unknown extension types keep the inspected schema's explicit extension policy.
+
+Check UTF-8 limits on the final serialized value of every content attribute,
+including retrieval queries and embedded JSON. Per-leaf bounds alone do not
+bound an aggregate; truncate structured content before serialization and
+validate the result again. Add negative cases for quoted JSON scalars,
+protected labelled text, nested/JSON-encoded reasoning parts, malformed known
+parts and aggregate multibyte overflow. Assert protected-value absence and
+useful safe-content retention on completed native records and actual exports,
+not just a sanitizer's return. Audit specifies these acceptance cases;
+instrument implements and executes them; verification tests or reports their
+exact missing proof. Keep earlier failing receipts when a repair passes.
 
 **Lifecycle and delivery evidence**
 
@@ -826,12 +856,15 @@ documented application hook or configuration surface, add an app-owned OTel
 closure, or record the exact external SDK prerequisite. Changing an
 application-owned fork is a separate, explicitly selected scope.
 
-For an existing Galileo or other vendor path, keep its producer, provider and
-exporter. Add selected AO resource/routing configuration through supported
-existing-exporter headers where compatible, without introducing Splunk AO
-instrumentation or an SDK dependency. If its API cannot enrich a required field
-or route to the selected destination, name that exact external prerequisite or
-destination decision; do not treat migration as automatic gap closure.
+For an existing Galileo path, keep its producer, provider and native exporter.
+Assess and resolve its project/log-stream bindings through supported Galileo
+APIs and the actual loaded vendor profile. Add missing non-overlapping OTel
+signals without installing Splunk AO or adding a Studio route by default. For
+other native OTel paths, use SDK-free resource APIs and supported trace headers.
+An explicitly selected additional destination remains separate and must
+preserve original Galileo selectors, authentication and export. If an API cannot
+enrich a required field or route to the selected destination, name that exact
+prerequisite rather than migrating the producer.
 Verification must compare before/after operations, fields, metrics and logs,
 prove one canonical span per logical operation and one export to each intended
 destination, and separately prove project/stream routing when selected.

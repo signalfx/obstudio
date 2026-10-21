@@ -1,0 +1,46 @@
+name: Tag Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - plugins/obstudio/.claude-plugin/plugin.json
+      - plugins/obstudio/.codex-plugin/plugin.json
+
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  tag-release:
+    name: Tag release and dispatch release workflow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify plugin manifest versions agree
+        run: python3 plugins/obstudio/scripts/stage_obstudio_plugin.py --check-manifest-versions
+
+      - name: Tag the commit and dispatch the release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import json; print(json.load(open("plugins/obstudio/.claude-plugin/plugin.json"))["version"])')"
+          tag="v${version}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "Tag ${tag} already exists; nothing to release."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" -m "Release ${tag}" "${GITHUB_SHA}"
+          git push origin "refs/tags/${tag}"
+          # Tags pushed with GITHUB_TOKEN do not trigger release.yml; workflow_dispatch is the exempted trigger.
+          gh workflow run release.yml --ref "${tag}"
