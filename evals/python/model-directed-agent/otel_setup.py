@@ -22,6 +22,7 @@ Environment (operator-owned):
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 
@@ -33,13 +34,19 @@ from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
-from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+try:
+    from opentelemetry.instrumentation.logging.handler import LoggingHandler as InstrumentorLoggingHandler
+except ImportError:
+    InstrumentorLoggingHandler = LoggingHandler
+
 
 LOCAL_OBSERVER_LOGS_ENDPOINT = "http://localhost:4318/v1/logs"
 
@@ -145,6 +152,7 @@ def configure_opentelemetry():
 
     logger_provider = None
     logging_instrumentor = None
+    logging_handler = None
     if log_exporter is not None:
         logger_provider = LoggerProvider(resource=resource)
         logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
@@ -159,15 +167,28 @@ def configure_opentelemetry():
     shutdown_complete = False
 
     def install_logging_bridge() -> None:
-        nonlocal logging_instrumentor
-        if logger_provider is None or logging_instrumentor is not None:
+        nonlocal logging_instrumentor, logging_handler
+        if logger_provider is None or logging_handler is not None or shutdown_complete:
             return
-        # Additional stdlib->OTel handler; preserves existing console/file sinks.
-        logging_instrumentor = LoggingInstrumentor()
-        logging_instrumentor.instrument(
-            set_logging_format=False,
-            inject_trace_context=True,
-        )
+        instrumentor = LoggingInstrumentor()
+        if not instrumentor.is_instrumented_by_opentelemetry:
+            instrumentor.instrument(
+                set_logging_format=False,
+                inject_trace_context=True,
+                enable_log_auto_instrumentation=False,
+            )
+            logging_instrumentor = instrumentor
+        if any(isinstance(handler, (LoggingHandler, InstrumentorLoggingHandler))
+               for handler in logging.getLogger().handlers):
+            return
+        # Older instrumentors inject context without installing a handler.
+        logging_handler = LoggingHandler(logger_provider=logger_provider)
+        logging.getLogger().addHandler(logging_handler)
+
+    def remove_logging_handler() -> None:
+        if logging_handler is not None:
+            logging.getLogger().removeHandler(logging_handler)
+            logging_handler.close()
 
     def shutdown() -> None:
         nonlocal shutdown_complete
@@ -177,6 +198,8 @@ def configure_opentelemetry():
             shutdown_complete = True
 
             actions = []
+            if logging_handler is not None:
+                actions.append(("logging handler", remove_logging_handler))
             if logging_instrumentor is not None:
                 actions.append(("logging bridge", logging_instrumentor.uninstrument))
             if logger_provider is not None:

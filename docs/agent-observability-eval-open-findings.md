@@ -167,7 +167,7 @@ These are local app-prompt and explicitly labelled synthetic output-seam tests,
 not live model or cloud delivery. The final full consumer rerun is recorded
 below; intermediate runs are not silently replaced by it.
 
-## Final targeted correction result
+## Targeted guidance correction result
 
 The fourth run used the corrected shared reference and passed **17/17 tasks,
 107/107 checks**: audit **24/24**, instrumentation **61/61**, verification
@@ -183,6 +183,8 @@ correction round is in the tracked correction archive.
 | Source-ledger lifecycle and scoped N/A | 6/8 | 44/46 |
 | Exporter topology and retry assessment | 7/8 | 44/46 |
 | Shared language, SDK ownership and formal recovery acceptance | 17/17 | 107/107 |
+| Stdlib logging fixture and normal CI coverage | 17/17 | 107/107 |
+| Public logging handler reuse | 17/17 | 107/107 |
 
 These phases include concrete source or grading corrections between runs;
 they are not repeated samples of one unchanged version. The original failing
@@ -205,6 +207,46 @@ Instrumentation selects those model-directed cases, the connection fixture,
 all four preservation modes, the focused content repair, and
 `python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json`.
 Exact invocations and final deterministic results are provided in the handover.
+
+## Combined review: stdlib logging compatibility
+
+Review of `98c75c7` confirmed a separate fixture defect. The declared
+`opentelemetry-instrumentation-logging==0.48b0` injects correlation without
+installing an OTel log handler. The fixture relied on automatic installation,
+and its startup test bypassed the bridge by emitting through the OTel log API.
+An ordinary stdlib log therefore produced no native LogRecord at the supported
+SDK 1.27.0 floor. Newer instrumentation also lost those logs with its automatic
+handler disabled. This is a code/test defect, not a reason to weaken a rubric.
+
+The fixture now owns one public SDK `LoggingHandler`, disables the
+instrumentor's automatic handler to prevent duplicates, preserves existing
+console sinks and externally owned correlation, and removes only its own
+handler at shutdown. A follow-up negative test exposed duplicate records when
+an external instrumentor or SDK handler already existed. The final correction
+reuses those supported public handler types and preserves their ownership.
+The real stdlib-to-protobuf startup test now covers fourteen
+configuration cases, repeated installation/shutdown, nonzero trace context,
+opt-out and header/destination isolation. Its original-code negative control
+fails, while the corrected code passes on SDK 1.27.0, 1.44.0 and 1.45.1.
+All eleven fixture regression methods now run through normal harness validation
+using declared development dependencies.
+
+The [tracked review receipt](evidence/agent-stdlib-logging-review.json) preserves
+the original absence failure, intermediate duplicate failure, exact source
+snapshots/hashes, dependency versions and positive matrix logs. Its replay
+cases identify the twelve-profile and fourteen-profile source revisions
+separately. The SDK 1.27.0 test environment supplies legacy setuptools for
+the old instrumentor's `pkg_resources` import; no SDK source or application
+version cap was changed. The first fixture correction passed all 107 checks in
+the same seventeen-task cohort and is archived as an intermediate result.
+The final public-handler-reuse cohort also passed **17/17 tasks, 107/107
+checks**: audit **24/24**, instrumentation **61/61**, verification **22/22**.
+All four preservation modes passed **8/8**. Both fixture-correction rounds
+retain every raw grade and source manifest in the correction archive; the
+intermediate result does not substitute for the final source. Direct final-
+checkout replays additionally pass all eleven methods on all three SDKs.
+These are targeted local proofs, not a fixed-version reliability estimate
+or new live Cloud delivery evidence.
 
 ## Completed evidence baseline
 

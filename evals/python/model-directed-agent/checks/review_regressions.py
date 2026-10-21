@@ -16,6 +16,8 @@ from types import SimpleNamespace as NS
 import unittest
 from unittest.mock import ANY, patch
 
+from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import ExportLogsServiceRequest
+
 FIXTURE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(FIXTURE))
 
@@ -126,7 +128,7 @@ class ExportHeaderTests(unittest.TestCase):
 
             def do_POST(self):
                 body = self.rfile.read(int(self.headers["Content-Length"]))
-                received.append((self.path, dict(self.headers), len(body)))
+                received.append((self.path, dict(self.headers), body))
                 self.send_response(200)
                 self.send_header("Content-Type", "application/x-protobuf")
                 self.send_header("Content-Length", "0")
@@ -139,6 +141,10 @@ class ExportHeaderTests(unittest.TestCase):
         try:
             for overrides in [
                 {},
+                {"OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION": "false"},
+                {"MODEL_DIRECTED_PREINSTRUMENT_LOGGING": "1"},
+                {"MODEL_DIRECTED_PREINSTRUMENT_LOGGING": "handler"},
+                {"MODEL_DIRECTED_PREINSTALLED_SDK_HANDLER": "1"},
                 {"OTEL_EXPORTER_OTLP_TRACES_HEADERS": "Authorization=trace-marker"},
                 {"OTEL_EXPORTER_OTLP_METRICS_HEADERS": "Authorization=metric-marker"},
                 {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": origin + "/selected/logs"},
@@ -159,17 +165,40 @@ class ExportHeaderTests(unittest.TestCase):
                                        OTEL_EXPORTER_OTLP_HEADERS="Authorization=generic-marker,X-App-Tenant=keep")
                     environment.update(overrides)
                     script = (
-                        "import sys\n"
+                        "import io,logging,os,sys\n"
                         f"sys.path.insert(0,{str(FIXTURE)!r})\n"
                         "import otel_setup\n"
                         f"otel_setup.LOCAL_OBSERVER_LOGS_ENDPOINT={origin + '/v1/logs'!r}\n"
                         "install,shutdown=otel_setup.configure_opentelemetry()\n"
                         "from opentelemetry import trace,metrics\n"
-                        "from opentelemetry._logs import get_logger,LogRecord\n"
+                        "external=None\n"
+                        "if os.getenv('MODEL_DIRECTED_PREINSTRUMENT_LOGGING') in ('1','handler'):\n"
+                        " from opentelemetry.instrumentation.logging import LoggingInstrumentor\n"
+                        " external=LoggingInstrumentor()\n"
+                        " external.instrument(set_logging_format=False,enable_log_auto_instrumentation=os.getenv('MODEL_DIRECTED_PREINSTRUMENT_LOGGING')=='handler')\n"
+                        "sdk_handler=None\n"
+                        "if os.getenv('MODEL_DIRECTED_PREINSTALLED_SDK_HANDLER') == '1':\n"
+                        " from opentelemetry.sdk._logs import LoggingHandler\n"
+                        " sdk_handler=LoggingHandler()\n"
+                        " logging.getLogger().addHandler(sdk_handler)\n"
+                        "console=logging.StreamHandler(io.StringIO())\n"
+                        "logging.getLogger().addHandler(console)\n"
+                        "factory=logging.getLogRecordFactory()\n"
+                        "handlers=tuple(logging.getLogger().handlers)\n"
+                        "install();install()\n"
                         "with trace.get_tracer('startup-regression').start_as_current_span('startup'):\n"
                         " metrics.get_meter('startup-regression').create_counter('startup.turns').add(1)\n"
-                        " get_logger('startup-regression').emit(LogRecord(body='startup passed'))\n"
-                        "shutdown()\n"
+                        " logging.getLogger('startup-regression').warning('startup passed')\n"
+                        "shutdown();shutdown();install()\n"
+                        "assert logging.getLogRecordFactory() is factory\n"
+                        "assert tuple(logging.getLogger().handlers) == handlers\n"
+                        "assert console.stream.getvalue().count('startup passed') == 1\n"
+                        "if external is not None:\n"
+                        " assert external.is_instrumented_by_opentelemetry\n"
+                        " external.uninstrument()\n"
+                        "if sdk_handler is not None:\n"
+                        " logging.getLogger().removeHandler(sdk_handler)\n"
+                        " sdk_handler.close()\n"
                     )
                     result = subprocess.run([sys.executable, "-c", script], env=environment,
                                             capture_output=True, text=True, timeout=20)
@@ -186,6 +215,13 @@ class ExportHeaderTests(unittest.TestCase):
                         self.assertEqual(bypath[basepath + "/v1/" + signal_name]["authorization"], expected)
                     if disabled:
                         continue
+                    logs = [record for path, _, payload in received if path == logpath
+                            for resource in ExportLogsServiceRequest.FromString(payload).resource_logs
+                            for scope in resource.scope_logs for record in scope.log_records]
+                    startup = [record for record in logs if record.body.string_value == "startup passed"]
+                    self.assertEqual(len(startup), 1)
+                    self.assertNotEqual(int.from_bytes(startup[0].trace_id, "big"), 0)
+                    self.assertNotEqual(int.from_bytes(startup[0].span_id, "big"), 0)
                     if selected:
                         expected = "log-marker" if "OTEL_EXPORTER_OTLP_LOGS_HEADERS" in overrides else "generic-marker"
                         self.assertEqual(bypath[logpath]["authorization"], expected)

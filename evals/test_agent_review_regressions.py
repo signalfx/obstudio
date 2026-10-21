@@ -4,6 +4,7 @@ import ast
 from collections import Counter
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -72,6 +73,43 @@ def test_gateway_contract_resolver_discovery_and_preflight(tmp_path, layout):
     else:
         assert found.is_file()
         assert found.read_bytes() == resolver.read_bytes()
+
+
+def test_model_directed_application_regressions_use_real_sdk_and_stdlib_logs():
+    environment = {key: value for key, value in os.environ.items()
+                   if not key.startswith("OTEL_") and key.lower() not in {
+                       "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+                   }}
+    environment["NETRC"] = os.devnull
+    result = subprocess.run(
+        [sys.executable, str(FIXTURE / "checks/review_regressions.py")],
+        env=environment, capture_output=True, text=True, timeout=45,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    environment["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://127.0.0.1:9"
+    result = subprocess.run(
+        [sys.executable, "-c", (
+            "import logging,sys\n"
+            f"sys.path.insert(0,{str(FIXTURE)!r})\n"
+            "import otel_setup\n"
+            "handlers=tuple(logging.getLogger().handlers)\n"
+            "factory=logging.getLogRecordFactory()\n"
+            "install,shutdown=otel_setup.configure_opentelemetry()\n"
+            "shutdown();install()\n"
+            "assert tuple(logging.getLogger().handlers)==handlers\n"
+            "assert logging.getLogRecordFactory() is factory\n"
+        )], env=environment, capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    receipt = json.loads((FIXTURE.parents[2] / "docs/evidence/agent-stdlib-logging-review.json").read_text())
+    for key in ("baseline_setup_source", "regression_check_source"):
+        source = receipt[key]
+        assert hashlib.sha256(source["text"].encode()).hexdigest() == source["sha256"]
+        ast.parse(source["text"])
+    cases = next(node.iter for node in ast.walk(ast.parse(receipt["regression_check_source"]["text"]))
+                 if isinstance(node, ast.For) and isinstance(node.target, ast.Name)
+                 and node.target.id == "overrides")
+    assert len(cases.elts) == receipt["regression_check_source"]["configuration_profiles"] == 14
 
 
 @pytest.mark.parametrize("case", [

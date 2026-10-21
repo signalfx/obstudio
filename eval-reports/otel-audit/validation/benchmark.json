@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261021T012223661337Z",
+    "run_id": "20261021T021249487780Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "",
@@ -607,7 +607,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "1dede7c4df72a8eab445d004942930434868640f7fd7e3331453106bbd89e43b",
+    "digest": "cfac65cb55796228d85c4d88168e43a68ab7a8681c67a28cbe669bbae0f87876",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -806,11 +806,11 @@
       "evals/python/model-directed-agent/agent.py": "a9b953d189a35ac1e7518918651e5d8144754615d6592a5fdcb0e0d2d85da5dd",
       "evals/python/model-directed-agent/app.py": "bc137f928c5521f4395786376964e76a70e899961ecf06f9e97cb9b32943f349",
       "evals/python/model-directed-agent/chat_core.py": "c228f81a2dbc7e9b66ea1ff7b0280ffbe2879c0421deeb5c0e20ed21655465db",
-      "evals/python/model-directed-agent/checks/review_regressions.py": "9e4cb84f467c682b7422a84c7ee4f8a44f6cf660c78bf8d1340b13e3e5b4214a",
-      "evals/python/model-directed-agent/eval/inputs/prior-audit.json": "5e5047ef4ac6a1cca10eaa6a2c29045fd763904e6048cd89f505c798f6766d78",
+      "evals/python/model-directed-agent/checks/review_regressions.py": "e858ef319e753664b5632cbd2ae4a26ef370085c1e9c3d36dfe0c1ca4000ac84",
+      "evals/python/model-directed-agent/eval/inputs/prior-audit.json": "f6616fa9533a8df67ed3665a448f32e068aebeeb95f3626f233f281f59c28428",
       "evals/python/model-directed-agent/eval/qual/audit.json": "492caa234f35abf70d4a16bcc538844e9ee033dfdf8e23025719f185899859ca",
       "evals/python/model-directed-agent/historical_check.py": "ef408c69e11dc0d60ab584ec881cbb3750a037bece37dfab357adb316a2426fa",
-      "evals/python/model-directed-agent/otel_setup.py": "a3ba3507ee22092ead48e424a5c1e1c4ccbe37a46cdf2657f0f61512af616f82",
+      "evals/python/model-directed-agent/otel_setup.py": "d7d591e2ca3aeef688aa2df30e4c2d89286917102c22439864fbb5c6a9d53b12",
       "evals/python/model-directed-agent/probe.py": "f190d42c2b2308660ba60c1f6d12d74207ef62b33162bc526cadbc12295db929",
       "evals/python/model-directed-agent/recommendations.py": "d120cd0c2154d963b5cb04ef6605831ca3f7703347fb1d0b6c0ef4bbdc3ea2f5",
       "evals/python/model-directed-agent/requirements.txt": "fa39473fff95e58feb9dce8bbd6b7129b203f9d1e0209cd62d4a05b9130ac5d4",
