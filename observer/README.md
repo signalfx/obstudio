@@ -21,14 +21,17 @@ Splunk Observability Studio starts these local endpoints:
 
 | Service | Default endpoint |
 |---|---|
-| Splunk Observability Studio UI and REST API | `http://127.0.0.1:3000` |
-| MCP | `http://127.0.0.1:3000/mcp` |
+| Splunk Observability Studio UI and REST API | `http://127.0.0.1:17900` |
+| MCP | `http://127.0.0.1:17900/mcp` |
 | OTLP/HTTP | `http://127.0.0.1:4318` |
 | OTLP/gRPC | `127.0.0.1:4317` |
 
-The UI port and receiver ports are independent. Run `PORT=41234 ./obstudio` to
-move only the UI, REST, and MCP listener. Set `OTLP_HTTP_PORT` or
-`OTLP_GRPC_PORT` to move the corresponding receiver.
+These are the ports obstudio expects, and the bundled skills all pin the default
+UI port `17900`. If `17900` is taken, the preferred fix is to **free it** (stop
+whatever is holding it) rather than move obstudio. As a last-resort break-glass
+option — knowing it breaks every bundled skill — you can move the UI, REST, and
+MCP listener with `OBSTUDIO_PORT=41234 ./obstudio` (or `./obstudio --port=41234`);
+the OTLP receiver ports move independently with `OTLP_HTTP_PORT` / `OTLP_GRPC_PORT`.
 
 ## Sending telemetry
 
@@ -49,7 +52,7 @@ Splunk Observability Studio skills can audit and configure a service when you
 do not already have an OpenTelemetry setup.
 
 Start the application, exercise a real request, and open
-`http://127.0.0.1:3000`. Use **Live** or press `P` while the UI is focused
+`http://127.0.0.1:17900`. Use **Live** or press `P` while the UI is focused
 to pause and resume updates.
 
 ## Explore and validate
@@ -259,16 +262,31 @@ The REST API uses the Splunk Observability Studio UI base URL. Common routes are
 
 ## Environment variables
 
-`PORT`, `OTLP_HTTP_PORT`, and `OTLP_GRPC_PORT` move the three listeners
-independently. `OBSTUDIO_WORKSPACE_ROOT` selects the workspace used for audit
-and dashboard files, while `OBSTUDIO_AUDIT_REPORT` selects the audit shown in
+`OBSTUDIO_PORT`, `OTLP_HTTP_PORT`, and `OTLP_GRPC_PORT` move the three listeners
+independently (the UI/REST/MCP port defaults to `17900`; `--port` also sets it
+and takes precedence over `OBSTUDIO_PORT`). Note that the bundled skills pin the
+default UI port `17900`, so moving it is a last-resort break-glass action that
+breaks those skills — if `17900` is occupied, free it in preference to moving
+obstudio. `OBSTUDIO_WORKSPACE_ROOT` selects the workspace used for audit and
+dashboard files, while `OBSTUDIO_AUDIT_REPORT` selects the audit shown in
 Overview. Use `./obstudio --env-file <path>` for another startup env file.
 
 ## Troubleshooting
 
-- **Splunk Observability Studio will not start:** check `3000`, `4318`, and
-  `4317` separately. Change `PORT`, `OTLP_HTTP_PORT`, or `OTLP_GRPC_PORT` for
-  the listener that is busy.
+- **Splunk Observability Studio will not start:** check `17900`, `4318`, and
+  `4317` separately. The preferred fix is to **free** whichever port is busy so
+  obstudio can use its defaults — the bundled skills pin `17900`, so freeing it
+  beats moving obstudio. A foreign process on `17900` makes the binary fail loud
+  with the same guidance. Only as a last resort (and knowing it breaks the
+  bundled skills), move the busy listener with `OBSTUDIO_PORT` (or `--port`),
+  `OTLP_HTTP_PORT`, or `OTLP_GRPC_PORT`.
+- **Upgrading from a pre-cutover build (transitional):** an OLD obstudio may
+  still be running on `:3000`. It does NOT hold `17900`, but it DOES still hold
+  the shared OTLP ports `4317`/`4318`. An unpinned new launch therefore defers to
+  it (exits 0) and the UI appears "missing" (still on `:3000`); a pinned launch
+  fails loud on the OTLP ports. Fix: **stop the stale `:3000` instance** so the
+  new one can take over. (This note is transitional and can be pruned a few
+  releases after the cutover.)
 - **No telemetry appears:** confirm that the SDK has OTLP exporters enabled,
   uses the expected protocol, sends to this instance's receiver ports, and
   reports the service name you expect.

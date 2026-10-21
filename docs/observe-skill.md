@@ -22,7 +22,7 @@ capabilities when they use it with a supported observability backend.
 | Component | Purpose | Delivery |
 |-----------|---------|----------|
 | **Instrumenter** | Agent skills to add OpenTelemetry instrumentation to any codebase | Markdown files consumed by AI agents |
-| **Telemetry Explorer** | Receive, store, and visualize OTLP telemetry in real time | Web UI on `localhost:3000` |
+| **Telemetry Explorer** | Receive, store, and visualize OTLP telemetry in real time | Web UI on `localhost:17900` |
 | **Validator** | Check telemetry conformance to OTel standards via OTel Weaver | CLI mode and visual overlay in Explorer |
 | **Terraformer** | Generate observability terraform (dashboards, detectors) | Agent skills |
 | **IDE Extension** | Package all components as a VS Code extension | VS Code Marketplace |
@@ -102,7 +102,7 @@ files are loaded only when the specific workflow step executes them.
 | `observer_traces_overview` | List recent traces with span previews |
 | `observer_trace_detail` | Fetch one trace with all spans, events, links |
 
-Endpoint: `http://localhost:3000/mcp` (Streamable HTTP, standard MCP).
+Endpoint: `http://localhost:17900/mcp` (Streamable HTTP, standard MCP).
 
 ---
 

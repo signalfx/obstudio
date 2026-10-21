@@ -18,7 +18,7 @@ const defaultOutdir = goStaticDir;
 const outdir = outdirIndex === -1
   ? defaultOutdir
   : path.resolve(clientRoot, args[outdirIndex + 1]);
-const liveReloadPort = Number(process.env.PORT ?? 3000);
+const liveReloadPort = Number(process.env.OBSTUDIO_PORT || 17900);
 
 const copyPublicAssets = async () => {
   const publicDir = path.resolve(clientRoot, "public");

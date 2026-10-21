@@ -229,7 +229,7 @@ async function startSharedObserver(
 				...envOverrides,
 				HOST: '127.0.0.1',
 				OBSTUDIO_SHARED_OBSERVER_STATE_PATH: statePath,
-				PORT: String(port),
+				OBSTUDIO_PORT: String(port),
 				OTLP_GRPC_PORT: String(grpcPort),
 				OTLP_HTTP_PORT: String(httpPort),
 			},
@@ -419,7 +419,7 @@ const http = require('node:http');
 const net = require('node:net');
 
 const host = process.env.HOST || '127.0.0.1';
-const port = Number(process.env.PORT);
+const port = Number(process.env.OBSTUDIO_PORT || process.env.PORT);
 const otlpHttpPort = Number(process.env.OTLP_HTTP_PORT || '4318');
 const otlpGrpcPort = Number(process.env.OTLP_GRPC_PORT || '4317');
 const baseUrl = 'http://' + host + ':' + port;
@@ -556,7 +556,7 @@ func sendJSON(response http.ResponseWriter, status int, value any) {
 
 func main() {
 	host := env("HOST", "127.0.0.1")
-	port := env("PORT", "3000")
+	port := env("OBSTUDIO_PORT", env("PORT", "3000"))
 	otlpHTTPPort := env("OTLP_HTTP_PORT", "4318")
 	otlpGRPCPort := env("OTLP_GRPC_PORT", "4317")
 	controlToken := os.Getenv("OBSTUDIO_CONTROL_TOKEN")
@@ -1041,7 +1041,7 @@ suite('VS Code Host', () => {
 
 		try {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', managedPort);
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 
 			await vscode.commands.executeCommand('observability-studio.startObserver');
@@ -1065,7 +1065,7 @@ suite('VS Code Host', () => {
 			assert.equal(secondHealth.kind, 'obstudio');
 		} finally {
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 		}
 	});
 
@@ -1102,7 +1102,7 @@ suite('VS Code Host', () => {
 				{ grpc: observerPorts.grpc, http: observerPorts.http },
 			);
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', observerPorts.ui);
 			// Let configuration-driven lifecycle work finish before replacing the
 			// bundled process with the shutdown-gated fixture under test.
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
@@ -1173,7 +1173,7 @@ suite('VS Code Host', () => {
 				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
 			}
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			cleanupTempDir(tempHome);
 		}
 	});
@@ -1279,7 +1279,7 @@ suite('VS Code Host', () => {
 
 		try {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', managedPort);
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 			await vscode.commands.executeCommand('observability-studio.startObserver');
 
@@ -1301,7 +1301,7 @@ suite('VS Code Host', () => {
 		} finally {
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			if (originalSharedObserverStatePath === undefined) {
 				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
 			} else {
@@ -1350,7 +1350,7 @@ suite('VS Code Host', () => {
 
 		try {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', managedPort);
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 			await vscode.commands.executeCommand('observability-studio.startObserver');
 
@@ -1362,7 +1362,7 @@ suite('VS Code Host', () => {
 		} finally {
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			if (originalSharedObserverStatePath === undefined) {
 				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
 			} else {
@@ -1410,7 +1410,7 @@ suite('VS Code Host', () => {
 				{ legacyBearerAuth: false },
 			);
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', observerPorts.ui);
 			await vscode.commands.executeCommand('observability-studio.startObserver');
 
 			const state = await vscode.commands.executeCommand<RuntimeState>(
@@ -1438,7 +1438,7 @@ suite('VS Code Host', () => {
 				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
 			}
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			cleanupTempDir(tempHome);
 		}
 	});
@@ -1488,7 +1488,7 @@ suite('VS Code Host', () => {
 				updatedAt: new Date(0).toISOString(),
 			}), { mode: 0o600 });
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', observerPorts.ui);
 
 			await vscode.commands.executeCommand('observability-studio.openObserver');
 			const state = await waitFor(
@@ -1518,7 +1518,7 @@ suite('VS Code Host', () => {
 				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
 			}
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			cleanupTempDir(tempHome);
 		}
 	});
@@ -1555,7 +1555,7 @@ suite('VS Code Host', () => {
 				{ grpc: observerPorts.grpc, http: observerPorts.http },
 			);
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', observerPorts.ui);
 			// Configuration updates restart the observer. Settle and stop that work before
 			// constructing the prior-host shutdown window under test.
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
@@ -1748,7 +1748,7 @@ suite('VS Code Host', () => {
 				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
 			}
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			cleanupTempDir(tempHome);
 		}
 	});
@@ -1871,7 +1871,7 @@ suite('VS Code Host', () => {
 				}), { mode: 0o600 });
 
 				await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-				await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
+				await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', managedPort);
 				await vscode.commands.executeCommand('observability-studio.internal.resetAgentIntegrationPromptState');
 				await vscode.commands.executeCommand('observability-studio.openObserver');
 
@@ -1934,7 +1934,7 @@ suite('VS Code Host', () => {
 					process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
 				}
 				await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-				await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+				await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 				cleanupTempDir(legacyExtensionPath);
 				cleanupTempDir(tempHome);
 				cleanupTempDir(legacyHome);
@@ -2036,7 +2036,7 @@ suite('VS Code Host', () => {
 				}), { mode: 0o600 });
 
 				await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-				await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+				await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', observerPorts.ui);
 				await vscode.commands.executeCommand('observability-studio.openObserver');
 
 				const upgradedState = await waitFor(
@@ -2094,7 +2094,7 @@ suite('VS Code Host', () => {
 					process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
 				}
 				await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-				await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+				await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 				cleanupTempDir(tempHome);
 				cleanupTempDir(legacyHome);
 			}
@@ -2171,8 +2171,9 @@ suite('VS Code Host', () => {
 				updatedAt: new Date().toISOString(),
 			}), { mode: 0o600 });
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', observerPorts.ui);
 			await vscode.commands.executeCommand('observability-studio.internal.resetAgentIntegrationPromptState');
+			await vscode.commands.executeCommand('observability-studio.openObserver');
 
 			const upgradedState = await waitFor(
 				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>(
@@ -2233,7 +2234,7 @@ suite('VS Code Host', () => {
 				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
 			}
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			cleanupTempDir(tempHome);
 			cleanupTempDir(legacyHome);
 		}
@@ -2319,7 +2320,7 @@ suite('VS Code Host', () => {
 			}), { mode: 0o600 });
 
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', managedPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', managedPorts.ui);
 			await vscode.commands.executeCommand('observability-studio.internal.resetAgentIntegrationPromptState');
 			await vscode.commands.executeCommand('observability-studio.openObserver');
 
@@ -2367,7 +2368,7 @@ suite('VS Code Host', () => {
 				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
 			}
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			cleanupTempDir(tempHome);
 			cleanupTempDir(legacyHome);
 		}
@@ -2451,7 +2452,7 @@ suite('VS Code Host', () => {
 				updatedAt: new Date().toISOString(),
 			}), { mode: 0o600 });
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', observerPorts.ui);
 			await vscode.commands.executeCommand('observability-studio.openObserver');
 
 			const failedState = await waitFor(
@@ -2465,7 +2466,7 @@ suite('VS Code Host', () => {
 					&& value.panelHtml?.includes('<h2>Restart required</h2>')
 					&& value.panelHtml.includes(`localhost port ${observerPorts.ui}`)
 					&& value.panelHtml.includes(`PID ${legacyProcess?.pid}`)
-					&& value.panelHtml.includes('Cloud controls are unavailable'),
+					&& value.panelHtml.includes('Only one Splunk Observability Studio instance can run at a time'),
 				),
 				20_000,
 			);
@@ -2499,7 +2500,7 @@ suite('VS Code Host', () => {
 				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
 			}
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			cleanupTempDir(legacyExtensionPath);
 			cleanupTempDir(tempHome);
 			cleanupTempDir(legacyHome);
@@ -2577,7 +2578,7 @@ suite('VS Code Host', () => {
 			}), { mode: 0o600 });
 
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', observerPorts.ui, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', observerPorts.ui);
 			await vscode.commands.executeCommand('observability-studio.openObserver');
 
 			const upgradedState = await waitFor(
@@ -2638,7 +2639,7 @@ suite('VS Code Host', () => {
 				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
 			}
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			cleanupTempDir(tempHome);
 			cleanupTempDir(legacyHome);
 		}
@@ -2675,7 +2676,7 @@ suite('VS Code Host', () => {
 
 		try {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', managedPort);
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 			await vscode.commands.executeCommand('observability-studio.startObserver');
 
@@ -2697,7 +2698,7 @@ suite('VS Code Host', () => {
 			} else {
 				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
 			}
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			cleanupTempDir(tempHome);
 			await mismatchedObserver.dispose();
 			await managedObserver.dispose();
@@ -2746,19 +2747,19 @@ suite('VS Code Host', () => {
 			);
 
 			const prompts = await waitFor(
-				() => Promise.resolve(vscode.commands.executeCommand<Array<{ detail?: string; message: string }>>(
+				() => Promise.resolve(vscode.commands.executeCommand<Array<{ message: string }>>(
 					'observability-studio.internal.getAgentIntegrationPrompts',
 				)),
 				(value) => Array.isArray(value) && value.some((item) =>
-					item.message.includes('Enable Codex integration for Splunk Observability Studio?')
-					&& item.detail?.includes(secondSharedMcpUrl)
+					item.message.includes('Update the Codex integration for Splunk Observability Studio?')
 				),
 				20_000,
 			);
 
-			const prompt = prompts.find((item) => item.message.includes('Enable Codex integration for Splunk Observability Studio?'));
+			// The second-URL config was already confirmed applied via getRuntimeState
+			// above, so a fresh Update prompt after the reset is the signal.
+			const prompt = prompts.find((item) => item.message.includes('Update the Codex integration for Splunk Observability Studio?'));
 			assert.ok(prompt, 'expected the Codex integration prompt after changing the shared Splunk Observability Studio URL');
-			assert.equal(prompt?.detail, `Install bundled skills and configure Codex to use the local Splunk Observability Studio service at ${secondSharedMcpUrl}.`);
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await firstSharedObserver.dispose();
@@ -2779,7 +2780,7 @@ suite('VS Code Host', () => {
 
 		try {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', conflictPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', conflictPort);
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 
 			await vscode.commands.executeCommand('observability-studio.openObserver');
@@ -2794,7 +2795,6 @@ suite('VS Code Host', () => {
 						&& value.panelHtml.includes(`http://127.0.0.1:${conflictPort}`)
 						&& value.panelHtml.includes(`Splunk Observability Studio UI port ${conflictPort}`)
 						&& value.panelHtml.includes('is already in use')
-						&& value.panelHtml.includes('observability-studio.managedObserverPort')
 						&& !value.panelHtml.includes('/api/health')
 						&& value.panelHtml.includes('after freeing the conflicting port');
 				},
@@ -2803,7 +2803,7 @@ suite('VS Code Host', () => {
 			assert.equal(failedState.sharedMode, false);
 		} finally {
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			await conflictService.dispose();
 		}
 	});
@@ -2818,7 +2818,7 @@ suite('VS Code Host', () => {
 
 		try {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', conflictPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', conflictPort);
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 
 			await vscode.commands.executeCommand('observability-studio.openObserver');
@@ -2838,41 +2838,8 @@ suite('VS Code Host', () => {
 			assert.equal(failedState.sharedMode, false);
 		} finally {
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', undefined);
 			await conflictService.dispose();
-		}
-	});
-
-	test('managed observer rejects ports reserved for fixed OTLP listeners', async function () {
-		this.timeout(30_000);
-
-		await getExtension();
-		const config = vscode.workspace.getConfiguration('observability-studio');
-
-		try {
-			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', 4318, vscode.ConfigurationTarget.Global);
-			await vscode.commands.executeCommand('observability-studio.stopObserver');
-
-			await vscode.commands.executeCommand('observability-studio.openObserver');
-			const failedState = await waitFor(
-				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
-				(value) => {
-					if (!value || value.observerPort !== undefined || value.observerUrl !== undefined) {
-						return false;
-					}
-					return typeof value.panelHtml === 'string'
-						&& value.panelHtml.includes('Splunk Observability Studio could not start')
-						&& value.panelHtml.includes('observability-studio.managedObserverPort')
-						&& value.panelHtml.includes('4318')
-						&& value.panelHtml.includes('OTLP/HTTP');
-				},
-				20_000,
-			);
-			assert.equal(failedState.sharedMode, false);
-		} finally {
-			await vscode.commands.executeCommand('observability-studio.stopObserver');
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
 		}
 	});
 
@@ -3355,16 +3322,17 @@ suite('VS Code Host', () => {
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 			await vscode.commands.executeCommand('observability-studio.startObserver');
 			const prompts = await waitFor(
-				() => Promise.resolve(vscode.commands.executeCommand<Array<{ detail?: string; message: string }>>(
+				() => Promise.resolve(vscode.commands.executeCommand<Array<{ message: string }>>(
 					'observability-studio.internal.getAgentIntegrationPrompts',
 				)),
-				(value) => Array.isArray(value) && value.some((item) => item.message.includes('Enable Codex integration for Splunk Observability Studio?')),
+				(value) => Array.isArray(value) && value.some((item) => item.message.includes('Enable the Codex integration for Splunk Observability Studio?')),
 				20_000,
 			);
 
-			const prompt = prompts.find((item) => item.message.includes('Enable Codex integration for Splunk Observability Studio?'));
+			// Prompts no longer carry a `detail` field (dead on a non-modal toast); the
+			// Enable message appearing is the signal that the integration prompt fired.
+			const prompt = prompts.find((item) => item.message.includes('Enable the Codex integration for Splunk Observability Studio?'));
 			assert.ok(prompt, 'expected the Codex integration prompt to be shown');
-			assert.equal(prompt?.detail, `Install bundled skills and configure Codex to use the local Splunk Observability Studio service at ${sharedMcpUrl}.`);
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();
@@ -3490,11 +3458,11 @@ suite('VS Code Host', () => {
 			);
 
 			const prompts = await waitFor(
-				() => Promise.resolve(vscode.commands.executeCommand<Array<{ detail?: string; message: string }>>(
+				() => Promise.resolve(vscode.commands.executeCommand<Array<{ message: string }>>(
 					'observability-studio.internal.getAgentIntegrationPrompts',
 				)),
 				(value) => Array.isArray(value) && value.some((item) =>
-					item.message.includes('Enable detected agent integrations for Splunk Observability Studio?'),
+					item.message.includes('Update detected agent integrations for Splunk Observability Studio?'),
 				),
 				20_000,
 			);
