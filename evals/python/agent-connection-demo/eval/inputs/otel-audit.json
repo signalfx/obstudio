@@ -1,0 +1,390 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "agent-connection-modes",
+    "service_name": "agent-connection-demo",
+    "commit": "fixture",
+    "language": "python",
+    "framework": "CLI",
+    "date": "2026-10-19",
+    "status": "Partial",
+    "genai_ownership_detected": true
+  },
+  "summary": [
+    "Existing native OTel replay agent has traces, metrics and correlated local logs.",
+    "Selected work is project/stream provisioning and safe connected/disconnected routing, not semantic rewrites."
+  ],
+  "flow": "audit -> select -> instrument -> verify",
+  "evidence": [
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "app.py"
+    },
+    {
+      "check": "Agent ownership",
+      "finding": "Model selects offered search_docs and receives its actual result before final reply; one existing invoke_agent mode-agent boundary.",
+      "source": "app.py"
+    },
+    {
+      "check": "Native providers",
+      "finding": "One provider per signal; actual OTLP exporters plus independent in-memory evidence sinks; launch profile loads before initialization.",
+      "source": "telemetry.py; launch.py"
+    },
+    {
+      "check": "Destination compatibility",
+      "finding": "Configured numeric-loopback AGENT_RESOURCE_API_URL supplies supported Studio resource API; existing native HTTP/protobuf exporter supports projectid/logstreamid trace headers. Live resource and cloud proof unavailable; no SDK dependency needed.",
+      "source": "probe.py; telemetry.py"
+    },
+    {
+      "check": "Entry point",
+      "finding": "launch.py loads the chosen dotenv profile before one native provider lifecycle; app.py supports one-shot and AGENT_INTERACTIVE stdin turns.",
+      "source": "launch.py; app.py"
+    },
+    {
+      "check": "Manifest",
+      "finding": "Existing native OTel SDK/HTTP exporter family and dotenv; no AO or Galileo dependency.",
+      "source": "requirements.txt"
+    },
+    {
+      "check": "Route source",
+      "finding": "CLI only; no application HTTP routes. Resource and OTLP HTTP endpoints are configured external dependencies.",
+      "source": "launch.py; app.py; probe.py"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Compatible Python and requirements; python launch.py --profile PATH. Probe executes one-shot launch cases plus an interactive same-PID connection transition.",
+      "source": "README.md; requirements.txt; launch.py; probe.py"
+    }
+  ],
+  "routes": [],
+  "signal_flow": {
+    "component_flow_map": "launch/profile -> project [GAP: Project binding] -> stream [GAP: Stream binding] -> route [GAP: Runtime routing] -> existing native agent/model/tool and local signals"
+  },
+  "current_instrumentation": {
+    "spans": [
+      {
+        "name": "invoke_agent mode-agent -> chat replay-model x2 + execute_tool search_docs",
+        "source": "app.py",
+        "type": "custom",
+        "status": "source-active",
+        "evidence": "app.py; telemetry.py"
+      }
+    ],
+    "metrics": [
+      {
+        "name": "agent.turns",
+        "source": "app.py",
+        "type": "custom",
+        "status": "source-active",
+        "evidence": "app.py; telemetry.py"
+      }
+    ],
+    "logs": [
+      {
+        "name": "agent completed",
+        "source": "app.py",
+        "type": "custom",
+        "status": "source-active",
+        "evidence": "app.py; telemetry.py",
+        "integration": "Native OTel LoggingHandler with SDK OTLP and in-memory exporters",
+        "detail": "agent completed INFO with current trace context; console sink preserved; SDK local OTLP and native memory capture."
+      }
+    ]
+  },
+  "genai_readiness": [
+    {
+      "surface": "Project binding",
+      "status": "missing",
+      "current_status": "missing",
+      "evidence": "launch.py; telemetry.py",
+      "required_signals": "Resolve configured AGENT_PROJECT through selected supported resource API, reuse exact matches, create only conclusive missing names, recover uncertain creates by exact bounded relookup. Do not create after503/auth/transport lookup failures.",
+      "owner": "App-owned + patchable",
+      "source_files": [
+        "launch.py",
+        "telemetry.py"
+      ],
+      "acceptance_criteria": "Resolve configured AGENT_PROJECT through selected supported resource API, reuse exact matches, create only conclusive missing names, recover uncertain creates by exact bounded relookup. Do not create after503/auth/transport lookup failures.",
+      "impact": "Missing binding or stale headers prevent correct agent destination routing and can suppress local receipt."
+    },
+    {
+      "surface": "Stream binding",
+      "status": "missing",
+      "current_status": "missing",
+      "evidence": "launch.py; telemetry.py",
+      "required_signals": "Resolve configured AGENT_STREAM within selected project with same idempotent rules; verify association and returned IDs, never choose an unrelated stream.",
+      "owner": "App-owned + patchable",
+      "source_files": [
+        "launch.py",
+        "telemetry.py"
+      ],
+      "acceptance_criteria": "Resolve configured AGENT_STREAM within selected project with same idempotent rules; verify association and returned IDs, never choose an unrelated stream.",
+      "impact": "Missing binding or stale headers prevent correct agent destination routing and can suppress local receipt."
+    },
+    {
+      "surface": "Runtime routing",
+      "status": "missing",
+      "current_status": "missing",
+      "evidence": "launch.py; telemetry.py",
+      "required_signals": "Keep the existing native provider and configured AGENT_RESOURCE_API_URL. Resolve exact project/stream names through supported resource APIs, persist actual returned UUIDs and atomically configure matching projectid/logstreamid headers plus splunk_ao.project.id/splunk_ao.logstream.id trace Resources. With names only and an initially disconnected API, automatically retry and activate the complete binding in the same running PID, without manual setup or restart. Retain previously resolved valid same-destination bindings through503/unavailability. Preserve endpoint/protocol/harmless headers, business behavior and metric/log Resources; reject invalid or wrong-parent identities, never invent IDs or switch destination.",
+      "owner": "App-owned + patchable",
+      "source_files": [
+        "launch.py",
+        "telemetry.py"
+      ],
+      "acceptance_criteria": "Keep the existing native provider and configured AGENT_RESOURCE_API_URL. Resolve exact project/stream names through supported resource APIs, persist actual returned UUIDs and atomically configure matching projectid/logstreamid headers plus splunk_ao.project.id/splunk_ao.logstream.id trace Resources. With names only and an initially disconnected API, automatically retry and activate the complete binding in the same running PID, without manual setup or restart. Retain previously resolved valid same-destination bindings through503/unavailability. Preserve endpoint/protocol/harmless headers, business behavior and metric/log Resources; reject invalid or wrong-parent identities, never invent IDs or switch destination.",
+      "impact": "Missing binding or stale headers prevent correct agent destination routing and can suppress local receipt."
+    }
+  ],
+  "findings": [
+    {
+      "id": "AO-001",
+      "title": "Resolve the selected project",
+      "finding_group": "splunk-agent-observability",
+      "ao_target_scope": "resource-routing",
+      "area": "Project binding",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "gap": "Project selector exists but no resource resolution precedes export.",
+      "impact": "Missing binding or stale headers prevent correct agent destination routing and can suppress local receipt.",
+      "product_outcome": "Working local telemetry independent of cloud connection, with validated resource routing when available.",
+      "required_fix": "Resolve configured AGENT_PROJECT through selected supported resource API, reuse exact matches, create only conclusive missing names, recover uncertain creates by exact bounded relookup. Do not create after503/auth/transport lookup failures.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "mode.connected",
+        "mode.create",
+        "mode.uncertain",
+        "mode.disconnected",
+        "mode.unavailable",
+        "mode.reconnect"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "launch.py",
+        "app.py",
+        "telemetry.py",
+        "README.md"
+      ],
+      "acceptance_criteria": [
+        "Resolve association before routed export; reuse existing resources with zero creates, correct returned UUID headers, one agent/two model/one tool span, one counter and correlated log. Persist IDs and preserve harmless headers/profile values.",
+        "Conclusive absence permits project-before-stream creation; resolved UUIDs reach consumed trace header config and native export. No duplicate destination export or vendor SDK adoption.",
+        "Project create commits and its HTTP response is lost. Execute bounded exact relookup, recover its identity and create stream once; no second project POST.",
+        "Running Studio resource API503 is not absence: zero creates; selected names and previously resolved valid UUID headers plus trace Resource fields remain active. Native three-signal emission/business behavior and local receiver storage continue; forwarding is blocked.",
+        "Studio socket is refused: business succeeds and independent native records prove four spans, counter1 and correlated log. Previously resolved valid complete binding remains configured; receiver/cloud receipt is blocked.",
+        "Start the interactive launcher with names only and existing resources, initially503. Connect the same fake destination while retaining one PID; automatic exact scoped lookup activates matching UUID headers and trace Resource IDs with zero creates. Disconnect/reconnect again without erasing that binding, manual setup, restart or an invented route-registration cache."
+      ],
+      "constraints": [
+        "Preserve app.py, telemetry.py and probe.py bytes, existing native providers/producers/sinks and business outputs. No Splunk AO dependency, runtime discovery, fake SDKs, dummy production IDs or direct-cloud fallback."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "agent-observability.project",
+          "attributes": [],
+          "product_view": "Validated project/stream binding and connection-aware runtime route."
+        }
+      ],
+      "follow_up_actions": [
+        "Keep actual live-cloud visibility distinct from fake-boundary proof."
+      ]
+    },
+    {
+      "id": "AO-002",
+      "title": "Resolve the dedicated stream",
+      "finding_group": "splunk-agent-observability",
+      "ao_target_scope": "resource-routing",
+      "area": "Stream binding",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "gap": "AGENT_STREAM is not resolved/associated before export.",
+      "impact": "Missing binding or stale headers prevent correct agent destination routing and can suppress local receipt.",
+      "product_outcome": "Working local telemetry independent of cloud connection, with validated resource routing when available.",
+      "required_fix": "Resolve configured AGENT_STREAM within selected project with same idempotent rules; verify association and returned IDs, never choose an unrelated stream.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "mode.connected",
+        "mode.create",
+        "mode.uncertain",
+        "mode.disconnected",
+        "mode.unavailable",
+        "mode.reconnect"
+      ],
+      "dependencies": [
+        "AO-001"
+      ],
+      "evidence": [
+        "launch.py",
+        "app.py",
+        "telemetry.py",
+        "README.md"
+      ],
+      "acceptance_criteria": [
+        "Resolve association before routed export; reuse existing resources with zero creates, correct returned UUID headers, one agent/two model/one tool span, one counter and correlated log. Persist IDs and preserve harmless headers/profile values.",
+        "Conclusive absence permits project-before-stream creation; resolved UUIDs reach consumed trace header config and native export. No duplicate destination export or vendor SDK adoption.",
+        "Project create commits and its HTTP response is lost. Execute bounded exact relookup, recover its identity and create stream once; no second project POST.",
+        "Running Studio resource API503 is not absence: zero creates; selected names and previously resolved valid UUID headers plus trace Resource fields remain active. Native three-signal emission/business behavior and local receiver storage continue; forwarding is blocked.",
+        "Studio socket is refused: business succeeds and independent native records prove four spans, counter1 and correlated log. Previously resolved valid complete binding remains configured; receiver/cloud receipt is blocked.",
+        "Start the interactive launcher with names only and existing resources, initially503. Connect the same fake destination while retaining one PID; automatic exact scoped lookup activates matching UUID headers and trace Resource IDs with zero creates. Disconnect/reconnect again without erasing that binding, manual setup, restart or an invented route-registration cache."
+      ],
+      "constraints": [
+        "Preserve app.py, telemetry.py and probe.py bytes, existing native providers/producers/sinks and business outputs. No Splunk AO dependency, runtime discovery, fake SDKs, dummy production IDs or direct-cloud fallback."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "agent-observability.agent-stream",
+          "attributes": [],
+          "product_view": "Validated project/stream binding and connection-aware runtime route."
+        }
+      ],
+      "follow_up_actions": [
+        "Keep actual live-cloud visibility distinct from fake-boundary proof."
+      ]
+    },
+    {
+      "id": "AO-003",
+      "title": "Route correctly in connected and disconnected launches",
+      "finding_group": "splunk-agent-observability",
+      "ao_target_scope": "resource-routing",
+      "area": "Runtime routing",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "gap": "Existing exporter consumes inherited UUID headers without active-resource validation, losing local traces when Studio is disconnected.",
+      "impact": "Missing binding or stale headers prevent correct agent destination routing and can suppress local receipt.",
+      "product_outcome": "Working local telemetry independent of cloud connection, with validated resource routing when available.",
+      "required_fix": "Keep the existing native provider and configured AGENT_RESOURCE_API_URL. Resolve exact project/stream names through supported resource APIs, persist actual returned UUIDs and atomically configure matching projectid/logstreamid headers plus splunk_ao.project.id/splunk_ao.logstream.id trace Resources. With names only and an initially disconnected API, automatically retry and activate the complete binding in the same running PID, without manual setup or restart. Retain previously resolved valid same-destination bindings through503/unavailability. Preserve endpoint/protocol/harmless headers, business behavior and metric/log Resources; reject invalid or wrong-parent identities, never invent IDs or switch destination.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "mode.connected",
+        "mode.create",
+        "mode.uncertain",
+        "mode.disconnected",
+        "mode.unavailable",
+        "mode.reconnect"
+      ],
+      "dependencies": [
+        "AO-001",
+        "AO-002"
+      ],
+      "evidence": [
+        "launch.py",
+        "app.py",
+        "telemetry.py",
+        "README.md"
+      ],
+      "acceptance_criteria": [
+        "Resolve association before routed export; reuse existing resources with zero creates, correct returned UUID headers, one agent/two model/one tool span, one counter and correlated log. Persist IDs and preserve harmless headers/profile values.",
+        "Conclusive absence permits project-before-stream creation; resolved UUIDs reach consumed trace header config and native export. No duplicate destination export or vendor SDK adoption.",
+        "Project create commits and its HTTP response is lost. Execute bounded exact relookup, recover its identity and create stream once; no second project POST.",
+        "Running Studio resource API503 is not absence: zero creates; selected names and previously resolved valid UUID headers plus trace Resource fields remain active. Native three-signal emission/business behavior and local receiver storage continue; forwarding is blocked.",
+        "Studio socket is refused: business succeeds and independent native records prove four spans, counter1 and correlated log. Previously resolved valid complete binding remains configured; receiver/cloud receipt is blocked.",
+        "Start the interactive launcher with names only and existing resources, initially503. Connect the same fake destination while retaining one PID; automatic exact scoped lookup activates matching UUID headers and trace Resource IDs with zero creates. Disconnect/reconnect again without erasing that binding, manual setup, restart or an invented route-registration cache."
+      ],
+      "constraints": [
+        "Preserve app.py, telemetry.py and probe.py bytes, existing native providers/producers/sinks and business outputs. No Splunk AO dependency, runtime discovery, fake SDKs, dummy production IDs or direct-cloud fallback."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "agent-observability.runtime-routing",
+          "attributes": [],
+          "product_view": "Validated project/stream binding and connection-aware runtime route."
+        }
+      ],
+      "follow_up_actions": [
+        "Keep actual live-cloud visibility distinct from fake-boundary proof."
+      ]
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "py.local",
+        "surface": "Existing native replay agent and profile/launcher",
+        "config_evidence": "requirements.txt; launch.py; app.py; telemetry.py; probe.py",
+        "runner": "python launch.py --profile PATH; python probe.py",
+        "scope": "native application process with real SDK and local fake resource/OTLP endpoints",
+        "prerequisites": "Compatible isolated Python and requirements. No live credentials, models, cloud or UI. Fake gateway is numeric-loopback and all IDs are test resource identities; live product visibility remains Not proven."
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "mode.connected",
+        "trigger": "Resolve association before routed export; reuse existing resources with zero creates, correct returned UUID headers, one agent/two model/one tool span, one counter and correlated log. Persist IDs and preserve harmless headers/profile values.",
+        "entrypoint": "launch.py",
+        "expected_signals": "Resolve association before routed export; reuse existing resources with zero creates, correct returned UUID headers, one agent/two model/one tool span, one counter and correlated log. Persist IDs and preserve harmless headers/profile values.",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Resolve association before routed export; reuse existing resources with zero creates, correct returned UUID headers, one agent/two model/one tool span, one counter and correlated log. Persist IDs and preserve harmless headers/profile values.",
+        "environments": [
+          "py.local"
+        ]
+      },
+      {
+        "id": "mode.create",
+        "trigger": "Conclusive absence permits project-before-stream creation; resolved UUIDs reach consumed trace header config and native export. No duplicate destination export or vendor SDK adoption.",
+        "entrypoint": "launch.py",
+        "expected_signals": "Conclusive absence permits project-before-stream creation; resolved UUIDs reach consumed trace header config and native export. No duplicate destination export or vendor SDK adoption.",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Conclusive absence permits project-before-stream creation; resolved UUIDs reach consumed trace header config and native export. No duplicate destination export or vendor SDK adoption.",
+        "environments": [
+          "py.local"
+        ]
+      },
+      {
+        "id": "mode.uncertain",
+        "trigger": "Project create commits and its HTTP response is lost. Execute bounded exact relookup, recover its identity and create stream once; no second project POST.",
+        "entrypoint": "launch.py",
+        "expected_signals": "Project create commits and its HTTP response is lost. Execute bounded exact relookup, recover its identity and create stream once; no second project POST.",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Project create commits and its HTTP response is lost. Execute bounded exact relookup, recover its identity and create stream once; no second project POST.",
+        "environments": [
+          "py.local"
+        ]
+      },
+      {
+        "id": "mode.disconnected",
+        "trigger": "Running Studio resource API503 is not absence: zero creates; selected names and previously resolved valid UUID headers plus trace Resource fields remain active. Native three-signal emission/business behavior and local receiver storage continue; forwarding is blocked.",
+        "entrypoint": "launch.py",
+        "expected_signals": "Running Studio resource API503 is not absence: zero creates; selected names and previously resolved valid UUID headers plus trace Resource fields remain active. Native three-signal emission/business behavior and local receiver storage continue; forwarding is blocked.",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Running Studio resource API503 is not absence: zero creates; selected names and previously resolved valid UUID headers plus trace Resource fields remain active. Native three-signal emission/business behavior and local receiver storage continue; forwarding is blocked.",
+        "environments": [
+          "py.local"
+        ]
+      },
+      {
+        "id": "mode.unavailable",
+        "trigger": "Studio socket is refused: business succeeds and independent native records prove four spans, counter1 and correlated log. Previously resolved valid complete binding remains configured; receiver/cloud receipt is blocked.",
+        "entrypoint": "launch.py",
+        "expected_signals": "Studio socket is refused: business succeeds and independent native records prove four spans, counter1 and correlated log. Previously resolved valid complete binding remains configured; receiver/cloud receipt is blocked.",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Studio socket is refused: business succeeds and independent native records prove four spans, counter1 and correlated log. Previously resolved valid complete binding remains configured; receiver/cloud receipt is blocked.",
+        "environments": [
+          "py.local"
+        ]
+      },
+      {
+        "id": "mode.reconnect",
+        "trigger": "Start the interactive launcher with names only and existing resources, initially503. Connect the same fake destination while retaining one PID; automatic exact scoped lookup activates matching UUID headers and trace Resource IDs with zero creates. Disconnect/reconnect again without erasing that binding, manual setup, restart or an invented route-registration cache.",
+        "entrypoint": "launch.py",
+        "expected_signals": "Start the interactive launcher with names only and existing resources, initially503. Connect the same fake destination while retaining one PID; automatic exact scoped lookup activates matching UUID headers and trace Resource IDs with zero creates. Disconnect/reconnect again without erasing that binding, manual setup, restart or an invented route-registration cache.",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Start the interactive launcher with names only and existing resources, initially503. Connect the same fake destination while retaining one PID; automatic exact scoped lookup activates matching UUID headers and trace Resource IDs with zero creates. Disconnect/reconnect again without erasing that binding, manual setup, restart or an invented route-registration cache.",
+        "environments": [
+          "py.local"
+        ]
+      }
+    ]
+  },
+  "anti_patterns": [],
+  "recommendation": [
+    "Select AO-003 with project/stream prerequisites and run immutable seven-case probe.py; preserve bound audit."
+  ]
+}

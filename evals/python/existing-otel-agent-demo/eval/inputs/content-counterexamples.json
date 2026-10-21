@@ -1,0 +1,88 @@
+{
+  "kind": "synthetic-redacted-content-counterexamples",
+  "scope": "Capture acceptance inputs, not application results or cloud evidence. Apply the same source policy to inputs and produced outputs; do not hardcode these sentinel values in production.",
+  "cases": [
+    {
+      "id": "quoted-email",
+      "value": "\"reader@example.invalid\"",
+      "forbidden": [
+        "reader@example.invalid"
+      ]
+    },
+    {
+      "id": "quoted-labels",
+      "value": "\"token=fixture-secret; reasoning=hidden-value\"",
+      "forbidden": [
+        "fixture-secret",
+        "hidden-value"
+      ]
+    },
+    {
+      "id": "labelled-protected-values",
+      "value": "approved-question-marker Where is my order? hidden_reasoning=thought-sentinel; private_prompt=hidden-sentinel; api_key=secret-sentinel",
+      "forbidden": [
+        "thought-sentinel",
+        "hidden-sentinel",
+        "secret-sentinel"
+      ],
+      "required": "approved-question-marker"
+    },
+    {
+      "id": "typed-reasoning",
+      "value": {
+        "question": "approved-question-marker Where is my order?",
+        "parts": [
+          {
+            "type": "reasoning",
+            "content": "hidden-reasoning-sentinel"
+          }
+        ]
+      },
+      "forbidden": [
+        "hidden-reasoning-sentinel"
+      ],
+      "required": "approved-question-marker"
+    },
+    {
+      "id": "json-typed-reasoning",
+      "value": "{\"question\": \"approved-question-marker Where is my order?\", \"parts\": [{\"type\": \"reasoning\", \"content\": \"hidden-reasoning-sentinel\"}]}",
+      "forbidden": [
+        "hidden-reasoning-sentinel"
+      ],
+      "required": "approved-question-marker"
+    },
+    {
+      "id": "aggregate-unicode",
+      "forbidden": [],
+      "required": "approved-question-marker",
+      "max_serialized_attribute_bytes": 8192,
+      "value_recipe": {
+        "encoding": "json",
+        "prefix": {
+          "question": "approved-question-marker"
+        },
+        "field_count": 16,
+        "field_prefix": "field_",
+        "unit": "界",
+        "repeat": 2000
+      }
+    }
+  ],
+  "malformed_known_parts": [
+    {
+      "type": "text"
+    },
+    {
+      "type": "text",
+      "content": 123
+    },
+    {
+      "type": "tool_call",
+      "name": 123
+    },
+    {
+      "type": "tool_call_response"
+    }
+  ],
+  "unknown_extension_policy": "Follow the supplied schema explicitly; rejecting malformed known discriminators does not authorize rejecting every valid extension."
+}

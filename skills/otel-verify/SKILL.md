@@ -26,11 +26,31 @@ Before writing verification artifacts, read
 Contract plus Reader-First Report Order. When `.observe/otel-audit.json` exists,
 also read `./references/json-approval-handoff.md`; it owns canonical scope,
 schema, digest binding, status rollup, and the HTML refresh.
+Independently reconcile each selected GenAI orchestration role with the source
+control flow before accepting the audit or test expectations. A custom
+model-directed tool/result feedback loop is an agent invocation; an existing
+`invoke_workflow` label or a passing test asserting that label cannot prove
+correct agent coverage. For no-tool, tool-feedback and failure turns, compare
+the received canonical span's operation, actual agent identity, parentage,
+call counts, status and selected agent-duration measurement with executed app
+code. Require one agent node at that boundary, without an extra workflow for
+the same turn. Distinguish genuine staged workflows and single inference
+facades. When source behavior contradicts a bound audit contract, report the
+role defect and its affected proof as incomplete/failed; do not rewrite source,
+rebind old proof or mark the agent covered from schema validation alone.
 Always read `../references/local-otlp-receiver.md` before choosing a local
 export target. When selected or bound findings use
 `finding_group: splunk-agent-observability`, or the repository contains a
 `splunk_ao` dependency/import, also read
 `../references/splunk-agent-observability.md`.
+For every source-owned agent, independently assess project, dedicated stream
+and runtime routing using the Agent Resource And Producer Decision matrix in
+`../references/splunk-agent-observability.md`, including native OTel fallback,
+existing native OTel, existing AO and Galileo plus native OTel. An old audit
+omitting these requirements is an audit coverage gap, not proof of completeness.
+Keep canonical selected checks bound to their selection; report omitted or
+unselected resource/delivery gaps separately without rebinding evidence or
+modifying source/configuration. Standalone verification assesses all three.
 When the selected scope or application owns GenAI operations, also read
 `../references/genai-readiness.md` and apply its GenAI Instrumentation Selection
 and Required GenAI Coverage Profile. Verify the chosen producer's span creation
@@ -90,6 +110,16 @@ creation-time or sink contract requires exact evidence and a supported fallback.
 Verify actual business values, stream behavior and one node per operation, not merely
 the presence of an annotation. Preserve framework/provider-owned operations
 without a duplicate decorator span and keep all remaining field gaps visible.
+
+
+For a supplemental SDK/connection source review, close the supplied API facts:
+exact helper signature, effective creation kind, initial attributes/sampling
+inputs, and exit-time updates. Read the reference's local span creation and function
+producer gates even when a full semantic audit is excluded. Name the justified
+app-owned function decorator and supported creator for uncovered boundaries.
+Use a public OTel exception only for a source-proven incompatible contract;
+keep unknown transport Conditional and preserve existing producers. Record
+unexecuted runtime proof separately from established source behavior.
 
 
 ## Contract
@@ -442,6 +472,21 @@ Coverage rules:
   timeout, treat each as a separate path scenario unless source inspection
   proves identical telemetry.
 
+Bind each runtime claim to its own capture path, process/mode, destination,
+scenario and observed trace/span IDs. Resolve cited IDs against that exact
+capture and its decoded request metadata before finalizing; IDs copied from a
+Studio case cannot prove a public or rejected-export case. Add a negative
+association test when generating report evidence from several captures.
+When the receiver is unavailable, business success and an export error prove
+neither native emission nor delivery. Independently capture completed native
+spans, metric points and LogRecords through supported SDK test seams, or keep
+that emission claim Not proven. Preserve N/A applicability in every downstream
+state row; a non-agent N/A cannot become required/Blocked AO setup in a template.
+Interpret applicability with its explicit scope: a whole section marked N/A
+can retain a conditional catalog of checks without making them current work.
+Flag an active required/Blocked child outcome that contradicts that scope,
+not the mere presence of a key named `required` inside an N/A section.
+
 Use this status vocabulary:
 
 - `Verified: unit`: deterministic app-code assertion or in-memory exporter
@@ -527,12 +572,42 @@ not an instrumentation failure.
   discovery/route-registration APIs. Normal SDK authentication and resource
   calls to the configured cloud-compatible endpoint are allowed.
 
-For selected Splunk Agent Observability work, verify four outcomes separately:
+For each assessed agent, report four outcomes separately, marking unselected
+work or unavailable remote proof explicitly rather than claiming full readiness:
 
 - the project is resolved or created through a supported product path;
 - the dedicated Agent Stream is resolved or created;
 - the selected application routing mode is configured and exercised; and
 - a fresh application trace is observed in the intended project and stream.
+
+For existing native OTel, apply the shared reference's Native trace binding
+and recovery contract. Capture actual headers and completed span Resources:
+`projectid` must equal `splunk_ao.project.id`, and `logstreamid` must equal
+`splunk_ao.logstream.id`, using the selected resolved UUIDs. A header-only test
+does not prove payload binding. Require a real-launcher test starting with only
+selected names and already-existing resources, an initially unavailable API,
+then recovery in the same app PID with zero creates and no manual setup.
+Separately test resolved bindings through an outage without erasing them.
+Preseeding IDs or restarting between states cannot prove names-only recovery.
+Include finite per-request timeouts, a capped retry rate/backoff, business and
+local-telemetry progress during a prolonged outage, and cancellation of pending
+retries on shutdown in that acceptance. Bounded retry work does not require
+permanently stopping retries before Studio connects. Record actual configured
+bounds when source or captures supply them; otherwise name the missing bounds
+and their future assertion as Not proven. An automatic-recovery sentence alone
+does not assess these constraints, and source-only verification must not invent
+numeric runtime settings.
+Only exact fresh cloud trace readback proves end-to-end AO visibility.
+
+For Galileo, verify its native project/log-stream client and actual consumed
+vendor configuration, then its installed native processor/logger/export path.
+Preserve nondefault selectors, API/console/auth and legitimate native OTel
+sinks; do not require Splunk AO variables or Studio trace headers for that path.
+Local fakes must exercise the real installed Galileo SDK and application
+startup/exporter, not a fake vendor module. Apply the same resource lookup,
+creation, repeat, association, ID, race and failure checks through supported
+Galileo APIs. Missing live credentials/API permission may block exact remote
+trace readback; report that outcome separately from local runtime proof.
 
 For selected resource provisioning, inspect the configured `ao_target` and
 exercise the application's actual provisioning step with credential-free API
@@ -562,7 +637,7 @@ runtime that passes its own resource names explicitly. Prove explicit-ID
 plumbing when supported, or state the source-backed name-only limitation;
 passing an ID string to a name lookup does not prove ID support.
 
-For a non-AO application, verify the actual launch consumes the resolved IDs
+For a native OTel application without Galileo, verify the actual launch consumes the resolved IDs
 through the existing exporter's supported trace-header hook: current Studio
 uses `projectid`/`logstreamid`, public standalone AO docs use
 `projectid`/`agentstreamid`. Verify the exact target contract and authentication,
