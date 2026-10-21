@@ -96,6 +96,7 @@ import {
 	type RegistrationAndAuthProtocol,
 	type StoredSplunkCloudConnection,
 } from './cloud-bridge';
+import { ConfigWarningController, type ConfigStatusResponse, type ConfigWatcher } from './config-warning';
 import {
 	collectObserverHostHTTPResponse,
 	isObserverHostCancelEnvelope,
@@ -164,6 +165,8 @@ let agentIntegrationRefreshOperation: { key: string; promise: Promise<string[]> 
 let recentAgentIntegrationPrompts: Array<{ message: string }> = [];
 const observerLifecycleState = createObserverLifecycleState();
 let lastObserverPanelRenderKey: string | undefined;
+let configWarningController: ConfigWarningController | undefined;
+let configWarningRunId: number | undefined;
 
 const observerPanelViewType = 'observabilityStudioObserver';
 const observerPanelTitle = 'Splunk Observability Studio – Telemetry Explorer';
@@ -434,6 +437,14 @@ export async function activate(context: vscode.ExtensionContext) {
 	observerOutputChannel = vscode.window.createOutputChannel('Splunk Observability Studio');
 	context.subscriptions.push(observerOutputChannel);
 	logObserverLifecycle(`Extension ${getBundleVersion(context)} activated.`);
+
+	const configWarning = createConfigWarningController(context);
+	configWarningController = configWarning;
+	configWarningRunId = undefined;
+	context.subscriptions.push(
+		configWarning,
+		vscode.window.onDidChangeWindowState((state) => configWarning.onWindowFocusChanged(state.focused)),
+	);
 
 	context.subscriptions.push(
 		vscode.window.registerWebviewPanelSerializer(observerPanelViewType, {
@@ -2011,6 +2022,73 @@ function forceDisposeObserverForExtensionUnload(
 function syncObserverUi(): void {
 	updateStatusBar(observerLifecycleState.status);
 	refreshObserverPanel();
+	notifyConfigWarningOfRun();
+}
+
+// Every path into 'running' (managed start, restart, shared or discovered attach)
+// begins a new run id and ends in syncObserverUi, so a new running run id is
+// exactly one transition into 'running' (diagnostics FR11 T1).
+function notifyConfigWarningOfRun(): void {
+	const runId = observerLifecycleState.status === 'running' ? observerLifecycleState.currentRunId : undefined;
+	if (runId !== undefined && runId !== configWarningRunId) {
+		configWarningController?.onObserverRunning();
+	}
+	configWarningRunId = runId;
+}
+
+function createConfigWarningController(context: vscode.ExtensionContext): ConfigWarningController {
+	return new ConfigWarningController({
+		clearTimeout: (handle) => clearTimeout(handle as NodeJS.Timeout),
+		createWatcher: (dir): ConfigWatcher => {
+			const watcher = vscode.workspace.createFileSystemWatcher(
+				new vscode.RelativePattern(vscode.Uri.file(dir), 'config.yaml'),
+			);
+			const listeners: vscode.Disposable[] = [];
+			return {
+				dispose: () => {
+					for (const listener of listeners) {
+						listener.dispose();
+					}
+					watcher.dispose();
+				},
+				onEvent: (listener) => {
+					listeners.push(
+						watcher.onDidChange(listener),
+						watcher.onDidCreate(listener),
+						watcher.onDidDelete(listener),
+					);
+				},
+			};
+		},
+		currentBaseUrl: () => observerLifecycleState.status === 'running' ? observerBaseUrl : undefined,
+		fetchStatus: fetchObserverConfigStatus,
+		isFocused: () => vscode.window.state.focused,
+		memento: context.globalState,
+		openDocument: (filePath, opts) => {
+			const selection = opts.selection === undefined
+				? undefined
+				: new vscode.Range(
+					new vscode.Position(opts.selection.line, opts.selection.character),
+					new vscode.Position(opts.selection.line, opts.selection.character),
+				);
+			return vscode.window.showTextDocument(
+				vscode.Uri.file(filePath),
+				selection === undefined ? {} : { selection },
+			);
+		},
+		setTimeout: (callback, ms) => setTimeout(callback, ms),
+		showWarning: (message, action) => vscode.window.showWarningMessage(message, action),
+	});
+}
+
+async function fetchObserverConfigStatus(baseUrl: string): Promise<ConfigStatusResponse> {
+	// The host request helper targets the current observer; refuse if it moved
+	// between the trigger and the request.
+	if (baseUrl !== observerBaseUrl) {
+		throw new Error('Splunk Observability Studio changed before the config status request.');
+	}
+	const response = await requestObserverHostHTTP('GET', '/api/config/status', undefined, new AbortController().signal);
+	return { body: response.body, status: response.status };
 }
 
 function terminateObserverProcess(
