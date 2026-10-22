@@ -60,6 +60,7 @@ function pending(): { promise: Promise<Response>; resolve(r: Response): void; re
 }
 
 const usageSwitch = () => screen.getByRole("switch", { name: "Fixture title" }) as HTMLInputElement;
+const busy = () => usageSwitch().getAttribute("aria-disabled") === "true";
 
 describe("UsageDataSetting", () => {
   beforeEach(() => transport.fetch.mockReset());
@@ -93,12 +94,36 @@ describe("UsageDataSetting", () => {
     const init = posts[0][1] as RequestInit;
     expect(init.body).toBe('{"telemetry":{"enabled":false}}');
     expect(new Headers(init.headers).get("X-Obstudio-Browser-Request")).toBe("1");
-    expect(usageSwitch().disabled).toBe(true);
+    expect(busy()).toBe(true);
     expect(usageSwitch().checked).toBe(true);
     await act(async () => post.resolve(value(false)));
-    await waitFor(() => expect(usageSwitch().disabled).toBe(false));
+    await waitFor(() => expect(busy()).toBe(false));
     expect(usageSwitch().checked).toBe(false);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps keyboard focus on the switch and ignores toggles while a write is in flight", async () => {
+    const post = pending();
+    serve((path, init) => {
+      if (path === "/api/config/definitions") return json(200, DEF);
+      if (init?.method === "POST") return post.promise;
+      return value(true);
+    });
+    render(<UsageDataSetting />);
+    await waitFor(() => expect(usageSwitch().checked).toBe(true));
+    usageSwitch().focus();
+    fireEvent.click(usageSwitch());
+    expect(busy()).toBe(true);
+    expect(usageSwitch().hasAttribute("disabled")).toBe(false);
+    expect(document.activeElement).toBe(usageSwitch());
+    fireEvent.click(usageSwitch());
+    expect(calls("/api/config", "POST")).toHaveLength(1);
+    expect(usageSwitch().checked).toBe(true);
+    await act(async () => post.resolve(value(true)));
+    await waitFor(() => expect(busy()).toBe(false));
+    expect(usageSwitch().checked).toBe(true);
+    expect(calls("/api/config", "POST")).toHaveLength(1);
+    expect(document.activeElement).toBe(usageSwitch());
   });
 
   it("shows the save error and snaps back to the refreshed value", async () => {
@@ -115,19 +140,19 @@ describe("UsageDataSetting", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(error);
     await waitFor(() => expect(calls("/api/config")).toHaveLength(2));
     expect(usageSwitch().checked).toBe(false);
-    expect(usageSwitch().disabled).toBe(false);
+    expect(busy()).toBe(false);
 
     postReply = () => new Response("oops", { status: 500 });
     fireEvent.click(usageSwitch());
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Usage data setting could not be saved (HTTP 500)."));
 
     postReply = () => Promise.reject(new Error("offline"));
-    await waitFor(() => expect(usageSwitch().disabled).toBe(false));
+    await waitFor(() => expect(busy()).toBe(false));
     fireEvent.click(usageSwitch());
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Usage data setting could not be saved."));
 
     postReply = () => value(true);
-    await waitFor(() => expect(usageSwitch().disabled).toBe(false));
+    await waitFor(() => expect(busy()).toBe(false));
     fireEvent.click(usageSwitch());
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });

@@ -101,7 +101,7 @@ export function UsageDataSetting(): React.ReactElement {
             <input
               aria-describedby="cloud-usage-data-description"
               checked={state.values[usageDataPath] === true}
-              disabled={state.inFlight.has(usageDataPath)}
+              aria-disabled={state.inFlight.has(usageDataPath) || undefined}
               onChange={(event) => editsRef.current?.edit(usageDataPath, event.currentTarget.checked)}
               role="switch"
               type="checkbox"

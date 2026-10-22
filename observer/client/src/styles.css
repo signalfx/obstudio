@@ -7628,7 +7628,7 @@ code {
   cursor: inherit;
 }
 
-.cloud-usage-data__switch:has(input:disabled) {
+.cloud-usage-data__switch:has(input[aria-disabled="true"]) {
   cursor: progress;
   opacity: 0.7;
 }
