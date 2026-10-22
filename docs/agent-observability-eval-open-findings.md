@@ -1,5 +1,11 @@
 # Agent Observability eval failures and corrections
 
+This is a historical correction record frozen at the
+[recorded report snapshot](https://github.com/signalfx/obstudio/tree/a7d495d0b4eb13e83b690d474c2cb4e820bfd69e/eval-reports).
+Run IDs, cohort totals, and latest/current-source references below describe
+that snapshot. Later focused dependency-security reports are published in
+`eval-reports/` with their own model, configuration, and selected-case scope.
+
 These failures were observed in model-generated application code and reports.
 This record distinguishes valid failures from grading errors, retains the
 original counterexamples, and records the focused corrections below. Fixture
@@ -214,7 +220,7 @@ all four preservation modes, the focused content repair, and
 `python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json`.
 The exact selected rubric commands are below; `EVAL_AUTH_HOME` denotes the
 private authenticated evaluation home. Temporary login copies used for these
-runs were removed after all model jobs completed. Audit's latest scoped result
+runs were removed after all model jobs completed. Audit's recorded scoped result
 is 24/24, instrumentation is 61/61 and verification is 22/22; earlier failed
 outcomes remain in the archive.
 
@@ -370,13 +376,13 @@ Instrumentation passed **61/61**, including all four preservation modes, and
 verification passed **22/22**. Audit passed **22/24**. The archive retains all
 three runs, every raw grade and their consistent source-file digest union.
 The coordinated audit run is `20261021T043124565699Z`; the table below tracks
-the latest owning-skill results, including the later scoped audit correction.
+the recorded owning-skill results, including the later scoped audit correction.
 
-| Latest retained rubric report | Run ID |
-|---|---|
-| Audit | `20261021T051843575616Z` |
-| Instrument | `20261021T042942403248Z` |
-| Verify | `20261021T043122995424Z` |
+| Recorded closure rubric report | Run ID | Snapshot |
+|---|---|---|
+| Audit | `20261021T051843575616Z` | [Report](https://github.com/signalfx/obstudio/blob/a7d495d0b4eb13e83b690d474c2cb4e820bfd69e/eval-reports/otel-audit/rubric/benchmark.json) |
+| Instrument | `20261021T042942403248Z` | [Report](https://github.com/signalfx/obstudio/blob/a7d495d0b4eb13e83b690d474c2cb4e820bfd69e/eval-reports/otel-instrument/rubric/benchmark.json) |
+| Verify | `20261021T043122995424Z` | [Report](https://github.com/signalfx/obstudio/blob/a7d495d0b4eb13e83b690d474c2cb4e820bfd69e/eval-reports/otel-verify/rubric/benchmark.json) |
 
 The resource-table audit failed two valid acceptance checks. Its Go routing
 fix named native Go interfaces, while active acceptance still required foreign
@@ -418,7 +424,7 @@ The four new acceptance/owner mutations keep the correct inventory and routing
 fix unchanged. The receipt embeds the candidate report, checker, raw grade and
 replay output; the original 5/7 and intermediate 6/7 grades remain failed.
 
-The latest current-source report set is **17 tasks, 107/107 checks**: audit
+At that snapshot, the retained report set is **17 tasks, 107/107 checks**: audit
 **24/24**, instrumentation **61/61**, verification **22/22**. It combines the
 scoped owner correction with the unchanged instrumentation/verifier evidence
 from the complete merged-source cohort. It is not a clean coordinated sweep
