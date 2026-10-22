@@ -31,7 +31,31 @@ The extension provides these integration commands:
 | Claude Code | **Enable Claude Code Integration** |
 | Codex | **Enable Codex Integration** |
 
-For Copilot, Windsurf, and Devin Desktop setup, follow the standalone CLI
+### GitHub Copilot in VS Code
+
+With **VS Code 1.109 or newer** and GitHub Copilot agent chat, the extension
+contributes all nine bundled skills automatically. Start a new chat and type
+`/otel-audit`, `/otel-instrument`, or `/otel-verify`; Copilot can also select
+relevant skills from their descriptions. No skill-copy command or changes to
+your workspace or personal Copilot settings are required. Older editors retain
+the existing runtime and integration features but do not discover these native
+skill contributions.
+
+Skills and MCP tools are separate. For workflows that use the local runtime's
+MCP tools, run **Splunk Observability Studio: Open**, then use **MCP: Add Server**
+in VS Code to add an HTTP server at `http://127.0.0.1:3000/mcp` named `obstudio`.
+Use the configured `managedObserverPort` or `sharedObserverUrl` instead when
+overridden. Keep the runtime running and approve the MCP server when prompted.
+Native extension skills apply to VS Code chat, not the standalone Copilot CLI.
+
+VS Code also synchronizes contributed skills to agent-plugin caches for hosted
+agent sessions. Each contributed entrypoint therefore carries a complete
+runtime skill bundle under `bundle/` and directs the agent to the unchanged
+canonical workflow inside it. Shared report helpers, sibling verification
+skills, and references remain available even when only one skill directory is
+copied. The CLI-managed Codex and other integrations retain their existing layout.
+
+For Windsurf and Devin Desktop setup, follow the standalone CLI
 instructions in the
 [user guide](https://github.com/signalfx/obstudio/blob/main/docs/USER.md#agent-targets).
 
@@ -42,7 +66,7 @@ From the service root, enter the audit command in your coding-agent chat:
 | Agent | Command form |
 |---|---|
 | Codex | `$otel-audit` |
-| Claude Code, Cursor, Kiro, or Devin Local | `/otel-audit` |
+| Copilot in VS Code, Claude Code, Cursor, Kiro, or Devin Local | `/otel-audit` |
 | Legacy Cascade | `@otel-audit` |
 
 Open the returned report and follow the next step it recommends. The
@@ -132,6 +156,14 @@ contracts.
   Splunk Observability Studio is reachable and its version matches the extension.
 - After enabling an integration, fully restart the agent and start a new task.
   Existing processes keep their startup settings.
+- If Copilot does not offer `/otel-audit`, confirm VS Code is 1.109 or newer,
+  reload the window after installing the updated VSIX, and start a new agent
+  chat. Use **Chat: Configure Skills** to inspect skill discovery. MCP server
+  setup alone does not install skills.
+- If a session reports a missing shared report helper from an `agentPlugins`
+  cache, install the updated VSIX, reload the window, and start a new session so
+  VS Code refreshes its synchronized skills. Do not copy helpers into an
+  application repository or manually patch generated agent caches.
 - Dashboard previews use the first workspace folder captured when Splunk
   Observability Studio starts. Open the service in its own window or make it
   the first folder, then run **Splunk Observability Studio: Restart** after

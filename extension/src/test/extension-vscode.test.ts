@@ -980,6 +980,27 @@ async function requestJson(url: string, method: 'GET' | 'POST'): Promise<any> {
 }
 
 suite('VS Code Host', () => {
+	test('Copilot-capable hosts discover the bundled skills through the native contribution point', async function () {
+		const [major, minor] = vscode.version.split('.').map(Number);
+		if (major === 1 && minor < 109) {
+			this.skip();
+		}
+		const extension = await getExtension();
+		const files = await vscode.commands.executeCommand<Array<{ uri: Parameters<typeof vscode.Uri.from>[0]; type: string }>>(
+			'_listExtensionPromptFiles',
+		);
+		assert.ok(files, 'the host must expose extension-contributed prompt discovery');
+		const skills = files.filter((file) => file.type === 'skill')
+			.map((file) => vscode.Uri.from(file.uri).toString());
+		const contributions = extension.packageJSON.contributes.chatSkills as Array<{ path: string }>;
+		assert.equal(contributions.length, 9);
+		for (const contribution of contributions) {
+			const uri = vscode.Uri.joinPath(extension.extensionUri, contribution.path);
+			assert.ok(skills.includes(uri.toString()), `host did not discover ${contribution.path}`);
+			assert.ok((await vscode.workspace.fs.readFile(uri)).length > 0);
+		}
+	});
+
 	test('shared observer startup retries port collisions', () => {
 		assert.equal(
 			isRetryableSharedObserverStartupFailure(
