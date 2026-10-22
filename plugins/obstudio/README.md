@@ -82,9 +82,12 @@ turn off the "Usage data" switch in the Cloud tab, or set
 `telemetry.enabled: false` in `~/.obstudio/config.yaml`.
 
 Token telemetry and repository correlation are separate and stay off unless
-you opt in with `obstudio token-telemetry enable`. The Splunk publish skills call Splunk
-Observability Cloud APIs only when you invoke them with credentials you
-provide, and OTLP data received by the local instance stays local unless you
+you opt in with `obstudio token-telemetry enable`.
+
+The Splunk publish skills call Splunk Observability Cloud APIs only when you
+invoke them with credentials you provide. Dashboards and detectors they create
+are tagged `obstudio` in your Splunk organization, regardless of the usage-data
+setting. OTLP data received by the local instance stays local unless you
 configure forwarding. Your host and model provider have their own privacy
 behavior. See [`PRIVACY.md`](./PRIVACY.md) for the data flows.
 
