@@ -12,6 +12,20 @@ operating system, and user-invoked tools have their own privacy behavior.
 | Splunk Observability Studio and MCP controls: the bundled MCP configuration, SessionStart hook, and `$observer-open`, `$observer-status`, `$observer-restart`, and `$observer-stop` | Interact with local endpoints and may download, start, or manage Splunk Observability Studio. Health or control checks may require narrow elevated access. The command skills use the default Splunk Observability Studio endpoint and do not follow, probe, or control custom MCP endpoints automatically. |
 | Splunk publishers: `$splunk-detector-publish` and `$splunk-dashboard-publish` | Call Splunk Observability Cloud APIs only when explicitly invoked. They can create dashboards or detectors and require credentials with the corresponding API permissions. |
 
+## Anonymous usage data
+
+Splunk Observability Studio collects anonymous usage data about the tool
+itself. This is on by default and is separate from token telemetry below. It
+is controlled by `telemetry.enabled` in `~/.obstudio/config.yaml`. To opt out:
+
+- run `obstudio telemetry disable` (`obstudio telemetry status` shows the
+  current setting);
+- turn off the "Usage data" switch in the Cloud tab; or
+- set `telemetry.enabled: false` in `~/.obstudio/config.yaml`.
+
+If the setting is missing, invalid, or the file cannot be read, usage data is
+treated as off.
+
 ## What the plugin does not add
 
 - The plugin package does not enable token telemetry or repository correlation
@@ -106,7 +120,8 @@ Splunk Observability Studio is unhealthy.
 
 If a project command, package manager, test runtime, OTLP exporter, or user
 configuration performs network access, that traffic belongs to the selected
-tooling or project configuration, not to plugin telemetry code.
+tooling or project configuration, not to the anonymous usage data described
+above.
 
 ## Privacy policy and contact
 

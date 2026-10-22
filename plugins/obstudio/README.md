@@ -75,8 +75,14 @@ policy. See [`SECURITY.md`](./SECURITY.md) for the full trust model.
 ## Privacy
 
 The plugin does not upload workspace contents to Splunk Observability Cloud.
-Token telemetry and repository correlation stay off unless you opt in with
-`obstudio token-telemetry enable`. The Splunk publish skills call Splunk
+
+Splunk Observability Studio collects anonymous usage data about the tool
+itself. This is on by default. To opt out, run `obstudio telemetry disable`,
+turn off the "Usage data" switch in the Cloud tab, or set
+`telemetry.enabled: false` in `~/.obstudio/config.yaml`.
+
+Token telemetry and repository correlation are separate and stay off unless
+you opt in with `obstudio token-telemetry enable`. The Splunk publish skills call Splunk
 Observability Cloud APIs only when you invoke them with credentials you
 provide, and OTLP data received by the local instance stays local unless you
 configure forwarding. Your host and model provider have their own privacy
