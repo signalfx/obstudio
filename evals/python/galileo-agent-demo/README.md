@@ -24,11 +24,15 @@ The project and log stream remain operator-overridable through
 `GALILEO_PROJECT` and `GALILEO_LOG_STREAM`. Credentials are supplied through
 the runtime secret environment and are not stored in this fixture.
 
-The manifest enables Galileo's supported `otel` extra because this entrypoint
-imports its OTLP exporter. Its transport dependencies use the compatible OTel
-family below 1.45: Galileo's exporter accesses the inherited requests session,
-which the newer transport removed. This keeps the real existing exporter
-runnable without patching the SDK or changing application ownership.
+The manifest enables Galileo's supported `otel` extra and requires patched
+OpenTelemetry 1.45 or newer. `galileo_compat.py` supplies a requests session
+through the exporter's public constructor and retains it for Galileo's legacy
+session access. The session preserves Galileo's per-batch project, stream, and
+experiment headers with the new transport. The real Galileo processor,
+exporter, authentication, and provider ownership remain in use.
+
+`make test` exercises real Galileo and OTLP exports against a loopback receiver,
+including destination headers, authentication, and shutdown.
 
 ## Replay agent entrypoint
 

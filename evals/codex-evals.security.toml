@@ -1,0 +1,14 @@
+# Reproducible dependency-security checks; the agent-role model hit capacity.
+[run]
+mode = "with_skill"
+[rubric]
+enabled = true
+[runtime]
+enabled = false
+[models]
+agent = "gpt-6-sol"
+judge = "gpt-6-sol"
+[agent]
+extra_args = ["--config", 'model_reasoning_effort="medium"', "--config", "sandbox_workspace_write.network_access=true"]
+timeout = 2400
+judge_timeout = 900
