@@ -636,12 +636,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.38.0,<2" },
-    { name = "opentelemetry-sdk", specifier = ">=1.38.0,<2" },
+    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.45.0,<2" },
+    { name = "opentelemetry-sdk", specifier = ">=1.45.0,<2" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-codex-evals", editable = "../pytest-codex-evals" },
     { name = "pytest-xdist", specifier = ">=3.6.0" },
-    { name = "python-dotenv", specifier = ">=1" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
 ]
 
 [package.metadata.requires-dev]
