@@ -4,22 +4,22 @@ on:
   workflow_call:
     inputs:
       release_tag:
-        description: "Release tag (vMAJOR.MINOR.PATCH[-prerelease][+build]) to bump the plugin manifests to"
+        description: "Release tag (vMAJOR.MINOR.PATCH[-prerelease][+build]) to point the plugin marketplaces at"
         required: true
         type: string
       base:
-        description: "Branch to bump the manifests on and open the sync PR against"
+        description: "Branch to sync the marketplaces on and open the sync PR against"
         required: false
         type: string
         default: main
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag (vMAJOR.MINOR.PATCH[-prerelease][+build]) to bump the plugin manifests to"
+        description: "Release tag (vMAJOR.MINOR.PATCH[-prerelease][+build]) to point the plugin marketplaces at"
         required: true
         type: string
       base:
-        description: "Branch to bump the manifests on and open the sync PR against"
+        description: "Branch to sync the marketplaces on and open the sync PR against"
         required: false
         type: string
         default: main
@@ -64,32 +64,22 @@ jobs:
             --sync-codex-marketplace \
             --release-tag "$RELEASE_TAG"
 
-      - name: Bump committed plugin manifests to release version
-        env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
-        run: |
-          python3 plugins/obstudio/scripts/stage_obstudio_plugin.py \
-            --bump-manifests --release-tag "$RELEASE_TAG"
-
-      - name: Open PR to sync plugin manifest versions
+      - name: Open PR to sync plugin marketplace sources
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: bot/sync-plugin-version-${{ inputs.release_tag }}
           base: ${{ inputs.base }}
           delete-branch: true
-          commit-message: "chore: sync plugin manifest versions to ${{ inputs.release_tag }}"
-          title: "Sync plugin manifests to ${{ inputs.release_tag }}"
+          commit-message: "chore: sync plugin marketplaces to ${{ inputs.release_tag }}"
+          title: "Sync plugin marketplaces to ${{ inputs.release_tag }}"
           body: |
             Automated sync after release [${{ inputs.release_tag }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ inputs.release_tag }}).
 
-            This keeps the plugin metadata and marketplace sources aligned with the release:
-            - Update both plugin manifests' `version` fields so Claude and Codex identify the plugin as the released version.
+            The plugin manifest versions were already set to this release by the prepare-release PR, before the tag and ZIPs were created. This PR only points the marketplaces at the published release:
             - Point the Claude marketplace entry at the released plugin ZIP and its SHA-256 from `checksums.txt`.
             - Pin the Codex marketplace entry to the `plugins/obstudio` subdirectory at the release tag, so installs use that tagged source.
 
             Files updated:
-            - `plugins/obstudio/.claude-plugin/plugin.json`
-            - `plugins/obstudio/.codex-plugin/plugin.json`
             - `.claude-plugin/marketplace.json`
             - `.agents/plugins/marketplace.json`

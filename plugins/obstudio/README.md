@@ -100,12 +100,40 @@ under `plugins/obstudio/skills/observer-control/`.
 The published Claude marketplace entry uses a SHA-256-pinned release archive.
 GoReleaser's release `checksums.txt` includes the runtime archives, Claude and
 Codex plugin archives, and VSIX packages. The release workflow uses the Claude
-plugin ZIP hash from this manifest when it updates the marketplace archive URL
-alongside the Claude and Codex plugin manifest versions. The Codex marketplace
-uses a Git-backed `git-subdir` source pinned to the same release tag. The
-release sync workflow updates that tag along with both plugin manifest versions.
+plugin ZIP hash from this manifest when it updates the marketplace archive URL.
+The Codex marketplace uses a Git-backed `git-subdir` source pinned to the same
+release tag, which the release sync workflow updates. Both plugin manifest
+versions are set earlier, by the prepare-release PR, so the release tag and
+plugin ZIPs are created from manifests that already carry the release version.
 This relies on release tags remaining stable; moving a tag changes the Codex
 marketplace source for that version.
+
+### Release ordering: before and after
+
+Before, the tag and plugin ZIPs were created while `main` still held the
+previous release's manifest versions. The sync PR bumped the versions only
+afterward, so the tag (which Codex installs from) kept reporting the old
+version, and the Observer runtime soft pin followed that stale version.
+
+```text
+Before
+  1. Maintainer tags vX.Y.Z by hand         (plugin.json still says the previous version)
+  2. release.yml builds and uploads         (tag and ZIPs snapshot the stale manifests)
+  3. Sync PR bumps manifests + marketplaces (lands on main, cannot change the tag)
+  Result: marketplace -> vX.Y.Z, plugin.json inside the tag -> previous version
+```
+
+Now the manifests are bumped and merged first, and the tag is created from that
+commit automatically.
+
+```text
+After
+  1. Run Prepare Release (version X.Y.Z)    -> PR bumps both plugin.json files
+  2. Merge the PR                           -> tag-release.yml tags vX.Y.Z on the merge commit
+  3. release.yml verifies, builds, uploads  (fails if not on main or manifests != tag)
+  4. Sync PR updates marketplaces only      (Claude ZIP URL + SHA-256, Codex ref)
+  Result: marketplace, plugin.json, and the Observer soft pin all match vX.Y.Z
+```
 
 For Claude development, choose one of these local workflows:
 
