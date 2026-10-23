@@ -2,6 +2,17 @@
 
 All notable changes to the "Splunk Observability Studio" extension will be documented in this file.
 
+## Unreleased
+
+### Added
+- Contribute all nine bundled skills to GitHub Copilot chat in VS Code 1.109+
+  through native `chatSkills` registration, including shared references and
+  scripts without modifying user or workspace configuration.
+
+### Fixed
+- Keep shared reporting helpers and sibling workflow resources with each native
+  skill when VS Code copies individual skills into hosted-agent plugin caches.
+
 ## 0.0.15
 
 ### Added

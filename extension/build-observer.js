@@ -37,6 +37,7 @@ function getBuildPaths(extensionRoot = __dirname, env = process.env) {
 	const observerOutDir = path.join(extensionRoot, "dist", "observer");
 	const clientAssetsDir = path.join(observerRoot, "internal", "web", "static", "assets");
 	const webviewOutDir = path.join(extensionRoot, "dist", "webview");
+	const skillsOutDir = path.join(extensionRoot, "dist", "skills");
 	const target = resolveBuildTarget(env);
 	const observerOutBinary = path.join(observerOutDir, target.binaryName);
 
@@ -48,6 +49,7 @@ function getBuildPaths(extensionRoot = __dirname, env = process.env) {
 		observerOutBinary,
 		target,
 		webviewOutDir,
+		skillsOutDir,
 	};
 }
 
@@ -58,13 +60,48 @@ function resetObserverOutputDirs(paths) {
 	fs.mkdirSync(paths.webviewOutDir, { recursive: true });
 }
 
-function stageSkills(paths) {
+function stageSkills(paths, run = execFileSync) {
 	console.log("Staging embedded skills via Go...");
-	execFileSync("go", ["run", "./cmd/stage-skills"], {
+	run("go", ["run", "./cmd/stage-skills"], {
 		cwd: paths.observerRoot,
 		stdio: "inherit",
 	});
+	fs.rmSync(paths.skillsOutDir, { force: true, recursive: true });
+	fs.cpSync(
+		path.join(paths.observerRoot, "cmd", "obstudio", "_skills"),
+		paths.skillsOutDir,
+		{ recursive: true },
+	);
 	console.log("Skills staged.");
+}
+
+function bundleCopilotSkills(paths) {
+	const contributions = require("./package.json").contributes.chatSkills;
+	const outputRoot = path.join(paths.skillsOutDir, "..", "copilot-skills");
+	fs.rmSync(outputRoot, { recursive: true, force: true });
+	for (const contribution of contributions) {
+		const skillName = path.basename(path.dirname(contribution.path));
+		const canonicalPath = path.join(paths.skillsOutDir, skillName, "SKILL.md");
+		const source = fs.readFileSync(canonicalPath, "utf8");
+		const frontmatter = source.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/);
+		if (!frontmatter) {
+			throw new Error(`Missing skill frontmatter: ${canonicalPath}`);
+		}
+		const destination = path.join(outputRoot, skillName, "SKILL.md");
+		const skillRoot = path.dirname(destination);
+		fs.mkdirSync(skillRoot, { recursive: true });
+		// VS Code synchronizes only the contributed skill's directory, not siblings.
+		fs.cpSync(paths.skillsOutDir, path.join(skillRoot, "bundle"), { recursive: true });
+		fs.writeFileSync(destination, `${frontmatter[0]}
+# ${skillName}
+
+Read and follow [the canonical skill](./bundle/${skillName}/SKILL.md).
+That file contains the complete workflow. Resolve its relative resources and
+scripts from its own directory, \`bundle/${skillName}/\`, not from this entrypoint
+or the application workspace. The adjacent skills and shared references are
+included under \`bundle/\`; use those bundled copies for subsequent workflow steps.
+`);
+	}
 }
 
 function buildClientAssets(paths, run = execFileSync) {
@@ -145,6 +182,7 @@ if (require.main === module) {
 		const paths = getBuildPaths();
 		resetObserverOutputDirs(paths);
 		stageSkills(paths);
+		bundleCopilotSkills(paths);
 		buildClientAssets(paths);
 		buildObserverGo(paths);
 		bundleWeaverRuntime(paths);
@@ -159,6 +197,7 @@ module.exports = {
 	resolveBuildTarget,
 	resetObserverOutputDirs,
 	stageSkills,
+	bundleCopilotSkills,
 	buildClientAssets,
 	buildObserverGo,
 	bundleWeaverRuntime,
