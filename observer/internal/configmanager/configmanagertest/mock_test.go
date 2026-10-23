@@ -148,3 +148,30 @@ func TestMockEnforcesDeclaredSpecs(t *testing.T) {
 		t.Errorf("Set a.s=y: %v", err)
 	}
 }
+
+func TestMockWithSpecRejectsMalformedSpecs(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("WithSpec accepted a spec with an over-long label, want a panic")
+		}
+	}()
+	New(map[string]any{"a.b": "x"}).WithSpec(configmanager.KeySpec{
+		Key: "a.b", Type: configmanager.TypeString, Label: "this label is much longer than the forty character limit",
+	})
+}
+
+func TestMockSchemaCarriesLabelAndDescription(t *testing.T) {
+	mock := New(map[string]any{"a.b": "x", "a.c": "y"}).WithSpec(configmanager.KeySpec{
+		Key: "a.b", Type: configmanager.TypeString, Label: "Bee", Description: "The b setting.",
+	})
+	specs, err := mock.Schema(context.Background())
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	if specs[0].Label != "Bee" || specs[0].Description != "The b setting." {
+		t.Errorf("a.b spec = %#v, want label and description carried through", specs[0])
+	}
+	if specs[1].Label != "" || specs[1].Description != "" {
+		t.Errorf("a.c spec = %#v, want no label or description for an undeclared key", specs[1])
+	}
+}

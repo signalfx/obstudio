@@ -64,13 +64,15 @@ curl -s $B/schema
 
 ```json
 {"keys": [
-  {"key": "logging.level", "type": "string", "allowedValues": ["debug", "info", "warn", "error"]},
+  {"key": "logging.level", "type": "string", "label": "Log level",
+   "description": "How much detail obstudio writes to its log. Use debug when troubleshooting.",
+   "allowedValues": ["debug", "info", "warn", "error"]},
   {"key": "splunk.metricsExport", "type": "boolean"},
   {"key": "ui.port", "type": "integer", "minimum": 1024, "maximum": 65535}
 ]}
 ```
 
-`type` is `string`, `boolean` or `integer`. `allowedValues`, `minimum` and `maximum` appear only when they apply. Keys are sorted.
+`type` is `string`, `boolean` or `integer`. `label` (at most 40 characters) and `description` (at most 120) are optional plain text for people; clients should fall back to the key when `label` is absent. `allowedValues`, `minimum` and `maximum` appear only when they apply. Keys are sorted.
 
 ## Errors
 

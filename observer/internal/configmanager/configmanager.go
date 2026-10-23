@@ -7,7 +7,10 @@ package configmanager
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // ErrUnknownKey is returned (possibly wrapped) when a key does not exist.
@@ -48,15 +51,62 @@ const (
 	TypeInteger ValueType = "integer"
 )
 
+// Limits on the human-readable text in a KeySpec, in characters.
+const (
+	MaxLabelLength       = 40
+	MaxDescriptionLength = 120
+)
+
 // KeySpec describes one settable configuration key. AllowedValues, Minimum and
 // Maximum are optional constraints: AllowedValues is an exhaustive list (for
 // example an enum of strings), and Minimum/Maximum bound integer values.
+//
+// Label and Description are optional plain text for people. Label is a short
+// name for the setting (at most MaxLabelLength characters); Description is one
+// sentence saying what it does (at most MaxDescriptionLength characters). Both
+// must be a single line with no surrounding whitespace.
 type KeySpec struct {
 	Key           string    `json:"key"`
 	Type          ValueType `json:"type"`
+	Label         string    `json:"label,omitempty"`
+	Description   string    `json:"description,omitempty"`
 	AllowedValues []any     `json:"allowedValues,omitempty"`
 	Minimum       *int64    `json:"minimum,omitempty"`
 	Maximum       *int64    `json:"maximum,omitempty"`
+}
+
+// Validate reports whether the spec is well formed: it has a key and a type,
+// and its label and description respect the documented limits.
+func (s KeySpec) Validate() error {
+	if s.Key == "" {
+		return errors.New("key spec has no key")
+	}
+	if s.Type == "" {
+		return fmt.Errorf("key spec %q has no type", s.Key)
+	}
+	if err := validateText("label", s.Label, MaxLabelLength); err != nil {
+		return fmt.Errorf("key spec %q: %w", s.Key, err)
+	}
+	if err := validateText("description", s.Description, MaxDescriptionLength); err != nil {
+		return fmt.Errorf("key spec %q: %w", s.Key, err)
+	}
+	return nil
+}
+
+func validateText(name, text string, maxLength int) error {
+	if text == "" {
+		return nil
+	}
+	if length := utf8.RuneCountInString(text); length > maxLength {
+		return fmt.Errorf("%s is %d characters, the limit is %d", name, length, maxLength)
+	}
+	if strings.TrimSpace(text) != text {
+		return fmt.Errorf("%s must not have leading or trailing whitespace", name)
+	}
+	if strings.IndexFunc(text, unicode.IsControl) >= 0 {
+		return fmt.Errorf("%s must be a single line without control characters", name)
+	}
+	return nil
 }
 
 // ConfigManager reads, validates and persists configuration values.
