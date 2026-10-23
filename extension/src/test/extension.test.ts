@@ -2828,6 +2828,81 @@ test('retired splunk-dashboard-sync skill is not exposed in the docs registry', 
 	assert.equal(skillDocsUrl('splunk-dashboard-sync'), undefined);
 });
 
+function httpRequestEnvelope(method: string, path: string, body?: unknown): unknown {
+	return {
+		request: { body, kind: 'http', method, path },
+		requestId: 'request-123',
+		type: 'obstudio.host.request',
+	};
+}
+
+test('IDE host lets the webview read the config API and save one key', () => {
+	for (const path of ['/api/config', '/api/config/schema']) {
+		assert.equal(isAllowedObserverHostHTTPPath('GET', path), true, `GET ${path}`);
+	}
+	for (const path of [
+		'/api/config/splunk.realm',
+		'/api/config/ui.port',
+		'/api/config/telemetry.retentionMinutes',
+		'/api/config/some-key_1',
+		'/api/config/a.b.c.d',
+		`/api/config/${'a'.repeat(256)}`,
+	]) {
+		assert.equal(isAllowedObserverHostHTTPPath('PUT', path), true, `PUT ${path}`);
+	}
+});
+
+test('IDE host keeps the config allowlist as narrow as the UI needs', () => {
+	// The UI never reads a single key, so the webview may not either.
+	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/config/splunk.realm'), false);
+	// Only PUT may name a key; no method may write the whole-config or schema paths.
+	for (const path of ['/api/config', '/api/config/schema', '/api/config/']) {
+		assert.equal(isAllowedObserverHostHTTPPath('PUT', path), false, `PUT ${path}`);
+	}
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/config'), false);
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/config/splunk.realm'), false);
+	// Malformed or oversized keys, queries and traversal never reach the observer.
+	for (const path of [
+		'/api/config/a..b',
+		'/api/config/.a',
+		'/api/config/a.',
+		'/api/config/a/b',
+		'/api/config/a%2Fb',
+		'/api/config/a b',
+		'/api/config/..',
+		'/api/config/splunk.realm?x=1',
+		'/api/config/splunk.realm#frag',
+		`/api/config/${'a'.repeat(257)}`,
+		'//evil.example/api/config/splunk.realm',
+		'https://evil.example/api/config/splunk.realm',
+		'/api/configx/splunk.realm',
+	]) {
+		assert.equal(isAllowedObserverHostHTTPPath('PUT', path), false, `PUT ${path}`);
+	}
+	// PUT does not open up any other API path.
+	for (const path of ['/api/health', '/api/validation/run', '/api/splunk/export', '/api/data']) {
+		assert.equal(isAllowedObserverHostHTTPPath('PUT', path), false, `PUT ${path}`);
+	}
+	// Reads of the config API take no query string either way: they are exact paths.
+	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/config/schema/extra'), false);
+});
+
+test('IDE host request envelopes carry a body only for POST and PUT, and refuse other methods', () => {
+	assert.equal(isObserverHostRequestEnvelope(httpRequestEnvelope('PUT', '/api/config/ui.port', '{"value":18000}')), true);
+	assert.equal(isObserverHostRequestEnvelope(httpRequestEnvelope('GET', '/api/config')), true);
+	assert.equal(isObserverHostRequestEnvelope(httpRequestEnvelope('GET', '/api/config', '{}')), false);
+	assert.equal(isObserverHostRequestEnvelope(httpRequestEnvelope('PUT', '/api/config/ui.port', 18000)), false);
+	assert.equal(isObserverHostRequestEnvelope(
+		httpRequestEnvelope('PUT', '/api/config/ui.port', `{"value":"${'x'.repeat(1 << 20)}"}`),
+	), false);
+	// PATCH and DELETE stay blocked until something needs them.
+	for (const method of ['PATCH', 'DELETE', 'put', 'HEAD']) {
+		assert.equal(isObserverHostRequestEnvelope(httpRequestEnvelope(method, '/api/config/ui.port', '{"value":1}')), false, method);
+	}
+	// Existing POST behavior is unchanged.
+	assert.equal(isObserverHostRequestEnvelope(httpRequestEnvelope('POST', '/api/validation/run', '{}')), true);
+});
+
 test('IDE host accepts the audit report action without a payload', () => {
 	assert.equal(isObserverHostRequestEnvelope({
 		request: { action: 'open-audit-report', kind: 'cloud' },

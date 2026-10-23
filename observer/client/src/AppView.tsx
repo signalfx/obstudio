@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { CloudTab, type CloudConnectionState } from "./cloud/CloudTab";
+import { ConfigTab } from "./config";
 import { DashboardsTab } from "./dashboards";
 import { LogsTab } from "./logs";
 import { MetricsTab } from "./metrics";
@@ -16,7 +17,7 @@ interface AppViewProps {
   telemetry: TelemetryHandle;
 }
 
-type AppTab = "overview" | "services" | "metrics" | "traces" | "logs" | "validation" | "dashboards" | "cloud";
+type AppTab = "overview" | "services" | "metrics" | "traces" | "logs" | "validation" | "dashboards" | "cloud" | "config";
 
 /** Main application view with tab navigation, summary cards, and live/paused toggle. */
 export function AppView({ telemetry }: AppViewProps): React.ReactElement {
@@ -52,6 +53,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
     "6": () => switchTab("validation"),
     "7": () => switchTab("dashboards"),
     "8": () => switchTab("cloud"),
+    "9": () => switchTab("config"),
   }), [toggle, switchTab]);
 
   useKeyboardShortcuts(shortcuts);
@@ -88,7 +90,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             role="tablist"
             aria-label="Splunk Observability Studio sections"
             onKeyDown={(e) => {
-              const order: AppTab[] = ["overview", "metrics", "traces", "logs", "services", "validation", "dashboards", "cloud"];
+              const order: AppTab[] = ["overview", "metrics", "traces", "logs", "services", "validation", "dashboards", "cloud", "config"];
               const idx = order.indexOf(activeTab);
               let next = idx;
               if (e.key === "ArrowRight") next = (idx + 1) % order.length;
@@ -210,10 +212,23 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           >
             Cloud
           </button>
+          <button
+            id="tab-config"
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "config"}
+            aria-controls={activeTab === "config" ? "panel-config" : undefined}
+            aria-label="Config"
+            className={activeTab === "config" ? "tab-button is-active" : "tab-button"}
+            tabIndex={activeTab === "config" ? 0 : -1}
+            onClick={() => switchTab("config")}
+          >
+            Config
+          </button>
           </div>
 
           <div className="tab-bar__actions">
-            {activeTab !== "cloud" ? (
+            {activeTab !== "cloud" && activeTab !== "config" ? (
               <button
                 className={`stream-toggle ${paused ? "stream-toggle--paused" : "stream-toggle--live"}`}
                 onClick={toggle}
@@ -224,7 +239,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
                 </span>
                 {paused ? "Paused" : "Live"}
               </button>
-            ) : (
+            ) : activeTab === "cloud" ? (
               <span
                 role="status"
                 aria-live="polite"
@@ -240,8 +255,8 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
                   : cloudConnectionState === "disconnected" ? "Not connected"
                   : "Checking connection…"}
               </span>
-            )}
-            {activeTab !== "cloud" && paused && hasNewUpdates ? (
+            ) : null}
+            {activeTab !== "cloud" && activeTab !== "config" && paused && hasNewUpdates ? (
               <button
                 className="pending-badge"
                 onClick={resume}
@@ -250,7 +265,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
                 updates available — resume
               </button>
             ) : null}
-            {activeTab !== "cloud" && state.error !== null ? (
+            {activeTab !== "cloud" && activeTab !== "config" && state.error !== null ? (
               <span className="pill pill--error">{state.error}</span>
             ) : null}
             <button
@@ -302,6 +317,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           <DashboardsTab telemetryError={state.error} paused={paused} />
         ) : null}
         {activeTab === "cloud" ? <CloudTab onConnectionChange={setCloudConnectionState} /> : null}
+        {activeTab === "config" ? <ConfigTab /> : null}
       </section>
 
       {showHelp ? <KeyboardHelp onClose={() => setShowHelp(false)} /> : null}
@@ -322,6 +338,7 @@ function initialTabFromLocation(): AppTab {
     case "validation":
     case "dashboards":
     case "cloud":
+    case "config":
       return tab;
     default:
       return "overview";

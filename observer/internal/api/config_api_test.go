@@ -480,7 +480,10 @@ func newConfigSchemaTestMock() *configmanagertest.Mock {
 		"splunk.realm":  "us1",
 	}).
 		WithSpec(configmanager.KeySpec{Key: "ui.port", Type: configmanager.TypeInteger, Minimum: int64Pointer(1024), Maximum: int64Pointer(65535)}).
-		WithSpec(configmanager.KeySpec{Key: "logging.level", Type: configmanager.TypeString, AllowedValues: []any{"debug", "info", "warn", "error"}}).
+		WithSpec(configmanager.KeySpec{
+			Key: "logging.level", Type: configmanager.TypeString, AllowedValues: []any{"debug", "info", "warn", "error"},
+			Label: "Log level", Description: "How much detail is written to the log.",
+		}).
 		WithSpec(configmanager.KeySpec{Key: "splunk.export", Type: configmanager.TypeBoolean})
 }
 
@@ -522,8 +525,12 @@ func TestConfigSchemaListsEveryKeyWithTypeAndConstraints(t *testing.T) {
 	// A key with no declared spec still appears, typed from its value, with no
 	// constraint fields at all.
 	realm := byKey["splunk.realm"]
-	if realm["type"] != "string" || realm["allowedValues"] != nil || realm["minimum"] != nil || realm["maximum"] != nil {
+	if realm["type"] != "string" || realm["allowedValues"] != nil || realm["minimum"] != nil || realm["maximum"] != nil ||
+		realm["label"] != nil || realm["description"] != nil {
 		t.Errorf("splunk.realm spec = %#v, want a bare string spec", realm)
+	}
+	if level["label"] != "Log level" || level["description"] != "How much detail is written to the log." {
+		t.Errorf("logging.level spec = %#v, want its label and description passed through", level)
 	}
 }
 

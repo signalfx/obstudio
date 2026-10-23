@@ -59,8 +59,12 @@ func (m *Mock) WithValidator(key string, fn func(value any) error) *Mock {
 // WithSpec declares the type and constraints of spec.Key. The spec is reported
 // by Schema and enforced by Set and SetMany, ahead of any WithValidator check.
 // Keys without a spec get a type inferred from their current value and no
-// constraints.
+// constraints. It panics if the spec is malformed (see KeySpec.Validate), so a
+// bad fixture fails where it is written.
 func (m *Mock) WithSpec(spec configmanager.KeySpec) *Mock {
+	if err := spec.Validate(); err != nil {
+		panic("configmanagertest: " + err.Error())
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.specs[spec.Key] = spec
