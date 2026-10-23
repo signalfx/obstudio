@@ -93,6 +93,13 @@ user explicitly invokes them and provides usable credentials. Those skills
 should show the live diff and confirmed gaps before creating dashboards,
 charts, or detectors.
 
+Dashboards and detectors created by the publish skills carry the tag
+`obstudio` in your Splunk Observability Cloud organization. The tag identifies
+the resource as created by this plugin and lets Splunk count such resources
+across organizations. It is applied whenever a publish skill creates one of
+these resources. You can remove the tag from a resource in Splunk Observability
+Cloud.
+
 Host-local checks are optional, one-time verification or control probes. Codex
 and Claude Code may prompt for user approval before a shell command accesses
 host-local endpoints. Health checks use
