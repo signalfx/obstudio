@@ -43,7 +43,7 @@ skill contributions.
 
 Skills and MCP tools are separate. For workflows that use the local runtime's
 MCP tools, run **Splunk Observability Studio: Open**, then use **MCP: Add Server**
-in VS Code to add an HTTP server at `http://127.0.0.1:3000/mcp` named `obstudio`.
+in VS Code to add an HTTP server at `http://127.0.0.1:17900/mcp` named `obstudio`.
 Use the configured `managedObserverPort` or `sharedObserverUrl` instead when
 overridden. Keep the runtime running and approve the MCP server when prompted.
 Native extension skills apply to VS Code chat, not the standalone Copilot CLI.
