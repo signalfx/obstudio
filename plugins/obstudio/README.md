@@ -80,9 +80,8 @@ Token telemetry and repository correlation are separate and stay off unless
 you opt in with `obstudio token-telemetry enable`.
 
 The Splunk publish skills call Splunk Observability Cloud APIs only when you
-invoke them with credentials you provide. Dashboards and detectors they create
-are tagged `obstudio` in your Splunk organization. OTLP data received by the
-local instance stays local unless you configure forwarding. Your host and model provider have their own privacy
+invoke them with credentials you provide. OTLP data received by the local
+instance stays local unless you configure forwarding. Your host and model provider have their own privacy
 behavior. See [`PRIVACY.md`](./PRIVACY.md) for the data flows.
 
 ## Support and security contact
