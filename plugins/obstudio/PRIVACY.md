@@ -107,3 +107,10 @@ Splunk Observability Studio is unhealthy.
 If a project command, package manager, test runtime, OTLP exporter, or user
 configuration performs network access, that traffic belongs to the selected
 tooling or project configuration, not to plugin telemetry code.
+
+## Privacy policy and contact
+
+The privacy policy for this plugin is the
+[Cisco Online Privacy Statement](https://www.cisco.com/c/en/us/about/legal/privacy-full.html).
+For questions about the data flows in this document, email
+bkovuri@cisco.com.
