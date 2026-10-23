@@ -989,7 +989,8 @@ suite('VS Code Host', () => {
 		// reason if a future host version removes or renames it.
 		const commands = await vscode.commands.getCommands(true);
 		if (!commands.includes('_listExtensionPromptFiles')) {
-			this.skip('VS Code host does not register _listExtensionPromptFiles; native prompt discovery cannot be inspected.');
+			console.warn('Skipping Copilot prompt discovery assertion: VS Code does not register _listExtensionPromptFiles.');
+			this.skip();
 		}
 		const extension = await getExtension();
 		const files = await vscode.commands.executeCommand<Array<{ uri: Parameters<typeof vscode.Uri.from>[0]; type: string }>>(
