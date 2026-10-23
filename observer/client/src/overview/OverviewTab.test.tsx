@@ -3,6 +3,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CLOUD_CONNECT_DESCRIPTION } from "../cloud/CloudTab";
 import { OverviewTab, formatScoreValue, scoreTone, shortCommit } from "./OverviewTab";
 
 interface BridgeRequest {
@@ -522,8 +523,10 @@ describe("OverviewTab", () => {
       expect(container.querySelector(".overview-skills__empty-title")?.textContent)
         .toBe("Connect Splunk Observability Cloud");
     });
-    expect(container.querySelector(".overview-skills__empty-hint")?.textContent?.replace(/\s+/g, " ").trim())
-      .toBe("Configure alerting and monitoring by publishing detectors and dashboards right from the IDE");
+    // Same copy as the Cloud tab's connect prompt, so the two never drift apart.
+    expect(container.querySelector(".overview-skills__empty-hint")?.textContent)
+      .toBe(CLOUD_CONNECT_DESCRIPTION);
+    expect(CLOUD_CONNECT_DESCRIPTION).toBe("Connect to export metrics and traces and publish detectors and dashboards.");
   });
 
   it.each([

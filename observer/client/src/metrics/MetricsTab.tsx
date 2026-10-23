@@ -291,8 +291,12 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
                     <span className="data-table__td data-table__td--metric-meta">
                       <span className="data-table__cell-content data-table__cell-content--meta metric-card__meta">
                         <span className={`metric-card__badge metric-type metric-type--${metric.type}`}>{metric.type}</span>
-                        <span className="metric-card__meta-separator explorer-row__secondary">/</span>
-                        <span className="metric-card__unit explorer-row__secondary">{metric.unit || "--"}</span>
+                        {metric.unit ? (
+                          <>
+                            <span className="metric-card__meta-separator explorer-row__secondary">/</span>
+                            <span className="metric-card__unit explorer-row__secondary">{metric.unit}</span>
+                          </>
+                        ) : null}
                       </span>
                     </span>
                   </button>
