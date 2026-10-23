@@ -41,6 +41,7 @@ type Receiver struct {
 type receiverConfig struct {
 	metricsExporter MetricsExporter
 	tracesExporter  TracesExporter
+	logsExporter    LogsExporter
 }
 
 // ReceiverOption configures optional receiver behavior.
@@ -59,6 +60,14 @@ func WithMetricsExporter(exporter MetricsExporter) ReceiverOption {
 func WithTracesExporter(exporter TracesExporter) ReceiverOption {
 	return func(config *receiverConfig) {
 		config.tracesExporter = exporter
+	}
+}
+
+// WithLogsExporter forwards ingested OTLP logs to an external logs backend in
+// addition to storing them locally.
+func WithLogsExporter(exporter LogsExporter) ReceiverOption {
+	return func(config *receiverConfig) {
+		config.logsExporter = exporter
 	}
 }
 
@@ -149,6 +158,7 @@ func StartReceiver(ctx context.Context, s *store.Store, grpcAddr, httpAddr strin
 	}
 	logsConsumer, err := consumer.NewLogs(func(ctx context.Context, ld plog.Logs) error {
 		s.AddLogsForConnection(connIDFromContext(ctx), ConvertLogs(ld))
+		exportLogsAsync(config.logsExporter, ld)
 		return nil
 	})
 	if err != nil {
@@ -190,7 +200,7 @@ func StartReceiver(ctx context.Context, s *store.Store, grpcAddr, httpAddr strin
 	}
 	started = append(started, rcvLogs)
 
-	ct, err := StartConnTracker(s, grpcAddr, httpAddr, internalGRPC, config.metricsExporter, config.tracesExporter)
+	ct, err := StartConnTracker(s, grpcAddr, httpAddr, internalGRPC, config.metricsExporter, config.tracesExporter, config.logsExporter)
 	if err != nil {
 		shutdownAll(ctx, started)
 		return nil, fmt.Errorf("start connection tracker: %w", err)
@@ -210,6 +220,7 @@ func (r *Receiver) HTTPHandler() http.Handler {
 	ct := r.connTracker
 	return &otlpHTTPHandler{
 		store: ct.store, ct: ct, exporter: ct.exporter, tracesExporter: ct.tracesExporter,
+		logsExporter: ct.logsExporter,
 	}
 }
 

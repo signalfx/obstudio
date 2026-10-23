@@ -204,10 +204,19 @@ func run(config runConfig) error {
 		)
 	}
 
-	rcv, err := otlp.StartReceiver(ctx, s, otlpGRPCAddr, otlpHTTPAddr,
+	// Log forwarding is optional: a bad or incomplete configuration disables it
+	// and leaves the receiver, UI, and other exporters running.
+	logsConfig, logsConfigErr := splunkHECLogsExporterConfigFromEnv()
+	logsController := otlp.NewSplunkHECLogsExportController(logsConfig)
+	if logsConfigErr != nil {
+		log.Printf("[splunk-logs] logs forwarding disabled: %v", logsConfigErr)
+	}
+	receiverOptions := []otlp.ReceiverOption{
 		otlp.WithMetricsExporter(splunkExportController),
 		otlp.WithTracesExporter(splunkTracesController),
-	)
+		otlp.WithLogsExporter(logsController),
+	}
+	rcv, err := otlp.StartReceiver(ctx, s, otlpGRPCAddr, otlpHTTPAddr, receiverOptions...)
 	if err != nil {
 		// The OTLP ports (4317/4318) are the singleton lock: they are fixed and
 		// shared across the one obstudio instance. If they are already bound and
@@ -219,6 +228,14 @@ func run(config runConfig) error {
 			return nil
 		}
 		log.Fatalf("failed to start OTLP receiver: %v", err)
+	}
+
+	// Logged only once the receiver owns the OTLP ports: a deferred start
+	// forwards nothing, so announcing it earlier would be misleading.
+	if logsStatus := logsController.Status(); logsStatus.Enabled {
+		log.Printf("[splunk-logs] logs forwarding enabled: endpoint=%s index=%s channel=%s", logsStatus.Endpoint, logsStatus.Index, logsController.Config().Channel)
+	} else if logsStatus.LastExportError != "" {
+		log.Printf("[splunk-logs] logs forwarding disabled: %s", logsStatus.LastExportError)
 	}
 
 	observerOwner := envOr("OBSTUDIO_OWNER", "cli")
@@ -247,7 +264,7 @@ func run(config runConfig) error {
 		MCPURL: observerState.MCPURL,
 	}, splunkExportController, splunkTracesController,
 		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController),
-		freeAccountSubmitter)
+		freeAccountSubmitter, api.SplunkLogsSettings{Controller: logsController, Save: newSplunkLogsSettingsSaver(config.envFile)})
 	mux.Handle("POST /otel/v1/traces", rcv.HTTPHandler())
 	mux.Handle("POST /v2/trace/otlp", rcv.HTTPHandler())
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
@@ -467,6 +484,7 @@ func existingEnvKeys() map[string]struct{} {
 
 func rememberEnvFileShellPrecedence() {
 	keys := append(append([]string{}, splunkEnvFilePrecedenceKeys...), splunkEnvFileLegacyEndpointKeys...)
+	keys = append(keys, "OBSTUDIO_SPLUNK_LOGS_EXPORT", "SPLUNK_LOGS_EXPORT", "OBSTUDIO_SPLUNK_HEC_URL", "SPLUNK_PLATFORM_URL", "OBSTUDIO_SPLUNK_HEC_TOKEN", "SPLUNK_PLATFORM_TOKEN", "OBSTUDIO_SPLUNK_LOGS_INDEX", "SPLUNK_PLATFORM_LOGS_INDEX", "OBSTUDIO_SPLUNK_LOGS_SOURCE", "OBSTUDIO_SPLUNK_LOGS_SOURCETYPE", "OBSTUDIO_SPLUNK_HEC_INSECURE", "OBSTUDIO_SPLUNK_LOGS_TIMEOUT")
 	for _, key := range keys {
 		if _, ok := os.LookupEnv(key); ok {
 			markEnvFileShellPrecedence(key)
@@ -781,6 +799,27 @@ func splunkTracesExporterConfigFromEnv() (otlp.SplunkTracesExporterConfig, error
 		Endpoint:    envOr("OBSTUDIO_SPLUNK_TRACES_ENDPOINT", ""),
 		AccessToken: envOr("SPLUNK_ACCESS_TOKEN", ""),
 		Timeout:     timeout,
+	}, nil
+}
+
+// splunkHECLogsExporterConfigFromEnv reads Splunk Platform log forwarding
+// settings. The SPLUNK_PLATFORM_* aliases match the names the Splunk
+// distribution of the OpenTelemetry Collector already uses for HEC.
+func splunkHECLogsExporterConfigFromEnv() (otlp.SplunkHECLogsExporterConfig, error) {
+	timeout, err := durationEnv("OBSTUDIO_SPLUNK_LOGS_TIMEOUT")
+	if err != nil {
+		return otlp.SplunkHECLogsExporterConfig{}, err
+	}
+	return otlp.SplunkHECLogsExporterConfig{
+		Enabled:            envBool("OBSTUDIO_SPLUNK_LOGS_EXPORT") || envBool("SPLUNK_LOGS_EXPORT"),
+		Endpoint:           envOr("OBSTUDIO_SPLUNK_HEC_URL", envOr("SPLUNK_PLATFORM_URL", "")),
+		Token:              envOr("OBSTUDIO_SPLUNK_HEC_TOKEN", envOr("SPLUNK_PLATFORM_TOKEN", "")),
+		Index:              envOr("OBSTUDIO_SPLUNK_LOGS_INDEX", envOr("SPLUNK_PLATFORM_LOGS_INDEX", "")),
+		Source:             envOr("OBSTUDIO_SPLUNK_LOGS_SOURCE", "otel"),
+		Sourcetype:         envOr("OBSTUDIO_SPLUNK_LOGS_SOURCETYPE", "otel:logs"),
+		Channel:            envOr("OBSTUDIO_SPLUNK_HEC_CHANNEL", ""),
+		InsecureSkipVerify: envBool("OBSTUDIO_SPLUNK_HEC_INSECURE"),
+		Timeout:            timeout,
 	}, nil
 }
 

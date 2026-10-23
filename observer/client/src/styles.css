@@ -6912,6 +6912,22 @@ code {
   overflow: auto;
 }
 
+.cloud-logs { margin-top: 20px; }
+.cloud-setup-stack > .cloud-logs { margin-top: 0; }
+.cloud-logs__form { display: grid; gap: 16px; padding: 0 20px 20px; }
+.cloud-logs__form fieldset { display: grid; gap: 8px; min-width: 0; padding: 0; margin: 0; border: 0; }
+.cloud-logs__form input:not([type="checkbox"]) { width: 100%; min-width: 0; box-sizing: border-box; min-height: 36px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--chrome-2); color: var(--text); font: inherit; }
+.cloud-logs__form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cloud-logs__form label { color: var(--text); font-size: var(--font-body); }
+.cloud-logs__form small, .cloud-logs__form p { margin: 0; color: var(--text-dim); line-height: 1.5; overflow-wrap: anywhere; }
+.cloud-logs__form .cloud-field__error { color: var(--red); }
+.cloud-logs__status { display: grid; gap: 5px; font-size: var(--font-body); }
+.cloud-logs__destinations { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.cloud-logs__destinations > div { display: grid; gap: 8px; min-width: 0; }
+.cloud-logs__tls { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.cloud-logs__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+@media (max-width: 420px) { .cloud-logs__destinations { grid-template-columns: minmax(0,1fr); } .cloud-logs__form { padding: 0 16px 16px; } }
+
 .cloud-tab__content {
   width: min(540px, calc(100% - 40px));
   margin: 0 auto;

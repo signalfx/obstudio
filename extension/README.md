@@ -83,6 +83,14 @@ validator and inspect actionable findings by signal and severity.
 
 ## Commands and configuration
 
+In **Cloud → Splunk Platform logs**, paste the full HEC endpoint and token,
+then enter the destination index and source. **Save and enable logs** sends
+one connection-test log before saving the settings locally and applying them
+to the running collector. The token stays masked. Use **Pause logs** to stop
+forwarding while retaining local logs, and **Refresh logs status** to view
+accepted records and export errors. The Observability Cloud connection above
+this section controls metrics and traces separately.
+
 | Command Palette action | Purpose |
 |---|---|
 | **Splunk Observability Studio: Open** | Open the local panel. |

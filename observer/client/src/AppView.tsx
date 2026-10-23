@@ -229,13 +229,15 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
                 role="status"
                 aria-live="polite"
                 className={`stream-toggle stream-toggle--status ${
-                  cloudConnectionState === "connected" ? "stream-toggle--live"
-                  : cloudConnectionState === "configured" ? "stream-toggle--paused"
+                  cloudConnectionState === "connected" || cloudConnectionState === "logs-connected" ? "stream-toggle--live"
+                  : cloudConnectionState === "configured" || cloudConnectionState === "logs-configured" ? "stream-toggle--paused"
                   : "stream-toggle--muted"
                 }`}
               >
                 {cloudConnectionState !== null ? <span className="stream-toggle__dot" aria-hidden="true" /> : null}
                 {cloudConnectionState === "connected" ? "Connected"
+                  : cloudConnectionState === "logs-connected" ? "Logs forwarding on"
+                  : cloudConnectionState === "logs-configured" ? "Logs configured"
                   : cloudConnectionState === "configured" ? "Configured, not connected"
                   : cloudConnectionState === "disconnected" ? "Not connected"
                   : "Checking connection…"}

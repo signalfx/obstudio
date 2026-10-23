@@ -6,6 +6,7 @@ import type {
   SISCIMDRegistrationResult,
   SISCIMDSessionStatus,
   SplunkExportStatus,
+  SplunkLogsStatus,
   TraceDetail,
   TraceSummary,
 } from "./types";
@@ -175,6 +176,29 @@ export async function fetchDashboardPreview(signal?: AbortSignal): Promise<Previ
 /** Fetch secret-free Splunk Observability Cloud export status. */
 export async function fetchSplunkExportStatus(signal?: AbortSignal): Promise<SplunkExportStatus> {
   return fetchJSON<SplunkExportStatus>("/api/splunk/export", { signal });
+}
+
+export async function fetchSplunkLogsStatus(signal?: AbortSignal): Promise<SplunkLogsStatus> {
+  return requireSplunkLogsStatus(await fetchJSON<unknown>("/api/splunk/logs", { signal, cache: "no-store" }));
+}
+
+export async function configureSplunkLogs(settings: {
+  endpoint: string; token: string; index: string; source: string;
+  enabled: boolean; insecureSkipVerify: boolean; expectedVersion: string;
+}): Promise<SplunkLogsStatus> {
+  return requireSplunkLogsStatus(await postSplunkBrowserJSON("/api/splunk/logs", settings));
+}
+
+function requireSplunkLogsStatus(value: unknown): SplunkLogsStatus {
+  const status = value as Partial<SplunkLogsStatus> | null;
+  if (!status || typeof status.version !== "string" || typeof status.enabled !== "boolean"
+    || typeof status.configured !== "boolean" || typeof status.tokenConfigured !== "boolean"
+    || typeof status.endpoint !== "string" || typeof status.index !== "string"
+    || typeof status.source !== "string" || typeof status.insecureSkipVerify !== "boolean"
+    || typeof status.exportedRecords !== "number" || typeof status.failedBatches !== "number") {
+    throw new Error("Logs status is unavailable from this collector. Refresh after updating Splunk Observability Studio.");
+  }
+  return status as SplunkLogsStatus;
 }
 
 export type SplunkExportBrowserAction = "connect" | "forget" | "set-enabled";

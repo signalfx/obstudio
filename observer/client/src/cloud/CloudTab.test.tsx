@@ -8,10 +8,16 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 import { CloudTab } from "./CloudTab";
+import { fetchSplunkLogsStatus } from "../api/client";
 
 const disconnectedVersion = "D".repeat(43);
 const connectedVersion = "C".repeat(43);
 const enabledVersion = "E".repeat(43);
+
+vi.mock("../api/client", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../api/client")>(),
+  fetchSplunkLogsStatus: vi.fn(async () => ({ version: "logs-test", configured: false, enabled: false, endpoint: "", index: "", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: false, exportedRecords: 0, failedBatches: 0 })),
+}));
 
 afterEach(() => {
   cleanup();
@@ -22,6 +28,13 @@ afterEach(() => {
 });
 
 describe("CloudTab", () => {
+  it("reports the logs connection independently when metrics and traces are disconnected", async () => {
+    vi.mocked(fetchSplunkLogsStatus).mockResolvedValueOnce({version:"logs-v1",configured:true,enabled:true,endpoint:"https://logs.example/services/collector",index:"studio",source:"otel",sourcetype:"otel:logs",insecureSkipVerify:false,tokenConfigured:true,exportedRecords:1,failedBatches:0});
+    vi.stubGlobal("fetch",vi.fn(async()=>jsonResponse(disconnectedStatus())));
+    const onConnectionChange=vi.fn();render(<CloudTab onConnectionChange={onConnectionChange}/>);
+    await waitFor(()=>expect(onConnectionChange).toHaveBeenLastCalledWith("logs-connected"));
+    expect(screen.getByRole("button",{name:"Connect"})).toBeTruthy();
+  });
   it("loads standalone status directly without creating a browser session", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);

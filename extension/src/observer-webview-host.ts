@@ -89,8 +89,9 @@ const allowedGetPaths = new Set([
 	'/api/query/validation/latest',
 	'/api/query/validation/summary',
 	'/api/splunk/export',
+	'/api/splunk/logs',
 ]);
-const allowedPostPaths = new Set(['/api/validation/run']);
+const allowedPostPaths = new Set(['/api/validation/run', '/api/splunk/logs']);
 
 export function observerHostResponseByteLimit(url: URL): number {
 	return isLoopbackObserverHost(url.hostname)

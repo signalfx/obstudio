@@ -670,10 +670,13 @@ test('IDE host transport restricts HTTP paths, cancellation, and telemetry comma
 		'/api/query/traces?service=checkout',
 		'/api/query/traces/0123456789abcdef0123456789abcdef',
 		'/api/splunk/export',
+		'/api/splunk/logs',
 	]) {
 		assert.equal(isAllowedObserverHostHTTPPath('GET', path), true, path);
 	}
 	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/validation/run'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/splunk/logs'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/splunk/logs/unknown'), false);
 	for (const path of [
 		'https://evil.example/api/health',
 		'//evil.example/api/health',

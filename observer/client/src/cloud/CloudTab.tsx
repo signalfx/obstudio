@@ -27,6 +27,7 @@ import {
 } from "./bridge";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 import { CopyTextButton } from "../layout/DetailPanel";
+import { LogsConnection, type LogsConnectionState } from "./LogsConnection";
 
 const maxSplunkDestinationBytes = 2048;
 const sisCIMDSessionPollIntervalMs = 1_500;
@@ -88,7 +89,7 @@ interface SignalRow {
   tone: "error" | "idle" | "success" | "warning";
 }
 
-export type CloudConnectionState = "connected" | "configured" | "disconnected";
+export type CloudConnectionState = "connected" | "configured" | "disconnected" | "logs-connected" | "logs-configured";
 
 interface CloudTabProps {
   onConnectionChange?: (state: CloudConnectionState) => void;
@@ -106,6 +107,7 @@ interface CloudActionResponse {
 }
 
 export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElement {
+  const [logsConnectionState, setLogsConnectionState] = useState<LogsConnectionState>("disconnected");
   const { bridge, callBridge } = useCloudBridge();
   const [status, setStatus] = useState<SplunkExportStatus | null>(null);
   const [region, setRegion] = useState("");
@@ -244,7 +246,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         if (!active || controller.signal.aborted) return;
         const message = errorMessage(initializationError, "Could not load cloud connection status.");
         setError(message);
-        onConnectionChange?.("disconnected");
       } finally {
         if (active) {
           setBusyAction(null);
@@ -354,13 +355,20 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   }, [loadObserverStatus]);
 
   useEffect(() => {
-    if (status === null) return;
+    if (status === null) {
+      if (logsConnectionState !== "disconnected") onConnectionChange?.(logsConnectionState === "connected" ? "logs-connected" : "logs-configured");
+      else if (cloudInitializationFinished) onConnectionChange?.("disconnected");
+      return;
+    }
     const isConfigured = status.connected
       || status.metrics.configured
       || status.traces.configured;
-    const state: CloudConnectionState = status.connected ? "connected" : isConfigured ? "configured" : "disconnected";
+    const state: CloudConnectionState = status.connected ? "connected"
+      : logsConnectionState === "connected" ? "logs-connected"
+      : isConfigured ? "configured"
+      : logsConnectionState === "configured" ? "logs-configured" : "disconnected";
     onConnectionChange?.(state);
-  }, [onConnectionChange, status]);
+  }, [onConnectionChange, status, logsConnectionState, cloudInitializationFinished]);
 
   const exportEnabled = status?.enabled === true;
   const metricsConfigured = status?.metrics.configured === true;
@@ -1333,6 +1341,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             </form>
           ) : null}
           </section>
+          <LogsConnection onConnectionChange={setLogsConnectionState} />
           {!cloudConfigured ? (
             <section
               aria-labelledby={freeAccountSuccess

@@ -341,3 +341,18 @@ export interface SISCIMDSessionStatus {
   connectedAt?: string;
   expiresAt?: string;
 }
+export interface SplunkLogsStatus {
+  version: string;
+  configured: boolean;
+  enabled: boolean;
+  endpoint: string;
+  index: string;
+  source: string;
+  sourcetype: string;
+  insecureSkipVerify: boolean;
+  tokenConfigured: boolean;
+  exportedRecords: number;
+  failedBatches: number;
+  lastExportError?: string;
+  lastExportSuccess?: string;
+}

@@ -58,6 +58,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	var splunkExportRefresher SplunkExportConfigurationRefresher
 	var freeAccountSubmitter freeaccount.Submitter
 	var endpointConfig EndpointConfig
+	var logsSettings SplunkLogsSettings
 	info := ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
@@ -102,9 +103,12 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			}
 		case EndpointConfig:
 			endpointConfig = value
+		case SplunkLogsSettings:
+			logsSettings = value
 		}
 	}
 	validationService := validator.NewService(validationStore, runner)
+	registerSplunkLogs(mux, logsSettings)
 	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig)
 	auditResolver := audit.NewResolver(auditConfig)
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
