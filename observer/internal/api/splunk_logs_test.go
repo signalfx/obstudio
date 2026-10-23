@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
+	"go.opentelemetry.io/collector/pdata/plog"
 )
 
 func TestSplunkLogsSaveTestPauseAndFailureIsolation(t *testing.T) {
@@ -109,5 +111,112 @@ func TestSplunkLogsSaveTestPauseAndFailureIsolation(t *testing.T) {
 	mux.ServeHTTP(w, request)
 	if w.Code != 200 {
 		t.Fatal("logs failure broke core API")
+	}
+}
+
+func TestSplunkLogsFollowSharedExportSwitch(t *testing.T) {
+	requests := 0
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_, _ = w.Write([]byte(`{"code":0}`))
+	}))
+	defer remote.Close()
+	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	logs := otlp.NewSplunkHECLogsExportController(otlp.SplunkHECLogsExporterConfig{})
+	var saved otlp.SplunkHECLogsExporterConfig
+	diskError := false
+	mux := http.NewServeMux()
+	Register(mux, store.New(), metrics, traces, SplunkLogsSettings{Controller: logs, Save: func(config otlp.SplunkHECLogsExporterConfig) error {
+		if diskError {
+			return errors.New("disk unavailable")
+		}
+		saved = config
+		return nil
+	}})
+	status := func() splunkExportStatusResponse {
+		var status splunkExportStatusResponse
+		response := splunkExportRequest(t, mux, "GET", "/api/splunk/export", "")
+		if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
+			t.Fatal(err)
+		}
+		return status
+	}
+	initial := status()
+	body, _ := json.Marshal(map[string]any{"endpoint": remote.URL + "/services/collector", "token": "private-token", "index": "studio", "source": "otel", "expectedVersion": logs.Status().Version})
+	if w := splunkExportRequest(t, mux, "POST", "/api/splunk/logs", string(body)); w.Code != 200 {
+		t.Fatalf("save: %d %s", w.Code, w.Body)
+	}
+	if saved.Enabled || logs.Status().Enabled || requests != 0 {
+		t.Fatal("Save enabled forwarding or sent a log while export was off")
+	}
+	if !status().Logs.Configured || status().Version == initial.Version {
+		t.Fatal("logs destination missing from shared state/version")
+	}
+	toggle := func(enabled bool) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]any{"enabled": enabled, "expectedVersion": status().Version})
+		return splunkExportRequest(t, mux, "POST", "/api/splunk/export/enabled", string(body))
+	}
+	if w := toggle(true); w.Code != 200 {
+		t.Fatalf("enable logs-only: %d %s", w.Code, w.Body)
+	}
+	if !status().Enabled || !saved.Enabled || !logs.Status().Enabled || status().Connected {
+		t.Fatal("logs-only switch state incorrect")
+	}
+	data := plog.NewLogs()
+	data.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords().AppendEmpty().Body().SetStr("application log")
+	if err := logs.ExportLogs(context.Background(), data); err != nil {
+		t.Fatal(err)
+	}
+	if status().Logs.ExportedItems != 1 {
+		t.Fatal("exported log count missing from shared activity")
+	}
+	if w := toggle(false); w.Code != 200 {
+		t.Fatalf("disable: %d %s", w.Code, w.Body)
+	}
+	if err := logs.ExportLogs(context.Background(), data); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 1 || saved.Enabled || status().Enabled || status().Logs.ExportedItems != 1 {
+		t.Fatal("disabled logs exported or count was reset")
+	}
+	if w := toggle(true); w.Code != 200 {
+		t.Fatal(w.Body)
+	}
+	if err := logs.ExportLogs(context.Background(), data); err != nil {
+		t.Fatal(err)
+	}
+	if status().Logs.ExportedItems != 2 {
+		t.Fatal("resume lost the exported log count")
+	}
+
+	if err := metrics.Configure(otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: "cloud-token", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := traces.Configure(otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: "cloud-token", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	diskError = true
+	if w := toggle(false); w.Code != 500 {
+		t.Fatal("logs persistence failure was hidden")
+	}
+	if !metrics.Status().Enabled || !traces.Status().Enabled || !logs.Status().Enabled {
+		t.Fatal("failed switch mutation changed working signals")
+	}
+	diskError = false
+	rollbackToken := strings.Repeat("a", 43)
+	w := splunkExportRequestWithRollbackToken(t, mux, "POST", "/api/splunk/export/enabled", `{"enabled":false}`, rollbackToken)
+	if w.Code != 200 {
+		t.Fatalf("disable with rollback: %d %s", w.Code, w.Body)
+	}
+	if metrics.Status().Enabled || traces.Status().Enabled || logs.Status().Enabled || saved.Enabled {
+		t.Fatal("shared off switch did not stop all three signals")
+	}
+	w = splunkExportRequest(t, mux, "POST", "/api/splunk/export/rollback", `{"rollbackToken":"`+rollbackToken+`"}`)
+	if w.Code != 200 {
+		t.Fatalf("rollback: %d %s", w.Code, w.Body)
+	}
+	if !metrics.Status().Enabled || !traces.Status().Enabled || !logs.Status().Enabled || !saved.Enabled {
+		t.Fatal("rollback did not restore all three signals")
 	}
 }

@@ -90,6 +90,7 @@ func parseRegistrationAndAuthProtocol(raw string) registrationAndAuthProtocol {
 type splunkExportService struct {
 	metrics                       *otlp.SplunkMetricsExportController
 	traces                        *otlp.SplunkTracesExportController
+	logs                          SplunkLogsSettings
 	refresh                       SplunkExportConfigurationRefresher
 	verifyConnection              splunkConnectionVerifier
 	resolveRealmClient            *http.Client
@@ -98,6 +99,7 @@ type splunkExportService struct {
 	rollbackMetrics               otlp.SplunkMetricsExporterConfig
 	rollbackChanged               bool
 	rollbackTraces                otlp.SplunkTracesExporterConfig
+	rollbackLogsEnabled           bool
 	rollbackSource                string
 	source                        string
 	registrationAndAuthProtocol   registrationAndAuthProtocol
@@ -118,14 +120,15 @@ type splunkExportSignalStatus struct {
 }
 
 type splunkExportStatusResponse struct {
-	Connected                   bool                     `json:"connected"`
-	Enabled                     bool                     `json:"enabled"`
-	Realm                       string                   `json:"realm,omitempty"`
-	RollbackToken               string                   `json:"rollbackToken,omitempty"`
-	Version                     string                   `json:"version"`
-	Metrics                     splunkExportSignalStatus `json:"metrics"`
-	Traces                      splunkExportSignalStatus `json:"traces"`
-	RegistrationAndAuthProtocol string                   `json:"registrationAndAuthProtocol"`
+	Connected                   bool                      `json:"connected"`
+	Enabled                     bool                      `json:"enabled"`
+	Realm                       string                    `json:"realm,omitempty"`
+	RollbackToken               string                    `json:"rollbackToken,omitempty"`
+	Version                     string                    `json:"version"`
+	Metrics                     splunkExportSignalStatus  `json:"metrics"`
+	Traces                      splunkExportSignalStatus  `json:"traces"`
+	Logs                        *splunkExportSignalStatus `json:"logs,omitempty"`
+	RegistrationAndAuthProtocol string                    `json:"registrationAndAuthProtocol"`
 }
 
 type configureSplunkExportRequest struct {
@@ -300,9 +303,10 @@ func (s *splunkExportService) applyCloudConnection(
 		return
 	}
 
-	if err := s.apply(
+	if err := s.applyWithLogs(
 		otlp.SplunkMetricsExporterConfig{Realm: realm, AccessToken: accessToken},
 		otlp.SplunkTracesExporterConfig{Realm: realm, AccessToken: accessToken},
+		false,
 	); err != nil {
 		if rollbackToken != "" {
 			if rollbackErr := s.apply(previousMetrics, previousTraces); rollbackErr == nil {
@@ -337,7 +341,7 @@ func (s *splunkExportService) rollback(w http.ResponseWriter, r *http.Request) {
 		writeSplunkExportError(w, http.StatusConflict, "cloud rollback capability is not valid")
 		return
 	}
-	if err := s.apply(s.rollbackMetrics, s.rollbackTraces); err != nil {
+	if err := s.applyWithLogs(s.rollbackMetrics, s.rollbackTraces, s.rollbackLogsEnabled); err != nil {
 		writeSplunkExportError(w, http.StatusInternalServerError, "could not roll back Splunk Observability Cloud export")
 		return
 	}
@@ -370,14 +374,16 @@ func (s *splunkExportService) setEnabled(w http.ResponseWriter, r *http.Request)
 	defer s.mu.Unlock()
 	metricsConfig := s.metrics.Config()
 	tracesConfig := s.traces.Config()
-	if enabled && !sameSplunkCloudRealm(
+	cloudConnected := sameSplunkCloudRealm(
 		metricsConfig.Realm,
 		metricsConfig.AccessToken,
 		metricsConfig.Endpoint != "",
 		tracesConfig.Realm,
 		tracesConfig.AccessToken,
 		tracesConfig.Endpoint != "",
-	) {
+	)
+	logsConfigured := s.logs.Controller != nil && s.logs.Controller.Status().Configured
+	if enabled && !cloudConnected && !logsConfigured {
 		writeSplunkExportError(w, http.StatusConflict, "connect a Splunk Observability Cloud destination before enabling export")
 		return
 	}
@@ -386,9 +392,9 @@ func (s *splunkExportService) setEnabled(w http.ResponseWriter, r *http.Request)
 		writeSplunkExportError(w, http.StatusInternalServerError, "could not create cloud rollback capability")
 		return
 	}
-	metricsConfig.Enabled = enabled
-	tracesConfig.Enabled = enabled
-	if err := s.apply(metricsConfig, tracesConfig); err != nil {
+	metricsConfig.Enabled = enabled && cloudConnected
+	tracesConfig.Enabled = enabled && cloudConnected
+	if err := s.applyWithLogs(metricsConfig, tracesConfig, enabled); err != nil {
 		writeSplunkExportError(w, http.StatusInternalServerError, "could not update Splunk Observability Cloud export")
 		return
 	}
@@ -423,7 +429,7 @@ func (s *splunkExportService) forget(w http.ResponseWriter, r *http.Request) {
 		writeSplunkExportError(w, http.StatusInternalServerError, "could not create cloud rollback capability")
 		return
 	}
-	if err := s.apply(otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}); err != nil {
+	if err := s.applyWithLogs(otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}, false); err != nil {
 		writeSplunkExportError(w, http.StatusInternalServerError, "could not remove Splunk Observability Cloud connection")
 		return
 	}
@@ -471,6 +477,9 @@ func (s *splunkExportService) beginRollbackLocked(
 	s.rollbackChanged = s.configurationChanged
 	s.rollbackMetrics = s.metrics.Config()
 	s.rollbackTraces = s.traces.Config()
+	if s.logs.Controller != nil {
+		s.rollbackLogsEnabled = s.logs.Controller.Config().Enabled
+	}
 	s.rollbackSource = s.source
 	return token, nil
 }
@@ -480,6 +489,7 @@ func (s *splunkExportService) clearRollbackLocked() {
 	s.rollbackChanged = false
 	s.rollbackMetrics = otlp.SplunkMetricsExporterConfig{}
 	s.rollbackTraces = otlp.SplunkTracesExporterConfig{}
+	s.rollbackLogsEnabled = false
 	s.rollbackSource = ""
 }
 
@@ -627,6 +637,36 @@ func (s *splunkExportService) snapshot() splunkExportStatusResponse {
 	return s.snapshotLocked()
 }
 
+func (s *splunkExportService) applyWithLogs(metrics otlp.SplunkMetricsExporterConfig, traces otlp.SplunkTracesExporterConfig, enabled bool) error {
+	previousMetrics, previousTraces := s.metrics.Config(), s.traces.Config()
+	if err := s.apply(metrics, traces); err != nil {
+		return err
+	}
+	if controller := s.logs.Controller; controller != nil && controller.Status().Configured {
+		config := controller.Config()
+		if config.Enabled == enabled {
+			return nil
+		}
+		config.Enabled = enabled
+		_, err := otlp.NewSplunkHECLogsExporter(config)
+		if err == nil {
+			if s.logs.Save == nil {
+				err = errors.New("saving logs settings is unavailable")
+			} else {
+				err = s.logs.Save(config)
+			}
+		}
+		if err != nil {
+			if rollbackErr := s.apply(previousMetrics, previousTraces); rollbackErr != nil {
+				return fmt.Errorf("configure logs: %w; rollback: %v", err, rollbackErr)
+			}
+			return err
+		}
+		return controller.SetEnabled(enabled)
+	}
+	return nil
+}
+
 // snapshotLocked returns a status whose configuration and source belong to
 // the same mutation epoch. The caller must hold s.mu.
 func (s *splunkExportService) snapshotLocked() splunkExportStatusResponse {
@@ -647,7 +687,7 @@ func (s *splunkExportService) snapshotLocked() splunkExportStatusResponse {
 		realm = metrics.Realm
 	}
 
-	return splunkExportStatusResponse{
+	status := splunkExportStatusResponse{
 		Connected:                   connected,
 		Enabled:                     connected && metrics.Enabled && traces.Enabled,
 		Realm:                       realm,
@@ -670,6 +710,21 @@ func (s *splunkExportService) snapshotLocked() splunkExportStatusResponse {
 			LastExport:      traces.LastExport,
 		},
 	}
+	if s.logs.Controller != nil {
+		logs := s.logs.Controller.Status()
+		status.Logs = &splunkExportSignalStatus{
+			Configured: logs.Configured, Enabled: logs.Enabled,
+			ExportedBatches: logs.ExportedBatches, ExportedItems: logs.ExportedRecords,
+			FailedBatches: logs.FailedBatches,
+		}
+		if logs.LastExportError != "" || logs.LastExportSuccess != "" {
+			status.Logs.LastExport = map[string]any{"success": logs.LastExportError == "", "error": logs.LastExportError, "time": logs.LastExportSuccess}
+		}
+		if logs.Configured {
+			status.Enabled = logs.Enabled && (!connected || status.Enabled)
+		}
+	}
+	return status
 }
 
 func (s *splunkExportService) acceptExpectedVersion(w http.ResponseWriter, expected string) bool {
@@ -701,13 +756,21 @@ func (s *splunkExportService) stateVersionLocked(
 	traces otlp.SplunkTracesExporterConfig,
 ) string {
 	state, err := json.Marshal(struct {
-		Metrics otlp.SplunkMetricsExporterConfig `json:"metrics"`
-		Source  string                           `json:"source"`
-		Traces  otlp.SplunkTracesExporterConfig  `json:"traces"`
+		Metrics otlp.SplunkMetricsExporterConfig  `json:"metrics"`
+		Source  string                            `json:"source"`
+		Traces  otlp.SplunkTracesExporterConfig   `json:"traces"`
+		Logs    *otlp.SplunkHECLogsExporterConfig `json:"logs,omitempty"`
 	}{
 		Metrics: metrics,
 		Source:  s.source,
 		Traces:  traces,
+		Logs: func() *otlp.SplunkHECLogsExporterConfig {
+			if s.logs.Controller == nil {
+				return nil
+			}
+			config := s.logs.Controller.Config()
+			return &config
+		}(),
 	})
 	if err != nil {
 		panic("serialize cloud configuration state: " + err.Error())

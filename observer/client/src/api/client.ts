@@ -184,7 +184,7 @@ export async function fetchSplunkLogsStatus(signal?: AbortSignal): Promise<Splun
 
 export async function configureSplunkLogs(settings: {
   endpoint: string; token: string; index: string; source: string;
-  enabled: boolean; insecureSkipVerify: boolean; expectedVersion: string;
+  enabled?: boolean; insecureSkipVerify: boolean; expectedVersion: string;
 }): Promise<SplunkLogsStatus> {
   return requireSplunkLogsStatus(await postSplunkBrowserJSON("/api/splunk/logs", settings));
 }

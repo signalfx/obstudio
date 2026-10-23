@@ -99,6 +99,15 @@ describe("Splunk Observability Studio host transport", () => {
     respond(posted.at(-1), true, { status: legacyDisconnectedStatus() });
     await expect(legacy).resolves.toEqual({ status: legacyDisconnectedStatus() });
 
+    const logsStatus = { ...disconnectedStatus(), logs: { ...disconnectedStatus().metrics, configured: true, exportedItems: 4 } };
+    const logs = callObserverHostCloud("initialize");
+    respond(posted.at(-1), true, { status: logsStatus });
+    await expect(logs).resolves.toEqual({ status: logsStatus });
+
+    const invalidLogs = callObserverHostCloud("initialize");
+    respond(posted.at(-1), true, { status: { ...logsStatus, logs: { exportedItems: "four" } } });
+    await expect(invalidLogs).rejects.toThrow("invalid cloud response");
+
     const invalid = callObserverHostCloud("initialize");
     respond(posted.at(-1), true, { status: { connected: "yes" } });
     await expect(invalid).rejects.toThrow("invalid cloud response");

@@ -86,12 +86,11 @@ validator and inspect actionable findings by signal and severity.
 In **Cloud → Splunk Platform logs**, paste the full HEC endpoint and token,
 then enter the destination index. The existing source is retained, or defaults
 to `otel`. Existing TLS settings are retained for the same endpoint; a different
-endpoint uses certificate verification. **Save and enable logs** sends
-one connection-test log before saving the settings locally and applying them
-to the running collector. The token stays masked. Use **Pause logs** to stop
-forwarding while retaining local logs, and **Refresh logs status** to view
-accepted records and export errors. The Observability Cloud connection above
-this section controls metrics and traces separately.
+endpoint uses certificate verification. **Save** stores the settings locally
+and applies them to the running collector. The token stays masked. The shared
+**Remote export** switch controls configured metrics, traces, and logs, and
+their exported counts appear together in the export activity list. Saving logs
+settings retains the switch state; status updates automatically.
 
 | Command Palette action | Purpose |
 |---|---|

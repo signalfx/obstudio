@@ -2337,6 +2337,29 @@ describe("CloudTab", () => {
     expect(bridge.requests().some((request) => request.action === "connect")).toBe(false);
   });
 
+  it("controls a logs-only destination with the shared switch and shows log activity beside metrics and traces", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+    const initialize = await bridge.next("initialize");
+    const off = { ...disconnectedStatus(), logs: { ...signalStatus(false), configured: true, exportedItems: 7, exportedBatches: 2 } };
+    bridge.respond(initialize, { status: off });
+    fireEvent.click(await screen.findByRole("switch", { name: "Remote telemetry export is off" }));
+    const enable = await bridge.next("set-enabled");
+    expect(enable.payload).toMatchObject({ enabled: true });
+    bridge.respond(enable, { status: { ...off, enabled: true, version: enabledVersion, logs: { ...off.logs, enabled: true } } });
+    const activity = await screen.findByRole("list", { name: "Telemetry export activity" });
+    expect(within(activity).getByText("Metrics")).toBeTruthy();
+    expect(within(activity).getByText("Traces")).toBeTruthy();
+    expect(within(activity).getByText("Logs")).toBeTruthy();
+    expect(within(activity).getByText("7 logs · 2 batches")).toBeTruthy();
+    fireEvent.click(screen.getByRole("switch", { name: "Remote telemetry export is on" }));
+    const disable = await bridge.next("set-enabled");
+    expect(disable.payload).toMatchObject({ enabled: false });
+    bridge.respond(disable, { status: off });
+    expect(await screen.findByRole("switch", { name: "Remote telemetry export is off" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeTruthy();
+  });
+
   it("toggles remote export and forgets the securely stored key", async () => {
     const bridge = installBridge();
     render(<CloudTab />);

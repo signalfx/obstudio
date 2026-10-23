@@ -287,6 +287,22 @@ func (c *SplunkHECLogsExportController) Config() SplunkHECLogsExporterConfig {
 	return c.config
 }
 
+// SetEnabled preserves export activity while pausing or resuming forwarding.
+func (c *SplunkHECLogsExportController) SetEnabled(enabled bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if enabled && c.exporter == nil {
+		exporter, err := NewSplunkHECLogsExporter(c.config)
+		if err != nil {
+			return err
+		}
+		c.exporter = exporter
+	}
+	c.config.Enabled = enabled
+	c.version = newRequestChannel()
+	return nil
+}
+
 func (c *SplunkHECLogsExportController) Apply(config SplunkHECLogsExporterConfig, exporter *SplunkHECLogsExporter) {
 	c.mu.Lock()
 	previous := c.exporter

@@ -108,7 +108,13 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 		}
 	}
 	validationService := validator.NewService(validationStore, runner)
-	registerSplunkLogs(mux, logsSettings)
+	var splunkExport *splunkExportService
+	if metricsController != nil && tracesController != nil {
+		splunkExport = newSplunkExportService(metricsController, tracesController, splunkExportRefresher)
+		splunkExport.logs = logsSettings
+		splunkExport.register(mux)
+	}
+	registerSplunkLogs(mux, logsSettings, splunkExport)
 	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig)
 	auditResolver := audit.NewResolver(auditConfig)
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
@@ -138,9 +144,6 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("POST /api/validation/analyze", localMutation(analyzeValidation(validationService)))
 	mux.HandleFunc("GET /api/query/validation/findings", queryValidationFindings(validationService))
 	mux.HandleFunc("DELETE /api/data", localMutation(clearData(s, validationStore)))
-	if metricsController != nil && tracesController != nil {
-		newSplunkExportService(metricsController, tracesController, splunkExportRefresher).register(mux)
-	}
 	if freeAccountSubmitter != nil {
 		newFreeAccountAPI(freeAccountSubmitter).register(mux)
 	}

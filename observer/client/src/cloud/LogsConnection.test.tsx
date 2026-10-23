@@ -37,28 +37,21 @@ const connected: SplunkLogsStatus = {
   exportedRecords: 3,
 };
 
-it("pauses the saved connection without applying or discarding unfinished edits", async () => {
-  const { posts } = backend(connected);
+it("provides only Save and leaves forwarding controlled by Cloud export", async () => {
+  const { posts } = backend({ ...connected, enabled: false });
+  const onSaved = vi.fn();
   const user = userEvent.setup();
-  render(<LogsConnection />);
-  await screen.findByText("Forwarding on");
-  await user.type(screen.getByLabelText("HEC token"), "unfinished-token");
-  await user.clear(screen.getByLabelText("Logs index"));
-  await user.type(screen.getByLabelText("Logs index"), "draft-index");
-  await user.click(screen.getByRole("button", { name: "Pause logs" }));
+  render(<LogsConnection onSaved={onSaved} />);
   await screen.findByText("Paused");
-  expect(posts[0]).toMatchObject({
-    token: "",
-    source: connected.source,
-    index: connected.index,
-    enabled: false,
-  });
-  expect((screen.getByLabelText("Logs index") as HTMLInputElement).value).toBe(
-    "draft-index",
-  );
-  expect((screen.getByLabelText("HEC token") as HTMLInputElement).value).toBe(
-    "unfinished-token",
-  );
+  expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["Save"]);
+  await user.clear(screen.getByLabelText("Logs index"));
+  await user.type(screen.getByLabelText("Logs index"), "edited-index");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByText("Logs settings saved.");
+  expect(posts[0]).toMatchObject({ token: "", index: "edited-index" });
+  expect(posts[0]).not.toHaveProperty("enabled");
+  expect(screen.getByText("Paused")).toBeTruthy();
+  expect(onSaved).toHaveBeenCalledOnce();
 });
 afterEach(() => {
   cleanup();
@@ -132,7 +125,7 @@ function backend(initial = empty) {
   return { fetch, posts };
 }
 
-it("accepts pasted connection fields, submits with Enter, clears the token, and pauses without replacing it", async () => {
+it("accepts pasted connection fields, submits with Enter, and clears the token", async () => {
   const { posts } = backend();
   const user = userEvent.setup();
   render(<LogsConnection />);
@@ -146,17 +139,16 @@ it("accepts pasted connection fields, submits with Enter, clears the token, and 
   await user.paste("studio");
   await user.tab();
   expect(document.activeElement).toBe(
-    screen.getByRole("button", { name: "Save and enable logs" }),
+    screen.getByRole("button", { name: "Save" }),
   );
   await user.keyboard("{Enter}");
-  expect(await screen.findByText("Forwarding on")).toBeTruthy();
+  expect(await screen.findByText("Paused")).toBeTruthy();
   expect(posts[0]).toMatchObject({
     endpoint: "https://logs.example/services/collector",
     token: "00000000-0000-4000-8000-000000000001",
     index: "studio",
     source: "otel",
     expectedVersion: "v1",
-    enabled: true,
     insecureSkipVerify: false,
   });
   expect((screen.getByLabelText("HEC token") as HTMLInputElement).value).toBe(
@@ -165,13 +157,7 @@ it("accepts pasted connection fields, submits with Enter, clears the token, and 
   expect((screen.getByLabelText("HEC token") as HTMLInputElement).type).toBe(
     "password",
   );
-  await user.click(screen.getByRole("button", { name: "Pause logs" }));
-  expect(await screen.findByText("Paused")).toBeTruthy();
-  expect(posts[1]).toMatchObject({
-    token: "",
-    enabled: false,
-    expectedVersion: "v2",
-  });
+  expect(posts[0]).not.toHaveProperty("enabled");
 });
 
 it("keeps saved source and TLS settings without showing their controls or extra instructions", async () => {
@@ -184,7 +170,7 @@ it("keeps saved source and TLS settings without showing their controls or extra 
   expect(screen.queryByText(/Skip TLS certificate verification/)).toBeNull();
   expect(screen.queryByText(/Leave off for trusted certificates/)).toBeNull();
   expect(screen.queryByText(/Saving sends one test log/)).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Save and enable logs" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByRole("status");
   expect(posts[0]).toMatchObject({
     source: connected.source,
@@ -203,7 +189,7 @@ it("verifies certificates for a different endpoint even when the saved endpoint 
     "https://other.example/services/collector",
   );
   await user.type(screen.getByLabelText("HEC token"), "replacement-token");
-  await user.click(screen.getByRole("button", { name: "Save and enable logs" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByRole("status");
   expect(posts[0]).toMatchObject({
     endpoint: "https://other.example/services/collector",
@@ -223,7 +209,7 @@ it("requires a replacement token when editing the endpoint and focuses the missi
     "https://other.example/services/collector",
   );
   await user.click(
-    screen.getByRole("button", { name: "Save and enable logs" }),
+    screen.getByRole("button", { name: "Save" }),
   );
   expect(await screen.findByRole("alert")).toHaveProperty(
     "textContent",
@@ -244,7 +230,7 @@ it("shows a save failure while keeping edits and the existing connection usable,
       }),
   );
   await user.click(
-    screen.getByRole("button", { name: "Save and enable logs" }),
+    screen.getByRole("button", { name: "Save" }),
   );
   expect((await screen.findByRole("alert")).textContent).toBe(
     "HEC rejected this token",
@@ -254,22 +240,33 @@ it("shows a save failure while keeping edits and the existing connection usable,
     (screen.getByLabelText("HEC endpoint") as HTMLInputElement).value,
   ).toBe(connected.endpoint);
   await user.click(
-    screen.getByRole("button", { name: "Save and enable logs" }),
+    screen.getByRole("button", { name: "Save" }),
   );
   expect(await screen.findByRole("status")).toBeTruthy();
 });
 
-it("shows loading and an isolated status error, then retries successfully", async () => {
+it("shows loading and an isolated status error, then retries automatically", async () => {
+  vi.useFakeTimers();
   const { fetch } = backend(connected);
   fetch.mockRejectedValueOnce(new Error("offline"));
-  const user = userEvent.setup();
-  render(<LogsConnection />);
-  expect(screen.getByText("Loading")).toBeTruthy();
-  expect((await screen.findByRole("alert")).textContent).toContain(
-    "unavailable",
-  );
-  await user.click(screen.getByRole("button", { name: "Refresh logs status" }));
-  expect(await screen.findByText("Forwarding on")).toBeTruthy();
+  await act(async () => { render(<LogsConnection />); });
+  expect(screen.getByRole("alert").textContent).toContain("unavailable");
+  await act(async () => { vi.advanceTimersByTime(5000); });
+  expect(screen.getByText("Forwarding on")).toBeTruthy();
+});
+
+it("updates the Cloud switch state without discarding edited fields", async () => {
+  const { fetch, posts } = backend(connected);
+  const view = render(<LogsConnection refreshKey="cloud-v1" />);
+  await screen.findByText("Forwarding on");
+  fireEvent.change(screen.getByLabelText("Logs index"), { target: { value: "draft-index" } });
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify({ ...connected, version: "v3", enabled: false })));
+  view.rerender(<LogsConnection refreshKey="cloud-v2" />);
+  await screen.findByText("Paused");
+  expect((screen.getByLabelText("Logs index") as HTMLInputElement).value).toBe("draft-index");
+  fireEvent.submit(screen.getByRole("form", { name: "Logs connection" }));
+  await screen.findByText("Logs settings saved.");
+  expect(posts[0]).toMatchObject({ expectedVersion: "v3", index: "draft-index" });
 });
 
 it("retains saved fields after remounting and never puts the saved secret in the input", async () => {

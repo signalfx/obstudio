@@ -312,6 +312,7 @@ export interface SplunkExportStatus {
   version: string;
   metrics: SplunkExportSignalStatus;
   traces: SplunkExportSignalStatus;
+  logs?: SplunkExportSignalStatus;
   registrationAndAuthProtocol?: RegistrationAndAuthProtocol;
 }
 

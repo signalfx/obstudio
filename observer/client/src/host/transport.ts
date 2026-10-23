@@ -408,6 +408,7 @@ function isSplunkExportStatus(value: unknown): value is SplunkExportStatus {
     && /^[A-Za-z0-9_-]{43}$/.test(status.version)
     && isSplunkExportSignalStatus(status.metrics)
     && isSplunkExportSignalStatus(status.traces)
+    && (status.logs === undefined || isSplunkExportSignalStatus(status.logs))
     && (status.registrationAndAuthProtocol === undefined
       || isRegistrationAndAuthProtocol(status.registrationAndAuthProtocol));
 }

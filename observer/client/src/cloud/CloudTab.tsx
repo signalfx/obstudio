@@ -374,10 +374,11 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const metricsConfigured = status?.metrics.configured === true;
   const tracesConfigured = status?.traces.configured === true;
   const cloudConfigured = connected || metricsConfigured || tracesConfigured;
+  const logsConfigured = status?.logs?.configured === true;
   cloudConfiguredRef.current = cloudConfigured;
   freeAccountMutationStateRef.current = freeAccountMutationState;
   const exportPartiallyEnabled = !exportEnabled
-    && (status?.metrics.enabled === true || status?.traces.enabled === true);
+    && (status?.metrics.enabled === true || status?.traces.enabled === true || status?.logs?.enabled === true);
   const exportActive = exportEnabled || exportPartiallyEnabled;
   const exportStateLabel = exportEnabled ? "on" : exportPartiallyEnabled ? "partially on" : "off";
   const destinationLabel = cloudConfigured
@@ -395,6 +396,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const signals = useMemo(() => [
     signalRow("Metrics", status?.metrics),
     signalRow("Traces", status?.traces),
+    ...(status?.logs ? [signalRow("Logs", status.logs)] : []),
   ], [status]);
 
   useEffect(() => {
@@ -1182,12 +1184,12 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             </section>
           ) : null}
 
-          {cloudConfigured ? (
+          {cloudConfigured || logsConfigured ? (
             <section aria-labelledby="cloud-export-title" className="cloud-export">
               <div className="cloud-export__header">
                 <div>
                   <h3 id="cloud-export-title">Remote export</h3>
-                  <p>Send metrics and traces to {destinationLabel}.</p>
+                  <p>{logsConfigured ? "Send configured metrics, traces, and logs to Splunk." : `Send metrics and traces to ${destinationLabel}.`}</p>
                 </div>
                 <button
                   aria-checked={exportEnabled}
@@ -1225,7 +1227,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                 </div>
               ) : null}
             </section>
-          ) : registrationAndAuthProtocol === "NONE" ? (
+          ) : null}
+          {!cloudConfigured && registrationAndAuthProtocol === "NONE" ? (
             <form aria-label="Cloud connection" className="cloud-connect-form" noValidate onSubmit={connect}>
               <div className="cloud-field cloud-field--region">
                 <div
@@ -1341,7 +1344,12 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             </form>
           ) : null}
           </section>
-          <LogsConnection onConnectionChange={setLogsConnectionState} />
+          <LogsConnection
+            onConnectionChange={setLogsConnectionState}
+            onSaved={() => { void loadObserverStatus(false).catch(() => {}); }}
+            refreshKey={status?.version}
+            disabled={busyAction !== null}
+          />
           {!cloudConfigured ? (
             <section
               aria-labelledby={freeAccountSuccess
@@ -1693,7 +1701,8 @@ function cloudControlStateChanged(
   return cloudConfigurationStateChanged(current, next)
     || current.enabled !== next.enabled
     || current.metrics.enabled !== next.metrics.enabled
-    || current.traces.enabled !== next.traces.enabled;
+    || current.traces.enabled !== next.traces.enabled
+    || current.logs?.enabled !== next.logs?.enabled;
 }
 
 function cloudConfigurationStateChanged(
@@ -1704,7 +1713,8 @@ function cloudConfigurationStateChanged(
     || current.connected !== next.connected
     || (current.realm ?? "").trim().toLowerCase() !== (next.realm ?? "").trim().toLowerCase()
     || current.metrics.configured !== next.metrics.configured
-    || current.traces.configured !== next.traces.configured;
+    || current.traces.configured !== next.traces.configured
+    || current.logs?.configured !== next.logs?.configured;
 }
 
 function utf8ByteLength(value: string): number {
@@ -1735,7 +1745,7 @@ function signalRow(label: string, signal: SplunkExportSignalStatus | undefined):
   if (!signal) {
     return { detail: "No activity", label, status: "Waiting for Splunk Observability Studio", tone: "idle" };
   }
-  const detail = `${formatCount(signal.exportedItems, label === "Metrics" ? "point" : "span")} · ${formatCount(signal.exportedBatches, "batch", "batches")}`;
+  const detail = `${formatCount(signal.exportedItems, label === "Metrics" ? "point" : label === "Logs" ? "log" : "span")} · ${formatCount(signal.exportedBatches, "batch", "batches")}`;
   if (!signal.enabled) {
     return { detail, label, status: "Remote export off", tone: "idle" };
   }

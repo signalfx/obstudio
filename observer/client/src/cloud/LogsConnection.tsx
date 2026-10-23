@@ -6,8 +6,14 @@ export type LogsConnectionState = "connected" | "configured" | "disconnected";
 
 export function LogsConnection({
   onConnectionChange,
+  onSaved,
+  refreshKey,
+  disabled = false,
 }: {
   onConnectionChange?: (state: LogsConnectionState) => void;
+  onSaved?: () => void;
+  refreshKey?: string;
+  disabled?: boolean;
 }): React.ReactElement {
   const [status, setStatus] = useState<SplunkLogsStatus | null>(null);
   const [endpoint, setEndpoint] = useState("");
@@ -30,7 +36,7 @@ export function LogsConnection({
     setIndex(next.index ?? "");
   }
 
-  async function refresh(signal?: AbortSignal) {
+  async function refresh(signal?: AbortSignal, reconcile = false) {
     const sequence = ++requestSequence.current;
     try {
       const next = await fetchSplunkLogsStatus(signal);
@@ -38,11 +44,11 @@ export function LogsConnection({
         !mounted.current ||
         signal?.aborted ||
         inFlight.current ||
-        dirty.current ||
+        (dirty.current && !reconcile) ||
         sequence !== requestSequence.current
       )
         return;
-      hydrate(next);
+      if (!dirty.current) hydrate(next);
       setStatus(next);
       setStatusUnavailable(false);
       setError(null);
@@ -53,7 +59,7 @@ export function LogsConnection({
         sequence === requestSequence.current
       ) {
         setStatusUnavailable(true);
-        setError("Logs settings are unavailable. Refresh to try again.");
+        setError("Logs settings are unavailable. Retrying…");
       }
     }
   }
@@ -61,7 +67,7 @@ export function LogsConnection({
   useEffect(() => {
     mounted.current = true;
     const controller = new AbortController();
-    void refresh(controller.signal);
+    void refresh(controller.signal, true);
     const timer = window.setInterval(() => {
       if (!dirty.current && !inFlight.current) void refresh(controller.signal);
     }, 5000);
@@ -70,7 +76,7 @@ export function LogsConnection({
       controller.abort();
       window.clearInterval(timer);
     };
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     if (!status) return;
@@ -90,20 +96,19 @@ export function LogsConnection({
     setError(null);
   }
 
-  async function save(enabled: boolean) {
+  async function save() {
     if (!status || inFlight.current) return;
-    if (enabled && !endpoint.trim()) {
+    if (!endpoint.trim()) {
       setError("Enter the HEC endpoint.");
       endpointRef.current?.focus();
       return;
     }
-    if (enabled && !index.trim()) {
+    if (!index.trim()) {
       setError("Enter the destination index.");
       indexRef.current?.focus();
       return;
     }
     if (
-      enabled &&
       !token.trim() &&
       (!status.tokenConfigured || endpoint.trim() !== status.endpoint)
     ) {
@@ -111,23 +116,14 @@ export function LogsConnection({
       tokenRef.current?.focus();
       return;
     }
-    const hadEdits = dirty.current;
-    const settings = enabled
-      ? {
-          endpoint,
-          token,
-          index,
-          source: status.source || "otel",
-          insecureSkipVerify:
-            endpoint.trim() === status.endpoint && status.insecureSkipVerify,
-        }
-      : {
-          endpoint: status.endpoint,
-          token: "",
-          index: status.index,
-          source: status.source,
-          insecureSkipVerify: status.insecureSkipVerify,
-        };
+    const settings = {
+      endpoint,
+      token,
+      index,
+      source: status.source || "otel",
+      insecureSkipVerify:
+        endpoint.trim() === status.endpoint && status.insecureSkipVerify,
+    };
     inFlight.current = true;
     dirty.current = true;
     requestSequence.current += 1;
@@ -137,22 +133,16 @@ export function LogsConnection({
     try {
       const next = await configureSplunkLogs({
         ...settings,
-        enabled,
         expectedVersion: status.version,
       });
       if (!mounted.current) return;
       setStatus(next);
       setStatusUnavailable(false);
-      if (enabled || !hadEdits) {
-        hydrate(next);
-        setToken("");
-      }
-      dirty.current = enabled ? false : hadEdits;
-      setNotice(
-        enabled
-          ? "Test log accepted. Logs forwarding is on and settings are saved."
-          : "Logs forwarding paused. Settings are saved.",
-      );
+      hydrate(next);
+      setToken("");
+      dirty.current = false;
+      setNotice("Logs settings saved.");
+      onSaved?.();
     } catch (reason) {
       if (mounted.current)
         setError(
@@ -160,6 +150,12 @@ export function LogsConnection({
             ? reason.message
             : "Could not save logs settings.",
         );
+      try {
+        const next = await fetchSplunkLogsStatus();
+        if (mounted.current) setStatus(next);
+      } catch {
+        // Preserve edits so Save can retry when the collector becomes available.
+      }
     } finally {
       inFlight.current = false;
       if (mounted.current) setBusy(false);
@@ -199,25 +195,12 @@ export function LogsConnection({
         className="cloud-logs__form"
         onSubmit={(event) => {
           event.preventDefault();
-          void save(true);
+          void save();
         }}
         noValidate
       >
         <div aria-live="polite" className="cloud-logs__status">
           <strong>{state}</strong>
-          {status ? (
-            <span>
-              {status.exportedRecords}{" "}
-              {status.exportedRecords === 1 ? "record" : "records"} accepted ·{" "}
-              {status.failedBatches} failed batches
-            </span>
-          ) : null}
-          {status?.lastExportSuccess ? (
-            <small>
-              Last accepted:{" "}
-              {new Date(status.lastExportSuccess).toLocaleString()}
-            </small>
-          ) : null}
           {status?.lastExportError ? (
             <p role="alert">{status.lastExportError}</p>
           ) : null}
@@ -228,7 +211,7 @@ export function LogsConnection({
           </p>
         ) : null}
         {notice ? <p role="status">{notice}</p> : null}
-        <fieldset disabled={!status || busy}>
+        <fieldset disabled={!status || busy || disabled}>
           <label htmlFor="cloud-logs-endpoint">HEC endpoint</label>
           <input
             id="cloud-logs-endpoint"
@@ -284,32 +267,10 @@ export function LogsConnection({
               className="cloud-button cloud-button--primary"
               type="submit"
             >
-              {busy ? "Saving…" : "Save and enable logs"}
+              {busy ? "Saving…" : "Save"}
             </button>
-            {status?.enabled ? (
-              <button
-                className="cloud-button"
-                type="button"
-                onClick={() => void save(false)}
-              >
-                Pause logs
-              </button>
-            ) : null}
           </div>
         </fieldset>
-        <button
-          className="cloud-button"
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            dirty.current = false;
-            setToken("");
-            setNotice(null);
-            void refresh();
-          }}
-        >
-          Refresh logs status
-        </button>
       </form>
     </section>
   );

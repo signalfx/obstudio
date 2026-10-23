@@ -20,7 +20,7 @@ type SplunkLogsSettings struct {
 	Save       func(otlp.SplunkHECLogsExporterConfig) error
 }
 
-func registerSplunkLogs(mux *http.ServeMux, settings SplunkLogsSettings) {
+func registerSplunkLogs(mux *http.ServeMux, settings SplunkLogsSettings, cloud *splunkExportService) {
 	if settings.Controller == nil {
 		return
 	}
@@ -29,15 +29,19 @@ func registerSplunkLogs(mux *http.ServeMux, settings SplunkLogsSettings) {
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, settings.Controller.Status())
 	})
-	mux.HandleFunc("POST /api/splunk/logs", localMutation(func(w http.ResponseWriter, r *http.Request) {
+	save := func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
+		if cloud != nil {
+			cloud.mu.Lock()
+			defer cloud.mu.Unlock()
+		}
 		var request struct {
 			Endpoint           string `json:"endpoint"`
 			Token              string `json:"token"`
 			Index              string `json:"index"`
 			Source             string `json:"source"`
-			Enabled            bool   `json:"enabled"`
+			Enabled            *bool  `json:"enabled"`
 			InsecureSkipVerify bool   `json:"insecureSkipVerify"`
 			ExpectedVersion    string `json:"expectedVersion"`
 		}
@@ -46,13 +50,18 @@ func registerSplunkLogs(mux *http.ServeMux, settings SplunkLogsSettings) {
 			return
 		}
 		if request.ExpectedVersion != settings.Controller.Status().Version {
-			writeSplunkExportError(w, 409, "Logs settings changed. Refresh before saving.")
+			writeSplunkExportError(w, 409, "Logs settings changed. Try saving again.")
 			return
 		}
 		previous := settings.Controller.Config()
 		config := previous
 		config.Endpoint, config.Index, config.Source = strings.TrimSpace(request.Endpoint), strings.TrimSpace(request.Index), strings.TrimSpace(request.Source)
-		config.Enabled, config.InsecureSkipVerify = request.Enabled, request.InsecureSkipVerify
+		config.InsecureSkipVerify = request.InsecureSkipVerify
+		if request.Enabled != nil {
+			config.Enabled = *request.Enabled
+		} else if cloud != nil {
+			config.Enabled = cloud.snapshotLocked().Enabled
+		}
 		if request.Token != "" {
 			config.Token = strings.TrimSpace(request.Token)
 		} else if config.Endpoint != previous.Endpoint {
@@ -108,7 +117,14 @@ func registerSplunkLogs(mux *http.ServeMux, settings SplunkLogsSettings) {
 			return
 		}
 		settings.Controller.Apply(config, candidate)
+		if cloud != nil {
+			cloud.clearRollbackLocked()
+		}
 		w.Header().Set("Cache-Control", "no-store")
 		writeSameOriginJSON(w, settings.Controller.Status())
-	}))
+	}
+	if cloud != nil {
+		save = cloud.serializeMutation(save)
+	}
+	mux.HandleFunc("POST /api/splunk/logs", localMutation(save))
 }
