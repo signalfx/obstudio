@@ -12,9 +12,7 @@ export function LogsConnection({
   const [status, setStatus] = useState<SplunkLogsStatus | null>(null);
   const [endpoint, setEndpoint] = useState("");
   const [index, setIndex] = useState("");
-  const [source, setSource] = useState("otel");
   const [token, setToken] = useState("");
-  const [insecure, setInsecure] = useState(false);
   const [busy, setBusy] = useState(false);
   const [statusUnavailable, setStatusUnavailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,8 +28,6 @@ export function LogsConnection({
   function hydrate(next: SplunkLogsStatus) {
     setEndpoint(next.endpoint ?? "");
     setIndex(next.index ?? "");
-    setSource(next.source || "otel");
-    setInsecure(next.insecureSkipVerify);
   }
 
   async function refresh(signal?: AbortSignal) {
@@ -117,7 +113,14 @@ export function LogsConnection({
     }
     const hadEdits = dirty.current;
     const settings = enabled
-      ? { endpoint, token, index, source, insecureSkipVerify: insecure }
+      ? {
+          endpoint,
+          token,
+          index,
+          source: status.source || "otel",
+          insecureSkipVerify:
+            endpoint.trim() === status.endpoint && status.insecureSkipVerify,
+        }
       : {
           endpoint: status.endpoint,
           token: "",
@@ -265,52 +268,17 @@ export function LogsConnection({
               A token is saved. Leave blank to keep it for the same endpoint.
             </small>
           ) : null}
-          <div className="cloud-logs__destinations">
-            <div>
-              <label htmlFor="cloud-logs-index">Logs index</label>
-              <input
-                id="cloud-logs-index"
-                value={index}
-                ref={indexRef}
-                onChange={(e) => {
-                  edit();
-                  setIndex(e.target.value);
-                }}
-                placeholder="studio"
-              />
-            </div>
-            <div>
-              <label htmlFor="cloud-logs-source">Logs source</label>
-              <input
-                id="cloud-logs-source"
-                value={source}
-                onChange={(e) => {
-                  edit();
-                  setSource(e.target.value);
-                }}
-                placeholder="otel"
-              />
-            </div>
-          </div>
-          <label className="cloud-logs__tls">
-            <input
-              type="checkbox"
-              checked={insecure}
-              onChange={(e) => {
-                edit();
-                setInsecure(e.target.checked);
-              }}
-            />
-            Skip TLS certificate verification
-          </label>
-          <small>
-            Leave off for trusted certificates. Enabling this disables server
-            certificate verification.
-          </small>
-          <p>
-            Saving sends one test log to this endpoint and index, then enables
-            forwarding. Settings are saved locally.
-          </p>
+          <label htmlFor="cloud-logs-index">Logs index</label>
+          <input
+            id="cloud-logs-index"
+            value={index}
+            ref={indexRef}
+            onChange={(e) => {
+              edit();
+              setIndex(e.target.value);
+            }}
+            placeholder="studio"
+          />
           <div className="cloud-logs__actions">
             <button
               className="cloud-button cloud-button--primary"

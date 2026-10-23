@@ -43,17 +43,18 @@ it("pauses the saved connection without applying or discarding unfinished edits"
   render(<LogsConnection />);
   await screen.findByText("Forwarding on");
   await user.type(screen.getByLabelText("HEC token"), "unfinished-token");
-  await user.clear(screen.getByLabelText("Logs source"));
-  await user.type(screen.getByLabelText("Logs source"), "draft-source");
+  await user.clear(screen.getByLabelText("Logs index"));
+  await user.type(screen.getByLabelText("Logs index"), "draft-index");
   await user.click(screen.getByRole("button", { name: "Pause logs" }));
   await screen.findByText("Paused");
   expect(posts[0]).toMatchObject({
     token: "",
     source: connected.source,
+    index: connected.index,
     enabled: false,
   });
-  expect((screen.getByLabelText("Logs source") as HTMLInputElement).value).toBe(
-    "draft-source",
+  expect((screen.getByLabelText("Logs index") as HTMLInputElement).value).toBe(
+    "draft-index",
   );
   expect((screen.getByLabelText("HEC token") as HTMLInputElement).value).toBe(
     "unfinished-token",
@@ -81,8 +82,8 @@ it("does not overwrite edits or their version when an older status poll complete
     vi.advanceTimersByTime(5000);
   });
   expect(finishPoll).toBeTypeOf("function");
-  fireEvent.change(screen.getByLabelText("Logs source"), {
-    target: { value: "edited-source" },
+  fireEvent.change(screen.getByLabelText("Logs index"), {
+    target: { value: "edited-index" },
   });
   await act(async () => {
     finishPoll?.(
@@ -90,19 +91,19 @@ it("does not overwrite edits or their version when an older status poll complete
         JSON.stringify({
           ...connected,
           version: "other-editor",
-          source: "other-source",
+          index: "other-index",
         }),
         { status: 200 },
       ),
     );
   });
-  expect((screen.getByLabelText("Logs source") as HTMLInputElement).value).toBe(
-    "edited-source",
+  expect((screen.getByLabelText("Logs index") as HTMLInputElement).value).toBe(
+    "edited-index",
   );
   fireEvent.submit(screen.getByRole("form", { name: "Logs connection" }));
   await act(async () => {});
   expect(posts[0]).toMatchObject({
-    source: "edited-source",
+    index: "edited-index",
     expectedVersion: "v1",
   });
 });
@@ -144,15 +145,16 @@ it("accepts pasted connection fields, submits with Enter, clears the token, and 
   await user.tab();
   await user.paste("studio");
   await user.tab();
-  await user.clear(screen.getByLabelText("Logs source"));
-  await user.paste("http:studio-test");
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: "Save and enable logs" }),
+  );
   await user.keyboard("{Enter}");
   expect(await screen.findByText("Forwarding on")).toBeTruthy();
   expect(posts[0]).toMatchObject({
     endpoint: "https://logs.example/services/collector",
     token: "00000000-0000-4000-8000-000000000001",
     index: "studio",
-    source: "http:studio-test",
+    source: "otel",
     expectedVersion: "v1",
     enabled: true,
     insecureSkipVerify: false,
@@ -169,6 +171,44 @@ it("accepts pasted connection fields, submits with Enter, clears the token, and 
     token: "",
     enabled: false,
     expectedVersion: "v2",
+  });
+});
+
+it("keeps saved source and TLS settings without showing their controls or extra instructions", async () => {
+  const { posts } = backend({ ...connected, insecureSkipVerify: true });
+  const user = userEvent.setup();
+  render(<LogsConnection />);
+  await screen.findByText("Forwarding on");
+  expect(screen.queryByLabelText("Logs source")).toBeNull();
+  expect(screen.queryByRole("checkbox")).toBeNull();
+  expect(screen.queryByText(/Skip TLS certificate verification/)).toBeNull();
+  expect(screen.queryByText(/Leave off for trusted certificates/)).toBeNull();
+  expect(screen.queryByText(/Saving sends one test log/)).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Save and enable logs" }));
+  await screen.findByRole("status");
+  expect(posts[0]).toMatchObject({
+    source: connected.source,
+    insecureSkipVerify: true,
+  });
+});
+
+it("verifies certificates for a different endpoint even when the saved endpoint skips verification", async () => {
+  const { posts } = backend({ ...connected, insecureSkipVerify: true });
+  const user = userEvent.setup();
+  render(<LogsConnection />);
+  await screen.findByText("Forwarding on");
+  await user.clear(screen.getByLabelText("HEC endpoint"));
+  await user.type(
+    screen.getByLabelText("HEC endpoint"),
+    "https://other.example/services/collector",
+  );
+  await user.type(screen.getByLabelText("HEC token"), "replacement-token");
+  await user.click(screen.getByRole("button", { name: "Save and enable logs" }));
+  await screen.findByRole("status");
+  expect(posts[0]).toMatchObject({
+    endpoint: "https://other.example/services/collector",
+    source: connected.source,
+    insecureSkipVerify: false,
   });
 });
 
