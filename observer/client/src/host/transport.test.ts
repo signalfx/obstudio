@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { fetchConfigSchema, fetchConfigValues, putConfigValue } from "../api/client";
 import {
   callObserverHostCloud,
   ObserverHostCloudRequestError,
@@ -65,6 +66,91 @@ describe("Splunk Observability Studio host transport", () => {
     expect(response.status).toBe(202);
     expect(response.statusText).toBe("Accepted");
     await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+
+  it("routes a PUT with a JSON body through the host and passes a rejection through intact", async () => {
+    const { posted } = installHost();
+    const pending = observerFetch("/api/config/ui.port", {
+      body: JSON.stringify({ value: 80 }),
+      method: "PUT",
+    });
+    const request = posted.at(-1);
+    expect(request).toMatchObject({
+      request: {
+        body: '{"value":80}',
+        kind: "http",
+        method: "PUT",
+        path: "/api/config/ui.port",
+      },
+      type: "obstudio.host.request",
+    });
+
+    respond(request, true, {
+      body: JSON.stringify({ code: "invalid_value", error: "must be between 1024 and 65535" }),
+      headers: { "content-type": "application/json" },
+      status: 422,
+      statusText: "Unprocessable Entity",
+    });
+
+    const response = await pending;
+    expect(response.ok).toBe(false);
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({ code: "invalid_value", error: "must be between 1024 and 65535" });
+  });
+
+  it("still refuses HTTP methods the host does not forward", async () => {
+    const { posted } = installHost();
+    for (const method of ["PATCH", "DELETE"]) {
+      await expect(observerFetch("/api/config/ui.port", { body: "{}", method })).rejects.toThrow(
+        `Splunk Observability Studio host transport does not support ${method} requests.`,
+      );
+    }
+    expect(posted).toHaveLength(0);
+  });
+
+  it("serves the Config tab's API calls through the host", async () => {
+    const { posted } = installHost();
+
+    const schema = fetchConfigSchema();
+    expect(posted.at(-1)).toMatchObject({ request: { kind: "http", method: "GET", path: "/api/config/schema" } });
+    respond(posted.at(-1), true, {
+      body: JSON.stringify({ keys: [{ key: "ui.port", type: "integer" }] }),
+      headers: { "content-type": "application/json" },
+      status: 200,
+      statusText: "OK",
+    });
+    await expect(schema).resolves.toEqual([{ key: "ui.port", type: "integer" }]);
+
+    const values = fetchConfigValues();
+    expect(posted.at(-1)).toMatchObject({ request: { kind: "http", method: "GET", path: "/api/config" } });
+    respond(posted.at(-1), true, {
+      body: JSON.stringify({ values: { ui: { port: 17900 } } }),
+      headers: { "content-type": "application/json" },
+      status: 200,
+      statusText: "OK",
+    });
+    await expect(values).resolves.toEqual({ ui: { port: 17900 } });
+
+    const saved = putConfigValue("ui.port", 18000);
+    expect(posted.at(-1)).toMatchObject({
+      request: { body: '{"value":18000}', kind: "http", method: "PUT", path: "/api/config/ui.port" },
+    });
+    respond(posted.at(-1), true, {
+      body: JSON.stringify({ key: "ui.port", value: 18000 }),
+      headers: { "content-type": "application/json" },
+      status: 200,
+      statusText: "OK",
+    });
+    await expect(saved).resolves.toBe(18000);
+
+    const rejected = putConfigValue("ui.port", 80);
+    respond(posted.at(-1), true, {
+      body: JSON.stringify({ code: "invalid_value", error: "port is reserved" }),
+      headers: { "content-type": "application/json" },
+      status: 422,
+      statusText: "Unprocessable Entity",
+    });
+    await expect(rejected).rejects.toMatchObject({ code: "invalid_value", message: "port is reserved", status: 422 });
   });
 
   it("sends bounded cloud actions and validates the host status", async () => {

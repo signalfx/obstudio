@@ -103,6 +103,7 @@ import {
 	isObserverHostTelemetryEnvelope,
 	observerHostResponseByteLimit,
 	type ObserverHostCloudPayload,
+	type ObserverHostHTTPMethod,
 	type ObserverHostRequest,
 	type ObserverHostResponseEnvelope,
 } from './observer-webview-host';
@@ -2688,7 +2689,7 @@ function writeSplunkCloudExportPreference(
 }
 
 async function requestObserverHostHTTP(
-	method: 'GET' | 'POST',
+	method: ObserverHostHTTPMethod,
 	pathname: string,
 	body: string | undefined,
 	signal: AbortSignal,

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/audit"
+	"github.com/signalfx/obstudio/observer/internal/configmanager"
 	"github.com/signalfx/obstudio/observer/internal/dashboards"
 	"github.com/signalfx/obstudio/observer/internal/freeaccount"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
@@ -57,6 +58,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	var tracesController *otlp.SplunkTracesExportController
 	var splunkExportRefresher SplunkExportConfigurationRefresher
 	var freeAccountSubmitter freeaccount.Submitter
+	var configManager configmanager.ConfigManager
 	var endpointConfig EndpointConfig
 	info := ServerInfo{
 		Kind:       "obstudio",
@@ -102,6 +104,10 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			}
 		case EndpointConfig:
 			endpointConfig = value
+		case configmanager.ConfigManager:
+			if value != nil {
+				configManager = value
+			}
 		}
 	}
 	validationService := validator.NewService(validationStore, runner)
@@ -139,6 +145,9 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	}
 	if freeAccountSubmitter != nil {
 		newFreeAccountAPI(freeAccountSubmitter).register(mux)
+	}
+	if configManager != nil {
+		newConfigAPI(configManager).register(mux)
 	}
 	registerSISCIMDLoginRoutes(mux)
 	registerO11yOAuthRoutes(mux)
