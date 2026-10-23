@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "telemetry": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "Send anonymous usage data",
+          "description": "Sends anonymous usage counts about Splunk Observability Studio itself to Splunk. Turning this off does not change what Splunk Observability Studio collects from your agents or shows you locally.",
+          "default": true,
+          "x-obstudio-failSafe": false,
+          "x-obstudio-apply": "live"
+        }
+      }
+    }
+  }
+}

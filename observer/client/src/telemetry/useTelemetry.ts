@@ -5,6 +5,7 @@ import {
   subscribeObserverHostTelemetry,
   type ObserverHostTelemetrySubscription,
 } from "../host/transport";
+import { notifyConfigRefresh } from "./configSignal";
 
 /** Snapshot of all telemetry signals received from the server. */
 export interface TelemetryState {
@@ -200,12 +201,16 @@ export function useTelemetry(): TelemetryHandle {
         if (!active) return;
         if (msg.type === "paused-update") {
           setHasNewUpdates(true);
+        } else if (msg.type === "update" && msg.signal === "config") {
+          notifyConfigRefresh();
         } else if (msg.type === "update" && msg.signal && msg.data !== undefined) {
           applyUpdate(msg.signal, msg.data);
         } else if (msg.type === "reload") {
           window.location.reload();
         } else if (msg.type === "connected") {
           setTelemetry((current) => ({ ...current, error: null }));
+          // Signals sent while disconnected are lost; refetch to catch up.
+          notifyConfigRefresh();
         } else if (msg.type === "disconnected") {
           setTelemetry((current) => ({ ...current, error: "Disconnected. Reconnecting..." }));
         }
@@ -230,6 +235,7 @@ export function useTelemetry(): TelemetryHandle {
           setPaused(true);
           ws.send(JSON.stringify({ type: "pause" }));
         }
+        notifyConfigRefresh();
       };
 
       ws.onmessage = (event) => {

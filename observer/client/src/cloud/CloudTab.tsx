@@ -27,6 +27,7 @@ import {
 } from "./bridge";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 import { CopyTextButton } from "../layout/DetailPanel";
+import { UsageDataSetting } from "./UsageDataSetting";
 
 const maxSplunkDestinationBytes = 2048;
 const sisCIMDSessionPollIntervalMs = 1_500;
@@ -1549,6 +1550,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                 </div>
             </section>
           ) : null}
+          <UsageDataSetting />
         </div>
       </div>
 

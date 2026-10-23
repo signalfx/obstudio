@@ -10,6 +10,11 @@ import type { RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportSta
 import { CloudTab } from "./CloudTab";
 
 const disconnectedVersion = "D".repeat(43);
+
+// The usage data section loads its own settings alongside the Cloud status.
+function isUsageDataRequest(input: RequestInfo | URL): boolean {
+  return String(input).startsWith("/api/config");
+}
 const connectedVersion = "C".repeat(43);
 const enabledVersion = "E".repeat(43);
 
@@ -526,7 +531,7 @@ describe("CloudTab", () => {
     expect((screen.getByLabelText("Access token") as HTMLInputElement).disabled).toBe(false);
     fireEvent.change(screen.getByLabelText("Realm or Observability Cloud URL"), { target: { value: "us1" } });
     fireEvent.change(screen.getByLabelText("Access token"), { target: { value: "still_editable" } });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.filter(([input]) => !isUsageDataRequest(input))).toHaveLength(1);
   });
 
   it("shows Splunk Observability Studio state with standalone mutation controls available", async () => {
@@ -583,6 +588,7 @@ describe("CloudTab", () => {
     const enabledValues: boolean[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
+      if (isUsageDataRequest(input)) return jsonResponse({}, 404);
       if (path === "/api/splunk/export" && init?.method !== "POST") {
         return jsonResponse(status);
       }
@@ -661,6 +667,7 @@ describe("CloudTab", () => {
     const mutationPaths: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
+      if (isUsageDataRequest(input)) return jsonResponse({}, 404);
       if (path === "/api/splunk/export" && init?.method !== "POST") {
         return jsonResponse(status);
       }
@@ -1408,7 +1415,7 @@ describe("CloudTab", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
-    const statusRequest = bridge.httpRequests()[0];
+    const statusRequest = bridge.httpRequests().find((request) => request.path === "/api/splunk/export")!;
     expect(statusRequest?.path).toBe("/api/splunk/export");
     bridge.respondHTTP(statusRequest, connectedStatus(false, "us1"));
     await act(async () => {
@@ -2995,6 +3002,31 @@ describe("CloudTab", () => {
     expect(document.activeElement).toBe(cancel);
     fireEvent.click(cancel);
     await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it("renders the usage data section last in the disconnected and connected states", async () => {
+    for (const status of [disconnectedStatus(), connectedStatus(false, "us1")]) {
+      vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input);
+        if (path === "/api/splunk/export") return jsonResponse(status);
+        if (path === "/api/config/definitions") {
+          return jsonResponse({
+            type: "object",
+            properties: { telemetry: { type: "object", properties: { enabled: { title: "Fixture title", description: "Fixture description." } } } },
+          });
+        }
+        if (path === "/api/config") return jsonResponse({ telemetry: { enabled: true } });
+        throw new Error(`unexpected request: ${path}`);
+      }));
+      const { unmount } = render(<CloudTab />);
+      const usageSwitch = await screen.findByRole("switch", { name: "Fixture title" });
+      const panel = document.getElementById("panel-cloud");
+      const sections = Array.from(panel?.querySelectorAll("section") ?? [])
+        .filter((section) => section.parentElement === usageSwitch.closest("section")?.parentElement);
+      expect(sections.at(-1)).toBe(usageSwitch.closest("section"));
+      unmount();
+      vi.unstubAllGlobals();
+    }
   });
 });
 

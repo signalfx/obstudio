@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/configstatus"
 	"github.com/signalfx/obstudio/observer/internal/freeaccount"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
@@ -153,6 +154,7 @@ type Dispatcher struct {
 	splunkTracesCtrl                  *otlp.SplunkTracesExportController
 	repositoryCorrelationModeResolver RepositoryCorrelationModeResolver
 	freeAccount                       freeaccount.Submitter
+	configStatus                      *configstatus.Builder
 	tools                             []toolDef
 }
 
@@ -164,8 +166,13 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 	var splunkTracesCtrl *otlp.SplunkTracesExportController
 	var repositoryCorrelationModeResolver RepositoryCorrelationModeResolver
 	var freeAccountSubmitter freeaccount.Submitter
+	var configStatus *configstatus.Builder
 	for _, param := range params {
 		switch value := param.(type) {
+		case *configstatus.Builder:
+			if value != nil {
+				configStatus = value
+			}
 		case *validator.Store:
 			if value != nil {
 				validationStore = value
@@ -202,6 +209,7 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 		splunkTracesCtrl:                  splunkTracesCtrl,
 		repositoryCorrelationModeResolver: repositoryCorrelationModeResolver,
 		freeAccount:                       freeAccountSubmitter,
+		configStatus:                      configStatus,
 		tools:                             buildToolDefs(splunkMetricsCtrl != nil, freeAccountSubmitter != nil),
 	}
 }
@@ -396,11 +404,17 @@ func (d *Dispatcher) clearStore() toolResult {
 func (d *Dispatcher) status() toolResult {
 	ep := d.store.Endpoints()
 	stats := d.store.Stats()
-	return jsonToolResult(map[string]any{
+	result := map[string]any{
 		"endpoints":  ep,
 		"stats":      stats,
 		"validation": d.validationService.Summary(),
-	})
+	}
+	if d.configStatus != nil {
+		if st := d.configStatus.Build(); st.Warn {
+			result["config"] = st
+		}
+	}
+	return jsonToolResult(result)
 }
 
 func (d *Dispatcher) validationStatus() toolResult {

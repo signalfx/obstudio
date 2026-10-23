@@ -1,0 +1,10 @@
+# ~/.obstudio/config.yaml — Splunk Observability Studio local configuration.
+# Per-user, per-machine; applies to every IDE/agent using this obstudio binary.
+# Changes are picked up live unless noted. Values: use true/false, not yes/no/on/off.
+# To stop sending anonymous usage data, run: obstudio telemetry disable
+
+telemetry:
+  # Sends anonymous usage counts about Splunk Observability Studio itself to
+  # Splunk. Turning this off does not change what Splunk Observability Studio
+  # collects from your agents or shows you locally.
+  enabled: true
