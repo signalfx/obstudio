@@ -1,0 +1,1 @@
+export { ConfigTab } from "./ConfigTab";

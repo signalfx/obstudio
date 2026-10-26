@@ -28,11 +28,13 @@ export type ObserverHostCloudPayload = {
 	termsAccepted?: boolean;
 };
 
+export type ObserverHostHTTPMethod = 'GET' | 'POST' | 'PUT';
+
 export type ObserverHostRequest =
 	| {
 		body?: string;
 		kind: 'http';
-		method: 'GET' | 'POST';
+		method: ObserverHostHTTPMethod;
 		path: string;
 	}
 	| {
@@ -74,8 +76,15 @@ const maxHostRequestPathLength = 4096;
 const requestIdPattern = /^[A-Za-z0-9_-]{8,128}$/;
 const observerStateVersionPattern = /^[A-Za-z0-9_-]{43}$/;
 const traceDetailPathPattern = /^\/api\/query\/traces\/[0-9a-fA-F]{32}$/;
+// One dotted config key, such as /api/config/splunk.realm. Only PUT may name a key;
+// reads go through the whole-config and schema paths below.
+const configKeyPathPattern = /^\/api\/config\/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
+const maxConfigKeyLength = 256;
+const configSchemaPath = '/api/config/schema';
 const allowedGetPaths = new Set([
 	'/api/audit/score',
+	'/api/config',
+	configSchemaPath,
 	'/api/dashboards/preview',
 	'/api/health',
 	'/api/query/logs',
@@ -201,7 +210,7 @@ export function isObserverHostTelemetryEnvelope(value: unknown): value is Observ
 		&& ['pause', 'resume', 'subscribe', 'unsubscribe'].includes(envelope.command);
 }
 
-export function isAllowedObserverHostHTTPPath(method: 'GET' | 'POST', value: string): boolean {
+export function isAllowedObserverHostHTTPPath(method: ObserverHostHTTPMethod, value: string): boolean {
 	if (value.length === 0 || value.length > maxHostRequestPathLength || value.includes('#')) {
 		return false;
 	}
@@ -217,6 +226,12 @@ export function isAllowedObserverHostHTTPPath(method: 'GET' | 'POST', value: str
 	if (method === 'GET') {
 		return allowedGetPaths.has(parsed.pathname) || traceDetailPathPattern.test(parsed.pathname);
 	}
+	if (method === 'PUT') {
+		return parsed.search === ''
+			&& parsed.pathname !== configSchemaPath
+			&& parsed.pathname.length <= '/api/config/'.length + maxConfigKeyLength
+			&& configKeyPathPattern.test(parsed.pathname);
+	}
 	return allowedPostPaths.has(parsed.pathname);
 }
 
@@ -226,13 +241,13 @@ function isObserverHostRequest(value: unknown): value is ObserverHostRequest {
 	}
 	const request = value as Record<string, unknown>;
 	if (request.kind === 'http') {
-		return (request.method === 'GET' || request.method === 'POST')
+		return (request.method === 'GET' || request.method === 'POST' || request.method === 'PUT')
 			&& typeof request.path === 'string'
 			&& isAllowedObserverHostHTTPPath(request.method, request.path)
 			&& (request.body === undefined
 				|| (typeof request.body === 'string'
 					&& Buffer.byteLength(request.body, 'utf8') <= maxHostRequestBodyBytes))
-			&& (request.method === 'POST' || request.body === undefined);
+			&& (request.method !== 'GET' || request.body === undefined);
 	}
 	if (request.kind !== 'cloud' || !isCloudAction(request.action)) {
 		return false;
