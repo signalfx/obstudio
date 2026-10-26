@@ -62,7 +62,7 @@ export function isLoopbackObserverUrl(url: string): boolean {
 }
 
 // An older observer answers 404, 405 or its SPA page here; anything that is not a
-// well-formed status must leave the stored fingerprint alone (diagnostics FR12).
+// well-formed status must leave the stored fingerprint alone.
 function parseUsableStatus(response: ConfigStatusResponse): ConfigStatus | undefined {
 	if (response.status !== 200) {
 		return undefined;

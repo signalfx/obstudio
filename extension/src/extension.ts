@@ -2027,7 +2027,7 @@ function syncObserverUi(): void {
 
 // Every path into 'running' (managed start, restart, shared or discovered attach)
 // begins a new run id and ends in syncObserverUi, so a new running run id is
-// exactly one transition into 'running' (diagnostics FR11 T1).
+// exactly one transition into 'running'.
 function notifyConfigWarningOfRun(): void {
 	const runId = observerLifecycleState.status === 'running' ? observerLifecycleState.currentRunId : undefined;
 	if (runId !== undefined && runId !== configWarningRunId) {
