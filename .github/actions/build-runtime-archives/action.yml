@@ -1,0 +1,68 @@
+name: Build runtime archives
+description: >-
+  Deterministically build the four obstudio runtime zips into ./dist without publishing.
+  Prepare Release, the release verification gate, and the determinism check share this
+  action so every build uses the same pinned toolchain and the same steps.
+
+inputs:
+  release_tag:
+    description: Release tag the archives are built for (for example v0.1.4)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22.23.4"
+        cache: npm
+        cache-dependency-path: observer/client/package-lock.json
+
+    - name: Pin npm version
+      shell: bash
+      run: |
+        npm i -g npm@11.6.2
+        npm --version
+
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: observer/go.mod
+        cache-dependency-path: observer/go.sum
+
+    - name: Stage skills, client, and Weaver runtimes
+      shell: bash
+      run: make stage-skills build-client stage-release-weaver
+
+    # .goreleaser.yaml globs the plugin zips into checksums.txt and GoReleaser cannot skip that
+    # step. The plugin zips are not part of the runtime archives and the verification gate hashes
+    # dist/*.zip directly, so empty placeholders keep this build independent of the plugin
+    # packaging (which requires the runtime manifest this build is producing).
+    - name: Create placeholder plugin zips for the checksum glob
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.release_tag }}
+      run: |
+        set -euo pipefail
+        version="${RELEASE_TAG#v}"
+        mkdir -p .release/plugins
+        : > ".release/plugins/obstudio_codex_${version}.zip"
+        : > ".release/plugins/obstudio_claude_${version}.zip"
+
+    - name: Tag the checkout locally so GoReleaser derives the release version
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.release_tag }}
+      run: |
+        set -euo pipefail
+        if git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
+          test "$(git rev-parse "${RELEASE_TAG}^{commit}")" = "$(git rev-parse HEAD)"
+        else
+          git tag "$RELEASE_TAG"
+        fi
+
+    - uses: goreleaser/goreleaser-action@v6
+      with:
+        version: v2.19.0
+        args: release --clean --skip=publish,announce,validate
+      env:
+        GITHUB_TOKEN: ${{ github.token }}

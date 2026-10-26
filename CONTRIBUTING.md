@@ -340,7 +340,8 @@ See [.goreleaser.yaml](.goreleaser.yaml) for the full release configuration.
 
 GoReleaser publishes one `checksums.txt` containing SHA-256 hashes for the
 Observer runtime archives, Claude and Codex plugin archives, and VSIX packages.
-Its follow-up sync PR updates the Claude marketplace's versioned archive URL
+The plugin hook does not read it; the hook trusts only the committed
+`runtime-manifest.json`. Its follow-up sync PR updates the Claude marketplace's versioned archive URL
 and SHA-256 from that manifest, and pins the Codex marketplace source to the
 release tag. It does not change plugin manifest versions; those were set by the
 prepare-release PR. Review and merge the sync PR to advance the published
@@ -355,11 +356,28 @@ registering a marketplace. The latter does not test the published archive or
 marketplace update flow. A sibling `marketplace.local.json` file is not
 automatically discovered as a separate marketplace.
 
-Claude's bootstrap prefers the Observer release matching the Claude plugin
-version, and falls back to the latest release with a warning if the pinned
-release assets are unavailable. If a healthy Observer is already running at a
-different version, Claude reports the mismatch and reuses the shared runtime.
-Codex continues to select the latest Observer release.
+The Claude and Codex bootstrap (`plugins/obstudio/hooks/bootstrap_obstudio.py`)
+downloads only the Observer release matching the plugin version and verifies it
+against `plugins/obstudio/hooks/runtime-manifest.json`, which lists the SHA-256
+of each runtime archive. There is no `releases/latest` fallback, no use of the
+release `checksums.txt`, and no verification bypass; a missing, mismatched, or
+unsupported entry makes the hook fail closed. If a healthy Observer is already
+running at a different version, the host reports the mismatch and reuses the
+shared runtime.
+
+The manifest is generated, not hand-edited. The Prepare Release workflow builds
+the runtime archives with the deterministic GoReleaser configuration and commits
+their hashes in the release PR. The Release workflow rebuilds them at the tag
+and fails before publishing unless every hash matches. If `main` changes the
+runtime inputs (`observer/`, `skills/`, `docs/`, build config) after Prepare
+Release ran, close the release PR and run Prepare Release again. The
+`Runtime determinism` workflow builds twice on separate runners and compares, so
+a change that breaks reproducibility fails on its own PR.
+
+Because of this, a development checkout whose `plugin.json` version has no
+matching manifest entry makes the hook fail closed. Use `make run` to run a
+locally built Observer instead of the hook. Do not add an override that skips
+verification.
 
 The pytest plugin is versioned in `pytest-codex-evals/pyproject.toml` and can be
 published from the same checkout when eval harness changes need a package
