@@ -397,7 +397,8 @@ func TestConfigStatusEndpointShape(t *testing.T) {
 	if !sameSet(keys, want) {
 		t.Errorf("keys %v", keys)
 	}
-	if string(raw["effective"]) != `{"telemetry":{"enabled":false}}` {
+	if string(raw["effective"]) != `{"telemetry":{"enabled":false}}` ||
+		string(raw["effective"]) != string(userconfig.EncodeSettings(m.Get().Settings)) {
 		t.Errorf("effective %s", raw["effective"])
 	}
 	var got configstatus.Status

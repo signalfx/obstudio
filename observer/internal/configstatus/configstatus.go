@@ -6,6 +6,7 @@ package configstatus
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -32,20 +33,16 @@ type Diagnostic struct {
 }
 
 type Status struct {
-	State       State        `json:"state"`
-	Warn        bool         `json:"warn"`
-	Degraded    bool         `json:"degraded"`
-	Path        string       `json:"path"`
-	Effective   Effective    `json:"effective"`
-	Message     string       `json:"message"`
-	Diagnostics []Diagnostic `json:"diagnostics"`
-	Fingerprint string       `json:"fingerprint"`
-}
-
-type Effective struct {
-	Telemetry struct {
-		Enabled bool `json:"enabled"`
-	} `json:"telemetry"`
+	State    State  `json:"state"`
+	Warn     bool   `json:"warn"`
+	Degraded bool   `json:"degraded"`
+	Path     string `json:"path"`
+	// Effective is every setting in force, in the same JSON shape as the
+	// settings endpoint body.
+	Effective   json.RawMessage `json:"effective"`
+	Message     string          `json:"message"`
+	Diagnostics []Diagnostic    `json:"diagnostics"`
+	Fingerprint string          `json:"fingerprint"`
 }
 
 // Getter is the settings source; the observer passes its config Manager.
@@ -61,17 +58,23 @@ func New(g Getter, path string) *Builder { return &Builder{g: g, path: path} }
 
 // warnKeys are the settings whose fail-safe differs from their default, so a
 // problem with them changes behavior the user chose.
-func warnKeys() []string { return warnKeysOf(userconfig.Definitions()) }
+func warnKeys() []userconfig.Definition { return warnKeysOf(userconfig.Definitions()) }
 
 // warnKeysOf is warnKeys over a given table, so tests can pass a fake one.
-func warnKeysOf(defs []userconfig.Definition) []string {
-	var keys []string
+func warnKeysOf(defs []userconfig.Definition) []userconfig.Definition {
+	var keys []userconfig.Definition
 	for _, d := range defs {
 		if d.Default != d.FailSafe {
-			keys = append(keys, d.Path)
+			keys = append(keys, d)
 		}
 	}
 	return keys
+}
+
+// hits reports whether diagnostic d is about warn key k, directly or through
+// its section.
+func hits(d userconfig.Diagnostic, k userconfig.Definition) bool {
+	return d.Key == k.Path || strings.HasPrefix(k.Path, d.Key+".")
 }
 
 func isProblem(d userconfig.Diagnostic) bool {
@@ -80,12 +83,12 @@ func isProblem(d userconfig.Diagnostic) bool {
 
 // warnWorthy reports a problem diagnostic on a warn key, or on a section
 // holding one.
-func warnWorthy(d userconfig.Diagnostic, keys []string) bool {
+func warnWorthy(d userconfig.Diagnostic, keys []userconfig.Definition) bool {
 	if !isProblem(d) {
 		return false
 	}
 	for _, k := range keys {
-		if d.Key == k || strings.HasPrefix(k, d.Key+".") {
+		if hits(d, k) {
 			return true
 		}
 	}
@@ -97,8 +100,12 @@ func (b *Builder) Build() Status {
 	snap := b.g.Get()
 	_, diags, err := userconfig.Load(b.path)
 
-	st := Status{Path: b.path, Degraded: snap.Degraded, Diagnostics: []Diagnostic{}}
-	st.Effective.Telemetry.Enabled = snap.Telemetry.Enabled
+	st := Status{
+		Path:        b.path,
+		Degraded:    snap.Degraded,
+		Effective:   userconfig.EncodeSettings(snap.Settings),
+		Diagnostics: []Diagnostic{},
+	}
 	problems := false
 	for _, d := range diags {
 		st.Diagnostics = append(st.Diagnostics, Diagnostic{Key: d.Key, Kind: string(d.Kind), Line: d.Line, Message: d.Message})
@@ -129,41 +136,51 @@ func (b *Builder) Build() Status {
 	if st.State == StateUnparseable {
 		errText = err.Error()
 	}
-	st.Fingerprint = fingerprint(st.State, st.Effective.Telemetry.Enabled, worthy, errText)
+	st.Fingerprint = fingerprint(st.State, st.Effective, worthy, errText)
 	if st.Warn {
-		st.Message = message(st, worthy, errText)
+		st.Message = message(st, keys, worthy, errText)
 	}
 	return st
 }
 
-func fingerprint(state State, enabled bool, worthy []userconfig.Diagnostic, errText string) string {
-	b := "0"
-	if enabled {
-		b = "1"
-	}
+// fingerprint changes when the warning or the settings in force change, so the
+// extension warns once per distinct situation.
+func fingerprint(state State, effective []byte, worthy []userconfig.Diagnostic, errText string) string {
 	entries := make([]string, len(worthy))
 	for i, d := range worthy {
 		entries[i] = fmt.Sprintf("%s:%s:%d", d.Key, d.Kind, d.Line)
 	}
 	sort.Strings(entries)
-	sum := sha256.Sum256([]byte(string(state) + "\n" + b + "\n" + strings.Join(entries, "\n") + "\n" + errText))
+	sum := sha256.Sum256([]byte(string(state) + "\n" + string(effective) + "\n" + strings.Join(entries, "\n") + "\n" + errText))
 	return hex.EncodeToString(sum[:])
 }
 
-func message(st Status, worthy []userconfig.Diagnostic, errText string) string {
-	prefix := "Using your last valid settings"
-	if !st.Effective.Telemetry.Enabled {
-		prefix = "Telemetry is off"
-	}
+// message says which settings are in force and why. Its opening depends on
+// the state and the keys hit, never on a setting's value.
+func message(st Status, keys []userconfig.Definition, worthy []userconfig.Diagnostic, errText string) string {
 	var msg string
-	if st.State == StateUnparseable {
+	switch {
+	case st.State == StateUnparseable:
+		prefix := "Using your last valid settings"
+		if st.Degraded {
+			prefix = "Using fail-safe settings"
+		}
 		msg = fmt.Sprintf("%s: %s cannot be used: %s. Fix the file, or delete it to restore defaults on next start.", prefix, st.Path, errText)
-	} else {
+	default:
+		var hit []string
+		for _, k := range keys {
+			for _, d := range worthy {
+				if hits(d, k) {
+					hit = append(hit, fmt.Sprintf("%s (%v)", k.Path, k.FailSafe))
+					break
+				}
+			}
+		}
 		parts := make([]string, len(worthy))
 		for i, d := range worthy {
 			parts[i] = d.Message
 		}
-		msg = fmt.Sprintf("%s: %s in %s. Fix the value, or delete the file to restore defaults on next start.", prefix, strings.Join(parts, "; "), st.Path)
+		msg = fmt.Sprintf("Using fail-safe settings for %s: %s in %s. Fix the value, or delete the file to restore defaults on next start.", strings.Join(hit, ", "), strings.Join(parts, "; "), st.Path)
 	}
 	return strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ").Replace(msg)
 }

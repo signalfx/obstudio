@@ -1,8 +1,10 @@
 package configstatus
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -81,6 +83,20 @@ func noSection() string {
 
 type kk struct{ key, kind string }
 
+// enabled reads effective.telemetry.enabled from a Status.
+func enabled(t *testing.T, st Status) bool {
+	t.Helper()
+	var e struct {
+		Telemetry struct {
+			Enabled *bool `json:"enabled"`
+		} `json:"telemetry"`
+	}
+	if err := json.Unmarshal(st.Effective, &e); err != nil || e.Telemetry.Enabled == nil {
+		t.Fatalf("effective %s: %v", st.Effective, err)
+	}
+	return *e.Telemetry.Enabled
+}
+
 func TestStateTable(t *testing.T) {
 	type row struct {
 		name     string
@@ -127,7 +143,10 @@ func TestStateTable(t *testing.T) {
 			m := quietManager(t, path)
 			r.change(t, m, path)
 			st := New(m, path).Build()
-			if st.State != r.state || st.Warn != r.warn || st.Degraded || st.Effective.Telemetry.Enabled != r.enabled {
+			if want := userconfig.EncodeSettings(m.Get().Settings); !bytes.Equal(st.Effective, want) {
+				t.Errorf("effective %s, want %s", st.Effective, want)
+			}
+			if st.State != r.state || st.Warn != r.warn || st.Degraded || enabled(t, st) != r.enabled {
 				t.Errorf("status %+v", st)
 			}
 			var got []kk
@@ -153,9 +172,14 @@ func assertMessage(t *testing.T, st Status, path string) {
 		}
 		return
 	}
-	prefix := "Using your last valid settings"
-	if !st.Effective.Telemetry.Enabled {
-		prefix = "Telemetry is off"
+	var prefix string
+	switch {
+	case st.State == StateInvalid:
+		prefix = "Using fail-safe settings for telemetry.enabled (false):"
+	case st.Degraded:
+		prefix = "Using fail-safe settings:"
+	default:
+		prefix = "Using your last valid settings"
 	}
 	if !strings.HasPrefix(st.Message, prefix) || !strings.Contains(st.Message, st.Path) || strings.Contains(st.Message, "\n") {
 		t.Errorf("message %q", st.Message)
@@ -180,7 +204,9 @@ func TestDegradedStart(t *testing.T) {
 	broken := "telemetry: [unclosed"
 	path := newPath(t, &broken)
 	st := New(quietManager(t, path), path).Build()
-	if st.State != StateUnparseable || !st.Warn || !st.Degraded || st.Effective.Telemetry.Enabled || !strings.HasPrefix(st.Message, "Telemetry is off") {
+	if st.State != StateUnparseable || !st.Warn || !st.Degraded || enabled(t, st) ||
+		!bytes.Equal(st.Effective, userconfig.EncodeSettings(userconfig.FailSafeSettings())) ||
+		!strings.HasPrefix(st.Message, "Using fail-safe settings:") {
 		t.Errorf("a: %+v", st)
 	}
 
@@ -194,7 +220,7 @@ func TestDegradedStart(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(parent, 0o700) })
 	bpath := filepath.Join(parent, ".obstudio", "config.yaml")
 	st = New(quietManager(t, bpath), bpath).Build()
-	if st.State != StateMissing || st.Warn || !st.Degraded || st.Effective.Telemetry.Enabled {
+	if st.State != StateMissing || st.Warn || !st.Degraded || enabled(t, st) {
 		t.Errorf("b: %+v", st)
 	}
 }
@@ -259,7 +285,7 @@ func TestFingerprintStability(t *testing.T) {
 		if err1.Error() != err2.Error() {
 			t.Fatal("error text changed between loads")
 		}
-		if !s1.Effective.Telemetry.Enabled || s2.Effective.Telemetry.Enabled || !s2.Degraded {
+		if !enabled(t, s1) || enabled(t, s2) || !s2.Degraded {
 			t.Errorf("effective %+v / %+v", s1, s2)
 		}
 		if s1.State != StateUnparseable || s2.State != StateUnparseable || s1.Fingerprint == s2.Fingerprint {
@@ -273,7 +299,7 @@ func TestFingerprintStability(t *testing.T) {
 			m := quietManager(t, path)
 			write(t, m, path, "telemetry: [unclosed")
 			st := New(m, path).Build()
-			fps[st.Effective.Telemetry.Enabled] = st.Fingerprint
+			fps[enabled(t, st)] = st.Fingerprint
 		}
 		if fps[true] == "" || fps[false] == "" || fps[true] == fps[false] {
 			t.Errorf("fingerprints %v", fps)
@@ -296,10 +322,6 @@ func TestFingerprintStability(t *testing.T) {
 			path := newPath(t, &content)
 			st := New(quietManager(t, path), path).Build()
 			_, diags, err := userconfig.Load(path)
-			bit := "0"
-			if st.Effective.Telemetry.Enabled {
-				bit = "1"
-			}
 			var entries []string
 			for _, d := range diags {
 				if warnWorthy(d, warnKeys()) {
@@ -310,12 +332,29 @@ func TestFingerprintStability(t *testing.T) {
 			if err != nil {
 				x = err.Error()
 			}
-			sum := sha256.Sum256([]byte(string(st.State) + "\n" + bit + "\n" + strings.Join(entries, "\n") + "\n" + x))
+			sum := sha256.Sum256([]byte(string(st.State) + "\n" + string(st.Effective) + "\n" + strings.Join(entries, "\n") + "\n" + x))
 			if hex.EncodeToString(sum[:]) != st.Fingerprint {
 				t.Errorf("%q: fingerprint does not match the formula", content)
 			}
 		}
 	})
+}
+
+type fixedGetter userconfig.Snapshot
+
+func (g fixedGetter) Get() userconfig.Snapshot { return userconfig.Snapshot(g) }
+
+func TestFingerprintVIsEffective(t *testing.T) {
+	maybe := scaffoldWith("enabled: true", "enabled: maybe")
+	path := newPath(t, &maybe)
+	on := New(fixedGetter(userconfig.DefaultSnapshot()), path).Build()
+	off := New(fixedGetter(userconfig.FailSafeSnapshot()), path).Build()
+	if on.State != off.State || !reflect.DeepEqual(on.Diagnostics, off.Diagnostics) {
+		t.Fatalf("state or diagnostics differ: %+v / %+v", on, off)
+	}
+	if on.Fingerprint == off.Fingerprint {
+		t.Error("different effective settings gave the same fingerprint")
+	}
 }
 
 func TestBuildReadsGetUnwatched(t *testing.T) {
@@ -349,12 +388,12 @@ func TestBuildReadsGetUnwatched(t *testing.T) {
 	}
 	b := New(m, path)
 	aged(userconfig.Scaffold())
-	if st := b.Build(); st.State != StateOK || st.Degraded || !st.Effective.Telemetry.Enabled {
+	if st := b.Build(); st.State != StateOK || st.Degraded || !enabled(t, st) {
 		t.Errorf("first build %+v", st)
 	}
 	content := scaffoldWith("enabled: true", "enabled: maybe")
 	mtime := aged(content)
-	if st := b.Build(); st.State != StateInvalid || !st.Warn || st.Effective.Telemetry.Enabled {
+	if st := b.Build(); st.State != StateInvalid || !st.Warn || enabled(t, st) {
 		t.Errorf("second build %+v", st)
 	}
 	got, _ := os.ReadFile(path)
@@ -401,7 +440,7 @@ func TestBuilderUsesGetter(t *testing.T) {
 	if g.calls != 1 {
 		t.Errorf("Get called %d times", g.calls)
 	}
-	if st.Effective.Telemetry.Enabled || !st.Degraded || st.State != StateOK {
+	if !bytes.Equal(st.Effective, userconfig.EncodeSettings(userconfig.FailSafeSettings())) || !st.Degraded || st.State != StateOK {
 		t.Errorf("status %+v", st)
 	}
 	for f, src := range nonTestSources(t) {
@@ -412,7 +451,14 @@ func TestBuilderUsesGetter(t *testing.T) {
 }
 
 func TestWarnKeysDerived(t *testing.T) {
-	if got := warnKeys(); !reflect.DeepEqual(got, []string{userconfig.TelemetryEnabled.Path()}) {
+	paths := func(defs []userconfig.Definition) []string {
+		var out []string
+		for _, d := range defs {
+			out = append(out, d.Path)
+		}
+		return out
+	}
+	if got := paths(warnKeys()); !reflect.DeepEqual(got, []string{userconfig.TelemetryEnabled.Path()}) {
 		t.Errorf("warn keys %v", got)
 	}
 	keys := warnKeys()
@@ -434,7 +480,7 @@ func TestWarnKeysDerived(t *testing.T) {
 		{Path: "b.off", Section: "b", Type: userconfig.TypeBool, Default: false, FailSafe: false},
 	}
 	fakeKeys := warnKeysOf(fake)
-	if !reflect.DeepEqual(fakeKeys, []string{"a.differs", "b.on"}) {
+	if !reflect.DeepEqual(paths(fakeKeys), []string{"a.differs", "b.on"}) {
 		t.Errorf("fake warn keys %v", fakeKeys)
 	}
 	for _, c := range []struct {
@@ -453,6 +499,24 @@ func TestWarnKeysDerived(t *testing.T) {
 			t.Errorf("warnWorthy(%s %s) = %v, want %v", c.d.Key, c.d.Kind, got, c.want)
 		}
 	}
+	// The message lists each warn key hit once, in table order, with its
+	// fail-safe value; a section diagnostic hits every warn key in it.
+	fake = append(fake, userconfig.Definition{Path: "b.two", Section: "b", Type: userconfig.TypeInt, Default: 1, FailSafe: 0})
+	msg := message(Status{State: StateInvalid, Path: "/p"}, warnKeysOf(fake), []userconfig.Diagnostic{
+		{Key: "b", Kind: userconfig.DiagInvalid, Message: "b: is not a mapping"},
+		{Key: "a.differs", Kind: userconfig.DiagAbsent, Message: "a.differs: is absent"},
+		{Key: "b.on", Kind: userconfig.DiagInvalid, Message: "b.on: bad"},
+	}, "")
+	if want := `Using fail-safe settings for a.differs (), b.on (false), b.two (0): `; !strings.HasPrefix(msg, want) {
+		t.Errorf("message %q, want prefix %q", msg, want)
+	}
+
+	for f, src := range nonTestSources(t) {
+		if bytes.Contains(bytes.ToLower(src), []byte("telemetry")) {
+			t.Errorf("%s names a setting: it contains %q", f, "telemetry")
+		}
+	}
+
 	// Struct tags are the JSON field names, not references to settings.
 	for f, src := range nonTestSources(t) {
 		file, err := parser.ParseFile(token.NewFileSet(), f, src, 0)

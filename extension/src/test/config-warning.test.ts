@@ -37,13 +37,13 @@ function statusBody(overrides: Partial<StatusBody>): StatusBody {
 const W1 = statusBody({
 	diagnostics: [{ key: 'telemetry.enabled', kind: 'invalid', line: 11 }],
 	fingerprint: 'f1',
-	message: 'Telemetry is off: one',
+	message: 'Using fail-safe settings for telemetry.enabled (false): one',
 	warn: true,
 });
 const W2 = statusBody({
 	diagnostics: [{ key: 'telemetry', kind: 'invalid', line: 10 }],
 	fingerprint: 'f2',
-	message: 'Telemetry is off: two',
+	message: 'Using fail-safe settings for telemetry.enabled (false): two',
 	warn: true,
 });
 const OK = statusBody({});
