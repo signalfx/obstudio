@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { observerFetch } from "../host/transport";
-import { onConfigRefresh } from "../telemetry/configSignal";
-import { createConfigEdits, type ConfigEdits, type ConfigEditsState } from "./configEdits";
+import type { ConfigEditsState, FieldKind } from "./configEdits";
+import { useConfigEdits } from "./useConfigEdits";
 
 const usageDataPath = "telemetry.enabled";
+const usageDataFields: Readonly<Record<string, FieldKind>> = { [usageDataPath]: "immediate" };
 
 interface Wording {
   title: string;
@@ -35,59 +36,38 @@ function saveErrorText(error: NonNullable<ConfigEditsState["error"]>): string {
 export function UsageDataSetting(): React.ReactElement {
   const [wording, setWording] = useState<Wording | null>(null);
   const [wordingFailed, setWordingFailed] = useState(false);
-  const [state, setState] = useState<ConfigEditsState | null>(null);
-  const editsRef = useRef<ConfigEdits | null>(null);
+  const wordingLoad = useRef({ have: false, inFlight: false, mounted: false });
 
   useEffect(() => {
-    let active = true;
-    let haveWording = false;
-    let wordingInFlight = false;
-
-    const loadWording = (): void => {
-      if (haveWording || wordingInFlight) return;
-      wordingInFlight = true;
-      observerFetch("/api/config/definitions")
-        .then(async (response) => (response.ok ? wordingFrom(await response.json()) : null))
-        .catch(() => null)
-        .then((loaded) => {
-          wordingInFlight = false;
-          if (!active) return;
-          if (loaded) {
-            haveWording = true;
-            setWording(loaded);
-            setWordingFailed(false);
-          } else {
-            setWordingFailed(true);
-          }
-        });
-    };
-
-    const edits = createConfigEdits({ [usageDataPath]: "immediate" }, {
-      fetchConfig: () => {
-        // Every value refresh is also a retry point for the wording.
-        loadWording();
-        return observerFetch("/api/config");
-      },
-      postConfig: (body) => observerFetch("/api/config", {
-        body,
-        headers: { "Content-Type": "application/json", "X-Obstudio-Browser-Request": "1" },
-        method: "POST",
-      }),
-      onChange: (next) => {
-        if (active) setState(next);
-      },
-    });
-    editsRef.current = edits;
-    const unsubscribe = onConfigRefresh(() => edits.refresh());
-    edits.refresh();
-
+    const load = wordingLoad.current;
+    load.mounted = true;
     return () => {
-      active = false;
-      unsubscribe();
-      edits.dispose();
-      editsRef.current = null;
+      load.mounted = false;
     };
   }, []);
+
+  // Every value refresh is also a retry point for the wording.
+  const loadWording = useCallback((): void => {
+    const load = wordingLoad.current;
+    if (load.have || load.inFlight) return;
+    load.inFlight = true;
+    observerFetch("/api/config/definitions")
+      .then(async (response) => (response.ok ? wordingFrom(await response.json()) : null))
+      .catch(() => null)
+      .then((loaded) => {
+        load.inFlight = false;
+        if (!load.mounted) return;
+        if (loaded) {
+          load.have = true;
+          setWording(loaded);
+          setWordingFailed(false);
+        } else {
+          setWordingFailed(true);
+        }
+      });
+  }, []);
+
+  const { edit, state } = useConfigEdits(usageDataFields, { onRefresh: loadWording });
 
   const unavailable = wordingFailed || state?.loadFailed === true;
   const ready = !unavailable && wording !== null && state !== null && state.server !== null;
@@ -102,7 +82,7 @@ export function UsageDataSetting(): React.ReactElement {
               aria-describedby="cloud-usage-data-description"
               checked={state.values[usageDataPath] === true}
               aria-disabled={state.inFlight.has(usageDataPath) || undefined}
-              onChange={(event) => editsRef.current?.edit(usageDataPath, event.currentTarget.checked)}
+              onChange={(event) => edit(usageDataPath, event.currentTarget.checked)}
               role="switch"
               type="checkbox"
             />
