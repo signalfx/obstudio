@@ -188,13 +188,30 @@ describe("UsageDataSetting", () => {
   ])("is unavailable after %s for the definitions and recovers on a later refresh", async (_name, firstDefinitions) => {
     let definitions: () => Response | Promise<Response> = firstDefinitions;
     serve((path) => (path === "/api/config/definitions" ? definitions() : value(true)));
-    render(<UsageDataSetting />);
+    const { container } = render(<UsageDataSetting />);
     expect(await screen.findByText("The usage data setting is unavailable.")).toBeTruthy();
     expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryAllByRole("heading")).toHaveLength(0);
+    expect(container.querySelector("[aria-labelledby]")).toBeNull();
     definitions = () => json(200, DEF);
     act(() => notifyConfigRefresh());
     expect(await screen.findByRole("switch", { name: "Fixture title" })).toBeTruthy();
+    const headings = screen.queryAllByRole("heading");
+    expect(headings).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "Fixture section" })).toBe(headings[0]);
     expect(calls("/api/config/definitions")).toHaveLength(2);
+  });
+
+  it("renders no heading while the definitions request is pending", async () => {
+    const definitions = pending();
+    serve((path) => (path === "/api/config/definitions" ? definitions.promise : value(true)));
+    const { container } = render(<UsageDataSetting />);
+    await waitFor(() => expect(calls("/api/config")).toHaveLength(1));
+    expect(calls("/api/config/definitions")).toHaveLength(1);
+    expect(screen.queryAllByRole("heading")).toHaveLength(0);
+    expect(container.querySelector("[aria-labelledby]")).toBeNull();
+    await act(async () => definitions.resolve(json(200, DEF)));
+    expect(await screen.findByRole("heading", { name: "Fixture section" })).toBeTruthy();
   });
 
   it("requests the definitions once and the value on every refresh trigger", async () => {
@@ -223,6 +240,8 @@ describe("UsageDataSetting", () => {
     render(<UsageDataSetting />);
     expect(await screen.findByText("The usage data setting is unavailable.")).toBeTruthy();
     expect(screen.queryByRole("switch")).toBeNull();
+    await waitFor(() => expect(screen.queryAllByRole("heading")).toHaveLength(1));
+    expect(screen.getByRole("heading", { name: "Fixture section" })).toBeTruthy();
     current = () => value(true);
     act(() => notifyConfigRefresh());
     expect(await screen.findByRole("switch", { name: "Fixture title" })).toBeTruthy();
