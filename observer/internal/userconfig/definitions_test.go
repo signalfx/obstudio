@@ -282,10 +282,15 @@ func TestDeclarationPanics(t *testing.T) {
 }
 
 func TestDefinitionsView(t *testing.T) {
+	before := Definitions()
 	d := Definitions()
-	d[0].Label = "x"
-	d[0].Default = false
-	assertV1Definitions(t, Definitions())
+	for i := range d {
+		d[i].Label = "x"
+		d[i].Default = nil
+	}
+	if !reflect.DeepEqual(Definitions(), before) {
+		t.Error("changing a returned definition changed the next call's result")
+	}
 
 	m := newDefinition(newSection("t"), "m", defSpec[int]{
 		Label: "m", Description: "m.", Apply: ApplyLive, Min: ptr(3), Enum: []int{3, 4},

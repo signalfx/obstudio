@@ -424,6 +424,35 @@ func TestWarnKeysDerived(t *testing.T) {
 		warnWorthy(userconfig.Diagnostic{Key: "server", Kind: userconfig.DiagUnknownKey}, keys) {
 		t.Error("an unrelated diagnostic is warn-worthy")
 	}
+
+	// A fake table with a second section: only the keys whose fail-safe
+	// differs from their default warn, in table order.
+	fake := []userconfig.Definition{
+		{Path: "a.same", Section: "a", Type: userconfig.TypeInt, Default: 3, FailSafe: 3},
+		{Path: "a.differs", Section: "a", Type: userconfig.TypeString, Default: "x", FailSafe: ""},
+		{Path: "b.on", Section: "b", Type: userconfig.TypeBool, Default: true, FailSafe: false},
+		{Path: "b.off", Section: "b", Type: userconfig.TypeBool, Default: false, FailSafe: false},
+	}
+	fakeKeys := warnKeysOf(fake)
+	if !reflect.DeepEqual(fakeKeys, []string{"a.differs", "b.on"}) {
+		t.Errorf("fake warn keys %v", fakeKeys)
+	}
+	for _, c := range []struct {
+		d    userconfig.Diagnostic
+		want bool
+	}{
+		{userconfig.Diagnostic{Key: "a.differs", Kind: userconfig.DiagAbsent}, true},
+		{userconfig.Diagnostic{Key: "b.on", Kind: userconfig.DiagInvalid}, true},
+		{userconfig.Diagnostic{Key: "b", Kind: userconfig.DiagInvalid}, true},
+		{userconfig.Diagnostic{Key: "a.same", Kind: userconfig.DiagInvalid}, false},
+		{userconfig.Diagnostic{Key: "b.off", Kind: userconfig.DiagAbsent}, false},
+		{userconfig.Diagnostic{Key: "b.on", Kind: userconfig.DiagUnknownKey}, false},
+		{userconfig.Diagnostic{Key: "a.differsx", Kind: userconfig.DiagInvalid}, false},
+	} {
+		if got := warnWorthy(c.d, fakeKeys); got != c.want {
+			t.Errorf("warnWorthy(%s %s) = %v, want %v", c.d.Key, c.d.Kind, got, c.want)
+		}
+	}
 	// Struct tags are the JSON field names, not references to settings.
 	for f, src := range nonTestSources(t) {
 		file, err := parser.ParseFile(token.NewFileSet(), f, src, 0)

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -125,8 +126,12 @@ func TestScaffoldGolden(t *testing.T) {
 	if strings.Contains(strings.ToLower(got), "port") {
 		t.Error("scaffold names a port")
 	}
-	if lines[9] != "  enabled: true" {
-		t.Errorf("line 10 = %q", lines[9])
+	for _, d := range Definitions() {
+		want := "  " + strings.TrimPrefix(d.Path, d.Section+".") + ": " + valueText(d.Default)
+		sec := slices.Index(lines, d.Section+":")
+		if sec < 0 || !slices.Contains(lines[sec+1:], want) {
+			t.Errorf("scaffold has no %q under %q", want, d.Section+":")
+		}
 	}
 }
 

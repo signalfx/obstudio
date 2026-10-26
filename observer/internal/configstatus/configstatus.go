@@ -61,9 +61,12 @@ func New(g Getter, path string) *Builder { return &Builder{g: g, path: path} }
 
 // warnKeys are the settings whose fail-safe differs from their default, so a
 // problem with them changes behavior the user chose.
-func warnKeys() []string {
+func warnKeys() []string { return warnKeysOf(userconfig.Definitions()) }
+
+// warnKeysOf is warnKeys over a given table, so tests can pass a fake one.
+func warnKeysOf(defs []userconfig.Definition) []string {
 	var keys []string
-	for _, d := range userconfig.Definitions() {
+	for _, d := range defs {
 		if d.Default != d.FailSafe {
 			keys = append(keys, d.Path)
 		}
