@@ -341,3 +341,31 @@ export interface SISCIMDSessionStatus {
   connectedAt?: string;
   expiresAt?: string;
 }
+
+/** One entry of GET /api/config/schema. `type` is open-ended so newer servers can add types. */
+export interface ConfigKeySpec {
+  key: string;
+  type: string;
+  /** Short name for the setting (server limit: 40 characters). Optional. */
+  label?: string;
+  /** One sentence on what the setting does (server limit: 120 characters). Optional. */
+  description?: string;
+  allowedValues?: Array<string | number | boolean>;
+  minimum?: number;
+  maximum?: number;
+}
+
+export interface ConfigSchemaResponse {
+  keys: ConfigKeySpec[];
+}
+
+/** GET /api/config: the whole configuration as a nested object. */
+export interface ConfigValuesResponse {
+  values: Record<string, unknown>;
+}
+
+/** GET and PUT /api/config/{key}. */
+export interface ConfigValueResponse {
+  key: string;
+  value: unknown;
+}

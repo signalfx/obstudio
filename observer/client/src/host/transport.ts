@@ -85,7 +85,7 @@ type ObserverHostRequest =
   | {
     body?: string;
     kind: "http";
-    method: "GET" | "POST";
+    method: "GET" | "POST" | "PUT";
     path: string;
   }
   | {
@@ -172,7 +172,7 @@ export async function observerFetch(path: string, init?: RequestInit): Promise<R
   if (!api) return fetch(path, init);
 
   const method = (init?.method ?? "GET").toUpperCase();
-  if (method !== "GET" && method !== "POST") {
+  if (method !== "GET" && method !== "POST" && method !== "PUT") {
     throw new Error(`Splunk Observability Studio host transport does not support ${method} requests.`);
   }
   if (init?.body !== undefined && typeof init.body !== "string") {

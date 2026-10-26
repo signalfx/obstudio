@@ -1,4 +1,8 @@
 import type {
+  ConfigKeySpec,
+  ConfigSchemaResponse,
+  ConfigValueResponse,
+  ConfigValuesResponse,
   LogRecord,
   MetricGroup,
   O11yOAuthRegistrationResult,
@@ -448,4 +452,66 @@ export interface InstrumentationScore {
 /** Fetch the instrumentation score derived from the latest $otel-audit report. */
 export async function fetchInstrumentationScore(signal?: AbortSignal): Promise<InstrumentationScore> {
   return fetchJSON<InstrumentationScore>("/api/audit/score", { signal });
+}
+
+/** An error response from the configuration API, carrying the server's message and code. */
+export class ConfigApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ConfigApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+// The config API applies its local-origin guard to reads as well as writes, so
+// every request carries the browser-request header.
+async function fetchConfigJSON<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  headers.set(splunkBrowserRequestHeader, "1");
+  const response = await observerFetch(`${BASE}${path}`, {
+    ...init,
+    cache: "no-store",
+    credentials: "same-origin",
+    headers,
+  });
+  let parsed: unknown = null;
+  try {
+    parsed = await response.json();
+  } catch {
+    parsed = null;
+  }
+  if (!response.ok) {
+    const body = typeof parsed === "object" && parsed !== null ? parsed as Record<string, unknown> : {};
+    throw new ConfigApiError(
+      typeof body.error === "string" ? body.error : `Configuration request failed with HTTP ${response.status}.`,
+      response.status,
+      typeof body.code === "string" ? body.code : undefined,
+    );
+  }
+  return parsed as T;
+}
+
+export async function fetchConfigSchema(signal?: AbortSignal): Promise<ConfigKeySpec[]> {
+  const response = await fetchConfigJSON<ConfigSchemaResponse>("/api/config/schema", { signal });
+  return Array.isArray(response?.keys) ? response.keys : [];
+}
+
+export async function fetchConfigValues(signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const response = await fetchConfigJSON<ConfigValuesResponse>("/api/config", { signal });
+  return typeof response?.values === "object" && response.values !== null ? response.values : {};
+}
+
+/** Set one value. Resolves to the value the server actually stored. */
+export async function putConfigValue(key: string, value: unknown, signal?: AbortSignal): Promise<unknown> {
+  const response = await fetchConfigJSON<ConfigValueResponse>(`/api/config/${encodeURIComponent(key)}`, {
+    body: JSON.stringify({ value }),
+    headers: { "Content-Type": "application/json" },
+    method: "PUT",
+    signal,
+  });
+  return response?.value;
 }

@@ -364,6 +364,7 @@ describe("AppView validation tab", () => {
     expect(helpMap["6"]).toMatch(/validation/i);
     expect(helpMap["7"]).toMatch(/dashboards/i);
     expect(helpMap["8"]).toMatch(/cloud/i);
+    expect(helpMap["9"]).toMatch(/config/i);
     expect(helpMap["P"]).toMatch(/pause/i);
   });
 
@@ -377,6 +378,31 @@ describe("AppView validation tab", () => {
 
     expect(screen.getByRole("tab", { name: /cloud/i }).getAttribute("aria-selected")).toBe("true");
     await waitFor(() => expect(screen.getByRole("heading", { name: "Splunk Observability Cloud" })).toBeTruthy());
+  });
+
+  it("switches to the Config tab with the 9 shortcut", async () => {
+    window.history.replaceState({}, "", "/?tab=metrics");
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    fireEvent.keyDown(window, { key: "9" });
+
+    expect(screen.getByRole("tab", { name: "Config" }).getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Configuration" })).toBeTruthy());
+  });
+
+  it("opens the Config tab from the tab query parameter and hides the telemetry stream controls", async () => {
+    window.history.replaceState({}, "", "/?tab=config");
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    telemetry.state.error = "telemetry stream failed";
+    render(<AppView telemetry={telemetry} />);
+
+    expect(screen.getByRole("tab", { name: "Config" }).getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Configuration" })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /pause|resume/i })).toBeNull();
+    expect(screen.queryByText("telemetry stream failed")).toBeNull();
   });
 
   it("closes keyboard help without clearing the selected trace", async () => {
@@ -522,7 +548,7 @@ describe("AppView main tab keyboard navigation", () => {
 
   it("ArrowRight wraps focus from last tab back to first", () => {
     stubCloudStatusFetch();
-    window.history.replaceState({}, "", "/?tab=cloud");
+    window.history.replaceState({}, "", "/?tab=config");
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
@@ -543,9 +569,9 @@ describe("AppView main tab keyboard navigation", () => {
     const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "ArrowLeft" });
 
-    const cloudTab = screen.getByRole("tab", { name: /cloud/i });
-    expect(cloudTab.getAttribute("aria-selected")).toBe("true");
-    expect(document.activeElement).toBe(cloudTab);
+    const configTab = screen.getByRole("tab", { name: "Config" });
+    expect(configTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(configTab);
   });
 
   it("End key moves focus to the last tab", () => {
@@ -556,9 +582,9 @@ describe("AppView main tab keyboard navigation", () => {
     const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "End" });
 
-    const cloudTab = screen.getByRole("tab", { name: /cloud/i });
-    expect(cloudTab.getAttribute("aria-selected")).toBe("true");
-    expect(document.activeElement).toBe(cloudTab);
+    const configTab = screen.getByRole("tab", { name: "Config" });
+    expect(configTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(configTab);
   });
 
   it("Home key moves focus to the first tab from any position", () => {
