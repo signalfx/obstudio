@@ -74,6 +74,15 @@ export function parseDefinitions(document: unknown): ConfigSection[] | null {
   return sections;
 }
 
+/** One setting from a definitions document, by dotted key, or null when the document does not have it. */
+export function findSpec(document: unknown, key: string): ConfigKeySpec | null {
+  for (const section of parseDefinitions(document) ?? []) {
+    const spec = section.specs.find((candidate) => candidate.key === key);
+    if (spec !== undefined) return spec;
+  }
+  return null;
+}
+
 /** Discrete controls send at once; typed ones wait for the debounce. */
 export function editKind(spec: ConfigKeySpec): EditKind {
   return spec.type === "boolean" || hasChoices(spec) ? "immediate" : "debounced";

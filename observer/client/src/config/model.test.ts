@@ -5,6 +5,7 @@ import {
   displayLabel,
   editFields,
   editKind,
+  findSpec,
   parseDefinitions,
   parseText,
   toText,
@@ -75,6 +76,25 @@ describe("parseDefinitions", () => {
     for (const document of [null, [], "x", {}, { properties: [] }]) {
       expect(parseDefinitions(document)).toBeNull();
     }
+  });
+});
+
+describe("findSpec", () => {
+  const document = {
+    properties: {
+      display: { properties: { theme: { type: "string" } } },
+      telemetry: { properties: { enabled: { type: "boolean", title: "T", description: "D." } } },
+    },
+  };
+
+  it("finds a setting by its dotted key", () => {
+    expect(findSpec(document, "telemetry.enabled")).toEqual({ description: "D.", key: "telemetry.enabled", title: "T", type: "boolean" });
+  });
+
+  it("returns null for a missing key or a document of the wrong shape", () => {
+    expect(findSpec(document, "telemetry.missing")).toBeNull();
+    expect(findSpec({ properties: {} }, "telemetry.enabled")).toBeNull();
+    expect(findSpec("<!doctype html>", "telemetry.enabled")).toBeNull();
   });
 });
 

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { findSpec } from "../config/model";
 import { observerFetch } from "../host/transport";
 import type { FieldKind } from "./configEdits";
 import { saveErrorText, useConfigEdits } from "./useConfigEdits";
@@ -12,22 +13,12 @@ interface Wording {
   description: string;
 }
 
-function child(node: unknown, key: string): unknown {
-  return node !== null && typeof node === "object" ? (node as Record<string, unknown>)[key] : undefined;
-}
-
-function nonEmpty(value: unknown): value is string {
-  return typeof value === "string" && value !== "";
-}
-
-function wordingFrom(body: unknown): Wording | null {
-  const section = child(child(body, "properties"), "telemetry");
-  const setting = child(child(section, "properties"), "enabled");
-  const heading = child(section, "title");
-  const title = child(setting, "title");
-  const description = child(setting, "description");
-  if (!nonEmpty(heading) || !nonEmpty(title) || !nonEmpty(description)) return null;
-  return { heading, title, description };
+/** The served title of the section holding the setting at path, or "" when it has none. */
+function sectionTitle(document: unknown, path: string): string {
+  const child = (node: unknown, key: string): unknown =>
+    node !== null && typeof node === "object" ? (node as Record<string, unknown>)[key] : undefined;
+  const title = child(child(child(document, "properties"), path.split(".")[0]), "title");
+  return typeof title === "string" ? title : "";
 }
 
 /**
@@ -54,14 +45,17 @@ export function UsageDataSetting(): React.ReactElement {
     if (load.have || load.inFlight) return;
     load.inFlight = true;
     observerFetch("/api/config/definitions")
-      .then(async (response) => (response.ok ? wordingFrom(await response.json()) : null))
+      .then(async (response) => (response.ok ? response.json() : null))
       .catch(() => null)
-      .then((loaded) => {
+      .then((document: unknown) => {
         load.inFlight = false;
         if (!load.mounted) return;
-        if (loaded) {
+        const spec = findSpec(document, usageDataPath);
+        const heading = sectionTitle(document, usageDataPath);
+        // All three texts come from the server; without them there is no switch.
+        if (heading && spec?.title && spec.description) {
           load.have = true;
-          setWording(loaded);
+          setWording({ description: spec.description, heading, title: spec.title });
           setWordingFailed(false);
         } else {
           setWordingFailed(true);

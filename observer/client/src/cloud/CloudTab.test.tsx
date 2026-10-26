@@ -3012,7 +3012,7 @@ describe("CloudTab", () => {
         if (path === "/api/config/definitions") {
           return jsonResponse({
             type: "object",
-            properties: { telemetry: { type: "object", title: "Fixture section", properties: { enabled: { title: "Fixture title", description: "Fixture description." } } } },
+            properties: { telemetry: { type: "object", title: "Fixture section", properties: { enabled: { type: "boolean", title: "Fixture title", description: "Fixture description." } } } },
           });
         }
         if (path === "/api/config") return jsonResponse({ telemetry: { enabled: true } });
