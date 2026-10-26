@@ -80,7 +80,7 @@ describe("UsageDataSetting", () => {
   beforeEach(() => transport.fetch.mockReset());
   afterEach(() => cleanup());
 
-  it("takes its heading, label and helper text from the served definitions", async () => {
+  it("takes its heading, title and description from the served definitions", async () => {
     serve((path) => (path === "/api/config/definitions" ? json(200, DEF) : value(true)));
     render(<UsageDataSetting />);
     await screen.findByRole("switch", { name: "Fixture title" });

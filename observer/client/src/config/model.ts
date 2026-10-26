@@ -1,39 +1,62 @@
-import type { FieldKind as EditKind, FieldValue } from "../cloud/configEdits";
+import type { FieldKind, FieldValue } from "../cloud/configEdits";
 
-/** A JSON Schema type the tab has a control for. */
-export type FieldKind = "boolean" | "integer" | "string";
+/** A setting's value type, as the definitions document names it in `type`. */
+export type ValueType = "boolean" | "integer" | "string";
 
-/** One setting, read from GET /api/config/definitions. */
-export interface ConfigKeySpec {
-  /** Dotted path, such as telemetry.enabled. */
-  key: string;
-  type: FieldKind;
-  title?: string;
-  description?: string;
+/** Whether a change takes effect while the observer runs or after a restart. */
+export type Apply = "live" | "restart";
+
+/** One definition, as GET /api/config/definitions serves it. */
+export interface DefinitionNode {
+  type: ValueType;
+  title: string;
+  description: string;
+  default: FieldValue;
   enum?: FieldValue[];
   minimum?: number;
   maximum?: number;
-  /** x-obstudio-apply: whether a change applies live or after a restart. */
-  apply?: "live" | "restart";
+  "x-obstudio-failSafe": FieldValue;
+  "x-obstudio-apply": Apply;
+}
+
+/** One section: its properties are its definitions, by name. */
+export interface SectionNode {
+  type: "object";
+  properties: Record<string, DefinitionNode>;
+}
+
+/** The GET /api/config/definitions document: its properties are the sections, by name. */
+export interface DefinitionsDocument {
+  type: "object";
+  properties: Record<string, SectionNode>;
+}
+
+/** One setting, with the served field names and its dotted path. */
+export interface ConfigDefinition extends Partial<Pick<DefinitionNode, "title" | "description" | "default" | "enum" | "minimum" | "maximum">> {
+  /** `<section>.<name>`, such as telemetry.enabled. */
+  path: string;
+  type: ValueType;
+  apply?: Apply;
 }
 
 export interface ConfigSection {
-  id: string;
+  name: string;
   title: string;
-  specs: ConfigKeySpec[];
+  definitions: ConfigDefinition[];
 }
 
 export type ParseResult =
   | { ok: true; value: FieldValue }
   | { ok: false; error: string };
 
-type Node = Record<string, unknown>;
+/** A served shape whose values have not been checked yet. */
+type Unchecked<T> = { [K in keyof T]?: unknown };
 
-function isNode(value: unknown): value is Node {
+function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function isFieldKind(value: unknown): value is FieldKind {
+function isValueType(value: unknown): value is ValueType {
   return value === "boolean" || value === "integer" || value === "string";
 }
 
@@ -41,75 +64,82 @@ function isFieldValue(value: unknown): value is FieldValue {
   return typeof value === "boolean" || typeof value === "number" || typeof value === "string";
 }
 
-function readSpec(key: string, node: Node): ConfigKeySpec | null {
-  if (!isFieldKind(node.type)) return null;
-  const spec: ConfigKeySpec = { key, type: node.type };
-  if (typeof node.title === "string") spec.title = node.title;
-  if (typeof node.description === "string") spec.description = node.description;
-  if (Array.isArray(node.enum) && node.enum.every(isFieldValue)) spec.enum = node.enum;
-  if (typeof node.minimum === "number") spec.minimum = node.minimum;
-  if (typeof node.maximum === "number") spec.maximum = node.maximum;
-  if (node["x-obstudio-apply"] === "live" || node["x-obstudio-apply"] === "restart") spec.apply = node["x-obstudio-apply"];
-  return spec;
+function readDefinition(path: string, node: Unchecked<DefinitionNode>): ConfigDefinition | null {
+  if (!isValueType(node.type)) return null;
+  const definition: ConfigDefinition = { path, type: node.type };
+  if (typeof node.title === "string") definition.title = node.title;
+  if (typeof node.description === "string") definition.description = node.description;
+  if (isFieldValue(node.default)) definition.default = node.default;
+  if (Array.isArray(node.enum) && node.enum.every(isFieldValue)) definition.enum = node.enum;
+  if (typeof node.minimum === "number") definition.minimum = node.minimum;
+  if (typeof node.maximum === "number") definition.maximum = node.maximum;
+  // The one renamed field: x-obstudio-apply is read into apply here and nowhere else.
+  const apply = node["x-obstudio-apply"];
+  if (apply === "live" || apply === "restart") definition.apply = apply;
+  return definition;
 }
 
 /**
  * Read the definitions document into sections, in the order the server lists
- * them. Each top-level property is a section and each of its properties is a
- * setting. Settings of a type the tab has no control for are left out.
- * Returns null when the document does not have that shape.
+ * them. Settings of a type the tab has no control for are left out. Returns
+ * null when the document does not have the served shape.
  */
 export function parseDefinitions(document: unknown): ConfigSection[] | null {
-  if (!isNode(document) || !isNode(document.properties)) return null;
+  if (!isObject(document)) return null;
+  const root: Unchecked<DefinitionsDocument> = document;
+  if (!isObject(root.properties)) return null;
   const sections: ConfigSection[] = [];
-  for (const [name, section] of Object.entries(document.properties)) {
-    if (!isNode(section) || !isNode(section.properties)) continue;
-    const specs: ConfigKeySpec[] = [];
-    for (const [leaf, node] of Object.entries(section.properties)) {
-      const spec = isNode(node) ? readSpec(`${name}.${leaf}`, node) : null;
-      if (spec !== null) specs.push(spec);
+  for (const [name, section] of Object.entries(root.properties)) {
+    if (!isObject(section)) continue;
+    const node: Unchecked<SectionNode> = section;
+    if (!isObject(node.properties)) continue;
+    const definitions: ConfigDefinition[] = [];
+    for (const [leaf, definitionNode] of Object.entries(node.properties)) {
+      const definition = isObject(definitionNode) ? readDefinition(`${name}.${leaf}`, definitionNode) : null;
+      if (definition !== null) definitions.push(definition);
     }
-    if (specs.length > 0) sections.push({ id: name, specs, title: name });
+    // TODO: use the section's own title once the definitions document serves one. Until then the heading is the section name.
+    if (definitions.length > 0) sections.push({ definitions, name, title: name });
   }
   return sections;
 }
 
-/** One setting from a definitions document, by dotted key, or null when the document does not have it. */
-export function findSpec(document: unknown, key: string): ConfigKeySpec | null {
+/** One setting from a definitions document, by dotted path, or null when the document does not have it. */
+export function findDefinition(document: unknown, path: string): ConfigDefinition | null {
   for (const section of parseDefinitions(document) ?? []) {
-    const spec = section.specs.find((candidate) => candidate.key === key);
-    if (spec !== undefined) return spec;
+    const definition = section.definitions.find((candidate) => candidate.path === path);
+    if (definition !== undefined) return definition;
   }
   return null;
 }
 
 /** Discrete controls send at once; typed ones wait for the debounce. */
-export function editKind(spec: ConfigKeySpec): EditKind {
-  return spec.type === "boolean" || hasChoices(spec) ? "immediate" : "debounced";
+export function fieldKind(definition: ConfigDefinition): FieldKind {
+  return definition.type === "boolean" || hasChoices(definition) ? "immediate" : "debounced";
 }
 
-export function hasChoices(spec: ConfigKeySpec): boolean {
-  return spec.type !== "boolean" && spec.enum !== undefined && spec.enum.length > 0;
+export function hasChoices(definition: ConfigDefinition): boolean {
+  return definition.type !== "boolean" && definition.enum !== undefined && definition.enum.length > 0;
 }
 
 /** The configEdits fields for every setting in the sections. */
-export function editFields(sections: readonly ConfigSection[]): Record<string, EditKind> {
-  const fields: Record<string, EditKind> = {};
+export function editFields(sections: readonly ConfigSection[]): Record<string, FieldKind> {
+  const fields: Record<string, FieldKind> = {};
   for (const section of sections) {
-    for (const spec of section.specs) fields[spec.key] = editKind(spec);
+    for (const definition of section.definitions) fields[definition.path] = fieldKind(definition);
   }
   return fields;
 }
 
-/** The server's title for the key, or the exact key when it has none. */
-export function displayLabel(spec: ConfigKeySpec): string {
-  const label = spec.title?.trim();
-  return label !== undefined && label !== "" ? label : spec.key;
+/** The server's title for the setting, or the exact path when it has none. */
+export function displayTitle(definition: ConfigDefinition): string {
+  const title = definition.title?.trim();
+  return title !== undefined && title !== "" ? title : definition.path;
 }
 
-/** The server's description for the key, if it has one. */
-export function displayDescription(spec: ConfigKeySpec): string | null {
-  const description = spec.description?.trim();
+/** The server's description for the setting, if it has one. */
+export function displayDescription(definition: ConfigDefinition): string | null {
+  const description = definition.description?.trim();
   return description !== undefined && description !== "" ? description : null;
 }
 
@@ -122,8 +152,8 @@ function describeAllowed(values: readonly FieldValue[]): string {
   return `Must be one of: ${values.join(", ")}`;
 }
 
-function rangeError(spec: ConfigKeySpec, value: number): string | null {
-  const { minimum, maximum } = spec;
+function rangeError(definition: ConfigDefinition, value: number): string | null {
+  const { minimum, maximum } = definition;
   if (minimum !== undefined && maximum !== undefined && (value < minimum || value > maximum)) {
     return `Must be a whole number between ${minimum} and ${maximum}`;
   }
@@ -133,15 +163,15 @@ function rangeError(spec: ConfigKeySpec, value: number): string | null {
 }
 
 /** Check typed or chosen text against the definition before sending it. The server stays authoritative. */
-export function parseText(spec: ConfigKeySpec, text: string): ParseResult {
-  const allowed = hasChoices(spec) ? spec.enum ?? null : null;
-  switch (spec.type) {
+export function parseText(definition: ConfigDefinition, text: string): ParseResult {
+  const allowed = hasChoices(definition) ? definition.enum ?? null : null;
+  switch (definition.type) {
     case "integer": {
       const trimmed = text.trim();
       if (!/^[+-]?\d+$/.test(trimmed)) return { ok: false, error: "Enter a whole number" };
       const value = Number(trimmed);
       if (!Number.isSafeInteger(value)) return { ok: false, error: "Enter a smaller whole number" };
-      const outOfRange = rangeError(spec, value);
+      const outOfRange = rangeError(definition, value);
       if (outOfRange !== null) return { ok: false, error: outOfRange };
       if (allowed !== null && !allowed.includes(value)) return { ok: false, error: describeAllowed(allowed) };
       return { ok: true, value };

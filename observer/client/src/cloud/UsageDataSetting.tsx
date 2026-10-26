@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Switch } from "../components/Switch";
-import { findSpec } from "../config/model";
+import { findDefinition } from "../config/model";
 import { observerFetch } from "../host/transport";
 import type { FieldKind } from "./configEdits";
 import { saveErrorText, useConfigEdits } from "./useConfigEdits";
@@ -23,8 +23,8 @@ function sectionTitle(document: unknown, path: string): string {
 }
 
 /**
- * The switch for sending anonymous usage data. Its heading, label and helper
- * text come from the observer's config definitions, and its value is always the
+ * The switch for sending anonymous usage data. Its heading, title and
+ * description come from the observer's config definitions, and its value is always the
  * observer's: a change applies at once and the switch shows the result.
  */
 export function UsageDataSetting(): React.ReactElement {
@@ -51,12 +51,12 @@ export function UsageDataSetting(): React.ReactElement {
       .then((document: unknown) => {
         load.inFlight = false;
         if (!load.mounted) return;
-        const spec = findSpec(document, usageDataPath);
+        const definition = findDefinition(document, usageDataPath);
         const heading = sectionTitle(document, usageDataPath);
         // All three texts come from the server; without them there is no switch.
-        if (heading && spec?.title && spec.description) {
+        if (heading && definition?.title && definition.description) {
           load.have = true;
-          setWording({ description: spec.description, heading, title: spec.title });
+          setWording({ description: definition.description, heading, title: definition.title });
           setWordingFailed(false);
         } else {
           setWordingFailed(true);
@@ -75,10 +75,10 @@ export function UsageDataSetting(): React.ReactElement {
       {ready && wording && state ? (
         <>
           <div className="cloud-usage-data__switch">
-            <label htmlFor="cloud-usage-data-switch" id="cloud-usage-data-label">{wording.title}</label>
+            <label htmlFor="cloud-usage-data-switch" id="cloud-usage-data-setting-title">{wording.title}</label>
             <Switch
               aria-describedby="cloud-usage-data-description"
-              aria-labelledby="cloud-usage-data-label"
+              aria-labelledby="cloud-usage-data-setting-title"
               busy={state.inFlight.has(usageDataPath)}
               checked={state.values[usageDataPath] === true}
               id="cloud-usage-data-switch"

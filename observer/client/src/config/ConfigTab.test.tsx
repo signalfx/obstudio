@@ -81,8 +81,8 @@ function respond(status: number, body: unknown): FakeResponse {
 
 function nest(values: Record<string, unknown>): Doc {
   const root: Doc = {};
-  for (const [key, value] of Object.entries(values)) {
-    const [section, leaf] = key.split(".");
+  for (const [path, value] of Object.entries(values)) {
+    const [section, leaf] = path.split(".");
     root[section] = { ...(root[section] as Doc | undefined), [leaf]: value };
   }
   return root;
@@ -174,7 +174,7 @@ describe("ConfigTab rendering", () => {
 
     await screen.findByRole("switch", { name: "Enable sample" });
     expect(screen.getByRole("tabpanel", { name: "Config" })).toBeTruthy();
-    // Sections and keys keep the server's order.
+    // Sections and definitions keep the server's order.
     expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["sample", "other"]);
     expect(screen.getByRole("switch", { name: "Enable sample" }).getAttribute("aria-checked")).toBe("false");
     expect((screen.getByRole("textbox", { name: "Name" }) as HTMLInputElement).value).toBe("alpha");
@@ -194,7 +194,7 @@ describe("ConfigTab rendering", () => {
     ]);
   });
 
-  it("shows the key beside the server's title and the allowed range, tied to the control", async () => {
+  it("shows the path beside the server's title and the allowed range, tied to the control", async () => {
     installServer();
     await renderLoaded();
     expect(within(fieldOf("Count")).getByText("sample.count")).toBeTruthy();
@@ -214,7 +214,7 @@ describe("ConfigTab rendering", () => {
     expect(within(fieldOf("Enable sample")).queryByText("Takes effect after a restart.")).toBeNull();
   });
 
-  it("falls back to the exact key, case and all, when the server sends no title", async () => {
+  it("falls back to the exact path, case and all, when the server sends no title", async () => {
     installServer(
       { properties: { sample: { properties: { flagStatus: { type: "string" }, "retry_Count-2": { type: "boolean", title: "  " } } } } },
       { "sample.flagStatus": "on", "sample.retry_Count-2": false },
@@ -223,7 +223,7 @@ describe("ConfigTab rendering", () => {
 
     expect(await screen.findByRole("textbox", { name: "sample.flagStatus" })).toBeTruthy();
     expect(screen.getByRole("switch", { name: "sample.retry_Count-2" })).toBeTruthy();
-    // The key is already the label, so it is not repeated in a second line.
+    // The path is already the title, so it is not repeated in a second line.
     expect(screen.getAllByText("sample.flagStatus")).toHaveLength(1);
     expect(fieldOf("sample.flagStatus").querySelector(".config-field__key")).toBeNull();
   });

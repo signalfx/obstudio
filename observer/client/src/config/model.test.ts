@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
-  type ConfigKeySpec,
+  type ConfigDefinition,
   displayDescription,
-  displayLabel,
+  displayTitle,
   editFields,
-  editKind,
-  findSpec,
+  fieldKind,
+  findDefinition,
   parseDefinitions,
   parseText,
   toText,
 } from "./model";
 
-const count: ConfigKeySpec = { key: "sample.count", type: "integer", minimum: 10, maximum: 500 };
+const count: ConfigDefinition = { path: "sample.count", type: "integer", minimum: 10, maximum: 500 };
 
 describe("parseDefinitions", () => {
   it("reads the served v1 document into one section with one switch", () => {
@@ -34,29 +34,30 @@ describe("parseDefinitions", () => {
       },
     });
     expect(sections).toEqual([{
-      id: "telemetry",
-      specs: [{
+      definitions: [{
         apply: "live",
+        default: true,
         description: "Sends anonymous usage counts.",
-        key: "telemetry.enabled",
+        path: "telemetry.enabled",
         title: "Send anonymous usage data",
         type: "boolean",
       }],
+      name: "telemetry",
       title: "telemetry",
     }]);
   });
 
-  it("keeps the server's order of sections and keys, and reads enum and range", () => {
+  it("keeps the server's order of sections and definitions, and reads enum and range", () => {
     const sections = parseDefinitions({
       properties: {
         display: { properties: { theme: { type: "string", enum: ["dark", "light"] }, size: { type: "integer", minimum: 1, maximum: 9 } } },
         output: { properties: { format: { type: "string" } } },
       },
     });
-    expect(sections?.map((section) => section.id)).toEqual(["display", "output"]);
-    expect(sections?.[0].specs).toEqual([
-      { enum: ["dark", "light"], key: "display.theme", type: "string" },
-      { key: "display.size", maximum: 9, minimum: 1, type: "integer" },
+    expect(sections?.map((section) => section.name)).toEqual(["display", "output"]);
+    expect(sections?.[0].definitions).toEqual([
+      { enum: ["dark", "light"], path: "display.theme", type: "string" },
+      { maximum: 9, minimum: 1, path: "display.size", type: "integer" },
     ]);
   });
 
@@ -68,7 +69,7 @@ describe("parseDefinitions", () => {
         c: "not a section",
       },
     });
-    expect(sections).toEqual([{ id: "a", specs: [{ key: "a.on", type: "boolean" }], title: "a" }]);
+    expect(sections).toEqual([{ definitions: [{ path: "a.on", type: "boolean" }], name: "a", title: "a" }]);
   });
 
   it("returns no sections for an empty document, and null for one of the wrong shape", () => {
@@ -79,7 +80,7 @@ describe("parseDefinitions", () => {
   });
 });
 
-describe("findSpec", () => {
+describe("findDefinition", () => {
   const document = {
     properties: {
       display: { properties: { theme: { type: "string" } } },
@@ -87,50 +88,50 @@ describe("findSpec", () => {
     },
   };
 
-  it("finds a setting by its dotted key", () => {
-    expect(findSpec(document, "telemetry.enabled")).toEqual({ description: "D.", key: "telemetry.enabled", title: "T", type: "boolean" });
+  it("finds a setting by its dotted path", () => {
+    expect(findDefinition(document, "telemetry.enabled")).toEqual({ description: "D.", path: "telemetry.enabled", title: "T", type: "boolean" });
   });
 
-  it("returns null for a missing key or a document of the wrong shape", () => {
-    expect(findSpec(document, "telemetry.missing")).toBeNull();
-    expect(findSpec({ properties: {} }, "telemetry.enabled")).toBeNull();
-    expect(findSpec("<!doctype html>", "telemetry.enabled")).toBeNull();
+  it("returns null for a missing path or a document of the wrong shape", () => {
+    expect(findDefinition(document, "telemetry.missing")).toBeNull();
+    expect(findDefinition({ properties: {} }, "telemetry.enabled")).toBeNull();
+    expect(findDefinition("<!doctype html>", "telemetry.enabled")).toBeNull();
   });
 });
 
-describe("editKind and editFields", () => {
+describe("fieldKind and editFields", () => {
   it("sends switches and choices at once and debounces typed fields", () => {
-    expect(editKind({ key: "a.b", type: "boolean" })).toBe("immediate");
-    expect(editKind({ key: "a.b", type: "string", enum: ["x", "y"] })).toBe("immediate");
-    expect(editKind({ key: "a.b", type: "integer", enum: [1, 2] })).toBe("immediate");
-    expect(editKind({ key: "a.b", type: "string" })).toBe("debounced");
-    expect(editKind({ key: "a.b", type: "string", enum: [] })).toBe("debounced");
-    expect(editKind(count)).toBe("debounced");
+    expect(fieldKind({ path: "a.b", type: "boolean" })).toBe("immediate");
+    expect(fieldKind({ path: "a.b", type: "string", enum: ["x", "y"] })).toBe("immediate");
+    expect(fieldKind({ path: "a.b", type: "integer", enum: [1, 2] })).toBe("immediate");
+    expect(fieldKind({ path: "a.b", type: "string" })).toBe("debounced");
+    expect(fieldKind({ path: "a.b", type: "string", enum: [] })).toBe("debounced");
+    expect(fieldKind(count)).toBe("debounced");
   });
 
   it("covers every setting in every section", () => {
     expect(editFields([
-      { id: "a", specs: [{ key: "a.on", type: "boolean" }, { key: "a.name", type: "string" }], title: "a" },
-      { id: "b", specs: [count], title: "b" },
+      { definitions: [{ path: "a.on", type: "boolean" }, { path: "a.name", type: "string" }], name: "a", title: "a" },
+      { definitions: [count], name: "b", title: "b" },
     ])).toEqual({ "a.name": "debounced", "a.on": "immediate", "sample.count": "debounced" });
   });
 });
 
-describe("displayLabel and displayDescription", () => {
+describe("displayTitle and displayDescription", () => {
   it("prefers the server's title and trims it", () => {
-    expect(displayLabel({ key: "sample.enabled", type: "boolean", title: "  Enable sample " })).toBe("Enable sample");
+    expect(displayTitle({ path: "sample.enabled", type: "boolean", title: "  Enable sample " })).toBe("Enable sample");
   });
 
-  it("falls back to the exact key, case and all, when the server sent no title or a blank one", () => {
-    expect(displayLabel({ key: "sample.flagStatus", type: "boolean" })).toBe("sample.flagStatus");
-    expect(displayLabel({ key: "sample.flagStatus", type: "boolean", title: "" })).toBe("sample.flagStatus");
-    expect(displayLabel({ key: "sample.flagStatus", type: "boolean", title: "  " })).toBe("sample.flagStatus");
+  it("falls back to the exact path, case and all, when the server sent no title or a blank one", () => {
+    expect(displayTitle({ path: "sample.flagStatus", type: "boolean" })).toBe("sample.flagStatus");
+    expect(displayTitle({ path: "sample.flagStatus", type: "boolean", title: "" })).toBe("sample.flagStatus");
+    expect(displayTitle({ path: "sample.flagStatus", type: "boolean", title: "  " })).toBe("sample.flagStatus");
   });
 
   it("returns the trimmed description, or null when there is none", () => {
-    expect(displayDescription({ key: "a.b", type: "string", description: " Does a thing. " })).toBe("Does a thing.");
-    expect(displayDescription({ key: "a.b", type: "string" })).toBeNull();
-    expect(displayDescription({ key: "a.b", type: "string", description: "  " })).toBeNull();
+    expect(displayDescription({ path: "a.b", type: "string", description: " Does a thing. " })).toBe("Does a thing.");
+    expect(displayDescription({ path: "a.b", type: "string" })).toBeNull();
+    expect(displayDescription({ path: "a.b", type: "string", description: "  " })).toBeNull();
   });
 });
 
@@ -146,8 +147,8 @@ describe("toText", () => {
 describe("parseText", () => {
   it("parses whole numbers, tolerating whitespace and a sign", () => {
     expect(parseText(count, " 200 ")).toEqual({ ok: true, value: 200 });
-    expect(parseText({ key: "a.b", type: "integer" }, "+7")).toEqual({ ok: true, value: 7 });
-    expect(parseText({ key: "a.b", type: "integer" }, "-3")).toEqual({ ok: true, value: -3 });
+    expect(parseText({ path: "a.b", type: "integer" }, "+7")).toEqual({ ok: true, value: 7 });
+    expect(parseText({ path: "a.b", type: "integer" }, "-3")).toEqual({ ok: true, value: -3 });
   });
 
   it("rejects non-integers", () => {
@@ -157,7 +158,7 @@ describe("parseText", () => {
   });
 
   it("rejects integers beyond the safe range", () => {
-    expect(parseText({ key: "a.b", type: "integer" }, "99999999999999999999")).toEqual({
+    expect(parseText({ path: "a.b", type: "integer" }, "99999999999999999999")).toEqual({
       ok: false,
       error: "Enter a smaller whole number",
     });
@@ -168,20 +169,20 @@ describe("parseText", () => {
     expect(parseText(count, "900")).toEqual({ ok: false, error: "Must be a whole number between 10 and 500" });
     expect(parseText(count, "10")).toEqual({ ok: true, value: 10 });
     expect(parseText(count, "500")).toEqual({ ok: true, value: 500 });
-    expect(parseText({ key: "a.b", type: "integer", minimum: 5 }, "4")).toEqual({ ok: false, error: "Must be at least 5" });
-    expect(parseText({ key: "a.b", type: "integer", maximum: 5 }, "6")).toEqual({ ok: false, error: "Must be at most 5" });
+    expect(parseText({ path: "a.b", type: "integer", minimum: 5 }, "4")).toEqual({ ok: false, error: "Must be at least 5" });
+    expect(parseText({ path: "a.b", type: "integer", maximum: 5 }, "6")).toEqual({ ok: false, error: "Must be at most 5" });
   });
 
   it("checks allowed values for strings and integers", () => {
-    const level: ConfigKeySpec = { key: "a.b", type: "string", enum: ["debug", "info"] };
+    const level: ConfigDefinition = { path: "a.b", type: "string", enum: ["debug", "info"] };
     expect(parseText(level, "info")).toEqual({ ok: true, value: "info" });
     expect(parseText(level, "loud")).toEqual({ ok: false, error: "Must be one of: debug, info" });
-    const size: ConfigKeySpec = { key: "a.b", type: "integer", enum: [10, 20] };
+    const size: ConfigDefinition = { path: "a.b", type: "integer", enum: [10, 20] };
     expect(parseText(size, "20")).toEqual({ ok: true, value: 20 });
     expect(parseText(size, "15")).toEqual({ ok: false, error: "Must be one of: 10, 20" });
   });
 
   it("accepts any string, including empty, when no allowed values apply", () => {
-    expect(parseText({ key: "a.b", type: "string" }, "")).toEqual({ ok: true, value: "" });
+    expect(parseText({ path: "a.b", type: "string" }, "")).toEqual({ ok: true, value: "" });
   });
 });

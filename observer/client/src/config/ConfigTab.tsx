@@ -5,10 +5,10 @@ import type { ConfigEditsState, FieldValue } from "../cloud/configEdits";
 import { saveErrorText, type SendOutcome, useConfigEdits } from "../cloud/useConfigEdits";
 import { observerFetch } from "../host/transport";
 import {
-  type ConfigKeySpec,
+  type ConfigDefinition,
   type ConfigSection,
   displayDescription,
-  displayLabel,
+  displayTitle,
   editFields,
   hasChoices,
   parseDefinitions,
@@ -75,17 +75,17 @@ export function ConfigTab(): React.ReactElement {
         ) : null}
 
         {ready ? sections.map((section) => (
-          <section aria-labelledby={`config-section-${section.id}`} className="config-section" key={section.id}>
-            <h3 className="config-section__title" id={`config-section-${section.id}`}>{section.title}</h3>
-            {section.specs.map((spec) => (
+          <section aria-labelledby={`config-section-${section.name}`} className="config-section" key={section.name}>
+            <h3 className="config-section__title" id={`config-section-${section.name}`}>{section.title}</h3>
+            {section.definitions.map((definition) => (
               <ConfigField
-                error={outcomes[spec.key]?.ok === false ? state.error : null}
-                inFlight={state.inFlight.has(spec.key)}
-                key={spec.key}
+                definition={definition}
+                error={outcomes[definition.path]?.ok === false ? state.error : null}
+                inFlight={state.inFlight.has(definition.path)}
+                key={definition.path}
                 onEdit={edit}
-                outcome={outcomes[spec.key]}
-                spec={spec}
-                value={state.values[spec.key]}
+                outcome={outcomes[definition.path]}
+                value={state.values[definition.path]}
               />
             ))}
           </section>
@@ -96,7 +96,7 @@ export function ConfigTab(): React.ReactElement {
 }
 
 interface ConfigFieldProps {
-  spec: ConfigKeySpec;
+  definition: ConfigDefinition;
   /** What configEdits says the field displays. */
   value: FieldValue | undefined;
   inFlight: boolean;
@@ -106,8 +106,8 @@ interface ConfigFieldProps {
   onEdit: (path: string, value: FieldValue) => void;
 }
 
-function rangeHint(spec: ConfigKeySpec): string | null {
-  const { minimum, maximum } = spec;
+function rangeHint(definition: ConfigDefinition): string | null {
+  const { minimum, maximum } = definition;
   if (minimum !== undefined && maximum !== undefined) return `Whole number from ${minimum} to ${maximum}`;
   if (minimum !== undefined) return `Whole number, at least ${minimum}`;
   if (maximum !== undefined) return `Whole number, at most ${maximum}`;
@@ -129,7 +129,7 @@ function useSavedIndicator(outcome: SendOutcome | undefined): boolean {
   return shownFor !== null && shownFor === outcome?.seq;
 }
 
-function ConfigField({ spec, value, inFlight, outcome, error, onEdit }: ConfigFieldProps): React.ReactElement {
+function ConfigField({ definition, value, inFlight, outcome, error, onEdit }: ConfigFieldProps): React.ReactElement {
   // Text the user typed. Kept while it does not parse, or while it still
   // matches the displayed value; dropped when the server's value replaces it.
   const [draft, setDraft] = useState<{ text: string; error: string | null } | null>(null);
@@ -138,22 +138,22 @@ function ConfigField({ spec, value, inFlight, outcome, error, onEdit }: ConfigFi
   useEffect(() => {
     setDraft((current) => {
       if (current === null || current.error !== null) return current;
-      const parsed = parseText(spec, current.text);
+      const parsed = parseText(definition, current.text);
       return parsed.ok && parsed.value === value ? current : null;
     });
-  }, [spec, value]);
+  }, [definition, value]);
 
-  const id = `config-field-${spec.key.replace(/[^A-Za-z0-9_-]/g, "-")}`;
-  const labelId = `${id}-label`;
+  const id = `config-field-${definition.path.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+  const titleId = `${id}-title`;
   const descriptionId = `${id}-description`;
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
-  const label = displayLabel(spec);
-  const description = displayDescription(spec);
-  const choices = hasChoices(spec) ? (spec.enum ?? []).map(String) : null;
+  const title = displayTitle(definition);
+  const description = displayDescription(definition);
+  const choices = hasChoices(definition) ? (definition.enum ?? []).map(String) : null;
   const hints = [
-    spec.type === "integer" && choices === null ? rangeHint(spec) : null,
-    spec.apply === "restart" ? "Takes effect after a restart." : null,
+    definition.type === "integer" && choices === null ? rangeHint(definition) : null,
+    definition.apply === "restart" ? "Takes effect after a restart." : null,
   ].filter((hint): hint is string => hint !== null);
   const hint = hints.length > 0 ? hints.join(" ") : null;
   const errorText = draft?.error ?? (error ? saveErrorText(error) : null);
@@ -168,15 +168,15 @@ function ConfigField({ spec, value, inFlight, outcome, error, onEdit }: ConfigFi
   const statusText = status === "saving" ? "Saving…" : status === "saved" ? "Saved" : "";
 
   let control: React.ReactElement;
-  if (spec.type === "boolean") {
+  if (definition.type === "boolean") {
     control = (
       <Switch
         aria-describedby={describedBy}
-        aria-labelledby={labelId}
+        aria-labelledby={titleId}
         busy={inFlight}
         checked={value === true}
         id={id}
-        onToggle={(next) => onEdit(spec.key, next)}
+        onToggle={(next) => onEdit(definition.path, next)}
       />
     );
   } else if (choices !== null) {
@@ -189,8 +189,8 @@ function ConfigField({ spec, value, inFlight, outcome, error, onEdit }: ConfigFi
         className="config-select"
         id={id}
         onChange={(event) => {
-          const parsed = parseText(spec, event.target.value);
-          if (parsed.ok && !inFlight) onEdit(spec.key, parsed.value);
+          const parsed = parseText(definition, event.target.value);
+          if (parsed.ok && !inFlight) onEdit(definition.path, parsed.value);
         }}
         value={text}
       >
@@ -206,12 +206,12 @@ function ConfigField({ spec, value, inFlight, outcome, error, onEdit }: ConfigFi
         autoComplete="off"
         className="config-input"
         id={id}
-        inputMode={spec.type === "integer" ? "numeric" : undefined}
+        inputMode={definition.type === "integer" ? "numeric" : undefined}
         onChange={(event) => {
           const text = event.target.value;
-          const parsed = parseText(spec, text);
+          const parsed = parseText(definition, text);
           setDraft({ error: parsed.ok ? null : parsed.error, text });
-          if (parsed.ok) onEdit(spec.key, parsed.value);
+          if (parsed.ok) onEdit(definition.path, parsed.value);
         }}
         spellCheck={false}
         type="text"
@@ -223,9 +223,9 @@ function ConfigField({ spec, value, inFlight, outcome, error, onEdit }: ConfigFi
   return (
     <div className="config-field" data-status={status}>
       <div className="config-field__text">
-        <label className="config-field__label" htmlFor={id} id={labelId}>{label}</label>
+        <label className="config-field__label" htmlFor={id} id={titleId}>{title}</label>
         {description !== null ? <p className="config-field__description" id={descriptionId}>{description}</p> : null}
-        {label !== spec.key ? <code className="config-field__key">{spec.key}</code> : null}
+        {title !== definition.path ? <code className="config-field__key">{definition.path}</code> : null}
         {hint !== null ? <p className="config-field__hint" id={hintId}>{hint}</p> : null}
       </div>
       <div className="config-field__control">
