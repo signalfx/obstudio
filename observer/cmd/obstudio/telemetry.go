@@ -158,7 +158,7 @@ func newTelemetryStatusCommand() *cobra.Command {
 }
 
 func telemetryReason(d userconfig.Diagnostic) string {
-	const tail = ", so telemetry.enabled is treated as false."
+	tail := fmt.Sprintf(", so %s is treated as %t.", userconfig.TelemetryEnabled.Path(), userconfig.FailSafeSettings().Telemetry.Enabled)
 	if d.Kind == userconfig.DiagAbsent {
 		return d.Key + " is not set" + tail
 	}
