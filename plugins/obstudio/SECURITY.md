@@ -100,10 +100,11 @@ the one-time release download from GitHub described below.
   `runtimePinFallback` in its state. Pinning the checksum inside the plugin
   itself, so it no longer comes from the same origin as the archive, is tracked
   in BORN-286.
-- OpenTelemetry Java agent (documentation only). `java.md` shows a command for
-  the user's build or setup step. It pins version 2.33.1 from Maven Central and
-  verifies a SHA-256 stored in the plugin before use. The plugin itself never
-  runs this command.
+- OpenTelemetry Java agent (documentation only). `java.md` shows a template for
+  the user's build or setup step. It requires an explicit pinned version from
+  Maven Central and a SHA-256 the user records for that version, checked before
+  the JVM loads the jar, and it forbids `latest` URLs. The plugin ships no
+  version or hash of its own and never runs this command.
 - No other plugin code downloads anything. Skill text that mentions package
   installation (`pip`, `npm`, Maven, Gradle) describes dependency changes made
   in the user's own project under the host's approval flow.
