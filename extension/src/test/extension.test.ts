@@ -1,4 +1,5 @@
 import * as assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as os from 'node:os';
@@ -76,11 +77,14 @@ import {
 const extensionRoot = path.resolve(__dirname, '..', '..');
 const {
 	buildClientAssets,
+	bundleCopilotSkills,
 	getBuildPaths,
 	observerBuildArgs,
 	observerBuildVersion,
 	resetObserverOutputDirs,
+	stageSkills,
 } = require('../../build-observer.js') as {
+	bundleCopilotSkills: (paths: ReturnType<typeof getBuildPaths>) => void;
 	buildClientAssets: (
 		paths: ReturnType<typeof getBuildPaths>,
 		run?: (file: string, args: string[], options: { cwd: string; stdio: string }) => unknown,
@@ -97,6 +101,7 @@ const {
 			goos: string;
 		};
 		webviewOutDir: string;
+		skillsOutDir: string;
 	};
 	observerBuildArgs: (
 		paths: ReturnType<typeof getBuildPaths>,
@@ -104,6 +109,10 @@ const {
 	) => string[];
 	observerBuildVersion: (env?: NodeJS.ProcessEnv) => string;
 	resetObserverOutputDirs: (paths: ReturnType<typeof getBuildPaths>) => void;
+	stageSkills: (
+		paths: ReturnType<typeof getBuildPaths>,
+		run?: (file: string, args: string[], options: { cwd: string; stdio: string }) => unknown,
+	) => void;
 };
 function hostWeaverBinaryName(): string {
 	return process.platform === 'win32' ? 'weaver.exe' : 'weaver';
@@ -2741,6 +2750,135 @@ test('resetObserverOutputDirs recreates observer and webview output directories'
 		assert.equal(fs.existsSync(paths.observerOutDir), true);
 		assert.equal(fs.existsSync(paths.webviewOutDir), true);
 	});
+});
+
+test('stageSkills bundles the embedded runtime tree with sibling resources and removes stale skills', () => {
+	const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-build-skills-'));
+	try {
+		const paths = getBuildPaths(path.join(repoRoot, 'extension'));
+		const stagedRoot = path.join(paths.observerRoot, 'cmd', 'obstudio', '_skills');
+		const resources = [
+			'otel-audit/SKILL.md',
+			'otel-audit/scripts/scan.py',
+			'otel-instrument/references/languages/go.md',
+			'references/report-flow-contract.md',
+		];
+		const calls: string[][] = [];
+		fs.mkdirSync(paths.skillsOutDir, { recursive: true });
+		fs.writeFileSync(path.join(paths.skillsOutDir, 'retired.md'), 'stale');
+		stageSkills(paths, (file, args, options) => {
+			calls.push([file, ...args]);
+			assert.equal(options.cwd, paths.observerRoot);
+			for (const resource of resources) {
+				const target = path.join(stagedRoot, resource);
+				fs.mkdirSync(path.dirname(target), { recursive: true });
+				fs.writeFileSync(target, resource);
+			}
+		});
+		assert.deepEqual(calls, [['go', 'run', './cmd/stage-skills']]);
+		for (const resource of resources) {
+			assert.equal(fs.readFileSync(path.join(paths.skillsOutDir, resource), 'utf8'), resource);
+		}
+		assert.equal(fs.existsSync(path.join(paths.skillsOutDir, 'retired.md')), false);
+		assert.throws(() => stageSkills(paths, () => {
+			throw new Error('skill staging failed');
+		}), /skill staging failed/);
+	} finally {
+		fs.rmSync(repoRoot, { recursive: true, force: true });
+	}
+});
+
+test('each synchronized Copilot skill retains executable report helpers without sibling directories', async () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-synced-skills-'));
+	try {
+		const paths = getBuildPaths(path.join(root, 'extension'));
+		fs.cpSync(path.resolve(extensionRoot, '..', 'skills'), paths.skillsOutDir, {
+			recursive: true,
+			filter: (source) => !['tests', 'evals', '__pycache__'].includes(path.basename(source)),
+		});
+		bundleCopilotSkills(paths);
+		const python = process.env.OBSTUDIO_TEST_PYTHON || 'python3';
+		const reportRoot = path.join(root, '.observe');
+		fs.mkdirSync(reportRoot);
+		const audit = path.join(reportRoot, 'otel-audit.json');
+		execFileSync(python, ['-I', '-c', [
+			'import json, runpy, sys',
+			'from pathlib import Path',
+			'fixtures = runpy.run_path(sys.argv[1])',
+			'Path(sys.argv[2]).write_text(json.dumps(fixtures["sample_report"]()))',
+		].join('\n'), path.resolve(extensionRoot, '..', 'skills/references/tests/test_observe_report.py'), audit]);
+		for (const name of ['otel-audit', 'otel-instrument', 'otel-verify']) {
+			const isolated = path.join(root, 'synced', name);
+			fs.cpSync(path.join(root, 'extension', 'dist', 'copilot-skills', name), isolated, { recursive: true });
+			const canonical = path.join(isolated, 'bundle', name);
+			assert.equal(
+				fs.readFileSync(path.join(canonical, 'SKILL.md'), 'utf8'),
+				fs.readFileSync(path.resolve(extensionRoot, '..', 'skills', name, 'SKILL.md'), 'utf8'),
+			);
+			for (const command of ['select', 'validate-flow', 'render-instrumentation-html']) {
+				const output = execFileSync(python, [
+					'-I', path.join(canonical, 'scripts', 'observe_report.py'), command, '--help',
+				], { cwd: root, encoding: 'utf8' });
+				const plainOutput = output.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
+				assert.match(plainOutput, /usage: observe_report\.py/);
+			}
+			const launcher = path.join(canonical, 'scripts', 'observe_report.py');
+			const selection = path.join(isolated, 'otel-selection.json');
+			execFileSync(python, ['-I', launcher, 'select', audit, '--ids', 'OTEL-001', '-o', selection], {
+				cwd: root, encoding: 'utf8',
+			});
+			const flow = execFileSync(python, [
+				'-I', launcher, 'validate-flow', audit, '--selection-json', selection,
+			], { cwd: root, encoding: 'utf8' });
+			assert.match(flow, /PASS: audit -> selection/);
+			assert.deepEqual(JSON.parse(fs.readFileSync(selection, 'utf8')).approved_ids, ['OTEL-001']);
+			if (name === 'otel-instrument') {
+				const instrumentation = path.join(reportRoot, 'otel-instrumentation.json');
+				const verification = path.join(reportRoot, 'otel-verify.json');
+				execFileSync(python, ['-I', '-c', [
+					'import json, runpy, sys',
+					'from pathlib import Path',
+					'f = runpy.run_path(sys.argv[1])',
+					'm = f["MODULE"]',
+					'audit = m.normalize_audit_report(json.loads(Path(sys.argv[2]).read_text()))',
+					'selection = json.loads(Path(sys.argv[3]).read_text())',
+					'digest = m.audit_digest(audit)',
+					'instrument = m.normalize_instrumentation(f["sample_instrumentation"](audit, digest, selection), audit, selection)',
+					'Path(sys.argv[4]).write_text(json.dumps(instrument))',
+					'Path(sys.argv[5]).write_text(json.dumps(f["sample_verify"](audit, digest, m.instrumentation_digest(instrument))))',
+				].join('\n'), path.resolve(extensionRoot, '..', 'skills/references/tests/test_observe_report.py'),
+				audit, selection, instrumentation, verification]);
+				const flags = ['--selection-json', selection, '--instrumentation-json', instrumentation, '--verify-json', verification];
+				assert.match(execFileSync(python, ['-I', launcher, 'validate-flow', audit, ...flags], {
+					cwd: root, encoding: 'utf8',
+				}), /PASS: audit -> selection -> instrumentation -> verify/);
+				const html = path.join(reportRoot, 'otel-instrumentation.html');
+				const rendered = JSON.parse(execFileSync(python, [
+					'-I', launcher, 'render-instrumentation-html', audit, '-o', html, ...flags,
+				], { cwd: root, encoding: 'utf8' })) as {
+					result: string;
+					server: { pid: number; url: string };
+				};
+				try {
+					assert.equal(rendered.result, 'PASS');
+					const response = await fetch(rendered.server.url);
+					assert.equal(response.status, 200);
+					assert.equal(await response.text(), fs.readFileSync(html, 'utf8'));
+				} finally {
+					process.kill(rendered.server.pid, 'SIGTERM');
+				}
+			}
+			assert.ok(fs.existsSync(path.join(isolated, 'bundle', 'otel-verify', 'scripts', 'validate_reader_report.py')));
+		}
+		assert.equal(fs.existsSync(path.join(root, 'synced', 'references')), false);
+		fs.writeFileSync(path.join(root, 'extension', 'dist', 'copilot-skills', 'stale.txt'), 'stale');
+		bundleCopilotSkills(paths);
+		assert.equal(fs.existsSync(path.join(root, 'extension', 'dist', 'copilot-skills', 'stale.txt')), false);
+		fs.writeFileSync(path.join(paths.skillsOutDir, 'otel-audit', 'SKILL.md'), 'missing frontmatter');
+		assert.throws(() => bundleCopilotSkills(paths), /Missing skill frontmatter/);
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
 });
 
 test('buildClientAssets rebuilds and stages the same client assets for the top-level webview', () => {

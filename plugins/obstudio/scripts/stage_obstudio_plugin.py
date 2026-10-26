@@ -203,9 +203,11 @@ def check_committed_manifest_versions(
     release_tag: str = "",
     plugin_root: Path = PLUGIN_ROOT,
     codex_marketplace_path: Path | None = None,
+    claude_marketplace_path: Path | None = None,
 ) -> None:
-    """Verify committed plugin versions agree with each other and the Codex marketplace ref.
+    """Verify committed plugin versions agree with each other and do not trail the marketplaces.
 
+    The Codex ref and Claude archive may lag the manifests but never lead them.
     When ``release_tag`` is given, also verify both manifests already match it.
     """
     versions: dict[str, str] = {}
@@ -233,6 +235,7 @@ def check_committed_manifest_versions(
 
     if plugin_root == PLUGIN_ROOT:
         check_codex_marketplace_ref(versions["codex"], codex_marketplace_path)
+        check_claude_marketplace_archive(versions["claude"], claude_marketplace_path)
 
     print(f"plugin manifest versions agree: {versions['claude']}")
 
@@ -337,6 +340,47 @@ def check_codex_marketplace_ref(
     if _semver_precedence(ref[1:]) > _semver_precedence(plugin_version):
         raise RuntimeError(
             f"Codex marketplace ref {ref!r} is newer than plugin version {plugin_version!r} in {target}"
+        )
+
+
+def check_claude_marketplace_archive(
+    plugin_version: str,
+    marketplace_path: Path | None = None,
+) -> None:
+    target = marketplace_path or ROOT / ".claude-plugin" / "marketplace.json"
+    marketplace = json.loads(target.read_text(encoding="utf-8"))
+    plugins = marketplace.get("plugins")
+    if not isinstance(plugins, list):
+        raise RuntimeError(f"marketplace plugins must be an array: {target}")
+    entries = [
+        entry for entry in plugins if isinstance(entry, dict) and entry.get("name") == "obstudio"
+    ]
+    if len(entries) != 1:
+        raise RuntimeError(f"expected exactly one obstudio plugin entry in {target}")
+    source = entries[0].get("source")
+    url = source.get("url") if isinstance(source, dict) else None
+    match = (
+        re.fullmatch(
+            r"https://github\.com/signalfx/obstudio/releases/download/v(?P<tag>[^/]+)/obstudio_claude_(?P<file>.+)\.zip",
+            url,
+        )
+        if isinstance(url, str)
+        else None
+    )
+    if (
+        not isinstance(source, dict)
+        or source.get("source") != "archive"
+        or match is None
+        or match["tag"] != match["file"]
+        or not SEMVER_PATTERN.fullmatch(match["tag"])
+    ):
+        raise RuntimeError(
+            f"Claude marketplace source must be a versioned obstudio release archive in {target}: {source!r}"
+        )
+    # Manifests are bumped before the release exists, so the archive may lag until the sync PR merges.
+    if _semver_precedence(match["tag"]) > _semver_precedence(plugin_version):
+        raise RuntimeError(
+            f"Claude marketplace archive v{match['tag']} is newer than plugin version {plugin_version!r} in {target}"
         )
 
 

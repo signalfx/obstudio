@@ -71,6 +71,12 @@ To connect every supported target to the running shared instance:
 | `windsurf` with legacy Cascade | `@otel-audit` |
 | `copilot` | MCP only; no bundled skill |
 
+The CLI `copilot` target above configures MCP only. **Copilot in VS Code 1.109+**
+can instead discover all nine skills directly from the installed
+[VS Code extension](../extension/README.md#github-copilot-in-vs-code), without
+copying skills into the project or user profile. Use `/otel-audit` in a new
+agent chat. Configure the local MCP server separately when using runtime tools.
+
 The `windsurf` skill bundle is available to Devin Local and legacy Cascade; the
 target configures Cascade automatically. For Devin Local, install the [Devin
 CLI](https://docs.devin.ai/cli), make sure `devin` is on `PATH`, and add the

@@ -268,6 +268,70 @@ class StageObstudioPluginTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Codex marketplace source must match"):
                 STAGE.check_codex_marketplace_ref("1.2.3", marketplace_path)
 
+    def test_check_claude_marketplace_archive_allows_archive_lagging_prepared_manifests(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            marketplace_path = self._write_claude_marketplace(tempdir, "1.2.3")
+            for plugin_version in ("1.2.3", "1.2.4", "1.3.0-rc.1", "2.0.0"):
+                with self.subTest(plugin_version=plugin_version):
+                    STAGE.check_claude_marketplace_archive(plugin_version, marketplace_path)
+
+    def test_check_claude_marketplace_archive_rejects_archive_newer_than_manifest(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            for archive_version, plugin_version in (
+                ("1.2.3", "1.2.2"),
+                ("1.2.3", "1.2.3-rc.1"),
+                ("1.2.3-rc.2", "1.2.3-rc.1"),
+            ):
+                with self.subTest(archive_version=archive_version, plugin_version=plugin_version):
+                    marketplace_path = self._write_claude_marketplace(tempdir, archive_version)
+                    with self.assertRaisesRegex(RuntimeError, "is newer than plugin version"):
+                        STAGE.check_claude_marketplace_archive(plugin_version, marketplace_path)
+
+    def test_check_claude_marketplace_archive_rejects_non_release_archive_sources(self):
+        base = "https://github.com/signalfx/obstudio/releases/download"
+        bad_sources = (
+            {"source": "archive", "url": f"{base}/v1.2.3/obstudio_claude_1.2.4.zip"},
+            {"source": "archive", "url": f"{base}/latest/obstudio_claude_latest.zip"},
+            {"source": "archive", "url": f"{base}/v1.2.3/obstudio_codex_1.2.3.zip"},
+            {"source": "archive", "url": "https://example.com/obstudio_claude_1.2.3.zip"},
+            {"source": "path", "url": f"{base}/v1.2.3/obstudio_claude_1.2.3.zip"},
+            "./plugins/obstudio",
+        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            for source in bad_sources:
+                with self.subTest(source=source):
+                    marketplace_path = Path(tempdir) / "marketplace.json"
+                    marketplace_path.write_text(
+                        json.dumps({"plugins": [{"name": "obstudio", "source": source}]}),
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(RuntimeError, "must be a versioned obstudio release archive"):
+                        STAGE.check_claude_marketplace_archive("1.2.3", marketplace_path)
+
+    def _write_claude_marketplace(self, tempdir, archive_version):
+        marketplace_path = Path(tempdir) / "marketplace.json"
+        marketplace_path.write_text(
+            json.dumps(
+                {
+                    "plugins": [
+                        {
+                            "name": "obstudio",
+                            "source": {
+                                "source": "archive",
+                                "url": (
+                                    "https://github.com/signalfx/obstudio/releases/download/"
+                                    f"v{archive_version}/obstudio_claude_{archive_version}.zip"
+                                ),
+                                "sha256": "0" * 64,
+                            },
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        return marketplace_path
+
     def _write_codex_marketplace(self, tempdir, ref, path="./plugins/obstudio"):
         marketplace_path = Path(tempdir) / "marketplace.json"
         marketplace_path.write_text(
@@ -443,7 +507,7 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertEqual(source["source"], "git-subdir")
         self.assertEqual(source["url"], "https://github.com/signalfx/obstudio.git")
         self.assertEqual(source["path"], "./plugins/obstudio")
-        self.assertEqual(source["ref"], f"v{plugin_manifest['version']}")
+        STAGE.check_codex_marketplace_ref(plugin_manifest["version"], marketplace_path)
         self.assertEqual(marketplace["interface"]["displayName"], "Splunk Observability Studio")
         self.assertEqual(marketplace["plugins"][0]["name"], "obstudio")
 
@@ -464,11 +528,7 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertEqual(marketplace["plugins"][0]["name"], "obstudio")
         self.assertEqual(marketplace["plugins"][0]["displayName"], "Splunk Observability Studio")
         self.assertEqual(source["source"], "archive")
-        self.assertEqual(
-            source["url"],
-            f"https://github.com/signalfx/obstudio/releases/download/v{plugin_version}/"
-            f"obstudio_claude_{plugin_version}.zip",
-        )
+        STAGE.check_claude_marketplace_archive(plugin_version, marketplace_path)
         self.assertRegex(source["sha256"], r"\A[0-9a-f]{64}\Z")
         self.assertIn("Splunk Observability Studio", marketplace["plugins"][0]["description"])
         self.assertNotIn("observer controls", marketplace["plugins"][0]["description"].lower())

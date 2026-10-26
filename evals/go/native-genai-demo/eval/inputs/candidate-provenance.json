@@ -1,14 +1,14 @@
 {
   "kind": "actual-native-Go-OTLP-source-and-capture-provenance",
-  "captured_at_utc": "2026-10-15T05:40:01.504890+00:00",
-  "toolchain": "go1.25.1 darwin/arm64",
+  "captured_at_utc": "2026-10-21T22:49:17.020252+00:00",
+  "toolchain": "go version go1.27.2 darwin/arm64",
   "dependencies": "Official native Go SDK/API/OTLP HTTP trace and metric exporters; versions and primary metadata in native-module-evidence.json and go.mod/go.sum. No AO SDK or Python runtime.",
   "files": {
     "main.go": "7ff08c72f55f98255c93762056f8816f2a4351975365e2c03dfc3b1f39bee09f",
     "main_test.go": "a0f03b2b02fb3611808b500c198dd96d1fe9eaeda4372ceed389998b8449c23e",
     "telemetry.go": "1a6a265bbf7e72ab6b1a4cbfe5c99bfac66af61dd4bd9e1eddb4dfe392e0a22d",
-    "go.mod": "b2b828937bb1b3f44774b3a912db72b6642f92ba0bfd55e03d2c1c48c42268f1",
-    "go.sum": "bb817b2d8c6107d7a75a150775fc87b46632dc25b56cb60ad251fb1e619fc862",
+    "go.mod": "81fbdf643df4bcdee512f33b7fd9b3cddfda49488da4eca00f5d77d516633e09",
+    "go.sum": "5ab9f296e66959a6a223bacf165f6540fa2b49f63dc8a7698a8cdbc93978c04d",
     "eval/inputs/nativeprobe/main.go": "2a2dcfeffb8bb6a370f8dc342e18d3432514cf849b423107b728940173be64ca",
     "eval/inputs/nativeprobe/main_test.go": "f3a4aebe0fa1fd2d31f8c57e586081f5c69a6f5f41bc9fa3e963134edb8af025",
     "eval/inputs/nativecandidate/telemetry.go": "bae9ae52fd8f05fc4ba3dba125ce93c507cd3b434abbf9f47bfc4f6c2e0bd671",
@@ -16,11 +16,11 @@
     "eval/inputs/schemacheck/main_test.go": "3ceeff0d5bc8383ed85b5fd90fd8b10f69724b04c0aa8b7d327e33d9ea6cb081",
     "eval/inputs/genai-profile-evidence.json": "aa816ae1e830e83a99289d326264d53e050cccd0c50648d49c3f2f8627ce7343",
     "eval/inputs/native-module-evidence.json": "450d81069099780c28e3a105394662a5713d004cf23a7f1f92289a8b252b996c",
-    "eval/inputs/native-baseline-capture.json": "053fe1477741e02918477f75c69fc00e4f2e93f93299176ef123d86760b1aa01",
-    "eval/inputs/native-candidate-capture.json": "d48153885e37ee333af1ed4b6c6dbf552151f5db87066b32d41a2de3bf4c69e6",
-    "eval/inputs/native-missing-tool-message-capture.json": "4c07b1f3d747d9a675999fa46417fb19035e7cd6a61771c5e552f2673de05cd8",
-    "eval/inputs/native-lookup-failure-capture.json": "f5aa6d4674d8ec7ec141774ec004c025117b96f349643aca5c59e9d759fb5b54",
-    "eval/inputs/native-rejected-traces-capture.json": "fae4a0ff2f040808de3dfbb030a9a2890fd67711d213ea7aeed157276cd04d35"
+    "eval/inputs/native-baseline-capture.json": "9991dd0218de75043bde04ee2ed0abf69e78603418aa61e5509da5d81443d470",
+    "eval/inputs/native-candidate-capture.json": "cc8bcbf86b66fb304a09156d964b795fe71b004e389303066b2f8710fcefe606",
+    "eval/inputs/native-missing-tool-message-capture.json": "94a3e09804f322cddf1d0291c153d232b4aebc7e677138cd68a4def65f53706c",
+    "eval/inputs/native-lookup-failure-capture.json": "8dd89e0ac1edb09284255d90f7aa009b0b173e40d703a6920080162eac6c02f1",
+    "eval/inputs/native-rejected-traces-capture.json": "b7c3bbf1c1a5c14f7a28249afb180a0df2e7a9f3ebccc84efed465ebac2102b9"
   },
   "baseline": {
     "source": "main.go + no-op telemetry.go",
@@ -61,7 +61,7 @@
     }
   },
   "proof_scope": "Real application processes and official native exporters to isolated local Go HTTP handlers. Not real Studio/controller bindings, cloud delivery, backend recognition or billing.",
-  "candidate_refresh_scope": "Reference-only metadata and bounded SDK-free409 recovery. Only four candidate/negative/auth/rejected captures were regenerated; original actual zero-telemetry baseline is unchanged.",
+  "candidate_refresh_scope": "All five baseline/native/negative/auth/rejected captures regenerated after the gRPC security update to v1.83.2; candidate source and transformation are unchanged.",
   "source_known_metadata": "All14source-affiliated spans per process contain gen_ai.agent.name=support_agent; four actual agent roots include fixed configured gen_ai.request.model=fixture-model-v1. Actual model responses/usage remain success-only.",
   "resource_conflict_proof": {
     "test": "TestNativeCandidateMetadataAndConflictRecovery in eval/inputs/nativeprobe/main_test.go",
