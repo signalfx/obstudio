@@ -171,7 +171,7 @@ func NewManager(path string, opts ...Option) (*Manager, error) {
 	snap, diags, loadErr := Load(m.path)
 	if err := errors.Join(scaffoldErr, loadErr); err != nil {
 		snap = FailSafeSnapshot()
-		m.opts.logf("warning: config %s could not be read, using fail-safe settings (telemetry off): %v", m.path, err)
+		m.opts.logf("[userconfig] %s could not be read, using fail-safe settings (telemetry off): %v", m.path, err)
 	} else {
 		m.logDiagnostics(diags)
 	}
@@ -185,7 +185,7 @@ func NewManager(path string, opts ...Option) (*Manager, error) {
 
 func (m *Manager) logDiagnostics(diags []Diagnostic) {
 	for _, d := range diags {
-		m.opts.logf("config %s: %s (%s)", m.path, d.Message, d.Kind)
+		m.opts.logf("[userconfig] %s: %s (%s)", m.path, d.Message, d.Kind)
 	}
 }
 
@@ -230,7 +230,7 @@ func (m *Manager) reload() {
 	cur := m.snap.Load()
 	switch {
 	case err != nil:
-		m.opts.logf("config %s could not be read, keeping current settings: %v", m.path, err)
+		m.opts.logf("[userconfig] %s could not be read, keeping current settings: %v", m.path, err)
 	case snap.Hash == cur.Hash:
 	default:
 		m.snap.Store(&snap)
@@ -371,7 +371,7 @@ func (s *subscriber) run() {
 func (s *subscriber) invoke(ev Event) {
 	defer func() {
 		if r := recover(); r != nil {
-			s.logf("config subscriber panicked: %v", r)
+			s.logf("[userconfig] subscriber panicked: %v", r)
 		}
 	}()
 	s.fn(ev)

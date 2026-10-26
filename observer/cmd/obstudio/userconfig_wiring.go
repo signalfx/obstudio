@@ -27,12 +27,12 @@ type userConfigWiring struct {
 func openUserConfig() userConfigWiring {
 	path, err := userConfigYAMLPath()
 	if err != nil {
-		log.Printf("warning: user settings are unavailable: %v", err)
+		log.Printf("user settings are unavailable: %v", err)
 		return userConfigWiring{}
 	}
 	m, err := userconfig.NewManager(path)
 	if err != nil {
-		log.Printf("warning: user settings are unavailable: %v", err)
+		log.Printf("user settings are unavailable: %v", err)
 		return userConfigWiring{}
 	}
 	m.Subscribe(func(userconfig.Event) { notifyConfigChanged() })

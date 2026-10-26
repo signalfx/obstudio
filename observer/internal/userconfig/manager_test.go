@@ -754,7 +754,7 @@ func TestWatcherFailureStartsUnwatched(t *testing.T) {
 			if h.m.isWatched() {
 				t.Error("watched")
 			}
-			if n := h.log.count("warning"); n != 1 {
+			if n := h.log.count("read when settings are read"); n != 1 {
 				t.Errorf("%d warnings: %v", n, h.log.lines)
 			}
 			external(t, path, scaffoldWith("false"), true)
@@ -779,7 +779,7 @@ func TestModeSwitchDirectoryRemoved(t *testing.T) {
 			if h.m.isWatched() || h.fw.closes.Load() != 1 {
 				t.Errorf("watched=%v closes=%d", h.m.isWatched(), h.fw.closes.Load())
 			}
-			if n := h.log.count("warning"); n != 1 {
+			if n := h.log.count("read when settings are read"); n != 1 {
 				t.Errorf("%d warnings", n)
 			}
 			external(t, path, scaffoldWith("false"), true)
@@ -799,11 +799,11 @@ func TestModeSwitchEventsClosed(t *testing.T) {
 	h := newHarness(t, scaffoldPath(t))
 	close(h.fw.events)
 	eventually(t, func() bool { return !h.m.isWatched() }, "switch to unwatched")
-	if n := h.log.count("warning"); n != 1 {
+	if n := h.log.count("read when settings are read"); n != 1 {
 		t.Errorf("%d warnings", n)
 	}
 	h.m.onWatchClosed()
-	if n := h.log.count("warning"); n != 1 {
+	if n := h.log.count("read when settings are read"); n != 1 {
 		t.Errorf("%d warnings after a second close", n)
 	}
 }
@@ -1137,7 +1137,7 @@ func TestFsnotifyDirectoryRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 	eventually(t, func() bool { return !h.m.isWatched() }, "switch to unwatched")
-	if n := h.log.count("warning"); n != 1 {
+	if n := h.log.count("read when settings are read"); n != 1 {
 		t.Errorf("%d warnings: %v", n, h.log.lines)
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {

@@ -33,12 +33,12 @@ func (f fsWatcher) Close() error                  { return f.w.Close() }
 func (m *Manager) startWatch() {
 	w, err := m.opts.newWatcher()
 	if err != nil {
-		m.opts.logf("warning: cannot watch config %s, changes are read when settings are read: %v", m.path, err)
+		m.opts.logf("[userconfig] cannot watch %s, changes are read when settings are read: %v", m.path, err)
 		return
 	}
 	if err := w.Add(m.dir); err != nil {
 		w.Close()
-		m.opts.logf("warning: cannot watch config %s, changes are read when settings are read: %v", m.path, err)
+		m.opts.logf("[userconfig] cannot watch %s, changes are read when settings are read: %v", m.path, err)
 		return
 	}
 	quit := make(chan struct{})
@@ -94,7 +94,7 @@ func (m *Manager) onWatchError(err error) {
 	if m.closed.Load() {
 		return
 	}
-	m.opts.logf("config watcher error, re-reading %s: %v", m.path, err)
+	m.opts.logf("[userconfig] watcher error, re-reading %s: %v", m.path, err)
 	m.arm()
 }
 
@@ -129,7 +129,7 @@ func (m *Manager) switchUnwatched(reason string) {
 	w, quit := m.w, m.quit
 	m.w, m.quit = nil, nil
 	m.watchMu.Unlock()
-	m.opts.logf("warning: %s; config changes are now read when settings are read", reason)
+	m.opts.logf("[userconfig] %s; config changes are now read when settings are read", reason)
 	close(quit)
 	w.Close()
 }
