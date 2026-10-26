@@ -12,12 +12,6 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/validator"
 )
 
-const signalConfig = "config"
-
-// bypassesPause reports signals that must reach a paused view: they are not
-// part of the telemetry stream the user paused.
-func bypassesPause(sig string) bool { return sig == "validation" || sig == signalConfig }
-
 const (
 	throttleInterval = 100 * time.Millisecond
 	writeWait        = 10 * time.Second
@@ -90,7 +84,7 @@ func broadcastSignal(s *store.Store, v *validator.Store, sig string) {
 // settings changed. The message carries no data; clients refetch the
 // settings.
 func NotifyConfigChanged() {
-	broadcastSignal(nil, nil, signalConfig)
+	broadcastSignal(nil, nil, "config")
 }
 
 // broadcastReload tells every open tab to reload, bypassing the
@@ -250,6 +244,10 @@ func (c *conn) queryAndSend(signal string) {
 }
 
 // ── Store signal → throttled push ────────────────────────
+
+// bypassesPause reports signals that must reach a paused view: they are not
+// part of the telemetry stream the user paused.
+func bypassesPause(sig string) bool { return sig == "validation" || sig == "config" }
 
 func (c *conn) onSignal(sig string) {
 	c.mu.Lock()
