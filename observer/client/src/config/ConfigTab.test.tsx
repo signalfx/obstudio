@@ -22,6 +22,8 @@ const definitions = {
   properties: {
     sample: {
       type: "object",
+      title: "Sample section",
+      description: "Settings for the sample.",
       properties: {
         enabled: {
           type: "boolean",
@@ -62,6 +64,7 @@ const definitions = {
     },
     other: {
       type: "object",
+      title: "Other section",
       properties: {
         flag: {
           type: "boolean",
@@ -206,7 +209,8 @@ describe("ConfigTab rendering", () => {
     await screen.findByRole("switch", { name: "Enable sample" });
     expect(screen.getByRole("tabpanel", { name: "Config" })).toBeTruthy();
     // Sections and definitions keep the server's order.
-    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["sample", "other"]);
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["Sample section", "Other section"]);
+    expect(screen.getByText("Settings for the sample.").closest("section")?.querySelector("h3")?.textContent).toBe("Sample section");
     expect(screen.getByRole("switch", { name: "Enable sample" }).getAttribute("aria-checked")).toBe("false");
     expect((screen.getByRole("textbox", { name: "Name" }) as HTMLInputElement).value).toBe("alpha");
     expect((screen.getByRole("textbox", { name: "Count" }) as HTMLInputElement).value).toBe("100");
@@ -249,6 +253,7 @@ describe("ConfigTab rendering", () => {
       {
         properties: {
           sample: {
+            title: "Sample section",
             properties: {
               flagStatus: { type: "string", title: "Flag status", description: "D." },
               "retry_Count-2": { type: "boolean", title: "Retry count", description: "D." },
@@ -270,7 +275,7 @@ describe("ConfigTab rendering", () => {
     const longTitle = "A title that is far longer than any setting title should ever be";
     const longDescription = "A description that runs well past what a setting should say, so the interface has to cope with text the server should not have sent at all.";
     installServer(
-      { properties: { sample: { properties: { name: { type: "string", title: longTitle, description: longDescription } } } } },
+      { properties: { sample: { title: "Sample section", properties: { name: { type: "string", title: longTitle, description: longDescription } } } } },
       { "sample.name": "a" },
     );
     render(<ConfigTab />);

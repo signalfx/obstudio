@@ -22,6 +22,8 @@ export interface DefinitionNode {
 /** One section: its properties are its definitions, by name. */
 export interface SectionNode {
   type: "object";
+  title: string;
+  description?: string;
   properties: Record<string, DefinitionNode>;
 }
 
@@ -41,9 +43,8 @@ export interface ConfigDefinition
   apply?: Apply;
 }
 
-export interface ConfigSection {
+export interface ConfigSection extends Pick<SectionNode, "title" | "description"> {
   name: string;
-  title: string;
   definitions: ConfigDefinition[];
 }
 
@@ -82,8 +83,8 @@ function readDefinition(path: string, node: Unchecked<DefinitionNode>): ConfigDe
 /**
  * Read the definitions document into sections, in the order the server lists
  * them. Settings of a type the tab has no control for, or without the served
- * title and description, are left out. Returns
- * null when the document does not have the served shape.
+ * title and description, are left out, as are sections without a title.
+ * Returns null when the document does not have the served shape.
  */
 export function parseDefinitions(document: unknown): ConfigSection[] | null {
   if (!isObject(document)) return null;
@@ -93,23 +94,25 @@ export function parseDefinitions(document: unknown): ConfigSection[] | null {
   for (const [name, section] of Object.entries(root.properties)) {
     if (!isObject(section)) continue;
     const node: Unchecked<SectionNode> = section;
-    if (!isObject(node.properties)) continue;
+    if (!isObject(node.properties) || typeof node.title !== "string") continue;
     const definitions: ConfigDefinition[] = [];
     for (const [leaf, definitionNode] of Object.entries(node.properties)) {
       const definition = isObject(definitionNode) ? readDefinition(`${name}.${leaf}`, definitionNode) : null;
       if (definition !== null) definitions.push(definition);
     }
-    // TODO: use the section's own title once the definitions document serves one. Until then the heading is the section name.
-    if (definitions.length > 0) sections.push({ definitions, name, title: name });
+    if (definitions.length === 0) continue;
+    const parsed: ConfigSection = { definitions, name, title: node.title };
+    if (typeof node.description === "string") parsed.description = node.description;
+    sections.push(parsed);
   }
   return sections;
 }
 
-/** One setting from a definitions document, by dotted path, or null when the document does not have it. */
-export function findDefinition(document: unknown, path: string): ConfigDefinition | null {
+/** One setting from a definitions document, by dotted path, with its section, or null when the document does not have it. */
+export function findDefinition(document: unknown, path: string): { section: ConfigSection; definition: ConfigDefinition } | null {
   for (const section of parseDefinitions(document) ?? []) {
     const definition = section.definitions.find((candidate) => candidate.path === path);
-    if (definition !== undefined) return definition;
+    if (definition !== undefined) return { definition, section };
   }
   return null;
 }

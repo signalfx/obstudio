@@ -14,14 +14,6 @@ interface Wording {
   description: string;
 }
 
-/** The served title of the section holding the setting at path, or "" when it has none. */
-function sectionTitle(document: unknown, path: string): string {
-  const child = (node: unknown, key: string): unknown =>
-    node !== null && typeof node === "object" ? (node as Record<string, unknown>)[key] : undefined;
-  const title = child(child(child(document, "properties"), path.split(".")[0]), "title");
-  return typeof title === "string" ? title : "";
-}
-
 /**
  * The switch for sending anonymous usage data. Its heading, title and
  * description come from the observer's config definitions, and its value is always the
@@ -51,12 +43,11 @@ export function UsageDataSetting(): React.ReactElement {
       .then((document: unknown) => {
         load.inFlight = false;
         if (!load.mounted) return;
-        const definition = findDefinition(document, usageDataPath);
-        const heading = sectionTitle(document, usageDataPath);
+        const found = findDefinition(document, usageDataPath);
         // All three texts come from the server; without them there is no switch.
-        if (heading && definition?.title && definition.description) {
+        if (found?.section.title && found.definition.title && found.definition.description) {
           load.have = true;
-          setWording({ description: definition.description, heading, title: definition.title });
+          setWording({ description: found.definition.description, heading: found.section.title, title: found.definition.title });
           setWordingFailed(false);
         } else {
           setWordingFailed(true);

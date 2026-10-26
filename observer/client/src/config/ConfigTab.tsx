@@ -75,6 +75,7 @@ export function ConfigTab(): React.ReactElement {
         {ready ? sections.map((section) => (
           <section aria-labelledby={`config-section-${section.name}`} className="config-section" key={section.name}>
             <h3 className="config-section__title" id={`config-section-${section.name}`}>{section.title}</h3>
+            {section.description ? <p className="config-section__description">{section.description}</p> : null}
             {section.definitions.map((definition) => (
               <ConfigField
                 definition={definition}

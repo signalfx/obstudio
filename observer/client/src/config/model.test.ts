@@ -24,6 +24,7 @@ describe("parseDefinitions", () => {
       properties: {
         telemetry: {
           type: "object",
+          title: "Usage data",
           properties: {
             enabled: {
               type: "boolean",
@@ -47,7 +48,7 @@ describe("parseDefinitions", () => {
         type: "boolean",
       }],
       name: "telemetry",
-      title: "telemetry",
+      title: "Usage data",
     }]);
   });
 
@@ -55,25 +56,29 @@ describe("parseDefinitions", () => {
     const sections = parseDefinitions({
       properties: {
         display: {
+          title: "Display",
+          description: "How it looks.",
           properties: {
             theme: { type: "string", title: "T", description: "D.", enum: ["dark", "light"] },
             size: { type: "integer", title: "T", description: "D.", minimum: 1, maximum: 9 },
           },
         },
-        output: { properties: { format: { type: "string", title: "T", description: "D." } } },
+        output: { title: "Output", properties: { format: { type: "string", title: "T", description: "D." } } },
       },
     });
     expect(sections?.map((section) => section.name)).toEqual(["display", "output"]);
+    expect(sections?.map((section) => [section.title, section.description])).toEqual([["Display", "How it looks."], ["Output", undefined]]);
     expect(sections?.[0].definitions).toEqual([
       definition("display.theme", "string", { enum: ["dark", "light"] }),
       definition("display.size", "integer", { maximum: 9, minimum: 1 }),
     ]);
   });
 
-  it("leaves out settings it has no control for or that lack the served wording, and sections left empty", () => {
+  it("leaves out settings it has no control for or that lack the served wording, and sections left empty or without a title", () => {
     const sections = parseDefinitions({
       properties: {
         a: {
+          title: "A",
           properties: {
             list: { type: "array", title: "T", description: "D." },
             on: { type: "boolean", title: "T", description: "D." },
@@ -82,11 +87,12 @@ describe("parseDefinitions", () => {
             odd: "x",
           },
         },
-        b: { properties: { map: { type: "object", title: "T", description: "D." } } },
+        b: { title: "B", properties: { map: { type: "object", title: "T", description: "D." } } },
         c: "not a section",
+        untitled: { properties: { on: { type: "boolean", title: "T", description: "D." } } },
       },
     });
-    expect(sections).toEqual([{ definitions: [definition("a.on", "boolean")], name: "a", title: "a" }]);
+    expect(sections).toEqual([{ definitions: [definition("a.on", "boolean")], name: "a", title: "A" }]);
   });
 
   it("returns no sections for an empty document, and null for one of the wrong shape", () => {
@@ -100,13 +106,17 @@ describe("parseDefinitions", () => {
 describe("findDefinition", () => {
   const document = {
     properties: {
-      display: { properties: { theme: { type: "string", title: "Theme", description: "The theme." } } },
-      telemetry: { properties: { enabled: { type: "boolean", title: "T", description: "D." } } },
+      display: { title: "Display", properties: { theme: { type: "string", title: "Theme", description: "The theme." } } },
+      telemetry: { title: "S", properties: { enabled: { type: "boolean", title: "T", description: "D." } } },
     },
   };
 
-  it("finds a setting by its dotted path", () => {
-    expect(findDefinition(document, "telemetry.enabled")).toEqual(definition("telemetry.enabled", "boolean"));
+  it("finds a setting and its section by the setting's dotted path", () => {
+    const enabled = definition("telemetry.enabled", "boolean");
+    expect(findDefinition(document, "telemetry.enabled")).toEqual({
+      definition: enabled,
+      section: { definitions: [enabled], name: "telemetry", title: "S" },
+    });
   });
 
   it("returns null for a missing path or a document of the wrong shape", () => {

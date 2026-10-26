@@ -8615,6 +8615,16 @@ code {
   font-weight: 600;
 }
 
+.config-section__description {
+  margin: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .config-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(180px, 280px);
