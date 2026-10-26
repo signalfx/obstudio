@@ -23,6 +23,13 @@ export interface UseConfigEdits {
   refresh(): void;
 }
 
+/** What to show for a failed send: the server's message, or a generic one. */
+export function saveErrorText(error: NonNullable<ConfigEditsState["error"]>): string {
+  if (error.message) return error.message;
+  if (error.status !== undefined) return `This setting could not be saved (HTTP ${error.status}).`;
+  return "This setting could not be saved.";
+}
+
 /**
  * Owns one configEdits instance for the given fields, wired to the observer's
  * /api/config endpoints. It refreshes on mount and on every config signal,

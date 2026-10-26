@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { EmptyState } from "../components/EmptyState";
 import type { ConfigEditsState, FieldValue } from "../cloud/configEdits";
-import { type SendOutcome, useConfigEdits } from "../cloud/useConfigEdits";
+import { saveErrorText, type SendOutcome, useConfigEdits } from "../cloud/useConfigEdits";
 import { observerFetch } from "../host/transport";
 import {
   type ConfigKeySpec,
@@ -16,12 +16,6 @@ import {
 } from "./model";
 
 const SAVED_INDICATOR_MS = 1500;
-
-function saveErrorText(error: NonNullable<ConfigEditsState["error"]>): string {
-  if (error.message) return error.message;
-  if (error.status !== undefined) return `This setting could not be saved (HTTP ${error.status}).`;
-  return "This setting could not be saved.";
-}
 
 /** Settings generated from the observer's config definitions, saved as they are edited. */
 export function ConfigTab(): React.ReactElement {

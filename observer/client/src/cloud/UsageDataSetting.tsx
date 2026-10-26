@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { observerFetch } from "../host/transport";
-import type { ConfigEditsState, FieldKind } from "./configEdits";
-import { useConfigEdits } from "./useConfigEdits";
+import type { FieldKind } from "./configEdits";
+import { saveErrorText, useConfigEdits } from "./useConfigEdits";
 
 const usageDataPath = "telemetry.enabled";
 const usageDataFields: Readonly<Record<string, FieldKind>> = { [usageDataPath]: "immediate" };
@@ -28,12 +28,6 @@ function wordingFrom(body: unknown): Wording | null {
   const description = child(setting, "description");
   if (!nonEmpty(heading) || !nonEmpty(title) || !nonEmpty(description)) return null;
   return { heading, title, description };
-}
-
-function saveErrorText(error: NonNullable<ConfigEditsState["error"]>): string {
-  if (error.message) return error.message;
-  if (error.status !== undefined) return `This setting could not be saved (HTTP ${error.status}).`;
-  return "This setting could not be saved.";
 }
 
 /**
