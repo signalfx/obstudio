@@ -12,12 +12,20 @@ import subprocess
 
 GENERATOR = Path(__file__).resolve()
 ROOT = GENERATOR.parents[4]
-HELPER = ROOT / "skills/references/tests/test_observe_report.py"
+HELPER = ROOT / "skills/references/tests/observe_report_fixtures.py"
 SPEC = importlib.util.spec_from_file_location("group_fixture", HELPER)
 assert SPEC and SPEC.loader
 FIXTURE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(FIXTURE)
 ENGINE = FIXTURE.MODULE
+
+
+def engine_sha256() -> str:
+    script = Path(ENGINE.__file__)
+    digest = hashlib.sha256()
+    for part in (script, script.with_name("observe_report_core.py"), script.with_name("observe_report_html.py")):
+        digest.update(part.read_bytes())
+    return digest.hexdigest()
 NODE = r"""
 const fs = require('node:fs'), vm = require('node:vm');
 const payload = JSON.parse(fs.readFileSync(0, 'utf8'));
@@ -180,9 +188,7 @@ function renderCards() {
     snapshot = {
         "evidence_basis": "Executed Python normalizers and Node VM renderCards with a stub card renderer; no browser, application, SDK, Terraform or cloud execution.",
         "producer": {
-            "engine_sha256": hashlib.sha256(
-                Path(ENGINE.__file__).read_bytes()
-            ).hexdigest(),
+            "engine_sha256": engine_sha256(),
             "script_sha256": hashlib.sha256(GENERATOR.read_bytes()).hexdigest(),
             "functions": [
                 "normalize_audit_report",
@@ -329,7 +335,7 @@ def refresh_handoff_snapshot() -> None:
     snapshot = {
         "kind": previous["kind"], "schema_version": 1,
         "producer": {"source": "skills/references/scripts/observe_report.py",
-                     "source_sha256": "sha256:" + hashlib.sha256(Path(ENGINE.__file__).read_bytes()).hexdigest(),
+                     "source_sha256": "sha256:" + engine_sha256(),
                      "generator_sha256": hashlib.sha256(GENERATOR.read_bytes()).hexdigest(),
                      "functions_executed": ["normalize_audit_report", "audit_digest", "normalize_selection", "selection_digest",
                                             "normalize_instrumentation", "instrumentation_digest", "normalize_verify",

@@ -426,10 +426,12 @@ it('integration: VSIX contains extension host and top-level webview assets', { t
 				fs.readFileSync(canonicalPath, 'utf8'),
 				`${archivePath} must match its canonical skill`,
 			);
-			assert.equal(
-				execFileSync('unzip', ['-p', vsixFile, `${path.posix.dirname(archivePath)}/bundle/references/scripts/observe_report.py`], { encoding: 'utf8' }),
-				fs.readFileSync(path.join(repoRoot, 'skills/references/scripts/observe_report.py'), 'utf8'),
-			);
+			for (const script of ['observe_report.py', 'observe_report_core.py', 'observe_report_html.py']) {
+				assert.equal(
+					execFileSync('unzip', ['-p', vsixFile, `${path.posix.dirname(archivePath)}/bundle/references/scripts/${script}`], { encoding: 'utf8' }),
+					fs.readFileSync(path.join(repoRoot, 'skills/references/scripts', script), 'utf8'),
+				);
+			}
 		}
 		for (const resource of [
 			'references/report-flow-contract.md',

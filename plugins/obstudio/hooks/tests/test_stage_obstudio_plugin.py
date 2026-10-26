@@ -643,6 +643,37 @@ class StageObstudioPluginTest(unittest.TestCase):
     def test_committed_plugin_skills_are_synced(self):
         STAGE.verify_plugin_skills_synced()
 
+    def test_committed_plugin_files_are_under_the_directory_size_limit(self):
+        STAGE.verify_plugin_file_sizes()
+
+    def test_plugin_file_size_guard_rejects_oversized_text_but_not_images(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            limit = STAGE.MAX_PLUGIN_FILE_BYTES
+            (root / "ok.py").write_bytes(b"x" * limit)
+            (root / "icon.PNG").write_bytes(b"x" * (limit + 1))
+            (root / "__pycache__").mkdir()
+            (root / "__pycache__" / "big.pyc").write_bytes(b"x" * (limit + 1))
+            STAGE.verify_plugin_file_sizes(root)
+
+            (root / "skills").mkdir()
+            (root / "skills" / "big.py").write_bytes(b"x" * (limit + 1))
+            (root / "diagram.svg").write_bytes(b"x" * (limit + 1))
+            with self.assertRaisesRegex(RuntimeError, r"big\.py \(\d+ bytes\)") as raised:
+                STAGE.verify_plugin_file_sizes(root)
+            self.assertIn("diagram.svg", str(raised.exception))
+            self.assertNotIn("icon.PNG", str(raised.exception))
+            self.assertNotIn("ok.py", str(raised.exception))
+
+    def test_staged_plugin_verification_rejects_oversized_files(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            output = Path(tempdir) / "obstudio"
+            STAGE.stage_plugin(output)
+            (output / "skills" / "too-big.md").write_bytes(b"x" * (STAGE.MAX_PLUGIN_FILE_BYTES + 1))
+
+            with self.assertRaisesRegex(RuntimeError, r"too-big\.md"):
+                STAGE.verify_staged_plugin(output)
+
     def test_normalized_hash_ignores_trailing_line_whitespace(self):
         with tempfile.TemporaryDirectory() as tempdir:
             source = Path(tempdir) / "source.md"
