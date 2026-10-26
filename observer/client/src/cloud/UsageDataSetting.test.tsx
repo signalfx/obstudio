@@ -17,6 +17,7 @@ const DEF = {
   properties: {
     telemetry: {
       type: "object",
+      title: "Fixture section",
       properties: {
         enabled: {
           type: "boolean",
@@ -59,6 +60,18 @@ function pending(): { promise: Promise<Response>; resolve(r: Response): void; re
   return { promise, resolve, reject };
 }
 
+interface ProductionWording {
+  sectionTitle: string;
+  title: string;
+  description: string;
+}
+
+function productionWording(): ProductionWording {
+  const golden = JSON.parse(readFileSync(resolve("../internal/userconfig/testdata/definitions.golden.json"), "utf8"));
+  const section = golden.properties.telemetry as { title: string; properties: { enabled: { title: string; description: string } } };
+  return { sectionTitle: section.title, title: section.properties.enabled.title, description: section.properties.enabled.description };
+}
+
 const usageSwitch = () => screen.getByRole("switch", { name: "Fixture title" }) as HTMLInputElement;
 const busy = () => usageSwitch().getAttribute("aria-disabled") === "true";
 
@@ -66,15 +79,21 @@ describe("UsageDataSetting", () => {
   beforeEach(() => transport.fetch.mockReset());
   afterEach(() => cleanup());
 
-  it("takes its label and helper text from the served definitions", async () => {
+  it("takes its heading, label and helper text from the served definitions", async () => {
     serve((path) => (path === "/api/config/definitions" ? json(200, DEF) : value(true)));
     const { container } = render(<UsageDataSetting />);
-    expect(await screen.findByRole("switch", { name: "Fixture title" })).toBeTruthy();
-    expect(screen.getByText("Fixture description.")).toBeTruthy();
-    expect(container.textContent).not.toContain("Send anonymous usage data");
-    expect(container.textContent).not.toContain("Sends anonymous usage counts");
-    expect(screen.queryAllByRole("heading").some((h) => h.textContent?.includes("Telemetry"))).toBe(false);
-    expect(screen.getByRole("heading", { name: "Usage data" })).toBeTruthy();
+    const name = (await screen.findByRole("switch", { name: "Fixture title" })).closest("label")?.textContent;
+    const helper = screen.getByText("Fixture description.").textContent;
+    const headings = screen.queryAllByRole("heading");
+    expect(headings).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "Fixture section" })).toBe(headings[0]);
+    const production = productionWording();
+    for (const text of [production.sectionTitle, production.title, production.description]) {
+      expect(headings[0].textContent).not.toBe(text);
+      expect(name).not.toBe(text);
+      expect(helper).not.toBe(text);
+    }
+    expect(headings.some((h) => h.textContent?.includes("Telemetry"))).toBe(false);
     expect(container.querySelector("button")).toBeNull();
     expect(calls("/api/config/status")).toHaveLength(0);
   });
@@ -161,6 +180,10 @@ describe("UsageDataSetting", () => {
     ["a network error", () => Promise.reject(new Error("offline"))],
     ["a 404", () => json(404, {})],
     ["a document without the setting", () => json(200, { type: "object", properties: {} })],
+    ["a document without the section title", () => {
+      const { title: _title, ...section } = DEF.properties.telemetry;
+      return json(200, { ...DEF, properties: { telemetry: section } });
+    }],
     ["an HTML page from an older observer", () => new Response("<!doctype html><html></html>", { status: 200, headers: { "Content-Type": "text/html" } })],
   ])("is unavailable after %s for the definitions and recovers on a later refresh", async (_name, firstDefinitions) => {
     let definitions: () => Response | Promise<Response> = firstDefinitions;
@@ -230,8 +253,11 @@ describe("UsageDataSetting", () => {
   });
 
   it("contains no copy of the production wording", () => {
-    const golden = JSON.parse(readFileSync(resolve("../internal/userconfig/testdata/definitions.golden.json"), "utf8"));
-    const { title, description } = golden.properties.telemetry.properties.enabled as { title: string; description: string };
+    const { sectionTitle, title, description } = productionWording();
+    const quoted = sectionTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // A hardcoded heading is the whole title as a string literal or as JSX text;
+    // longer client strings may contain the same words.
+    const wholeSectionTitle = new RegExp(`(['"\`])${quoted}\\1|>\\s*${quoted}\\s*<`);
     const firstSentence = description.slice(0, description.indexOf(".") + 1);
     const root = resolve("src");
     const files: string[] = [];
@@ -247,7 +273,9 @@ describe("UsageDataSetting", () => {
     for (const file of files) {
       const source = readFileSync(file, "utf8");
       expect(source.includes(title), file).toBe(false);
+      expect(source.includes(description), file).toBe(false);
       expect(source.includes(firstSentence), file).toBe(false);
+      expect(wholeSectionTitle.test(source), file).toBe(false);
     }
   });
 });

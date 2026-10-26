@@ -6,19 +6,27 @@ import { createConfigEdits, type ConfigEdits, type ConfigEditsState } from "./co
 const usageDataPath = "telemetry.enabled";
 
 interface Wording {
+  heading: string;
   title: string;
   description: string;
 }
 
+function child(node: unknown, key: string): unknown {
+  return node !== null && typeof node === "object" ? (node as Record<string, unknown>)[key] : undefined;
+}
+
+function nonEmpty(value: unknown): value is string {
+  return typeof value === "string" && value !== "";
+}
+
 function wordingFrom(body: unknown): Wording | null {
-  let node: unknown = body;
-  for (const key of ["properties", "telemetry", "properties", "enabled"]) {
-    node = node !== null && typeof node === "object" ? (node as Record<string, unknown>)[key] : undefined;
-  }
-  if (node === null || typeof node !== "object") return null;
-  const { title, description } = node as { title?: unknown; description?: unknown };
-  if (typeof title !== "string" || title === "" || typeof description !== "string" || description === "") return null;
-  return { title, description };
+  const section = child(child(body, "properties"), "telemetry");
+  const setting = child(child(section, "properties"), "enabled");
+  const heading = child(section, "title");
+  const title = child(setting, "title");
+  const description = child(setting, "description");
+  if (!nonEmpty(heading) || !nonEmpty(title) || !nonEmpty(description)) return null;
+  return { heading, title, description };
 }
 
 function saveErrorText(error: NonNullable<ConfigEditsState["error"]>): string {
@@ -28,8 +36,8 @@ function saveErrorText(error: NonNullable<ConfigEditsState["error"]>): string {
 }
 
 /**
- * The switch for sending anonymous usage data. Its label and helper text come
- * from the observer's config definitions, and its value is always the
+ * The switch for sending anonymous usage data. Its heading, label and helper
+ * text come from the observer's config definitions, and its value is always the
  * observer's: a change applies at once and the switch shows the result.
  */
 export function UsageDataSetting(): React.ReactElement {
@@ -93,8 +101,8 @@ export function UsageDataSetting(): React.ReactElement {
   const ready = !unavailable && wording !== null && state !== null && state.server !== null;
 
   return (
-    <section aria-labelledby="cloud-usage-data-title" className="cloud-panel cloud-usage-data">
-      <h2 id="cloud-usage-data-title">Usage data</h2>
+    <section aria-labelledby={wording ? "cloud-usage-data-title" : undefined} className="cloud-panel cloud-usage-data">
+      {wording ? <h2 id="cloud-usage-data-title">{wording.heading}</h2> : null}
       {ready && wording && state ? (
         <>
           <label className="cloud-usage-data__switch">
