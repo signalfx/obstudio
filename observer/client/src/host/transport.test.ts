@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchConfigSchema, fetchConfigValues, putConfigValue } from "../api/client";
 import {
   callObserverHostCloud,
   ObserverHostCloudRequestError,
@@ -68,40 +67,10 @@ describe("Splunk Observability Studio host transport", () => {
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
 
-  it("routes a PUT with a JSON body through the host and passes a rejection through intact", async () => {
+  it("refuses HTTP methods the host does not forward", async () => {
     const { posted } = installHost();
-    const pending = observerFetch("/api/config/ui.port", {
-      body: JSON.stringify({ value: 80 }),
-      method: "PUT",
-    });
-    const request = posted.at(-1);
-    expect(request).toMatchObject({
-      request: {
-        body: '{"value":80}',
-        kind: "http",
-        method: "PUT",
-        path: "/api/config/ui.port",
-      },
-      type: "obstudio.host.request",
-    });
-
-    respond(request, true, {
-      body: JSON.stringify({ code: "invalid_value", error: "must be between 1024 and 65535" }),
-      headers: { "content-type": "application/json" },
-      status: 422,
-      statusText: "Unprocessable Entity",
-    });
-
-    const response = await pending;
-    expect(response.ok).toBe(false);
-    expect(response.status).toBe(422);
-    await expect(response.json()).resolves.toEqual({ code: "invalid_value", error: "must be between 1024 and 65535" });
-  });
-
-  it("still refuses HTTP methods the host does not forward", async () => {
-    const { posted } = installHost();
-    for (const method of ["PATCH", "DELETE"]) {
-      await expect(observerFetch("/api/config/ui.port", { body: "{}", method })).rejects.toThrow(
+    for (const method of ["PUT", "PATCH", "DELETE"]) {
+      await expect(observerFetch("/api/config", { body: "{}", method })).rejects.toThrow(
         `Splunk Observability Studio host transport does not support ${method} requests.`,
       );
     }
@@ -111,46 +80,43 @@ describe("Splunk Observability Studio host transport", () => {
   it("serves the Config tab's API calls through the host", async () => {
     const { posted } = installHost();
 
-    const schema = fetchConfigSchema();
-    expect(posted.at(-1)).toMatchObject({ request: { kind: "http", method: "GET", path: "/api/config/schema" } });
+    const definitions = observerFetch("/api/config/definitions");
+    expect(posted.at(-1)).toMatchObject({ request: { kind: "http", method: "GET", path: "/api/config/definitions" } });
     respond(posted.at(-1), true, {
-      body: JSON.stringify({ keys: [{ key: "ui.port", type: "integer" }] }),
+      body: JSON.stringify({ type: "object", properties: {} }),
       headers: { "content-type": "application/json" },
       status: 200,
       statusText: "OK",
     });
-    await expect(schema).resolves.toEqual([{ key: "ui.port", type: "integer" }]);
+    await expect((await definitions).json()).resolves.toEqual({ type: "object", properties: {} });
 
-    const values = fetchConfigValues();
+    const values = observerFetch("/api/config");
     expect(posted.at(-1)).toMatchObject({ request: { kind: "http", method: "GET", path: "/api/config" } });
     respond(posted.at(-1), true, {
-      body: JSON.stringify({ values: { ui: { port: 17900 } } }),
+      body: JSON.stringify({ telemetry: { enabled: true } }),
       headers: { "content-type": "application/json" },
       status: 200,
       statusText: "OK",
     });
-    await expect(values).resolves.toEqual({ ui: { port: 17900 } });
+    await expect((await values).json()).resolves.toEqual({ telemetry: { enabled: true } });
 
-    const saved = putConfigValue("ui.port", 18000);
+    const rejected = observerFetch("/api/config", {
+      body: '{"telemetry":{"enabled":null}}',
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
     expect(posted.at(-1)).toMatchObject({
-      request: { body: '{"value":18000}', kind: "http", method: "PUT", path: "/api/config/ui.port" },
+      request: { body: '{"telemetry":{"enabled":null}}', kind: "http", method: "POST", path: "/api/config" },
     });
     respond(posted.at(-1), true, {
-      body: JSON.stringify({ key: "ui.port", value: 18000 }),
+      body: JSON.stringify({ error: "telemetry.enabled: null is not a valid value" }),
       headers: { "content-type": "application/json" },
-      status: 200,
-      statusText: "OK",
+      status: 400,
+      statusText: "Bad Request",
     });
-    await expect(saved).resolves.toBe(18000);
-
-    const rejected = putConfigValue("ui.port", 80);
-    respond(posted.at(-1), true, {
-      body: JSON.stringify({ code: "invalid_value", error: "port is reserved" }),
-      headers: { "content-type": "application/json" },
-      status: 422,
-      statusText: "Unprocessable Entity",
-    });
-    await expect(rejected).rejects.toMatchObject({ code: "invalid_value", message: "port is reserved", status: 422 });
+    const response = await rejected;
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "telemetry.enabled: null is not a valid value" });
   });
 
   it("sends bounded cloud actions and validates the host status", async () => {
