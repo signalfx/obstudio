@@ -32,7 +32,9 @@ export interface DefinitionsDocument {
 }
 
 /** One setting, with the served field names and its dotted path. */
-export interface ConfigDefinition extends Partial<Pick<DefinitionNode, "title" | "description" | "default" | "enum" | "minimum" | "maximum">> {
+export interface ConfigDefinition
+  extends Pick<DefinitionNode, "title" | "description">,
+    Partial<Pick<DefinitionNode, "default" | "enum" | "minimum" | "maximum">> {
   /** `<section>.<name>`, such as telemetry.enabled. */
   path: string;
   type: ValueType;
@@ -65,10 +67,8 @@ function isFieldValue(value: unknown): value is FieldValue {
 }
 
 function readDefinition(path: string, node: Unchecked<DefinitionNode>): ConfigDefinition | null {
-  if (!isValueType(node.type)) return null;
-  const definition: ConfigDefinition = { path, type: node.type };
-  if (typeof node.title === "string") definition.title = node.title;
-  if (typeof node.description === "string") definition.description = node.description;
+  if (!isValueType(node.type) || typeof node.title !== "string" || typeof node.description !== "string") return null;
+  const definition: ConfigDefinition = { description: node.description, path, title: node.title, type: node.type };
   if (isFieldValue(node.default)) definition.default = node.default;
   if (Array.isArray(node.enum) && node.enum.every(isFieldValue)) definition.enum = node.enum;
   if (typeof node.minimum === "number") definition.minimum = node.minimum;
@@ -81,7 +81,8 @@ function readDefinition(path: string, node: Unchecked<DefinitionNode>): ConfigDe
 
 /**
  * Read the definitions document into sections, in the order the server lists
- * them. Settings of a type the tab has no control for are left out. Returns
+ * them. Settings of a type the tab has no control for, or without the served
+ * title and description, are left out. Returns
  * null when the document does not have the served shape.
  */
 export function parseDefinitions(document: unknown): ConfigSection[] | null {
@@ -129,18 +130,6 @@ export function editFields(sections: readonly ConfigSection[]): Record<string, F
     for (const definition of section.definitions) fields[definition.path] = fieldKind(definition);
   }
   return fields;
-}
-
-/** The server's title for the setting, or the exact path when it has none. */
-export function displayTitle(definition: ConfigDefinition): string {
-  const title = definition.title?.trim();
-  return title !== undefined && title !== "" ? title : definition.path;
-}
-
-/** The server's description for the setting, if it has one. */
-export function displayDescription(definition: ConfigDefinition): string | null {
-  const description = definition.description?.trim();
-  return description !== undefined && description !== "" ? description : null;
 }
 
 /** How a value is shown in a text field or select. */

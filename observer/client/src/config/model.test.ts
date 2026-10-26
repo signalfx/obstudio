@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   type ConfigDefinition,
-  displayDescription,
-  displayTitle,
+  type ValueType,
   editFields,
   fieldKind,
   findDefinition,
@@ -11,7 +10,12 @@ import {
   toText,
 } from "./model";
 
-const count: ConfigDefinition = { path: "sample.count", type: "integer", minimum: 10, maximum: 500 };
+/** A definition with placeholder wording; the tests here are about everything else. */
+function definition(path: string, type: ValueType, more: Partial<ConfigDefinition> = {}): ConfigDefinition {
+  return { description: "D.", path, title: "T", type, ...more };
+}
+
+const count = definition("sample.count", "integer", { minimum: 10, maximum: 500 });
 
 describe("parseDefinitions", () => {
   it("reads the served v1 document into one section with one switch", () => {
@@ -50,26 +54,39 @@ describe("parseDefinitions", () => {
   it("keeps the server's order of sections and definitions, and reads enum and range", () => {
     const sections = parseDefinitions({
       properties: {
-        display: { properties: { theme: { type: "string", enum: ["dark", "light"] }, size: { type: "integer", minimum: 1, maximum: 9 } } },
-        output: { properties: { format: { type: "string" } } },
+        display: {
+          properties: {
+            theme: { type: "string", title: "T", description: "D.", enum: ["dark", "light"] },
+            size: { type: "integer", title: "T", description: "D.", minimum: 1, maximum: 9 },
+          },
+        },
+        output: { properties: { format: { type: "string", title: "T", description: "D." } } },
       },
     });
     expect(sections?.map((section) => section.name)).toEqual(["display", "output"]);
     expect(sections?.[0].definitions).toEqual([
-      { enum: ["dark", "light"], path: "display.theme", type: "string" },
-      { maximum: 9, minimum: 1, path: "display.size", type: "integer" },
+      definition("display.theme", "string", { enum: ["dark", "light"] }),
+      definition("display.size", "integer", { maximum: 9, minimum: 1 }),
     ]);
   });
 
-  it("leaves out settings it has no control for, and sections left empty", () => {
+  it("leaves out settings it has no control for or that lack the served wording, and sections left empty", () => {
     const sections = parseDefinitions({
       properties: {
-        a: { properties: { list: { type: "array" }, on: { type: "boolean" }, odd: "x" } },
-        b: { properties: { map: { type: "object" } } },
+        a: {
+          properties: {
+            list: { type: "array", title: "T", description: "D." },
+            on: { type: "boolean", title: "T", description: "D." },
+            untitled: { type: "boolean", description: "D." },
+            undescribed: { type: "boolean", title: "T" },
+            odd: "x",
+          },
+        },
+        b: { properties: { map: { type: "object", title: "T", description: "D." } } },
         c: "not a section",
       },
     });
-    expect(sections).toEqual([{ definitions: [{ path: "a.on", type: "boolean" }], name: "a", title: "a" }]);
+    expect(sections).toEqual([{ definitions: [definition("a.on", "boolean")], name: "a", title: "a" }]);
   });
 
   it("returns no sections for an empty document, and null for one of the wrong shape", () => {
@@ -83,13 +100,13 @@ describe("parseDefinitions", () => {
 describe("findDefinition", () => {
   const document = {
     properties: {
-      display: { properties: { theme: { type: "string" } } },
+      display: { properties: { theme: { type: "string", title: "Theme", description: "The theme." } } },
       telemetry: { properties: { enabled: { type: "boolean", title: "T", description: "D." } } },
     },
   };
 
   it("finds a setting by its dotted path", () => {
-    expect(findDefinition(document, "telemetry.enabled")).toEqual({ description: "D.", path: "telemetry.enabled", title: "T", type: "boolean" });
+    expect(findDefinition(document, "telemetry.enabled")).toEqual(definition("telemetry.enabled", "boolean"));
   });
 
   it("returns null for a missing path or a document of the wrong shape", () => {
@@ -101,37 +118,19 @@ describe("findDefinition", () => {
 
 describe("fieldKind and editFields", () => {
   it("sends switches and choices at once and debounces typed fields", () => {
-    expect(fieldKind({ path: "a.b", type: "boolean" })).toBe("immediate");
-    expect(fieldKind({ path: "a.b", type: "string", enum: ["x", "y"] })).toBe("immediate");
-    expect(fieldKind({ path: "a.b", type: "integer", enum: [1, 2] })).toBe("immediate");
-    expect(fieldKind({ path: "a.b", type: "string" })).toBe("debounced");
-    expect(fieldKind({ path: "a.b", type: "string", enum: [] })).toBe("debounced");
+    expect(fieldKind(definition("a.b", "boolean"))).toBe("immediate");
+    expect(fieldKind(definition("a.b", "string", { enum: ["x", "y"] }))).toBe("immediate");
+    expect(fieldKind(definition("a.b", "integer", { enum: [1, 2] }))).toBe("immediate");
+    expect(fieldKind(definition("a.b", "string"))).toBe("debounced");
+    expect(fieldKind(definition("a.b", "string", { enum: [] }))).toBe("debounced");
     expect(fieldKind(count)).toBe("debounced");
   });
 
   it("covers every setting in every section", () => {
     expect(editFields([
-      { definitions: [{ path: "a.on", type: "boolean" }, { path: "a.name", type: "string" }], name: "a", title: "a" },
+      { definitions: [definition("a.on", "boolean"), definition("a.name", "string")], name: "a", title: "a" },
       { definitions: [count], name: "b", title: "b" },
     ])).toEqual({ "a.name": "debounced", "a.on": "immediate", "sample.count": "debounced" });
-  });
-});
-
-describe("displayTitle and displayDescription", () => {
-  it("prefers the server's title and trims it", () => {
-    expect(displayTitle({ path: "sample.enabled", type: "boolean", title: "  Enable sample " })).toBe("Enable sample");
-  });
-
-  it("falls back to the exact path, case and all, when the server sent no title or a blank one", () => {
-    expect(displayTitle({ path: "sample.flagStatus", type: "boolean" })).toBe("sample.flagStatus");
-    expect(displayTitle({ path: "sample.flagStatus", type: "boolean", title: "" })).toBe("sample.flagStatus");
-    expect(displayTitle({ path: "sample.flagStatus", type: "boolean", title: "  " })).toBe("sample.flagStatus");
-  });
-
-  it("returns the trimmed description, or null when there is none", () => {
-    expect(displayDescription({ path: "a.b", type: "string", description: " Does a thing. " })).toBe("Does a thing.");
-    expect(displayDescription({ path: "a.b", type: "string" })).toBeNull();
-    expect(displayDescription({ path: "a.b", type: "string", description: "  " })).toBeNull();
   });
 });
 
@@ -147,8 +146,8 @@ describe("toText", () => {
 describe("parseText", () => {
   it("parses whole numbers, tolerating whitespace and a sign", () => {
     expect(parseText(count, " 200 ")).toEqual({ ok: true, value: 200 });
-    expect(parseText({ path: "a.b", type: "integer" }, "+7")).toEqual({ ok: true, value: 7 });
-    expect(parseText({ path: "a.b", type: "integer" }, "-3")).toEqual({ ok: true, value: -3 });
+    expect(parseText(definition("a.b", "integer"), "+7")).toEqual({ ok: true, value: 7 });
+    expect(parseText(definition("a.b", "integer"), "-3")).toEqual({ ok: true, value: -3 });
   });
 
   it("rejects non-integers", () => {
@@ -158,7 +157,7 @@ describe("parseText", () => {
   });
 
   it("rejects integers beyond the safe range", () => {
-    expect(parseText({ path: "a.b", type: "integer" }, "99999999999999999999")).toEqual({
+    expect(parseText(definition("a.b", "integer"), "99999999999999999999")).toEqual({
       ok: false,
       error: "Enter a smaller whole number",
     });
@@ -169,20 +168,20 @@ describe("parseText", () => {
     expect(parseText(count, "900")).toEqual({ ok: false, error: "Must be a whole number between 10 and 500" });
     expect(parseText(count, "10")).toEqual({ ok: true, value: 10 });
     expect(parseText(count, "500")).toEqual({ ok: true, value: 500 });
-    expect(parseText({ path: "a.b", type: "integer", minimum: 5 }, "4")).toEqual({ ok: false, error: "Must be at least 5" });
-    expect(parseText({ path: "a.b", type: "integer", maximum: 5 }, "6")).toEqual({ ok: false, error: "Must be at most 5" });
+    expect(parseText(definition("a.b", "integer", { minimum: 5 }), "4")).toEqual({ ok: false, error: "Must be at least 5" });
+    expect(parseText(definition("a.b", "integer", { maximum: 5 }), "6")).toEqual({ ok: false, error: "Must be at most 5" });
   });
 
   it("checks allowed values for strings and integers", () => {
-    const level: ConfigDefinition = { path: "a.b", type: "string", enum: ["debug", "info"] };
+    const level: ConfigDefinition = definition("a.b", "string", { enum: ["debug", "info"] });
     expect(parseText(level, "info")).toEqual({ ok: true, value: "info" });
     expect(parseText(level, "loud")).toEqual({ ok: false, error: "Must be one of: debug, info" });
-    const size: ConfigDefinition = { path: "a.b", type: "integer", enum: [10, 20] };
+    const size: ConfigDefinition = definition("a.b", "integer", { enum: [10, 20] });
     expect(parseText(size, "20")).toEqual({ ok: true, value: 20 });
     expect(parseText(size, "15")).toEqual({ ok: false, error: "Must be one of: 10, 20" });
   });
 
   it("accepts any string, including empty, when no allowed values apply", () => {
-    expect(parseText({ path: "a.b", type: "string" }, "")).toEqual({ ok: true, value: "" });
+    expect(parseText(definition("a.b", "string"), "")).toEqual({ ok: true, value: "" });
   });
 });

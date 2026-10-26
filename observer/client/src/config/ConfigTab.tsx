@@ -7,8 +7,6 @@ import { observerFetch } from "../host/transport";
 import {
   type ConfigDefinition,
   type ConfigSection,
-  displayDescription,
-  displayTitle,
   editFields,
   hasChoices,
   parseDefinitions,
@@ -148,8 +146,6 @@ function ConfigField({ definition, value, inFlight, outcome, error, onEdit }: Co
   const descriptionId = `${id}-description`;
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
-  const title = displayTitle(definition);
-  const description = displayDescription(definition);
   const choices = hasChoices(definition) ? (definition.enum ?? []).map(String) : null;
   const hints = [
     definition.type === "integer" && choices === null ? rangeHint(definition) : null,
@@ -157,13 +153,9 @@ function ConfigField({ definition, value, inFlight, outcome, error, onEdit }: Co
   ].filter((hint): hint is string => hint !== null);
   const hint = hints.length > 0 ? hints.join(" ") : null;
   const errorText = draft?.error ?? (error ? saveErrorText(error) : null);
-  const describedBy = [
-    description !== null ? descriptionId : null,
-    hint !== null ? hintId : null,
-    errorText !== null ? errorId : null,
-  ]
+  const describedBy = [descriptionId, hint !== null ? hintId : null, errorText !== null ? errorId : null]
     .filter((part): part is string => part !== null)
-    .join(" ") || undefined;
+    .join(" ");
   const status = inFlight ? "saving" : saved ? "saved" : "idle";
   const statusText = status === "saving" ? "Saving…" : status === "saved" ? "Saved" : "";
 
@@ -223,9 +215,9 @@ function ConfigField({ definition, value, inFlight, outcome, error, onEdit }: Co
   return (
     <div className="config-field" data-status={status}>
       <div className="config-field__text">
-        <label className="config-field__label" htmlFor={id} id={titleId}>{title}</label>
-        {description !== null ? <p className="config-field__description" id={descriptionId}>{description}</p> : null}
-        {title !== definition.path ? <code className="config-field__key">{definition.path}</code> : null}
+        <label className="config-field__label" htmlFor={id} id={titleId}>{definition.title}</label>
+        <p className="config-field__description" id={descriptionId}>{definition.description}</p>
+        <code className="config-field__key">{definition.path}</code>
         {hint !== null ? <p className="config-field__hint" id={hintId}>{hint}</p> : null}
       </div>
       <div className="config-field__control">

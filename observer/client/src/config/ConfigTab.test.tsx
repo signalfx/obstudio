@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { notifyConfigRefresh } from "../telemetry/configSignal";
 import { ConfigTab } from "./ConfigTab";
+import type { DefinitionsDocument } from "./model";
 
 afterEach(() => {
   cleanup();
@@ -16,22 +17,45 @@ afterEach(() => {
 type Doc = Record<string, unknown>;
 
 // Test-only settings in the shape GET /api/config/definitions serves.
-const definitions: Doc = {
+const definitions = {
   type: "object",
   properties: {
     sample: {
       type: "object",
       properties: {
-        enabled: { type: "boolean", title: "Enable sample", default: true, "x-obstudio-failSafe": false, "x-obstudio-apply": "live" },
-        mode: { type: "string", title: "Mode", enum: ["fast", "safe", "slow"], default: "safe", "x-obstudio-apply": "live" },
-        name: { type: "string", title: "Name", description: "A name for the sample.", default: "", "x-obstudio-apply": "live" },
+        enabled: {
+          type: "boolean",
+          title: "Enable sample",
+          description: "Turns the sample on.",
+          default: true,
+          "x-obstudio-failSafe": false,
+          "x-obstudio-apply": "live",
+        },
+        mode: {
+          type: "string",
+          title: "Mode",
+          description: "How the sample runs.",
+          default: "safe",
+          enum: ["fast", "safe", "slow"],
+          "x-obstudio-failSafe": "safe",
+          "x-obstudio-apply": "live",
+        },
+        name: {
+          type: "string",
+          title: "Name",
+          description: "A name for the sample.",
+          default: "",
+          "x-obstudio-failSafe": "",
+          "x-obstudio-apply": "live",
+        },
         count: {
           type: "integer",
           title: "Count",
           description: "How many samples to keep.",
+          default: 100,
           minimum: 10,
           maximum: 500,
-          default: 100,
+          "x-obstudio-failSafe": 100,
           "x-obstudio-apply": "live",
         },
       },
@@ -39,11 +63,18 @@ const definitions: Doc = {
     other: {
       type: "object",
       properties: {
-        flag: { type: "boolean", title: "Other flag", default: false, "x-obstudio-apply": "restart" },
+        flag: {
+          type: "boolean",
+          title: "Other flag",
+          description: "Another flag.",
+          default: false,
+          "x-obstudio-failSafe": false,
+          "x-obstudio-apply": "restart",
+        },
       },
     },
   },
-};
+} satisfies DefinitionsDocument;
 
 const initialValues: Record<string, unknown> = {
   "other.flag": false,
@@ -203,29 +234,36 @@ describe("ConfigTab rendering", () => {
       name: "Count",
     })).toBeTruthy();
     expect(screen.getByRole("textbox", { description: "A name for the sample.", name: "Name" })).toBeTruthy();
-    expect(fieldOf("Enable sample").querySelector(".config-field__description")).toBeNull();
-    expect(screen.getByRole("switch", { name: "Enable sample" }).hasAttribute("aria-describedby")).toBe(false);
+    expect(screen.getByRole("switch", { description: "Turns the sample on.", name: "Enable sample" })).toBeTruthy();
   });
 
   it("says when a setting takes effect only after a restart", async () => {
     installServer();
     await renderLoaded();
-    expect(screen.getByRole("switch", { description: "Takes effect after a restart.", name: "Other flag" })).toBeTruthy();
+    expect(screen.getByRole("switch", { description: "Another flag. Takes effect after a restart.", name: "Other flag" })).toBeTruthy();
     expect(within(fieldOf("Enable sample")).queryByText("Takes effect after a restart.")).toBeNull();
   });
 
-  it("falls back to the exact path, case and all, when the server sends no title", async () => {
+  it("shows the exact path, case and all, under the title", async () => {
     installServer(
-      { properties: { sample: { properties: { flagStatus: { type: "string" }, "retry_Count-2": { type: "boolean", title: "  " } } } } },
+      {
+        properties: {
+          sample: {
+            properties: {
+              flagStatus: { type: "string", title: "Flag status", description: "D." },
+              "retry_Count-2": { type: "boolean", title: "Retry count", description: "D." },
+            },
+          },
+        },
+      },
       { "sample.flagStatus": "on", "sample.retry_Count-2": false },
     );
     render(<ConfigTab />);
 
-    expect(await screen.findByRole("textbox", { name: "sample.flagStatus" })).toBeTruthy();
-    expect(screen.getByRole("switch", { name: "sample.retry_Count-2" })).toBeTruthy();
-    // The path is already the title, so it is not repeated in a second line.
-    expect(screen.getAllByText("sample.flagStatus")).toHaveLength(1);
-    expect(fieldOf("sample.flagStatus").querySelector(".config-field__key")).toBeNull();
+    expect(await screen.findByRole("textbox", { name: "Flag status" })).toBeTruthy();
+    expect(within(fieldOf("Flag status")).getByText("sample.flagStatus")).toBeTruthy();
+    expect(within(fieldOf("Retry count")).getByText("sample.retry_Count-2")).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Retry count" })).toBeTruthy();
   });
 
   it("shows over-long text in full", async () => {
