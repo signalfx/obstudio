@@ -35,7 +35,10 @@ func renderKeysDoc(secs []Section, defs []def) []byte {
 		"Splunk Observability Studio reads these keys from `~/.obstudio/config.yaml`. A key that is absent or has an invalid value uses its fail-safe value. A change applies while Splunk Observability Studio is running unless the key requires a restart.",
 	}
 	for _, s := range secs {
-		blocks = append(blocks, "## `"+s.name+"`")
+		blocks = append(blocks, "## "+s.title()+" (`"+s.name+"`)")
+		if s.description() != "" {
+			blocks = append(blocks, s.description())
+		}
 		for _, d := range defsIn(s, defs) {
 			v := d.view()
 			rows := []string{
@@ -66,12 +69,11 @@ func renderKeysDoc(secs []Section, defs []def) []byte {
 				applies = "Requires restart"
 			}
 			rows = append(rows, "| Applies | "+applies+" |")
-			blocks = append(blocks,
-				"### `"+v.Path+"`",
-				"**"+v.Label+"**",
-				v.Description,
-				strings.Join(rows, "\n"),
-			)
+			blocks = append(blocks, "### `"+v.Path+"`", "**"+v.Title+"**", v.Description)
+			if v.Hint != "" {
+				blocks = append(blocks, v.Hint)
+			}
+			blocks = append(blocks, strings.Join(rows, "\n"))
 		}
 	}
 	return []byte(strings.Join(blocks, "\n\n") + "\n")
@@ -134,7 +136,7 @@ func renderDefinitionsDocument(secs []Section, defs []def) []byte {
 			v := d.view()
 			o := object{
 				{"type", jsonSchemaType(v.Type)},
-				{"title", v.Label},
+				{"title", v.Title},
 				{"description", v.Description},
 				{"default", v.Default},
 			}
@@ -153,7 +155,11 @@ func renderDefinitionsDocument(secs []Section, defs []def) []byte {
 			)
 			props = append(props, member{defName(d), o})
 		}
-		root = append(root, member{s.name, object{{"type", "object"}, {"properties", props}}})
+		so := object{{"type", "object"}, {"title", s.title()}}
+		if s.description() != "" {
+			so = append(so, member{"description", s.description()})
+		}
+		root = append(root, member{s.name, append(so, member{"properties", props})})
 	}
 	doc := object{{"type", "object"}, {"properties", root}}
 	var b bytes.Buffer

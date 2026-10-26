@@ -53,21 +53,27 @@ func (k Key[T]) Path() string {
 func (k Key[T]) selectorPath() string { return k.Path() }
 
 // Section names a group of settings.
-type Section struct{ name string }
+type Section struct{ name, titleText, descText string }
 
 // Path returns the section name, or "" for the zero Section.
 func (s Section) Path() string { return s.name }
 
 func (s Section) selectorPath() string { return s.name }
 
+func (s Section) title() string       { return s.titleText }
+func (s Section) description() string { return s.descText }
+
 // Selector is a Key or a Section.
 type Selector interface{ selectorPath() string }
 
-var SectionTelemetry = section("telemetry")
+var SectionTelemetry = section("telemetry", sectionSpec{
+	Title: "Usage data",
+})
 
 var TelemetryEnabled = define(SectionTelemetry, "enabled", defSpec[bool]{
-	Label:       "Send anonymous usage data",
+	Title:       "Send anonymous usage data",
 	Description: "Sends anonymous usage counts about Splunk Observability Studio itself to Splunk. Turning this off does not change what Splunk Observability Studio collects from your agents or shows you locally.",
+	Hint:        "To turn this off, run: obstudio telemetry disable",
 	Default:     true,
 	FailSafe:    false,
 	Apply:       ApplyLive,
@@ -114,8 +120,9 @@ type Definition struct {
 	Path        string
 	Section     string
 	Type        Type
-	Label       string
+	Title       string
 	Description string
+	Hint        string
 	Default     any
 	FailSafe    any
 	Enum        []any
@@ -135,9 +142,14 @@ func Definitions() []Definition {
 	return out
 }
 
+// sectionSpec is a section's wording. Title is required; Description is
+// optional.
+type sectionSpec struct{ Title, Description string }
+
 type defSpec[T Value] struct {
-	Label       string
+	Title       string
 	Description string
+	Hint        string
 	Default     T
 	FailSafe    T
 	Enum        []T
@@ -205,11 +217,20 @@ func isSegment(s string) bool {
 	return true
 }
 
-func newSection(name string) Section {
-	if !isSegment(name) {
-		panic(fmt.Sprintf("userconfig: invalid section name %q", name))
+func newSection(name string, d sectionSpec) Section {
+	fail := func(reason string) {
+		panic(fmt.Sprintf("userconfig: invalid section %q: %s", name, reason))
 	}
-	return Section{name: name}
+	if !isSegment(name) {
+		fail("invalid name")
+	}
+	if d.Title == "" || strings.Contains(d.Title, "\n") {
+		fail("title must be one non-empty line")
+	}
+	if strings.Contains(d.Description, "\n") {
+		fail("description must be one line")
+	}
+	return Section{name: name, titleText: d.Title, descText: d.Description}
 }
 
 func typeOf[T Value]() Type {
@@ -235,11 +256,14 @@ func newDefinition[T Value](s Section, name string, d defSpec[T]) *definition[T]
 	if !isSegment(name) {
 		fail("invalid name")
 	}
-	if d.Label == "" || strings.Contains(d.Label, "\n") {
-		fail("label must be one non-empty line")
+	if d.Title == "" || strings.Contains(d.Title, "\n") {
+		fail("title must be one non-empty line")
 	}
 	if d.Description == "" || strings.Contains(d.Description, "\n") {
 		fail("description must be one non-empty line")
+	}
+	if strings.Contains(d.Hint, "\n") {
+		fail("hint must be one line")
 	}
 	if d.Apply != ApplyLive && d.Apply != ApplyRestart {
 		fail("apply must be live or restart")
@@ -264,8 +288,8 @@ func newDefinition[T Value](s Section, name string, d defSpec[T]) *definition[T]
 	return &definition[T]{sec: s, name: name, spec: d}
 }
 
-func section(name string) Section {
-	s := newSection(name)
+func section(name string, d sectionSpec) Section {
+	s := newSection(name, d)
 	for _, r := range registeredSections {
 		if r.name == name {
 			panic(fmt.Sprintf("userconfig: duplicate section %q", name))
@@ -392,8 +416,9 @@ func (d *definition[T]) view() Definition {
 		Path:        d.path(),
 		Section:     d.sec.name,
 		Type:        typeOf[T](),
-		Label:       d.spec.Label,
+		Title:       d.spec.Title,
 		Description: d.spec.Description,
+		Hint:        d.spec.Hint,
 		Default:     d.spec.Default,
 		FailSafe:    d.spec.FailSafe,
 		Validated:   d.spec.Validate != nil,

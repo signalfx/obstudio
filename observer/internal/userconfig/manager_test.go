@@ -505,7 +505,7 @@ func TestUpdateOneReloadOneEvent(t *testing.T) {
 	path := scaffoldPath(t)
 	h := newHarness(t, path)
 	r := record(h.m)
-	x := newDefinition(newSection("t"), "x", defSpec[int]{Label: "x", Description: "x.", Apply: ApplyLive})
+	x := newDefinition(newSection("t", sectionSpec{Title: "T"}), "x", defSpec[int]{Title: "x", Description: "x.", Apply: ApplyLive})
 	var c1 Changes
 	Put(&c1, TelemetryEnabled, false)
 	c1.put(x, 5)
@@ -569,12 +569,12 @@ func TestUpdateAfterClose(t *testing.T) {
 func TestConcurrentUpdatesSerialized(t *testing.T) {
 	path := scaffoldPath(t)
 	h := newHarness(t, path)
-	sec := newSection("t")
+	sec := newSection("t", sectionSpec{Title: "T"})
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	errs := make(chan error, 20)
 	for i := range 20 {
-		k := newDefinition(sec, fmt.Sprintf("k%d", i), defSpec[int]{Label: "k", Description: "k.", Apply: ApplyLive})
+		k := newDefinition(sec, fmt.Sprintf("k%d", i), defSpec[int]{Title: "k", Description: "k.", Apply: ApplyLive})
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

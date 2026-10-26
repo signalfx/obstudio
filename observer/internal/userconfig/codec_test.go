@@ -21,11 +21,11 @@ type ttTable struct {
 // and s (string, Enum low/high), then section u with c (bool).
 func newTT() ttTable {
 	var tt ttTable
-	tt.t, tt.u = newSection("t"), newSection("u")
-	tt.b = newDefinition(tt.t, "b", defSpec[bool]{Label: "b", Description: "b.", Apply: ApplyLive})
-	tt.n = newDefinition(tt.t, "n", defSpec[int]{Label: "n", Description: "n.", Apply: ApplyLive, Min: ptr(1), Default: 1, FailSafe: 1})
-	tt.s = newDefinition(tt.t, "s", defSpec[string]{Label: "s", Description: "s.", Apply: ApplyLive, Enum: []string{"low", "high"}, Default: "low", FailSafe: "low"})
-	tt.c = newDefinition(tt.u, "c", defSpec[bool]{Label: "c", Description: "c.", Apply: ApplyLive})
+	tt.t, tt.u = newSection("t", sectionSpec{Title: "T"}), newSection("u", sectionSpec{Title: "U"})
+	tt.b = newDefinition(tt.t, "b", defSpec[bool]{Title: "b", Description: "b.", Apply: ApplyLive})
+	tt.n = newDefinition(tt.t, "n", defSpec[int]{Title: "n", Description: "n.", Apply: ApplyLive, Min: ptr(1), Default: 1, FailSafe: 1})
+	tt.s = newDefinition(tt.t, "s", defSpec[string]{Title: "s", Description: "s.", Apply: ApplyLive, Enum: []string{"low", "high"}, Default: "low", FailSafe: "low"})
+	tt.c = newDefinition(tt.u, "c", defSpec[bool]{Title: "c", Description: "c.", Apply: ApplyLive})
 	tt.secs = []Section{tt.t, tt.u}
 	tt.defs = []def{tt.b, tt.n, tt.s, tt.c}
 	return tt

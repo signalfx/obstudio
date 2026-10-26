@@ -23,13 +23,15 @@ import (
 
 const v1Scaffold = `# ~/.obstudio/config.yaml — Splunk Observability Studio local configuration.
 # Per-user, per-machine; applies to every IDE/agent using this obstudio binary.
-# Changes are picked up live unless noted. Values: use true/false, not yes/no/on/off.
-# To stop sending anonymous usage data, run: obstudio telemetry disable
+# Changes are picked up live unless noted.
 
+# Usage data
 telemetry:
   # Sends anonymous usage counts about Splunk Observability Studio itself to
   # Splunk. Turning this off does not change what Splunk Observability Studio
   # collects from your agents or shows you locally.
+  # Values: true or false.
+  # To turn this off, run: obstudio telemetry disable
   enabled: true
 `
 
@@ -118,9 +120,15 @@ func TestScaffoldGolden(t *testing.T) {
 		t.Error("Scaffold() is not stable")
 	}
 	lines := strings.Split(got, "\n")
-	for i, l := range lines[4:] {
+	if !reflect.DeepEqual(lines[:3], strings.Split(scaffoldHeader, "\n")) || len(strings.Split(scaffoldHeader, "\n")) != 3 || lines[3] != "" {
+		t.Errorf("scaffold does not start with the 3-line header and a blank line:\n%s", strings.Join(lines[:4], "\n"))
+	}
+	if lines[11] != "  enabled: true" {
+		t.Errorf("line 12 = %q, want %q", lines[11], "  enabled: true")
+	}
+	for i, l := range lines[3:] {
 		if utf8.RuneCountInString(l) > 80 {
-			t.Errorf("line %d is %d code points", i+5, utf8.RuneCountInString(l))
+			t.Errorf("line %d is %d code points", i+4, utf8.RuneCountInString(l))
 		}
 	}
 	if strings.Contains(strings.ToLower(got), "port") {
@@ -136,40 +144,62 @@ func TestScaffoldGolden(t *testing.T) {
 }
 
 func TestScaffoldRenderRules(t *testing.T) {
+	secDesc := strings.TrimSpace(strings.Repeat("one two three four five ", 5))
 	desc := strings.TrimSpace(strings.Repeat("alpha beta gamma delta epsilon zeta ", 5))
-	tsec, usec := newSection("t"), newSection("u")
-	a := newDefinition(tsec, "a", defSpec[string]{Label: "A", Description: desc, Default: "x y", Apply: ApplyRestart})
-	b := newDefinition(tsec, "b", defSpec[int]{Label: "B", Description: "B value.", Default: 7, Apply: ApplyLive})
-	c := newDefinition(usec, "c", defSpec[bool]{Label: "C", Description: "C value.", Default: false, Apply: ApplyLive})
+	tsec := newSection("t", sectionSpec{Title: "Tee", Description: secDesc})
+	usec := newSection("u", sectionSpec{Title: "You"})
+	a := newDefinition(tsec, "a", defSpec[string]{
+		Title: "A", Description: desc, Hint: "Run tee --reset.", Default: "x y",
+		Enum: []string{"x y", "z"}, Apply: ApplyRestart,
+	})
+	b := newDefinition(tsec, "b", defSpec[int]{Title: "B", Description: "B value.", Default: 7, Apply: ApplyLive})
+	c := newDefinition(usec, "c", defSpec[bool]{Title: "C", Description: "C value.", Default: false, Apply: ApplyLive})
 	got := renderScaffold([]Section{tsec, usec}, []def{a, b, c})
 	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
 
+	secLines := wrapComment("# ", secDesc)
 	aLines := wrapComment("  # ", desc)
 	want := strings.Split(scaffoldHeader, "\n")
-	want = append(want, "", "t:")
+	want = append(want, "", "# Tee")
+	want = append(want, secLines...)
+	want = append(want, "t:")
 	want = append(want, aLines...)
-	want = append(want, "  # Requires restart.", `  a: "x y"`, "", "  # B value.", "  b: 7", "", "u:", "  # C value.", "  c: false")
+	want = append(want, `  # Values: "x y", "z".`, "  # Requires restart.", "  # Run tee --reset.", `  a: "x y"`,
+		"", "  # B value.", "  b: 7",
+		"", "# You", "u:", "  # C value.", "  # Values: true or false.", "  c: false")
 	if !reflect.DeepEqual(lines, want) {
 		t.Fatalf("scaffold lines:\n%s\nwant:\n%s", strings.Join(lines, "\n"), strings.Join(want, "\n"))
 	}
-	var words []string
-	for i, l := range aLines {
-		if utf8.RuneCountInString(l) > 80 {
-			t.Errorf("comment line %q is too wide", l)
-		}
-		if i+1 < len(aLines) {
-			next := strings.Fields(strings.TrimPrefix(aLines[i+1], "  # "))[0]
-			if utf8.RuneCountInString(l)+1+utf8.RuneCountInString(next) <= 80 {
-				t.Errorf("line %q could have held %q", l, next)
+	for _, g := range []struct {
+		prefix, text string
+		lines        []string
+	}{{"# ", secDesc, secLines}, {"  # ", desc, aLines}} {
+		var words []string
+		for i, l := range g.lines {
+			if utf8.RuneCountInString(l) > 80 {
+				t.Errorf("comment line %q is too wide", l)
 			}
+			if i+1 < len(g.lines) {
+				next := strings.Fields(strings.TrimPrefix(g.lines[i+1], g.prefix))[0]
+				if utf8.RuneCountInString(l)+1+utf8.RuneCountInString(next) <= 80 {
+					t.Errorf("line %q could have held %q", l, next)
+				}
+			}
+			words = append(words, strings.TrimPrefix(l, g.prefix))
 		}
-		words = append(words, strings.TrimPrefix(l, "  # "))
-	}
-	if strings.Join(words, " ") != desc {
-		t.Error("wrapped comment does not reproduce the description")
+		if strings.Join(words, " ") != g.text {
+			t.Errorf("wrapped comment does not reproduce %q", g.text)
+		}
 	}
 	if len(aLines) < 2 {
 		t.Error("30-word description did not wrap")
+	}
+	bAt := slices.Index(lines, "  b: 7")
+	if slices.ContainsFunc(lines[slices.Index(lines, `  a: "x y"`)+1:bAt], func(l string) bool { return strings.Contains(l, "Values:") }) {
+		t.Error("an int without Enum has a Values line")
+	}
+	if you := slices.Index(lines, "# You"); lines[you+1] != "u:" {
+		t.Errorf("line after # You = %q, want u:", lines[you+1])
 	}
 	if strings.Count(got, "Requires restart") != 1 {
 		t.Error("a live definition has a restart note")
@@ -331,11 +361,11 @@ func TestDecodeValue(t *testing.T) {
 }
 
 func TestScalarCodec(t *testing.T) {
-	sec := newSection("t")
+	sec := newSection("t", sectionSpec{Title: "T"})
 	defs := map[Type]def{
-		TypeBool:   newDefinition(sec, "b", defSpec[bool]{Label: "b", Description: "b.", Apply: ApplyLive}),
-		TypeInt:    newDefinition(sec, "n", defSpec[int]{Label: "n", Description: "n.", Apply: ApplyLive}),
-		TypeString: newDefinition(sec, "s", defSpec[string]{Label: "s", Description: "s.", Apply: ApplyLive}),
+		TypeBool:   newDefinition(sec, "b", defSpec[bool]{Title: "b", Description: "b.", Apply: ApplyLive}),
+		TypeInt:    newDefinition(sec, "n", defSpec[int]{Title: "n", Description: "n.", Apply: ApplyLive}),
+		TypeString: newDefinition(sec, "s", defSpec[string]{Title: "s", Description: "s.", Apply: ApplyLive}),
 	}
 	values := []any{true, false, 0, -7, 123456, "", "true", "123", "null", "a: b", "# x", "line1\nline2", "ünï"}
 	for _, v := range values {
@@ -480,7 +510,7 @@ func TestWritePreservesUnknownKeys(t *testing.T) {
 func TestWriteRejectsBeforeDisk(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "absent")
 	path := filepath.Join(dir, "config.yaml")
-	n := newDefinition(newSection("t"), "n", defSpec[int]{Label: "n", Description: "n.", Apply: ApplyLive, Min: ptr(1), Default: 1})
+	n := newDefinition(newSection("t", sectionSpec{Title: "T"}), "n", defSpec[int]{Title: "n", Description: "n.", Apply: ApplyLive, Min: ptr(1), Default: 1})
 
 	if err := Write(path, Key[bool]{}, true); err != ErrUnknownKey {
 		t.Errorf("zero Key: %v", err)
@@ -534,9 +564,9 @@ func countingRename(n *int) func(string, string) error {
 
 func TestWriteChangesOneRename(t *testing.T) {
 	path := writeFile(t, Scaffold()+"server:\n  port: 9000\n")
-	sec := newSection("t")
-	a := newDefinition(sec, "a", defSpec[string]{Label: "a", Description: "a.", Apply: ApplyLive})
-	b := newDefinition(sec, "b", defSpec[int]{Label: "b", Description: "b.", Apply: ApplyLive})
+	sec := newSection("t", sectionSpec{Title: "T"})
+	a := newDefinition(sec, "a", defSpec[string]{Title: "a", Description: "a.", Apply: ApplyLive})
+	b := newDefinition(sec, "b", defSpec[int]{Title: "b", Description: "b.", Apply: ApplyLive})
 	var c Changes
 	Put(&c, TelemetryEnabled, false)
 	c.put(a, "x")
@@ -580,8 +610,8 @@ func TestWriteChangesOneRename(t *testing.T) {
 }
 
 func TestWriteChangesAllOrNothing(t *testing.T) {
-	n := newDefinition(newSection("t"), "n", defSpec[int]{Label: "n", Description: "n.", Apply: ApplyLive, Min: ptr(1), Default: 1})
-	uc := newDefinition(newSection("u"), "c", defSpec[bool]{Label: "c", Description: "c.", Apply: ApplyLive})
+	n := newDefinition(newSection("t", sectionSpec{Title: "T"}), "n", defSpec[int]{Title: "n", Description: "n.", Apply: ApplyLive, Min: ptr(1), Default: 1})
+	uc := newDefinition(newSection("u", sectionSpec{Title: "U"}), "c", defSpec[bool]{Title: "c", Description: "c.", Apply: ApplyLive})
 	f1, f2, f3 := Scaffold(), Scaffold()+"u: 5\n", "telemetry: [unclosed"
 	var c1, c2, c3 Changes
 	Put(&c1, TelemetryEnabled, false)
@@ -878,6 +908,11 @@ func TestFileLayerBuildsAlone(t *testing.T) {
 			if strings.Contains(src, banned) {
 				t.Errorf("%s contains %s", f, banned)
 			}
+		}
+	}
+	for _, f := range []string{"file.go", "scaffold.go", "render.go", "codec.go"} {
+		if strings.Contains(strings.ToLower(readFile(t, f)), "telemetry") {
+			t.Errorf("%s names a setting: it contains %q", f, "telemetry")
 		}
 	}
 }

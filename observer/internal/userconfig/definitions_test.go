@@ -18,7 +18,13 @@ func upper(s string) string {
 	return string(r)
 }
 
-const v1Description = "Sends anonymous usage counts about Splunk Observability Studio itself to Splunk. Turning this off does not change what Splunk Observability Studio collects from your agents or shows you locally."
+// The v1 text, as declared in definitions.go.
+const (
+	v1SectionTitle = "Usage data"
+	v1Title        = "Send anonymous usage data"
+	v1Description  = "Sends anonymous usage counts about Splunk Observability Studio itself to Splunk. Turning this off does not change what Splunk Observability Studio collects from your agents or shows you locally."
+	v1Hint         = "To turn this off, run: obstudio telemetry disable"
+)
 
 func assertV1Definitions(t *testing.T, defs []Definition) {
 	t.Helper()
@@ -30,8 +36,9 @@ func assertV1Definitions(t *testing.T, defs []Definition) {
 		Path:        "telemetry.enabled",
 		Section:     "telemetry",
 		Type:        TypeBool,
-		Label:       "Send anonymous usage data",
+		Title:       v1Title,
 		Description: v1Description,
+		Hint:        v1Hint,
 		Default:     true,
 		FailSafe:    false,
 		Apply:       ApplyLive,
@@ -44,6 +51,12 @@ func assertV1Definitions(t *testing.T, defs []Definition) {
 func TestTableV1(t *testing.T) {
 	defs := Definitions()
 	assertV1Definitions(t, defs)
+	if secs := sections(); !reflect.DeepEqual(secs, []Section{SectionTelemetry}) {
+		t.Errorf("sections() = %v, want [SectionTelemetry]", secs)
+	}
+	if SectionTelemetry.title() != v1SectionTitle || SectionTelemetry.description() != "" {
+		t.Errorf("SectionTelemetry title %q description %q", SectionTelemetry.title(), SectionTelemetry.description())
+	}
 	for _, d := range defs {
 		if d.Path == "version" || strings.Contains(d.Path, "port") {
 			t.Errorf("unexpected definition %q", d.Path)
@@ -134,17 +147,17 @@ func fieldPointer(d def, s *Settings) any {
 }
 
 func TestCheckConstraints(t *testing.T) {
-	sec := newSection("t")
-	n := newDefinition(sec, "n", defSpec[int]{Label: "n", Description: "n.", Apply: ApplyLive, Min: ptr(1), Max: ptr(10)})
-	e := newDefinition(sec, "e", defSpec[int]{Label: "e", Description: "e.", Apply: ApplyLive, Enum: []int{1, 2, 4}})
-	s := newDefinition(sec, "s", defSpec[string]{Label: "s", Description: "s.", Apply: ApplyLive, Enum: []string{"low", "high"}})
-	v := newDefinition(sec, "v", defSpec[string]{Label: "v", Description: "v.", Apply: ApplyLive, Validate: func(s string) error {
+	sec := newSection("t", sectionSpec{Title: "T"})
+	n := newDefinition(sec, "n", defSpec[int]{Title: "n", Description: "n.", Apply: ApplyLive, Min: ptr(1), Max: ptr(10)})
+	e := newDefinition(sec, "e", defSpec[int]{Title: "e", Description: "e.", Apply: ApplyLive, Enum: []int{1, 2, 4}})
+	s := newDefinition(sec, "s", defSpec[string]{Title: "s", Description: "s.", Apply: ApplyLive, Enum: []string{"low", "high"}})
+	v := newDefinition(sec, "v", defSpec[string]{Title: "v", Description: "v.", Apply: ApplyLive, Validate: func(s string) error {
 		if s == "" {
 			return errors.New("must not be empty")
 		}
 		return nil
 	}})
-	b := newDefinition(sec, "b", defSpec[bool]{Label: "b", Description: "b.", Apply: ApplyLive})
+	b := newDefinition(sec, "b", defSpec[bool]{Title: "b", Description: "b.", Apply: ApplyLive})
 
 	cases := []struct {
 		name string
@@ -192,8 +205,8 @@ func TestCheckConstraints(t *testing.T) {
 
 func TestCheckOrder(t *testing.T) {
 	calls := 0
-	o := newDefinition(newSection("t"), "o", defSpec[int]{
-		Label: "o", Description: "o.", Apply: ApplyLive,
+	o := newDefinition(newSection("t", sectionSpec{Title: "T"}), "o", defSpec[int]{
+		Title: "o", Description: "o.", Apply: ApplyLive,
 		Enum: []int{5, 50}, Max: ptr(20),
 		Validate: func(int) error { calls++; return nil },
 	})
@@ -246,26 +259,32 @@ func mustPanic(t *testing.T, contains string, f func()) {
 func TestDeclarationPanics(t *testing.T) {
 	nTable, nSections := len(table()), len(sections())
 	for _, name := range []string{"Telemetry", "", "a.b"} {
-		mustPanic(t, fmt.Sprintf("%q", name), func() { newSection(name) })
+		mustPanic(t, fmt.Sprintf("%q", name), func() { newSection(name, sectionSpec{Title: "T"}) })
 	}
-	sec := newSection("t")
-	ok := defSpec[bool]{Label: "x", Description: "x.", Apply: ApplyLive}
+	for _, spec := range []sectionSpec{{}, {Title: "a\nb"}, {Title: "T", Description: "a\nb"}} {
+		mustPanic(t, `"t"`, func() { newSection("t", spec) })
+	}
+	sec := newSection("t", sectionSpec{Title: "T"})
+	ok := defSpec[bool]{Title: "x", Description: "x.", Apply: ApplyLive}
 	mustPanic(t, "t.9x", func() { newDefinition(sec, "9x", ok) })
 	mustPanic(t, "t.x", func() { newDefinition(sec, "x", defSpec[bool]{Description: "x.", Apply: ApplyLive}) })
-	mustPanic(t, "t.x", func() { newDefinition(sec, "x", defSpec[bool]{Label: "a\nb", Description: "x.", Apply: ApplyLive}) })
-	mustPanic(t, "t.x", func() { newDefinition(sec, "x", defSpec[bool]{Label: "x", Apply: ApplyLive}) })
-	mustPanic(t, "t.x", func() { newDefinition(sec, "x", defSpec[bool]{Label: "x", Description: "x."}) })
+	mustPanic(t, "t.x", func() { newDefinition(sec, "x", defSpec[bool]{Title: "a\nb", Description: "x.", Apply: ApplyLive}) })
+	mustPanic(t, "t.x", func() { newDefinition(sec, "x", defSpec[bool]{Title: "x", Apply: ApplyLive}) })
+	mustPanic(t, "t.x", func() { newDefinition(sec, "x", defSpec[bool]{Title: "x", Description: "x."}) })
 	mustPanic(t, "t.x", func() {
-		newDefinition(sec, "x", defSpec[bool]{Label: "x", Description: "x.", Apply: ApplyLive, Enum: []bool{true}})
+		newDefinition(sec, "x", defSpec[bool]{Title: "x", Description: "x.", Hint: "a\nb", Apply: ApplyLive})
 	})
 	mustPanic(t, "t.x", func() {
-		newDefinition(sec, "x", defSpec[string]{Label: "x", Description: "x.", Apply: ApplyLive, Min: ptr(1)})
+		newDefinition(sec, "x", defSpec[bool]{Title: "x", Description: "x.", Apply: ApplyLive, Enum: []bool{true}})
 	})
 	mustPanic(t, "t.x", func() {
-		newDefinition(sec, "x", defSpec[int]{Label: "x", Description: "x.", Apply: ApplyLive, Min: ptr(5), Max: ptr(1)})
+		newDefinition(sec, "x", defSpec[string]{Title: "x", Description: "x.", Apply: ApplyLive, Min: ptr(1)})
 	})
 	mustPanic(t, "t.x", func() {
-		newDefinition(sec, "x", defSpec[int]{Label: "x", Description: "x.", Apply: ApplyLive, Enum: []int{1, 1}})
+		newDefinition(sec, "x", defSpec[int]{Title: "x", Description: "x.", Apply: ApplyLive, Min: ptr(5), Max: ptr(1)})
+	})
+	mustPanic(t, "t.x", func() {
+		newDefinition(sec, "x", defSpec[int]{Title: "x", Description: "x.", Apply: ApplyLive, Enum: []int{1, 1}})
 	})
 	mustPanic(t, ".x", func() { newDefinition(Section{}, "x", ok) })
 
@@ -273,8 +292,13 @@ func TestDeclarationPanics(t *testing.T) {
 	mustPanic(t, "telemetry.x", func() { define(SectionTelemetry, "x", ok) })
 	withField := ok
 	withField.Field = field
-	mustPanic(t, "t.x", func() { define(newSection("t"), "x", withField) })
+	mustPanic(t, "t.x", func() { define(newSection("t", sectionSpec{Title: "T"}), "x", withField) })
 	mustPanic(t, "telemetry.enabled", func() { define(SectionTelemetry, "enabled", withField) })
+	mustPanic(t, `"telemetry"`, func() { section("telemetry", sectionSpec{Title: "T"}) })
+
+	// Optional text may be unset.
+	newSection("t", sectionSpec{Title: "T"})
+	newDefinition(sec, "x", ok)
 
 	if len(table()) != nTable || len(sections()) != nSections {
 		t.Errorf("table changed: %d/%d definitions, %d/%d sections", len(table()), nTable, len(sections()), nSections)
@@ -285,15 +309,15 @@ func TestDefinitionsView(t *testing.T) {
 	before := Definitions()
 	d := Definitions()
 	for i := range d {
-		d[i].Label = "x"
+		d[i].Title = "x"
 		d[i].Default = nil
 	}
 	if !reflect.DeepEqual(Definitions(), before) {
 		t.Error("changing a returned definition changed the next call's result")
 	}
 
-	m := newDefinition(newSection("t"), "m", defSpec[int]{
-		Label: "m", Description: "m.", Apply: ApplyLive, Min: ptr(3), Enum: []int{3, 4},
+	m := newDefinition(newSection("t", sectionSpec{Title: "T"}), "m", defSpec[int]{
+		Title: "m", Description: "m.", Apply: ApplyLive, Min: ptr(3), Enum: []int{3, 4},
 	})
 	a := m.view()
 	*a.Min = 99

@@ -3,6 +3,7 @@
   "properties": {
     "telemetry": {
       "type": "object",
+      "title": "Usage data",
       "properties": {
         "enabled": {
           "type": "boolean",

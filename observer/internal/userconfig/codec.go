@@ -8,7 +8,7 @@ import (
 )
 
 // DecodeChanges turns a JSON merge body shaped like the file, for example
-// {"telemetry":{"enabled":false}}, into a change set. Settings absent from the
+// {"<section>":{"<name>":<value>}}, into a change set. Settings absent from the
 // body are absent from the set. Any failure returns an empty set.
 func DecodeChanges(data []byte) (Changes, error) {
 	return decodeChanges(sections(), table(), data)
