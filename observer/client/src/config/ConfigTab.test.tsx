@@ -4,7 +4,7 @@ import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ConfigKeySpec } from "../api/types";
+import { notifyConfigRefresh } from "../telemetry/configSignal";
 import { ConfigTab } from "./ConfigTab";
 
 afterEach(() => {
@@ -13,33 +13,49 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const specs: ConfigKeySpec[] = [
-  { key: "logging.level", type: "string", label: "Level", allowedValues: ["debug", "info", "warn", "error"] },
-  { key: "splunk.metricsExport", type: "boolean", label: "Metrics export" },
-  { key: "splunk.realm", type: "string", label: "Realm", description: "Splunk Observability Cloud realm, such as us1." },
-  {
-    key: "telemetry.retentionMinutes",
-    type: "integer",
-    minimum: 1,
-    maximum: 1440,
-    label: "Telemetry retention (minutes)",
-    description: "How long telemetry is kept in memory.",
+type Doc = Record<string, unknown>;
+
+// Test-only settings in the shape GET /api/config/definitions serves.
+const definitions: Doc = {
+  type: "object",
+  properties: {
+    sample: {
+      type: "object",
+      properties: {
+        enabled: { type: "boolean", title: "Enable sample", default: true, "x-obstudio-failSafe": false, "x-obstudio-apply": "live" },
+        mode: { type: "string", title: "Mode", enum: ["fast", "safe", "slow"], default: "safe", "x-obstudio-apply": "live" },
+        name: { type: "string", title: "Name", description: "A name for the sample.", default: "", "x-obstudio-apply": "live" },
+        count: {
+          type: "integer",
+          title: "Count",
+          description: "How many samples to keep.",
+          minimum: 10,
+          maximum: 500,
+          default: 100,
+          "x-obstudio-apply": "live",
+        },
+      },
+    },
+    other: {
+      type: "object",
+      properties: {
+        flag: { type: "boolean", title: "Other flag", default: false, "x-obstudio-apply": "restart" },
+      },
+    },
   },
-  { key: "ui.port", type: "integer", label: "Port", minimum: 1024, maximum: 65535 },
-];
+};
 
 const initialValues: Record<string, unknown> = {
-  "logging.level": "info",
-  "splunk.metricsExport": false,
-  "splunk.realm": "us1",
-  "telemetry.retentionMinutes": 60,
-  "ui.port": 17900,
+  "other.flag": false,
+  "sample.count": 100,
+  "sample.enabled": false,
+  "sample.mode": "safe",
+  "sample.name": "alpha",
 };
 
 interface FakeResponse {
   ok: boolean;
   status: number;
-  statusText: string;
   json: () => Promise<unknown>;
 }
 
@@ -52,68 +68,78 @@ interface Call {
 
 interface FakeServer {
   calls: Call[];
-  puts: () => Array<{ key: string; value: unknown }>;
-  /** Intercept PUTs: return a response (possibly delayed) to override the default echo. */
-  onPut: ((key: string, value: unknown) => Promise<FakeResponse> | FakeResponse | undefined) | null;
-  failLoad: { status: number; error: string } | null;
+  stored: Record<string, unknown>;
+  posts: () => unknown[];
+  /** Intercept a POST: return a response (possibly delayed) instead of the default merge. */
+  onPost: ((body: Doc) => Promise<FakeResponse> | FakeResponse | undefined) | null;
+  failNext: { path: string; status: number } | null;
 }
 
 function respond(status: number, body: unknown): FakeResponse {
-  return { json: async () => body, ok: status >= 200 && status < 300, status, statusText: "" };
+  return { json: async () => body, ok: status >= 200 && status < 300, status };
 }
 
-function nest(values: Record<string, unknown>): Record<string, unknown> {
-  const root: Record<string, unknown> = {};
+function nest(values: Record<string, unknown>): Doc {
+  const root: Doc = {};
   for (const [key, value] of Object.entries(values)) {
-    const parts = key.split(".");
-    let node = root;
-    for (const part of parts.slice(0, -1)) {
-      node = (node[part] ??= {}) as Record<string, unknown>;
-    }
-    node[parts[parts.length - 1]] = value;
+    const [section, leaf] = key.split(".");
+    root[section] = { ...(root[section] as Doc | undefined), [leaf]: value };
   }
   return root;
 }
 
-function installServer(
-  schema: ConfigKeySpec[] = specs,
-  values: Record<string, unknown> = initialValues,
-): FakeServer {
-  const stored = { ...values };
+function knownPaths(document: Doc): Set<string> {
+  const paths = new Set<string>();
+  for (const [section, node] of Object.entries((document.properties ?? {}) as Doc)) {
+    for (const leaf of Object.keys(((node as Doc).properties ?? {}) as Doc)) paths.add(`${section}.${leaf}`);
+  }
+  return paths;
+}
+
+/** A fake observer: GET definitions, GET config, and a merge POST with the real 400 rules. */
+function installServer(document: Doc = definitions, values: Record<string, unknown> = initialValues): FakeServer {
+  const known = knownPaths(document);
   const server: FakeServer = {
     calls: [],
-    failLoad: null,
-    onPut: null,
-    puts: () => server.calls
-      .filter((call) => call.method === "PUT")
-      .map((call) => ({
-        key: decodeURIComponent(call.path.replace("/api/config/", "")),
-        value: (call.body as { value: unknown }).value,
-      })),
+    failNext: null,
+    onPost: null,
+    posts: () => server.calls.filter((call) => call.method === "POST").map((call) => call.body),
+    stored: { ...values },
+  };
+  const merge = (body: Doc): FakeResponse => {
+    const changes: Record<string, unknown> = {};
+    for (const [section, node] of Object.entries(body)) {
+      for (const [leaf, value] of Object.entries(node as Doc)) {
+        const path = `${section}.${leaf}`;
+        if (!known.has(path)) return respond(400, { error: `unknown key ${path}` });
+        if (value === null) return respond(400, { error: `${path}: null is not a valid value` });
+        changes[path] = value;
+      }
+    }
+    Object.assign(server.stored, changes);
+    return respond(200, nest(server.stored));
   };
   vi.stubGlobal("fetch", vi.fn(async (path: string, init: RequestInit = {}) => {
     const method = (init.method ?? "GET").toUpperCase();
-    const body = typeof init.body === "string" ? JSON.parse(init.body) as unknown : undefined;
+    const body = typeof init.body === "string" ? JSON.parse(init.body) as Doc : undefined;
     server.calls.push({ body, headers: new Headers(init.headers), method, path });
-    if (method === "GET" && server.failLoad !== null) {
-      const failure = server.failLoad;
-      server.failLoad = null;
-      return respond(failure.status, { code: "internal_error", error: failure.error });
+    if (server.failNext !== null && server.failNext.path === path) {
+      const { status } = server.failNext;
+      server.failNext = null;
+      return respond(status, { error: "boom" });
     }
-    if (method === "GET" && path === "/api/config/schema") return respond(200, { keys: schema });
-    if (method === "GET" && path === "/api/config") return respond(200, { values: nest(stored) });
-    if (method === "PUT") {
-      const key = decodeURIComponent(path.replace("/api/config/", ""));
-      const override = server.onPut?.(key, (body as { value: unknown }).value);
+    if (method === "GET" && path === "/api/config/definitions") return respond(200, document);
+    if (method === "GET" && path === "/api/config") return respond(200, nest(server.stored));
+    if (method === "POST" && path === "/api/config" && body !== undefined) {
+      const override = server.onPost?.(body);
       if (override !== undefined) {
         const response = await override;
-        if (response.ok) stored[key] = ((await response.json()) as { value: unknown }).value;
+        if (response.ok) merge(body);
         return response;
       }
-      stored[key] = (body as { value: unknown }).value;
-      return respond(200, { key, value: stored[key] });
+      return merge(body);
     }
-    return respond(404, { code: "unknown_key", error: "not found" });
+    return respond(405, {});
   }));
   return server;
 }
@@ -126,7 +152,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 
 async function renderLoaded(): Promise<void> {
   render(<ConfigTab />);
-  await screen.findByRole("switch", { name: "Metrics export" });
+  await screen.findByRole("switch", { name: "Enable sample" });
 }
 
 function fieldOf(name: string): HTMLElement {
@@ -141,210 +167,207 @@ async function settle(ms = 0): Promise<void> {
 }
 
 describe("ConfigTab rendering", () => {
-  it("shows a loading state, then a section per key group with a control matching each type", async () => {
+  it("shows a loading state, then a section per definitions section with a control matching each type", async () => {
     installServer();
     render(<ConfigTab />);
     expect(screen.getByText("Loading configuration…")).toBeTruthy();
 
-    await screen.findByRole("switch", { name: "Metrics export" });
+    await screen.findByRole("switch", { name: "Enable sample" });
     expect(screen.getByRole("tabpanel", { name: "Config" })).toBeTruthy();
-    for (const title of ["logging", "splunk", "telemetry", "ui"]) {
-      expect(screen.getByRole("heading", { name: title })).toBeTruthy();
-    }
-    expect(screen.getByRole("switch", { name: "Metrics export" }).getAttribute("aria-checked")).toBe("false");
-    expect((screen.getByRole("textbox", { name: "Realm" }) as HTMLInputElement).value).toBe("us1");
-    expect((screen.getByRole("textbox", { name: "Port" }) as HTMLInputElement).value).toBe("17900");
-    expect((screen.getByRole("textbox", { name: "Telemetry retention (minutes)" }) as HTMLInputElement).value).toBe("60");
+    // Sections and keys keep the server's order.
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["sample", "other"]);
+    expect(screen.getByRole("switch", { name: "Enable sample" }).getAttribute("aria-checked")).toBe("false");
+    expect((screen.getByRole("textbox", { name: "Name" }) as HTMLInputElement).value).toBe("alpha");
+    expect((screen.getByRole("textbox", { name: "Count" }) as HTMLInputElement).value).toBe("100");
 
-    const level = screen.getByRole("combobox", { name: "Level" }) as HTMLSelectElement;
-    expect(level.value).toBe("info");
-    expect(within(level).getAllByRole("option").map((option) => option.textContent)).toEqual([
-      "debug", "info", "warn", "error",
+    const mode = screen.getByRole("combobox", { name: "Mode" }) as HTMLSelectElement;
+    expect(mode.value).toBe("safe");
+    expect(within(mode).getAllByRole("option").map((option) => option.textContent)).toEqual(["fast", "safe", "slow"]);
+  });
+
+  it("reads only the definitions and config endpoints", async () => {
+    const server = installServer();
+    await renderLoaded();
+    expect(server.calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "GET /api/config/definitions",
+      "GET /api/config",
     ]);
   });
 
-  it("shows each key and the allowed range for integers, tied to the control", async () => {
+  it("shows the key beside the server's title and the allowed range, tied to the control", async () => {
     installServer();
     await renderLoaded();
-    expect(within(fieldOf("Port")).getByText("ui.port")).toBeTruthy();
-    expect(screen.getByRole("textbox", { description: "Whole number from 1024 to 65535", name: "Port" })).toBeTruthy();
-  });
-
-  it("uses the server's label when given", async () => {
-    installServer();
-    await renderLoaded();
-    expect(screen.getByRole("textbox", { name: "Telemetry retention (minutes)" })).toBeTruthy();
-    expect(screen.getByRole("switch", { name: "Metrics export" })).toBeTruthy();
-    // The key is shown beside a server label, so it stays visible and unambiguous.
-    expect(within(fieldOf("Realm")).getByText("splunk.realm")).toBeTruthy();
-  });
-
-  it("falls back to the exact key, case and all, when the server sends no label", async () => {
-    installServer(
-      [
-        { key: "o11y.flagStatus", type: "string" },
-        { key: "o11y.retry_Count-2", type: "boolean" },
-        { key: "workspaceRoot", type: "string" },
-      ],
-      { "o11y.flagStatus": "on", "o11y.retry_Count-2": false, workspaceRoot: "/tmp" },
-    );
-    render(<ConfigTab />);
-
-    expect(await screen.findByRole("textbox", { name: "o11y.flagStatus" })).toBeTruthy();
-    expect(screen.getByRole("switch", { name: "o11y.retry_Count-2" })).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "workspaceRoot" })).toBeTruthy();
-    // Sections are titled with the exact first segment; single-segment keys go under General.
-    expect(screen.getByRole("heading", { name: "o11y" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "General" })).toBeTruthy();
-    // The key is already the label, so it is not repeated in a second line.
-    expect(screen.getAllByText("o11y.flagStatus")).toHaveLength(1);
-    expect(fieldOf("o11y.flagStatus").querySelector(".config-field__key")).toBeNull();
-  });
-
-  it("shows a description for a key that has no label", async () => {
-    installServer(
-      [{ key: "splunk.realm", type: "string", description: "Splunk Observability Cloud realm, such as us1." }],
-      { "splunk.realm": "us1" },
-    );
-    render(<ConfigTab />);
-
-    expect(await screen.findByRole("textbox", {
-      description: "Splunk Observability Cloud realm, such as us1.",
-      name: "splunk.realm",
-    })).toBeTruthy();
-  });
-
-  it("shows the description under the label and ties it to the control", async () => {
-    installServer();
-    await renderLoaded();
-    const retention = screen.getByRole("textbox", { name: "Telemetry retention (minutes)" });
-    expect(within(fieldOf("Telemetry retention (minutes)")).getByText("How long telemetry is kept in memory.")).toBeTruthy();
-    // The description comes first, then the range hint.
-    expect(retention.getAttribute("aria-describedby")?.split(" ")).toHaveLength(2);
+    expect(within(fieldOf("Count")).getByText("sample.count")).toBeTruthy();
     expect(screen.getByRole("textbox", {
-      description: "How long telemetry is kept in memory. Whole number from 1 to 1440",
-      name: "Telemetry retention (minutes)",
+      description: "How many samples to keep. Whole number from 10 to 500",
+      name: "Count",
     })).toBeTruthy();
-    // A description alone works too, and keys without one add nothing.
-    expect(screen.getByRole("textbox", { description: "Splunk Observability Cloud realm, such as us1.", name: "Realm" })).toBeTruthy();
-    expect(fieldOf("Metrics export").querySelector(".config-field__description")).toBeNull();
-    expect(screen.getByRole("switch", { name: "Metrics export" }).hasAttribute("aria-describedby")).toBe(false);
+    expect(screen.getByRole("textbox", { description: "A name for the sample.", name: "Name" })).toBeTruthy();
+    expect(fieldOf("Enable sample").querySelector(".config-field__description")).toBeNull();
+    expect(screen.getByRole("switch", { name: "Enable sample" }).hasAttribute("aria-describedby")).toBe(false);
   });
 
-  it("falls back to the exact key for a blank label and shows over-long text in full", async () => {
-    const longLabel = "A label that is far longer than the forty character limit allows";
-    const longDescription = "A description that runs well past the one hundred and twenty character limit so the interface has to cope with text the server should not have sent at all.";
-    installServer([
-      { key: "ui.alpha", type: "string", label: "   " },
-      { key: "ui.beta", type: "string", label: longLabel, description: longDescription },
-    ], { "ui.alpha": "a", "ui.beta": "b" });
+  it("says when a setting takes effect only after a restart", async () => {
+    installServer();
+    await renderLoaded();
+    expect(screen.getByRole("switch", { description: "Takes effect after a restart.", name: "Other flag" })).toBeTruthy();
+    expect(within(fieldOf("Enable sample")).queryByText("Takes effect after a restart.")).toBeNull();
+  });
+
+  it("falls back to the exact key, case and all, when the server sends no title", async () => {
+    installServer(
+      { properties: { sample: { properties: { flagStatus: { type: "string" }, "retry_Count-2": { type: "boolean", title: "  " } } } } },
+      { "sample.flagStatus": "on", "sample.retry_Count-2": false },
+    );
     render(<ConfigTab />);
 
-    expect(await screen.findByRole("textbox", { name: "ui.alpha" })).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: longLabel })).toBeTruthy();
+    expect(await screen.findByRole("textbox", { name: "sample.flagStatus" })).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "sample.retry_Count-2" })).toBeTruthy();
+    // The key is already the label, so it is not repeated in a second line.
+    expect(screen.getAllByText("sample.flagStatus")).toHaveLength(1);
+    expect(fieldOf("sample.flagStatus").querySelector(".config-field__key")).toBeNull();
+  });
+
+  it("shows over-long text in full", async () => {
+    const longTitle = "A title that is far longer than any setting title should ever be";
+    const longDescription = "A description that runs well past what a setting should say, so the interface has to cope with text the server should not have sent at all.";
+    installServer(
+      { properties: { sample: { properties: { name: { type: "string", title: longTitle, description: longDescription } } } } },
+      { "sample.name": "a" },
+    );
+    render(<ConfigTab />);
+
+    expect(await screen.findByRole("textbox", { name: longTitle })).toBeTruthy();
     expect(screen.getByText(longDescription)).toBeTruthy();
   });
 
-  it("names the reset button after the server's label", async () => {
-    const server = installServer();
-    server.onPut = () => respond(422, { code: "invalid_value", error: "too long" });
-    await renderLoaded();
-    const retention = screen.getByRole("textbox", { name: "Telemetry retention (minutes)" });
-
-    fireEvent.change(retention, { target: { value: "90" } });
-    fireEvent.blur(retention);
-
-    expect(await screen.findByRole("button", { name: "Reset Telemetry retention (minutes) to its saved value" })).toBeTruthy();
-    expect(retention.getAttribute("aria-describedby")?.split(" ")).toHaveLength(3);
-  });
-
-  it("sends the browser-request header on every request", async () => {
-    const server = installServer();
-    await renderLoaded();
-    fireEvent.click(screen.getByRole("switch", { name: "Metrics export" }));
-    await waitFor(() => expect(server.puts()).toHaveLength(1));
-    expect(server.calls.length).toBeGreaterThanOrEqual(3);
-    for (const call of server.calls) {
-      expect(call.headers.get("X-Obstudio-Browser-Request")).toBe("1");
-    }
-  });
-
-  it("shows an empty state when the server reports no settings", async () => {
-    installServer([], {});
+  it("shows an empty state when the server declares no settings", async () => {
+    installServer({ type: "object", properties: {} }, {});
     render(<ConfigTab />);
     expect(await screen.findByText("No settings available")).toBeTruthy();
   });
 
-  it("shows the server's message with a Retry button when loading fails, and recovers on retry", async () => {
+  it("shows a Retry alert when the definitions fail to load, and recovers on retry", async () => {
     const server = installServer();
-    server.failLoad = { error: "reading config.yaml failed", status: 500 };
+    server.failNext = { path: "/api/config/definitions", status: 500 };
     render(<ConfigTab />);
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("reading config.yaml failed");
+    expect(alert.textContent).toContain("Could not load the configuration.");
     fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
 
-    expect(await screen.findByRole("switch", { name: "Metrics export" })).toBeTruthy();
+    expect(await screen.findByRole("switch", { name: "Enable sample" })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("shows unsupported types read-only instead of a broken control", async () => {
-    installServer([{ key: "ui.accent", type: "color" }, ...specs], { ...initialValues, "ui.accent": "#3993ff" });
-    await renderLoaded();
-    expect(screen.getByText("#3993ff")).toBeTruthy();
-    expect(screen.queryByRole("textbox", { name: "Accent" })).toBeNull();
+  it("shows a Retry alert when the values fail to load, and recovers on retry", async () => {
+    const server = installServer();
+    server.failNext = { path: "/api/config", status: 500 };
+    render(<ConfigTab />);
+
+    const alert = await screen.findByRole("alert");
+    expect(screen.queryByRole("switch", { name: "Enable sample" })).toBeNull();
+    fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByRole("switch", { name: "Enable sample" })).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    // The definitions were already loaded, so the retry asks only for the values.
+    expect(server.calls.filter((call) => call.path === "/api/config/definitions")).toHaveLength(1);
   });
 
-  it("keeps a current value that is not in the allowed list visible and selectable", async () => {
-    installServer(specs, { ...initialValues, "logging.level": "loud" });
+  it("keeps a current value that is not in the allowed list visible", async () => {
+    installServer(definitions, { ...initialValues, "sample.mode": "loud" });
     await renderLoaded();
-    const level = screen.getByRole("combobox", { name: "Level" }) as HTMLSelectElement;
-    expect(level.value).toBe("loud");
-    expect(within(level).getByRole("option", { name: "loud (not allowed)" })).toBeTruthy();
+    const mode = screen.getByRole("combobox", { name: "Mode" }) as HTMLSelectElement;
+    expect(mode.value).toBe("loud");
+    expect(within(mode).getByRole("option", { name: "loud (not allowed)" })).toBeTruthy();
+  });
+
+  it("refreshes the values when the config signal fires", async () => {
+    const server = installServer();
+    await renderLoaded();
+    server.stored["sample.enabled"] = true;
+    server.stored["sample.name"] = "beta";
+
+    act(() => notifyConfigRefresh());
+
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Enable sample" }).getAttribute("aria-checked")).toBe("true"));
+    expect((screen.getByRole("textbox", { name: "Name" }) as HTMLInputElement).value).toBe("beta");
   });
 });
 
 describe("ConfigTab autosave", () => {
-  it("saves a switch immediately and shows Saved, via mouse or keyboard", async () => {
+  it("sends a switch at once as a merge body, shows the server's answer, and keeps keyboard focus", async () => {
     const server = installServer();
     await renderLoaded();
     const user = userEvent.setup();
+    const pending = deferred<FakeResponse>();
+    server.onPost = () => pending.promise;
+    const toggle = screen.getByRole("switch", { name: "Enable sample" });
 
-    await user.click(screen.getByRole("switch", { name: "Metrics export" }));
-    await waitFor(() => expect(server.puts()).toEqual([{ key: "splunk.metricsExport", value: true }]));
-    await waitFor(() => expect(within(fieldOf("Metrics export")).getByText("Saved")).toBeTruthy());
-    expect(screen.getByRole("switch", { name: "Metrics export" }).getAttribute("aria-checked")).toBe("true");
+    await user.click(toggle);
+    expect(server.posts()).toEqual([{ sample: { enabled: true } }]);
+    // Never optimistic: the switch shows the server's value until it answers.
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(toggle.getAttribute("aria-disabled")).toBe("true");
+    expect(document.activeElement).toBe(toggle);
+    expect(within(fieldOf("Enable sample")).getByText("Saving…")).toBeTruthy();
 
-    screen.getByRole("switch", { name: "Metrics export" }).focus();
+    // A second toggle while the first is in flight is ignored.
+    await user.click(toggle);
+    expect(server.posts()).toHaveLength(1);
+
+    await act(async () => pending.resolve(respond(200, nest({ ...server.stored, "sample.enabled": true }))));
+    await waitFor(() => expect(toggle.getAttribute("aria-checked")).toBe("true"));
+    expect(toggle.hasAttribute("aria-disabled")).toBe(false);
+    expect(within(fieldOf("Enable sample")).getByText("Saved")).toBeTruthy();
+
+    server.onPost = null;
+    toggle.focus();
     await user.keyboard(" ");
-    await waitFor(() => expect(server.puts()).toHaveLength(2));
-    expect(server.puts()[1]).toEqual({ key: "splunk.metricsExport", value: false });
+    await waitFor(() => expect(server.posts()).toHaveLength(2));
+    expect(server.posts()[1]).toEqual({ sample: { enabled: false } });
+    await waitFor(() => expect(toggle.getAttribute("aria-checked")).toBe("false"));
+    expect(document.activeElement).toBe(toggle);
   });
 
-  it("saves a chosen allowed value immediately", async () => {
+  it("sends the browser-request header with every write", async () => {
+    const server = installServer();
+    await renderLoaded();
+    fireEvent.click(screen.getByRole("switch", { name: "Enable sample" }));
+    await waitFor(() => expect(server.posts()).toHaveLength(1));
+    const post = server.calls.find((call) => call.method === "POST");
+    expect(post?.headers.get("X-Obstudio-Browser-Request")).toBe("1");
+    expect(post?.headers.get("Content-Type")).toBe("application/json");
+  });
+
+  it("sends a chosen allowed value at once", async () => {
     const server = installServer();
     await renderLoaded();
 
-    await userEvent.setup().selectOptions(screen.getByRole("combobox", { name: "Level" }), "debug");
+    await userEvent.setup().selectOptions(screen.getByRole("combobox", { name: "Mode" }), "fast");
 
-    await waitFor(() => expect(server.puts()).toEqual([{ key: "logging.level", value: "debug" }]));
+    await waitFor(() => expect(server.posts()).toEqual([{ sample: { mode: "fast" } }]));
+    await waitFor(() => expect((screen.getByRole("combobox", { name: "Mode" }) as HTMLSelectElement).value).toBe("fast"));
   });
 
   it("debounces typing into a text field and sends only the final value", async () => {
     const server = installServer();
     await renderLoaded();
     vi.useFakeTimers();
-    const realm = screen.getByRole("textbox", { name: "Realm" });
+    const name = screen.getByRole("textbox", { name: "Name" }) as HTMLInputElement;
 
-    fireEvent.change(realm, { target: { value: "u" } });
+    fireEvent.change(name, { target: { value: "b" } });
     await settle(300);
-    fireEvent.change(realm, { target: { value: "us2" } });
+    fireEvent.change(name, { target: { value: "beta" } });
     await settle(499);
-    expect(server.puts()).toHaveLength(0);
+    expect(server.posts()).toHaveLength(0);
+    expect(name.value).toBe("beta");
 
     await settle(1);
-    expect(server.puts()).toEqual([{ key: "splunk.realm", value: "us2" }]);
-    expect(within(fieldOf("Realm")).getByText("Saved")).toBeTruthy();
+    expect(server.posts()).toEqual([{ sample: { name: "beta" } }]);
+    expect(within(fieldOf("Name")).getByText("Saved")).toBeTruthy();
+    expect(name.value).toBe("beta");
   });
 
   it("sends integers as numbers and clears the Saved indicator after a moment", async () => {
@@ -352,230 +375,162 @@ describe("ConfigTab autosave", () => {
     await renderLoaded();
     vi.useFakeTimers();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Port" }), { target: { value: "18000" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Count" }), { target: { value: "250" } });
     await settle(500);
-    expect(server.puts()).toEqual([{ key: "ui.port", value: 18000 }]);
-    expect(within(fieldOf("Port")).getByText("Saved")).toBeTruthy();
+    expect(server.posts()).toEqual([{ sample: { count: 250 } }]);
+    expect(within(fieldOf("Count")).getByText("Saved")).toBeTruthy();
 
     await settle(2000);
-    expect(within(fieldOf("Port")).queryByText("Saved")).toBeNull();
+    expect(within(fieldOf("Count")).queryByText("Saved")).toBeNull();
   });
 
-  it("saves on blur and on Enter without waiting for the debounce", async () => {
+  it("sends edits to several typed fields together, once typing stops", async () => {
     const server = installServer();
     await renderLoaded();
     vi.useFakeTimers();
-    const realm = screen.getByRole("textbox", { name: "Realm" });
 
-    fireEvent.change(realm, { target: { value: "eu0" } });
-    fireEvent.blur(realm);
-    await settle(0);
-    expect(server.puts()).toEqual([{ key: "splunk.realm", value: "eu0" }]);
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "gamma" } });
+    await settle(300);
+    fireEvent.change(screen.getByRole("textbox", { name: "Count" }), { target: { value: "42" } });
+    await settle(500);
 
-    fireEvent.change(realm, { target: { value: "jp0" } });
-    fireEvent.keyDown(realm, { key: "Enter" });
-    await settle(0);
-    expect(server.puts()).toHaveLength(2);
-    expect(server.puts()[1]).toEqual({ key: "splunk.realm", value: "jp0" });
-
-    await settle(1000);
-    expect(server.puts()).toHaveLength(2);
-  });
-
-  it("does not send a value equal to the saved one", async () => {
-    const server = installServer();
-    await renderLoaded();
-    vi.useFakeTimers();
-    const realm = screen.getByRole("textbox", { name: "Realm" });
-
-    fireEvent.change(realm, { target: { value: "us12" } });
-    fireEvent.change(realm, { target: { value: "us1" } });
-    await settle(1000);
-
-    expect(server.puts()).toHaveLength(0);
+    expect(server.posts()).toEqual([{ sample: { name: "gamma", count: 42 } }]);
   });
 
   it("shows the server's stored value when it differs from what was typed", async () => {
     const server = installServer();
-    server.onPut = (key, value) => respond(200, { key, value: String(value).toUpperCase() });
+    server.onPost = (body) => {
+      const name = String(((body.sample ?? {}) as Doc).name).toUpperCase();
+      server.stored["sample.name"] = name;
+      return respond(200, nest(server.stored));
+    };
     await renderLoaded();
-    const realm = screen.getByRole("textbox", { name: "Realm" }) as HTMLInputElement;
+    vi.useFakeTimers();
+    const name = screen.getByRole("textbox", { name: "Name" }) as HTMLInputElement;
 
-    fireEvent.change(realm, { target: { value: "us2" } });
-    fireEvent.blur(realm);
+    fireEvent.change(name, { target: { value: "beta" } });
+    await settle(500);
 
-    await waitFor(() => expect(realm.value).toBe("US2"));
+    expect(name.value).toBe("BETA");
   });
 
   it("does not send an invalid number, explains why, and saves once it is fixed", async () => {
     const server = installServer();
     await renderLoaded();
     vi.useFakeTimers();
-    const port = screen.getByRole("textbox", { name: "Port" });
+    const count = screen.getByRole("textbox", { name: "Count" }) as HTMLInputElement;
 
-    fireEvent.change(port, { target: { value: "80" } });
+    fireEvent.change(count, { target: { value: "5" } });
     await settle(500);
-    expect(server.puts()).toHaveLength(0);
-    expect(within(fieldOf("Port")).getByRole("alert").textContent).toContain("Must be a whole number between 1024 and 65535");
-    expect(port.getAttribute("aria-invalid")).toBe("true");
+    expect(server.posts()).toHaveLength(0);
+    expect(within(fieldOf("Count")).getByRole("alert").textContent).toContain("Must be a whole number between 10 and 500");
+    expect(count.getAttribute("aria-invalid")).toBe("true");
+    expect(count.value).toBe("5");
 
-    fireEvent.change(port, { target: { value: "abc" } });
+    fireEvent.change(count, { target: { value: "abc" } });
     await settle(500);
-    expect(within(fieldOf("Port")).getByRole("alert").textContent).toContain("Enter a whole number");
-    expect(server.puts()).toHaveLength(0);
+    expect(within(fieldOf("Count")).getByRole("alert").textContent).toContain("Enter a whole number");
+    expect(server.posts()).toHaveLength(0);
 
-    fireEvent.change(port, { target: { value: "18000" } });
-    expect(within(fieldOf("Port")).queryByRole("alert")).toBeNull();
+    fireEvent.change(count, { target: { value: "250" } });
+    expect(within(fieldOf("Count")).queryByRole("alert")).toBeNull();
     await settle(500);
-    expect(server.puts()).toEqual([{ key: "ui.port", value: 18000 }]);
-    expect(port.getAttribute("aria-invalid")).toBe("false");
+    expect(server.posts()).toEqual([{ sample: { count: 250 } }]);
+    expect(count.getAttribute("aria-invalid")).toBe("false");
   });
 
-  it("keeps what was typed when the server rejects it, and Reset restores the saved value", async () => {
+  it("shows the server's error under the field and reverts it to the saved value", async () => {
     const server = installServer();
-    server.onPut = () => respond(422, {
-      code: "invalid_value",
-      error: "must be a non-empty string",
-      key: "splunk.realm",
-    });
+    server.onPost = () => respond(400, { error: "sample.name: must not be empty" });
     await renderLoaded();
-    const realm = screen.getByRole("textbox", { name: "Realm" }) as HTMLInputElement;
+    vi.useFakeTimers();
+    const name = screen.getByRole("textbox", { name: "Name" }) as HTMLInputElement;
 
-    fireEvent.change(realm, { target: { value: "" } });
-    fireEvent.blur(realm);
+    fireEvent.change(name, { target: { value: "" } });
+    await settle(500);
+    await settle(0);
 
-    const alert = await within(fieldOf("Realm")).findByRole("alert");
-    expect(alert.textContent).toContain("must be a non-empty string");
-    expect(realm.value).toBe("");
-    expect(realm.getAttribute("aria-invalid")).toBe("true");
+    const alert = within(fieldOf("Name")).getByRole("alert");
+    expect(alert.textContent).toBe("sample.name: must not be empty");
+    expect(name.value).toBe("alpha");
+    expect(name.getAttribute("aria-invalid")).toBe("true");
+    expect(within(fieldOf("Count")).queryByRole("alert")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Reset Realm to its saved value" }));
-    expect(realm.value).toBe("us1");
-    expect(within(fieldOf("Realm")).queryByRole("alert")).toBeNull();
-    expect(server.puts()).toHaveLength(1);
+    // The next successful send clears the error.
+    server.onPost = null;
+    fireEvent.change(name, { target: { value: "delta" } });
+    await settle(500);
+    expect(within(fieldOf("Name")).queryByRole("alert")).toBeNull();
+    expect(name.value).toBe("delta");
+  });
+
+  it("names the HTTP status when a rejection carries no message", async () => {
+    const server = installServer();
+    server.onPost = () => respond(500, {});
+    await renderLoaded();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Enable sample" }));
+
+    expect((await within(fieldOf("Enable sample")).findByRole("alert")).textContent).toBe("This setting could not be saved (HTTP 500).");
+    expect(screen.getByRole("switch", { name: "Enable sample" }).getAttribute("aria-checked")).toBe("false");
   });
 
   it("recovers from a network failure and lets the user try again", async () => {
     const server = installServer();
     await renderLoaded();
-    server.onPut = () => Promise.reject(new Error("Failed to fetch")) as unknown as Promise<FakeResponse>;
-    const realm = screen.getByRole("textbox", { name: "Realm" }) as HTMLInputElement;
+    server.onPost = () => Promise.reject(new Error("Failed to fetch")) as unknown as Promise<FakeResponse>;
+    const toggle = screen.getByRole("switch", { name: "Enable sample" });
 
-    fireEvent.change(realm, { target: { value: "eu0" } });
-    fireEvent.blur(realm);
-    expect((await within(fieldOf("Realm")).findByRole("alert")).textContent).toContain("Failed to fetch");
+    fireEvent.click(toggle);
+    expect((await within(fieldOf("Enable sample")).findByRole("alert")).textContent).toBe("This setting could not be saved.");
 
-    server.onPut = null;
-    fireEvent.change(realm, { target: { value: "eu1" } });
-    fireEvent.blur(realm);
-    await waitFor(() => expect(within(fieldOf("Realm")).getByText("Saved")).toBeTruthy());
-    expect(within(fieldOf("Realm")).queryByRole("alert")).toBeNull();
+    server.onPost = null;
+    await waitFor(() => expect(toggle.hasAttribute("aria-disabled")).toBe(false));
+    fireEvent.click(toggle);
+    await waitFor(() => expect(within(fieldOf("Enable sample")).getByText("Saved")).toBeTruthy());
+    expect(within(fieldOf("Enable sample")).queryByRole("alert")).toBeNull();
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
   });
 
-  it("allows only one request per key at a time and sends just the newest value after it", async () => {
+  it("keeps newer typing when an earlier save finishes, and sends it next", async () => {
     const server = installServer();
     await renderLoaded();
-    const first = deferred<FakeResponse>();
-    server.onPut = (_key, value) => (value === 2000 ? first.promise : undefined);
-    const port = screen.getByRole("textbox", { name: "Port" }) as HTMLInputElement;
-
-    fireEvent.change(port, { target: { value: "2000" } });
-    fireEvent.blur(port);
-    await waitFor(() => expect(server.puts()).toHaveLength(1));
-
-    fireEvent.change(port, { target: { value: "3000" } });
-    fireEvent.blur(port);
-    fireEvent.change(port, { target: { value: "4000" } });
-    fireEvent.blur(port);
-    expect(server.puts()).toHaveLength(1);
-
-    first.resolve(respond(200, { key: "ui.port", value: 2000 }));
-    await waitFor(() => expect(server.puts()).toHaveLength(2));
-    expect(server.puts().map((put) => put.value)).toEqual([2000, 4000]);
-    await waitFor(() => expect(within(fieldOf("Port")).getByText("Saved")).toBeTruthy());
-    expect(port.value).toBe("4000");
-  });
-
-  it("does not overwrite newer typing when an earlier save finishes", async () => {
-    const server = installServer();
-    await renderLoaded();
-    const first = deferred<FakeResponse>();
-    server.onPut = (_key, value) => (value === 2000 ? first.promise : undefined);
-    const port = screen.getByRole("textbox", { name: "Port" }) as HTMLInputElement;
-
-    fireEvent.change(port, { target: { value: "2000" } });
-    fireEvent.blur(port);
-    await waitFor(() => expect(server.puts()).toHaveLength(1));
     vi.useFakeTimers();
-    fireEvent.change(port, { target: { value: "3000" } });
+    const first = deferred<FakeResponse>();
+    server.onPost = () => first.promise;
+    const count = screen.getByRole("textbox", { name: "Count" }) as HTMLInputElement;
 
-    first.resolve(respond(200, { key: "ui.port", value: 2000 }));
+    fireEvent.change(count, { target: { value: "200" } });
+    await settle(500);
+    expect(server.posts()).toHaveLength(1);
+    expect(within(fieldOf("Count")).getByText("Saving…")).toBeTruthy();
+
+    fireEvent.change(count, { target: { value: "300" } });
+    server.onPost = null;
+    server.stored["sample.count"] = 200;
+    await act(async () => first.resolve(respond(200, nest(server.stored))));
     await settle(0);
-    expect(port.value).toBe("3000");
-    expect(within(fieldOf("Port")).queryByText("Saved")).toBeNull();
+    expect(count.value).toBe("300");
 
     await settle(500);
-    expect(server.puts().map((put) => put.value)).toEqual([2000, 3000]);
-    expect(port.value).toBe("3000");
+    expect(server.posts()).toEqual([{ sample: { count: 200 } }, { sample: { count: 300 } }]);
+    expect(count.value).toBe("300");
   });
 
-  describe("an invalid edit made while an earlier save is still in flight", () => {
-    // A is in flight, the user commits B (queued behind it), then types C, which does not parse.
-    async function replay(firstSaveIsSlow: boolean): Promise<{ port: HTMLInputElement; server: FakeServer }> {
-      const server = installServer();
-      await renderLoaded();
-      const first = deferred<FakeResponse>();
-      server.onPut = (_key, value) => (value === 2000 ? first.promise : undefined);
-      const port = screen.getByRole("textbox", { name: "Port" }) as HTMLInputElement;
-
-      fireEvent.change(port, { target: { value: "2000" } });
-      fireEvent.blur(port);
-      await waitFor(() => expect(server.puts()).toHaveLength(1));
-      fireEvent.change(port, { target: { value: "3000" } });
-      fireEvent.blur(port);
-      if (!firstSaveIsSlow) {
-        first.resolve(respond(200, { key: "ui.port", value: 2000 }));
-        await waitFor(() => expect(server.puts()).toHaveLength(2));
-      }
-      fireEvent.change(port, { target: { value: "abc" } });
-      fireEvent.blur(port);
-      expect(within(fieldOf("Port")).getByRole("alert").textContent).toContain("Enter a whole number");
-      if (firstSaveIsSlow) {
-        first.resolve(respond(200, { key: "ui.port", value: 2000 }));
-        await waitFor(() => expect(server.puts()).toHaveLength(2));
-      }
-      // Let the queued save finish.
-      await act(async () => { await new Promise((done) => setTimeout(done, 30)); });
-      return { port, server };
-    }
-
-    for (const [name, slow] of [["is slow", true], ["finishes first", false]] as const) {
-      it(`keeps the error and the committed value when the first save ${name}`, async () => {
-        const { port, server } = await replay(slow);
-
-        expect(server.puts().map((put) => put.value)).toEqual([2000, 3000]);
-        expect(port.value).toBe("abc");
-        expect(port.getAttribute("aria-invalid")).toBe("true");
-        expect(within(fieldOf("Port")).getByRole("alert").textContent).toContain("Enter a whole number");
-
-        fireEvent.click(screen.getByRole("button", { name: "Reset Port to its saved value" }));
-        expect(port.value).toBe("3000");
-        expect(within(fieldOf("Port")).queryByRole("alert")).toBeNull();
-      });
-    }
-  });
-
-  it("saves fields independently, so one rejected value does not block another", async () => {
+  it("does not let a config refresh clobber typing that has not been sent", async () => {
     const server = installServer();
-    server.onPut = (key) => (key === "ui.port" ? respond(422, { code: "invalid_value", error: "port is reserved" }) : undefined);
     await renderLoaded();
+    vi.useFakeTimers();
+    const name = screen.getByRole("textbox", { name: "Name" }) as HTMLInputElement;
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Port" }), { target: { value: "2000" } });
-    fireEvent.blur(screen.getByRole("textbox", { name: "Port" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Metrics export" }));
+    fireEvent.change(name, { target: { value: "typing" } });
+    server.stored["sample.name"] = "from disk";
+    act(() => notifyConfigRefresh());
+    await settle(0);
+    expect(name.value).toBe("typing");
 
-    await waitFor(() => expect(within(fieldOf("Metrics export")).getByText("Saved")).toBeTruthy());
-    expect((await within(fieldOf("Port")).findByRole("alert")).textContent).toContain("port is reserved");
+    await settle(500);
+    expect(server.posts()).toEqual([{ sample: { name: "typing" } }]);
   });
 
   it("still saves an edit that was waiting on the debounce when the tab is left", async () => {
@@ -583,22 +538,22 @@ describe("ConfigTab autosave", () => {
     await renderLoaded();
     vi.useFakeTimers();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Realm" }), { target: { value: "eu0" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "epsilon" } });
     cleanup();
     await settle(0);
 
-    expect(server.puts()).toEqual([{ key: "splunk.realm", value: "eu0" }]);
+    expect(server.posts()).toEqual([{ sample: { name: "epsilon" } }]);
   });
 
-  it("does not save an invalid edit that was waiting on the debounce when the tab is left", async () => {
+  it("does not save an invalid edit when the tab is left", async () => {
     const server = installServer();
     await renderLoaded();
     vi.useFakeTimers();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Port" }), { target: { value: "80" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Count" }), { target: { value: "5" } });
     cleanup();
     await settle(1000);
 
-    expect(server.puts()).toHaveLength(0);
+    expect(server.posts()).toHaveLength(0);
   });
 });

@@ -7646,7 +7646,8 @@ code {
   cursor: pointer;
 }
 
-.cloud-switch:disabled {
+.cloud-switch:disabled,
+.cloud-switch[aria-disabled="true"] {
   cursor: default;
   opacity: 0.55;
 }
@@ -8697,8 +8698,7 @@ code {
 }
 
 .config-input:focus-visible,
-.config-select:focus-visible,
-.config-field__reset:focus-visible {
+.config-select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -8708,13 +8708,8 @@ code {
   border-color: var(--red);
 }
 
-.config-field__readonly {
-  flex: 1;
-  min-width: 0;
-  color: var(--text-dim);
-  font-family: var(--font-family-mono);
-  font-size: var(--font-mono);
-  overflow-wrap: anywhere;
+.config-select[aria-disabled="true"] {
+  opacity: 0.55;
 }
 
 .config-field__status {
@@ -8728,29 +8723,11 @@ code {
 }
 
 .config-field__error {
-  display: flex;
   grid-column: 1 / -1;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
   margin: 0;
   color: var(--red);
   font-size: var(--font-xs);
   line-height: 1.4;
-}
-
-.config-field__reset {
-  padding: 2px 0;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-size: var(--font-xs);
-  cursor: pointer;
-}
-
-.config-field__reset:hover {
-  text-decoration: underline;
 }
 
 @media (max-width: 560px) {
