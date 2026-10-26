@@ -171,7 +171,7 @@ func NewManager(path string, opts ...Option) (*Manager, error) {
 	snap, diags, loadErr := Load(m.path)
 	if err := errors.Join(scaffoldErr, loadErr); err != nil {
 		snap = FailSafeSnapshot()
-		m.opts.logf("[userconfig] %s could not be read, using fail-safe settings (telemetry off): %v", m.path, err)
+		m.opts.logf("[userconfig] %s could not be read, using fail-safe settings (%s): %v", m.path, failSafeSummary(), err)
 	} else {
 		m.logDiagnostics(diags)
 	}

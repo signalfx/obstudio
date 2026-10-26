@@ -98,6 +98,17 @@ func FailSafeSettings() Settings {
 	return s
 }
 
+// failSafeSummary lists every setting's fail-safe value as path=value, for
+// log lines.
+func failSafeSummary() string {
+	defs := table()
+	parts := make([]string, len(defs))
+	for i, d := range defs {
+		parts[i] = d.path() + "=" + valueText(d.view().FailSafe)
+	}
+	return strings.Join(parts, ", ")
+}
+
 // Definition is a read-only description of one declared setting.
 type Definition struct {
 	Path        string

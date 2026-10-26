@@ -298,8 +298,13 @@ func TestNewManagerDegradedStart(t *testing.T) {
 			if s.Telemetry.Enabled || !s.Degraded {
 				t.Errorf("snapshot %+v", s)
 			}
-			if n := h.log.count("fail-safe"); n != 1 {
+			if n := h.log.count("using fail-safe settings"); n != 1 {
 				t.Errorf("%d degraded-start warnings, want 1: %v", n, h.log.lines)
+			}
+			for _, d := range Definitions() {
+				if h.log.count(d.Path+"="+valueText(d.FailSafe)) != 1 {
+					t.Errorf("degraded-start warning does not list %s's fail-safe value: %v", d.Path, h.log.lines)
+				}
 			}
 			if name == "unwritable" && h.m.isWatched() {
 				t.Error("watched a directory that does not exist")
