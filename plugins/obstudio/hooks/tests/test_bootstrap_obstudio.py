@@ -1922,6 +1922,29 @@ class StartObstudioBackgroundTest(unittest.TestCase):
         self.assertEqual(captured["kwargs"]["env"]["OBSTUDIO_MODE"], "managed")
         self.assertEqual(log_path.name, "obstudio.log")
 
+    def test_child_env_excludes_unrelated_credentials(self):
+        parent_env = {
+            "PATH": "/usr/bin",
+            "HOME": "/home/user",
+            "HTTPS_PROXY": "http://proxy.example:8080",
+            "LC_ALL": "C",
+            "SPLUNK_ACCESS_TOKEN": "splunk-token",
+            "ANTHROPIC_API_KEY": "sk-ant-secret",
+            "AWS_SECRET_ACCESS_KEY": "aws-secret",
+            "OPENAI_API_KEY": "sk-openai-secret",
+            "GITHUB_TOKEN": "ghp_secret",
+        }
+
+        child_env = BOOTSTRAP.build_child_env(parent_env)
+
+        self.assertEqual(child_env["PATH"], "/usr/bin")
+        self.assertEqual(child_env["HOME"], "/home/user")
+        self.assertEqual(child_env["HTTPS_PROXY"], "http://proxy.example:8080")
+        self.assertEqual(child_env["LC_ALL"], "C")
+        self.assertEqual(child_env["SPLUNK_ACCESS_TOKEN"], "splunk-token")
+        for name in ("ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "OPENAI_API_KEY", "GITHUB_TOKEN"):
+            self.assertNotIn(name, child_env)
+
 
 class MainOwnershipFlowTest(unittest.TestCase):
     def test_prior_managed_state_survives_legacy_command_config(self):
