@@ -276,3 +276,34 @@ func TestInstallGuidesUsePortableReleaseCommands(t *testing.T) {
 		})
 	}
 }
+
+func TestSupportedTargetsPinSHA256(t *testing.T) {
+	t.Parallel()
+
+	for _, target := range supportedTargets {
+		if len(target.sha256) != 64 {
+			t.Fatalf("%s: sha256 must be 64 hex chars, got %q", target.asset, target.sha256)
+		}
+		if strings.ToLower(target.sha256) != target.sha256 {
+			t.Fatalf("%s: sha256 must be lowercase hex", target.asset)
+		}
+	}
+}
+
+func TestVerifyFileSHA256(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "archive")
+	if err := os.WriteFile(path, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const helloSHA256 = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+	if err := verifyFileSHA256(path, helloSHA256); err != nil {
+		t.Fatalf("expected matching checksum to pass: %v", err)
+	}
+	err := verifyFileSHA256(path, strings.Repeat("0", 64))
+	if err == nil || !strings.Contains(err.Error(), "sha256 mismatch") {
+		t.Fatalf("expected sha256 mismatch error, got %v", err)
+	}
+}

@@ -1,0 +1,86 @@
+name: Runtime determinism
+
+# The plugin pins runtime archive hashes at Prepare Release time and the release workflow
+# rebuilds them at the tag. That only works if two independent builds of the same source
+# produce byte-identical archives, so check it whenever the inputs change and weekly to catch
+# toolchain drift.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "observer/**"
+      - "skills/**"
+      - "docs/USER.md"
+      - "docs/examples.md"
+      - ".goreleaser.yaml"
+      - "Makefile"
+      - ".github/actions/build-runtime-archives/**"
+      - ".github/workflows/runtime-determinism.yml"
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-determinism-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build runtime archives (run ${{ matrix.run }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        run: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read the current plugin version
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import json; print(json.load(open("plugins/obstudio/.claude-plugin/plugin.json"))["version"])')"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build runtime archives
+        uses: ./.github/actions/build-runtime-archives
+        with:
+          release_tag: ${{ steps.version.outputs.tag }}
+
+      - name: Record archive hashes
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum obstudio_*_*.zip | sort -k2 > "${RUNNER_TEMP}/hashes-${{ matrix.run }}.txt"
+          cat "${RUNNER_TEMP}/hashes-${{ matrix.run }}.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-hashes-${{ matrix.run }}
+          path: ${{ runner.temp }}/hashes-${{ matrix.run }}.txt
+          if-no-files-found: error
+
+  compare:
+    name: Runtime archives are reproducible
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: runtime-hashes-*
+          merge-multiple: true
+
+      - name: Require identical hashes across independent builds
+        run: |
+          set -euo pipefail
+          if ! diff -u hashes-1.txt hashes-2.txt; then
+            echo "::error::Runtime archives differ between two builds of the same commit; pinned hashes cannot be reproduced at release time"
+            exit 1
+          fi
+          cat hashes-1.txt

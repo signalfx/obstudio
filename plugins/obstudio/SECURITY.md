@@ -54,8 +54,11 @@ available, the hook exits with code 2 and the managed runtime is not prepared.
 
 If the user trusts the SessionStart hook, the bootstrap may:
 
-- download a Splunk Observability Studio release binary;
-- verify it against `checksums.txt`;
+- download the Splunk Observability Studio release binary whose version matches
+  `plugin.json`, and only that version;
+- verify its SHA-256 against the manifest shipped inside the plugin
+  (`hooks/runtime-manifest.json`) and refuse to extract or run it on any
+  mismatch;
 - extract the release into plugin data;
 - use the bundled plugin `.mcp.json` endpoint policy;
 - start or reuse a local Splunk Observability Studio process unless the active
@@ -63,6 +66,34 @@ If the user trusts the SessionStart hook, the bootstrap may:
 
 Do not trust the hook if you do not want plugin-managed binary download,
 checksum validation, or local process startup.
+
+### Pinned runtime
+
+The runtime hashes are part of the reviewed plugin, not something fetched at
+run time. `hooks/runtime-manifest.json` lists the SHA-256 of the archive for
+each supported platform at the plugin's exact version. The hook:
+
+- downloads only `releases/download/v<plugin version>` and has no
+  `releases/latest` path or fallback to another version;
+- does not read `checksums.txt` from the release, so replacing release assets
+  cannot change what the hook accepts;
+- fails closed when the manifest is missing, malformed, does not match the
+  plugin version, or has no entry for the platform, and when a downloaded
+  archive does not match its pinned hash;
+- has no setting that skips verification.
+
+A new runtime reaches users only through a new plugin version whose manifest
+was reviewed with it.
+
+### Build provenance
+
+The runtime archives are built by GitHub Actions from this public repository at
+the release tag. The build is deterministic (pinned Go, Node, npm, GoReleaser
+and Weaver, `-trimpath`, no VCS stamping, fixed file timestamps and modes). The
+Prepare Release workflow builds the archives and commits their hashes into the
+manifest. The Release workflow rebuilds them at the tag and refuses to publish
+unless every hash matches the committed manifest. A weekly CI job also builds
+twice and compares, to catch toolchain drift early.
 
 The editor extension also owns the Splunk Observability Studio version on its
 configured managed port. If that port contains a verified `obstudio` running
