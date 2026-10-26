@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Switch } from "../components/Switch";
 import { findSpec } from "../config/model";
 import { observerFetch } from "../host/transport";
 import type { FieldKind } from "./configEdits";
@@ -73,17 +74,17 @@ export function UsageDataSetting(): React.ReactElement {
       {wording ? <h2 id="cloud-usage-data-title">{wording.heading}</h2> : null}
       {ready && wording && state ? (
         <>
-          <label className="cloud-usage-data__switch">
-            <input
+          <div className="cloud-usage-data__switch">
+            <label htmlFor="cloud-usage-data-switch" id="cloud-usage-data-label">{wording.title}</label>
+            <Switch
               aria-describedby="cloud-usage-data-description"
+              aria-labelledby="cloud-usage-data-label"
+              busy={state.inFlight.has(usageDataPath)}
               checked={state.values[usageDataPath] === true}
-              aria-disabled={state.inFlight.has(usageDataPath) || undefined}
-              onChange={(event) => edit(usageDataPath, event.currentTarget.checked)}
-              role="switch"
-              type="checkbox"
+              id="cloud-usage-data-switch"
+              onToggle={(next) => edit(usageDataPath, next)}
             />
-            <span>{wording.title}</span>
-          </label>
+          </div>
           <p id="cloud-usage-data-description">{wording.description}</p>
           {state.error ? (
             <div className="cloud-alert cloud-alert--error" role="alert">

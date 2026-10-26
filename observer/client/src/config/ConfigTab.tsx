@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { EmptyState } from "../components/EmptyState";
+import { Switch } from "../components/Switch";
 import type { ConfigEditsState, FieldValue } from "../cloud/configEdits";
 import { saveErrorText, type SendOutcome, useConfigEdits } from "../cloud/useConfigEdits";
 import { observerFetch } from "../host/transport";
@@ -168,25 +169,15 @@ function ConfigField({ spec, value, inFlight, outcome, error, onEdit }: ConfigFi
 
   let control: React.ReactElement;
   if (spec.type === "boolean") {
-    const on = value === true;
-    // aria-disabled, not disabled: a disabled button drops keyboard focus.
     control = (
-      <button
-        aria-checked={on}
+      <Switch
         aria-describedby={describedBy}
-        aria-disabled={inFlight || undefined}
         aria-labelledby={labelId}
-        className={on ? "cloud-switch cloud-switch--on" : "cloud-switch"}
+        busy={inFlight}
+        checked={value === true}
         id={id}
-        onClick={() => {
-          if (!inFlight) onEdit(spec.key, !on);
-        }}
-        role="switch"
-        type="button"
-      >
-        <span aria-hidden="true" className="cloud-switch__track"><span /></span>
-        <span aria-hidden="true">{on ? "On" : "Off"}</span>
-      </button>
+        onToggle={(next) => onEdit(spec.key, next)}
+      />
     );
   } else if (choices !== null) {
     const text = toText(value);

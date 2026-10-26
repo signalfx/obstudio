@@ -7612,25 +7612,19 @@ code {
 .cloud-usage-data__switch {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cloud-usage-data__switch label {
   color: var(--text);
   font-size: var(--font-body);
   font-weight: 600;
   cursor: pointer;
 }
 
-.cloud-usage-data__switch input {
+.cloud-usage-data__switch .cloud-switch {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: var(--accent);
-  cursor: inherit;
-}
-
-.cloud-usage-data__switch:has(input[aria-disabled="true"]) {
-  cursor: progress;
-  opacity: 0.7;
 }
 
 .cloud-switch {

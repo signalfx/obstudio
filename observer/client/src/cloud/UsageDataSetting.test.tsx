@@ -72,7 +72,8 @@ function productionWording(): ProductionWording {
   return { sectionTitle: section.title, title: section.properties.enabled.title, description: section.properties.enabled.description };
 }
 
-const usageSwitch = () => screen.getByRole("switch", { name: "Fixture title" }) as HTMLInputElement;
+const usageSwitch = () => screen.getByRole("switch", { name: "Fixture title" });
+const isOn = () => usageSwitch().getAttribute("aria-checked") === "true";
 const busy = () => usageSwitch().getAttribute("aria-disabled") === "true";
 
 describe("UsageDataSetting", () => {
@@ -81,8 +82,9 @@ describe("UsageDataSetting", () => {
 
   it("takes its heading, label and helper text from the served definitions", async () => {
     serve((path) => (path === "/api/config/definitions" ? json(200, DEF) : value(true)));
-    const { container } = render(<UsageDataSetting />);
-    const name = (await screen.findByRole("switch", { name: "Fixture title" })).closest("label")?.textContent;
+    render(<UsageDataSetting />);
+    await screen.findByRole("switch", { name: "Fixture title" });
+    const name = "Fixture title";
     const helper = screen.getByText("Fixture description.").textContent;
     const headings = screen.queryAllByRole("heading");
     expect(headings).toHaveLength(1);
@@ -94,7 +96,7 @@ describe("UsageDataSetting", () => {
       expect(helper).not.toBe(text);
     }
     expect(headings.some((h) => h.textContent?.includes("Telemetry"))).toBe(false);
-    expect(container.querySelector("button")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
     expect(calls("/api/config/status")).toHaveLength(0);
   });
 
@@ -106,7 +108,7 @@ describe("UsageDataSetting", () => {
       return value(true);
     });
     render(<UsageDataSetting />);
-    await waitFor(() => expect(usageSwitch().checked).toBe(true));
+    await waitFor(() => expect(isOn()).toBe(true));
     fireEvent.click(usageSwitch());
     const posts = calls("/api/config", "POST");
     expect(posts).toHaveLength(1);
@@ -114,10 +116,10 @@ describe("UsageDataSetting", () => {
     expect(init.body).toBe('{"telemetry":{"enabled":false}}');
     expect(new Headers(init.headers).get("X-Obstudio-Browser-Request")).toBe("1");
     expect(busy()).toBe(true);
-    expect(usageSwitch().checked).toBe(true);
+    expect(isOn()).toBe(true);
     await act(async () => post.resolve(value(false)));
     await waitFor(() => expect(busy()).toBe(false));
-    expect(usageSwitch().checked).toBe(false);
+    expect(isOn()).toBe(false);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -129,7 +131,7 @@ describe("UsageDataSetting", () => {
       return value(true);
     });
     render(<UsageDataSetting />);
-    await waitFor(() => expect(usageSwitch().checked).toBe(true));
+    await waitFor(() => expect(isOn()).toBe(true));
     usageSwitch().focus();
     fireEvent.click(usageSwitch());
     expect(busy()).toBe(true);
@@ -137,10 +139,10 @@ describe("UsageDataSetting", () => {
     expect(document.activeElement).toBe(usageSwitch());
     fireEvent.click(usageSwitch());
     expect(calls("/api/config", "POST")).toHaveLength(1);
-    expect(usageSwitch().checked).toBe(true);
+    expect(isOn()).toBe(true);
     await act(async () => post.resolve(value(true)));
     await waitFor(() => expect(busy()).toBe(false));
-    expect(usageSwitch().checked).toBe(true);
+    expect(isOn()).toBe(true);
     expect(calls("/api/config", "POST")).toHaveLength(1);
     expect(document.activeElement).toBe(usageSwitch());
   });
@@ -154,11 +156,11 @@ describe("UsageDataSetting", () => {
       return value(false);
     });
     render(<UsageDataSetting />);
-    await waitFor(() => expect(usageSwitch().checked).toBe(false));
+    await waitFor(() => expect(isOn()).toBe(false));
     fireEvent.click(usageSwitch());
     expect((await screen.findByRole("alert")).textContent).toBe(error);
     await waitFor(() => expect(calls("/api/config")).toHaveLength(2));
-    expect(usageSwitch().checked).toBe(false);
+    expect(isOn()).toBe(false);
     expect(busy()).toBe(false);
 
     postReply = () => new Response("oops", { status: 500 });
@@ -257,9 +259,9 @@ describe("UsageDataSetting", () => {
     });
     render(<UsageDataSetting />);
     act(() => notifyConfigRefresh());
-    await waitFor(() => expect(usageSwitch().checked).toBe(false));
+    await waitFor(() => expect(isOn()).toBe(false));
     await act(async () => first.resolve(value(true)));
-    expect(usageSwitch().checked).toBe(false);
+    expect(isOn()).toBe(false);
   });
 
   it("flushes on unmount", async () => {
