@@ -846,6 +846,33 @@ test('IDE telemetry opens its WebSocket immediately and forwards live updates', 
 	assert.equal(socket.closed, true);
 });
 
+test('IDE telemetry relays the config-changed notice and still drops unknown types', () => {
+	const posted: unknown[] = [];
+	const socket = new FakeObserverWebSocket();
+	const telemetry = new ObserverWebviewTelemetry(
+		'http://127.0.0.1:3000',
+		async (message) => {
+			posted.push(message);
+			return true;
+		},
+		() => undefined,
+		() => socket as unknown as WebSocket,
+	);
+	telemetry.handle('subscribe');
+	socket.readyState = WebSocket.OPEN;
+	socket.emit('open');
+	posted.length = 0;
+
+	socket.emit('message', Buffer.from('{"type":"config-changed"}'), false);
+	socket.emit('message', Buffer.from('{"type":"bogus"}'), false);
+	assert.deepEqual(posted, [
+		{ message: { type: 'config-changed' }, type: 'obstudio.host.telemetry-message' },
+	]);
+	const forwarded = (posted[0] as { message: Record<string, unknown> }).message;
+	assert.deepEqual(Object.keys(forwarded), ['type']);
+	telemetry.dispose();
+});
+
 test('IDE telemetry uses the same local and remote payload limits as HTTP snapshots', () => {
 	for (const [baseURL, expectedLimit] of [
 		['http://127.0.0.1:3000', maxLocalObserverHostResponseBytes],

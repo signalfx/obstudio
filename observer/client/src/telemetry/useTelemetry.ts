@@ -36,7 +36,7 @@ export interface TelemetryHandle {
 }
 
 interface ServerMessage {
-  type: "connected" | "disconnected" | "update" | "paused-update" | "reload";
+  type: "connected" | "disconnected" | "update" | "paused-update" | "reload" | "config-changed";
   signal?: string;
   data?: unknown;
 }
@@ -201,7 +201,7 @@ export function useTelemetry(): TelemetryHandle {
         if (!active) return;
         if (msg.type === "paused-update") {
           setHasNewUpdates(true);
-        } else if (msg.type === "update" && msg.signal === "config") {
+        } else if (msg.type === "config-changed") {
           notifyConfigRefresh();
         } else if (msg.type === "update" && msg.signal && msg.data !== undefined) {
           applyUpdate(msg.signal, msg.data);

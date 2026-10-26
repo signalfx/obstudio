@@ -80,11 +80,25 @@ func broadcastSignal(s *store.Store, v *validator.Store, sig string) {
 	}
 }
 
-// NotifyConfigChanged tells every subscribed connection that the user
-// settings changed. The message carries no data; clients refetch the
-// settings.
+// NotifyConfigChanged sends {"type":"config-changed"} to every subscribed
+// connection, paused or not, so clients refetch the user settings. It is
+// not a telemetry signal: it skips the throttle and the pause state.
 func NotifyConfigChanged() {
-	broadcastSignal(nil, nil, "config")
+	connsMu.Lock()
+	snapshot := make([]*conn, 0, len(conns))
+	for c := range conns {
+		snapshot = append(snapshot, c)
+	}
+	connsMu.Unlock()
+
+	for _, c := range snapshot {
+		c.mu.Lock()
+		subscribed := c.subscribed
+		c.mu.Unlock()
+		if subscribed {
+			c.sendMsg(ServerMessage{Type: "config-changed"})
+		}
+	}
 }
 
 // broadcastReload tells every open tab to reload, bypassing the
@@ -245,10 +259,6 @@ func (c *conn) queryAndSend(signal string) {
 
 // ── Store signal → throttled push ────────────────────────
 
-// bypassesPause reports signals that must reach a paused view: they are not
-// part of the telemetry stream the user paused.
-func bypassesPause(sig string) bool { return sig == "validation" || sig == "config" }
-
 func (c *conn) onSignal(sig string) {
 	c.mu.Lock()
 
@@ -258,14 +268,14 @@ func (c *conn) onSignal(sig string) {
 	}
 
 	signals := []string{sig}
-	if !bypassesPause(sig) {
+	if sig != "validation" {
 		signals = append(signals, "stats")
 	}
 
 	if c.paused {
-		if bypassesPause(sig) {
+		if sig == "validation" {
 			c.mu.Unlock()
-			c.throttledPush(sig, true)
+			c.throttledPush("validation", true)
 			return
 		}
 		if !c.pausedNotified {
