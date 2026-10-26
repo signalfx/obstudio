@@ -54,24 +54,31 @@ func writeConfigBytes(w http.ResponseWriter, status int, body []byte) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if _, err := w.Write(body); err != nil {
-		log.Printf("[api] config response: %v", err)
+		log.Printf("[api] writeConfigBytes: %v", err)
 	}
 }
 
 func writeConfigError(w http.ResponseWriter, status int, message string) {
-	body, _ := json.Marshal(map[string]string{"error": message})
-	writeConfigBytes(w, status, body)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
 func postUserConfig(uc UserConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(io.LimitReader(r.Body, maxConfigBodyBytes+1))
+		// Read the bytes rather than json.NewDecoder: DecodeChanges takes the
+		// whole body and owns its strict parsing.
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxConfigBodyBytes))
 		if err != nil {
-			writeConfigError(w, http.StatusBadRequest, "request body could not be read")
-			return
-		}
-		if len(body) > maxConfigBodyBytes {
-			writeConfigError(w, http.StatusBadRequest, fmt.Sprintf("request body is larger than %d bytes", maxConfigBodyBytes))
+			// Unlike the export routes' 413, a body over the limit is a 400 here,
+			// like every other rejected config body.
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				writeConfigError(w, http.StatusBadRequest, fmt.Sprintf("request body is larger than %d bytes", maxConfigBodyBytes))
+			} else {
+				writeConfigError(w, http.StatusBadRequest, "request body could not be read")
+			}
 			return
 		}
 		changes, err := userconfig.DecodeChanges(body)
