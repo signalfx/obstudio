@@ -2806,7 +2806,7 @@ test('each synchronized Copilot skill retains executable report helpers without 
 			'from pathlib import Path',
 			'fixtures = runpy.run_path(sys.argv[1])',
 			'Path(sys.argv[2]).write_text(json.dumps(fixtures["sample_report"]()))',
-		].join('\n'), path.resolve(extensionRoot, '..', 'skills/references/tests/test_observe_report.py'), audit]);
+		].join('\n'), path.resolve(extensionRoot, '..', 'skills/references/tests/observe_report_fixtures.py'), audit]);
 		for (const name of ['otel-audit', 'otel-instrument', 'otel-verify']) {
 			const isolated = path.join(root, 'synced', name);
 			fs.cpSync(path.join(root, 'extension', 'dist', 'copilot-skills', name), isolated, { recursive: true });
@@ -2846,7 +2846,7 @@ test('each synchronized Copilot skill retains executable report helpers without 
 					'instrument = m.normalize_instrumentation(f["sample_instrumentation"](audit, digest, selection), audit, selection)',
 					'Path(sys.argv[4]).write_text(json.dumps(instrument))',
 					'Path(sys.argv[5]).write_text(json.dumps(f["sample_verify"](audit, digest, m.instrumentation_digest(instrument))))',
-				].join('\n'), path.resolve(extensionRoot, '..', 'skills/references/tests/test_observe_report.py'),
+				].join('\n'), path.resolve(extensionRoot, '..', 'skills/references/tests/observe_report_fixtures.py'),
 				audit, selection, instrumentation, verification]);
 				const flags = ['--selection-json', selection, '--instrumentation-json', instrumentation, '--verify-json', verification];
 				assert.match(execFileSync(python, ['-I', launcher, 'validate-flow', audit, ...flags], {

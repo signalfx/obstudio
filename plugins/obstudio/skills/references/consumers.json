@@ -36,6 +36,16 @@
     "otel-instrument",
     "otel-verify"
   ],
+  "scripts/observe_report_core.py": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
+  "scripts/observe_report_html.py": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
   "signalflow-patterns.md": [
     "splunk-configure",
     "splunk-dashboard"

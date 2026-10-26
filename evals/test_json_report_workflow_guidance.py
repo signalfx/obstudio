@@ -14,6 +14,12 @@ INSTRUMENT_HANDOFF = ROOT / "skills" / "otel-instrument" / "references" / "json-
 VERIFY_HANDOFF = ROOT / "skills" / "otel-verify" / "references" / "json-approval-handoff.md"
 AUDIT_INPUT = ROOT / "evals" / "go" / "chi-basic" / "eval" / "inputs" / "otel-audit.json"
 REPORT_TOOL = ROOT / "skills" / "references" / "scripts" / "observe_report.py"
+REPORT_TOOL_PARTS = (
+    REPORT_TOOL,
+    REPORT_TOOL.with_name("observe_report_core.py"),
+    REPORT_TOOL.with_name("observe_report_html.py"),
+)
+REPORT_TESTS = ROOT / "skills" / "references" / "tests"
 REPORT_FLOW = ROOT / "skills" / "references" / "report-flow-contract.md"
 AUDIT_EVAL = ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "audit.json"
 INSTRUMENT_EVAL = (
@@ -38,6 +44,13 @@ CHI_DECISION_INSTRUMENT_EVAL = (
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def _report_engine_sha256() -> str:
+    digest = hashlib.sha256()
+    for part in REPORT_TOOL_PARTS:
+        digest.update(part.read_bytes())
+    return digest.hexdigest()
 
 
 def _eval_contract(path: Path) -> str:
@@ -302,7 +315,7 @@ def test_manual_decision_answers_are_separate_and_gate_matching_work() -> None:
 
 def test_current_audit_and_selection_versions_are_explicit() -> None:
     audit = _read(AUDIT_SKILL)
-    report_tool = _read(REPORT_TOOL)
+    report_tool = "".join(_read(part) for part in REPORT_TOOL_PARTS)
     audit_normalized = " ".join(audit.split())
     audit_input = json.loads(_read(AUDIT_INPUT))
 
@@ -314,7 +327,7 @@ def test_current_audit_and_selection_versions_are_explicit() -> None:
     assert "SUPPORTED_SELECTION_SCHEMA_VERSIONS = {1, 2, CURRENT_SELECTION_SCHEMA_VERSION}" in report_tool
     assert "CURRENT_AUDIT_SCHEMA_VERSION = 2" in report_tool
     assert "a selection carrying `decision_answers` is schema v2" in audit_normalized
-    report_tests = _read(ROOT / "skills/references/tests/test_observe_report.py")
+    report_tests = "".join(_read(path) for path in sorted(REPORT_TESTS.glob("test_observe_report*.py")))
     assert "def test_ao_target_preserves_legacy_selection_shape_and_decisions" in report_tests
     assert "def test_selection_v3_ao_target_normalization_and_digest_binding" in report_tests
 
@@ -455,7 +468,7 @@ def test_ao_target_handoff_evals_review_actual_snapshot_without_runtime_claims()
     assert "unproven" in readiness["acceptance_criteria"]
     assert snapshot["normalized_audit"]["genai_readiness"] == resource_audit["genai_readiness"]
     assert snapshot["producer"]["source"] == "skills/references/scripts/observe_report.py"
-    assert snapshot["producer"]["source_sha256"] == "sha256:" + hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
+    assert snapshot["producer"]["source_sha256"] == "sha256:" + _report_engine_sha256()
     cases = {case["case"]: case for case in snapshot["selection_cases"]}
     for name in ("legacy-v1-no-target", "legacy-v2-no-target", "schema-v3-no-target"):
         assert cases[name]["outcome"] == "accepted"
@@ -518,7 +531,7 @@ def test_ao_target_handoff_ui_snapshot_records_bound_field_validity() -> None:
     assert ui["schema_version"] == 1
     assert ui["kind"] == "ao-selector-field-validity-browser-snapshot"
     assert ui["outcome"] == "pass"
-    assert ui["producer"]["engine_sha256"] == hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
+    assert ui["producer"]["engine_sha256"] == _report_engine_sha256()
     assert ui["producer"]["audit_fixture_sha256"] == hashlib.sha256(
         (inputs / "ao-resource-audit.json").read_bytes()
     ).hexdigest()
@@ -556,7 +569,7 @@ def test_ao_target_scope_snapshots_preserve_resource_and_content_boundary() -> N
     validator = json.loads(_read(inputs / "ao-target-handoff-validator-snapshot.json"))
     cases = {case["case"]: case for case in validator["ao_target_scope_cases"]}
     assert len(cases) == len(validator["ao_target_scope_cases"]) == 14
-    assert validator["producer"]["source_sha256"] == "sha256:" + hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
+    assert validator["producer"]["source_sha256"] == "sha256:" + _report_engine_sha256()
     assert cases["actual-callback-targetless"]["outcome"] == "accepted"
     assert cases["actual-callback-targetless"]["eligible_ids"] == []
     for name in ("actual-callback-target-pair-rejected", "actual-callback-policy-only-rejected",
@@ -589,7 +602,7 @@ def test_ao_target_scope_snapshots_preserve_resource_and_content_boundary() -> N
         assert "marker" in criterion and ("absent" in criterion or "omitted" in criterion)
     ui = json.loads(_read(inputs / "ao-selector-field-validity-snapshot.json"))
     gate = ui["ao_target_scope_gate"]
-    assert gate["producer_engine_sha256"] == hashlib.sha256(REPORT_TOOL.read_bytes()).hexdigest()
+    assert gate["producer_engine_sha256"] == _report_engine_sha256()
     assert len(gate["cases"]) == 4
     for case in gate["cases"]:
         assert case["outcome"] == "pass"
