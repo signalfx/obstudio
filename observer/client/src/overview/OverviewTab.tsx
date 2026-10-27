@@ -5,6 +5,7 @@ import {
   type InstrumentationScore,
 } from "../api/client";
 import { useCloudBridge, type SkillDocsId } from "../cloud/bridge";
+import { CLOUD_CONNECT_DESCRIPTION } from "../cloud/copy";
 import { CopyTextButton } from "../layout";
 
 /** Agent skill a checklist step hands off to. */
@@ -543,10 +544,7 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                   ) : (
                     <>
                       <p className="overview-skills__empty-title">Connect Splunk Observability Cloud</p>
-                      <p className="overview-skills__empty-hint">
-                        Configure alerting and monitoring by publishing detectors and dashboards
-                        right from the IDE
-                      </p>
+                      <p className="overview-skills__empty-hint">{CLOUD_CONNECT_DESCRIPTION}</p>
                       {onOpenCloud ? (
                         <button type="button" className="overview-checklist__nav" onClick={onOpenCloud}>
                           Connect <span aria-hidden="true">→</span>

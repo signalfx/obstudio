@@ -24,6 +24,28 @@ function selectFilterField(label: string): void {
 }
 
 describe("MetricsTab", () => {
+  it("shows only the metric type when a metric has no unit", () => {
+    const base = { serviceName: "checkout", scopeName: "otel", dataPointCount: 1, dataPoints: [] };
+    render(
+      <MetricsTab
+        metrics={[
+          { ...base, name: "http.server.active_requests", description: "Active requests", unit: "", type: "gauge" },
+          { ...base, name: "http.server.duration", description: "Request duration", unit: "ms", type: "histogram" },
+        ]}
+        telemetryError={null}
+      />,
+    );
+
+    const unitless = screen.getByRole("button", { name: /http\.server\.active_requests/ });
+    expect(unitless.querySelector(".metric-card__badge")?.textContent).toBe("gauge");
+    expect(unitless.querySelector(".metric-card__meta-separator")).toBeNull();
+    expect(unitless.textContent).not.toContain("--");
+
+    const withUnit = screen.getByRole("button", { name: /http\.server\.duration/ });
+    expect(withUnit.querySelector(".metric-card__meta-separator")?.textContent).toBe("/");
+    expect(withUnit.querySelector(".metric-card__unit")?.textContent).toBe("ms");
+  });
+
   it("filters metrics from the compact explorer toolbar via the REST query endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
