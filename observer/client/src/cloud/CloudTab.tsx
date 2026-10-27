@@ -25,10 +25,9 @@ import {
   type CloudBridgeAction,
   type CloudBridgeResponse,
 } from "./bridge";
+import { CLOUD_CONNECT_DESCRIPTION } from "./copy";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 import { CopyTextButton } from "../layout/DetailPanel";
-
-export const CLOUD_CONNECT_DESCRIPTION = "Connect to export metrics and traces and publish detectors and dashboards.";
 
 const maxSplunkDestinationBytes = 2048;
 const sisCIMDSessionPollIntervalMs = 1_500;

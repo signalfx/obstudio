@@ -3,7 +3,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CLOUD_CONNECT_DESCRIPTION } from "../cloud/CloudTab";
+import { CLOUD_CONNECT_DESCRIPTION } from "../cloud/copy";
 import { OverviewTab, formatScoreValue, scoreTone, shortCommit } from "./OverviewTab";
 
 interface BridgeRequest {

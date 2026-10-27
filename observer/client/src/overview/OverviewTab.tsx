@@ -5,7 +5,7 @@ import {
   type InstrumentationScore,
 } from "../api/client";
 import { useCloudBridge, type SkillDocsId } from "../cloud/bridge";
-import { CLOUD_CONNECT_DESCRIPTION } from "../cloud/CloudTab";
+import { CLOUD_CONNECT_DESCRIPTION } from "../cloud/copy";
 import { CopyTextButton } from "../layout";
 
 /** Agent skill a checklist step hands off to. */
