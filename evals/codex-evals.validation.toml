@@ -9,5 +9,5 @@ enabled = false
 
 [models]
 # Agent model can be set here or overridden with MODEL=... in Make.
-agent = "gpt-5.5"
-judge = "gpt-5.5"
+agent = "gpt-6-luna"
+judge = "gpt-6-luna"

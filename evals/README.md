@@ -91,7 +91,7 @@ Runtime checks are top-level `checks[]` entries in `eval/runtime/*.json`.
 file and declares telemetry expectations. The Compose file owns service
 topology, Splunk Observability Studio startup, app startup, and a profiled `traffic` service that
 generates requests with tools such as `siege`. The harness runs Compose,
-discovers Splunk Observability Studio host port with `docker compose port observer 3000`,
+discovers Splunk Observability Studio host port with `docker compose port observer 17900`,
 invokes `traffic`, queries that isolated Splunk Observability Studio instance, then tears the stack
 down. Compose can use `${CODEX_EVAL_SERVICE_DIR}` when it must build the
 instrumented temp service workspace rather than the source fixture. Shared
@@ -233,8 +233,8 @@ Set the judge model with:
 
 ```toml
 [models]
-agent = "gpt-5.5"
-judge = "gpt-5.5"
+agent = "gpt-6-luna"
+judge = "gpt-6-luna"
 
 [runtime]
 enabled = false

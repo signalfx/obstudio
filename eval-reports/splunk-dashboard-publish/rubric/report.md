@@ -7,9 +7,9 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | splunk-dashboard-publish |
-| Run ID | 20260921T234133309675Z |
-| Agent model | gpt-5.5 |
-| Judge model | gpt-5.5 |
+| Run ID | 20261028T020923992052Z |
+| Agent model | gpt-6-luna |
+| Judge model | gpt-6-luna |
 | Rubric enabled | True |
 | Workers | 1 |
 | Config | evals/codex-evals.toml |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-sync/qual/dashboard-publish | dashboards/checkout-sync | 1 | 100% (7/7), avg score 98 | 199.4K | 4.0m | - | - | - |
+| with_skill | dashboards/checkout-sync/qual/dashboard-publish | dashboards/checkout-sync | 1 | 100% (7/7), avg score 96 | 152.5K | 2.0m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-sync/qual/dashboard-publish | dashboards/checkout-sync | with_skill | codex | cumulative | measured | 1/1 recognized | 191894 | 163456 | 0 | 7541 | 4176 | unknown | 199435 |
+| with_skill | dashboards/checkout-sync/qual/dashboard-publish | dashboards/checkout-sync | with_skill | codex | cumulative | measured | 1/1 recognized | 148655 | 119936 | 0 | 3810 | 1960 | unknown | 152465 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-sync/qual/dashboard-publish | dashboards/checkout-sync | with_skill | codex | cumulative | measured | 1/1 recognized | 116643 | 68096 | 0 | 4614 | 2430 | unknown | 121257 |
+| with_skill | dashboards/checkout-sync/qual/dashboard-publish | dashboards/checkout-sync | with_skill | codex | cumulative | measured | 1/1 recognized | 59973 | 18944 | 0 | 1836 | 1082 | unknown | 61809 |
 
 ## Rubric Failures
 
