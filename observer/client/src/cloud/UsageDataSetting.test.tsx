@@ -163,12 +163,12 @@ describe("UsageDataSetting", () => {
 
     postReply = () => new Response("oops", { status: 500 });
     fireEvent.click(usageSwitch());
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Usage data setting could not be saved (HTTP 500)."));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("This setting could not be saved (HTTP 500)."));
 
     postReply = () => Promise.reject(new Error("offline"));
     await waitFor(() => expect(busy()).toBe(false));
     fireEvent.click(usageSwitch());
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Usage data setting could not be saved."));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("This setting could not be saved."));
 
     postReply = () => value(true);
     await waitFor(() => expect(busy()).toBe(false));

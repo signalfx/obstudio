@@ -22,7 +22,7 @@ type userConfigWiring struct {
 }
 
 // openUserConfig builds the config Manager for ~/.obstudio/config.yaml and
-// connects its events to the UI's live config signal. The caller closes the
+// connects file-state changes to the UI's live config signal. The caller closes the
 // Manager; Close also ends the subscription.
 func openUserConfig() userConfigWiring {
 	path, err := userConfigYAMLPath()
@@ -35,6 +35,6 @@ func openUserConfig() userConfigWiring {
 		log.Printf("user settings are unavailable: %v", err)
 		return userConfigWiring{}
 	}
-	m.Subscribe(func(userconfig.Event) { notifyConfigChanged() })
+	m.SubscribeFile(func() { notifyConfigChanged() })
 	return userConfigWiring{manager: m, api: api.NewUserConfig(m), status: configstatus.New(m, path)}
 }

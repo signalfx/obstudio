@@ -31,8 +31,8 @@ function wordingFrom(body: unknown): Wording | null {
 
 function saveErrorText(error: NonNullable<ConfigEditsState["error"]>): string {
   if (error.message) return error.message;
-  if (error.status !== undefined) return `Usage data setting could not be saved (HTTP ${error.status}).`;
-  return "Usage data setting could not be saved.";
+  if (error.status !== undefined) return `This setting could not be saved (HTTP ${error.status}).`;
+  return "This setting could not be saved.";
 }
 
 /**
