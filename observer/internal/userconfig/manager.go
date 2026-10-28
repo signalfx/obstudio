@@ -109,6 +109,37 @@ func (a stamp) settling(now time.Time) bool {
 	return age >= 0 && age < DebounceInterval
 }
 
+// loadResult is what one Load call returned: the snapshot hash, or the
+// error's kind and text. Diagnostics are left out because they follow from
+// the bytes, so an equal hash means equal diagnostics.
+type loadResult struct {
+	ok   bool
+	hash [32]byte
+	kind errKind
+	text string
+}
+
+type errKind int
+
+const (
+	errMissing errKind = iota + 1
+	errSyntaxKind
+	errRead
+)
+
+func resultOf(snap Snapshot, err error) loadResult {
+	switch {
+	case err == nil:
+		return loadResult{ok: true, hash: snap.Hash}
+	case errors.Is(err, fs.ErrNotExist):
+		return loadResult{kind: errMissing, text: err.Error()}
+	case errors.Is(err, ErrSyntax):
+		return loadResult{kind: errSyntaxKind, text: err.Error()}
+	default:
+		return loadResult{kind: errRead, text: err.Error()}
+	}
+}
+
 // Manager holds the current settings of one config file and keeps them in
 // step with the file.
 type Manager struct {
@@ -117,13 +148,15 @@ type Manager struct {
 
 	snap atomic.Pointer[Snapshot]
 
-	// reloadMu serializes reloads and guards recorded and generation.
+	// reloadMu serializes reloads and guards recorded, result and
+	// generation.
 	reloadMu   sync.Mutex
 	recorded   stamp
+	result     loadResult
 	generation uint64
 
-	// dispatchMu is taken before reloadMu is released, so events reach the
-	// mailboxes in generation order.
+	// dispatchMu is taken before reloadMu is released, so events and file
+	// notifications reach the mailboxes in reload order.
 	dispatchMu sync.Mutex
 
 	// writeMu serializes Update within this process; taken before reloadMu.
@@ -137,8 +170,9 @@ type Manager struct {
 	quit    chan struct{}
 	timer   stopper
 
-	subMu sync.Mutex
-	subs  map[*subscriber]struct{}
+	subMu    sync.Mutex
+	subs     map[*subscriber]struct{}
+	fileSubs map[*fileSubscriber]struct{}
 }
 
 // NewManager opens the config file at path, creating it if absent, and
@@ -160,15 +194,17 @@ func NewManager(path string, opts ...Option) (*Manager, error) {
 		opt(&o)
 	}
 	m := &Manager{
-		path: filepath.Clean(path),
-		dir:  filepath.Clean(filepath.Dir(path)),
-		opts: o,
-		subs: map[*subscriber]struct{}{},
+		path:     filepath.Clean(path),
+		dir:      filepath.Clean(filepath.Dir(path)),
+		opts:     o,
+		subs:     map[*subscriber]struct{}{},
+		fileSubs: map[*fileSubscriber]struct{}{},
 	}
 
 	_, scaffoldErr := EnsureScaffold(m.path)
 	m.recorded = takeStamp(m.path)
 	snap, diags, loadErr := Load(m.path)
+	m.result = resultOf(snap, loadErr)
 	if err := errors.Join(scaffoldErr, loadErr); err != nil {
 		snap = FailSafeSnapshot()
 		m.opts.logf("[userconfig] %s could not be read, using fail-safe settings (%s): %v", m.path, failSafeSummary(), err)
@@ -225,6 +261,9 @@ func (m *Manager) reload() {
 	snap, diags, err := Load(m.path)
 	m.opts.afterRead()
 	m.recorded = st
+	res := resultOf(snap, err)
+	fileChanged := res != m.result
+	m.result = res
 
 	var ev *Event
 	cur := m.snap.Load()
@@ -240,13 +279,18 @@ func (m *Manager) reload() {
 			ev = &Event{Old: *cur, New: snap, Generation: m.generation}
 		}
 	}
-	if ev == nil {
+	if ev == nil && !fileChanged {
 		m.reloadMu.Unlock()
 		return
 	}
 	m.dispatchMu.Lock()
 	m.reloadMu.Unlock()
-	m.dispatch(*ev)
+	if ev != nil {
+		m.dispatch(*ev)
+	}
+	if fileChanged {
+		m.dispatchFile()
+	}
 	m.dispatchMu.Unlock()
 }
 
@@ -377,6 +421,105 @@ func (s *subscriber) invoke(ev Event) {
 	s.fn(ev)
 }
 
+type fileSubscriber struct {
+	fn   func()
+	logf func(format string, args ...any)
+	wake chan struct{}
+
+	mu        sync.Mutex
+	pending   bool
+	cancelled bool
+}
+
+// SubscribeFile calls fn on its own goroutine after each later reload whose
+// result (the file's hash, or the error reading it) differs from the
+// previous reload's. It fires for changes that leave the settings as they
+// were, such as a broken file, its fix, or an unknown key. Notifications
+// that arrive while fn runs are merged into one call. fn may run once after
+// cancel returns, so it must be idempotent.
+func (m *Manager) SubscribeFile(fn func()) (cancel func()) {
+	if m.closed.Load() {
+		return func() {}
+	}
+	s := &fileSubscriber{fn: fn, logf: m.opts.logf, wake: make(chan struct{}, 1)}
+	m.subMu.Lock()
+	if m.closed.Load() {
+		m.subMu.Unlock()
+		return func() {}
+	}
+	m.fileSubs[s] = struct{}{}
+	m.subMu.Unlock()
+	go s.run()
+	return func() {
+		m.subMu.Lock()
+		delete(m.fileSubs, s)
+		m.subMu.Unlock()
+		s.cancel()
+	}
+}
+
+func (m *Manager) dispatchFile() {
+	m.subMu.Lock()
+	subs := make([]*fileSubscriber, 0, len(m.fileSubs))
+	for s := range m.fileSubs {
+		subs = append(subs, s)
+	}
+	m.subMu.Unlock()
+	for _, s := range subs {
+		s.deliver()
+	}
+}
+
+func (s *fileSubscriber) deliver() {
+	s.mu.Lock()
+	if s.cancelled {
+		s.mu.Unlock()
+		return
+	}
+	s.pending = true
+	s.mu.Unlock()
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
+func (s *fileSubscriber) cancel() {
+	s.mu.Lock()
+	s.cancelled = true
+	s.pending = false
+	s.mu.Unlock()
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
+func (s *fileSubscriber) run() {
+	for range s.wake {
+		s.mu.Lock()
+		if s.cancelled {
+			s.mu.Unlock()
+			return
+		}
+		pending := s.pending
+		s.pending = false
+		s.mu.Unlock()
+		if pending {
+			s.invoke()
+		}
+	}
+}
+
+func (s *fileSubscriber) invoke() {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logf("[userconfig] file subscriber panicked: %v", r)
+		}
+	}()
+	s.fn()
+}
+
 // Close stops watching and cancels every subscriber. It does not wait for a
 // callback in progress, so a callback may call it.
 func (m *Manager) Close() error {
@@ -388,10 +531,14 @@ func (m *Manager) Close() error {
 	m.reloadMu.Lock()
 	m.reloadMu.Unlock()
 	m.subMu.Lock()
-	subs := m.subs
+	subs, fileSubs := m.subs, m.fileSubs
 	m.subs = map[*subscriber]struct{}{}
+	m.fileSubs = map[*fileSubscriber]struct{}{}
 	m.subMu.Unlock()
 	for s := range subs {
+		s.cancel()
+	}
+	for s := range fileSubs {
 		s.cancel()
 	}
 	return err
