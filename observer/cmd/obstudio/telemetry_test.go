@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -339,38 +340,87 @@ func TestTelemetryUnresolvableHome(t *testing.T) {
 }
 
 func TestTelemetryHelpText(t *testing.T) {
+	const (
+		l2 = "This setting can also be managed in ~/.obstudio/config.yaml (telemetry.enabled). A running Splunk Observability Studio picks up a change without a restart."
+		l3 = `To manage whether or not Splunk Observability Studio receives token telemetry from your Codex or Claude Code instances, use "obstudio token-telemetry".`
+	)
+	var d string
+	for _, def := range userconfig.Definitions() {
+		if def.Path == userconfig.TelemetryEnabled.Path() {
+			d = def.Description
+		}
+	}
+	if d == "" {
+		t.Fatal("no Description for the setting")
+	}
+	shorts := map[string]string{
+		"enable":  "Allow Cisco to collect anonymous usage data",
+		"disable": "Stop Cisco collecting anonymous usage data",
+		"status":  "Show whether anonymous usage data will be collected",
+	}
+
+	group := newTelemetryCommand()
+	if group.Long != d+"\n\n"+l2+"\n\n"+l3 {
+		t.Errorf("long-exact: Long = %q", group.Long)
+	}
+	if first, _, _ := strings.Cut(group.Long, "\n\n"); first != d {
+		t.Errorf("description-first: %q", first)
+	}
+	for _, old := range []string{"non-PII", "sends about itself to Splunk"} {
+		if strings.Contains(group.Long, old) {
+			t.Errorf("no-old-text: Long contains %q", old)
+		}
+	}
+	src, err := os.ReadFile("telemetry.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The enable Short is itself the first 43 bytes of D, so it is the one
+	// literal allowed to hold D's first 40 bytes.
+	prefix := d[:min(40, len(d))]
+	if n := bytes.Count(src, []byte(prefix)); n != bytes.Count(src, []byte(`"`+shorts["enable"]+`"`)) {
+		t.Errorf("no-copied-literal: telemetry.go holds %q outside the enable Short", prefix)
+	}
+	if bytes.Contains(src, []byte(d)) {
+		t.Error("no-copied-literal: telemetry.go holds the Description")
+	}
+	if group.Short != "Manage the anonymous usage data Splunk Observability Studio sends about itself" {
+		t.Errorf("group Short %q", group.Short)
+	}
+	for _, c := range group.Commands() {
+		if want, ok := shorts[c.Name()]; ok && c.Short != want {
+			t.Errorf("%s Short %q, want %q", c.Name(), c.Short, want)
+		}
+	}
+
 	telemetryHome(t)
 	for _, args := range [][]string{{"telemetry"}, {"telemetry", "--help"}} {
 		r := runTelemetry(args...)
 		if r.err != nil {
-			t.Errorf("%v: %v", args, r.err)
+			t.Errorf("exit: %v: %v", args, r.err)
 		}
-		for _, want := range []string{
-			"anonymous usage data (non-PII usage counts) that Splunk",
-			"sends about itself",
-			"does not change what Splunk Observability Studio collects",
-			`"obstudio token-telemetry"`,
-			"Allow sending anonymous usage data",
-			"Stop sending anonymous usage data",
-			"Show whether anonymous usage data will be sent",
-		} {
+		for _, want := range []string{d, l2, l3} {
 			if !strings.Contains(r.stdout, want) {
-				t.Errorf("%v: help lacks %q", args, want)
+				t.Errorf("printed: %v: help lacks %q", args, want)
+			}
+		}
+		for name, short := range shorts {
+			if !regexp.MustCompile(`(?m)^\s+` + name + `\s+` + regexp.QuoteMeta(short) + `$`).MatchString(r.stdout) {
+				t.Errorf("subcommands: %v: help lacks %s %q", args, name, short)
 			}
 		}
 	}
-	group := newTelemetryCommand()
 	if strings.Contains(group.Short, "token") {
-		t.Error("group Short mentions token")
+		t.Error("no-token-in-short: group Short mentions token")
 	}
 	for _, c := range group.Commands() {
 		if strings.Contains(c.Short, "token") {
-			t.Errorf("%s Short mentions token", c.Name())
+			t.Errorf("no-token-in-short: %s Short mentions token", c.Name())
 		}
 	}
 	r := runTelemetry("--help")
 	if !strings.Contains(r.stdout, "  telemetry ") || !strings.Contains(r.stdout, "  token-telemetry ") {
-		t.Errorf("root help does not list both groups:\n%s", r.stdout)
+		t.Errorf("root-lists-both: root help does not list both groups:\n%s", r.stdout)
 	}
 }
 

@@ -10,15 +10,24 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/userconfig"
 )
 
-const telemetryLong = `Control the anonymous usage data (non-PII usage counts) that Splunk
-Observability Studio sends about itself to Splunk. The setting is
-telemetry.enabled in ~/.obstudio/config.yaml.
+// telemetryLongL2 and telemetryLongL3 follow the setting's Description in
+// the group's Long.
+const (
+	telemetryLongL2 = "This setting can also be managed in ~/.obstudio/config.yaml (telemetry.enabled). A running Splunk Observability Studio picks up a change without a restart."
+	telemetryLongL3 = `To manage whether or not Splunk Observability Studio receives token telemetry from your Codex or Claude Code instances, use "obstudio token-telemetry".`
+)
 
-This does not change what Splunk Observability Studio collects from your
-agents or shows you locally. To manage Codex or Claude token telemetry, use
-"obstudio token-telemetry".
-
-A running Splunk Observability Studio picks up a change without a restart.`
+// telemetryLong is the setting's Description, read from the definitions,
+// then the two fixed lines.
+func telemetryLong() string {
+	var d string
+	for _, def := range userconfig.Definitions() {
+		if def.Path == userconfig.TelemetryEnabled.Path() {
+			d = def.Description
+		}
+	}
+	return d + "\n\n" + telemetryLongL2 + "\n\n" + telemetryLongL3
+}
 
 // telemetryWrite is replaced in tests to simulate a write that does not land.
 var telemetryWrite = userconfig.Write[bool]
@@ -27,11 +36,11 @@ func newTelemetryCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "telemetry",
 		Short: "Manage the anonymous usage data Splunk Observability Studio sends about itself",
-		Long:  telemetryLong,
+		Long:  telemetryLong(),
 	}
 	cmd.AddCommand(
-		newTelemetrySetCommand("enable", "Allow sending anonymous usage data", true),
-		newTelemetrySetCommand("disable", "Stop sending anonymous usage data", false),
+		newTelemetrySetCommand("enable", "Allow Cisco to collect anonymous usage data", true),
+		newTelemetrySetCommand("disable", "Stop Cisco collecting anonymous usage data", false),
 		newTelemetryStatusCommand(),
 	)
 	return cmd
@@ -121,7 +130,7 @@ const runningObserverNote = "Note: A running Splunk Observability Studio may sti
 func newTelemetryStatusCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show whether anonymous usage data will be sent",
+		Short: "Show whether anonymous usage data will be collected",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			path, err := userConfigYAMLPath()
