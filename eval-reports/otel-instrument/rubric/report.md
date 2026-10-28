@@ -7,36 +7,36 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261027T150809627145Z |
-| Agent model | gpt-5.6-sol |
-| Judge model | gpt-5.6-sol |
+| Run ID | 20261027T175239134893Z |
+| Agent model | gpt-6.1-sol |
+| Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
 | Workers | 1 |
-| Config | .workspace/codex-evals/codex-evals-gpt-5.6-sol.toml |
+| Config | evals/codex-evals.agent-role.toml |
 
 ## Rubric Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/benchmark-instrument | go/chi-basic | 1 | 100% (3/3), avg score 99 | 9.9M | 23.9m | - | - | - |
-| with_skill | go/chi-basic/qual/instrument | go/chi-basic | 2 | 100% (16/16), avg score 100 | 39.6M | 1.2h | - | - | - |
-| with_skill | go/chi-basic/qual/instrument-decision-gated | go/chi-basic | 1 | 100% (4/4), avg score 100 | 8.1M | 17.6m | - | - | - |
+| with_skill | go/chi-basic/qual/benchmark-instrument | go/chi-basic | 1 | 100% (3/3), avg score 100 | 2.8M | 16.5m | - | - | - |
+| with_skill | go/chi-basic/qual/instrument | go/chi-basic | 2 | 100% (16/16), avg score 100 | 5.8M | 31.8m | - | - | - |
+| with_skill | go/chi-basic/qual/instrument-decision-gated | go/chi-basic | 1 | 100% (4/4), avg score 100 | 2.8M | 11.9m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/benchmark-instrument | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 9896058 | 9653376 | 0 | 48554 | 19844 | unknown | 9944612 |
-| with_skill | go/chi-basic/qual/instrument | go/chi-basic | with_skill | codex | cumulative | measured | 2/2 recognized | 39441951 | 38898944 | 0 | 133399 | 49046 | unknown | 39575350 |
-| with_skill | go/chi-basic/qual/instrument-decision-gated | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 8072130 | 7893248 | 0 | 32560 | 14183 | unknown | 8104690 |
+| with_skill | go/chi-basic/qual/benchmark-instrument | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2809334 | 2731392 | 0 | 26821 | 5332 | unknown | 2836155 |
+| with_skill | go/chi-basic/qual/instrument | go/chi-basic | with_skill | codex | cumulative | measured | 2/2 recognized | 5713748 | 5496704 | 0 | 59171 | 13300 | unknown | 5772919 |
+| with_skill | go/chi-basic/qual/instrument-decision-gated | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2760502 | 2660224 | 0 | 21365 | 3539 | unknown | 2781867 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/benchmark-instrument | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1292966 | 1167616 | 0 | 6511 | 2869 | unknown | 1299477 |
-| with_skill | go/chi-basic/qual/instrument | go/chi-basic | with_skill | codex | cumulative | measured | 2/2 recognized | 1402159 | 1223296 | 0 | 12810 | 6395 | unknown | 1414969 |
-| with_skill | go/chi-basic/qual/instrument-decision-gated | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 185046 | 148608 | 0 | 3523 | 1630 | unknown | 188569 |
+| with_skill | go/chi-basic/qual/benchmark-instrument | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 598094 | 513152 | 0 | 3195 | 678 | unknown | 601289 |
+| with_skill | go/chi-basic/qual/instrument | go/chi-basic | with_skill | codex | cumulative | measured | 2/2 recognized | 932031 | 775680 | 0 | 5306 | 627 | unknown | 937337 |
+| with_skill | go/chi-basic/qual/instrument-decision-gated | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 351229 | 319232 | 0 | 2671 | 188 | unknown | 353900 |
 
 ## Rubric Failures
 
