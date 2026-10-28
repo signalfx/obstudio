@@ -7,8 +7,6 @@ resource. An environment name/ID pair is rejected rather than guessed.
 The default uses the installed SDK. --studio-api-origin explicitly selects an
 SDK-free local Studio API proved reachable in the application's network namespace.
 No credentials are accepted as arguments or copied into the evidence report.
-This script downloads nothing and executes nothing; its only network access is
-the installed SDK or a loopback-only Studio API origin.
 """
 
 from __future__ import annotations

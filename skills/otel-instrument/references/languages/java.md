@@ -159,21 +159,9 @@ The OpenTelemetry Java agent provides auto-instrumentation with zero code change
 
 ### Download
 
-Pin an explicit agent version and verify its SHA-256 before the JVM ever loads
-it. Never fetch a `latest` URL. The jar runs inside the application JVM via
-`-javaagent`, so an unverified download is code execution. This is a template
-for the user's build or setup step; the plugin never runs it. Choose the version
-yourself (prefer one already pinned in the project's dependency management),
-record it with its hash in the repository, and take the hash from the Maven
-Central `.jar.sha256` file for that exact version, reviewing it once rather than
-fetching it at every build.
-
 ```bash
-OTEL_JAVAAGENT_VERSION="<pinned version>"
-OTEL_JAVAAGENT_SHA256="<sha256 recorded for that version>"
-curl -fsSL "https://repo1.maven.org/maven2/io/opentelemetry/javaagent/opentelemetry-javaagent/${OTEL_JAVAAGENT_VERSION}/opentelemetry-javaagent-${OTEL_JAVAAGENT_VERSION}.jar" \
+curl -L https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar \
   -o opentelemetry-javaagent.jar
-echo "${OTEL_JAVAAGENT_SHA256}  opentelemetry-javaagent.jar" | shasum -a 256 -c -
 ```
 
 ### Host/native run
