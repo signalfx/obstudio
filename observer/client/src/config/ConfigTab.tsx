@@ -4,6 +4,7 @@ import { Switch } from "../components/Switch";
 import type { ConfigEditsState, FieldValue } from "../cloud/configEdits";
 import { saveErrorText, type SendOutcome, useConfigEdits } from "../cloud/useConfigEdits";
 import { observerFetch } from "../host/transport";
+import type { ConfigStatus } from "./configStatus";
 import {
   type ConfigDefinition,
   type ConfigSection,
@@ -16,8 +17,13 @@ import {
 
 const SAVED_INDICATOR_MS = 1500;
 
+interface ConfigTabProps {
+  /** The observer's config status, read once by AppView; null when there is none. */
+  status: ConfigStatus | null;
+}
+
 /** Settings generated from the observer's config definitions, saved as they are edited. */
-export function ConfigTab(): React.ReactElement {
+export function ConfigTab({ status }: ConfigTabProps): React.ReactElement {
   const [sections, setSections] = useState<ConfigSection[] | null>(null);
   const [definitionsFailed, setDefinitionsFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -56,6 +62,8 @@ export function ConfigTab(): React.ReactElement {
           <h2>Configuration</h2>
           <p>Changes are saved automatically.</p>
         </header>
+
+        {status !== null && status.message !== "" ? <ConfigProblems status={status} /> : null}
 
         {!ready && !loadFailed ? (
           <p className="explorer__status" role="status">Loading configuration…</p>
@@ -227,6 +235,22 @@ function ConfigField({ definition, value, inFlight, outcome, error, onEdit }: Co
       </div>
       {errorText !== null ? (
         <p className="config-field__error" id={errorId} role="alert">{errorText}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/** The status message and one line per diagnostic, as served. */
+function ConfigProblems({ status }: { status: ConfigStatus }): React.ReactElement {
+  return (
+    <div className="config-problems">
+      <p>{status.message}</p>
+      {status.diagnostics.length > 0 ? (
+        <ul>
+          {status.diagnostics.map((d, i) => (
+            <li key={i}>{d.line === 0 ? d.message : `${d.message} (line ${d.line})`}</li>
+          ))}
+        </ul>
       ) : null}
     </div>
   );

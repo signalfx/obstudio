@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { CloudTab, type CloudConnectionState } from "./cloud/CloudTab";
 import { ConfigTab } from "./config";
+import { CONFIG_PROBLEM_PILL_TEXT, useConfigStatus } from "./config/configStatus";
 import { DashboardsTab } from "./dashboards";
 import { LogsTab } from "./logs";
 import { MetricsTab } from "./metrics";
@@ -25,6 +26,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   const tabsRef = useRef<HTMLDivElement>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [cloudConnectionState, setCloudConnectionState] = useState<CloudConnectionState | null>(null);
+  const configStatus = useConfigStatus();
 
   const { state, paused, hasNewUpdates, resume, toggle } = telemetry;
   const validationSummary = state.validation?.summary ?? null;
@@ -268,6 +270,11 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             {activeTab !== "cloud" && activeTab !== "config" && state.error !== null ? (
               <span className="pill pill--error">{state.error}</span>
             ) : null}
+            {activeTab !== "config" && configStatus?.problem === true ? (
+              <button className="pill pill--error" onClick={() => switchTab("config")} type="button">
+                {CONFIG_PROBLEM_PILL_TEXT}
+              </button>
+            ) : null}
             <button
               className="tab-bar__help"
               onClick={() => setShowHelp(true)}
@@ -317,7 +324,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           <DashboardsTab telemetryError={state.error} paused={paused} />
         ) : null}
         {activeTab === "cloud" ? <CloudTab onConnectionChange={setCloudConnectionState} /> : null}
-        {activeTab === "config" ? <ConfigTab /> : null}
+        {activeTab === "config" ? <ConfigTab status={configStatus} /> : null}
       </section>
 
       {showHelp ? <KeyboardHelp onClose={() => setShowHelp(false)} /> : null}

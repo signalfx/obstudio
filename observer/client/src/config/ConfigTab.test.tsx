@@ -185,7 +185,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 }
 
 async function renderLoaded(): Promise<void> {
-  render(<ConfigTab />);
+  render(<ConfigTab status={null} />);
   await screen.findByRole("switch", { name: "Enable sample" });
 }
 
@@ -203,7 +203,7 @@ async function settle(ms = 0): Promise<void> {
 describe("ConfigTab rendering", () => {
   it("shows a loading state, then a section per definitions section with a control matching each type", async () => {
     installServer();
-    render(<ConfigTab />);
+    render(<ConfigTab status={null} />);
     expect(screen.getByText("Loading configuration…")).toBeTruthy();
 
     await screen.findByRole("switch", { name: "Enable sample" });
@@ -263,7 +263,7 @@ describe("ConfigTab rendering", () => {
       },
       { "sample.flagStatus": "on", "sample.retry_Count-2": false },
     );
-    render(<ConfigTab />);
+    render(<ConfigTab status={null} />);
 
     expect(await screen.findByRole("textbox", { name: "Flag status" })).toBeTruthy();
     expect(within(fieldOf("Flag status")).getByText("sample.flagStatus")).toBeTruthy();
@@ -278,7 +278,7 @@ describe("ConfigTab rendering", () => {
       { properties: { sample: { title: "Sample section", properties: { name: { type: "string", title: longTitle, description: longDescription } } } } },
       { "sample.name": "a" },
     );
-    render(<ConfigTab />);
+    render(<ConfigTab status={null} />);
 
     expect(await screen.findByRole("textbox", { name: longTitle })).toBeTruthy();
     expect(screen.getByText(longDescription)).toBeTruthy();
@@ -286,14 +286,14 @@ describe("ConfigTab rendering", () => {
 
   it("shows an empty state when the server declares no settings", async () => {
     installServer({ type: "object", properties: {} }, {});
-    render(<ConfigTab />);
+    render(<ConfigTab status={null} />);
     expect(await screen.findByText("No settings available")).toBeTruthy();
   });
 
   it("shows a Retry alert when the definitions fail to load, and recovers on retry", async () => {
     const server = installServer();
     server.failNext = { path: "/api/config/definitions", status: 500 };
-    render(<ConfigTab />);
+    render(<ConfigTab status={null} />);
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Could not load the configuration.");
@@ -306,7 +306,7 @@ describe("ConfigTab rendering", () => {
   it("shows a Retry alert when the values fail to load, and recovers on retry", async () => {
     const server = installServer();
     server.failNext = { path: "/api/config", status: 500 };
-    render(<ConfigTab />);
+    render(<ConfigTab status={null} />);
 
     const alert = await screen.findByRole("alert");
     expect(screen.queryByRole("switch", { name: "Enable sample" })).toBeNull();
