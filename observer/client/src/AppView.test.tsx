@@ -263,6 +263,12 @@ describe("AppView validation tab", () => {
 
   it("renders tab labels with count badges", () => {
     const telemetry = makeTelemetryHandle([makeFinding({})]);
+    // One metric name reported by three services is three table rows; the badge counts rows, not names.
+    telemetry.state.metrics = ["checkout", "payments", "orders"].map((serviceName) => ({
+      ...makeMetric("db.client.operation.duration"),
+      serviceName,
+    }));
+    telemetry.state.stats = { ...telemetry.state.stats!, metricNameCount: 1 };
 
     const { container } = render(<AppView telemetry={telemetry} />);
 
@@ -277,7 +283,7 @@ describe("AppView validation tab", () => {
     expect(servicesTab.getAttribute("aria-label")).toBe("Services, 1 service");
     expect(metricsTab.textContent).toContain("Metrics");
     expect(metricsTab.querySelector(".tab-button__count")?.textContent).toBe("3");
-    expect(metricsTab.getAttribute("aria-label")).toBe("Metrics, 3 metric names");
+    expect(metricsTab.getAttribute("aria-label")).toBe("Metrics, 3 metrics");
     expect(tracesTab.textContent).toContain("Traces");
     expect(tracesTab.querySelector(".tab-button__count")?.textContent).toBe("2");
     expect(tracesTab.getAttribute("aria-label")).toBe("Traces, 2 traces");

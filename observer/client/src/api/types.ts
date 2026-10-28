@@ -113,6 +113,8 @@ export interface TraceSummary {
   rootSpanName: string;
   serviceName?: string;
   spanCount: number;
+  /** Earliest span start, RFC 3339 despite the name (matches spans). */
+  startTimeUnixNano?: string;
   durationMs?: number;
   status: string;
   isGenAI?: boolean;

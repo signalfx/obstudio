@@ -30,6 +30,32 @@ function selectFilterField(label: string): void {
 }
 
 describe("LogsTab", () => {
+  it("shows only the time for today's logs and ellipsizes long messages", () => {
+    const today = new Date();
+    today.setUTCHours(14, 3, 21, 123);
+    const { container } = render(
+      <LogsTab
+        logs={[{
+          id: "today",
+          timeUnixNano: today.toISOString(),
+          severityText: "INFO",
+          body: "a very long log message ".repeat(20),
+          attributes: {},
+          resource: { serviceName: "checkout", attributes: {} },
+          scope: { name: "app" },
+        }]}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector(".data-table__td--timestamp")?.textContent).toBe("14:03:21.123");
+    const { readFileSync } = require("fs");
+    const { resolve } = require("path");
+    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+    expect(css).toMatch(/\.data-table__td > \.explorer-row__primary,\s*\.data-table__td > \.explorer-row__secondary \{[^}]*text-overflow: ellipsis;/);
+    expect(css).toMatch(/\.data-table__head--logs \.data-table__th--timestamp,\s*\.data-table__row--logs \.data-table__td--timestamp \{\s*display: flex;/);
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
     Object.defineProperty(HTMLElement.prototype, "clientHeight", {
@@ -200,7 +226,7 @@ describe("LogsTab", () => {
     const messages = Array.from(container.querySelectorAll(".data-table__td--message"), (element) => element.textContent);
     const timestamps = Array.from(container.querySelectorAll(".data-table__td--timestamp"), (element) => element.textContent);
     expect(messages).toEqual(["codex.turn_ttft", "api_request", "--"]);
-    expect(timestamps).toEqual(["17:27:03.227", "18:00:04.005", "--"]);
+    expect(timestamps).toEqual(["Aug 27 17:27:03.227", "Aug 27 18:00:04.005", "--"]);
 
     fireEvent.click(container.querySelectorAll(".data-table__row--logs")[0] as HTMLElement);
     expect(container.querySelector(".detail-panel__title")?.textContent).toBe("codex.turn_ttft");
@@ -250,7 +276,7 @@ describe("LogsTab", () => {
       container.querySelectorAll(".data-table__td--timestamp"),
       (element) => element.textContent,
     );
-    expect(timestamps).toEqual(["00:00:00.000", "00:00:00.000", "--"]);
+    expect(timestamps).toEqual(["Jan 1 00:00:00.000", "Jan 1 00:00:00.000", "--"]);
   });
 
   it("encodes negated exact filters with neq operators", async () => {

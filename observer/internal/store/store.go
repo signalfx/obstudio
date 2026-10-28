@@ -185,6 +185,7 @@ type TraceSummary struct {
 	RootSpanName       string        `json:"rootSpanName"`
 	ServiceName        string        `json:"serviceName,omitempty"`
 	SpanCount          int           `json:"spanCount"`
+	StartTime          time.Time     `json:"startTimeUnixNano,omitzero"`
 	DurationMs         float64       `json:"durationMs"`
 	Status             string        `json:"status"`
 	IsGenAI            bool          `json:"isGenAI,omitempty"`
@@ -883,6 +884,7 @@ func (s *Store) QueryTraceSummariesFiltered(filter TraceSummaryFilter) []TraceSu
 			RootSpanName:       root.Name,
 			ServiceName:        root.Resource.ServiceName,
 			SpanCount:          len(spans),
+			StartTime:          startTime,
 			DurationMs:         dur,
 			Status:             computeTraceStatus(spans),
 			IsGenAI:            traceHasGenAISignal(spans),
@@ -1655,6 +1657,7 @@ func (s *Store) queryTracesFiltered(serviceName, spanName, status, traceIDPrefix
 			RootSpanName:       root.Name,
 			ServiceName:        svcName,
 			SpanCount:          len(spans),
+			StartTime:          getTraceStartTime(spans),
 			DurationMs:         dur,
 			Status:             st,
 			IsGenAI:            isGenAI,

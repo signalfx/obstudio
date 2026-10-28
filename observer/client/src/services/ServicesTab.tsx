@@ -2,13 +2,26 @@ import React, { useEffect, useMemo, useState } from "react";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
 import { EmptyState } from "../components/EmptyState";
 import { fetchServiceStats, type ServiceStats } from "../api/client";
+import { formatDurationMs } from "../format";
 
 interface ServicesTabProps {
   serviceNames: string[];
 }
 
-type SortKey = keyof ServiceStats;
+type SortKey = keyof ServiceStats | "errorRate";
 type SortDir = "asc" | "desc";
+
+function errorRate(row: ServiceStats): number | null {
+  return row.spanCount > 0 ? row.errorCount / row.spanCount : null;
+}
+
+function sortValue(row: ServiceStats, key: Exclude<SortKey, "name">): number | null {
+  return key === "errorRate" ? errorRate(row) : row[key];
+}
+
+function formatAvg(ms: number | null): string {
+  return ms !== null ? formatDurationMs(ms) : "—";
+}
 
 const SERVICE_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "serviceName", label: "Service", kind: "text", placeholder: "checkout" },
@@ -54,9 +67,7 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
     if (sortKey === "name") {
       cmp = a.name.localeCompare(b.name);
     } else {
-      const av = a[sortKey] ?? -1;
-      const bv = b[sortKey] ?? -1;
-      cmp = (av as number) - (bv as number);
+      cmp = (sortValue(a, sortKey) ?? -1) - (sortValue(b, sortKey) ?? -1);
     }
     return sortDir === "asc" ? cmp : -cmp;
   }), [filtered, sortKey, sortDir]);
@@ -106,61 +117,68 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
             <button type="button" className="data-table__th data-table__th--sortable" onClick={() => handleSort("name")} aria-label={sortLabel("name", "Service")}>
               Service{arrow("name")}
             </button>
-            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("traceCount")} aria-label={sortLabel("traceCount", "Traces")}>
+            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric services-table__col--secondary" onClick={() => handleSort("traceCount")} aria-label={sortLabel("traceCount", "Traces")}>
               Traces{arrow("traceCount")}
             </button>
-            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("spanCount")} aria-label={sortLabel("spanCount", "Spans")}>
+            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric services-table__col--secondary" onClick={() => handleSort("spanCount")} aria-label={sortLabel("spanCount", "Spans")}>
               Spans{arrow("spanCount")}
             </button>
             <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("errorCount")} aria-label={sortLabel("errorCount", "Errors")}>
               Errors{arrow("errorCount")}
             </button>
+            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("errorRate")} aria-label={sortLabel("errorRate", "Error rate")}>
+              Error rate{arrow("errorRate")}
+            </button>
             <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("avgDurationMs")} aria-label={sortLabel("avgDurationMs", "Avg Duration")}>
               Avg Duration{arrow("avgDurationMs")}
             </button>
-            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("avgClientDurationMs")} aria-label={sortLabel("avgClientDurationMs", "Avg Client")}>
+            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric services-table__col--secondary" onClick={() => handleSort("avgClientDurationMs")} aria-label={sortLabel("avgClientDurationMs", "Avg Client")}>
               Avg Client{arrow("avgClientDurationMs")}
             </button>
-            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("avgServerDurationMs")} aria-label={sortLabel("avgServerDurationMs", "Avg Server")}>
+            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric services-table__col--secondary" onClick={() => handleSort("avgServerDurationMs")} aria-label={sortLabel("avgServerDurationMs", "Avg Server")}>
               Avg Server{arrow("avgServerDurationMs")}
             </button>
           </div>
 
           {sorted.length === 0 && clauses.length > 0 ? (
             <p className="explorer__status" role="status">No services match the current filter.</p>
-          ) : sorted.map((row) => (
-            <div key={row.name} className="services-table__row">
-              <span className="data-table__td data-table__td--service-name">
-                <span className="explorer-row__primary">{row.name}</span>
-              </span>
-              <span className="data-table__td data-table__td--numeric">
-                <span className="explorer-row__numeric">{row.traceCount || "—"}</span>
-              </span>
-              <span className="data-table__td data-table__td--numeric">
-                <span className="explorer-row__numeric">{row.spanCount || "—"}</span>
-              </span>
-              <span className="data-table__td data-table__td--numeric">
-                {row.errorCount > 0
-                  ? <span className="explorer-row__numeric services-tab__error-count">{row.errorCount}</span>
-                  : <span className="explorer-row__numeric explorer-row__numeric--muted">—</span>}
-              </span>
-              <span className="data-table__td data-table__td--numeric">
-                <span className="explorer-row__numeric">
-                  {row.avgDurationMs !== null ? `${row.avgDurationMs.toFixed(1)} ms` : "—"}
+          ) : sorted.map((row) => {
+            const rate = errorRate(row);
+            const hasErrors = row.errorCount > 0;
+            return (
+              <div key={row.name} className={hasErrors ? "services-table__row services-table__row--errors" : "services-table__row"}>
+                <span className="data-table__td data-table__td--service-name">
+                  {hasErrors ? <span className="services-tab__error-dot" aria-hidden="true" /> : null}
+                  <span className="explorer-row__primary">{row.name}</span>
                 </span>
-              </span>
-              <span className="data-table__td data-table__td--numeric">
-                <span className="explorer-row__numeric">
-                  {row.avgClientDurationMs !== null ? `${row.avgClientDurationMs.toFixed(1)} ms` : "—"}
+                <span className="data-table__td data-table__td--numeric services-table__col--secondary">
+                  <span className="explorer-row__numeric">{row.traceCount || "—"}</span>
                 </span>
-              </span>
-              <span className="data-table__td data-table__td--numeric">
-                <span className="explorer-row__numeric">
-                  {row.avgServerDurationMs !== null ? `${row.avgServerDurationMs.toFixed(1)} ms` : "—"}
+                <span className="data-table__td data-table__td--numeric services-table__col--secondary">
+                  <span className="explorer-row__numeric">{row.spanCount || "—"}</span>
                 </span>
-              </span>
-            </div>
-          ))}
+                <span className="data-table__td data-table__td--numeric">
+                  {hasErrors
+                    ? <span className="explorer-row__numeric services-tab__error-count">{row.errorCount}</span>
+                    : <span className="explorer-row__numeric explorer-row__numeric--muted">—</span>}
+                </span>
+                <span className="data-table__td data-table__td--numeric">
+                  {hasErrors && rate !== null
+                    ? <span className="explorer-row__numeric services-tab__error-rate">{`${(rate * 100).toFixed(1)}%`}</span>
+                    : <span className="explorer-row__numeric explorer-row__numeric--muted">—</span>}
+                </span>
+                <span className="data-table__td data-table__td--numeric">
+                  <span className="explorer-row__numeric">{formatAvg(row.avgDurationMs)}</span>
+                </span>
+                <span className="data-table__td data-table__td--numeric services-table__col--secondary">
+                  <span className="explorer-row__numeric">{formatAvg(row.avgClientDurationMs)}</span>
+                </span>
+                <span className="data-table__td data-table__td--numeric services-table__col--secondary">
+                  <span className="explorer-row__numeric">{formatAvg(row.avgServerDurationMs)}</span>
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>

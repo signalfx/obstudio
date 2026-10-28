@@ -100,7 +100,8 @@ describe("TracesTab row layout", () => {
     expect(container.querySelector(".trace-row__operation")?.classList.contains("explorer-row__primary")).toBe(true);
     expect(container.querySelector(".data-table__td--trace-id .trace-row__trace-id")?.classList.contains("explorer-row__secondary")).toBe(true);
     expect(container.querySelector(".trace-row__trace-id")?.classList.contains("mono")).toBe(false);
-    expect(container.querySelector(".trace-row__trace-id")?.textContent).toBe("trace-1234567890ab");
+    expect(container.querySelector(".trace-row__trace-id")?.textContent).toBe("trace-12");
+    expect(container.querySelector(".trace-row__trace-id")?.getAttribute("title")).toBe("trace-1234567890ab");
     expect(container.querySelector(".trace-row__service")?.classList.contains("explorer-row__secondary")).toBe(true);
     expect(container.querySelector(".data-table__td--service")?.textContent).toBe("checkout");
     expect(container.querySelector(".validation-badge")).toBeNull();
@@ -472,9 +473,9 @@ describe("TracesTab row layout", () => {
     const { resolve } = require("path");
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(css).toContain(".data-table__head--metrics,\n.data-table__row--metrics {\n  --table-columns: minmax(80px, 2fr) minmax(80px, 3fr) minmax(80px, 1fr);\n}");
-    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: minmax(128px, 3fr) minmax(80px, 4fr) minmax(96px, 2fr) minmax(64px, 1fr) minmax(72px, 1fr) minmax(48px, 1fr);\n}");
-    expect(css).toContain(".data-table__head--logs,\n.data-table__row--logs {\n  --table-columns: minmax(72px, 1fr) minmax(96px, 2fr) minmax(96px, 3fr) minmax(256px, 6fr);\n}");
+    expect(css).toContain(".data-table__head--metrics,\n.data-table__row--metrics {\n  --table-columns: minmax(80px, 2fr) minmax(72px, 1fr) minmax(80px, 2fr) minmax(80px, 1fr);\n}");
+    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: minmax(128px, 4fr) minmax(72px, 1fr) minmax(72px, 1fr) minmax(96px, 2fr) minmax(64px, 1fr) minmax(72px, 1fr) minmax(48px, 1fr);\n}");
+    expect(css).toContain(".data-table__head--logs,\n.data-table__row--logs {\n  --table-columns: 76px 136px minmax(88px, 1fr) minmax(200px, 5fr);\n}");
   });
 
   it("uses the same compact row shell height as logs for master rows", () => {
@@ -482,7 +483,7 @@ describe("TracesTab row layout", () => {
     const { resolve } = require("path");
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: minmax(128px, 3fr) minmax(80px, 4fr) minmax(96px, 2fr) minmax(64px, 1fr) minmax(72px, 1fr) minmax(48px, 1fr);\n}");
+    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: minmax(128px, 4fr) minmax(72px, 1fr) minmax(72px, 1fr) minmax(96px, 2fr) minmax(64px, 1fr) minmax(72px, 1fr) minmax(48px, 1fr);\n}");
     expect(css).toContain(".data-table__row--traces {\n  align-items: center;\n  min-height: 32px;\n}");
     expect(css).toContain(".data-table__row--traces .data-table__td {\n  padding-top: 3px;\n  padding-bottom: 3px;\n}");
     expect(css).toContain(".filter-builder {\n  display: flex;\n  flex: 1 1 auto;");

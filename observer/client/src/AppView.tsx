@@ -161,13 +161,14 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             role="tab"
             aria-selected={activeTab === "metrics"}
             aria-controls={activeTab === "metrics" ? "panel-metrics" : undefined}
-            aria-label={formatTabAriaLabel("Metrics", state.stats?.metricNameCount, "metric name", "metric names")}
+            aria-label={formatTabAriaLabel("Metrics", state.metrics?.length, "metric", "metrics")}
             className={activeTab === "metrics" ? "tab-button is-active" : "tab-button"}
             tabIndex={activeTab === "metrics" ? 0 : -1}
             onClick={() => switchTab("metrics")}
           >
             Metrics
-            {state.stats?.metricNameCount ? <span className="tab-button__count" aria-hidden="true">{state.stats.metricNameCount}</span> : null}
+            {/* One row per metric and service, so the badge matches what the table lists. */}
+            {state.metrics?.length ? <span className="tab-button__count" aria-hidden="true">{state.metrics.length}</span> : null}
           </button>
           <button
             id="tab-traces"

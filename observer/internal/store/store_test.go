@@ -2562,6 +2562,34 @@ func TestQueryTraces_ZeroDurationIsIncludedInJSON(t *testing.T) {
 	}
 }
 
+func TestTraceSummaries_StartTimeIsEarliestSpanStart(t *testing.T) {
+	s := New()
+	start := time.Date(2026, 10, 28, 14, 3, 21, 0, time.UTC)
+	root := newTestSpan("trace-1", "span-1", "root", start.Add(5*time.Millisecond), 10)
+	child := newTestSpan("trace-1", "span-2", "child", start, 2)
+	child.ParentSpanID = "span-1"
+	s.AddSpansForConnection("conn-1", []Span{root, child})
+
+	for name, results := range map[string][]TraceSummary{
+		"QueryTraceSummariesFiltered": s.QueryTraceSummariesFiltered(TraceSummaryFilter{Limit: 10}),
+		"QueryTracesFiltered":         s.QueryTracesFiltered("", "", "", "", 10, 8),
+	} {
+		if len(results) != 1 {
+			t.Fatalf("%s: expected 1 trace, got %d", name, len(results))
+		}
+		if !results[0].StartTime.Equal(start) {
+			t.Fatalf("%s: start time = %v, want %v", name, results[0].StartTime, start)
+		}
+		summaryJSON, err := json.Marshal(results[0])
+		if err != nil {
+			t.Fatalf("%s: marshal summary: %v", name, err)
+		}
+		if !strings.Contains(string(summaryJSON), `"startTimeUnixNano":"2026-10-28T14:03:21Z"`) {
+			t.Fatalf("%s: expected start time in summary JSON, got %s", name, summaryJSON)
+		}
+	}
+}
+
 // ============================================================================
 // Trace Tests
 // ============================================================================

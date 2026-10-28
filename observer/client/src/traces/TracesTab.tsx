@@ -11,6 +11,7 @@ import { SpanDetailsPanel } from "./SpanDetailsPanel";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import type { ValidationIndex } from "../validation/utils";
 import { lookupSpanValidation } from "../validation/utils";
+import { formatDurationMs, formatUtcTimestamp } from "../format";
 
 interface TracesTabProps {
   traces: TraceSummary[];
@@ -52,7 +53,7 @@ function spanCountLabel(spanCount: number, retentionTruncated?: boolean, retenti
 }
 
 function traceDurationLabel(durationMs: number | undefined, retentionTruncated?: boolean, retentionUnknown?: boolean): string {
-  const duration = formatTraceDuration(durationMs);
+  const duration = formatDurationMs(durationMs ?? 0);
   if (retentionUnknown) return `${duration} retained duration; full duration unknown`;
   return retentionTruncated ? `at least ${duration} retained duration` : duration;
 }
@@ -382,6 +383,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
             <>
           <div ref={headRef} className="data-table__head data-table__head--traces data-table__head--left-cluster data-table__head--scroll-sync">
             <span className="data-table__th data-table__th--operation">Operation</span>
+            <span className="data-table__th data-table__th--start">Start</span>
             <span className="data-table__th data-table__th--trace-id">Trace ID</span>
             <span className="data-table__th data-table__th--service">Service</span>
             <span className="data-table__th data-table__th--status">Status</span>
@@ -403,7 +405,8 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
                 const t = visibleTraces[vi.index];
                 if (!t) return null;
                 const active = t.traceId === selectedTraceId;
-                const duration = formatTraceDuration(t.durationMs);
+                const duration = formatDurationMs(t.durationMs ?? 0);
+                const start = parseTraceStart(t.startTimeUnixNano);
                 const durationLabel = traceDurationLabel(t.durationMs, t.retentionTruncated, t.retentionUnknown);
                 const countLabel = spanCountLabel(t.spanCount, t.retentionTruncated, t.retentionUnknown);
                 const retentionSuffix = t.retentionUnknown ? "?" : t.retentionTruncated ? "+" : "";
@@ -433,8 +436,14 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
                         <span className="trace-row__operation explorer-row__primary">{t.rootSpanName}</span>
                       </span>
                     </span>
+                    <span className="data-table__td data-table__td--start">
+                      <span className="explorer-row__secondary" title={start?.toISOString()}>
+                        {start ? formatUtcTimestamp(start) : "--"}
+                      </span>
+                    </span>
+                    {/* Short ID only: the row is a button, so the copy action lives in the trace panel it opens. */}
                     <span className="data-table__td data-table__td--trace-id">
-                      <span className="trace-row__trace-id explorer-row__secondary">{t.traceId}</span>
+                      <span className="trace-row__trace-id explorer-row__secondary" title={t.traceId}>{t.traceId.slice(0, 8)}</span>
                     </span>
                     <span className="data-table__td data-table__td--service">
                       <span className="trace-row__service explorer-row__secondary">{t.serviceName ?? "unknown"}</span>
@@ -540,8 +549,10 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
   );
 }
 
-function formatTraceDuration(durationMs?: number): string {
-  return `${(durationMs ?? 0).toFixed(1)}ms`;
+function parseTraceStart(value: string | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) || date.getTime() <= 0 ? null : date;
 }
 
 export function traceStatusLabel(status: string): string | null {

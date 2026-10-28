@@ -43,6 +43,44 @@ function makeStats(overrides: Partial<{
 }
 
 describe("ServicesTab", () => {
+  it("highlights services with errors, shows an error rate, and sorts by it", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        makeStats({ name: "auth-service", spanCount: 40, errorCount: 1, avgDurationMs: 1008.3 }),
+        makeStats({ name: "checkout", spanCount: 10, errorCount: 2 }),
+        makeStats({ name: "inventory", spanCount: 8, errorCount: 0 }),
+      ],
+    }));
+
+    const { container } = await act(async () => render(<ServicesTab serviceNames={["auth-service", "checkout", "inventory"]} />));
+
+    const rowFor = (name: string) => Array.from(container.querySelectorAll(".services-table__row")).find((row) => row.textContent?.includes(name))!;
+    expect(rowFor("auth-service").classList.contains("services-table__row--errors")).toBe(true);
+    expect(rowFor("auth-service").querySelector(".services-tab__error-count")?.textContent).toBe("1");
+    expect(rowFor("auth-service").querySelector(".services-tab__error-rate")?.textContent).toBe("2.5%");
+    expect(rowFor("auth-service").textContent).toContain("1.01 s");
+    expect(rowFor("inventory").classList.contains("services-table__row--errors")).toBe(false);
+    expect(rowFor("inventory").querySelector(".services-tab__error-rate")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Error rate" }));
+    const order = Array.from(container.querySelectorAll(".services-table__row .data-table__td--service-name"), (cell) => cell.textContent);
+    expect(order).toEqual(["checkout", "auth-service", "inventory"]);
+    expect(screen.getByRole("button", { name: "Error rate, sorted descending" })).toBeTruthy();
+  });
+
+  it("marks the volume and split-latency columns as the ones narrow panels drop", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [makeStats()] }));
+    const { container } = await act(async () => render(<ServicesTab serviceNames={["checkout"]} />));
+
+    const secondary = Array.from(container.querySelectorAll(".services-table__head .services-table__col--secondary"), (th) => th.textContent);
+    expect(secondary).toEqual(["Traces", "Spans", "Avg Client", "Avg Server"]);
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+    expect(css).toMatch(/@media \(max-width: 900px\) \{\s*\.services-table \{[^}]*min-width: 0;[^}]*\}\s*\.services-table \.services-table__col--secondary \{\s*display: none;/);
+  });
+
   it("fetches service stats from /api/query/stats/services on mount", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

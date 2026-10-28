@@ -6,6 +6,7 @@ import { fetchLogFilterValues, fetchLogs, type LogsQuery } from "../api/client";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
 import { CopyTextButton, DetailPanel, ResizablePanel, useAnimatedPanel } from "../layout";
 import { KVTable } from "../components/KVTable";
+import { formatUtcTimestamp } from "../format";
 
 interface LogsTabProps {
   logs: LogRecord[];
@@ -358,7 +359,7 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                         className="explorer-row__secondary"
                         title={formatTimestampFull(timestamp)}
                       >
-                        {formatTimestamp(timestamp)}
+                        {formatRowTimestamp(timestamp)}
                       </span>
                     </span>
                     <span className="data-table__td data-table__td--service">
@@ -495,14 +496,14 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
 }
 
 /**
- * Formats a timestamp string as HH:MM:SS.mmm.
+ * Formats a timestamp string as HH:MM:SS.mmm (UTC), prefixed with the date when it isn't today.
  * Accepts either a nanosecond integer string or an ISO-8601 date string,
  * since the Go backend serializes time.Time as RFC3339.
  * The full ISO date is available via {@link formatTimestampFull}.
  */
-function formatTimestamp(ts: string): string {
+function formatRowTimestamp(ts: string): string {
   const timestamp = parseTimestamp(ts);
-  return timestamp ? timestamp.toISOString().slice(11, 23) : "--";
+  return timestamp ? formatUtcTimestamp(timestamp, { millis: true }) : "--";
 }
 
 function parseTimestamp(ts: string): Date | null {
