@@ -142,7 +142,7 @@ func assertNotRegistered(t *testing.T, mux *http.ServeMux, method, path string) 
 		if _, ok := doc["telemetry"]; ok {
 			t.Errorf("%s %s returned a config body", method, path)
 		}
-		if _, ok := doc["fingerprint"]; ok {
+		if _, ok := doc["problem"]; ok {
 			t.Errorf("%s %s returned a status body", method, path)
 		}
 	}
@@ -393,7 +393,7 @@ func TestConfigStatusEndpointShape(t *testing.T) {
 	for k := range raw {
 		keys = append(keys, k)
 	}
-	want := []string{"degraded", "diagnostics", "effective", "fingerprint", "message", "path", "state", "warn"}
+	want := []string{"degraded", "diagnostics", "effective", "message", "path", "problem", "state"}
 	if !sameSet(keys, want) {
 		t.Errorf("keys %v", keys)
 	}

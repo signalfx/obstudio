@@ -1,16 +1,13 @@
-// Package configstatus reports whether ~/.obstudio/config.yaml is in a state
-// the user should be warned about, for the status endpoint, the MCP status
-// tool and the editor extension.
+// Package configstatus reports the state of ~/.obstudio/config.yaml and the
+// settings in force, for the status endpoint and the MCP status tool.
 package configstatus
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
-	"sort"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/signalfx/obstudio/observer/internal/userconfig"
@@ -33,8 +30,10 @@ type Diagnostic struct {
 }
 
 type Status struct {
-	State    State  `json:"state"`
-	Warn     bool   `json:"warn"`
+	State State `json:"state"`
+	// Problem is true when the file changes behavior: a setting the file
+	// names is not in force because the file is invalid or unparseable.
+	Problem  bool   `json:"problem"`
 	Degraded bool   `json:"degraded"`
 	Path     string `json:"path"`
 	// Effective is every setting in force, in the same JSON shape as the
@@ -42,58 +41,36 @@ type Status struct {
 	Effective   json.RawMessage `json:"effective"`
 	Message     string          `json:"message"`
 	Diagnostics []Diagnostic    `json:"diagnostics"`
-	Fingerprint string          `json:"fingerprint"`
 }
 
 // Getter is the settings source; the observer passes its config Manager.
 type Getter interface{ Get() userconfig.Snapshot }
 
 type Builder struct {
-	g    Getter
-	path string
+	g             Getter
+	path, display string
 }
 
 // New returns a Builder over g, whose settings come from the file at path.
-func New(g Getter, path string) *Builder { return &Builder{g: g, path: path} }
+func New(g Getter, path string) *Builder {
+	home, err := os.UserHomeDir()
+	return &Builder{g: g, path: path, display: displayPath(path, home, err)}
+}
 
-// warnKeys are the settings whose fail-safe differs from their default, so a
-// problem with them changes behavior the user chose.
-func warnKeys() []userconfig.Definition { return warnKeysOf(userconfig.Definitions()) }
-
-// warnKeysOf is warnKeys over a given table, so tests can pass a fake one.
-func warnKeysOf(defs []userconfig.Definition) []userconfig.Definition {
-	var keys []userconfig.Definition
-	for _, d := range defs {
-		if d.Default != d.FailSafe {
-			keys = append(keys, d)
-		}
+// displayPath writes path with the home directory as ~ when path is inside it.
+func displayPath(path, home string, err error) string {
+	if err != nil || home == "" {
+		return path
 	}
-	return keys
-}
-
-// hits reports whether diagnostic d is about warn key k, directly or through
-// its section.
-func hits(d userconfig.Diagnostic, k userconfig.Definition) bool {
-	return d.Key == k.Path || strings.HasPrefix(k.Path, d.Key+".")
-}
-
-func isProblem(d userconfig.Diagnostic) bool {
-	return d.Kind == userconfig.DiagInvalid || d.Kind == userconfig.DiagAbsent
-}
-
-// warnWorthy reports a problem diagnostic on a warn key, or on a section
-// holding one.
-func warnWorthy(d userconfig.Diagnostic, keys []userconfig.Definition) bool {
-	if !isProblem(d) {
-		return false
+	sep := string(filepath.Separator)
+	prefix := filepath.Clean(home) + sep
+	if rest, ok := strings.CutPrefix(path, prefix); ok && rest != "" {
+		return "~" + sep + rest
 	}
-	for _, k := range keys {
-		if hits(d, k) {
-			return true
-		}
-	}
-	return false
+	return path
 }
+
+const fixSentence = "Fix the file, or delete it to restore defaults on next start."
 
 // Build reports the settings in force and the current state of the file.
 func (b *Builder) Build() Status {
@@ -109,7 +86,7 @@ func (b *Builder) Build() Status {
 	problems := false
 	for _, d := range diags {
 		st.Diagnostics = append(st.Diagnostics, Diagnostic{Key: d.Key, Kind: string(d.Kind), Line: d.Line, Message: d.Message})
-		if isProblem(d) {
+		if d.Kind == userconfig.DiagInvalid || d.Kind == userconfig.DiagAbsent {
 			problems = true
 		}
 	}
@@ -123,64 +100,21 @@ func (b *Builder) Build() Status {
 	default:
 		st.State = StateUnparseable
 	}
+	st.Problem = st.State == StateInvalid || st.State == StateUnparseable
 
-	keys := warnKeys()
-	var worthy []userconfig.Diagnostic
-	for _, d := range diags {
-		if warnWorthy(d, keys) {
-			worthy = append(worthy, d)
+	readFail := "Some settings could not be read from " + b.display
+	switch {
+	case st.State == StateInvalid:
+		st.Message = readFail + ", so safe defaults are in use. " + fixSentence
+	case st.State == StateUnparseable:
+		inUse := ", so your last valid settings are in use. "
+		if st.Degraded {
+			inUse = ", so safe defaults are in use. "
 		}
-	}
-	st.Warn = st.State == StateUnparseable || (st.State == StateInvalid && len(worthy) > 0)
-	errText := ""
-	if st.State == StateUnparseable {
-		errText = err.Error()
-	}
-	st.Fingerprint = fingerprint(st.State, st.Effective, worthy, errText)
-	if st.Warn {
-		st.Message = message(st, keys, worthy, errText)
+		errText := strings.NewReplacer("\r", " ", "\n", " ").Replace(err.Error())
+		st.Message = readFail + inUse + errText + " " + fixSentence
+	case st.State == StateOK && len(diags) > 0:
+		st.Message = "Some entries in " + b.display + " are not recognized and have no effect."
 	}
 	return st
-}
-
-// fingerprint changes when the warning or the settings in force change, so the
-// extension warns once per distinct situation.
-func fingerprint(state State, effective []byte, worthy []userconfig.Diagnostic, errText string) string {
-	entries := make([]string, len(worthy))
-	for i, d := range worthy {
-		entries[i] = fmt.Sprintf("%s:%s:%d", d.Key, d.Kind, d.Line)
-	}
-	sort.Strings(entries)
-	sum := sha256.Sum256([]byte(string(state) + "\n" + string(effective) + "\n" + strings.Join(entries, "\n") + "\n" + errText))
-	return hex.EncodeToString(sum[:])
-}
-
-// message says which settings are in force and why. Its opening depends on
-// the state and the keys hit, never on a setting's value.
-func message(st Status, keys []userconfig.Definition, worthy []userconfig.Diagnostic, errText string) string {
-	var msg string
-	switch {
-	case st.State == StateUnparseable:
-		prefix := "Using your last valid settings"
-		if st.Degraded {
-			prefix = "Using fail-safe settings"
-		}
-		msg = fmt.Sprintf("%s: %s cannot be used: %s. Fix the file, or delete it to restore defaults on next start.", prefix, st.Path, errText)
-	default:
-		var hit []string
-		for _, k := range keys {
-			for _, d := range worthy {
-				if hits(d, k) {
-					hit = append(hit, fmt.Sprintf("%s (%v)", k.Path, k.FailSafe))
-					break
-				}
-			}
-		}
-		parts := make([]string, len(worthy))
-		for i, d := range worthy {
-			parts[i] = d.Message
-		}
-		msg = fmt.Sprintf("Using fail-safe settings for %s: %s in %s. Fix the value, or delete the file to restore defaults on next start.", strings.Join(hit, ", "), strings.Join(parts, "; "), st.Path)
-	}
-	return strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ").Replace(msg)
 }

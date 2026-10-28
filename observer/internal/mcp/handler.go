@@ -410,7 +410,7 @@ func (d *Dispatcher) status() toolResult {
 		"validation": d.validationService.Summary(),
 	}
 	if d.configStatus != nil {
-		if st := d.configStatus.Build(); st.Warn {
+		if st := d.configStatus.Build(); st.Problem {
 			result["config"] = st
 		}
 	}

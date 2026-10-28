@@ -66,6 +66,17 @@ func builderFor(t *testing.T, content string) *configstatus.Builder {
 	return configstatus.New(m, path)
 }
 
+// brokenAfterStart starts a Manager on the Scaffold and then breaks the YAML.
+func brokenAfterStart(t *testing.T) *configstatus.Builder {
+	t.Helper()
+	b := builderFor(t, userconfig.Scaffold())
+	path := b.Build().Path
+	if err := os.WriteFile(path, []byte("telemetry: [unclosed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
 func TestObserverStatusConfigField(t *testing.T) {
 	sc := userconfig.Scaffold()
 	maybe := strings.Replace(sc, "enabled: true", "enabled: maybe", 1)
@@ -77,6 +88,7 @@ func TestObserverStatusConfigField(t *testing.T) {
 		{"ok", builderFor(t, sc), false},
 		{"invalid", builderFor(t, maybe), true},
 		{"unknown key only", builderFor(t, sc+"zz: 1\n"), false},
+		{"unparseable after start", brokenAfterStart(t), true},
 		{"no builder", nil, false},
 	}
 	baseline := toolNames(t, NewDispatcher(store.New()))
@@ -108,6 +120,9 @@ func TestObserverStatusConfigField(t *testing.T) {
 				json.Unmarshal(want, &exp)
 				if !reflect.DeepEqual(got, exp) {
 					t.Errorf("config %s, want %s", raw, want)
+				}
+				if tc.name == "unparseable after start" && got.(map[string]any)["state"] != "unparseable" {
+					t.Errorf("config state %v, want unparseable", got.(map[string]any)["state"])
 				}
 			}
 			if names := toolNames(t, d); !reflect.DeepEqual(names, baseline) {

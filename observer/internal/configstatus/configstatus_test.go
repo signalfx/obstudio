@@ -3,7 +3,6 @@ package configstatus
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"go/ast"
 	"go/parser"
@@ -12,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -43,15 +41,57 @@ func quietManager(t *testing.T, path string) *userconfig.Manager {
 	return m
 }
 
-func newPath(t *testing.T, content *string) string {
+// homePath points the home directory at a fresh temp dir H and returns
+// H/.obstudio/config.yaml, written with content unless content is nil.
+func homePath(t *testing.T, content *string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "config.yaml")
+	home := t.TempDir()
+	setHome(t, home)
+	path := filepath.Join(home, ".obstudio", "config.yaml")
 	if content != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(path, []byte(*content), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return path
+}
+
+func setHome(t *testing.T, home string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", home)
+	} else {
+		t.Setenv("HOME", home)
+	}
+}
+
+var sep = string(filepath.Separator)
+
+// tildePath is <P> for a homePath config.
+var tildePath = "~" + sep + ".obstudio" + sep + "config.yaml"
+
+const fix = "Fix the file, or delete it to restore defaults on next start."
+
+// wantMessage is the FR7 text for st, with <P> = p and <E> from loading path.
+func wantMessage(t *testing.T, st Status, path, p string) string {
+	t.Helper()
+	_, diags, err := userconfig.Load(path)
+	switch {
+	case st.State == StateInvalid:
+		return "Some settings could not be read from " + p + ", so safe defaults are in use. " + fix
+	case st.State == StateUnparseable:
+		e := strings.NewReplacer("\r", " ", "\n", " ").Replace(err.Error())
+		if st.Degraded {
+			return "Some settings could not be read from " + p + ", so safe defaults are in use. " + e + " " + fix
+		}
+		return "Some settings could not be read from " + p + ", so your last valid settings are in use. " + e + " " + fix
+	case st.State == StateOK && len(diags) > 0:
+		return "Some entries in " + p + " are not recognized and have no effect."
+	}
+	return ""
 }
 
 // write replaces the file atomically and, when the content is well-formed,
@@ -81,7 +121,17 @@ func noSection() string {
 	return sc[:strings.Index(sc, "telemetry:")]
 }
 
+var maybe = scaffoldWith("enabled: true", "enabled: maybe")
+
 type kk struct{ key, kind string }
+
+func kinds(st Status) []kk {
+	var got []kk
+	for _, d := range st.Diagnostics {
+		got = append(got, kk{d.Key, d.Kind})
+	}
+	return got
+}
 
 // enabled reads effective.telemetry.enabled from a Status.
 func enabled(t *testing.T, st Status) bool {
@@ -97,13 +147,28 @@ func enabled(t *testing.T, st Status) bool {
 	return *e.Telemetry.Enabled
 }
 
+func unixOnly(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs Unix permissions and a non-root user")
+	}
+}
+
+// started builds a home-setup config holding start, starts a Manager on it,
+// and returns both.
+func started(t *testing.T, start string) (*userconfig.Manager, string) {
+	t.Helper()
+	path := homePath(t, &start)
+	return quietManager(t, path), path
+}
+
 func TestStateTable(t *testing.T) {
 	type row struct {
 		name     string
 		start    string
 		change   func(t *testing.T, m *userconfig.Manager, path string)
 		state    State
-		warn     bool
+		problem  bool
 		enabled  bool
 		diags    []kk
 		unixOnly bool
@@ -114,253 +179,245 @@ func TestStateTable(t *testing.T) {
 	sc := userconfig.Scaffold()
 	rows := []row{
 		{name: "none", change: func(*testing.T, *userconfig.Manager, string) {}, state: StateOK, enabled: true},
-		{name: "maybe", change: writeRow(scaffoldWith("enabled: true", "enabled: maybe")), state: StateInvalid, warn: true, diags: []kk{{"telemetry.enabled", "invalid"}}},
-		{name: "line removed", change: writeRow(scaffoldWith("  enabled: true\n", "")), state: StateInvalid, warn: true, diags: []kk{{"telemetry.enabled", "absent"}}},
-		{name: "section removed", change: writeRow(noSection()), state: StateInvalid, warn: true, diags: []kk{{"telemetry.enabled", "absent"}}},
-		{name: "section not mapping", change: writeRow(noSection() + "telemetry: true\n"), state: StateInvalid, warn: true, diags: []kk{{"telemetry", "invalid"}}},
-		{name: "empty", change: writeRow(""), state: StateInvalid, warn: true, diags: []kk{{"telemetry.enabled", "absent"}}},
+		{name: "maybe", change: writeRow(maybe), state: StateInvalid, problem: true, diags: []kk{{"telemetry.enabled", "invalid"}}},
+		{name: "line removed", change: writeRow(scaffoldWith("  enabled: true\n", "")), state: StateInvalid, problem: true, diags: []kk{{"telemetry.enabled", "absent"}}},
+		{name: "section removed", change: writeRow(noSection()), state: StateInvalid, problem: true, diags: []kk{{"telemetry.enabled", "absent"}}},
+		{name: "section not mapping", change: writeRow(noSection() + "telemetry: true\n"), state: StateInvalid, problem: true, diags: []kk{{"telemetry", "invalid"}}},
+		{name: "empty", change: writeRow(""), state: StateInvalid, problem: true, diags: []kk{{"telemetry.enabled", "absent"}}},
 		{name: "version", change: writeRow("version: 1\n" + sc), state: StateOK, enabled: true, diags: []kk{{"version", "unknown_key"}}},
 		{name: "server", change: writeRow(sc + "server: {port: 9000}\n"), state: StateOK, enabled: true, diags: []kk{{"server", "unknown_key"}}},
-		{name: "broken", change: writeRow("telemetry: [unclosed"), state: StateUnparseable, warn: true, enabled: true},
-		{name: "broken from off", start: scaffoldWith("enabled: true", "enabled: false"), change: writeRow("telemetry: [unclosed"), state: StateUnparseable, warn: true},
+		{name: "broken", change: writeRow("telemetry: [unclosed"), state: StateUnparseable, problem: true, enabled: true},
+		{name: "broken from off", start: scaffoldWith("enabled: true", "enabled: false"), change: writeRow("telemetry: [unclosed"), state: StateUnparseable, problem: true},
 		{name: "deleted", change: func(t *testing.T, _ *userconfig.Manager, path string) { os.Remove(path) }, state: StateMissing, enabled: true},
 		{name: "unreadable", change: func(t *testing.T, _ *userconfig.Manager, path string) {
 			if err := os.Chmod(path, 0); err != nil {
 				t.Fatal(err)
 			}
-		}, state: StateUnparseable, warn: true, enabled: true, unixOnly: true},
+		}, state: StateUnparseable, problem: true, enabled: true, unixOnly: true},
 	}
 	for _, r := range rows {
 		t.Run(r.name, func(t *testing.T) {
-			if r.unixOnly && (runtime.GOOS == "windows" || os.Geteuid() == 0) {
-				t.Skip("needs Unix permissions and a non-root user")
+			if r.unixOnly {
+				unixOnly(t)
 			}
 			start := sc
 			if r.start != "" {
 				start = r.start
 			}
-			path := newPath(t, &start)
-			m := quietManager(t, path)
+			m, path := started(t, start)
 			r.change(t, m, path)
 			st := New(m, path).Build()
 			if want := userconfig.EncodeSettings(m.Get().Settings); !bytes.Equal(st.Effective, want) {
-				t.Errorf("effective %s, want %s", st.Effective, want)
+				t.Errorf("effective-bytes: %s, want %s", st.Effective, want)
 			}
-			if st.State != r.state || st.Warn != r.warn || st.Degraded || enabled(t, st) != r.enabled {
-				t.Errorf("status %+v", st)
+			if st.State != r.state || st.Problem != r.problem || st.Degraded || enabled(t, st) != r.enabled {
+				t.Errorf("fields: %+v", st)
 			}
-			var got []kk
-			for _, d := range st.Diagnostics {
-				got = append(got, kk{d.Key, d.Kind})
-			}
-			if st.Diagnostics == nil || !reflect.DeepEqual(got, r.diags) {
-				t.Errorf("diagnostics %v (nil=%v), want %v", got, st.Diagnostics == nil, r.diags)
+			if got := kinds(st); st.Diagnostics == nil || !reflect.DeepEqual(got, r.diags) {
+				t.Errorf("diags-exact: %v (nil=%v), want %v", got, st.Diagnostics == nil, r.diags)
 			}
 			if st.Path != path {
-				t.Errorf("path %q", st.Path)
+				t.Errorf("path: %q", st.Path)
 			}
-			assertMessage(t, st, path)
+			if want := wantMessage(t, st, path, tildePath); st.Message != want {
+				t.Errorf("message-row: %q, want %q", st.Message, want)
+			}
 		})
 	}
 }
 
-func assertMessage(t *testing.T, st Status, path string) {
-	t.Helper()
-	if !st.Warn {
-		if st.Message != "" {
-			t.Errorf("message on a non-warn status: %q", st.Message)
-		}
-		return
-	}
-	var prefix string
-	switch {
-	case st.State == StateInvalid:
-		prefix = "Using fail-safe settings for telemetry.enabled (false):"
-	case st.Degraded:
-		prefix = "Using fail-safe settings:"
-	default:
-		prefix = "Using your last valid settings"
-	}
-	if !strings.HasPrefix(st.Message, prefix) || !strings.Contains(st.Message, st.Path) || strings.Contains(st.Message, "\n") {
-		t.Errorf("message %q", st.Message)
-	}
-	_, diags, err := userconfig.Load(path)
-	if st.State == StateUnparseable && !strings.Contains(st.Message, err.Error()) {
-		t.Errorf("message lacks the error text: %q", st.Message)
-	}
-	if st.State == StateInvalid {
-		for _, d := range diags {
-			if warnWorthy(d, warnKeys()) && !strings.Contains(st.Message, d.Message) {
-				t.Errorf("message lacks %q: %q", d.Message, st.Message)
-			}
-		}
-	}
-	if !strings.Contains(st.Message, "delete") {
-		t.Errorf("message has no fix-or-delete hint: %q", st.Message)
-	}
-}
-
 func TestDegradedStart(t *testing.T) {
-	broken := "telemetry: [unclosed"
-	path := newPath(t, &broken)
-	st := New(quietManager(t, path), path).Build()
-	if st.State != StateUnparseable || !st.Warn || !st.Degraded || enabled(t, st) ||
-		!bytes.Equal(st.Effective, userconfig.EncodeSettings(userconfig.FailSafeSettings())) ||
-		!strings.HasPrefix(st.Message, "Using fail-safe settings:") {
-		t.Errorf("a: %+v", st)
-	}
-
-	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
-		return
-	}
-	parent := t.TempDir()
-	if err := os.Chmod(parent, 0o500); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chmod(parent, 0o700) })
-	bpath := filepath.Join(parent, ".obstudio", "config.yaml")
-	st = New(quietManager(t, bpath), bpath).Build()
-	if st.State != StateMissing || st.Warn || !st.Degraded || enabled(t, st) {
-		t.Errorf("b: %+v", st)
-	}
+	t.Run("a", func(t *testing.T) {
+		broken := "telemetry: [unclosed"
+		path := homePath(t, &broken)
+		st := New(quietManager(t, path), path).Build()
+		if st.State != StateUnparseable || !st.Problem || !st.Degraded || enabled(t, st) ||
+			!bytes.Equal(st.Effective, userconfig.EncodeSettings(userconfig.FailSafeSettings())) {
+			t.Errorf("%+v", st)
+		}
+		if want := wantMessage(t, st, path, tildePath); st.Message != want || !strings.Contains(st.Message, "so safe defaults are in use.") {
+			t.Errorf("message %q, want %q", st.Message, want)
+		}
+	})
+	t.Run("b", func(t *testing.T) {
+		unixOnly(t)
+		path := homePath(t, nil)
+		home := filepath.Dir(filepath.Dir(path))
+		if err := os.Chmod(home, 0o500); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Chmod(home, 0o700) })
+		st := New(quietManager(t, path), path).Build()
+		if st.State != StateMissing || st.Problem || !st.Degraded || enabled(t, st) || st.Message != "" {
+			t.Errorf("%+v", st)
+		}
+	})
 }
 
-var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
-
-func TestFingerprintStability(t *testing.T) {
-	sc := userconfig.Scaffold()
-	path := newPath(t, &sc)
-	m := quietManager(t, path)
-	b := New(m, path)
-	fp := func(content string) string {
-		t.Helper()
-		write(t, m, path, content)
-		f := b.Build().Fingerprint
-		if !hex64.MatchString(f) {
-			t.Fatalf("fingerprint %q", f)
-		}
-		return f
-	}
-	maybe := scaffoldWith("enabled: true", "enabled: maybe")
-	f1 := fp(maybe)
-	f2 := b.Build().Fingerprint
-	f3 := fp(maybe)
-	if f1 != f2 || f2 != f3 {
-		t.Error("same content gave different fingerprints")
-	}
-	if fp(scaffoldWith("enabled: true", "enabled: nope")) != f1 {
-		t.Error("a different value at the same site changed the fingerprint")
-	}
-	different := map[string]string{
-		"maybe":        f1,
-		"line removed": fp(scaffoldWith("  enabled: true\n", "")),
-		"not mapping":  fp(noSection() + "telemetry: true\n"),
-		"broken":       fp("telemetry: [unclosed"),
-	}
-	seen := map[string]string{}
-	for name, f := range different {
-		if other, ok := seen[f]; ok {
-			t.Errorf("%s and %s share a fingerprint", name, other)
-		}
-		seen[f] = name
-	}
-	moved := strings.Replace(maybe, "  enabled: maybe", "  # moved\n  enabled: maybe", 1)
-	if fp(moved) == f1 {
-		t.Error("moving the line kept the fingerprint")
-	}
-	if fp(maybe+"zz: 1\n") != f1 {
-		t.Error("an unknown key changed the fingerprint")
-	}
-
-	t.Run("consequence-flip", func(t *testing.T) {
-		sc := userconfig.Scaffold()
-		path := newPath(t, &sc)
-		m := quietManager(t, path)
-		write(t, m, path, "telemetry: [unclosed")
-		_, _, err1 := userconfig.Load(path)
-		s1 := New(m, path).Build()
-		m.Close()
-		_, _, err2 := userconfig.Load(path)
-		s2 := New(quietManager(t, path), path).Build()
-		if err1.Error() != err2.Error() {
-			t.Fatal("error text changed between loads")
-		}
-		if !enabled(t, s1) || enabled(t, s2) || !s2.Degraded {
-			t.Errorf("effective %+v / %+v", s1, s2)
-		}
-		if s1.State != StateUnparseable || s2.State != StateUnparseable || s1.Fingerprint == s2.Fingerprint {
-			t.Error("a flipped consequence kept the fingerprint")
-		}
-	})
-	t.Run("rows-9-10", func(t *testing.T) {
-		fps := map[bool]string{}
-		for _, start := range []string{userconfig.Scaffold(), scaffoldWith("enabled: true", "enabled: false")} {
-			path := newPath(t, &start)
-			m := quietManager(t, path)
-			write(t, m, path, "telemetry: [unclosed")
-			st := New(m, path).Build()
-			fps[enabled(t, st)] = st.Fingerprint
-		}
-		if fps[true] == "" || fps[false] == "" || fps[true] == fps[false] {
-			t.Errorf("fingerprints %v", fps)
-		}
-	})
-	t.Run("no-flip-no-change", func(t *testing.T) {
-		off := scaffoldWith("enabled: true", "enabled: false")
-		path := newPath(t, &off)
-		m := quietManager(t, path)
-		write(t, m, path, "telemetry: [unclosed")
-		f1 := New(m, path).Build().Fingerprint
-		m.Close()
-		f2 := New(quietManager(t, path), path).Build().Fingerprint
-		if f1 != f2 {
-			t.Error("a restart with the same consequence changed the fingerprint")
-		}
-	})
-	t.Run("recompute", func(t *testing.T) {
+func TestProblemLevels(t *testing.T) {
+	level2 := "Some entries in " + tildePath + " are not recognized and have no effect."
+	t.Run("level-1", func(t *testing.T) {
 		for _, content := range []string{maybe, "telemetry: [unclosed"} {
-			path := newPath(t, &content)
-			st := New(quietManager(t, path), path).Build()
-			_, diags, err := userconfig.Load(path)
-			var entries []string
-			for _, d := range diags {
-				if warnWorthy(d, warnKeys()) {
-					entries = append(entries, d.Key+":"+string(d.Kind)+":"+strconv.Itoa(d.Line))
-				}
-			}
-			x := ""
-			if err != nil {
-				x = err.Error()
-			}
-			sum := sha256.Sum256([]byte(string(st.State) + "\n" + string(st.Effective) + "\n" + strings.Join(entries, "\n") + "\n" + x))
-			if hex.EncodeToString(sum[:]) != st.Fingerprint {
-				t.Errorf("%q: fingerprint does not match the formula", content)
+			m, path := started(t, userconfig.Scaffold())
+			write(t, m, path, content)
+			if st := New(m, path).Build(); !st.Problem {
+				t.Errorf("%q: %+v", content, st)
 			}
 		}
 	})
+	t.Run("level-2", func(t *testing.T) {
+		m, path := started(t, userconfig.Scaffold())
+		write(t, m, path, userconfig.Scaffold()+"zz: 1\n")
+		st := New(m, path).Build()
+		if st.State != StateOK || st.Problem || st.Message != level2 {
+			t.Errorf("%+v", st)
+		}
+		if len(st.Diagnostics) != 1 || st.Diagnostics[0].Key != "zz" || st.Diagnostics[0].Kind != "unknown_key" || st.Diagnostics[0].Line == 0 {
+			t.Errorf("diagnostics %+v", st.Diagnostics)
+		}
+	})
+	t.Run("mixed", func(t *testing.T) {
+		m, path := started(t, userconfig.Scaffold())
+		write(t, m, path, maybe+"zz: 1\n")
+		st := New(m, path).Build()
+		if !st.Problem || st.Message != wantMessage(t, st, path, tildePath) || st.State != StateInvalid || strings.Contains(st.Message, "not recognized") {
+			t.Errorf("%+v", st)
+		}
+		if got := kinds(st); !reflect.DeepEqual(got, []kk{{"telemetry.enabled", "invalid"}, {"zz", "unknown_key"}}) {
+			t.Errorf("diagnostics %v", got)
+		}
+	})
+	t.Run("neither", func(t *testing.T) {
+		m, path := started(t, userconfig.Scaffold())
+		b := New(m, path)
+		if st := b.Build(); st.Problem || st.Message != "" {
+			t.Errorf("scaffold: %+v", st)
+		}
+		os.Remove(path)
+		if st := b.Build(); st.Problem || st.Message != "" {
+			t.Errorf("deleted: %+v", st)
+		}
+	})
 }
+
+func TestMessageShape(t *testing.T) {
+	type c struct {
+		name string
+		st   Status
+		path string
+	}
+	var cases []c
+	{ // row 2
+		m, path := started(t, userconfig.Scaffold())
+		write(t, m, path, maybe)
+		cases = append(cases, c{"row2", New(m, path).Build(), path})
+	}
+	{ // row 9
+		m, path := started(t, userconfig.Scaffold())
+		write(t, m, path, "telemetry: [unclosed")
+		cases = append(cases, c{"row9", New(m, path).Build(), path})
+	}
+	{ // row 11
+		path := homePath(t, ptr("telemetry: [unclosed"))
+		cases = append(cases, c{"row11", New(quietManager(t, path), path).Build(), path})
+	}
+	for _, k := range cases {
+		msg := k.st.Message
+		if want := wantMessage(t, k.st, k.path, tildePath); msg != want {
+			t.Errorf("exact %s: %q, want %q", k.name, msg, want)
+		}
+		if strings.ContainsAny(msg, "\r\n") {
+			t.Errorf("one-line %s: %q", k.name, msg)
+		}
+		generic := strings.ReplaceAll(msg, tildePath, "")
+		if _, _, err := userconfig.Load(k.path); err != nil {
+			generic = strings.ReplaceAll(generic, strings.NewReplacer("\r", " ", "\n", " ").Replace(err.Error()), "")
+		}
+		for _, w := range []string{"telemetry", "enabled", "maybe", "false", "true", "fail-safe"} {
+			if strings.Contains(generic, w) {
+				t.Errorf("generic %s: %q contains %q", k.name, msg, w)
+			}
+		}
+		if !strings.HasSuffix(msg, fix) {
+			t.Errorf("ends-with-fix %s: %q", k.name, msg)
+		}
+	}
+	if !strings.Contains(cases[1].st.Message, "so your last valid settings are in use.") || cases[1].st.Degraded {
+		t.Errorf("last-valid-only-running row9: %+v", cases[1].st)
+	}
+	if !strings.Contains(cases[2].st.Message, "so safe defaults are in use.") || !cases[2].st.Degraded {
+		t.Errorf("last-valid-only-running row11: %+v", cases[2].st)
+	}
+}
+
+func ptr(s string) *string { return &s }
 
 type fixedGetter userconfig.Snapshot
 
 func (g fixedGetter) Get() userconfig.Snapshot { return userconfig.Snapshot(g) }
 
-func TestFingerprintVIsEffective(t *testing.T) {
-	maybe := scaffoldWith("enabled: true", "enabled: maybe")
-	path := newPath(t, &maybe)
-	on := New(fixedGetter(userconfig.DefaultSnapshot()), path).Build()
-	off := New(fixedGetter(userconfig.FailSafeSnapshot()), path).Build()
-	if on.State != off.State || !reflect.DeepEqual(on.Diagnostics, off.Diagnostics) {
-		t.Fatalf("state or diagnostics differ: %+v / %+v", on, off)
+func TestHomeAbbrev(t *testing.T) {
+	g := fixedGetter(userconfig.DefaultSnapshot())
+	inHome := func(t *testing.T, home string) string {
+		t.Helper()
+		path := filepath.Join(home, ".obstudio", "config.yaml")
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(maybe), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
 	}
-	if on.Fingerprint == off.Fingerprint {
-		t.Error("different effective settings gave the same fingerprint")
-	}
+	t.Run("inside", func(t *testing.T) {
+		h := t.TempDir()
+		path := inHome(t, h)
+		setHome(t, h)
+		st := New(g, path).Build()
+		if !strings.Contains(st.Message, tildePath) || strings.Contains(st.Message, h) || st.Path != path {
+			t.Errorf("%+v", st)
+		}
+	})
+	t.Run("trailing-sep-home", func(t *testing.T) {
+		h := t.TempDir()
+		path := inHome(t, h)
+		setHome(t, h+sep)
+		if st := New(g, path).Build(); !strings.Contains(st.Message, tildePath) || strings.Contains(st.Message, h) {
+			t.Errorf("%+v", st)
+		}
+	})
+	t.Run("outside", func(t *testing.T) {
+		h, o := t.TempDir(), t.TempDir()
+		path := inHome(t, o)
+		setHome(t, h)
+		if st := New(g, path).Build(); !strings.Contains(st.Message, path) || strings.Contains(st.Message, "~") {
+			t.Errorf("%+v", st)
+		}
+	})
+	t.Run("sibling-prefix", func(t *testing.T) {
+		h := t.TempDir()
+		sib := h + "2"
+		t.Cleanup(func() { os.RemoveAll(sib) })
+		path := inHome(t, sib)
+		setHome(t, h)
+		if st := New(g, path).Build(); !strings.Contains(st.Message, path) || strings.Contains(st.Message, "~") {
+			t.Errorf("%+v", st)
+		}
+	})
+	t.Run("no-home", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Unix only")
+		}
+		path := inHome(t, t.TempDir())
+		t.Setenv("HOME", "")
+		if st := New(g, path).Build(); !strings.Contains(st.Message, path) || strings.Contains(st.Message, "~") {
+			t.Errorf("%+v", st)
+		}
+	})
 }
 
 func TestBuildReadsGetUnwatched(t *testing.T) {
-	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
-		t.Skip("needs Unix permissions and a non-root user")
-	}
+	unixOnly(t)
 	parent := t.TempDir()
 	if err := os.Chmod(parent, 0o500); err != nil {
 		t.Fatal(err)
@@ -389,17 +446,16 @@ func TestBuildReadsGetUnwatched(t *testing.T) {
 	b := New(m, path)
 	aged(userconfig.Scaffold())
 	if st := b.Build(); st.State != StateOK || st.Degraded || !enabled(t, st) {
-		t.Errorf("first build %+v", st)
+		t.Errorf("fresh-ok: %+v", st)
 	}
-	content := scaffoldWith("enabled: true", "enabled: maybe")
-	mtime := aged(content)
-	if st := b.Build(); st.State != StateInvalid || !st.Warn || enabled(t, st) {
-		t.Errorf("second build %+v", st)
+	mtime := aged(maybe)
+	if st := b.Build(); st.State != StateInvalid || !st.Problem || enabled(t, st) {
+		t.Errorf("fresh-invalid: %+v", st)
 	}
 	got, _ := os.ReadFile(path)
 	fi, _ := os.Stat(path)
-	if string(got) != content || !fi.ModTime().Equal(mtime) {
-		t.Error("Build touched the file")
+	if string(got) != maybe || !fi.ModTime().Equal(mtime) {
+		t.Error("no-write: Build touched the file")
 	}
 }
 
@@ -429,96 +485,60 @@ func nonTestSources(t *testing.T) map[string][]byte {
 		}
 		out[f] = src
 	}
+	if len(out) == 0 {
+		t.Fatal("no non-test sources found")
+	}
 	return out
 }
 
 func TestBuilderUsesGetter(t *testing.T) {
 	sc := userconfig.Scaffold()
-	path := newPath(t, &sc)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(sc), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	g := &countingGetter{}
 	st := New(g, path).Build()
 	if g.calls != 1 {
-		t.Errorf("Get called %d times", g.calls)
+		t.Errorf("one-get: Get called %d times", g.calls)
 	}
 	if !bytes.Equal(st.Effective, userconfig.EncodeSettings(userconfig.FailSafeSettings())) || !st.Degraded || st.State != StateOK {
-		t.Errorf("status %+v", st)
+		t.Errorf("effective-from-getter: %+v", st)
 	}
 	for f, src := range nonTestSources(t) {
 		if strings.Contains(string(src), "userconfig.Manager") {
-			t.Errorf("%s names the Manager type", f)
+			t.Errorf("no-concrete: %s names the Manager type", f)
 		}
 	}
 }
 
-func TestWarnKeysDerived(t *testing.T) {
-	paths := func(defs []userconfig.Definition) []string {
-		var out []string
-		for _, d := range defs {
-			out = append(out, d.Path)
-		}
-		return out
+func TestNoSettingText(t *testing.T) {
+	names := map[string]bool{}
+	for _, d := range userconfig.Definitions() {
+		names[d.Path] = true
+		names[d.Section] = true
 	}
-	if got := paths(warnKeys()); !reflect.DeepEqual(got, []string{userconfig.TelemetryEnabled.Path()}) {
-		t.Errorf("warn keys %v", got)
-	}
-	keys := warnKeys()
-	sec := userconfig.SectionTelemetry.Path()
-	if !warnWorthy(userconfig.Diagnostic{Key: sec, Kind: userconfig.DiagInvalid}, keys) {
-		t.Error("an invalid section holding a warn key is not warn-worthy")
-	}
-	if warnWorthy(userconfig.Diagnostic{Key: "zz", Kind: userconfig.DiagInvalid}, keys) ||
-		warnWorthy(userconfig.Diagnostic{Key: "server", Kind: userconfig.DiagUnknownKey}, keys) {
-		t.Error("an unrelated diagnostic is warn-worthy")
-	}
-
-	// A fake table with a second section: only the keys whose fail-safe
-	// differs from their default warn, in table order.
-	fake := []userconfig.Definition{
-		{Path: "a.same", Section: "a", Type: userconfig.TypeInt, Default: 3, FailSafe: 3},
-		{Path: "a.differs", Section: "a", Type: userconfig.TypeString, Default: "x", FailSafe: ""},
-		{Path: "b.on", Section: "b", Type: userconfig.TypeBool, Default: true, FailSafe: false},
-		{Path: "b.off", Section: "b", Type: userconfig.TypeBool, Default: false, FailSafe: false},
-	}
-	fakeKeys := warnKeysOf(fake)
-	if !reflect.DeepEqual(paths(fakeKeys), []string{"a.differs", "b.on"}) {
-		t.Errorf("fake warn keys %v", fakeKeys)
-	}
-	for _, c := range []struct {
-		d    userconfig.Diagnostic
-		want bool
-	}{
-		{userconfig.Diagnostic{Key: "a.differs", Kind: userconfig.DiagAbsent}, true},
-		{userconfig.Diagnostic{Key: "b.on", Kind: userconfig.DiagInvalid}, true},
-		{userconfig.Diagnostic{Key: "b", Kind: userconfig.DiagInvalid}, true},
-		{userconfig.Diagnostic{Key: "a.same", Kind: userconfig.DiagInvalid}, false},
-		{userconfig.Diagnostic{Key: "b.off", Kind: userconfig.DiagAbsent}, false},
-		{userconfig.Diagnostic{Key: "b.on", Kind: userconfig.DiagUnknownKey}, false},
-		{userconfig.Diagnostic{Key: "a.differsx", Kind: userconfig.DiagInvalid}, false},
-	} {
-		if got := warnWorthy(c.d, fakeKeys); got != c.want {
-			t.Errorf("warnWorthy(%s %s) = %v, want %v", c.d.Key, c.d.Kind, got, c.want)
-		}
-	}
-	// The message lists each warn key hit once, in table order, with its
-	// fail-safe value; a section diagnostic hits every warn key in it.
-	fake = append(fake, userconfig.Definition{Path: "b.two", Section: "b", Type: userconfig.TypeInt, Default: 1, FailSafe: 0})
-	msg := message(Status{State: StateInvalid, Path: "/p"}, warnKeysOf(fake), []userconfig.Diagnostic{
-		{Key: "b", Kind: userconfig.DiagInvalid, Message: "b: is not a mapping"},
-		{Key: "a.differs", Kind: userconfig.DiagAbsent, Message: "a.differs: is absent"},
-		{Key: "b.on", Kind: userconfig.DiagInvalid, Message: "b.on: bad"},
-	}, "")
-	if want := `Using fail-safe settings for a.differs (), b.on (false), b.two (0): `; !strings.HasPrefix(msg, want) {
-		t.Errorf("message %q, want prefix %q", msg, want)
-	}
-
 	for f, src := range nonTestSources(t) {
-		if bytes.Contains(bytes.ToLower(src), []byte("telemetry")) {
-			t.Errorf("%s names a setting: it contains %q", f, "telemetry")
+		lower := bytes.ToLower(src)
+		if bytes.Contains(lower, []byte("telemetry")) {
+			t.Errorf("no-telemetry: %s contains %q", f, "telemetry")
 		}
-	}
+		for _, w := range []string{"Definitions", "userconfig.Definition"} {
+			if bytes.Contains(src, []byte(w)) {
+				t.Errorf("no-definitions: %s contains %q", f, w)
+			}
+		}
+		for _, w := range []string{"Fingerprint", "warnKey", "warnWorthy", `json:"warn"`} {
+			if bytes.Contains(src, []byte(w)) {
+				t.Errorf("no-removed-fields: %s contains %q", f, w)
+			}
+		}
+		if bytes.Contains(lower, []byte("fail-safe")) {
+			t.Errorf("no-removed-fields: %s contains %q", f, "fail-safe")
+		}
 
-	// Struct tags are the JSON field names, not references to settings.
-	for f, src := range nonTestSources(t) {
+		// No string literal names a definition path. Struct tags are JSON
+		// field names, not literals in this sense.
 		file, err := parser.ParseFile(token.NewFileSet(), f, src, 0)
 		if err != nil {
 			t.Fatal(err)
@@ -535,7 +555,7 @@ func TestWarnKeysDerived(t *testing.T) {
 			if !ok || lit.Kind != token.STRING || tags[lit] {
 				return true
 			}
-			if v, err := strconv.Unquote(lit.Value); err == nil && (v == "telemetry.enabled" || v == "telemetry") {
+			if v, err := strconv.Unquote(lit.Value); err == nil && names[v] {
 				t.Errorf("%s: string literal %s names a setting", f, lit.Value)
 			}
 			return true
