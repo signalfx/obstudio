@@ -701,7 +701,7 @@ def discover_service_base_url(
     project: str,
     env: dict[str, str],
     service_name: str = "observer",
-    service_port: int = 3000,
+    service_port: int = 17900,
 ) -> str:
     completed = run_process(
         compose_command(compose_file, project) + ["port", service_name, str(service_port)],

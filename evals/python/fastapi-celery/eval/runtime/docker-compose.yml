@@ -4,11 +4,11 @@ services:
       context: ../../../../..
       dockerfile: evals/runtime/observer.Dockerfile
     ports:
-      - target: 3000
+      - target: 17900
         host_ip: 127.0.0.1
     environment:
       - HOST=0.0.0.0
-      - OBSTUDIO_PORT=3000
+      - OBSTUDIO_PORT=17900
       - OTLP_HTTP_PORT=4318
       - OTLP_GRPC_HOST=127.0.0.1
       - OTLP_GRPC_PORT=4317

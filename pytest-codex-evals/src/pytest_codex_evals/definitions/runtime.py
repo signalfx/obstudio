@@ -72,7 +72,7 @@ class RuntimeExpectations(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     service_name: str = "observer"
-    service_port: int = 3000
+    service_port: int = 17900
     health_path: str = "/api/health"
     clear_path: str | None = "/api/data"
     clear_method: str = "DELETE"

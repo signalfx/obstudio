@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+// @vitest-environment-options {"url":"http://localhost:17900"}
 
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
