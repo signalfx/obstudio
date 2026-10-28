@@ -78,6 +78,7 @@ const allowedGetPaths = new Set([
 	'/api/audit/score',
 	'/api/config',
 	'/api/config/definitions',
+	'/api/config/status',
 	'/api/dashboards/preview',
 	'/api/health',
 	'/api/query/logs',

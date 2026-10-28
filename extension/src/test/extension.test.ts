@@ -677,11 +677,12 @@ test('IDE host transport restricts HTTP paths, cancellation, and telemetry comma
 	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/config'), true);
 	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/config'), true);
 	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/config/definitions'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/config/status'), true);
 	for (const [method, path] of [
 		['POST', '/api/config/definitions'],
 		['GET', '/api/config/telemetry'],
 		['POST', '/api/config/telemetry'],
-		['GET', '/api/config/status'],
+		['POST', '/api/config/status'],
 	] as const) {
 		assert.equal(isAllowedObserverHostHTTPPath(method, path), false, `${method} ${path}`);
 	}
