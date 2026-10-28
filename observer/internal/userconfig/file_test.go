@@ -279,14 +279,19 @@ func TestParseMatrix(t *testing.T) {
 					t.Errorf("%s at line %d (%q)", d.Key, d.Line, lines[max(d.Line-1, 0)])
 				}
 			}
-			switch r.name {
-			case "on":
-				if diags[0].Message != `telemetry.enabled: "on" is not true or false` {
-					t.Errorf("message = %q", diags[0].Message)
-				}
-			case "list":
-				if diags[0].Message != "telemetry.enabled: is not a single value" {
-					t.Errorf("message = %q", diags[0].Message)
+			wantMsg := map[string]string{
+				"on":                  `telemetry.enabled: "on" is not true or false`,
+				"list":                "telemetry.enabled: is not a single value",
+				"key line removed":    "telemetry.enabled: is not set",
+				"section not mapping": "telemetry: is not a mapping",
+				"server":              "server: is not a known key",
+			}
+			if want, ok := wantMsg[r.name]; ok && diags[0].Message != want {
+				t.Errorf("messages: %q, want %q", diags[0].Message, want)
+			}
+			for _, d := range diags {
+				if !strings.HasPrefix(d.Message, d.Key+": ") {
+					t.Errorf("prefix: %q does not begin with %q", d.Message, d.Key+": ")
 				}
 			}
 		})
