@@ -375,14 +375,14 @@ func TestTelemetryHelpText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The enable Short is itself the first 43 bytes of D, so it is the one
-	// literal allowed to hold D's first 40 bytes.
-	prefix := d[:min(40, len(d))]
-	if n := bytes.Count(src, []byte(prefix)); n != bytes.Count(src, []byte(`"`+shorts["enable"]+`"`)) {
-		t.Errorf("no-copied-literal: telemetry.go holds %q outside the enable Short", prefix)
+	// S1 is D through its first "." (all of D if none). The enable Short is a
+	// prefix of D with no ".", so it never contains S1.
+	s1 := d
+	if i := strings.IndexByte(d, '.'); i >= 0 {
+		s1 = d[:i+1]
 	}
-	if bytes.Contains(src, []byte(d)) {
-		t.Error("no-copied-literal: telemetry.go holds the Description")
+	if bytes.Contains(src, []byte(s1)) {
+		t.Errorf("no-copied-literal: telemetry.go holds %q", s1)
 	}
 	if group.Short != "Manage the anonymous usage data Splunk Observability Studio sends about itself" {
 		t.Errorf("group Short %q", group.Short)
