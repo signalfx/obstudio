@@ -20,9 +20,9 @@ func upper(s string) string {
 
 // The v1 text, as declared in definitions.go.
 const (
-	v1SectionTitle = "Usage data"
+	v1SectionTitle = "Privacy"
 	v1Title        = "Send anonymous usage data"
-	v1Description  = "Sends anonymous usage counts about Splunk Observability Studio itself to Splunk. Turning this off does not change what Splunk Observability Studio collects from your agents or shows you locally."
+	v1Description  = "Allow Cisco to collect anonymous usage data about Splunk Observability Studio itself. Turning this off does not change what Splunk Observability Studio collects from your agents or shows you locally."
 	v1Hint         = "To turn this off, run: obstudio telemetry disable"
 )
 

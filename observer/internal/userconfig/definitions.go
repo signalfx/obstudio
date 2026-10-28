@@ -67,12 +67,12 @@ func (s Section) description() string { return s.descText }
 type Selector interface{ selectorPath() string }
 
 var SectionTelemetry = section("telemetry", sectionSpec{
-	Title: "Usage data",
+	Title: "Privacy",
 })
 
 var TelemetryEnabled = define(SectionTelemetry, "enabled", defSpec[bool]{
 	Title:       "Send anonymous usage data",
-	Description: "Sends anonymous usage counts about Splunk Observability Studio itself to Splunk. Turning this off does not change what Splunk Observability Studio collects from your agents or shows you locally.",
+	Description: "Allow Cisco to collect anonymous usage data about Splunk Observability Studio itself. Turning this off does not change what Splunk Observability Studio collects from your agents or shows you locally.",
 	Hint:        "To turn this off, run: obstudio telemetry disable",
 	Default:     true,
 	FailSafe:    false,
