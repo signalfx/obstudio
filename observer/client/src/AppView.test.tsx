@@ -2,6 +2,7 @@
 
 import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MetricGroup, SplunkExportStatus, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
 import { AppView } from "./AppView";
@@ -704,6 +705,93 @@ describe("AppView KeyboardHelp focus management", () => {
     act(() => { fireEvent.keyDown(window, { key: "Escape" }); });
     expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).toBeNull();
     expect(document.activeElement).toBe(helpButton);
+  });
+});
+
+describe("AppView live status and pause control", () => {
+  it("shows Live as a status and exposes Pause as its own keyboard-operable button", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/?tab=services");
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const status = screen.getByText("Live").closest('[role="status"]');
+    expect(status?.className).toContain("stream-toggle--live");
+    expect(status?.tagName).not.toBe("BUTTON");
+    expect(screen.queryByRole("button", { name: /^live$/i })).toBeNull();
+
+    const pause = screen.getByRole("button", { name: "Pause live updates" });
+    expect(pause.getAttribute("title")).toBe("Pause live updates (P)");
+    await user.click(pause);
+    expect(telemetry.toggle).toHaveBeenCalledTimes(1);
+
+    pause.focus();
+    expect(document.activeElement).toBe(pause);
+    await user.keyboard("{Enter}");
+    expect(telemetry.toggle).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows Paused as a status with a Resume button while paused", () => {
+    window.history.replaceState({}, "", "/?tab=services");
+    const telemetry = { ...makeTelemetryHandle([]), paused: true };
+    render(<AppView telemetry={telemetry} />);
+
+    expect(screen.getByText("Paused").closest('[role="status"]')?.className).toContain("stream-toggle--paused");
+    fireEvent.click(screen.getByRole("button", { name: "Resume live updates" }));
+    expect(telemetry.toggle).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Pause live updates" })).toBeNull();
+  });
+
+  it("replaces the stream controls with the connection status on the Cloud tab", async () => {
+    stubCloudStatusFetch();
+    window.history.replaceState({}, "", "/?tab=cloud");
+    render(<AppView telemetry={makeTelemetryHandle([])} />);
+
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Not connected"));
+    expect(screen.queryByRole("button", { name: /live updates/i })).toBeNull();
+  });
+});
+
+describe("AppView tab overflow affordances", () => {
+  it("shows scroll arrows only on the side the tab strip overflows and scrolls the strip", () => {
+    window.history.replaceState({}, "", "/?tab=services");
+    render(<AppView telemetry={makeTelemetryHandle([])} />);
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
+    expect(screen.queryByRole("button", { name: "Scroll tabs right" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Scroll tabs left" })).toBeNull();
+
+    let scrollLeft = 0;
+    Object.defineProperty(tablist, "scrollWidth", { configurable: true, get: () => 700 });
+    Object.defineProperty(tablist, "clientWidth", { configurable: true, get: () => 300 });
+    Object.defineProperty(tablist, "scrollLeft", {
+      configurable: true,
+      get: () => scrollLeft,
+      set: (value: number) => { scrollLeft = value; },
+    });
+    const scrollBy = vi.fn((options: ScrollToOptions) => {
+      scrollLeft = Math.min(400, Math.max(0, scrollLeft + (options.left ?? 0)));
+      tablist.dispatchEvent(new Event("scroll"));
+    });
+    tablist.scrollBy = scrollBy as unknown as typeof tablist.scrollBy;
+    fireEvent.scroll(tablist);
+
+    const right = screen.getByRole("button", { name: "Scroll tabs right" });
+    expect(right.getAttribute("tabindex")).toBe("-1");
+    expect(within(tablist).queryByRole("button", { name: /scroll tabs/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Scroll tabs left" })).toBeNull();
+
+    fireEvent.click(right);
+    expect(scrollBy).toHaveBeenLastCalledWith(expect.objectContaining({ left: 210 }));
+    expect(screen.getByRole("button", { name: "Scroll tabs left" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Scroll tabs right" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Scroll tabs right" }));
+    expect(scrollLeft).toBe(400);
+    expect(screen.queryByRole("button", { name: "Scroll tabs right" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Scroll tabs left" }));
+    expect(scrollBy).toHaveBeenLastCalledWith(expect.objectContaining({ left: -210 }));
+    expect(screen.getByRole("button", { name: "Scroll tabs right" })).toBeTruthy();
   });
 });
 

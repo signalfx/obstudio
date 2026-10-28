@@ -353,7 +353,7 @@ describe("CloudTab", () => {
     expect(forget.payload).toEqual({ expectedVersion: connectedVersion });
     bridge.reject(forget, "A cloud configuration change is already in progress.");
 
-    expect(await screen.findByText("Connect to export metrics and traces.")).toBeTruthy();
+    expect(await screen.findByText("Connect to export metrics and traces and publish detectors and dashboards.")).toBeTruthy();
     expect(screen.getByText("Cloud state refreshed from Splunk Observability Studio.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     const regionInput = screen.getByLabelText("Realm or Observability Cloud URL");
@@ -431,11 +431,11 @@ describe("CloudTab", () => {
     expect((regionInput as HTMLInputElement).disabled).toBe(false);
     expect((tokenInput as HTMLInputElement).disabled).toBe(false);
     expect((regionInput as HTMLInputElement).value).toBe("");
-    expect((regionInput as HTMLInputElement).placeholder).toBe("Realm or Observability Cloud URL");
-    expect(regionInput.closest(".cloud-field__control")
-      ?.classList.contains("cloud-field__control--filled")).toBe(false);
-    expect(tokenInput.closest(".cloud-field__control")
-      ?.classList.contains("cloud-field__control--filled")).toBe(false);
+    expect((regionInput as HTMLInputElement).placeholder).toBe("e.g. us1");
+    // Labels are rendered before any value is entered, not only once a field is filled.
+    expect(document.querySelector('label[for="cloud-region"]')?.textContent)
+      .toBe("Realm or Observability Cloud URL");
+    expect(document.querySelector('label[for="cloud-access-token"]')?.textContent).toBe("Access token");
     await waitFor(() => {
       expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled).toBe(false);
     });
@@ -450,10 +450,6 @@ describe("CloudTab", () => {
     expect(document.querySelector('label[for="cloud-region"]')?.textContent)
       .toBe("Realm or Observability Cloud URL");
     expect(document.querySelector('label[for="cloud-access-token"]')?.textContent).toBe("Access token");
-    expect(regionInput.closest(".cloud-field__control")
-      ?.classList.contains("cloud-field__control--filled")).toBe(true);
-    expect(tokenInput.closest(".cloud-field__control")
-      ?.classList.contains("cloud-field__control--filled")).toBe(true);
     expect(screen.queryByText(/get token/i)).toBeNull();
 
     const regionField = screen.getByLabelText("Realm or Observability Cloud URL").closest(".cloud-field");
@@ -489,23 +485,17 @@ describe("CloudTab", () => {
     expect(tokenHelpLink.getAttribute("rel")).toBe("noopener noreferrer");
   });
 
-  it("keeps empty field names as placeholders and floats them only after entry", () => {
+  it("shows field labels above the inputs at all times and uses the app's button and panel styling", () => {
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(css).toMatch(/\.cloud-panel--setup\s*\{[^}]*max-width:\s*432px;[^}]*border-top:\s*5px solid #ce0070;[^}]*border-radius:\s*0;/s);
+    expect(css).toMatch(/\.cloud-field__label\s*\{[^}]*display:\s*block;/s);
+    expect(css).not.toMatch(/\.cloud-field__label\s*\{[^}]*(opacity:\s*0|position:\s*absolute)/s);
+    expect(css).not.toMatch(/cloud-field__floating-label|cloud-field__control--filled/);
+    expect(css).not.toMatch(/#ce0070/);
+    expect(css).not.toMatch(/\.cloud-[a-z_-]+[^{]*\{[^}]*border-radius:\s*24px;/s);
     expect(css).toMatch(/\.cloud-connect-form\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);[^}]*gap:\s*16px;/s);
-    expect(css).toMatch(/\.cloud-connect-form\s*\{[^}]*padding:\s*0 20px 20px;/s);
-    expect(css).toMatch(
-      /\.cloud-field input,\s*\.cloud-field select\s*\{[^}]*height:\s*52px;[^}]*border:\s*1px solid #969daa;[^}]*border-radius:\s*3px;[^}]*background-color:\s*transparent;[^}]*font-size:\s*16px;[^}]*font-weight:\s*600;[^}]*line-height:\s*24px;/s,
-    );
-    expect(css).toMatch(/\.cloud-field input\s*\{[^}]*padding:\s*0 15px;/s);
-    expect(css).toMatch(/\.cloud-field__floating-label\s*\{[^}]*position:\s*absolute;[^}]*font-size:\s*12px;[^}]*opacity:\s*0;/s);
-    expect(css).toMatch(/\.cloud-field__control--filled \.cloud-field__floating-label\s*\{[^}]*opacity:\s*1;/s);
-    expect(css).not.toMatch(/\.cloud-field__control:focus-within \.cloud-field__floating-label/);
-    expect(css).toMatch(/\.cloud-field__control--filled input\s*\{[^}]*padding:\s*16px 15px 0;/s);
-    expect(css).not.toMatch(/\.cloud-field__control:focus-within input/);
-    expect(css).toMatch(/\.cloud-field input::placeholder\s*\{[^}]*font-weight:\s*400;/s);
-    expect(css).toMatch(/\.cloud-connect-form__action \.cloud-button\s*\{[^}]*width:\s*100%;[^}]*min-height:\s*44px;[^}]*border-radius:\s*24px;/s);
+    expect(css).toMatch(/\.cloud-field input,\s*\.cloud-field select\s*\{[^}]*height:\s*36px;[^}]*border:\s*1px solid #969daa;[^}]*border-radius:\s*6px;/s);
+    expect(css).toMatch(/\.cloud-connect-form__action \.cloud-button,\s*\.cloud-free-account__action \.cloud-button\s*\{[^}]*width:\s*100%;/s);
   });
 
   it("keeps standalone controls available without a browser credential", async () => {
@@ -642,10 +632,10 @@ describe("CloudTab", () => {
     await user.click(forgetButton);
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove connection" }));
 
-    expect(await screen.findByText("Connect to export metrics and traces.")).toBeTruthy();
+    expect(await screen.findByText("Connect to export metrics and traces and publish detectors and dashboards.")).toBeTruthy();
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).value).toBe("");
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).placeholder)
-      .toBe("Realm or Observability Cloud URL");
+      .toBe("e.g. us1");
     expect(mutationPaths).toEqual([
       "/api/splunk/export",
       "/api/splunk/export/enabled",
@@ -755,7 +745,7 @@ describe("CloudTab", () => {
     });
     const regionInput = await screen.findByLabelText("Realm or Observability Cloud URL") as HTMLInputElement;
     expect(regionInput.value).toBe("");
-    expect(regionInput.placeholder).toBe("Realm or Observability Cloud URL");
+    expect(regionInput.placeholder).toBe("e.g. us1");
 
     const connectButton = screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement;
     expect(connectButton.disabled).toBe(false);
@@ -1031,7 +1021,7 @@ describe("CloudTab", () => {
       expect(bridge.httpRequests().some((request) => request.path === "/api/splunk/export")).toBe(true);
     });
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("Connect to export metrics and traces.")).toBeTruthy();
+    expect(screen.getByText("Connect to export metrics and traces and publish detectors and dashboards.")).toBeTruthy();
   });
 
   it("does not detect a signup region when initialization finds a connected organization", async () => {
@@ -1104,18 +1094,16 @@ describe("CloudTab", () => {
     expect(firstName.maxLength).toBe(40);
     expect(firstName.autocomplete).toBe("given-name");
     expect(firstName.required).toBe(true);
-    expect(firstName.placeholder).toBe("First name");
+    expect(firstName.placeholder).toBe("");
     expect(firstName.closest(".cloud-field__control")?.querySelector("label")?.textContent).toBe("First name");
-    expect(firstName.closest(".cloud-field__control")
-      ?.classList.contains("cloud-field__control--filled")).toBe(false);
     expect(lastName.maxLength).toBe(40);
     expect(lastName.autocomplete).toBe("family-name");
     expect(lastName.required).toBe(true);
-    expect(lastName.placeholder).toBe("Last name");
+    expect(lastName.placeholder).toBe("");
     expect(lastName.closest(".cloud-field__control")?.querySelector("label")?.textContent).toBe("Last name");
     const email = screen.getByLabelText("Email") as HTMLInputElement;
     expect(email.maxLength).toBe(80);
-    expect(email.placeholder).toBe("Email");
+    expect(email.placeholder).toBe("");
     expect(email.closest(".cloud-field__control")?.querySelector("label")?.textContent).toBe("Email");
     const signupRegion = within(signupForm).getByRole("combobox", { name: "Region" }) as HTMLSelectElement;
     expect(signupRegion.closest(".cloud-field__control")?.querySelector("label")?.textContent).toBe("Region");
@@ -1212,23 +1200,21 @@ describe("CloudTab", () => {
   it("separates signup into its own compact panel and stacks every field responsively", () => {
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(css).toMatch(/\.cloud-panel--setup\s*\{[^}]*max-width:\s*432px;[^}]*border-top:\s*5px solid #ce0070;[^}]*border-radius:\s*0;/s);
+    expect(css).toMatch(/\.cloud-panel--setup\s*\{[^}]*max-width:\s*432px;/s);
     expect(css).toMatch(/\.cloud-setup-stack\s*\{[^}]*display:\s*grid;[^}]*gap:\s*20px;[^}]*max-width:\s*432px;[^}]*margin:\s*0 auto;/s);
-    expect(css).toMatch(/\.cloud-setup-stack > \.cloud-panel\s*\{[^}]*max-width:\s*none;[^}]*margin:\s*0;[^}]*border-radius:\s*0;/s);
+    expect(css).toMatch(/\.cloud-setup-stack > \.cloud-panel\s*\{[^}]*max-width:\s*none;[^}]*margin:\s*0;/s);
     expect(css).toMatch(/\.cloud-button--primary\s*\{[^}]*border-color:\s*rgba\(57,\s*147,\s*255,\s*0\.72\);[^}]*background:\s*rgba\(57,\s*147,\s*255,\s*0\.16\);[^}]*color:\s*#dcecff;/s);
     expect(css).toMatch(/\.cloud-free-account\s*\{[^}]*border-top:\s*1px solid var\(--border\);/s);
     expect(css).toMatch(/\.cloud-free-account__prompt\s*\{[^}]*flex-direction:\s*column;[^}]*gap:\s*14px;[^}]*padding:\s*18px 20px;/s);
-    expect(css).toMatch(/\.cloud-free-account__start\s*\{[^}]*width:\s*100%;[^}]*min-height:\s*44px;[^}]*border-radius:\s*24px;/s);
+    expect(css).toMatch(/\.cloud-free-account__start\s*\{[^}]*width:\s*100%;/s);
     expect(css).toMatch(/\.cloud-free-account__header\s*\{[^}]*padding:\s*18px 20px 16px;[^}]*text-align:\s*center;/s);
     expect(css).toMatch(/\.cloud-free-account__form\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*gap:\s*16px;[^}]*padding:\s*0 20px 20px;/s);
     expect(css).toMatch(/\.cloud-free-account__fields\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
     expect(css).toMatch(/\.cloud-free-account__terms input\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px;/s);
     expect(css).toMatch(/\.cloud-field__control\s*\{[^}]*position:\s*relative;/s);
-    expect(css).toMatch(/\.cloud-field__floating-label\s*\{[^}]*position:\s*absolute;[^}]*opacity:\s*0;[^}]*pointer-events:\s*none;/s);
-    expect(css).toMatch(/\.cloud-field__control--filled \.cloud-field__floating-label\s*\{[^}]*opacity:\s*1;/s);
     expect(css).toMatch(/\.cloud-free-account__action\s*\{[^}]*flex-direction:\s*column;[^}]*gap:\s*10px;/s);
     expect(css).toMatch(/\.cloud-free-account__submission-error\s*\{[^}]*min-height:\s*0;/s);
-    expect(css).toMatch(/\.cloud-free-account__action \.cloud-button\s*\{[^}]*width:\s*100%;[^}]*min-height:\s*44px;[^}]*border-radius:\s*24px;/s);
+    expect(css).toMatch(/\.cloud-free-account__action \.cloud-button\s*\{[^}]*width:\s*100%;/s);
     expect(css).toMatch(/\.cloud-free-account__resources\s*\{[^}]*display:\s*grid;[^}]*gap:\s*14px;/s);
     expect(css).toMatch(/\.cloud-free-account__outcome-actions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/s);
     expect(css).toMatch(/@media \(max-width:\s*680px\)[^{]*\{[\s\S]*?\.cloud-free-account__form\s*\{[^}]*padding:\s*0 18px 18px;/);
@@ -2352,10 +2338,10 @@ describe("CloudTab", () => {
     bridge.respond(forget, { status: disconnectedStatus() });
 
     expect(await screen.findByText("Connection removed.")).toBeTruthy();
-    expect(await screen.findByText("Connect to export metrics and traces.")).toBeTruthy();
+    expect(await screen.findByText("Connect to export metrics and traces and publish detectors and dashboards.")).toBeTruthy();
     const regionInput = screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement;
     expect(regionInput.value).toBe("");
-    expect(regionInput.placeholder).toBe("Realm or Observability Cloud URL");
+    expect(regionInput.placeholder).toBe("e.g. us1");
     expect(screen.getByLabelText("Access token")).toBeTruthy();
   });
 
@@ -2392,7 +2378,7 @@ describe("CloudTab", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(screen.getByText("Connect to export metrics and traces.")).toBeTruthy();
+    expect(screen.getByText("Connect to export metrics and traces and publish detectors and dashboards.")).toBeTruthy();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
@@ -2421,7 +2407,7 @@ describe("CloudTab", () => {
 
     expect(bridge.httpRequests().filter((request) => request.path === "/api/splunk/export"))
       .toHaveLength(1);
-    expect(screen.getByText("Connect to export metrics and traces.")).toBeTruthy();
+    expect(screen.getByText("Connect to export metrics and traces and publish detectors and dashboards.")).toBeTruthy();
   });
 
   it("restores focus when another session forgets the key while the dialog is open", async () => {

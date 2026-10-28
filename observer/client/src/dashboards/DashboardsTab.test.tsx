@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,6 +25,15 @@ function stubFetchOnce(payload: unknown): ReturnType<typeof vi.fn> {
 }
 
 describe("DashboardsTab", () => {
+  it("uses the app's sans-serif font for the toolbar hints and time window picker", () => {
+    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+    for (const selector of ["dashboards-tab__hint", "dashboards-tab__hint--live", "dashboards-tab__window-select"]) {
+      const rule = css.match(new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+      expect(rule, selector).not.toBe("");
+      expect(rule, selector).not.toMatch(/font-family:\s*var\(--font-family-mono\)/);
+    }
+  });
+
   it("always shows the approximate badge", async () => {
     stubFetchOnce(makePreviewResponse({ available: false, groups: [], message: "Run $splunk-dashboard." }));
     render(<DashboardsTab />);

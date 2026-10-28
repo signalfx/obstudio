@@ -22,6 +22,7 @@ type AppTab = "overview" | "services" | "metrics" | "traces" | "logs" | "validat
 export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<AppTab>(() => initialTabFromLocation());
   const tabsRef = useRef<HTMLDivElement>(null);
+  const [tabOverflow, setTabOverflow] = useState({ left: false, right: false });
   const [showHelp, setShowHelp] = useState(false);
   const [cloudConnectionState, setCloudConnectionState] = useState<CloudConnectionState | null>(null);
 
@@ -56,6 +57,21 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
 
   useKeyboardShortcuts(shortcuts);
 
+  const updateTabOverflow = useCallback(() => {
+    const container = tabsRef.current;
+    if (!container) return;
+    const left = container.scrollLeft > 1;
+    const right = container.scrollLeft + container.clientWidth < container.scrollWidth - 1;
+    setTabOverflow((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
+  }, []);
+
+  const scrollTabs = (direction: -1 | 1) => {
+    const container = tabsRef.current;
+    if (!container) return;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+    container.scrollBy({ left: direction * container.clientWidth * 0.7, behavior: reduceMotion ? "auto" : "smooth" });
+  };
+
   useEffect(() => {
     function scrollActiveTabIntoView() {
       const tab = document.getElementById(`tab-${activeTab}`);
@@ -71,22 +87,47 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
     }
 
     scrollActiveTabIntoView();
+    updateTabOverflow();
 
     if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => requestAnimationFrame(scrollActiveTabIntoView));
-    if (tabsRef.current) observer.observe(tabsRef.current);
+    const observer = new ResizeObserver(() => requestAnimationFrame(() => {
+      scrollActiveTabIntoView();
+      updateTabOverflow();
+    }));
+    const container = tabsRef.current;
+    if (container) {
+      observer.observe(container);
+      // Tab widths change when their counts appear, without resizing the strip.
+      container.querySelectorAll('[role="tab"]').forEach((tab) => observer.observe(tab));
+    }
     return () => observer.disconnect();
-  }, [activeTab]);
+  }, [activeTab, updateTabOverflow]);
 
   return (
     <main className="app-shell">
       <section className="app-frame">
         <div className="tab-bar">
+          {/* Mouse affordance only: keyboard users move through the tablist with
+              the arrow keys, which already scrolls the active tab into view. */}
+          {tabOverflow.left ? (
+            <button
+              type="button"
+              className="tab-bar__scroll tab-bar__scroll--left"
+              aria-label="Scroll tabs left"
+              tabIndex={-1}
+              onClick={() => scrollTabs(-1)}
+            >
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16" width="12" height="12">
+                <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          ) : null}
           <div
             ref={tabsRef}
             className="tab-bar__tabs"
             role="tablist"
             aria-label="Splunk Observability Studio sections"
+            onScroll={updateTabOverflow}
             onKeyDown={(e) => {
               const order: AppTab[] = ["overview", "metrics", "traces", "logs", "services", "validation", "dashboards", "cloud"];
               const idx = order.indexOf(activeTab);
@@ -211,19 +252,49 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             Cloud
           </button>
           </div>
+          {tabOverflow.right ? (
+            <button
+              type="button"
+              className="tab-bar__scroll tab-bar__scroll--right"
+              aria-label="Scroll tabs right"
+              tabIndex={-1}
+              onClick={() => scrollTabs(1)}
+            >
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16" width="12" height="12">
+                <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          ) : null}
 
           <div className="tab-bar__actions">
             {activeTab !== "cloud" ? (
-              <button
-                className={`stream-toggle ${paused ? "stream-toggle--paused" : "stream-toggle--live"}`}
-                onClick={toggle}
-                title={paused ? "Resume live updates (P)" : "Pause live updates (P)"}
-              >
-                <span className="stream-toggle__icon" aria-hidden="true">
-                  {paused ? "▶" : "❚❚"}
+              <>
+                <span
+                  role="status"
+                  className={`stream-toggle stream-toggle--status stream-toggle--stream ${paused ? "stream-toggle--paused" : "stream-toggle--live"}`}
+                >
+                  <span className="stream-toggle__dot" aria-hidden="true" />
+                  <span className="stream-toggle__label">{paused ? "Paused" : "Live"}</span>
                 </span>
-                {paused ? "Paused" : "Live"}
-              </button>
+                <button
+                  type="button"
+                  className="tab-bar__icon-button"
+                  onClick={toggle}
+                  aria-label={paused ? "Resume live updates" : "Pause live updates"}
+                  title={paused ? "Resume live updates (P)" : "Pause live updates (P)"}
+                >
+                  {paused ? (
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16" width="10" height="10">
+                      <path d="M4 2.5v11l9-5.5z" fill="currentColor" />
+                    </svg>
+                  ) : (
+                    <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16" width="10" height="10">
+                      <rect x="3" y="2.5" width="3.5" height="11" rx="0.75" fill="currentColor" />
+                      <rect x="9.5" y="2.5" width="3.5" height="11" rx="0.75" fill="currentColor" />
+                    </svg>
+                  )}
+                </button>
+              </>
             ) : (
               <span
                 role="status"

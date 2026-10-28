@@ -25,6 +25,7 @@ import {
   type CloudBridgeAction,
   type CloudBridgeResponse,
 } from "./bridge";
+import { CLOUD_CONNECT_DESCRIPTION } from "./copy";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 import { CopyTextButton } from "../layout/DetailPanel";
 
@@ -383,7 +384,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       ? status?.realm?.trim()
         ? `${destinationLabel} · Connection details incomplete`
         : "Connection details incomplete"
-      : "Connect to export metrics and traces.";
+      : CLOUD_CONNECT_DESCRIPTION;
   const signals = useMemo(() => [
     signalRow("Metrics", status?.metrics),
     signalRow("Traces", status?.traces),
@@ -1053,12 +1054,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
               ) : (
                 <div className="cloud-field cloud-field--o11y-oauth">
                   <div className="cloud-field cloud-field--region">
-                    <div
-                      className={o11yOAuthRealm
-                        ? "cloud-field__control cloud-field__control--filled"
-                        : "cloud-field__control"}
-                    >
-                      <label className="cloud-field__floating-label" htmlFor="cloud-o11y-oauth-realm">Realm</label>
+                    <div className="cloud-field__control">
+                      <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-realm">Realm</label>
                       <input
                         aria-invalid={fieldError === "o11yOAuthRealm"}
                         aria-label="Realm"
@@ -1071,7 +1068,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                           if (fieldError === "o11yOAuthRealm") setFieldError(null);
                           setError(null);
                         }}
-                        placeholder="Realm, e.g. us0"
+                        placeholder="e.g. us0"
                         ref={o11yOAuthRealmInputRef}
                         spellCheck={false}
                         value={o11yOAuthRealm}
@@ -1082,12 +1079,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                     ) : null}
                   </div>
                   <div className="cloud-field cloud-field--token">
-                    <div
-                      className={o11yOAuthAdminToken
-                        ? "cloud-field__control cloud-field__control--filled"
-                        : "cloud-field__control"}
-                    >
-                      <label className="cloud-field__floating-label" htmlFor="cloud-o11y-oauth-admin-token">Admin X-SF-TOKEN</label>
+                    <div className="cloud-field__control">
+                      <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-admin-token">Admin X-SF-TOKEN</label>
                       <input
                         aria-invalid={fieldError === "o11yOAuthAdminToken"}
                         autoCapitalize="none"
@@ -1099,7 +1092,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                           if (fieldError === "o11yOAuthAdminToken") setFieldError(null);
                           setError(null);
                         }}
-                        placeholder="Admin X-SF-TOKEN"
                         ref={o11yOAuthAdminTokenInputRef}
                         spellCheck={false}
                         type="password"
@@ -1220,12 +1212,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           ) : registrationAndAuthProtocol === "NONE" ? (
             <form aria-label="Cloud connection" className="cloud-connect-form" noValidate onSubmit={connect}>
               <div className="cloud-field cloud-field--region">
-                <div
-                  className={region
-                    ? "cloud-field__control cloud-field__control--filled"
-                    : "cloud-field__control"}
-                >
-                  <label className="cloud-field__floating-label" htmlFor="cloud-region">Realm or Observability Cloud URL</label>
+                <div className="cloud-field__control">
+                  <label className="cloud-field__label" htmlFor="cloud-region">Realm or Observability Cloud URL</label>
                   <input
                     aria-describedby={fieldError === "region" ? "cloud-region-format cloud-region-error" : "cloud-region-format"}
                     aria-invalid={fieldError === "region"}
@@ -1241,7 +1229,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                       setError(null);
                     }}
                     onKeyDown={submitConnectionOnEnter}
-                    placeholder="Realm or Observability Cloud URL"
+                    placeholder="e.g. us1"
                     ref={regionInputRef}
                     spellCheck={false}
                     value={region}
@@ -1253,12 +1241,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                 ) : null}
               </div>
               <div className="cloud-field cloud-field--token">
-                <div
-                  className={accessToken
-                    ? "cloud-field__control cloud-field__control--filled"
-                    : "cloud-field__control"}
-                >
-                  <label className="cloud-field__floating-label" htmlFor="cloud-access-token">Access token</label>
+                <div className="cloud-field__control">
+                  <label className="cloud-field__label" htmlFor="cloud-access-token">Access token</label>
                   <input
                     aria-describedby={fieldError === "token" ? "cloud-token-help cloud-token-error" : "cloud-token-help"}
                     aria-invalid={fieldError === "token"}
@@ -1406,8 +1390,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                     <form aria-label="Free Edition account" className="cloud-free-account__form" id="cloud-free-account-form" noValidate onSubmit={createFreeAccount}>
                     <div className="cloud-free-account__fields">
                       <div className="cloud-field cloud-field--free-account">
-                        <div className={freeAccountFirstName ? "cloud-field__control cloud-field__control--filled" : "cloud-field__control"}>
-                          <label className="cloud-field__floating-label" htmlFor="cloud-free-account-first-name">First name</label>
+                        <div className="cloud-field__control">
+                          <label className="cloud-field__label" htmlFor="cloud-free-account-first-name">First name</label>
                           <input
                             aria-describedby={fieldError === "firstName" ? "cloud-free-account-first-name-error" : undefined}
                             aria-invalid={fieldError === "firstName"}
@@ -1420,7 +1404,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                               setError(null);
                               setFreeAccountSubmitError(null);
                             }}
-                            placeholder="First name"
                             ref={freeAccountFirstNameRef}
                             required
                             value={freeAccountFirstName}
@@ -1429,8 +1412,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                         {fieldError === "firstName" ? <p className="cloud-field__error" id="cloud-free-account-first-name-error">Enter your first name.</p> : null}
                       </div>
                       <div className="cloud-field cloud-field--free-account">
-                        <div className={freeAccountLastName ? "cloud-field__control cloud-field__control--filled" : "cloud-field__control"}>
-                          <label className="cloud-field__floating-label" htmlFor="cloud-free-account-last-name">Last name</label>
+                        <div className="cloud-field__control">
+                          <label className="cloud-field__label" htmlFor="cloud-free-account-last-name">Last name</label>
                           <input
                             aria-describedby={fieldError === "lastName" ? "cloud-free-account-last-name-error" : undefined}
                             aria-invalid={fieldError === "lastName"}
@@ -1443,7 +1426,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                               setError(null);
                               setFreeAccountSubmitError(null);
                             }}
-                            placeholder="Last name"
                             ref={freeAccountLastNameRef}
                             required
                             value={freeAccountLastName}
@@ -1452,8 +1434,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                         {fieldError === "lastName" ? <p className="cloud-field__error" id="cloud-free-account-last-name-error">Enter your last name.</p> : null}
                       </div>
                       <div className="cloud-field cloud-field--free-account">
-                        <div className={freeAccountEmail ? "cloud-field__control cloud-field__control--filled" : "cloud-field__control"}>
-                          <label className="cloud-field__floating-label" htmlFor="cloud-free-account-email">Email</label>
+                        <div className="cloud-field__control">
+                          <label className="cloud-field__label" htmlFor="cloud-free-account-email">Email</label>
                           <input
                             aria-describedby={fieldError === "email" ? "cloud-free-account-email-error" : undefined}
                             aria-invalid={fieldError === "email"}
@@ -1469,7 +1451,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                               setError(null);
                               setFreeAccountSubmitError(null);
                             }}
-                            placeholder="Email"
                             ref={freeAccountEmailRef}
                             required
                             spellCheck={false}
@@ -1480,8 +1461,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                         {fieldError === "email" ? <p className="cloud-field__error" id="cloud-free-account-email-error">Enter a valid email address.</p> : null}
                       </div>
                       <div className="cloud-field cloud-field--free-account">
-                        <div className="cloud-field__control cloud-field__control--filled cloud-field__control--select">
-                          <label className="cloud-field__floating-label" htmlFor="cloud-free-account-region">Region</label>
+                        <div className="cloud-field__control">
+                          <label className="cloud-field__label" htmlFor="cloud-free-account-region">Region</label>
                           <select
                             aria-describedby={freeAccountRegionDetection === "detecting" ? "cloud-free-account-region-hint" : undefined}
                             id="cloud-free-account-region"
@@ -1628,8 +1609,8 @@ function MaskedValueField({ id, label, value }: MaskedValueFieldProps): React.Re
   return (
     <div className="cloud-masked-field">
       <div className="cloud-field cloud-field--masked">
-        <div className="cloud-field__control cloud-field__control--filled">
-          <label className="cloud-field__floating-label" htmlFor={id}>{label}</label>
+        <div className="cloud-field__control">
+          <label className="cloud-field__label" htmlFor={id}>{label}</label>
           <input
             id={id}
             readOnly
