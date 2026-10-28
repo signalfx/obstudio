@@ -24,12 +24,12 @@ describe("parseDefinitions", () => {
       properties: {
         telemetry: {
           type: "object",
-          title: "Usage data",
+          title: "Privacy",
           properties: {
             enabled: {
               type: "boolean",
               title: "Send anonymous usage data",
-              description: "Sends anonymous usage counts.",
+              description: "Allow Cisco to collect anonymous usage data about Splunk Observability Studio itself. Turning this off does not change what Splunk Observability Studio collects from your agents or shows you locally.",
               default: true,
               "x-obstudio-failSafe": false,
               "x-obstudio-apply": "live",
@@ -42,13 +42,13 @@ describe("parseDefinitions", () => {
       definitions: [{
         apply: "live",
         default: true,
-        description: "Sends anonymous usage counts.",
+        description: "Allow Cisco to collect anonymous usage data about Splunk Observability Studio itself. Turning this off does not change what Splunk Observability Studio collects from your agents or shows you locally.",
         path: "telemetry.enabled",
         title: "Send anonymous usage data",
         type: "boolean",
       }],
       name: "telemetry",
-      title: "Usage data",
+      title: "Privacy",
     }]);
   });
 
