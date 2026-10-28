@@ -1669,7 +1669,7 @@ def test_runtime_observer_keeps_grpc_loopback_when_http_is_container_visible() -
         if "dockerfile: evals/runtime/observer.Dockerfile" not in compose:
             continue
         observer_service = compose.split("\n  app:", 1)[0]
-        assert "target: 3000" in observer_service
+        assert "target: 17900" in observer_service
         assert "host_ip: 127.0.0.1" in observer_service
 
         definition = json.loads(_read(compose_file.with_name("instrument.json")))
