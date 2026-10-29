@@ -18,6 +18,7 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/config/configmiddleware"
 	"go.opentelemetry.io/collector/config/configopaque"
 	"go.opentelemetry.io/collector/config/configoptional"
 	"go.opentelemetry.io/collector/exporter"
@@ -140,6 +141,15 @@ func NewSplunkTracesExportController(config SplunkTracesExporterConfig) (*Splunk
 
 // Configure replaces the live exporter after validating the supplied config.
 func (c *SplunkTracesExportController) Configure(config SplunkTracesExporterConfig) error {
+	return c.configure(config, false)
+}
+
+// ConfigureKeepingActivity replaces a connection without resetting its activity counters.
+func (c *SplunkTracesExportController) ConfigureKeepingActivity(config SplunkTracesExporterConfig) error {
+	return c.configure(config, true)
+}
+
+func (c *SplunkTracesExportController) configure(config SplunkTracesExporterConfig, keepActivity bool) error {
 	exporter, err := newConfiguredSplunkTracesExporter(config)
 	if err != nil {
 		return err
@@ -148,20 +158,21 @@ func (c *SplunkTracesExportController) Configure(config SplunkTracesExporterConf
 	c.mu.Lock()
 	old := c.exporter
 	normalized := normalizeSplunkTracesExporterConfig(config)
-	connectionChanged := c.exporter == nil || c.config.Enabled != normalized.Enabled ||
-		c.config.Realm != normalized.Realm || c.config.Endpoint != normalized.Endpoint ||
-		c.config.AccessToken != normalized.AccessToken
+	destinationChanged := c.config.Realm != normalized.Realm || c.config.Endpoint != normalized.Endpoint || c.config.AccessToken != normalized.AccessToken
+	connectionChanged := c.exporter == nil || c.config.Enabled != normalized.Enabled || destinationChanged
 	c.config = normalized
 	c.exporter = exporter
 	if connectionChanged {
 		c.connectionGeneration++
 		c.agentRoutes = nil
 	}
-	c.lastExport = SplunkTracesExportAttempt{}
-	c.hasLastExport = false
-	c.exportedBatches = 0
-	c.exportedSpans = 0
-	c.failedBatches = 0
+	if !keepActivity {
+		c.exportedBatches, c.exportedSpans, c.failedBatches = 0, 0, 0
+	}
+	if !keepActivity || destinationChanged || !c.lastExport.Success {
+		c.lastExport = SplunkTracesExportAttempt{}
+		c.hasLastExport = false
+	}
 	c.mu.Unlock()
 	c.exportMu.Unlock()
 	if old != nil {
@@ -601,6 +612,10 @@ func (c *SplunkTracesExportController) recordExport(err error, spans int) {
 	if err != nil {
 		c.failedBatches++
 		c.lastExport.Error = sanitizeExportError(err, c.config.AccessToken)
+		var partial *splunkOTLPPartialExportError
+		if errors.As(err, &partial) {
+			c.exportedSpans += uint64(partial.accepted)
+		}
 		return
 	}
 	c.exportedBatches++
@@ -665,7 +680,8 @@ func NewSplunkTracesExporter(config SplunkTracesExporterConfig) (*SplunkTracesEx
 	cfg := factory.CreateDefaultConfig().(*otlphttpexporter.Config)
 	cfg.TracesEndpoint = endpoint
 	cfg.ClientConfig = confighttp.ClientConfig{
-		Timeout: effectiveSplunkTracesTimeout(config.Timeout),
+		Timeout:     effectiveSplunkTracesTimeout(config.Timeout),
+		Middlewares: []configmiddleware.Config{{ID: splunkOTLPStatusMiddlewareID}},
 		Headers: configopaque.MapList{
 			{Name: "X-SF-Token", Value: configopaque.String(token)},
 		},
@@ -684,7 +700,7 @@ func NewSplunkTracesExporter(config SplunkTracesExporterConfig) (*SplunkTracesEx
 	if err != nil {
 		return nil, fmt.Errorf("create Splunk traces exporter: %w", err)
 	}
-	if err := exp.Start(context.Background(), minimalHost{}); err != nil {
+	if err := exp.Start(context.Background(), splunkOTLPExportHost{}); err != nil {
 		_ = exp.Shutdown(context.Background())
 		return nil, fmt.Errorf("start Splunk traces exporter: %w", err)
 	}
@@ -712,7 +728,19 @@ func (e *SplunkTracesExporter) ExportTraces(ctx context.Context, td ptrace.Trace
 	if e == nil {
 		return nil
 	}
-	return e.exp.ConsumeTraces(ctx, td)
+	attempt := &splunkOTLPExportAttempt{decode: func(body []byte, contentType string) (int64, error) {
+		response := ptraceotlp.NewExportResponse()
+		var err error
+		switch contentType {
+		case "application/json":
+			err = response.UnmarshalJSON(body)
+		case "application/x-protobuf":
+			err = response.UnmarshalProto(body)
+		}
+		return response.PartialSuccess().RejectedSpans(), err
+	}}
+	err := e.exp.ConsumeTraces(context.WithValue(ctx, splunkOTLPExportAttemptKey{}, attempt), td)
+	return attempt.result(err, td.SpanCount())
 }
 
 // Shutdown stops the underlying exporter component.

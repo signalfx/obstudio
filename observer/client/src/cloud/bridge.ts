@@ -58,8 +58,11 @@ export function isSplunkExportStatus(value: unknown): value is SplunkExportStatu
     && (status.realm === undefined || typeof status.realm === "string")
     && typeof status.version === "string"
     && /^[A-Za-z0-9_-]{43}$/.test(status.version)
+    && (status.cloudVersion === undefined
+      || (typeof status.cloudVersion === "string" && /^[A-Za-z0-9_-]{43}$/.test(status.cloudVersion)))
     && isSplunkExportSignalStatus(status.metrics)
     && isSplunkExportSignalStatus(status.traces)
+    && (status.logs === undefined || isSplunkExportSignalStatus(status.logs))
     && (status.registrationAndAuthProtocol === undefined
       || isRegistrationAndAuthProtocol(status.registrationAndAuthProtocol));
 }

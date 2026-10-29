@@ -643,7 +643,8 @@ it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t
 		const cssStatus = await new Promise<number>((resolve, reject) => {
 			http.get(`http://127.0.0.1:${port}/assets/main.css`, (res) => {
 				res.resume();
-				resolve(res.statusCode ?? 0);
+				res.on('end', () => resolve(res.statusCode ?? 0));
+				res.on('error', reject);
 			}).on('error', reject);
 		});
 		assert.equal(cssStatus, 200, '/assets/main.css should return 200 — client assets not embedded in binary');

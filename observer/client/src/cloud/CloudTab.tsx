@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   detectSplunkFreeAccountRegion,
   disconnectSISCIMDSession,
@@ -15,7 +15,6 @@ import type {
   O11yOAuthRegistrationResult,
   RegistrationAndAuthProtocol,
   SISCIMDSessionStatus,
-  SplunkExportSignalStatus,
   SplunkExportStatus,
 } from "../api/types";
 import {
@@ -25,9 +24,10 @@ import {
   type CloudBridgeAction,
   type CloudBridgeResponse,
 } from "./bridge";
-import { CLOUD_CONNECT_DESCRIPTION } from "./copy";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 import { CopyTextButton } from "../layout/DetailPanel";
+import { LogsConnection, isLogsRejected, type LogsConnectionState, type LogsConnectionDetails } from "./LogsConnection";
+import { ConnectionBadge, EditingBadge, ExportControls, ExportToggle, SavedTokenBadge } from "./ExportControls";
 
 const maxSplunkDestinationBytes = 2048;
 const sisCIMDSessionPollIntervalMs = 1_500;
@@ -82,14 +82,7 @@ type CloudFieldError =
   | "token";
 type FreeAccountMutationState = "idle" | "pending" | "uncertain";
 
-interface SignalRow {
-  detail: string;
-  label: string;
-  status: string;
-  tone: "error" | "idle" | "success" | "warning";
-}
-
-export type CloudConnectionState = "connected" | "configured" | "disconnected";
+export type CloudConnectionState = "connected" | "configured" | "disconnected" | "logs-connected" | "logs-configured";
 
 interface CloudTabProps {
   onConnectionChange?: (state: CloudConnectionState) => void;
@@ -107,6 +100,13 @@ interface CloudActionResponse {
 }
 
 export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElement {
+  const [logsConnectionState, setLogsConnectionState] = useState<LogsConnectionState>("disconnected");
+  const [logsDetails, setLogsDetails] = useState<LogsConnectionDetails>({ status: null, editing: false, unavailable: false, failed: false });
+  const [cloudEditing, setCloudEditing] = useState(false);
+  const [cloudAttemptFailed, setCloudAttemptFailed] = useState(false);
+  const cloudEditRef = useRef<HTMLButtonElement>(null);
+  const cloudExportRef = useRef<HTMLButtonElement>(null);
+  const restoreCloudEditFocus = useRef(false);
   const { bridge, callBridge } = useCloudBridge();
   const [status, setStatus] = useState<SplunkExportStatus | null>(null);
   const [region, setRegion] = useState("");
@@ -155,6 +155,10 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const regionValueRef = useRef("");
   const regionInputRef = useRef<HTMLInputElement>(null);
   const tokenInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (cloudEditing) regionInputRef.current?.focus();
+    else if (restoreCloudEditFocus.current) { restoreCloudEditFocus.current = false; cloudEditRef.current?.focus(); }
+  }, [cloudEditing]);
   const o11yOAuthRealmInputRef = useRef<HTMLInputElement>(null);
   const o11yOAuthAdminTokenInputRef = useRef<HTMLInputElement>(null);
   const freeAccountFirstNameRef = useRef<HTMLInputElement>(null);
@@ -245,7 +249,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         if (!active || controller.signal.aborted) return;
         const message = errorMessage(initializationError, "Could not load cloud connection status.");
         setError(message);
-        onConnectionChange?.("disconnected");
       } finally {
         if (active) {
           setBusyAction(null);
@@ -355,15 +358,22 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   }, [loadObserverStatus]);
 
   useEffect(() => {
-    if (status === null) return;
+    if (status === null) {
+      if (logsConnectionState !== "disconnected") onConnectionChange?.(logsConnectionState === "connected" ? "logs-connected" : "logs-configured");
+      else if (cloudInitializationFinished) onConnectionChange?.("disconnected");
+      return;
+    }
     const isConfigured = status.connected
       || status.metrics.configured
       || status.traces.configured;
-    const state: CloudConnectionState = status.connected ? "connected" : isConfigured ? "configured" : "disconnected";
+    const state: CloudConnectionState = status.connected ? "connected"
+      : logsConnectionState === "connected" ? "logs-connected"
+      : isConfigured ? "configured"
+      : logsConnectionState === "configured" ? "logs-configured" : "disconnected";
     onConnectionChange?.(state);
-  }, [onConnectionChange, status]);
+  }, [onConnectionChange, status, logsConnectionState, cloudInitializationFinished]);
 
-  const exportEnabled = status?.enabled === true;
+  const exportEnabled = status?.metrics.enabled === true && status?.traces.enabled === true;
   const metricsConfigured = status?.metrics.configured === true;
   const tracesConfigured = status?.traces.configured === true;
   const cloudConfigured = connected || metricsConfigured || tracesConfigured;
@@ -371,24 +381,31 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   freeAccountMutationStateRef.current = freeAccountMutationState;
   const exportPartiallyEnabled = !exportEnabled
     && (status?.metrics.enabled === true || status?.traces.enabled === true);
-  const exportActive = exportEnabled || exportPartiallyEnabled;
-  const exportStateLabel = exportEnabled ? "on" : exportPartiallyEnabled ? "partially on" : "off";
   const destinationLabel = cloudConfigured
     ? status?.realm?.trim()
       ? status.realm.toLowerCase()
       : "configured destination"
     : "";
-  const connectionSummary = connected
-    ? `${destinationLabel} · Access token configured`
-    : cloudConfigured
-      ? status?.realm?.trim()
-        ? `${destinationLabel} · Connection details incomplete`
-        : "Connection details incomplete"
-      : CLOUD_CONNECT_DESCRIPTION;
-  const signals = useMemo(() => [
-    signalRow("Metrics", status?.metrics),
-    signalRow("Traces", status?.traces),
-  ], [status]);
+  const cloudSignalError = [status?.metrics, status?.traces].find((signal) => signal?.lastExport?.success === false)?.lastExport;
+  const logsConnected = logsDetails.status?.connected ?? Boolean(logsDetails.status?.lastExportSuccess);
+  const logsRejected = isLogsRejected(logsDetails.status);
+  const logsFailing = Boolean(logsDetails.status?.lastExportError || logsDetails.unavailable || (!logsConnected && logsDetails.failed));
+  const cloudInputInvalid = fieldError === "region" || fieldError === "token";
+  const cloudFailing = Boolean(cloudSignalError || (!connected && (cloudAttemptFailed || cloudInputInvalid)));
+  const connectionCount = Number(connected && !cloudSignalError) + Number(logsConnected && !logsFailing);
+  const allSignalsFlowing = exportEnabled && status?.metrics.lastExport?.success === true && status?.traces.lastExport?.success === true
+    && logsDetails.status?.enabled && logsDetails.status.lastExportSuccess && !logsFailing;
+  const destinationsSummary = logsFailing && cloudFailing ? "Both destinations need attention."
+    : logsFailing ? connected ? logsRejected ? "Logs are being refused — metrics and traces are unaffected." : "The logs connection needs attention — metrics and traces are unaffected." : "The logs connection needs attention."
+    : cloudFailing ? logsConnected ? "Observability Cloud needs attention — logs are unaffected." : "The Observability Cloud connection needs attention."
+    : cloudEditing ? "Editing Observability Cloud."
+    : logsDetails.editing ? "Editing Splunk Platform."
+    : connectionCount === 2 ? allSignalsFlowing ? "All signals are reaching Splunk." : "Both destinations are connected. Each has its own export switch."
+    : connected ? "Logs are buffering locally until Splunk Platform is connected."
+    : logsConnected ? "Metrics and traces stay local until Observability Cloud is connected."
+    : "Neither is connected yet.";
+  const cloudBadge = cloudSignalError ? "Connection failed" : connected ? "Connected" : cloudAttemptFailed ? "Connection failed" : !status && !cloudInitializationFinished ? "Loading" : "Not connected";
+  const cloudURL = status?.realm && splunkRealmPattern.test(status.realm) ? `https://app.${status.realm}.observability.splunkcloud.com/` : null;
 
   useEffect(() => {
     if (
@@ -470,7 +487,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
 
   const runAction = async (
     action: CloudBridgeAction,
-    payload?: { accessToken?: string; adminToken?: string; destination?: string; enabled?: boolean; realm?: string },
+    payload?: { accessToken?: string; adminToken?: string; destination?: string; enabled?: boolean; realm?: string; scope?: "observability"; reuseSavedToken?: boolean; preserveEnabled?: boolean },
   ): Promise<CloudActionResponse | null> => {
     if (busyAction || actionInFlightRef.current || !controlAvailable) return null;
     const expectedVersion = statusRef.current?.version;
@@ -565,7 +582,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       regionInputRef.current?.focus();
       return;
     }
-    if (token.length === 0) {
+    if (token.length === 0 && !(cloudEditing && connected)) {
       setFieldError("token");
       setError("Paste the access token secret.");
       tokenInputRef.current?.focus();
@@ -579,11 +596,19 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     }
     const realm = await resolveConnectionDestination(destination);
     if (realm === null || regionValueRef.current.trim() !== destination) return;
+    if (!token && realm !== status?.realm) {
+      setFieldError("token");
+      setError("A new realm needs a token issued for it.");
+      tokenInputRef.current?.focus();
+      return;
+    }
+    setCloudAttemptFailed(false);
     const response = await runAction("connect", {
       accessToken: token,
       realm,
+      ...(cloudEditing ? { preserveEnabled: true, ...(!token ? { reuseSavedToken: true } : {}) } : {}),
     });
-    if (!response) return;
+    if (!response) { setCloudAttemptFailed(true); return; }
     if (response.status?.connected !== true) {
       setError("Splunk Observability Cloud did not confirm the connection.");
       return;
@@ -591,7 +616,9 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     setAccessToken((currentAccessToken) => (
       currentAccessToken === submittedAccessToken ? "" : currentAccessToken
     ));
-    setNotice("Cloud destination connected.");
+    setNotice(cloudEditing ? "Cloud connection updated." : "Cloud destination connected.");
+    setCloudEditing(false);
+    window.requestAnimationFrame(() => cloudExportRef.current?.focus());
   };
 
   const submitConnectionOnEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -816,7 +843,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     : { href: url, rel: "noopener noreferrer", target: "_blank" };
 
   const toggleExport = async () => {
-    const response = await runAction("set-enabled", { enabled: !exportEnabled });
+    const response = await runAction("set-enabled", { enabled: !exportEnabled, scope: "observability" });
     if (response) {
       setNotice(exportEnabled ? "Remote export disabled." : "Remote export enabled.");
     }
@@ -828,7 +855,27 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     closeForgetDialog();
     setRegion("");
     setAccessToken("");
-    setNotice("Connection removed.");
+    setCloudEditing(false);
+    setCloudAttemptFailed(false);
+    setNotice("Observability Cloud disconnected.");
+  };
+
+  const editCloudConnection = () => {
+    setRegion(status?.realm ?? "");
+    setAccessToken("");
+    setError(null);
+    setNotice(null);
+    setCloudEditing(true);
+  };
+
+  const cancelCloudEdit = () => {
+    setRegion(status?.realm ?? "");
+    setAccessToken("");
+    setError(null);
+    setFieldError(null);
+    setCloudAttemptFailed(false);
+    restoreCloudEditFocus.current = true;
+    setCloudEditing(false);
   };
 
   const createFreeAccount = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -969,8 +1016,27 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   };
 
   return (
-    <section id="panel-cloud" aria-label="Cloud" className="tab-panel cloud-tab" role="tabpanel">
+    <section id="panel-cloud" aria-label="Cloud" className="tab-panel cloud-tab cloud-tab--connections" role="tabpanel">
       <div className="cloud-tab__content">
+        <header className="connections-page-header">
+          <h1>Splunk connection</h1>
+        </header>
+        <div
+          className="cloud-destinations"
+        >
+          <header className={`destinations-summary${logsFailing || cloudFailing ? " destinations-summary--warning" : ""}`}>
+            <div><h2>Destinations</h2><p>{destinationsSummary}</p></div>
+            <span className={`destination-badge destination-badge--${logsFailing || cloudFailing ? "error" : connectionCount === 2 ? "connected" : connectionCount === 1 ? "partial" : "empty"}`}><span aria-hidden="true" />{connectionCount} of 2 connected</span>
+          </header>
+          <section aria-busy={busyAction ? "true" : "false"} aria-labelledby="cloud-o11y-title" className={`cloud-panel cloud-destination cloud-destination--o11y${connected ? " cloud-destination--connected" : ""}${cloudEditing ? " cloud-destination--editing" : ""}`}>
+            <header className="cloud-panel__header">
+              <h2 id="cloud-o11y-title">Splunk Observability Cloud</h2>
+              {cloudConfigured ? <code className="destination-identifier">{status?.realm ? `realm ${status.realm}` : "Connection details incomplete"}</code>
+                : <><span className="destination-chip">Metrics</span><span className="destination-chip">Traces</span></>}
+              <ConnectionBadge state={cloudBadge} />
+              {cloudEditing ? <EditingBadge /> : connected ? <ExportToggle enabled={exportEnabled} partial={exportPartiallyEnabled}
+                busy={busyAction === "set-enabled"} disabled={mutationsDisabled} onToggle={() => void toggleExport()} switchLabel="Remote telemetry export" buttonRef={cloudExportRef} /> : null}
+            </header>
         <div aria-atomic="true" aria-live="polite" className="cloud-alert-region">
           {displayedError || (cloudConfigured ? freeAccountSubmitError : null) ? (
             <div className="cloud-alert cloud-alert--error" role="alert">
@@ -987,30 +1053,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           ) : null}
         </div>
 
-        <div
-          aria-busy={busyAction ? "true" : "false"}
-          className={cloudConfigured ? undefined : "cloud-setup-stack"}
-        >
-          <section className={cloudConfigured ? "cloud-panel" : "cloud-panel cloud-panel--setup"}>
-          <header className="cloud-panel__header">
-            <div>
-              <h2>Splunk Observability Cloud</h2>
-              <p>{connectionSummary}</p>
-            </div>
-            {cloudConfigured ? (
-              <div className="cloud-panel__actions">
-                <button
-                  className="cloud-button cloud-button--danger"
-                  disabled={mutationsDisabled}
-                  onClick={() => setForgetOpen(true)}
-                  ref={forgetTriggerRef}
-                  type="button"
-                >
-                  Remove connection
-                </button>
-              </div>
-            ) : null}
-          </header>
+            {cloudEditing ? <p className="destination-editing-note">Export keeps running on the saved settings until you save.</p> : null}
 
           {!cloudConfigured && registrationAndAuthProtocol === "CIMD" ? (
             <section aria-labelledby="cloud-cimd-title" className="cloud-cimd-setup">
@@ -1027,7 +1070,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
               ) : (
                 <button
                   className="cloud-button"
-                  disabled={busyAction !== null}
+                  disabled={mutationsDisabled}
                   onClick={() => void setupCIMD()}
                   type="button"
                 >
@@ -1104,7 +1147,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   </div>
                   <button
                     className="cloud-button"
-                    disabled={busyAction !== null}
+                    disabled={mutationsDisabled}
                     onClick={() => void registerO11yOAuth()}
                     type="button"
                   >
@@ -1166,158 +1209,88 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             </section>
           ) : null}
 
-          {cloudConfigured ? (
-            <section aria-labelledby="cloud-export-title" className="cloud-export">
-              <div className="cloud-export__header">
-                <div>
-                  <h3 id="cloud-export-title">Remote export</h3>
-                  <p>Send metrics and traces to {destinationLabel}.</p>
+          {connected && !cloudEditing ? (
+            <ExportControls compact
+              id="cloud-export-title"
+              title="Metrics and traces export"
+              description={`Send metrics and traces to ${destinationLabel}.`}
+              switchLabel="Remote telemetry export"
+              activityLabel="Telemetry export activity"
+              enabled={exportEnabled}
+              partial={exportPartiallyEnabled}
+              busy={busyAction === "set-enabled"}
+              disabled={mutationsDisabled}
+              onToggle={() => void toggleExport()}
+              signals={[
+                { label: "Metrics", signal: status?.metrics },
+                { label: "Traces", signal: status?.traces },
+              ]}
+            />
+          ) : null}
+          {((!cloudConfigured && registrationAndAuthProtocol === "NONE") || cloudEditing) ? (
+            <form aria-label="Cloud connection" className="cloud-connect-form destination-body" noValidate onSubmit={connect}>
+              <div className="destination-field">
+                <div className="destination-label-row"><label htmlFor="cloud-region">Realm or Observability Cloud URL</label>
+                  <a {...externalLinkAttributes(realmHelpURL)} onClick={(event) => openExternalLink(event, "open-realm-help")}>Find your realm</a>
                 </div>
-                <button
-                  aria-checked={exportEnabled}
-                  aria-label={`Remote telemetry export is ${exportStateLabel}`}
-                  className={exportEnabled ? "cloud-switch cloud-switch--on" : "cloud-switch"}
-                  disabled={mutationsDisabled}
-                  onClick={() => void toggleExport()}
-                  role="switch"
-                  type="button"
-                >
-                  <span aria-hidden="true" className="cloud-switch__track"><span /></span>
-                  <span>
-                    {busyAction === "set-enabled"
-                      ? "Updating"
-                      : exportEnabled
-                        ? "On"
-                        : exportPartiallyEnabled
-                          ? "Partial"
-                          : "Off"}
-                  </span>
-                </button>
+                <input id="cloud-region" aria-label="Realm or Observability Cloud URL" aria-invalid={fieldError === "region"}
+                  aria-describedby={fieldError === "region" ? "cloud-region-format cloud-region-error" : "cloud-region-format"}
+                  autoCapitalize="none" autoComplete="off" autoCorrect="off" spellCheck={false} maxLength={maxSplunkDestinationBytes}
+                  placeholder="us1 — or paste the full URL" ref={regionInputRef} value={region} onKeyDown={submitConnectionOnEnter}
+                  onChange={(event) => { setRegion(event.target.value); if (fieldError === "region") setFieldError(null); setError(null); }} />
+                <small id="cloud-region-format" className={cloudEditing ? undefined : "visually-hidden"}>{cloudEditing ? "A new realm needs a token issued for it." : "Enter a realm or paste an Observability Cloud URL."}</small>
+                {fieldError === "region" ? <p className="cloud-field__error" id="cloud-region-error">Enter a valid realm or Observability Cloud URL.</p> : null}
               </div>
-
-              {exportActive ? (
-                <div aria-label="Telemetry export activity" className="cloud-signal-list" role="list">
-                  {signals.map((signal) => (
-                    <div className={`cloud-signal-row cloud-signal-row--${signal.tone}`} key={signal.label} role="listitem">
-                      <div>
-                        <p><span aria-hidden="true" />{signal.label}</p>
-                        <small>{signal.status}</small>
-                      </div>
-                      <span>{signal.detail}</span>
-                    </div>
-                  ))}
+              <div className="destination-field">
+                <div className="destination-label-row"><label htmlFor="cloud-access-token">Access token</label>
+                  <a {...externalLinkAttributes(ingestTokenHelpURL)} onClick={(event) => openExternalLink(event, "open-ingest-token-help")}>Create a token</a>
                 </div>
-              ) : null}
-            </section>
-          ) : registrationAndAuthProtocol === "NONE" ? (
-            <form aria-label="Cloud connection" className="cloud-connect-form" noValidate onSubmit={connect}>
-              <div className="cloud-field cloud-field--region">
-                <div className="cloud-field__control">
-                  <label className="cloud-field__label" htmlFor="cloud-region">Realm or Observability Cloud URL</label>
-                  <input
-                    aria-describedby={fieldError === "region" ? "cloud-region-format cloud-region-error" : "cloud-region-format"}
-                    aria-invalid={fieldError === "region"}
-                    aria-label="Realm or Observability Cloud URL"
-                    autoCapitalize="none"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    id="cloud-region"
-                    maxLength={maxSplunkDestinationBytes}
+                <div className="destination-token">
+                  <input id="cloud-access-token" aria-describedby={fieldError === "token" ? "cloud-token-help cloud-token-error" : "cloud-token-help"}
+                    aria-invalid={fieldError === "token"} autoCapitalize="none" autoComplete="new-password" autoCorrect="off" spellCheck={false} type="password"
+                    placeholder={cloudEditing && connected ? "Paste a new token to replace" : "Paste token"} ref={tokenInputRef} value={accessToken} onKeyDown={submitConnectionOnEnter}
                     onChange={(event) => {
-                      setRegion(event.target.value);
-                      if (fieldError === "region") setFieldError(null);
-                      setError(null);
+                      if (utf8ByteLength(event.target.value) > maxSplunkAccessTokenBytes) { setError(splunkAccessTokenTooLongMessage); setFieldError("token"); return; }
+                      setAccessToken(event.target.value); if (fieldError === "token") setFieldError(null); setError(null);
                     }}
-                    onKeyDown={submitConnectionOnEnter}
-                    placeholder="e.g. us1"
-                    ref={regionInputRef}
-                    spellCheck={false}
-                    value={region}
-                  />
-                </div>
-                <p className="visually-hidden" id="cloud-region-format">Enter a realm or paste an Observability Cloud URL.</p>
-                {fieldError === "region" ? (
-                  <p className="cloud-field__error" id="cloud-region-error">Enter a valid realm or Observability Cloud URL.</p>
-                ) : null}
-              </div>
-              <div className="cloud-field cloud-field--token">
-                <div className="cloud-field__control">
-                  <label className="cloud-field__label" htmlFor="cloud-access-token">Access token</label>
-                  <input
-                    aria-describedby={fieldError === "token" ? "cloud-token-help cloud-token-error" : "cloud-token-help"}
-                    aria-invalid={fieldError === "token"}
-                    autoCapitalize="none"
-                    autoComplete="new-password"
-                    autoCorrect="off"
-                    id="cloud-access-token"
-                    onChange={(event) => {
-                      if (utf8ByteLength(event.target.value) > maxSplunkAccessTokenBytes) {
-                        setError(splunkAccessTokenTooLongMessage);
-                        setFieldError("token");
-                        return;
-                      }
-                      setAccessToken(event.target.value);
-                      if (fieldError === "token") setFieldError(null);
-                      setError(null);
-                    }}
-                    onKeyDown={submitConnectionOnEnter}
                     onPaste={(event) => {
                       const pastedToken = event.clipboardData.getData("text");
-                      if (pastedToken === "") return;
+                      if (!pastedToken) return;
                       const input = event.currentTarget;
-                      const selectionStart = input.selectionStart ?? input.value.length;
-                      const selectionEnd = input.selectionEnd ?? selectionStart;
-                      const nextValue = input.value.slice(0, selectionStart)
-                        + pastedToken
-                        + input.value.slice(selectionEnd);
-                      if (utf8ByteLength(nextValue) > maxSplunkAccessTokenBytes) {
-                        event.preventDefault();
-                        setFieldError("token");
-                        setError(splunkAccessTokenTooLongMessage);
-                      }
-                    }}
-                    placeholder="Ingest and API token with power role"
-                    ref={tokenInputRef}
-                    spellCheck={false}
-                    type="password"
-                    value={accessToken}
-                  />
+                      const nextValue = input.value.slice(0, input.selectionStart ?? input.value.length) + pastedToken + input.value.slice(input.selectionEnd ?? input.value.length);
+                      if (utf8ByteLength(nextValue) > maxSplunkAccessTokenBytes) { event.preventDefault(); setFieldError("token"); setError(splunkAccessTokenTooLongMessage); }
+                    }} />
+                  {cloudEditing && connected && !accessToken && region.trim().toLowerCase() === status?.realm ? <SavedTokenBadge /> : null}
                 </div>
-                <p className="cloud-field__help" id="cloud-token-help">
-                  More on{" "}
-                  <a
-                    className="cloud-field__help-link"
-                    {...externalLinkAttributes(realmHelpURL)}
-                    onClick={(event) => openExternalLink(event, "open-realm-help")}
-                  >
-                    realm
-                  </a>
-                  {" and "}
-                  <a
-                    className="cloud-field__help-link"
-                    {...externalLinkAttributes(ingestTokenHelpURL)}
-                    onClick={(event) => openExternalLink(event, "open-ingest-token-help")}
-                  >
-                    access tokens
-                  </a>
-                </p>
-                {fieldError === "token" ? (
-                  <p className="cloud-field__error" id="cloud-token-error">Paste the full access token.</p>
-                ) : null}
+                <small id="cloud-token-help">{cloudEditing && connected ? "Leave blank to keep the saved token." : "Needs ingest and API scope with the power role."}</small>
+                {fieldError === "token" ? <p className="cloud-field__error" id="cloud-token-error">Paste the full access token.</p> : null}
               </div>
-              <div className="cloud-connect-form__action">
-                <button
-                  className="cloud-button cloud-button--primary"
-                  disabled={mutationsDisabled}
-                  type="submit"
-                >
-                  {busyAction === "connect" || busyAction === "resolve-realm" ? "Connecting..." : "Connect"}
+              <div className="destination-actions destination-actions--form">
+                <button className="cloud-button cloud-button--primary" aria-label={cloudEditing ? "Save Observability Cloud changes" : undefined} disabled={mutationsDisabled} type="submit">
+                  {busyAction === "connect" || busyAction === "resolve-realm" ? cloudEditing ? "Saving..." : "Connecting..." : cloudEditing ? "Save changes" : "Connect"}
                 </button>
+                {cloudEditing ? <>
+                  <button className="cloud-button" disabled={mutationsDisabled} onClick={cancelCloudEdit} type="button">Cancel</button>
+                  <button aria-label="Disconnect Observability Cloud" className="cloud-button cloud-button--danger destination-disconnect" disabled={mutationsDisabled} onClick={() => setForgetOpen(true)} ref={forgetTriggerRef} type="button">Disconnect</button>
+                </> : !freeAccountOpen && !freeAccountSuccess ? <span className="destination-inline-help">No org yet? <button aria-controls="cloud-free-account-details" aria-expanded={freeAccountOpen} aria-label="Get started with Observability Cloud Free Edition" className="destination-text-button" onClick={openFreeAccount} type="button">Start a free one</button></span> : null}
               </div>
             </form>
           ) : null}
-          </section>
-          {!cloudConfigured ? (
+          {!cloudConfigured && registrationAndAuthProtocol !== "NONE" && !freeAccountOpen && !freeAccountSuccess ? (
+            <div className="destination-actions">
+              <span className="destination-inline-help">No org yet? <button aria-controls="cloud-free-account-details" aria-expanded={freeAccountOpen} aria-label="Get started with Observability Cloud Free Edition" className="destination-text-button" onClick={openFreeAccount} type="button">Start a free one</button></span>
+            </div>
+          ) : null}
+          {cloudConfigured && !cloudEditing ? <div className="destination-actions">
+            <button className="cloud-button" aria-label="Edit Observability Cloud" disabled={mutationsDisabled} onClick={editCloudConnection} ref={cloudEditRef} type="button">Edit</button>
+            <button aria-label="Disconnect Observability Cloud" className="cloud-button cloud-button--danger" disabled={mutationsDisabled} onClick={() => setForgetOpen(true)} ref={forgetTriggerRef} type="button">Disconnect</button>
+            {cloudURL ? <span className="destination-links">
+              <a className="destination-open-link" {...externalLinkAttributes(`${cloudURL}#/metric-explorer`)} onClick={(event) => openExternalLink(event, "open-observability-metrics")}>View metrics</a>
+              <a className="destination-open-link" {...externalLinkAttributes(`${cloudURL}#/apm/traces`)} onClick={(event) => openExternalLink(event, "open-observability-traces")}>View traces</a>
+              <a className="destination-open-link" {...externalLinkAttributes(cloudURL)} onClick={(event) => openExternalLink(event, "open-observability-cloud")}>Open Observability Cloud</a>
+            </span> : null}
+          </div> : null}
+          {!cloudConfigured && (freeAccountOpen || freeAccountSuccess) ? (
             <section
               aria-labelledby={freeAccountSuccess
                 ? "cloud-free-account-success-title"
@@ -1326,23 +1299,6 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   : "cloud-free-account-prompt-title"}
               className="cloud-panel cloud-free-account cloud-free-account--signup"
             >
-                {!freeAccountOpen && !freeAccountSuccess ? (
-                  <div className="cloud-free-account__prompt">
-                    <div>
-                      <h3 id="cloud-free-account-prompt-title">New to Observability Cloud?</h3>
-                      <p>Sign up to get an access token.</p>
-                    </div>
-                    <button
-                      aria-controls="cloud-free-account-details"
-                      aria-expanded={false}
-                      className="cloud-button cloud-button--setup-action cloud-free-account__start"
-                      onClick={openFreeAccount}
-                      type="button"
-                    >
-                      Get started with Observability Cloud Free Edition
-                    </button>
-                  </div>
-                ) : null}
                 <div id="cloud-free-account-details" hidden={!freeAccountOpen}>
                   {freeAccountOpen && !freeAccountSuccess ? (
                     <header className="cloud-free-account__header">
@@ -1530,6 +1486,14 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                 </div>
             </section>
           ) : null}
+          </section>
+          <LogsConnection
+            onConnectionChange={setLogsConnectionState}
+            onSaved={() => { void loadObserverStatus(false).catch(() => {}); }}
+            refreshKey={status?.version}
+            onDetailsChange={setLogsDetails}
+          />
+
         </div>
       </div>
 
@@ -1565,9 +1529,9 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             }}
             role="dialog"
           >
-            <h2 id="cloud-forget-title">Remove connection?</h2>
+            <h2 id="cloud-forget-title">Disconnect Observability Cloud?</h2>
             <p id="cloud-forget-description">
-              This removes the saved region and access token and turns off remote export.
+              This removes the saved region and access token and turns off metrics and traces export.
             </p>
             <div>
               <button
@@ -1580,13 +1544,14 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                 Cancel
               </button>
               <button
+                aria-label="Disconnect Observability Cloud"
                 className="cloud-button cloud-button--danger"
                 disabled={busyAction === "forget"}
                 onClick={() => void forget()}
                 ref={forgetConfirmRef}
                 type="button"
               >
-                {busyAction === "forget" ? "Removing connection..." : "Remove connection"}
+                {busyAction === "forget" ? "Disconnecting..." : "Disconnect"}
               </button>
             </div>
           </section>
@@ -1663,7 +1628,6 @@ function cloudControlStateChanged(
   next: SplunkExportStatus,
 ): boolean {
   return cloudConfigurationStateChanged(current, next)
-    || current.enabled !== next.enabled
     || current.metrics.enabled !== next.metrics.enabled
     || current.traces.enabled !== next.traces.enabled;
 }
@@ -1672,7 +1636,7 @@ function cloudConfigurationStateChanged(
   current: SplunkExportStatus,
   next: SplunkExportStatus,
 ): boolean {
-  return current.version !== next.version
+  return (current.cloudVersion ?? current.version) !== (next.cloudVersion ?? next.version)
     || current.connected !== next.connected
     || (current.realm ?? "").trim().toLowerCase() !== (next.realm ?? "").trim().toLowerCase()
     || current.metrics.configured !== next.metrics.configured
@@ -1701,44 +1665,6 @@ function isPotentialSplunkCloudDestination(value: string): boolean {
   const hostname = parsed.hostname.toLowerCase();
   return hostname.endsWith(".observability.splunkcloud.com")
     || hostname.endsWith(".signalfx.com");
-}
-
-function signalRow(label: string, signal: SplunkExportSignalStatus | undefined): SignalRow {
-  if (!signal) {
-    return { detail: "No activity", label, status: "Waiting for Splunk Observability Studio", tone: "idle" };
-  }
-  const detail = `${formatCount(signal.exportedItems, label === "Metrics" ? "point" : "span")} · ${formatCount(signal.exportedBatches, "batch", "batches")}`;
-  if (!signal.enabled) {
-    return { detail, label, status: "Remote export off", tone: "idle" };
-  }
-  if (signal.lastExport && !signal.lastExport.success) {
-    return {
-      detail,
-      label,
-      status: signal.lastExport.error ? `Failed: ${signal.lastExport.error}` : "Last export failed",
-      tone: "error",
-    };
-  }
-  if (signal.lastExport?.success) {
-    return {
-      detail,
-      label,
-      status: `Last export ${formatTime(signal.lastExport.time)}`,
-      tone: signal.failedBatches > 0 ? "warning" : "success",
-    };
-  }
-  return { detail, label, status: "Waiting for telemetry", tone: "idle" };
-}
-
-function formatCount(value: number, singular: string, plural = `${singular}s`): string {
-  return `${value.toLocaleString()} ${value === 1 ? singular : plural}`;
-}
-
-function formatTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 function parseFreeAccountRegion(value: unknown): string | undefined {

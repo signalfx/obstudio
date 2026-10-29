@@ -6,6 +6,7 @@ import type {
   SISCIMDRegistrationResult,
   SISCIMDSessionStatus,
   SplunkExportStatus,
+  SplunkLogsStatus,
   TraceDetail,
   TraceSummary,
 } from "./types";
@@ -177,6 +178,42 @@ export async function fetchSplunkExportStatus(signal?: AbortSignal): Promise<Spl
   return fetchJSON<SplunkExportStatus>("/api/splunk/export", { signal });
 }
 
+export async function fetchSplunkLogsStatus(signal?: AbortSignal): Promise<SplunkLogsStatus> {
+  return requireSplunkLogsStatus(await fetchJSON<unknown>("/api/splunk/logs", { signal, cache: "no-store" }));
+}
+
+export async function configureSplunkLogs(settings: {
+  endpoint: string; token: string; index: string; source: string;
+  enabled?: boolean; insecureSkipVerify: boolean; expectedVersion: string;
+  verifyConnection?: boolean;
+  preserveEnabled?: boolean;
+}): Promise<SplunkLogsStatus> {
+  return requireSplunkLogsStatus(await postSplunkBrowserJSON("/api/splunk/logs", settings));
+}
+
+export async function setSplunkLogsEnabled(enabled: boolean, expectedVersion: string): Promise<SplunkLogsStatus> {
+  return requireSplunkLogsStatus(await postSplunkBrowserJSON("/api/splunk/logs/enabled", { enabled, expectedVersion }));
+}
+
+export async function disconnectSplunkLogs(expectedVersion: string): Promise<SplunkLogsStatus> {
+  return requireSplunkLogsStatus(await postSplunkBrowserJSON("/api/splunk/logs/disconnect", { expectedVersion }));
+}
+
+function requireSplunkLogsStatus(value: unknown): SplunkLogsStatus {
+  const status = value as Partial<SplunkLogsStatus> | null;
+  if (!status || typeof status.version !== "string" || typeof status.enabled !== "boolean"
+    || (status.connected !== undefined && typeof status.connected !== "boolean")
+    || typeof status.configured !== "boolean" || typeof status.tokenConfigured !== "boolean"
+    || typeof status.endpoint !== "string" || typeof status.index !== "string"
+    || typeof status.source !== "string" || typeof status.insecureSkipVerify !== "boolean"
+    || !Number.isFinite(status.exportedRecords) || (status.exportedRecords ?? -1) < 0
+    || !Number.isFinite(status.failedBatches) || (status.failedBatches ?? -1) < 0
+    || [status.queuedRecords, status.droppedRecords, status.exportedBatches, status.lastHTTPStatus, status.lastHECCode].some((count) => count !== undefined && (!Number.isSafeInteger(count) || count < 0))) {
+    throw new Error("Logs status is unavailable from this collector. Refresh after updating Splunk Observability Studio.");
+  }
+  return status as SplunkLogsStatus;
+}
+
 export type SplunkExportBrowserAction = "connect" | "forget" | "set-enabled";
 
 export class SplunkExportBrowserActionError extends Error {
@@ -198,7 +235,10 @@ export async function runSplunkExportBrowserAction(
   action: SplunkExportBrowserAction,
   payload: {
     accessToken?: string;
+    reuseSavedToken?: boolean;
+    preserveEnabled?: boolean;
     enabled?: boolean;
+    scope?: "observability";
     expectedVersion?: string;
     realm?: string;
   },

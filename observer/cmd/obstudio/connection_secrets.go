@@ -15,6 +15,8 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 )
 
+const logsSecretRef = "OBSTUDIO_SPLUNK_HEC_SECRET_REF"
+
 const cloudSecretRef = "OBSTUDIO_SPLUNK_CLOUD_SECRET_REF"
 
 type connectionPersistence struct {
@@ -60,6 +62,44 @@ func checkConnectionShellControl(keys ...string) error {
 		if _, ok := envFileShellPrecedence.keys[key]; ok {
 			return fmt.Errorf("%s: %w", key, api.ErrSplunkCloudLaunchControlled)
 		}
+	}
+	return nil
+}
+
+func (p *connectionPersistence) SaveLogs(config otlp.SplunkHECLogsExporterConfig) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	values := logsSettingsValues(config)
+	for key := range values {
+		if err := checkConnectionShellControl(key); err != nil {
+			return err
+		}
+	}
+	if err := checkConnectionShellControl("OBSTUDIO_SPLUNK_HEC_TOKEN", "SPLUNK_PLATFORM_TOKEN"); err != nil {
+		return err
+	}
+	previous, err := p.values()
+	if err != nil {
+		return err
+	}
+	var ref string
+	if config.Token != "" {
+		ref, err = p.reference("logs", config.Endpoint, config.Token, previous[logsSecretRef])
+		if err != nil {
+			return err
+		}
+	} else if config.Enabled || config.ConnectionVerified {
+		return errors.New("a connected logs destination requires a HEC token")
+	}
+	values[logsSecretRef] = ref
+	if err := writeConnectionSettings(p.path, values, "OBSTUDIO_SPLUNK_HEC_TOKEN", "SPLUNK_PLATFORM_TOKEN"); err != nil {
+		if ref != previous[logsSecretRef] {
+			p.store.Delete(p.path, "logs", config.Endpoint, ref)
+		}
+		return err
+	}
+	if ref != previous[logsSecretRef] {
+		p.store.Delete(p.path, "logs", firstNonEmpty(previous["OBSTUDIO_SPLUNK_HEC_URL"], previous["SPLUNK_PLATFORM_URL"]), previous[logsSecretRef])
 	}
 	return nil
 }
@@ -254,4 +294,18 @@ func (p *connectionPersistence) CloudStorageManaged() bool {
 	defer p.mu.Unlock()
 	values, err := p.values()
 	return err == nil && values["OBSTUDIO_SPLUNK_CLOUD_STORAGE_VERSION"] == "1"
+}
+
+func (p *connectionPersistence) Restore(metrics *otlp.SplunkMetricsExporterConfig, traces *otlp.SplunkTracesExporterConfig, logs *otlp.SplunkHECLogsExporterConfig) (error, error) {
+	cloudErr := p.RestoreCloud(metrics, traces)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	token, err := p.restore("logs", logs.Endpoint, logsSecretRef, []string{"OBSTUDIO_SPLUNK_HEC_TOKEN", "SPLUNK_PLATFORM_TOKEN"}, logs.Token)
+	if err != nil {
+		logs.Token = ""
+		logs.Enabled = false
+	} else {
+		logs.Token = token
+	}
+	return cloudErr, err
 }

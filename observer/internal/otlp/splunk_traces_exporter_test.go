@@ -3,15 +3,18 @@ package otlp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	"go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"
 )
 
 func TestNewSplunkTracesExporterDisabled(t *testing.T) {
@@ -190,6 +193,60 @@ func TestSplunkTracesExportControllerTracksRedactedActivity(t *testing.T) {
 	}
 	if strings.Contains(status.LastExport.Error, "secret-token") {
 		t.Fatalf("status leaked access token: %q", status.LastExport.Error)
+	}
+}
+
+func TestSplunkTracesExportControllerCountsAcceptedSpans(t *testing.T) {
+	for _, encoding := range []string{"application/json", "application/x-protobuf"} {
+		for _, rejected := range []int64{0, 1, 3, -1, 4} {
+			t.Run(fmt.Sprintf("%s/rejected=%d", encoding, rejected), func(t *testing.T) {
+				response := ptraceotlp.NewExportResponse()
+				response.PartialSuccess().SetRejectedSpans(rejected)
+				var body []byte
+				var err error
+				if encoding == "application/json" {
+					body, err = response.MarshalJSON()
+				} else {
+					body, err = response.MarshalProto()
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				var requests atomic.Int32
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requests.Add(1)
+					w.Header().Set("Content-Type", encoding)
+					_, _ = w.Write(body)
+				}))
+				defer server.Close()
+				controller, err := NewSplunkTracesExportController(SplunkTracesExporterConfig{
+					Enabled: true, Endpoint: server.URL, AccessToken: "test-token",
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer controller.Shutdown(context.Background())
+				traces := createTestSpan()
+				spans := traces.ResourceSpans().At(0).ScopeSpans().At(0).Spans()
+				spans.At(0).CopyTo(spans.AppendEmpty())
+				spans.At(0).CopyTo(spans.AppendEmpty())
+				err = controller.ExportTraces(context.Background(), traces)
+				want := uint64(0)
+				if rejected >= 0 && rejected <= 3 {
+					want = uint64(3 - rejected)
+				}
+				status := controller.Status()
+				if status.ExportedSpans != want || (err == nil) != (rejected == 0) {
+					t.Fatalf("exported=%d, want %d; error=%v", status.ExportedSpans, want, err)
+				}
+				if (status.ExportedBatches == 1) != (rejected == 0) || (status.FailedBatches == 1) != (rejected != 0) {
+					t.Fatalf("unexpected batch status: %#v", status)
+				}
+				if requests.Load() != 1 {
+					t.Fatalf("requests = %d; partial batches must not be retried", requests.Load())
+				}
+			})
+		}
 	}
 }
 
@@ -384,4 +441,66 @@ func (e *blockingTracesExporterRuntime) Endpoints() []string {
 
 func (e *blockingTracesExporterRuntime) Shutdown(context.Context) {
 	close(e.shutdown)
+}
+
+func TestSplunkTracesConnectionEditsKeepCountsAndRefreshDestinationHealth(t *testing.T) {
+	for _, change := range []string{"same", "realm", "token", "endpoint"} {
+		t.Run(change, func(t *testing.T) {
+			requests := make(chan string, 2)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+				_, _ = io.Copy(io.Discard, request.Body)
+				requests <- request.URL.Path + ":" + request.Header.Get("X-SF-Token")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+			config := SplunkTracesExporterConfig{Enabled: true, Realm: "us1", Endpoint: server.URL + "/first", AccessToken: "first-token"}
+			controller, err := NewSplunkTracesExportController(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer controller.Shutdown(context.Background())
+			if err := controller.ExportTraces(context.Background(), createTestSpan()); err != nil {
+				t.Fatal(err)
+			}
+			if got := <-requests; got != "/first:first-token" {
+				t.Fatal("first export reached the wrong destination", got)
+			}
+			switch change {
+			case "realm":
+				config.Realm = "eu0"
+			case "token":
+				config.AccessToken = "replacement-token"
+			case "endpoint":
+				config.Endpoint = server.URL + "/second"
+			}
+			if err := controller.ConfigureKeepingActivity(config); err != nil {
+				t.Fatal(err)
+			}
+			status := controller.Status()
+			if status.ExportedSpans != 1 || status.ExportedBatches != 1 {
+				t.Fatal("editing reset accepted activity")
+			}
+			if change == "same" {
+				if status.LastExport == nil || !status.LastExport.Success {
+					t.Fatal("unchanged destination lost its accepted export")
+				}
+			} else if status.LastExport != nil {
+				t.Fatal("new destination inherited the previous destination's successful export")
+			}
+			if err := controller.ExportTraces(context.Background(), createTestSpan()); err != nil {
+				t.Fatal(err)
+			}
+			path := "/first"
+			if change == "endpoint" {
+				path = "/second"
+			}
+			if got := <-requests; got != path+":"+config.AccessToken {
+				t.Fatal("edited export reached the wrong destination", got)
+			}
+			status = controller.Status()
+			if status.LastExport == nil || !status.LastExport.Success || status.ExportedSpans != 2 || status.ExportedBatches != 2 {
+				t.Fatal("new accepted export did not update its health and totals")
+			}
+		})
+	}
 }
