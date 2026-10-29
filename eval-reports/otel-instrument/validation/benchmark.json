@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261028T183327447030Z",
+    "run_id": "20261029T222425412670Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -883,7 +883,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "614829206cd99f4f37ae73cc3dc0adb31ce67e6c9bcc40a9fa230f93d9ec0001",
+    "digest": "3b66b65691c7e9aa556f0b5782ce8bdecdf0d9792bca44b19914a928e6295ca5",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1019,8 +1019,8 @@
       "observer/client/src/validation/utils.ts": "2d6101bdefbddc5df15b920553f8180a218c30d814893472b478cc32e0725270",
       "observer/client/tsconfig.json": "2820f6d9b69e01c0db82470b338e395f6e7ed92a0e4196ffd48b40ee408a03f8",
       "observer/cmd/build-client/main.go": "c2dd9d10336bd623e15c6bbc88d56631ddfb3ed79b7b3c9196b6fb8c3dcbb128",
-      "observer/cmd/fetch-weaver/main.go": "7aa875577f9b1d503999a524be4baa4a806c88d59aa71d3a7c13be884acb0b28",
-      "observer/cmd/fetch-weaver/main_test.go": "0ac362ea50a78d642a470db91d32903e4a6e72cabbc107fa3c64822bf9a18ed2",
+      "observer/cmd/fetch-weaver/main.go": "66d0bb8f7888a6e26da9f94a12e812e02964c99ecd494c3adfa9126b41efc3d9",
+      "observer/cmd/fetch-weaver/main_test.go": "befe53fe7ac6289c4fac368842860a39e9ead2b6650d93d55d894e3c040b8f54",
       "observer/cmd/obstudio/embed.go": "c03df1eb5339c062d8de86cb91f142cefecae6754952e4b2c077f8fb36bcb110",
       "observer/cmd/obstudio/env_file_test.go": "14a6c74358c81dc000e1aa0cbb366034347721a3b8bfd390e92cb0fe505939c6",
       "observer/cmd/obstudio/install.go": "9753eecbecfe401662580e3584e0680b0ca3b924c6cf06626ec5fc4296837c2e",
