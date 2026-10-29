@@ -1,0 +1,52 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "dotenv-profile-new",
+      "eval_inputs": [
+        "eval/inputs/dotenv-existing.env",
+        "eval/inputs/dotenv-launch.sh"
+      ],
+      "task": "Prepare ./service for this configuration-only OTel task: copy eval/inputs/dotenv-existing.env to .env and eval/inputs/dotenv-launch.sh to run-local.sh first, treating both as existing operator-owned configuration. Keep the Flask source, dependencies and existing launch mechanism unchanged. Configure local Studio HTTP/protobuf export using the discovered receiver http://127.0.0.1:14318, including traces /v1/traces and metrics /v1/metrics, and document newly introduced variables. No AO SDK or project/stream adoption is selected. A future integration needs OPTIONAL_API_KEY but no credential was supplied; document it without activating a dummy key. Prepare a reusable safe Studio configuration example. Demonstrate through run-local.sh that the active configuration reaches a child process, without printing the existing application secret. Do not contact any remote services or start Flask."
+    },
+    {
+      "id": "dotenv-profile-legacy",
+      "eval_inputs": [
+        "eval/inputs/dotenv-existing.env",
+        "eval/inputs/dotenv-launch.sh",
+        "eval/inputs/dotenv-legacy-example.env"
+      ],
+      "task": "Prepare ./service for this configuration-only OTel task: copy eval/inputs/dotenv-existing.env to .env, eval/inputs/dotenv-launch.sh to run-local.sh and eval/inputs/dotenv-legacy-example.env to .env.example first. Treat these files as pre-existing operator-owned configuration. Keep the Flask source, dependencies and launch mechanism unchanged. Configure local Studio HTTP/protobuf export using the discovered receiver http://127.0.0.1:14318, including traces /v1/traces and metrics /v1/metrics, and document newly introduced variables. No AO SDK or project/stream adoption is selected. A future integration needs OPTIONAL_API_KEY but no credential was supplied; document it without activating a dummy key. Prepare a reusable safe Studio configuration example while preserving the legacy template. Demonstrate through run-local.sh that active settings reach a child process, without printing the existing application secret. Do not contact remote services or start Flask."
+    },
+    {
+      "id": "dotenv-profile-missing",
+      "eval_inputs": [
+        "eval/inputs/dotenv-launch.sh"
+      ],
+      "task": "Prepare ./service for this configuration-only OTel task. Copy eval/inputs/dotenv-launch.sh to run-local.sh as the existing launch mechanism. This case starts without .env; no operator configuration or secret is seeded. Configure service name flask-basic and local Studio HTTP/protobuf export through the discovered receiver http://127.0.0.1:14318, including traces /v1/traces and metrics /v1/metrics. Keep the Flask source, dependencies and loader unchanged. No AO SDK or project/stream adoption is selected. A future integration needs OPTIONAL_API_KEY but no credential was supplied; document it without activating a dummy key. Prepare a reusable safe Studio configuration example and demonstrate through run-local.sh that active configuration reaches a child process. Do not contact remote services or start Flask."
+    },
+    {
+      "id": "dotenv-ao-required-origin",
+      "eval_inputs": [
+        "eval/inputs/dotenv-existing.env",
+        "eval/inputs/dotenv-launch.sh",
+        "eval/inputs/dotenv-ao-boundary.py"
+      ],
+      "task": "Prepare ./service for this configuration-only task. Copy eval/inputs/dotenv-existing.env to .env and eval/inputs/dotenv-launch.sh to run-local.sh as existing operator-owned files. The selected native OTel AO resource setup path is represented by the existing credential-free consumer eval/inputs/dotenv-ao-boundary.py; keep it, the loader, Flask code and dependencies unchanged. The accepted project is test-project and Agent Stream is test-stream. The discovered local Studio OTLP receiver is http://127.0.0.1:14318, including traces /v1/traces and metrics /v1/metrics, and its separately advertised resource API origin is http://127.0.0.1:17991. Persist all required selected configuration in the active .env and prepare a safe .env.studio.example; document only added or changed settings, preserving existing comments and values. Do not adopt an AO SDK or add variables unused by this path. Exercise the existing loader and consumer with inherited OTel/AO test overrides removed, and report whether the selected resource-resolution boundary is configured. Do not call a live resource API, export telemetry, start Flask, print the existing secret or claim delivery. Then make .env.studio.example unavailable in the isolated test workspace and rerun the same existing loader/consumer. Prove the accepted AO configuration and OTel settings still come from .env. Do not change the loader to source examples or introduce a runtime fallback to them."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service/.env, .env.studio.example, .gitignore, run-local.sh and any other generated dotenv files. Compare pre-existing file content against ./service/eval/inputs fixtures.",
+    "Read ./last_message.md and execution evidence for the actual launcher probe; do not credit a proposed command as executed proof.",
+    "Read ./grade.json for skill-loading guards."
+  ],
+  "rubric": [
+    "Creates the actual active .env for dotenv-profile-missing, using OTEL_SERVICE_NAME=flask-basic and the requested local configuration. For all pre-existing-file cases, updates .env in place while preserving the operator-selected OTEL_SERVICE_NAME, APP_SHARED_SECRET, OPERATOR_FLAG and all their existing comments exactly. Each added or modified variable has one active assignment; existing settings are not replaced by example values.",
+    "Documents only newly added or modified variables inside .env with useful comments and resolved safe receiver values. Adds no documentation to unchanged operator settings and preserves their existing comments. For the three OTel-only cases, OPTIONAL_API_KEY remains unset with a commented explanatory placeholder; no live-looking dummy key or unresolved endpoint becomes an active assignment.",
+    "Creates .env.studio.example as a credential-free Studio template with documented supported OTel settings and discovered port 14318. Does not copy APP_SHARED_SECRET, OPERATOR_FLAG or other unrelated application settings from .env; introduces no AO SDK environment variables when SDK adoption is not selected.",
+    "For dotenv-profile-new, dotenv-profile-missing and dotenv-ao-required-origin, does not create .env.example. For dotenv-profile-legacy, keeps .env.example byte-for-byte equal to eval/inputs/dotenv-legacy-example.env instead of updating, deleting or migrating it. No case introduces .env.studio or an unrequested cloud profile.",
+    "Uses the existing unchanged run-local.sh loader and executes a child-process probe demonstrating that the configured trace and metric endpoints and selected service name come from the actual .env. The missing-file case cannot pass with only .env.studio.example or a proposed command. Lists the actual ignored .env in Files Changed and the runtime/config summary, distinguishes creation from updating an existing file, and names added or changed variables without exposing secret values. Does not add a new application config loader; leaves app.py and pyproject.toml unchanged. Never adds loading of .env.studio.example or .env.example to application entrypoints, dotenv fallback chains, shell sourcing or launch arguments.",
+    "For dotenv-ao-required-origin, inspects the existing consumer and persists its consumed SPLUNK_AO_API_URL=http://127.0.0.1:17991 alongside SPLUNK_AO_PROJECT=test-project and SPLUNK_AO_AGENT_STREAM=test-stream in .env, with supported safe settings in .env.studio.example. Does not confuse the resource API with the OTLP receiver, leave the origin only commented or in a template, or invent an unconsumed alias, SDK credential or UUID binding. With inherited OTel/AO test overrides removed, executes the unchanged loader and consumer and obtains status=configured with the exact accepted origin and names from .env. A zero exit with status=local_only or a names-only environment check is insufficient. Reports this as configuration proof, not live resource or delivery proof. With .env.studio.example unavailable, repeats the unchanged loader/consumer probe and still receives configured with the accepted API origin and names from .env; template-driven activation cannot pass.",
+    "Ensures .env is ignored by Git, does not put APP_SHARED_SECRET into the Studio template, reports, probe output or final response, and accurately distinguishes safe template documentation, actual loaded configuration, and telemetry delivery that was not exercised."
+  ]
+}

@@ -1,0 +1,2506 @@
+{
+  "evidence_basis": "Executed Python normalizers and Node VM renderCards with a stub card renderer; no browser, application, SDK, Terraform or cloud execution.",
+  "producer": {
+    "engine_sha256": "c1653e43458d260cecfe30d87db28d3aa800ad5a06c169b0009c46d86c6915e4",
+    "script_sha256": "88846bdf7159175d411b8dd627bee79fd1e5e9e1d5a8431644199fcbb8825c0a",
+    "functions": [
+      "normalize_audit_report",
+      "normalize_selection",
+      "display_finding_ids",
+      "renderCards"
+    ],
+    "projection_source_sha256": {
+      "record-a": "99bc9389c01474871bf797e1f8fa8df84b547b285b2b51738c681e47974c159d",
+      "record-b": "7a9e3d9e732767cd932176af0bfbf4be378d7e6a52217e6a36cecb739a4f4786",
+      "record-c": "d8fd443e0d5994b04e298a391ceffe1125db39d1555b07ac61c3993217093994"
+    },
+    "counterexamples": {
+      "record-b": "Synthetic invalid per-card grouping, executed in Node VM.",
+      "record-c": "Synthetic invalid ID-prefix classification, executed in Node VM."
+    }
+  },
+  "identity_checks": {
+    "canonical_audit_unchanged": true,
+    "audit_sha256": "sha256:5a018b098bf686a394b6cda500a056c7f86f972c966e7f7057cf6608a4cf145b",
+    "selection_sha256": "sha256:6f03b5202f10e56b58f609506f5250321d535e1180a0082f5f2901f5a5289f40",
+    "requested_ids": [
+      "AO-002",
+      "OTEL-008"
+    ],
+    "approved_ids": [
+      "OTEL-001",
+      "OTEL-008",
+      "AO-001",
+      "AO-002"
+    ]
+  },
+  "records": [
+    {
+      "id": "record-a",
+      "audit": {
+        "schema_version": 2,
+        "kind": "otel-audit",
+        "meta": {
+          "audit_id": "checkout-20260717",
+          "service_name": "checkout",
+          "commit": "abc1234",
+          "language": "go",
+          "framework": "chi",
+          "date": "2026-07-17",
+          "status": "Partial",
+          "genai_ownership_detected": false
+        },
+        "summary": [
+          "Checkout telemetry needs route-level latency coverage."
+        ],
+        "flow": "audit -> instrument -> verify -> configure",
+        "evidence": [
+          {
+            "check": "Manifest",
+            "finding": "Go module",
+            "source": "go.mod"
+          },
+          {
+            "check": "Entry point",
+            "finding": "HTTP API",
+            "source": "main.go"
+          },
+          {
+            "check": "Route source",
+            "finding": "GET /checkout",
+            "source": "main.go:42"
+          },
+          {
+            "check": "Runtime/startup",
+            "finding": "go run",
+            "source": "Makefile"
+          },
+          {
+            "check": "GenAI ownership",
+            "finding": "No",
+            "source": "bounded repository scan"
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "path": "/checkout"
+          }
+        ],
+        "signal_flow": {
+          "component_flow_map": "fixture [GAP: Checkout latency]\nfixture [GAP: Payment dependency]\nfixture [GAP: Projection diagnostic AO-777]\nfixture [GAP: Projection diagnostic OTEL-009]\nfixture [GAP: Projection diagnostic OTEL-008]\nfixture [GAP: Agent Observability project]\nfixture [GAP: Dedicated Agent Stream]\nfixture [GAP: AO callback content guard]"
+        },
+        "current_instrumentation": {
+          "spans": [],
+          "metrics": [],
+          "logs": [],
+          "incident_readiness": []
+        },
+        "genai_readiness": [],
+        "findings": [
+          {
+            "id": "OTEL-001",
+            "title": "Checkout latency is not measured",
+            "severity": "high",
+            "priority": "required",
+            "effort": "small",
+            "status": "proposed",
+            "area": "Checkout latency",
+            "gap": "No route-level latency metric or span timing exists.",
+            "impact": "Operators cannot isolate slow checkout requests.",
+            "product_outcome": "Each checkout request has one route-named trace that can be filtered in the waterfall.",
+            "required_fix": "Add HTTP server instrumentation and route span attributes.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [],
+            "evidence": [
+              "main.go:42"
+            ],
+            "acceptance_criteria": [
+              "A request emits one server span with http.route."
+            ],
+            "constraints": [
+              "Keep route values low cardinality."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "GET /checkout",
+                "attributes": [
+                  "http.route"
+                ],
+                "product_view": "Trace waterfall and route filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Verify the span in ObStudio before merge."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "OTEL-007",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "recommended",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Payment dependency",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "AO-777",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "deferred",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Projection diagnostic AO-777",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "OTEL-009",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "recommended",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Projection diagnostic OTEL-009",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "OTEL-008",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "recommended",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Projection diagnostic OTEL-008",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "AO-001",
+            "title": "Agent Observability project is not configured",
+            "severity": "high",
+            "priority": "required",
+            "effort": "small",
+            "status": "proposed",
+            "area": "Agent Observability project",
+            "gap": "No source-backed project configuration is present.",
+            "impact": "Agent traces cannot be assigned to the intended project.",
+            "product_outcome": "The application has a durable Agent Observability project target.",
+            "required_fix": "Create or configure the Agent Observability project through a checked-in deployment path.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [],
+            "evidence": [
+              "Makefile"
+            ],
+            "acceptance_criteria": [
+              "The configured project can be resolved without Obstudio at runtime."
+            ],
+            "constraints": [
+              "Do not put access tokens in tracked files."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "configuration",
+                "name": "agent-observability.project",
+                "attributes": [],
+                "product_view": "Agent Observability project routing"
+              }
+            ],
+            "follow_up_actions": [
+              "Confirm the project target before instrumentation."
+            ],
+            "resolution": null,
+            "resolved_commit": null,
+            "finding_group": "splunk-agent-observability"
+          },
+          {
+            "id": "AO-002",
+            "title": "Dedicated Agent Stream is not configured",
+            "severity": "high",
+            "priority": "recommended",
+            "effort": "small",
+            "status": "proposed",
+            "area": "Dedicated Agent Stream",
+            "gap": "No source-backed Agent Stream configuration is present.",
+            "impact": "Agent traces remain unassigned or mix with unrelated applications.",
+            "product_outcome": "The application routes traces to its dedicated Agent Stream.",
+            "required_fix": "Create the Agent Stream and persist direct application export routing.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "AO-001",
+              "OTEL-001"
+            ],
+            "evidence": [
+              "Makefile"
+            ],
+            "acceptance_criteria": [
+              "A fresh application trace appears in the dedicated Agent Stream."
+            ],
+            "constraints": [
+              "The deployed application must not require Obstudio in the data path."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "configuration",
+                "name": "agent-observability.agent-stream",
+                "attributes": [],
+                "product_view": "Dedicated Agent Stream"
+              }
+            ],
+            "follow_up_actions": [
+              "Confirm routing with a fresh application trace."
+            ],
+            "resolution": null,
+            "resolved_commit": null,
+            "finding_group": "splunk-agent-observability"
+          },
+          {
+            "id": "OTEL-777",
+            "title": "AO callback content guard",
+            "severity": "high",
+            "priority": "deferred",
+            "effort": "small",
+            "status": "proposed",
+            "area": "AO callback content guard",
+            "gap": "No source-backed project configuration is present.",
+            "impact": "Agent traces cannot be assigned to the intended project.",
+            "product_outcome": "The application has a durable Agent Observability project target.",
+            "required_fix": "Create or configure the Agent Observability project through a checked-in deployment path.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [],
+            "evidence": [
+              "Makefile"
+            ],
+            "acceptance_criteria": [
+              "The configured project can be resolved without Obstudio at runtime."
+            ],
+            "constraints": [
+              "Do not put access tokens in tracked files."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "configuration",
+                "name": "splunk-ao.callback.capture-guard",
+                "attributes": [],
+                "product_view": "Agent Observability project routing"
+              }
+            ],
+            "follow_up_actions": [
+              "Confirm the project target before instrumentation."
+            ],
+            "resolution": null,
+            "resolved_commit": null,
+            "finding_group": "splunk-agent-observability"
+          }
+        ],
+        "verification": {
+          "environments": [
+            {
+              "id": "go.local",
+              "surface": "checkout service",
+              "config_evidence": "go.mod",
+              "runner": "go test ./...",
+              "scope": "module",
+              "prerequisites": "none"
+            }
+          ],
+          "scenarios": [
+            {
+              "id": "http.checkout.success",
+              "trigger": "GET /checkout",
+              "entrypoint": "main.go:42",
+              "expected_signals": "GET /checkout span and payment.request.duration metric",
+              "proof_level": "full runtime",
+              "acceptance_criteria": "span is emitted with route attribute",
+              "environments": [
+                "go.local"
+              ]
+            }
+          ]
+        },
+        "anti_patterns": [],
+        "recommendation": [
+          "Select executable findings and run $otel-instrument."
+        ],
+        "scan_blockers": []
+      },
+      "selection": {
+        "schema_version": 2,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:5a018b098bf686a394b6cda500a056c7f86f972c966e7f7057cf6608a4cf145b",
+        "requested_ids": [
+          "AO-002",
+          "OTEL-008"
+        ],
+        "approved_ids": [
+          "OTEL-001",
+          "OTEL-008",
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": []
+      },
+      "display_finding_ids": [
+        "OTEL-001",
+        "OTEL-007",
+        "OTEL-009",
+        "OTEL-008",
+        "AO-777",
+        "AO-001",
+        "AO-002",
+        "OTEL-777"
+      ],
+      "rendered_cards_html": "<article data-finding-id=\"OTEL-001\"></article><article data-finding-id=\"OTEL-007\"></article><article data-finding-id=\"OTEL-009\"></article><article data-finding-id=\"OTEL-008\"></article><article data-finding-id=\"AO-777\"></article><section class=\"finding-subsection\" aria-labelledby=\"splunk-agent-observability-findings-heading\"><h3 id=\"splunk-agent-observability-findings-heading\">Splunk Agent Observability findings <span class=\"findings-total\">\u00b7 3</span></h3><div id=\"ao-target-slot\"></div><article data-finding-id=\"AO-001\"></article><article data-finding-id=\"AO-002\"></article><article data-finding-id=\"OTEL-777\"></article></section>"
+    },
+    {
+      "id": "record-b",
+      "audit": {
+        "schema_version": 2,
+        "kind": "otel-audit",
+        "meta": {
+          "audit_id": "checkout-20260717",
+          "service_name": "checkout",
+          "commit": "abc1234",
+          "language": "go",
+          "framework": "chi",
+          "date": "2026-07-17",
+          "status": "Partial",
+          "genai_ownership_detected": false
+        },
+        "summary": [
+          "Checkout telemetry needs route-level latency coverage."
+        ],
+        "flow": "audit -> instrument -> verify -> configure",
+        "evidence": [
+          {
+            "check": "Manifest",
+            "finding": "Go module",
+            "source": "go.mod"
+          },
+          {
+            "check": "Entry point",
+            "finding": "HTTP API",
+            "source": "main.go"
+          },
+          {
+            "check": "Route source",
+            "finding": "GET /checkout",
+            "source": "main.go:42"
+          },
+          {
+            "check": "Runtime/startup",
+            "finding": "go run",
+            "source": "Makefile"
+          },
+          {
+            "check": "GenAI ownership",
+            "finding": "No",
+            "source": "bounded repository scan"
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "path": "/checkout"
+          }
+        ],
+        "signal_flow": {
+          "component_flow_map": "fixture [GAP: Checkout latency]\nfixture [GAP: Payment dependency]\nfixture [GAP: Projection diagnostic AO-777]\nfixture [GAP: Projection diagnostic OTEL-009]\nfixture [GAP: Projection diagnostic OTEL-008]\nfixture [GAP: Agent Observability project]\nfixture [GAP: Dedicated Agent Stream]\nfixture [GAP: AO callback content guard]"
+        },
+        "current_instrumentation": {
+          "spans": [],
+          "metrics": [],
+          "logs": [],
+          "incident_readiness": []
+        },
+        "genai_readiness": [],
+        "findings": [
+          {
+            "id": "OTEL-001",
+            "title": "Checkout latency is not measured",
+            "severity": "high",
+            "priority": "required",
+            "effort": "small",
+            "status": "proposed",
+            "area": "Checkout latency",
+            "gap": "No route-level latency metric or span timing exists.",
+            "impact": "Operators cannot isolate slow checkout requests.",
+            "product_outcome": "Each checkout request has one route-named trace that can be filtered in the waterfall.",
+            "required_fix": "Add HTTP server instrumentation and route span attributes.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [],
+            "evidence": [
+              "main.go:42"
+            ],
+            "acceptance_criteria": [
+              "A request emits one server span with http.route."
+            ],
+            "constraints": [
+              "Keep route values low cardinality."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "GET /checkout",
+                "attributes": [
+                  "http.route"
+                ],
+                "product_view": "Trace waterfall and route filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Verify the span in ObStudio before merge."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "OTEL-007",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "recommended",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Payment dependency",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "AO-777",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "deferred",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Projection diagnostic AO-777",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "OTEL-009",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "recommended",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Projection diagnostic OTEL-009",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "OTEL-008",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "recommended",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Projection diagnostic OTEL-008",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "AO-001",
+            "title": "Agent Observability project is not configured",
+            "severity": "high",
+            "priority": "required",
+            "effort": "small",
+            "status": "proposed",
+            "area": "Agent Observability project",
+            "gap": "No source-backed project configuration is present.",
+            "impact": "Agent traces cannot be assigned to the intended project.",
+            "product_outcome": "The application has a durable Agent Observability project target.",
+            "required_fix": "Create or configure the Agent Observability project through a checked-in deployment path.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [],
+            "evidence": [
+              "Makefile"
+            ],
+            "acceptance_criteria": [
+              "The configured project can be resolved without Obstudio at runtime."
+            ],
+            "constraints": [
+              "Do not put access tokens in tracked files."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "configuration",
+                "name": "agent-observability.project",
+                "attributes": [],
+                "product_view": "Agent Observability project routing"
+              }
+            ],
+            "follow_up_actions": [
+              "Confirm the project target before instrumentation."
+            ],
+            "resolution": null,
+            "resolved_commit": null,
+            "finding_group": "splunk-agent-observability"
+          },
+          {
+            "id": "AO-002",
+            "title": "Dedicated Agent Stream is not configured",
+            "severity": "high",
+            "priority": "recommended",
+            "effort": "small",
+            "status": "proposed",
+            "area": "Dedicated Agent Stream",
+            "gap": "No source-backed Agent Stream configuration is present.",
+            "impact": "Agent traces remain unassigned or mix with unrelated applications.",
+            "product_outcome": "The application routes traces to its dedicated Agent Stream.",
+            "required_fix": "Create the Agent Stream and persist direct application export routing.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "AO-001",
+              "OTEL-001"
+            ],
+            "evidence": [
+              "Makefile"
+            ],
+            "acceptance_criteria": [
+              "A fresh application trace appears in the dedicated Agent Stream."
+            ],
+            "constraints": [
+              "The deployed application must not require Obstudio in the data path."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "configuration",
+                "name": "agent-observability.agent-stream",
+                "attributes": [],
+                "product_view": "Dedicated Agent Stream"
+              }
+            ],
+            "follow_up_actions": [
+              "Confirm routing with a fresh application trace."
+            ],
+            "resolution": null,
+            "resolved_commit": null,
+            "finding_group": "splunk-agent-observability"
+          },
+          {
+            "id": "OTEL-777",
+            "title": "AO callback content guard",
+            "severity": "high",
+            "priority": "deferred",
+            "effort": "small",
+            "status": "proposed",
+            "area": "AO callback content guard",
+            "gap": "No source-backed project configuration is present.",
+            "impact": "Agent traces cannot be assigned to the intended project.",
+            "product_outcome": "The application has a durable Agent Observability project target.",
+            "required_fix": "Create or configure the Agent Observability project through a checked-in deployment path.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [],
+            "evidence": [
+              "Makefile"
+            ],
+            "acceptance_criteria": [
+              "The configured project can be resolved without Obstudio at runtime."
+            ],
+            "constraints": [
+              "Do not put access tokens in tracked files."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "configuration",
+                "name": "splunk-ao.callback.capture-guard",
+                "attributes": [],
+                "product_view": "Agent Observability project routing"
+              }
+            ],
+            "follow_up_actions": [
+              "Confirm the project target before instrumentation."
+            ],
+            "resolution": null,
+            "resolved_commit": null,
+            "finding_group": "splunk-agent-observability"
+          }
+        ],
+        "verification": {
+          "environments": [
+            {
+              "id": "go.local",
+              "surface": "checkout service",
+              "config_evidence": "go.mod",
+              "runner": "go test ./...",
+              "scope": "module",
+              "prerequisites": "none"
+            }
+          ],
+          "scenarios": [
+            {
+              "id": "http.checkout.success",
+              "trigger": "GET /checkout",
+              "entrypoint": "main.go:42",
+              "expected_signals": "GET /checkout span and payment.request.duration metric",
+              "proof_level": "full runtime",
+              "acceptance_criteria": "span is emitted with route attribute",
+              "environments": [
+                "go.local"
+              ]
+            }
+          ]
+        },
+        "anti_patterns": [],
+        "recommendation": [
+          "Select executable findings and run $otel-instrument."
+        ],
+        "scan_blockers": []
+      },
+      "selection": {
+        "schema_version": 2,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:5a018b098bf686a394b6cda500a056c7f86f972c966e7f7057cf6608a4cf145b",
+        "requested_ids": [
+          "AO-002",
+          "OTEL-008"
+        ],
+        "approved_ids": [
+          "OTEL-001",
+          "OTEL-008",
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": []
+      },
+      "display_finding_ids": [
+        "OTEL-001",
+        "AO-001",
+        "OTEL-007",
+        "OTEL-009",
+        "OTEL-008",
+        "AO-002",
+        "AO-777",
+        "OTEL-777"
+      ],
+      "rendered_cards_html": "<article data-finding-id=\"OTEL-001\"></article><section><h3>Splunk Agent Observability findings</h3><article data-finding-id=\"AO-001\"></article></section><article data-finding-id=\"OTEL-007\"></article><article data-finding-id=\"OTEL-009\"></article><article data-finding-id=\"OTEL-008\"></article><section><h3>Splunk Agent Observability findings</h3><article data-finding-id=\"AO-002\"></article></section><article data-finding-id=\"AO-777\"></article><section><h3>Splunk Agent Observability findings</h3><article data-finding-id=\"OTEL-777\"></article></section>"
+    },
+    {
+      "id": "record-c",
+      "audit": {
+        "schema_version": 2,
+        "kind": "otel-audit",
+        "meta": {
+          "audit_id": "checkout-20260717",
+          "service_name": "checkout",
+          "commit": "abc1234",
+          "language": "go",
+          "framework": "chi",
+          "date": "2026-07-17",
+          "status": "Partial",
+          "genai_ownership_detected": false
+        },
+        "summary": [
+          "Checkout telemetry needs route-level latency coverage."
+        ],
+        "flow": "audit -> instrument -> verify -> configure",
+        "evidence": [
+          {
+            "check": "Manifest",
+            "finding": "Go module",
+            "source": "go.mod"
+          },
+          {
+            "check": "Entry point",
+            "finding": "HTTP API",
+            "source": "main.go"
+          },
+          {
+            "check": "Route source",
+            "finding": "GET /checkout",
+            "source": "main.go:42"
+          },
+          {
+            "check": "Runtime/startup",
+            "finding": "go run",
+            "source": "Makefile"
+          },
+          {
+            "check": "GenAI ownership",
+            "finding": "No",
+            "source": "bounded repository scan"
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "path": "/checkout"
+          }
+        ],
+        "signal_flow": {
+          "component_flow_map": "fixture [GAP: Checkout latency]\nfixture [GAP: Payment dependency]\nfixture [GAP: Projection diagnostic AO-777]\nfixture [GAP: Projection diagnostic OTEL-009]\nfixture [GAP: Projection diagnostic OTEL-008]\nfixture [GAP: Agent Observability project]\nfixture [GAP: Dedicated Agent Stream]\nfixture [GAP: AO callback content guard]"
+        },
+        "current_instrumentation": {
+          "spans": [],
+          "metrics": [],
+          "logs": [],
+          "incident_readiness": []
+        },
+        "genai_readiness": [],
+        "findings": [
+          {
+            "id": "OTEL-001",
+            "title": "Checkout latency is not measured",
+            "severity": "high",
+            "priority": "required",
+            "effort": "small",
+            "status": "proposed",
+            "area": "Checkout latency",
+            "gap": "No route-level latency metric or span timing exists.",
+            "impact": "Operators cannot isolate slow checkout requests.",
+            "product_outcome": "Each checkout request has one route-named trace that can be filtered in the waterfall.",
+            "required_fix": "Add HTTP server instrumentation and route span attributes.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [],
+            "evidence": [
+              "main.go:42"
+            ],
+            "acceptance_criteria": [
+              "A request emits one server span with http.route."
+            ],
+            "constraints": [
+              "Keep route values low cardinality."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "GET /checkout",
+                "attributes": [
+                  "http.route"
+                ],
+                "product_view": "Trace waterfall and route filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Verify the span in ObStudio before merge."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "OTEL-007",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "recommended",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Payment dependency",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "AO-777",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "deferred",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Projection diagnostic AO-777",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "OTEL-009",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "recommended",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Projection diagnostic OTEL-009",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "OTEL-008",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "recommended",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Projection diagnostic OTEL-008",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "AO-001",
+            "title": "Agent Observability project is not configured",
+            "severity": "high",
+            "priority": "required",
+            "effort": "small",
+            "status": "proposed",
+            "area": "Agent Observability project",
+            "gap": "No source-backed project configuration is present.",
+            "impact": "Agent traces cannot be assigned to the intended project.",
+            "product_outcome": "The application has a durable Agent Observability project target.",
+            "required_fix": "Create or configure the Agent Observability project through a checked-in deployment path.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [],
+            "evidence": [
+              "Makefile"
+            ],
+            "acceptance_criteria": [
+              "The configured project can be resolved without Obstudio at runtime."
+            ],
+            "constraints": [
+              "Do not put access tokens in tracked files."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "configuration",
+                "name": "agent-observability.project",
+                "attributes": [],
+                "product_view": "Agent Observability project routing"
+              }
+            ],
+            "follow_up_actions": [
+              "Confirm the project target before instrumentation."
+            ],
+            "resolution": null,
+            "resolved_commit": null,
+            "finding_group": "splunk-agent-observability"
+          },
+          {
+            "id": "AO-002",
+            "title": "Dedicated Agent Stream is not configured",
+            "severity": "high",
+            "priority": "recommended",
+            "effort": "small",
+            "status": "proposed",
+            "area": "Dedicated Agent Stream",
+            "gap": "No source-backed Agent Stream configuration is present.",
+            "impact": "Agent traces remain unassigned or mix with unrelated applications.",
+            "product_outcome": "The application routes traces to its dedicated Agent Stream.",
+            "required_fix": "Create the Agent Stream and persist direct application export routing.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "AO-001",
+              "OTEL-001"
+            ],
+            "evidence": [
+              "Makefile"
+            ],
+            "acceptance_criteria": [
+              "A fresh application trace appears in the dedicated Agent Stream."
+            ],
+            "constraints": [
+              "The deployed application must not require Obstudio in the data path."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "configuration",
+                "name": "agent-observability.agent-stream",
+                "attributes": [],
+                "product_view": "Dedicated Agent Stream"
+              }
+            ],
+            "follow_up_actions": [
+              "Confirm routing with a fresh application trace."
+            ],
+            "resolution": null,
+            "resolved_commit": null,
+            "finding_group": "splunk-agent-observability"
+          },
+          {
+            "id": "OTEL-777",
+            "title": "AO callback content guard",
+            "severity": "high",
+            "priority": "deferred",
+            "effort": "small",
+            "status": "proposed",
+            "area": "AO callback content guard",
+            "gap": "No source-backed project configuration is present.",
+            "impact": "Agent traces cannot be assigned to the intended project.",
+            "product_outcome": "The application has a durable Agent Observability project target.",
+            "required_fix": "Create or configure the Agent Observability project through a checked-in deployment path.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [],
+            "evidence": [
+              "Makefile"
+            ],
+            "acceptance_criteria": [
+              "The configured project can be resolved without Obstudio at runtime."
+            ],
+            "constraints": [
+              "Do not put access tokens in tracked files."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "configuration",
+                "name": "splunk-ao.callback.capture-guard",
+                "attributes": [],
+                "product_view": "Agent Observability project routing"
+              }
+            ],
+            "follow_up_actions": [
+              "Confirm the project target before instrumentation."
+            ],
+            "resolution": null,
+            "resolved_commit": null,
+            "finding_group": "splunk-agent-observability"
+          }
+        ],
+        "verification": {
+          "environments": [
+            {
+              "id": "go.local",
+              "surface": "checkout service",
+              "config_evidence": "go.mod",
+              "runner": "go test ./...",
+              "scope": "module",
+              "prerequisites": "none"
+            }
+          ],
+          "scenarios": [
+            {
+              "id": "http.checkout.success",
+              "trigger": "GET /checkout",
+              "entrypoint": "main.go:42",
+              "expected_signals": "GET /checkout span and payment.request.duration metric",
+              "proof_level": "full runtime",
+              "acceptance_criteria": "span is emitted with route attribute",
+              "environments": [
+                "go.local"
+              ]
+            }
+          ]
+        },
+        "anti_patterns": [],
+        "recommendation": [
+          "Select executable findings and run $otel-instrument."
+        ],
+        "scan_blockers": []
+      },
+      "selection": {
+        "schema_version": 2,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:5a018b098bf686a394b6cda500a056c7f86f972c966e7f7057cf6608a4cf145b",
+        "requested_ids": [
+          "AO-002",
+          "OTEL-008"
+        ],
+        "approved_ids": [
+          "OTEL-001",
+          "OTEL-008",
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": []
+      },
+      "display_finding_ids": [
+        "OTEL-001",
+        "OTEL-007",
+        "OTEL-009",
+        "OTEL-008",
+        "AO-777",
+        "AO-001",
+        "AO-002",
+        "OTEL-777"
+      ],
+      "rendered_cards_html": "<article data-finding-id=\"OTEL-001\"></article><article data-finding-id=\"OTEL-007\"></article><article data-finding-id=\"OTEL-009\"></article><article data-finding-id=\"OTEL-008\"></article><article data-finding-id=\"OTEL-777\"></article><section class=\"finding-subsection\" aria-labelledby=\"splunk-agent-observability-findings-heading\"><h3 id=\"splunk-agent-observability-findings-heading\">Splunk Agent Observability findings <span class=\"findings-total\">\u00b7 3</span></h3><div id=\"ao-target-slot\"></div><article data-finding-id=\"AO-777\"></article><article data-finding-id=\"AO-001\"></article><article data-finding-id=\"AO-002\"></article></section>"
+    },
+    {
+      "id": "record-d",
+      "audit": {
+        "schema_version": 2,
+        "kind": "otel-audit",
+        "meta": {
+          "audit_id": "checkout-20260717",
+          "service_name": "checkout",
+          "commit": "abc1234",
+          "language": "go",
+          "framework": "chi",
+          "date": "2026-07-17",
+          "status": "Partial",
+          "genai_ownership_detected": false
+        },
+        "summary": [
+          "Checkout telemetry needs route-level latency coverage."
+        ],
+        "flow": "audit -> instrument -> verify -> configure",
+        "evidence": [
+          {
+            "check": "Manifest",
+            "finding": "Go module",
+            "source": "go.mod"
+          },
+          {
+            "check": "Entry point",
+            "finding": "HTTP API",
+            "source": "main.go"
+          },
+          {
+            "check": "Route source",
+            "finding": "GET /checkout",
+            "source": "main.go:42"
+          },
+          {
+            "check": "Runtime/startup",
+            "finding": "go run",
+            "source": "Makefile"
+          },
+          {
+            "check": "GenAI ownership",
+            "finding": "No",
+            "source": "bounded repository scan"
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "path": "/checkout"
+          }
+        ],
+        "signal_flow": {
+          "component_flow_map": "fixture [GAP: Checkout latency]\nfixture [GAP: Payment dependency]\nfixture [GAP: Projection diagnostic AO-777]\nfixture [GAP: Projection diagnostic OTEL-009]\nfixture [GAP: Projection diagnostic OTEL-008]"
+        },
+        "current_instrumentation": {
+          "spans": [],
+          "metrics": [],
+          "logs": [],
+          "incident_readiness": []
+        },
+        "genai_readiness": [],
+        "findings": [
+          {
+            "id": "OTEL-001",
+            "title": "Checkout latency is not measured",
+            "severity": "high",
+            "priority": "required",
+            "effort": "small",
+            "status": "proposed",
+            "area": "Checkout latency",
+            "gap": "No route-level latency metric or span timing exists.",
+            "impact": "Operators cannot isolate slow checkout requests.",
+            "product_outcome": "Each checkout request has one route-named trace that can be filtered in the waterfall.",
+            "required_fix": "Add HTTP server instrumentation and route span attributes.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [],
+            "evidence": [
+              "main.go:42"
+            ],
+            "acceptance_criteria": [
+              "A request emits one server span with http.route."
+            ],
+            "constraints": [
+              "Keep route values low cardinality."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "GET /checkout",
+                "attributes": [
+                  "http.route"
+                ],
+                "product_view": "Trace waterfall and route filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Verify the span in ObStudio before merge."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "OTEL-007",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "recommended",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Payment dependency",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "AO-777",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "deferred",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Projection diagnostic AO-777",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "OTEL-009",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "recommended",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Projection diagnostic OTEL-009",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          },
+          {
+            "id": "OTEL-008",
+            "title": "Payment provider dimension is missing",
+            "severity": "medium",
+            "priority": "recommended",
+            "effort": "medium",
+            "status": "proposed",
+            "area": "Projection diagnostic OTEL-008",
+            "gap": "Provider calls are not distinguishable.",
+            "impact": "Operators cannot compare provider-specific latency.",
+            "product_outcome": "Traces can be filtered by a bounded payment-provider name.",
+            "required_fix": "Add a low-cardinality payment.provider span attribute.",
+            "instrument_mode": "fix all",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "OTEL-001"
+            ],
+            "evidence": [
+              "payments.go:18"
+            ],
+            "acceptance_criteria": [
+              "Provider is filterable without raw provider IDs."
+            ],
+            "constraints": [
+              "Use a bounded provider name."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "span",
+                "name": "payment.authorize",
+                "attributes": [
+                  "payment.provider"
+                ],
+                "product_view": "Provider-specific trace filtering"
+              }
+            ],
+            "follow_up_actions": [
+              "Slice the trace view by payment.provider."
+            ],
+            "resolution": null,
+            "resolved_commit": null
+          }
+        ],
+        "verification": {
+          "environments": [
+            {
+              "id": "go.local",
+              "surface": "checkout service",
+              "config_evidence": "go.mod",
+              "runner": "go test ./...",
+              "scope": "module",
+              "prerequisites": "none"
+            }
+          ],
+          "scenarios": [
+            {
+              "id": "http.checkout.success",
+              "trigger": "GET /checkout",
+              "entrypoint": "main.go:42",
+              "expected_signals": "GET /checkout span and payment.request.duration metric",
+              "proof_level": "full runtime",
+              "acceptance_criteria": "span is emitted with route attribute",
+              "environments": [
+                "go.local"
+              ]
+            }
+          ]
+        },
+        "anti_patterns": [],
+        "recommendation": [
+          "Select executable findings and run $otel-instrument."
+        ],
+        "scan_blockers": []
+      },
+      "selection": {
+        "schema_version": 1,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:32117d3c39f9e398c636fcd706001c01872a9f5ffd84dafd4a53167e65b2147f",
+        "requested_ids": [],
+        "approved_ids": [],
+        "approved_by": null,
+        "approved_at": null
+      },
+      "display_finding_ids": [
+        "OTEL-001",
+        "OTEL-007",
+        "OTEL-009",
+        "OTEL-008",
+        "AO-777"
+      ],
+      "rendered_cards_html": "<article data-finding-id=\"OTEL-001\"></article><article data-finding-id=\"OTEL-007\"></article><article data-finding-id=\"OTEL-009\"></article><article data-finding-id=\"OTEL-008\"></article><article data-finding-id=\"AO-777\"></article>"
+    },
+    {
+      "id": "record-e",
+      "audit": {
+        "schema_version": 2,
+        "kind": "otel-audit",
+        "meta": {
+          "audit_id": "checkout-20260717",
+          "service_name": "checkout",
+          "commit": "abc1234",
+          "language": "go",
+          "framework": "chi",
+          "date": "2026-07-17",
+          "status": "Partial",
+          "genai_ownership_detected": false
+        },
+        "summary": [
+          "Checkout telemetry needs route-level latency coverage."
+        ],
+        "flow": "audit -> instrument -> verify -> configure",
+        "evidence": [
+          {
+            "check": "Manifest",
+            "finding": "Go module",
+            "source": "go.mod"
+          },
+          {
+            "check": "Entry point",
+            "finding": "HTTP API",
+            "source": "main.go"
+          },
+          {
+            "check": "Route source",
+            "finding": "GET /checkout",
+            "source": "main.go:42"
+          },
+          {
+            "check": "Runtime/startup",
+            "finding": "go run",
+            "source": "Makefile"
+          },
+          {
+            "check": "GenAI ownership",
+            "finding": "No",
+            "source": "bounded repository scan"
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "path": "/checkout"
+          }
+        ],
+        "signal_flow": {
+          "component_flow_map": "fixture [GAP: Agent Observability project]\nfixture [GAP: Dedicated Agent Stream]\nfixture [GAP: AO callback content guard]"
+        },
+        "current_instrumentation": {
+          "spans": [],
+          "metrics": [],
+          "logs": [],
+          "incident_readiness": []
+        },
+        "genai_readiness": [],
+        "findings": [
+          {
+            "id": "AO-001",
+            "title": "Agent Observability project is not configured",
+            "severity": "high",
+            "priority": "required",
+            "effort": "small",
+            "status": "proposed",
+            "area": "Agent Observability project",
+            "gap": "No source-backed project configuration is present.",
+            "impact": "Agent traces cannot be assigned to the intended project.",
+            "product_outcome": "The application has a durable Agent Observability project target.",
+            "required_fix": "Create or configure the Agent Observability project through a checked-in deployment path.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [],
+            "evidence": [
+              "Makefile"
+            ],
+            "acceptance_criteria": [
+              "The configured project can be resolved without Obstudio at runtime."
+            ],
+            "constraints": [
+              "Do not put access tokens in tracked files."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "configuration",
+                "name": "agent-observability.project",
+                "attributes": [],
+                "product_view": "Agent Observability project routing"
+              }
+            ],
+            "follow_up_actions": [
+              "Confirm the project target before instrumentation."
+            ],
+            "resolution": null,
+            "resolved_commit": null,
+            "finding_group": "splunk-agent-observability"
+          },
+          {
+            "id": "AO-002",
+            "title": "Dedicated Agent Stream is not configured",
+            "severity": "high",
+            "priority": "recommended",
+            "effort": "small",
+            "status": "proposed",
+            "area": "Dedicated Agent Stream",
+            "gap": "No source-backed Agent Stream configuration is present.",
+            "impact": "Agent traces remain unassigned or mix with unrelated applications.",
+            "product_outcome": "The application routes traces to its dedicated Agent Stream.",
+            "required_fix": "Create the Agent Stream and persist direct application export routing.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [
+              "AO-001"
+            ],
+            "evidence": [
+              "Makefile"
+            ],
+            "acceptance_criteria": [
+              "A fresh application trace appears in the dedicated Agent Stream."
+            ],
+            "constraints": [
+              "The deployed application must not require Obstudio in the data path."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "configuration",
+                "name": "agent-observability.agent-stream",
+                "attributes": [],
+                "product_view": "Dedicated Agent Stream"
+              }
+            ],
+            "follow_up_actions": [
+              "Confirm routing with a fresh application trace."
+            ],
+            "resolution": null,
+            "resolved_commit": null,
+            "finding_group": "splunk-agent-observability"
+          },
+          {
+            "id": "OTEL-777",
+            "title": "AO callback content guard",
+            "severity": "high",
+            "priority": "deferred",
+            "effort": "small",
+            "status": "proposed",
+            "area": "AO callback content guard",
+            "gap": "No source-backed project configuration is present.",
+            "impact": "Agent traces cannot be assigned to the intended project.",
+            "product_outcome": "The application has a durable Agent Observability project target.",
+            "required_fix": "Create or configure the Agent Observability project through a checked-in deployment path.",
+            "instrument_mode": "default",
+            "verification_scenarios": [
+              "http.checkout.success"
+            ],
+            "dependencies": [],
+            "evidence": [
+              "Makefile"
+            ],
+            "acceptance_criteria": [
+              "The configured project can be resolved without Obstudio at runtime."
+            ],
+            "constraints": [
+              "Do not put access tokens in tracked files."
+            ],
+            "expected_telemetry": [
+              {
+                "type": "configuration",
+                "name": "splunk-ao.callback.capture-guard",
+                "attributes": [],
+                "product_view": "Agent Observability project routing"
+              }
+            ],
+            "follow_up_actions": [
+              "Confirm the project target before instrumentation."
+            ],
+            "resolution": null,
+            "resolved_commit": null,
+            "finding_group": "splunk-agent-observability"
+          }
+        ],
+        "verification": {
+          "environments": [
+            {
+              "id": "go.local",
+              "surface": "checkout service",
+              "config_evidence": "go.mod",
+              "runner": "go test ./...",
+              "scope": "module",
+              "prerequisites": "none"
+            }
+          ],
+          "scenarios": [
+            {
+              "id": "http.checkout.success",
+              "trigger": "GET /checkout",
+              "entrypoint": "main.go:42",
+              "expected_signals": "GET /checkout span and payment.request.duration metric",
+              "proof_level": "full runtime",
+              "acceptance_criteria": "span is emitted with route attribute",
+              "environments": [
+                "go.local"
+              ]
+            }
+          ]
+        },
+        "anti_patterns": [],
+        "recommendation": [
+          "Select executable findings and run $otel-instrument."
+        ],
+        "scan_blockers": []
+      },
+      "selection": {
+        "schema_version": 1,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:95f30deaf8d546cd9062416daf2eb0cac565633cdb131c439ee477299c0d86d7",
+        "requested_ids": [],
+        "approved_ids": [],
+        "approved_by": null,
+        "approved_at": null
+      },
+      "display_finding_ids": [
+        "AO-001",
+        "AO-002",
+        "OTEL-777"
+      ],
+      "rendered_cards_html": "<section class=\"finding-subsection\" aria-labelledby=\"splunk-agent-observability-findings-heading\"><h3 id=\"splunk-agent-observability-findings-heading\">Splunk Agent Observability findings <span class=\"findings-total\">\u00b7 3</span></h3><div id=\"ao-target-slot\"></div><article data-finding-id=\"AO-001\"></article><article data-finding-id=\"AO-002\"></article><article data-finding-id=\"OTEL-777\"></article></section>"
+    },
+    {
+      "id": "record-f",
+      "audit": {
+        "schema_version": 2,
+        "kind": "otel-audit",
+        "meta": {
+          "audit_id": "checkout-20260717",
+          "service_name": "checkout",
+          "commit": "abc1234",
+          "language": "go",
+          "framework": "chi",
+          "date": "2026-07-17",
+          "status": "Pass",
+          "genai_ownership_detected": false
+        },
+        "summary": [
+          "Checkout telemetry needs route-level latency coverage."
+        ],
+        "flow": "audit -> instrument -> verify -> configure",
+        "evidence": [
+          {
+            "check": "Manifest",
+            "finding": "Go module",
+            "source": "go.mod"
+          },
+          {
+            "check": "Entry point",
+            "finding": "HTTP API",
+            "source": "main.go"
+          },
+          {
+            "check": "Route source",
+            "finding": "GET /checkout",
+            "source": "main.go:42"
+          },
+          {
+            "check": "Runtime/startup",
+            "finding": "go run",
+            "source": "Makefile"
+          },
+          {
+            "check": "GenAI ownership",
+            "finding": "No",
+            "source": "bounded repository scan"
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "path": "/checkout"
+          }
+        ],
+        "signal_flow": {
+          "component_flow_map": "No fixture gaps."
+        },
+        "current_instrumentation": {
+          "spans": [],
+          "metrics": [],
+          "logs": [],
+          "incident_readiness": []
+        },
+        "genai_readiness": [],
+        "findings": [],
+        "verification": {
+          "environments": [
+            {
+              "id": "go.local",
+              "surface": "checkout service",
+              "config_evidence": "go.mod",
+              "runner": "go test ./...",
+              "scope": "module",
+              "prerequisites": "none"
+            }
+          ],
+          "scenarios": [
+            {
+              "id": "http.checkout.success",
+              "trigger": "GET /checkout",
+              "entrypoint": "main.go:42",
+              "expected_signals": "GET /checkout span and payment.request.duration metric",
+              "proof_level": "full runtime",
+              "acceptance_criteria": "span is emitted with route attribute",
+              "environments": [
+                "go.local"
+              ]
+            }
+          ]
+        },
+        "anti_patterns": [],
+        "recommendation": [
+          "Select executable findings and run $otel-instrument."
+        ],
+        "scan_blockers": []
+      },
+      "selection": {
+        "schema_version": 1,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:383a8f2f817f8ae2e54a7a3485b39bfecd4b183c841da5e855d9f11a3afd2145",
+        "requested_ids": [],
+        "approved_ids": [],
+        "approved_by": null,
+        "approved_at": null
+      },
+      "display_finding_ids": [],
+      "rendered_cards_html": ""
+    }
+  ],
+  "required_inputs_cases": [
+    {
+      "id": "ordinary-only",
+      "selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:5a018b098bf686a394b6cda500a056c7f86f972c966e7f7057cf6608a4cf145b",
+        "requested_ids": [
+          "OTEL-007"
+        ],
+        "approved_ids": [
+          "OTEL-001",
+          "OTEL-007"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": []
+      },
+      "selection_sha256": "sha256:2703df15f3cd9c6cbac326386d23d5244cc7695c159c4dae63a3b3fc29d02129",
+      "resource_routing_selected": false,
+      "status": {
+        "ready": true,
+        "required_inputs": [],
+        "missing_inputs": [],
+        "prompt": ""
+      }
+    },
+    {
+      "id": "agent-targetless",
+      "selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:5a018b098bf686a394b6cda500a056c7f86f972c966e7f7057cf6608a4cf145b",
+        "requested_ids": [
+          "AO-002"
+        ],
+        "approved_ids": [
+          "OTEL-001",
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": []
+      },
+      "selection_sha256": "sha256:36969a8666d3752850b2a12f173ef3c5e6b028924432d8e2f9bb3f99840096e4",
+      "resource_routing_selected": true,
+      "status": {
+        "ready": false,
+        "required_inputs": [
+          {
+            "key": "ao_target.project",
+            "label": "Project",
+            "provided": false
+          },
+          {
+            "key": "ao_target.agent_stream",
+            "label": "Agent Stream",
+            "provided": false
+          }
+        ],
+        "missing_inputs": [
+          {
+            "key": "ao_target.project",
+            "label": "Project",
+            "provided": false
+          },
+          {
+            "key": "ao_target.agent_stream",
+            "label": "Agent Stream",
+            "provided": false
+          }
+        ],
+        "prompt": "Provide values for these required fields:\nProject:\nAgent Stream:"
+      }
+    },
+    {
+      "id": "agent-policy-only",
+      "selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:5a018b098bf686a394b6cda500a056c7f86f972c966e7f7057cf6608a4cf145b",
+        "requested_ids": [
+          "AO-002"
+        ],
+        "approved_ids": [
+          "OTEL-001",
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": [],
+        "ao_target": {
+          "create_if_missing": false
+        }
+      },
+      "selection_sha256": "sha256:dc8500ceb5b462a4ef7af4adb2b3cf7ff53280e219efd651ba98388831fac4da",
+      "resource_routing_selected": true,
+      "status": {
+        "ready": false,
+        "required_inputs": [
+          {
+            "key": "ao_target.project",
+            "label": "Project",
+            "provided": false
+          },
+          {
+            "key": "ao_target.agent_stream",
+            "label": "Agent Stream",
+            "provided": false
+          }
+        ],
+        "missing_inputs": [
+          {
+            "key": "ao_target.project",
+            "label": "Project",
+            "provided": false
+          },
+          {
+            "key": "ao_target.agent_stream",
+            "label": "Agent Stream",
+            "provided": false
+          }
+        ],
+        "prompt": "Provide values for these required fields:\nProject:\nAgent Stream:"
+      }
+    },
+    {
+      "id": "agent-complete",
+      "selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:5a018b098bf686a394b6cda500a056c7f86f972c966e7f7057cf6608a4cf145b",
+        "requested_ids": [
+          "AO-002"
+        ],
+        "approved_ids": [
+          "OTEL-001",
+          "AO-001",
+          "AO-002"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": [],
+        "ao_target": {
+          "project_name": "review-project",
+          "agent_stream_id": "review-stream",
+          "create_if_missing": true
+        }
+      },
+      "selection_sha256": "sha256:d042af097cd70e1b64bfe59b97f759aaf8c76bbf2fdbe445fab0eaf5232507fd",
+      "resource_routing_selected": true,
+      "status": {
+        "ready": true,
+        "required_inputs": [
+          {
+            "key": "ao_target.project",
+            "label": "Project",
+            "provided": true
+          },
+          {
+            "key": "ao_target.agent_stream",
+            "label": "Agent Stream",
+            "provided": true
+          }
+        ],
+        "missing_inputs": [],
+        "prompt": ""
+      }
+    },
+    {
+      "id": "callback-complete",
+      "selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:5a018b098bf686a394b6cda500a056c7f86f972c966e7f7057cf6608a4cf145b",
+        "requested_ids": [
+          "OTEL-777"
+        ],
+        "approved_ids": [
+          "OTEL-777"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": [],
+        "ao_target": {
+          "project_id": "review-project",
+          "agent_stream_name": "review-stream",
+          "create_if_missing": true
+        }
+      },
+      "selection_sha256": "sha256:8db2f22cd488f9babac05672f8b06b03a9e9fb8f1d03b4ce4e7e20a98a7f7a17",
+      "resource_routing_selected": false,
+      "status": {
+        "ready": true,
+        "required_inputs": [
+          {
+            "key": "ao_target.project",
+            "label": "Project",
+            "provided": true
+          },
+          {
+            "key": "ao_target.agent_stream",
+            "label": "Agent Stream",
+            "provided": true
+          }
+        ],
+        "missing_inputs": [],
+        "prompt": ""
+      }
+    },
+    {
+      "id": "callback-targetless",
+      "selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:5a018b098bf686a394b6cda500a056c7f86f972c966e7f7057cf6608a4cf145b",
+        "requested_ids": [
+          "OTEL-777"
+        ],
+        "approved_ids": [
+          "OTEL-777"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": []
+      },
+      "selection_sha256": "sha256:af9eec933c700f7d044b2aaf6cd65e8430c32b6f65bde47de433036488e6b2cd",
+      "resource_routing_selected": false,
+      "status": {
+        "ready": false,
+        "required_inputs": [
+          {
+            "key": "ao_target.project",
+            "label": "Project",
+            "provided": false
+          },
+          {
+            "key": "ao_target.agent_stream",
+            "label": "Agent Stream",
+            "provided": false
+          }
+        ],
+        "missing_inputs": [
+          {
+            "key": "ao_target.project",
+            "label": "Project",
+            "provided": false
+          },
+          {
+            "key": "ao_target.agent_stream",
+            "label": "Agent Stream",
+            "provided": false
+          }
+        ],
+        "prompt": "Provide values for these required fields:\nProject:\nAgent Stream:"
+      }
+    },
+    {
+      "id": "ordinary-ao-prefix",
+      "selection": {
+        "schema_version": 3,
+        "kind": "otel-selection",
+        "audit_id": "checkout-20260717",
+        "audit_sha256": "sha256:5a018b098bf686a394b6cda500a056c7f86f972c966e7f7057cf6608a4cf145b",
+        "requested_ids": [
+          "AO-777"
+        ],
+        "approved_ids": [
+          "OTEL-001",
+          "AO-777"
+        ],
+        "approved_by": null,
+        "approved_at": null,
+        "decision_answers": []
+      },
+      "selection_sha256": "sha256:da30aa6fb02834b9e10857c7441ed869f0d978edbd4aedcbce3937417fac044b",
+      "resource_routing_selected": false,
+      "status": {
+        "ready": true,
+        "required_inputs": [],
+        "missing_inputs": [],
+        "prompt": ""
+      }
+    },
+    {
+      "id": "generic-partial",
+      "groups": [
+        {
+          "key": "deployment",
+          "finding_ids": [
+            "DEPLOY-1"
+          ],
+          "fields": [
+            {
+              "key": "region",
+              "label": "Deployment region",
+              "selectors": [
+                "region_name",
+                "region_id"
+              ]
+            },
+            {
+              "key": "cluster",
+              "label": "Cluster",
+              "selectors": [
+                "cluster"
+              ]
+            }
+          ]
+        }
+      ],
+      "selection": {
+        "approved_ids": [
+          "DEPLOY-1"
+        ],
+        "deployment": {
+          "region_id": "region-1"
+        }
+      },
+      "status": {
+        "ready": false,
+        "required_inputs": [
+          {
+            "key": "deployment.region",
+            "label": "Deployment region",
+            "provided": true
+          },
+          {
+            "key": "deployment.cluster",
+            "label": "Cluster",
+            "provided": false
+          }
+        ],
+        "missing_inputs": [
+          {
+            "key": "deployment.cluster",
+            "label": "Cluster",
+            "provided": false
+          }
+        ],
+        "prompt": "Provide values for these required fields:\nCluster:"
+      }
+    }
+  ],
+  "required_input_groups": [
+    {
+      "key": "ao_target",
+      "finding_group": "splunk-agent-observability",
+      "fields": [
+        {
+          "key": "project",
+          "label": "Project",
+          "selectors": [
+            "project_name",
+            "project_id"
+          ]
+        },
+        {
+          "key": "agent_stream",
+          "label": "Agent Stream",
+          "selectors": [
+            "agent_stream_name",
+            "agent_stream_id"
+          ]
+        }
+      ],
+      "finding_ids": [
+        "AO-001",
+        "AO-002",
+        "OTEL-777"
+      ]
+    }
+  ]
+}

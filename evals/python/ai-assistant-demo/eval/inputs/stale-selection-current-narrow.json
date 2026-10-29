@@ -1,0 +1,16 @@
+{
+  "approved_at": null,
+  "approved_by": null,
+  "approved_ids": [
+    "AO-001",
+    "AO-002"
+  ],
+  "audit_id": "python-ai-assistant-stale-recovery-current",
+  "audit_sha256": "sha256:1a4f1718718a45e285dfc901307cd4c6ac4ea76b242f954303db9355bff9743f",
+  "kind": "otel-selection",
+  "requested_ids": [
+    "AO-001",
+    "AO-002"
+  ],
+  "schema_version": 1
+}
