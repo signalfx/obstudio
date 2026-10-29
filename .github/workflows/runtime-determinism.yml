@@ -41,12 +41,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Read the current plugin version
+      # A synthetic tag, because the current plugin version's real tag usually already exists
+      # on an older commit and the build action refuses to reuse a tag that is not HEAD.
+      # Both runs use the same name so the archive names, and the version embedded in the
+      # binary, match.
+      - name: Choose a synthetic release tag
         id: version
         run: |
           set -euo pipefail
           version="$(python3 -c 'import json; print(json.load(open("plugins/obstudio/.claude-plugin/plugin.json"))["version"])')"
-          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${version}-determinism" >> "$GITHUB_OUTPUT"
 
       - name: Build runtime archives
         uses: ./.github/actions/build-runtime-archives
