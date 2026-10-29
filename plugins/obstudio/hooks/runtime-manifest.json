@@ -1,22 +1,22 @@
 {
   "artifacts": {
     "darwin_amd64.zip": {
-      "name": "obstudio_0.1.3_darwin_amd64.zip",
-      "sha256": "fbaa5293c9062fb8bc418f23dad6ee63ca7ff8fe5ae3a25e5bdf397d1f2f4fc6"
+      "name": "obstudio_0.1.4_darwin_amd64.zip",
+      "sha256": "f9f0472d927b9b3bc7d7cafc015ced641bba65a2fb59867f81434b3db8e8f9e4"
     },
     "darwin_arm64.zip": {
-      "name": "obstudio_0.1.3_darwin_arm64.zip",
-      "sha256": "87062c804da0430b8d3d875ac3f37d01c251524f1c97264d0b31b3dbed169212"
+      "name": "obstudio_0.1.4_darwin_arm64.zip",
+      "sha256": "8a1ab09043a846d0bee72d3af31c8c8181926804e5587625582e8942e78d64d3"
     },
     "linux_amd64.zip": {
-      "name": "obstudio_0.1.3_linux_amd64.zip",
-      "sha256": "e51d9693b6b783365ff0b74072c8c5730f8eb8926fbfedbacbe2de324233ed14"
+      "name": "obstudio_0.1.4_linux_amd64.zip",
+      "sha256": "0a9bb124cf0f7e34a3ce0aad8c4c0eeab2686fbb1348c083699e7e4ac00827da"
     },
     "windows_amd64.zip": {
-      "name": "obstudio_0.1.3_windows_amd64.zip",
-      "sha256": "56b18cc1fd3a25d45c2cf1ce406751aade2d8cd25e00d0d9e028bc1d98fcf564"
+      "name": "obstudio_0.1.4_windows_amd64.zip",
+      "sha256": "5f1d87358a3c31b0df421250f90de3a6c07185a8a032a3a8f4a9d1859c1b7cc0"
     }
   },
   "schemaVersion": 1,
-  "version": "0.1.3"
+  "version": "0.1.4"
 }
