@@ -70,7 +70,9 @@ published `checksums.txt`, and starts a local process bound to loopback
 addresses (`127.0.0.1` ports 17900, 4317, and 4318). Do not trust the hook if
 you do not want managed binary download or local process startup. Skills that
 edit files or run project commands remain subject to your host's approval
-policy. See [`SECURITY.md`](./SECURITY.md) for the full trust model.
+policy. See [`SECURITY.md`](./SECURITY.md) for the full trust model, and its
+[reviewer summary](./SECURITY.md#reviewer-summary-what-runs-what-is-downloaded-which-credentials-are-read)
+for what runs locally, what is downloaded, and which credentials are read.
 
 ## Privacy
 
