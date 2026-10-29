@@ -97,16 +97,16 @@ the one-time release download from GitHub described below.
   is extracted or executed, the hook checks the zip entries for path traversal and
   verifies the archive SHA-256 against `checksums.txt`. If the pinned release is
   not found, the hook falls back to the latest release and records
-  `runtimePinFallback` in its state. Pinning the checksum inside the plugin
-  itself, so it no longer comes from the same origin as the archive, is tracked
-  in BORN-286.
+  `runtimePinFallback` in its state. Because `checksums.txt` comes from the same
+  release origin as the archive, the check detects corruption but not a
+  compromised release. Embedding the expected checksum in the plugin is planned.
 - OpenTelemetry Java agent (documentation only). `java.md` shows a `curl`
   command for the user's own build or setup step that fetches the agent jar from
   the OpenTelemetry project's GitHub releases; the jar is later loaded with
   `-javaagent`. The plugin never runs this command, and it executes only if the
   user or host agent runs it under the host's approval policy. The command is
   currently unpinned and unverified. Replacing it with a pinned, SHA-256-verified
-  template is tracked in BORN-304.
+  template is planned.
 - No other plugin code downloads anything. Skill text that mentions package
   installation (`pip`, `npm`, Maven, Gradle) describes dependency changes made
   in the user's own project under the host's approval flow.
