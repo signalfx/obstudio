@@ -1897,6 +1897,10 @@ class StartObstudioBackgroundTest(unittest.TestCase):
                         "OTLP_PORT": "9998",
                         "OTLP_HTTP_PORT": "9997",
                         "OTLP_GRPC_PORT": "9996",
+                        "ANTHROPIC_API_KEY": "sk-ant-secret",
+                        "AWS_SECRET_ACCESS_KEY": "aws-secret",
+                        "GITHUB_TOKEN": "ghp_secret",
+                        "SPLUNK_REALM": "us0",
                     },
                 ),
                 mock.patch.object(BOOTSTRAP.subprocess, "Popen", side_effect=fake_popen),
@@ -1920,6 +1924,9 @@ class StartObstudioBackgroundTest(unittest.TestCase):
         self.assertEqual(captured["kwargs"]["env"]["OTLP_GRPC_PORT"], "4317")
         self.assertEqual(captured["kwargs"]["env"]["OBSTUDIO_OWNER"], "codex-plugin")
         self.assertEqual(captured["kwargs"]["env"]["OBSTUDIO_MODE"], "managed")
+        self.assertEqual(captured["kwargs"]["env"]["SPLUNK_REALM"], "us0")
+        for name in ("ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"):
+            self.assertNotIn(name, captured["kwargs"]["env"])
         self.assertEqual(log_path.name, "obstudio.log")
 
     def test_child_env_excludes_unrelated_credentials(self):
@@ -1929,6 +1936,8 @@ class StartObstudioBackgroundTest(unittest.TestCase):
             "HTTPS_PROXY": "http://proxy.example:8080",
             "LC_ALL": "C",
             "SPLUNK_ACCESS_TOKEN": "splunk-token",
+            "WEAVER_PATH": "/opt/weaver/bin/weaver",
+            "MAX_FLOW_NODE_SPAN_LIST_SIZE": "5000",
             "ANTHROPIC_API_KEY": "sk-ant-secret",
             "AWS_SECRET_ACCESS_KEY": "aws-secret",
             "OPENAI_API_KEY": "sk-openai-secret",
@@ -1942,6 +1951,8 @@ class StartObstudioBackgroundTest(unittest.TestCase):
         self.assertEqual(child_env["HTTPS_PROXY"], "http://proxy.example:8080")
         self.assertEqual(child_env["LC_ALL"], "C")
         self.assertEqual(child_env["SPLUNK_ACCESS_TOKEN"], "splunk-token")
+        self.assertEqual(child_env["WEAVER_PATH"], "/opt/weaver/bin/weaver")
+        self.assertEqual(child_env["MAX_FLOW_NODE_SPAN_LIST_SIZE"], "5000")
         for name in ("ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "OPENAI_API_KEY", "GITHUB_TOKEN"):
             self.assertNotIn(name, child_env)
 
