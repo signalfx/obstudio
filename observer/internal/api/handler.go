@@ -57,11 +57,12 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	var tracesController *otlp.SplunkTracesExportController
 	var splunkExportRefresher SplunkExportConfigurationRefresher
 	var freeAccountSubmitter freeaccount.Submitter
+	var endpointConfig EndpointConfig
+	var logsSettings SplunkLogsSettings
 	var saveConnection SplunkCloudSettingsSaver
 	var savePreferences SplunkCloudPreferencesSaver
 	var storageManaged SplunkCloudStorageManaged
 	var cleanupPending SplunkCloudCleanupPending
-	var endpointConfig EndpointConfig
 	info := ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
@@ -104,6 +105,10 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			if value != nil {
 				freeAccountSubmitter = value
 			}
+		case EndpointConfig:
+			endpointConfig = value
+		case SplunkLogsSettings:
+			logsSettings = value
 		case SplunkCloudCleanupPending:
 			cleanupPending = value
 		case SplunkCloudStorageManaged:
@@ -112,11 +117,20 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			savePreferences = value
 		case SplunkCloudSettingsSaver:
 			saveConnection = value
-		case EndpointConfig:
-			endpointConfig = value
 		}
 	}
 	validationService := validator.NewService(validationStore, runner)
+	var splunkExport *splunkExportService
+	if metricsController != nil && tracesController != nil {
+		splunkExport = newSplunkExportService(metricsController, tracesController, splunkExportRefresher)
+		splunkExport.logs = logsSettings
+		splunkExport.saveConnection = saveConnection
+		splunkExport.savePreferences = savePreferences
+		splunkExport.storageManaged = storageManaged
+		splunkExport.cleanupPending = cleanupPending
+		splunkExport.register(mux)
+	}
+	registerSplunkLogs(mux, s, logsSettings, splunkExport)
 	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig)
 	auditResolver := audit.NewResolver(auditConfig)
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
@@ -146,14 +160,6 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("POST /api/validation/analyze", localMutation(analyzeValidation(validationService)))
 	mux.HandleFunc("GET /api/query/validation/findings", queryValidationFindings(validationService))
 	mux.HandleFunc("DELETE /api/data", localMutation(clearData(s, validationStore)))
-	if metricsController != nil && tracesController != nil {
-		service := newSplunkExportService(metricsController, tracesController, splunkExportRefresher)
-		service.saveConnection = saveConnection
-		service.savePreferences = savePreferences
-		service.storageManaged = storageManaged
-		service.cleanupPending = cleanupPending
-		service.register(mux)
-	}
 	if freeAccountSubmitter != nil {
 		newFreeAccountAPI(freeAccountSubmitter).register(mux)
 	}

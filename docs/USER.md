@@ -173,19 +173,20 @@ configuration, and APIs.
 
 ## Forward to Splunk Observability Cloud
 
-Splunk Observability Studio can forward received traces and metrics while
-keeping its UI available. Logs remain local.
+Splunk Observability Studio can forward metrics and traces to Observability Cloud
+and logs to Splunk Platform. Received telemetry stays available locally.
 
 - Open **Cloud** in Splunk Observability Studio.
-- Enter the realm and an organization access token with ingest and API scope, then
-  select **Connect**.
-- Use the export switch to pause or resume forwarding. Received telemetry remains
-  available locally.
+- For Observability Cloud, enter the realm and an organization access token with
+  ingest and API scope, then select **Connect**.
+- For Splunk Platform, enter the HEC endpoint, HEC token, and destination index,
+  then select **Connect**.
+- Each connection has its own export switch. Use the switch to pause or resume
+  forwarding for that destination.
 - Studio saves connection settings in `~/.obstudio/connections.json` and keeps
-  the token in the operating system credential store. Linux requires an unlocked
+  tokens in the operating system credential store. Linux requires an unlocked
   Secret Service provider.
-- Select **Remove connection** and confirm to forget the saved token. Reconnect
-  with updated details to change the connection.
+- Use **Edit** to update a connection or **Disconnect** to forget its token.
 - Saved connections and export preferences persist across restarts.
 
 Generating Terraform does not change Splunk; the publish skills described in

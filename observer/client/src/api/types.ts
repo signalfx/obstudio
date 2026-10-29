@@ -313,8 +313,10 @@ export interface SplunkExportStatus {
   enabled: boolean;
   realm?: string;
   version: string;
+  cloudVersion?: string;
   metrics: SplunkExportSignalStatus;
   traces: SplunkExportSignalStatus;
+  logs?: SplunkExportSignalStatus;
   registrationAndAuthProtocol?: RegistrationAndAuthProtocol;
 }
 
@@ -343,4 +345,28 @@ export interface SISCIMDSessionStatus {
   scope?: string;
   connectedAt?: string;
   expiresAt?: string;
+}
+export interface SplunkLogsStatus {
+  version: string;
+  configured: boolean;
+  connected?: boolean;
+  enabled: boolean;
+  endpoint: string;
+  searchURL?: string;
+  index: string;
+  source: string;
+  sourcetype: string;
+  insecureSkipVerify: boolean;
+  tokenConfigured: boolean;
+  canDisconnect?: boolean;
+  cleanupPending?: boolean;
+  exportedRecords: number;
+  exportedBatches?: number;
+  failedBatches: number;
+  lastExportError?: string;
+  lastExportSuccess?: string;
+  lastHTTPStatus?: number;
+  lastHECCode?: number;
+  queuedRecords?: number;
+  droppedRecords?: number;
 }

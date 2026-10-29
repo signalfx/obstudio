@@ -586,8 +586,17 @@ func (s *Store) AddMetricsForConnection(connID string, metrics []MetricDataPoint
 
 // AddLogsForConnection adds logs with an associated connection ID for later eviction.
 func (s *Store) AddLogsForConnection(connID string, logs []LogRecord) {
+	s.addLogs(connID, logs, true)
+}
+
+// AddInternalLogs retains diagnostic logs without changing the application session clock.
+func (s *Store) AddInternalLogs(logs []LogRecord) {
+	s.addLogs("", logs, false)
+}
+
+func (s *Store) addLogs(connID string, logs []LogRecord, applicationIngest bool) {
 	s.mu.Lock()
-	reset := s.checkSessionReset()
+	reset := applicationIngest && s.checkSessionReset()
 	changedAt := time.Now()
 	if connID != "" {
 		for i := range logs {
@@ -631,7 +640,9 @@ func (s *Store) AddLogsForConnection(connID string, logs []LogRecord) {
 			s.providerRepositoryCorrelationUnavailableThrough = evictedAt
 		}
 	}
-	s.lastIngest = changedAt
+	if applicationIngest {
+		s.lastIngest = changedAt
+	}
 	s.mu.Unlock()
 	if reset {
 		s.runInvalidateCallback()

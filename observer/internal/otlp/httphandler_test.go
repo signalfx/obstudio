@@ -3,6 +3,8 @@ package otlp
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -247,6 +249,86 @@ func TestPostLogsRemainsLocalWhenCloudExportersConfigured(t *testing.T) {
 	case <-tracesExporter.ch:
 		t.Fatal("log request unexpectedly invoked the Splunk traces exporter")
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestPostLogsDualDelivery(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		enabled bool
+		reject  bool
+	}{
+		{name: "enabled", enabled: true},
+		{name: "paused"},
+		{name: "remote failure", enabled: true, reject: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			received := make(chan hecEvent, 1)
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var event hecEvent
+				if err := json.NewDecoder(hecRequestBody(t, r)).Decode(&event); err != nil {
+					t.Error(err)
+				}
+				received <- event
+				if test.reject {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				_, _ = w.Write([]byte(`{"code":0}`))
+			}))
+			defer remote.Close()
+			controller := NewSplunkHECLogsExportController(SplunkHECLogsExporterConfig{
+				Endpoint: remote.URL + "/services/collector", Token: "test-token", Index: "studio", Enabled: test.enabled,
+			})
+			defer controller.Shutdown(context.Background())
+			local := store.New()
+			handler := &otlpHTTPHandler{store: local, ct: &ConnTracker{}, logsExporter: controller}
+			body, err := (&plog.JSONMarshaler{}).MarshalLogs(createTestLog())
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := httptest.NewRequest(http.MethodPost, "/v1/logs", bytes.NewReader(body))
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusOK {
+				t.Fatalf("local ingest: %d", response.Code)
+			}
+			logs := local.QueryLogs(10)
+			if len(logs) != 1 || logs[0].Body != "test log message" || logs[0].Resource.ServiceName != "test-service" {
+				t.Fatalf("log missing locally: %#v", logs)
+			}
+			if !test.enabled {
+				select {
+				case <-received:
+					t.Fatal("paused log was exported")
+				case <-time.After(50 * time.Millisecond):
+				}
+				return
+			}
+			select {
+			case event := <-received:
+				if event.Event != logs[0].Body || event.Index != "studio" {
+					t.Fatalf("local and remote logs differ: %#v", event)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("remote export missing")
+			}
+			deadline := time.Now().Add(2 * time.Second)
+			for {
+				status := controller.Status()
+				if (test.reject && status.FailedBatches == 1) || (!test.reject && status.ExportedRecords == 1) {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("export did not finish: %#v", status)
+				}
+				time.Sleep(time.Millisecond)
+			}
+			if len(local.QueryLogs(10)) != 1 {
+				t.Fatal("remote export removed the local log")
+			}
+		})
 	}
 }
 

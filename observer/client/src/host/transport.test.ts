@@ -27,6 +27,17 @@ afterEach(() => {
 });
 
 describe("Splunk Observability Studio host transport", () => {
+  it("routes logs settings through the IDE adapter without affecting unrelated requests after failure", async () => {
+    const { posted } = installHost();
+    const settings = observerFetch("/api/splunk/logs", {method:"POST",body:JSON.stringify({token:"synthetic-token",index:"studio"})});
+    const request=posted.at(-1);
+    expect(request?.request).toMatchObject({kind:"http",method:"POST",path:"/api/splunk/logs"});
+    respond(request,true,{body:JSON.stringify({error:"HEC rejected token"}),status:502,statusText:"Bad Gateway"});
+    expect((await settings).status).toBe(502);
+    const health=observerFetch("/api/health");
+    respond(posted.at(-1),true,{body:JSON.stringify({kind:"obstudio"}),status:200,statusText:"OK"});
+    await expect((await health).json()).resolves.toEqual({kind:"obstudio"});
+  });
   it("keeps native fetch for the standalone browser", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("browser", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -87,6 +98,15 @@ describe("Splunk Observability Studio host transport", () => {
     const legacy = callObserverHostCloud("initialize");
     respond(posted.at(-1), true, { status: legacyDisconnectedStatus() });
     await expect(legacy).resolves.toEqual({ status: legacyDisconnectedStatus() });
+
+    const logsStatus = { ...disconnectedStatus(), logs: { ...disconnectedStatus().metrics, configured: true, exportedItems: 4 } };
+    const logs = callObserverHostCloud("initialize");
+    respond(posted.at(-1), true, { status: logsStatus });
+    await expect(logs).resolves.toEqual({ status: logsStatus });
+
+    const invalidLogs = callObserverHostCloud("initialize");
+    respond(posted.at(-1), true, { status: { ...logsStatus, logs: { exportedItems: "four" } } });
+    await expect(invalidLogs).rejects.toThrow("invalid cloud response");
 
     const invalid = callObserverHostCloud("initialize");
     respond(posted.at(-1), true, { status: { connected: "yes" } });
