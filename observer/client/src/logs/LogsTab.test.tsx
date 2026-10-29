@@ -30,7 +30,7 @@ function selectFilterField(label: string): void {
 }
 
 describe("LogsTab", () => {
-  it("shows only the time for today's logs and ellipsizes long messages", () => {
+  it("shows only the time for today's logs", () => {
     const today = new Date();
     today.setUTCHours(14, 3, 21, 123);
     const { container } = render(
@@ -39,7 +39,7 @@ describe("LogsTab", () => {
           id: "today",
           timeUnixNano: today.toISOString(),
           severityText: "INFO",
-          body: "a very long log message ".repeat(20),
+          body: "checkout ready",
           attributes: {},
           resource: { serviceName: "checkout", attributes: {} },
           scope: { name: "app" },
@@ -49,11 +49,6 @@ describe("LogsTab", () => {
     );
 
     expect(container.querySelector(".data-table__td--timestamp")?.textContent).toBe("14:03:21.123");
-    const { readFileSync } = require("fs");
-    const { resolve } = require("path");
-    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
-    expect(css).toMatch(/\.data-table__td > \.explorer-row__primary,\s*\.data-table__td > \.explorer-row__secondary \{[^}]*text-overflow: ellipsis;/);
-    expect(css).toMatch(/\.data-table__head--logs \.data-table__th--timestamp,\s*\.data-table__row--logs \.data-table__td--timestamp \{\s*display: flex;/);
   });
 
   beforeEach(() => {

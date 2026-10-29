@@ -19,6 +19,10 @@ function sortValue(row: ServiceStats, key: Exclude<SortKey, "name">): number | n
   return key === "errorRate" ? errorRate(row) : row[key];
 }
 
+function formatErrorRate(row: ServiceStats): string {
+  return `${((errorRate(row) ?? 0) * 100).toFixed(1)}%`;
+}
+
 function formatAvg(ms: number | null): string {
   return ms !== null ? formatDurationMs(ms) : "—";
 }
@@ -142,43 +146,45 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
 
           {sorted.length === 0 && clauses.length > 0 ? (
             <p className="explorer__status" role="status">No services match the current filter.</p>
-          ) : sorted.map((row) => {
-            const rate = errorRate(row);
-            const hasErrors = row.errorCount > 0;
-            return (
-              <div key={row.name} className={hasErrors ? "services-table__row services-table__row--errors" : "services-table__row"}>
-                <span className="data-table__td data-table__td--service-name">
-                  {hasErrors ? <span className="services-tab__error-dot" aria-hidden="true" /> : null}
-                  <span className="explorer-row__primary">{row.name}</span>
+          ) : sorted.map((row) => (
+            <div key={row.name} className="services-table__row">
+              <span className="data-table__td data-table__td--service-name">
+                {row.errorCount > 0 ? <span className="services-tab__error-dot" aria-hidden="true" /> : null}
+                <span className="explorer-row__primary">{row.name}</span>
+              </span>
+              <span className="data-table__td data-table__td--numeric services-table__col--secondary">
+                <span className="explorer-row__numeric">{row.traceCount || "—"}</span>
+              </span>
+              <span className="data-table__td data-table__td--numeric services-table__col--secondary">
+                <span className="explorer-row__numeric">{row.spanCount || "—"}</span>
+              </span>
+              <span className="data-table__td data-table__td--numeric">
+                {row.errorCount > 0
+                  ? <span className="explorer-row__numeric services-tab__error-count">{row.errorCount}</span>
+                  : <span className="explorer-row__numeric explorer-row__numeric--muted">—</span>}
+              </span>
+              <span className="data-table__td data-table__td--numeric">
+                {row.errorCount > 0
+                  ? <span className="explorer-row__numeric services-tab__error-rate">{formatErrorRate(row)}</span>
+                  : <span className="explorer-row__numeric explorer-row__numeric--muted">—</span>}
+              </span>
+              <span className="data-table__td data-table__td--numeric">
+                <span className="explorer-row__numeric">
+                  {formatAvg(row.avgDurationMs)}
                 </span>
-                <span className="data-table__td data-table__td--numeric services-table__col--secondary">
-                  <span className="explorer-row__numeric">{row.traceCount || "—"}</span>
+              </span>
+              <span className="data-table__td data-table__td--numeric services-table__col--secondary">
+                <span className="explorer-row__numeric">
+                  {formatAvg(row.avgClientDurationMs)}
                 </span>
-                <span className="data-table__td data-table__td--numeric services-table__col--secondary">
-                  <span className="explorer-row__numeric">{row.spanCount || "—"}</span>
+              </span>
+              <span className="data-table__td data-table__td--numeric services-table__col--secondary">
+                <span className="explorer-row__numeric">
+                  {formatAvg(row.avgServerDurationMs)}
                 </span>
-                <span className="data-table__td data-table__td--numeric">
-                  {hasErrors
-                    ? <span className="explorer-row__numeric services-tab__error-count">{row.errorCount}</span>
-                    : <span className="explorer-row__numeric explorer-row__numeric--muted">—</span>}
-                </span>
-                <span className="data-table__td data-table__td--numeric">
-                  {hasErrors && rate !== null
-                    ? <span className="explorer-row__numeric services-tab__error-rate">{`${(rate * 100).toFixed(1)}%`}</span>
-                    : <span className="explorer-row__numeric explorer-row__numeric--muted">—</span>}
-                </span>
-                <span className="data-table__td data-table__td--numeric">
-                  <span className="explorer-row__numeric">{formatAvg(row.avgDurationMs)}</span>
-                </span>
-                <span className="data-table__td data-table__td--numeric services-table__col--secondary">
-                  <span className="explorer-row__numeric">{formatAvg(row.avgClientDurationMs)}</span>
-                </span>
-                <span className="data-table__td data-table__td--numeric services-table__col--secondary">
-                  <span className="explorer-row__numeric">{formatAvg(row.avgServerDurationMs)}</span>
-                </span>
-              </div>
-            );
-          })}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </section>

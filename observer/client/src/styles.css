@@ -3869,18 +3869,6 @@ code {
   width: 100%;
 }
 
-/* Narrow panels keep the errors and latency and drop the volume and split-latency columns. */
-@media (max-width: 900px) {
-  .services-table {
-    grid-template-columns: minmax(96px, 2fr) repeat(3, minmax(64px, 1fr));
-    min-width: 0;
-  }
-
-  .services-table .services-table__col--secondary {
-    display: none;
-  }
-}
-
 .services-table__head {
   display: contents;
 }
@@ -4480,7 +4468,6 @@ code {
     --table-columns: 76px 128px minmax(0, 1fr);
   }
 
-  /* Logs keep their time at narrow widths; only Service drops. */
   .data-table__head--logs .data-table__th--timestamp,
   .data-table__row--logs .data-table__td--timestamp {
     display: flex;
@@ -4491,9 +4478,17 @@ code {
     --table-columns: minmax(80px, 2fr) minmax(64px, 1fr) minmax(80px, 1fr);
   }
 
-  /* Service tells same-named metrics apart, so Description is the column that goes. */
   .data-table__th--metric-description,
   .data-table__td--metric-description {
+    display: none;
+  }
+
+  .services-table {
+    grid-template-columns: minmax(96px, 2fr) repeat(3, minmax(64px, 1fr));
+    min-width: 0;
+  }
+
+  .services-table .services-table__col--secondary {
     display: none;
   }
 

@@ -167,7 +167,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             onClick={() => switchTab("metrics")}
           >
             Metrics
-            {/* One row per metric and service, so the badge matches what the table lists. */}
             {state.metrics?.length ? <span className="tab-button__count" aria-hidden="true">{state.metrics.length}</span> : null}
           </button>
           <button
