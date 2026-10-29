@@ -20,6 +20,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -1275,6 +1276,27 @@ def sha256_zip_member(zf: zipfile.ZipFile, member_name: str) -> str:
     return digest.hexdigest()
 
 
+CHILD_ENV_ALLOWED_NAMES = frozenset(
+    {
+        "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TMP", "TEMP", "TZ", "LANG",
+        "USERPROFILE", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "APPDATA", "LOCALAPPDATA",
+        "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
+        "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS",
+        "WEAVER_PATH", "MAX_FLOW_NODE_SPAN_LIST_SIZE",
+    }
+)
+CHILD_ENV_ALLOWED_PREFIXES = ("LC_", "XDG_", "SPLUNK_", "SIGNALFX_", "OBSTUDIO_", "OTLP_")
+
+
+def build_child_env(parent_env: Mapping[str, str]) -> dict[str, str]:
+    """Return only the variables the Studio process needs, never the full parent environment."""
+    return {
+        key: value
+        for key, value in parent_env.items()
+        if key.upper() in CHILD_ENV_ALLOWED_NAMES or key.upper().startswith(CHILD_ENV_ALLOWED_PREFIXES)
+    }
+
+
 def start_obstudio_background(
     obstudio_binary: Path,
     plugin_data: Path,
@@ -1283,7 +1305,7 @@ def start_obstudio_background(
     log_dir = plugin_data / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / "obstudio.log"
-    env = os.environ.copy()
+    env = build_child_env(os.environ)
     for key in ("HOST", "PORT", "OBSTUDIO_PORT", "OTLP_PORT", "OTLP_HTTP_PORT", "OTLP_GRPC_PORT"):
         env.pop(key, None)
     env["HOST"] = "127.0.0.1"
