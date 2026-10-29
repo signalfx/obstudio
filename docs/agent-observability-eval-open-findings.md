@@ -321,18 +321,18 @@ were strengthened; neither original failed grade was overwritten.
 The [closure receipt](evidence/agent-report-closure-corrections.json) retains
 both failed reports, original rubric definitions and inputs, grades/hashes, focused public
 API replay source/results and correction-source receipts after a squash.
-Through all eleven retained correction rounds, the resource-table audit task
-failed **6/11** runs, and Studio connection verification failed **1/9**. These
+Through all twelve retained correction rounds, the resource-table audit task
+failed **6/12** runs, and Studio connection verification failed **1/10**. These
 descriptive rates include the two failures above; the raw grades and source
 manifests expose each change. All post-correction audit failures belong to the
 resource-table task:
 
 | Post-correction audit task | Runs with a failed criterion / retained runs | Failed criteria, in run order |
 |---|---:|---|
-| `active-signal-matrix-audit` | 0/11 | None |
-| `agent-resource-table-audit` | 6/11 | rubric-6; rubric-2; rubric-2 + rubric-7; rubric-4; rubric-2 + rubric-6; rubric-2 |
-| `agent-role-from-behavior` | 0/11 | None |
-| `studio-connection-modes` | 0/11 | None |
+| `active-signal-matrix-audit` | 0/12 | None |
+| `agent-resource-table-audit` | 6/12 | rubric-6; rubric-2; rubric-2 + rubric-7; rubric-4; rubric-2 + rubric-6; rubric-2 |
+| `agent-role-from-behavior` | 0/12 | None |
+| `studio-connection-modes` | 0/12 | None |
 
 The rotating criteria identify a concentrated compliance risk in the seven-case,
 four-state resource matrix. They are iterative-history observations across
@@ -374,9 +374,16 @@ the latest owning-skill results, including the later scoped audit correction.
 
 | Latest retained rubric report | Run ID |
 |---|---|
-| Audit | `20261021T051843575616Z` |
-| Instrument | `20261021T042942403248Z` |
-| Verify | `20261021T043122995424Z` |
+| Audit | `20261028T170414701823Z` |
+| Instrument | `20261029T160338863738Z` |
+| Verify | `20261028T183710176316Z` |
+
+The latest reports come from the BORN-282 report engine split, a behavior-preserving
+refactor. They re-run the same prompt sets as the coordinated cohort (audit 4,
+instrument 9, verify 4) at the split source with the tracked agent-role config.
+All 17 prompts passed their rubric. An earlier instrument attempt that lost three
+prompts to provider capacity errors and one to the agent timeout never produced a
+complete graded set; it was rerun in full and only the rerun is retained here.
 
 The resource-table audit failed two valid acceptance checks. Its Go routing
 fix named native Go interfaces, while active acceptance still required foreign
