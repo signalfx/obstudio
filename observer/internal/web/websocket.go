@@ -80,6 +80,27 @@ func broadcastSignal(s *store.Store, v *validator.Store, sig string) {
 	}
 }
 
+// NotifyConfigChanged sends {"type":"config-changed"} to every subscribed
+// connection, paused or not, so clients refetch the user settings. It is
+// not a telemetry signal: it skips the throttle and the pause state.
+func NotifyConfigChanged() {
+	connsMu.Lock()
+	snapshot := make([]*conn, 0, len(conns))
+	for c := range conns {
+		snapshot = append(snapshot, c)
+	}
+	connsMu.Unlock()
+
+	for _, c := range snapshot {
+		c.mu.Lock()
+		subscribed := c.subscribed
+		c.mu.Unlock()
+		if subscribed {
+			c.sendMsg(ServerMessage{Type: "config-changed"})
+		}
+	}
+}
+
 // broadcastReload tells every open tab to reload, bypassing the
 // subscribed/paused gating used for telemetry pushes: a client rebuild
 // should refresh the page regardless of stream state.

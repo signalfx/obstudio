@@ -683,6 +683,18 @@ test('IDE host transport restricts HTTP paths, cancellation, and telemetry comma
 		assert.equal(isAllowedObserverHostHTTPPath('GET', path), true, path);
 	}
 	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/validation/run'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/config'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/config'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/config/definitions'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/config/status'), true);
+	for (const [method, path] of [
+		['POST', '/api/config/definitions'],
+		['GET', '/api/config/telemetry'],
+		['POST', '/api/config/telemetry'],
+		['POST', '/api/config/status'],
+	] as const) {
+		assert.equal(isAllowedObserverHostHTTPPath(method, path), false, `${method} ${path}`);
+	}
 	for (const path of [
 		'https://evil.example/api/health',
 		'//evil.example/api/health',
@@ -728,6 +740,18 @@ test('IDE host transport restricts HTTP paths, cancellation, and telemetry comma
 			type: 'obstudio.host.request',
 		}), false, `${cimdAction} must not accept a realm payload`);
 	}
+	for (const method of ['PUT', 'PATCH']) {
+		assert.equal(isObserverHostRequestEnvelope({
+			request: { body: '{}', kind: 'http', method, path: '/api/config' },
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), false, method);
+	}
+	assert.equal(isObserverHostRequestEnvelope({
+		request: { body: '{"telemetry":{"enabled":false}}', kind: 'http', method: 'POST', path: '/api/config' },
+		requestId: 'request-123',
+		type: 'obstudio.host.request',
+	}), true);
 });
 
 test('IDE host response collection rejects truncated and aborted responses', async () => {
@@ -830,6 +854,33 @@ test('IDE telemetry opens its WebSocket immediately and forwards live updates', 
 	]);
 	telemetry.dispose();
 	assert.equal(socket.closed, true);
+});
+
+test('IDE telemetry relays the config-changed notice and still drops unknown types', () => {
+	const posted: unknown[] = [];
+	const socket = new FakeObserverWebSocket();
+	const telemetry = new ObserverWebviewTelemetry(
+		'http://127.0.0.1:3000',
+		async (message) => {
+			posted.push(message);
+			return true;
+		},
+		() => undefined,
+		() => socket as unknown as WebSocket,
+	);
+	telemetry.handle('subscribe');
+	socket.readyState = WebSocket.OPEN;
+	socket.emit('open');
+	posted.length = 0;
+
+	socket.emit('message', Buffer.from('{"type":"config-changed"}'), false);
+	socket.emit('message', Buffer.from('{"type":"bogus"}'), false);
+	assert.deepEqual(posted, [
+		{ message: { type: 'config-changed' }, type: 'obstudio.host.telemetry-message' },
+	]);
+	const forwarded = (posted[0] as { message: Record<string, unknown> }).message;
+	assert.deepEqual(Object.keys(forwarded), ['type']);
+	telemetry.dispose();
 });
 
 test('IDE telemetry uses the same local and remote payload limits as HTTP snapshots', () => {

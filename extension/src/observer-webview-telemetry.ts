@@ -6,7 +6,7 @@ type TelemetryCommand = 'pause' | 'resume' | 'subscribe' | 'unsubscribe';
 type ServerMessage = {
 	data?: unknown;
 	signal?: string;
-	type: 'connected' | 'paused-update' | 'reload' | 'update';
+	type: 'config-changed' | 'connected' | 'paused-update' | 'reload' | 'update';
 };
 
 export type ObserverWebSocketFactory = (
@@ -183,6 +183,6 @@ function isServerMessage(value: unknown): value is ServerMessage {
 	}
 	const message = value as Record<string, unknown>;
 	return typeof message.type === 'string'
-		&& ['connected', 'paused-update', 'reload', 'update'].includes(message.type)
+		&& ['config-changed', 'connected', 'paused-update', 'reload', 'update'].includes(message.type)
 		&& (message.signal === undefined || typeof message.signal === 'string');
 }

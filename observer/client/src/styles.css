@@ -278,6 +278,11 @@ body {
   color: var(--text-dim);
 }
 
+button.pill {
+  font-family: inherit;
+  cursor: pointer;
+}
+
 .copy-button {
   display: inline-flex;
   align-items: center;
@@ -7683,7 +7688,8 @@ code {
   cursor: pointer;
 }
 
-.cloud-switch:disabled {
+.cloud-switch:disabled,
+.cloud-switch[aria-disabled="true"] {
   cursor: default;
   opacity: 0.55;
 }
@@ -8630,6 +8636,23 @@ code {
   font-size: var(--font-body);
 }
 
+.config-problems {
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 82, 82, 0.42);
+  border-radius: 10px;
+  color: #ff9696;
+  font-size: var(--font-body);
+}
+
+.config-problems p {
+  margin: 0;
+}
+
+.config-problems ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
 .config-alert {
   display: flex;
   align-items: center;
@@ -8651,6 +8674,16 @@ code {
   color: var(--row-primary-text);
   font-size: var(--font-title);
   font-weight: 600;
+}
+
+.config-section__description {
+  margin: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .config-field {
@@ -8730,8 +8763,7 @@ code {
 }
 
 .config-input:focus-visible,
-.config-select:focus-visible,
-.config-field__reset:focus-visible {
+.config-select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -8741,13 +8773,8 @@ code {
   border-color: var(--red);
 }
 
-.config-field__readonly {
-  flex: 1;
-  min-width: 0;
-  color: var(--text-dim);
-  font-family: var(--font-family-mono);
-  font-size: var(--font-mono);
-  overflow-wrap: anywhere;
+.config-select[aria-disabled="true"] {
+  opacity: 0.55;
 }
 
 .config-field__status {
@@ -8761,29 +8788,11 @@ code {
 }
 
 .config-field__error {
-  display: flex;
   grid-column: 1 / -1;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
   margin: 0;
   color: var(--red);
   font-size: var(--font-xs);
   line-height: 1.4;
-}
-
-.config-field__reset {
-  padding: 2px 0;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-size: var(--font-xs);
-  cursor: pointer;
-}
-
-.config-field__reset:hover {
-  text-decoration: underline;
 }
 
 @media (max-width: 560px) {
