@@ -72,8 +72,8 @@ import {
 	auditReportUrl,
 	cloudBridgeActionRequiresLifecycleSerialization,
 	cloudStatusConnected,
-	connectSplunkCloudWithStorage,
-	forgetSplunkCloudWithStorage,
+	cloudStatusHasNoConfiguration,
+	cloudStatusVersion,
 	freeAccountSubmissionFailureIsOutcomeUnknown,
 	initializeCloudBridgeState,
 	initializeSplunkCloudStatus,
@@ -83,15 +83,9 @@ import {
 	parseFreeAccountSubmissionResult,
 	parseObserverCloudResponseBody,
 	parseStoredSplunkCloudConnection,
-	restoreSplunkCloudConnectionFromStorage,
-	setSplunkCloudExportEnabledWithStorage,
 	skillDocsUrl,
 	ObserverCloudResponseError,
-	SplunkCloudConnectionStore,
-	SplunkCloudExportPreferenceStore,
 	splunkCloudConnectionSecretKey,
-	verifyStoredSplunkCloudConnection,
-	writeSplunkCloudStatePair,
 	type CloudBridgeAction,
 	type RegistrationAndAuthProtocol,
 	type StoredSplunkCloudConnection,
@@ -142,8 +136,6 @@ let observerStartupPromise: Promise<void> | undefined;
 let observerConfigurationRestartOperation: Promise<void> | undefined;
 const observerStopOperation = new AsyncSingleFlight();
 const observerCloudLifecycleOperations = new AsyncOperationQueue();
-const splunkCloudConnectionStore = new SplunkCloudConnectionStore();
-const splunkCloudExportPreferenceStore = new SplunkCloudExportPreferenceStore();
 let observerStatusBarItem: vscode.StatusBarItem | undefined;
 let observerUsesSharedServer = false;
 let observerWebviewRootUri: vscode.Uri | undefined;
@@ -708,8 +700,29 @@ export async function activate(context: vscode.ExtensionContext) {
 				: buildObserverValidatorSummaryUrl(observerBaseUrl),
 		}),
 	);
+	const deleteSecretForTest = context.secrets.delete.bind(context.secrets);
 	const internalTestDisposables = context.extensionMode === vscode.ExtensionMode.Test
 		? [
+			vscode.commands.registerCommand('observability-studio.internal.seedCloudMigrationForTest', (value: string, enabled: boolean) => observerCloudLifecycleOperations.run(async () => {
+				await context.secrets.store(splunkCloudConnectionSecretKey, value);
+				await context.globalState.update(splunkCloudExportEnabledStateKey, enabled);
+				await context.globalState.update('splunkCloudStorageMigrated.v1', undefined);
+			})),
+			vscode.commands.registerCommand('observability-studio.internal.cloudMigrationStateForTest',async () => ({
+				hasToken: (await context.secrets.get(splunkCloudConnectionSecretKey))!==undefined,
+				enabled: context.globalState.get<boolean>(splunkCloudExportEnabledStateKey),
+				complete: context.globalState.get<boolean>('splunkCloudStorageMigrated.v1')===true,
+			})),
+			vscode.commands.registerCommand('observability-studio.internal.failCloudCleanupForTest', (fail: boolean) => {
+				context.secrets.delete = async (key: string) => {
+					if (fail && key === splunkCloudConnectionSecretKey) {
+						throw new Error('editor provider unavailable');
+					}
+					await deleteSecretForTest(key);
+				};
+			}),
+			vscode.commands.registerCommand('observability-studio.internal.cloudActionForTest',(request: { action: CloudBridgeAction; payload?: ObserverHostCloudPayload }) => performCloudBridgeAction(context,request)),
+
 			vscode.commands.registerCommand(
 				'observability-studio.internal.createFreeAccountForTest',
 				() => performCloudBridgeAction(context, {
@@ -2309,7 +2322,7 @@ async function performCloudBridgeActionExclusive(
 			return initializeCloudBridgeState({
 				readCimdSession: () => currentSISCIMDSessionStatus(context),
 				readStatus: () => getObserverCloudJSON('/api/splunk/export'),
-				refreshStatus: () => refreshSplunkCloudConnection(context),
+				refreshStatus: () => migrateStoredCloudConnection(context),
 				registrationAndAuthProtocol: getRegistrationAndAuthProtocol(),
 			});
 		}
@@ -2473,67 +2486,31 @@ async function performCloudBridgeActionExclusive(
 		}
 		case 'connect': {
 			const connection = cloudConnectionFromRequest(request);
-			const expectedVersion = cloudExpectedVersionFromRequest(request);
-			const rollbackToken = crypto.randomBytes(32).toString('base64url');
-			return {
-				status: await connectSplunkCloudWithStorage({
-					configureObserver: () => postObserverCloudJSON(
-						'/api/splunk/export',
-						{ ...connection, expectedVersion },
-						rollbackToken,
-					),
-					readStoredState: () => readStoredCloudConnectionState(context),
-					rollbackObserver: async (rollbackToken) => {
-						await postObserverCloudJSON('/api/splunk/export/rollback', { rollbackToken });
-					},
-					rollbackToken,
-					restoreStoredState: (state) => restoreStoredCloudConnectionState(
-						context,
-						state.connectionValue,
-						state.exportEnabled,
-					),
-					storeConnectedState: async () => {
-						await writeSplunkCloudConnectionValue(context, JSON.stringify(connection));
-						await writeSplunkCloudExportPreference(context, false);
-					},
-				}),
-			};
+			const status = await postObserverCloudJSON('/api/splunk/export', {
+				...connection, expectedVersion: cloudExpectedVersionFromRequest(request),
+			});
+			await completeCloudStorageMigration(context);
+			return { status };
 		}
 		case 'set-enabled': {
 			if (typeof request.payload?.enabled !== 'boolean') {
 				throw new Error('Remote export state is missing.');
 			}
 			const expectedVersion = cloudExpectedVersionFromRequest(request);
-			const rollbackToken = crypto.randomBytes(32).toString('base64url');
 			return {
-				status: await setSplunkCloudExportEnabledWithStorage({
-					enabled: request.payload.enabled,
-					readStoredState: () => readStoredCloudConnectionState(context),
-					rollbackObserver: async (rollbackToken) => {
-						await postObserverCloudJSON('/api/splunk/export/rollback', { rollbackToken });
-					},
-					rollbackToken,
-					restoreStoredExportEnabled: async (enabled) => {
-						await writeSplunkCloudExportPreference(context, enabled);
-					},
-					setObserverEnabled: (enabled) => postObserverCloudJSON(
-						'/api/splunk/export/enabled',
-						{ enabled, expectedVersion },
-						rollbackToken,
-					),
-					storeExportEnabled: async (enabled) => {
-						await writeSplunkCloudExportPreference(context, enabled);
-					},
+				status: await postObserverCloudJSON('/api/splunk/export/enabled', {
+					enabled: request.payload.enabled, expectedVersion,
 				}),
 			};
 		}
-		case 'forget':
-			return {
-				status: await forgetSplunkCloudConnection(
-					context,
-					cloudExpectedVersionFromRequest(request),
-				),
-			};
+		case 'forget': {
+			const status = await postObserverCloudJSON('/api/splunk/export/forget', {
+				expectedVersion: cloudExpectedVersionFromRequest(request),
+			});
+			await completeCloudStorageMigration(context);
+			return { status };
+		}
+
 	}
 }
 
@@ -2563,26 +2540,11 @@ function cloudExpectedVersionFromRequest(
 	return typeof expectedVersion === 'string' ? expectedVersion : undefined;
 }
 
-async function refreshSplunkCloudConnection(context: vscode.ExtensionContext): Promise<unknown> {
-	const usesSharedObserver = observerUsesSharedServer;
-	return restoreSplunkCloudConnectionFromStorage({
-		configure: (connection, expectedVersion) => verifyStoredSplunkCloudConnection(
-			() => postObserverCloudJSON('/api/splunk/export', { ...connection, expectedVersion }),
-		),
-		readConnection: async () => parseStoredSplunkCloudConnection(
-			await readSplunkCloudConnectionValue(context),
-		),
-		readExportEnabled: () => readSplunkCloudExportPreference(context),
-		refresh: () => initializeSplunkCloudStatus({
-			isManagedObserver: !usesSharedObserver,
-			readStatus: () => getObserverCloudJSON('/api/splunk/export'),
-			refreshManagedStatus: () => refreshObserverCloudStatus(),
-		}),
-		restoreStoredConnection: !usesSharedObserver,
-		setEnabled: (enabled, expectedVersion) => postObserverCloudJSON(
-			'/api/splunk/export/enabled',
-			{ enabled, expectedVersion },
-		),
+async function refreshSplunkCloudConnection(): Promise<unknown> {
+	return initializeSplunkCloudStatus({
+		isManagedObserver: !observerUsesSharedServer,
+		readStatus: () => getObserverCloudJSON('/api/splunk/export'),
+		refreshManagedStatus: () => refreshObserverCloudStatus(),
 	});
 }
 
@@ -2590,9 +2552,46 @@ async function refreshObserverCloudStatus(): Promise<unknown> {
 	return postObserverCloudJSON('/api/splunk/export/refresh', {});
 }
 
+async function completeCloudStorageMigration(context: vscode.ExtensionContext): Promise<void> {
+	try {
+		await context.globalState.update('splunkCloudStorageMigrated.v1', true);
+		await context.secrets.delete(splunkCloudConnectionSecretKey);
+		await context.globalState.update(splunkCloudExportEnabledStateKey, undefined);
+	} catch {
+		appendObserverOutputLine('[splunk-export] Connection saved. Old editor credential cleanup will retry when Cloud opens.');
+	}
+}
+
+async function migrateStoredCloudConnection(context: vscode.ExtensionContext): Promise<unknown> {
+	const status = await refreshSplunkCloudConnection();
+	if (observerUsesSharedServer) { return status; }
+	if (context.globalState.get<boolean>('splunkCloudStorageMigrated.v1') === true) {
+		await completeCloudStorageMigration(context);
+		return status;
+	}
+	const managed = typeof status === 'object' && status !== null
+		&& (status as { storageManaged?: boolean }).storageManaged === true;
+	if (managed) {
+		if (cloudStatusConnected(status) || cloudStatusHasNoConfiguration(status)) {
+			await completeCloudStorageMigration(context);
+		}
+		return status;
+	}
+	if (!cloudStatusHasNoConfiguration(status)) { return status; }
+	const stored = parseStoredSplunkCloudConnection(await context.secrets.get(splunkCloudConnectionSecretKey));
+	if (stored === undefined) { return status; }
+	const result = await postObserverCloudJSON('/api/splunk/export', {
+		...stored,
+		enabled: context.globalState.get<boolean>(splunkCloudExportEnabledStateKey) === true,
+		expectedVersion: cloudStatusVersion(status),
+	});
+	await completeCloudStorageMigration(context);
+	return result;
+}
+
 async function restoreManagedObserverCloudConnection(context: vscode.ExtensionContext): Promise<void> {
 	try {
-		const status = await refreshSplunkCloudConnection(context);
+		const status = await migrateStoredCloudConnection(context);
 		if (cloudStatusConnected(status)) {
 			appendObserverOutputLine('[splunk-export] restored cloud connection.');
 		}
@@ -2601,90 +2600,6 @@ async function restoreManagedObserverCloudConnection(context: vscode.ExtensionCo
 			`[splunk-export] could not restore cloud connection: ${getErrorMessage(error)}`,
 		);
 	}
-}
-
-async function forgetSplunkCloudConnection(
-	context: vscode.ExtensionContext,
-	expectedVersion: string | undefined,
-): Promise<unknown> {
-	const rollbackToken = crypto.randomBytes(32).toString('base64url');
-	return forgetSplunkCloudWithStorage({
-		clearStoredState: async () => {
-			await writeSplunkCloudConnectionValue(context, undefined);
-			await writeSplunkCloudExportPreference(context, undefined);
-		},
-		forgetObserver: () => postObserverCloudJSON(
-			'/api/splunk/export/forget',
-			{ expectedVersion },
-			rollbackToken,
-		),
-		readStoredState: () => readStoredCloudConnectionState(context),
-		rollbackObserver: async (rollbackToken) => {
-			await postObserverCloudJSON('/api/splunk/export/rollback', { rollbackToken });
-		},
-		rollbackToken,
-		restoreStoredState: (state) => restoreStoredCloudConnectionState(
-			context,
-			state.connectionValue,
-			state.exportEnabled,
-		),
-	});
-}
-
-async function readStoredCloudConnectionState(context: vscode.ExtensionContext) {
-	return {
-		connectionValue: await readSplunkCloudConnectionValue(context),
-		exportEnabled: readSplunkCloudExportPreference(context),
-	};
-}
-
-async function restoreStoredCloudConnectionState(
-	context: vscode.ExtensionContext,
-	storedValue: string | undefined,
-	storedExportEnabled: boolean | undefined,
-): Promise<void> {
-	await writeSplunkCloudStatePair({
-		state: { connectionValue: storedValue, exportEnabled: storedExportEnabled },
-		writeConnection: (value) => writeSplunkCloudConnectionValue(context, value),
-		writeExportEnabled: (value) => writeSplunkCloudExportPreference(context, value),
-	});
-}
-
-function readSplunkCloudConnectionValue(
-	context: vscode.ExtensionContext,
-): Promise<string | undefined> {
-	return splunkCloudConnectionStore.read(
-		() => Promise.resolve(context.secrets.get(splunkCloudConnectionSecretKey)),
-	);
-}
-
-function writeSplunkCloudConnectionValue(
-	context: vscode.ExtensionContext,
-	value: string | undefined,
-): Promise<void> {
-	return splunkCloudConnectionStore.write(value, async (current) => {
-		if (current === undefined) {
-			await context.secrets.delete(splunkCloudConnectionSecretKey);
-		} else {
-			await context.secrets.store(splunkCloudConnectionSecretKey, current);
-		}
-	});
-}
-
-function readSplunkCloudExportPreference(context: vscode.ExtensionContext): boolean | undefined {
-	return splunkCloudExportPreferenceStore.read(
-		() => context.globalState.get<boolean>(splunkCloudExportEnabledStateKey),
-	);
-}
-
-function writeSplunkCloudExportPreference(
-	context: vscode.ExtensionContext,
-	enabled: boolean | undefined,
-): Promise<void> {
-	return splunkCloudExportPreferenceStore.write(
-		enabled,
-		(value) => Promise.resolve(context.globalState.update(splunkCloudExportEnabledStateKey, value)),
-	);
 }
 
 async function requestObserverHostHTTP(
@@ -2821,7 +2736,6 @@ async function requestObserverFreeAccountJSON(
 async function postObserverCloudJSON(
 	pathname: string,
 	body: Record<string, unknown>,
-	rollbackToken?: string,
 ): Promise<unknown> {
 	if (observerBaseUrl === undefined || observerLifecycleState.status !== 'running') {
 		throw new Error('Splunk Observability Studio is not running.');
@@ -2835,7 +2749,6 @@ async function postObserverCloudJSON(
 		url,
 		body,
 		observerCloudRequestTimeoutMs,
-		rollbackToken,
 	);
 	if (response.statusCode >= 200 && response.statusCode < 300) {
 		return response.body;
@@ -2847,15 +2760,11 @@ async function requestObserverCloudJSON(
 	url: URL,
 	body: Record<string, unknown> | undefined,
 	timeoutMs = observerCloudRequestTimeoutMs,
-	rollbackToken?: string,
 ): Promise<{ body: unknown; statusCode: number }> {
 	const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body), 'utf8');
 	const headers: http.OutgoingHttpHeaders = {
 		Accept: 'application/json',
 	};
-	if (rollbackToken !== undefined) {
-		headers[observerCloudRollbackTokenHeader] = rollbackToken;
-	}
 	if (payload !== undefined) {
 		headers['Content-Length'] = String(payload.length);
 		headers['Content-Type'] = 'application/json';

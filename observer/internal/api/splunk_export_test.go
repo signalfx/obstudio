@@ -1657,3 +1657,80 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request)
 }
+
+func TestCloudConfigurePersistsInitialExportStateBeforeApplying(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprint(enabled), func(t *testing.T) {
+			metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+			traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+			service := newTestSplunkExportService(metrics, traces, nil)
+			fail := true
+			var storedMetrics otlp.SplunkMetricsExporterConfig
+			var storedTraces otlp.SplunkTracesExporterConfig
+			service.saveConnection = func(m otlp.SplunkMetricsExporterConfig, tr otlp.SplunkTracesExporterConfig) error {
+				if metrics.Status().Configured || traces.Status().Configured {
+					t.Fatal("runtime changed before durable save")
+				}
+				if fail {
+					return errors.New("provider-private-details")
+				}
+				storedMetrics, storedTraces = m, tr
+				return nil
+			}
+			mux := http.NewServeMux()
+			service.register(mux)
+			post := func() *httptest.ResponseRecorder {
+				request := httptest.NewRequest(http.MethodPost, "/api/splunk/export", strings.NewReader(fmt.Sprintf(`{"realm":"us1","accessToken":"%s","enabled":%t}`, testSplunkAccessToken, enabled)))
+				request.RemoteAddr = "127.0.0.1:1234"
+				request.Header.Set("Content-Type", "application/json")
+				response := httptest.NewRecorder()
+				mux.ServeHTTP(response, request)
+				return response
+			}
+			response := post()
+			if response.Code != 500 || metrics.Status().Configured || traces.Status().Configured || strings.Contains(response.Body.String(), "provider-private-details") {
+				t.Fatal("failed secure save changed runtime or exposed provider details")
+			}
+			fail = false
+			response = post()
+			if response.Code != 200 {
+				t.Fatal(response.Code, response.Body.String())
+			}
+			if storedMetrics.AccessToken != testSplunkAccessToken || storedTraces.AccessToken != testSplunkAccessToken || storedMetrics.Enabled != enabled || storedTraces.Enabled != enabled || metrics.Status().Enabled != enabled || traces.Status().Enabled != enabled {
+				t.Fatal("configure did not atomically preserve the initial export preference")
+			}
+		})
+	}
+}
+
+func TestCloudSaveFailureExplainsStorageAndLaunchOwnership(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		cause   error
+		status  int
+		message string
+	}{
+		{"secure storage", errors.New("private-provider-detail"), http.StatusInternalServerError, "secure credential storage is unlocked"},
+		{"launch environment", fmt.Errorf("private-provider-detail: %w", ErrSplunkCloudLaunchControlled), http.StatusConflict, "controlled by the launch environment"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+			traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+			service := newTestSplunkExportService(metrics, traces, nil)
+			service.saveConnection = func(otlp.SplunkMetricsExporterConfig, otlp.SplunkTracesExporterConfig) error { return tc.cause }
+			mux := http.NewServeMux()
+			service.register(mux)
+			request := httptest.NewRequest(http.MethodPost, "/api/splunk/export", strings.NewReader(`{"realm":"us1","accessToken":"test-token"}`))
+			request.RemoteAddr = "127.0.0.1:1234"
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, request)
+			if response.Code != tc.status || !strings.Contains(response.Body.String(), tc.message) || strings.Contains(response.Body.String(), "private-provider-detail") {
+				t.Fatalf("unexpected classified failure: %d %s", response.Code, response.Body.String())
+			}
+			if metrics.Status().Configured || traces.Status().Configured {
+				t.Fatal("failed save changed the live connection")
+			}
+		})
+	}
+}

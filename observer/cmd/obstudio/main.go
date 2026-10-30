@@ -178,6 +178,14 @@ func run(config runConfig) error {
 	if err != nil {
 		log.Fatalf("configure Splunk metrics export: %v", err)
 	}
+	splunkTracesConfig, err := splunkTracesExporterConfigFromEnv()
+	if err != nil {
+		log.Fatalf("configure Splunk traces export: %v", err)
+	}
+	connectionSettings := newConnectionPersistence(config.envFile, nil)
+	if err := connectionSettings.RestoreCloud(&splunkConfig, &splunkTracesConfig); err != nil {
+		log.Printf("[splunk-export] saved cloud credentials unavailable: %v", err)
+	}
 	splunkExportController, err := otlp.NewSplunkMetricsExportController(splunkConfig)
 	if err != nil {
 		log.Fatalf("configure Splunk metrics export: %v", err)
@@ -189,10 +197,6 @@ func run(config runConfig) error {
 		)
 	}
 
-	splunkTracesConfig, err := splunkTracesExporterConfigFromEnv()
-	if err != nil {
-		log.Fatalf("configure Splunk traces export: %v", err)
-	}
 	splunkTracesController, err := otlp.NewSplunkTracesExportController(splunkTracesConfig)
 	if err != nil {
 		log.Fatalf("configure Splunk traces export: %v", err)
@@ -246,8 +250,8 @@ func run(config runConfig) error {
 	}, api.EndpointConfig{
 		MCPURL: observerState.MCPURL,
 	}, splunkExportController, splunkTracesController,
-		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController),
-		freeAccountSubmitter)
+		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController, connectionSettings),
+		freeAccountSubmitter, api.SplunkCloudSettingsSaver(connectionSettings.SaveCloud), api.SplunkCloudStorageManaged(connectionSettings.CloudStorageManaged))
 	mux.Handle("POST /otel/v1/traces", rcv.HTTPHandler())
 	mux.Handle("POST /v2/trace/otlp", rcv.HTTPHandler())
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
@@ -543,6 +547,7 @@ func newSplunkExportConfigurationRefresher(
 	flagValue string,
 	metrics splunkMetricsExportConfigurator,
 	traces splunkTracesExportConfigurator,
+	secureSettings ...*connectionPersistence,
 ) api.SplunkExportConfigurationRefresher {
 	return func() (bool, error) {
 		path, explicit := configuredEnvFilePath(flagValue)
@@ -555,6 +560,9 @@ func newSplunkExportConfigurationRefresher(
 		}
 
 		values = applyEnvFileShellPrecedence(values)
+		if len(secureSettings) > 0 && values[cloudSecretRef] != "" && checkConnectionShellControl("SPLUNK_ACCESS_TOKEN") == nil {
+			return false, secureSettings[0].RefreshCloud(values, metrics, traces)
+		}
 		if hasEnvMapKey(values, splunkEnvFileLegacyEndpointKeys...) {
 			return activeSplunkExportConfigurationMatchesValues(values, metrics, traces)
 		}
