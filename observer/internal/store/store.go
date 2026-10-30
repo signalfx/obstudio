@@ -185,7 +185,7 @@ type TraceSummary struct {
 	RootSpanName       string        `json:"rootSpanName"`
 	ServiceName        string        `json:"serviceName,omitempty"`
 	SpanCount          int           `json:"spanCount"`
-	StartTime          time.Time     `json:"startTimeUnixNano,omitzero"`
+	StartTime          time.Time     `json:"startTime,omitzero"`
 	DurationMs         float64       `json:"durationMs"`
 	Status             string        `json:"status"`
 	IsGenAI            bool          `json:"isGenAI,omitempty"`
@@ -1668,13 +1668,8 @@ func (s *Store) queryTracesFiltered(serviceName, spanName, status, traceIDPrefix
 		})
 	}
 
-	startTimes := make(map[string]time.Time, len(grouped))
-	for traceID, spans := range grouped {
-		startTimes[traceID] = getTraceStartTime(spans)
-	}
-
 	sort.Slice(results, func(i, j int) bool {
-		return startTimes[results[i].TraceID].After(startTimes[results[j].TraceID])
+		return results[i].StartTime.After(results[j].StartTime)
 	})
 
 	if len(results) > limit {

@@ -2584,7 +2584,7 @@ func TestTraceSummaries_StartTimeIsEarliestSpanStart(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: marshal summary: %v", name, err)
 		}
-		if !strings.Contains(string(summaryJSON), `"startTimeUnixNano":"2026-10-28T14:03:21Z"`) {
+		if !strings.Contains(string(summaryJSON), `"startTime":"2026-10-28T14:03:21Z"`) {
 			t.Fatalf("%s: expected start time in summary JSON, got %s", name, summaryJSON)
 		}
 	}

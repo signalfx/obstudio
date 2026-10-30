@@ -344,6 +344,8 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
 
   const hasDetail = Boolean(selectedTraceId && (traceDetail || detailLoading || detailError));
 
+  const now = new Date();
+
   return (
     <section id="panel-traces" className="tab-panel" role="tabpanel" aria-label="Traces">
       <div
@@ -406,7 +408,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
                 if (!t) return null;
                 const active = t.traceId === selectedTraceId;
                 const duration = formatDurationMs(t.durationMs ?? 0);
-                const start = parseTraceStart(t.startTimeUnixNano);
+                const start = parseTraceStart(t.startTime);
                 const durationLabel = traceDurationLabel(t.durationMs, t.retentionTruncated, t.retentionUnknown);
                 const countLabel = spanCountLabel(t.spanCount, t.retentionTruncated, t.retentionUnknown);
                 const retentionSuffix = t.retentionUnknown ? "?" : t.retentionTruncated ? "+" : "";
@@ -438,7 +440,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
                     </span>
                     <span className="data-table__td data-table__td--start">
                       <span className="explorer-row__secondary" title={start?.toISOString()}>
-                        {start ? formatUtcTimestamp(start) : "--"}
+                        {start ? formatUtcTimestamp(start, { now }) : "--"}
                       </span>
                     </span>
                     {/* Short ID only: the row is a button, so the copy action lives in the trace panel it opens. */}

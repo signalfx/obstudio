@@ -40,7 +40,7 @@ describe("TracesTab", () => {
     const { container } = render(
       <TracesTab
         traces={[
-          { traceId: "0123456789abcdef0123456789abcdef", rootSpanName: "GET /orders", serviceName: "api", spanCount: 3, durationMs: 1008.3, status: "ok", startTimeUnixNano: "2026-10-27T14:03:21.500Z" },
+          { traceId: "0123456789abcdef0123456789abcdef", rootSpanName: "GET /orders", serviceName: "api", spanCount: 3, durationMs: 1008.3, status: "ok", startTime: "2026-10-27T14:03:21.500Z" },
         ]}
         telemetryError={null}
         onInteract={vi.fn()}

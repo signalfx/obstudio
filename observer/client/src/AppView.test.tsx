@@ -261,6 +261,17 @@ describe("AppView validation tab", () => {
     expect(screen.getByRole("tab", { name: /services/i }).getAttribute("aria-selected")).toBe("false");
   });
 
+  it("falls back to the stats metric count until the metric list loads", () => {
+    const telemetry = makeTelemetryHandle([]);
+    telemetry.state.metrics = [];
+
+    render(<AppView telemetry={telemetry} />);
+
+    const metricsTab = screen.getByRole("tab", { name: /metrics/i });
+    expect(metricsTab.querySelector(".tab-button__count")?.textContent).toBe("3");
+    expect(metricsTab.getAttribute("aria-label")).toBe("Metrics, 3 metrics");
+  });
+
   it("renders tab labels with count badges", () => {
     const telemetry = makeTelemetryHandle([makeFinding({})]);
     // One metric name reported by three services is three table rows; the badge counts rows, not names.

@@ -30,6 +30,8 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   const validationSummary = state.validation?.summary ?? null;
   const validationFindings = state.validation?.findings ?? [];
   const backendValidationIssues = state.validation?.issues ?? [];
+  // Rows in the Metrics table, or the stats count until the metric list has loaded.
+  const metricCount = state.metrics?.length || state.stats?.metricNameCount;
   const validationIndex = useMemo(() => buildValidationIndex(validationFindings), [validationFindings]);
   const validationIssues = useMemo(
     () => (backendValidationIssues.length > 0 || validationFindings.length === 0
@@ -161,13 +163,13 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             role="tab"
             aria-selected={activeTab === "metrics"}
             aria-controls={activeTab === "metrics" ? "panel-metrics" : undefined}
-            aria-label={formatTabAriaLabel("Metrics", state.metrics?.length, "metric", "metrics")}
+            aria-label={formatTabAriaLabel("Metrics", metricCount, "metric", "metrics")}
             className={activeTab === "metrics" ? "tab-button is-active" : "tab-button"}
             tabIndex={activeTab === "metrics" ? 0 : -1}
             onClick={() => switchTab("metrics")}
           >
             Metrics
-            {state.metrics?.length ? <span className="tab-button__count" aria-hidden="true">{state.metrics.length}</span> : null}
+            {metricCount ? <span className="tab-button__count" aria-hidden="true">{metricCount}</span> : null}
           </button>
           <button
             id="tab-traces"

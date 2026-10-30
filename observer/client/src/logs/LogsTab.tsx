@@ -269,6 +269,8 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
     overscan: 10,
   });
 
+  const now = new Date();
+
   return (
     <section id="panel-logs" className="tab-panel" role="tabpanel" aria-label="Logs">
       <div
@@ -359,7 +361,7 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                         className="explorer-row__secondary"
                         title={formatTimestampFull(timestamp)}
                       >
-                        {formatRowTimestamp(timestamp)}
+                        {formatRowTimestamp(timestamp, now)}
                       </span>
                     </span>
                     <span className="data-table__td data-table__td--service">
@@ -501,9 +503,9 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
  * since the Go backend serializes time.Time as RFC3339.
  * The full ISO date is available via {@link formatTimestampFull}.
  */
-function formatRowTimestamp(ts: string): string {
+function formatRowTimestamp(ts: string, now: Date): string {
   const timestamp = parseTimestamp(ts);
-  return timestamp ? formatUtcTimestamp(timestamp, { millis: true }) : "--";
+  return timestamp ? formatUtcTimestamp(timestamp, { millis: true, now }) : "--";
 }
 
 function parseTimestamp(ts: string): Date | null {
