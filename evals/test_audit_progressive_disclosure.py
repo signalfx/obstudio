@@ -27,14 +27,15 @@ def test_audit_renderer_owns_the_canonical_reader_projection() -> None:
         assert term.replace("`", "") in skill.replace("`", "")
 
 
-def test_audit_human_report_is_one_priority_ordered_decision_view() -> None:
+def test_audit_human_report_is_one_grouped_decision_view() -> None:
     skill = normalized(SKILL)
     flow = normalized(REPORT_FLOW)
 
     for text in (skill, flow):
         for term in (
-            "exactly one findings list ordered by",
-            "Priority defines ordering only",
+            "Within each group",
+            "canonical order within",
+            "finding_group",
             "Findings · N",
             "Each card has one title, one expected monitoring outcome",
             "only the plain selectable terminal command section",

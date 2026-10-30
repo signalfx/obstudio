@@ -27,7 +27,9 @@ jobs:
       - name: Validate agent-policy contracts
         env:
           AGENT_POLICY_BASE: ${{ github.event.pull_request.base.sha || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.event.before) || format('origin/{0}', github.event.repository.default_branch) }}
-        run: make agent-policy-check
+        run: |
+          make agent-policy-check
+          make check-eval-models EVAL_MODEL_POLICY_BASE="$AGENT_POLICY_BASE"
 
   plugin-skills-synced:
     name: Plugin - Canonical skill consistency sync
@@ -164,7 +166,7 @@ jobs:
             label: win32-x64
           - os: macos-15-intel
             label: darwin-x64
-          - os: macos-14
+          - os: macos-15
             label: darwin-arm64
     steps:
       - uses: actions/checkout@v4
@@ -273,7 +275,7 @@ jobs:
             label: win32-x64
           - os: macos-15-intel
             label: darwin-x64
-          - os: macos-14
+          - os: macos-15
             label: darwin-arm64
     steps:
       - uses: actions/checkout@v4
@@ -318,7 +320,7 @@ jobs:
             label: win32-x64
           - os: macos-15-intel
             label: darwin-x64
-          - os: macos-14
+          - os: macos-15
             label: darwin-arm64
     steps:
       - uses: actions/checkout@v4
