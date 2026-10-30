@@ -154,6 +154,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const forgetTriggerRef = useRef<HTMLButtonElement>(null);
   const regionValueRef = useRef("");
   const regionInputRef = useRef<HTMLInputElement>(null);
+  const cimdRegistrationRef = useRef<HTMLButtonElement>(null);
+  const cimdLoginRef = useRef<HTMLButtonElement>(null);
   const tokenInputRef = useRef<HTMLInputElement>(null);
   const o11yOAuthRealmInputRef = useRef<HTMLInputElement>(null);
   const o11yOAuthAdminTokenInputRef = useRef<HTMLInputElement>(null);
@@ -486,7 +488,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       if (bridge) {
         response = await callBridge(action, versionedPayload);
       } else {
-        if (action !== "connect" && action !== "forget" && action !== "set-enabled") {
+        if (action !== "connect" && action !== "forget" && action !== "set-enabled" && action !== "refresh") {
           throw new Error("This cloud action requires an IDE session.");
         }
         response = {
@@ -972,6 +974,20 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     <section id="panel-cloud" aria-label="Cloud" className="tab-panel cloud-tab" role="tabpanel">
       <div className="cloud-tab__content">
         <div aria-atomic="true" aria-live="polite" className="cloud-alert-region">
+          {status?.cleanupPending || cloudConfigured && !connected || connected && displayedError ? (
+            <div className="cloud-alert cloud-alert--error" role="status">
+              <p>{status?.cleanupPending ? "Credential cleanup is pending. Unlock secure storage, then retry." : connected ? "Reload saved settings before retrying this change." : "Saved credentials are unavailable. Unlock secure storage, then reload the connection."}</p>
+              <button className="cloud-button" disabled={mutationsDisabled} type="button" onClick={async () => {
+                const response = await runAction("refresh");
+                if (response?.status && !response.status.cleanupPending) {
+                  window.requestAnimationFrame(() => {
+                    if (response.status?.connected) forgetTriggerRef.current?.focus();
+                    else (regionInputRef.current ?? o11yOAuthRealmInputRef.current ?? cimdLoginRef.current ?? cimdRegistrationRef.current)?.focus();
+                  });
+                }
+              }}>{status?.cleanupPending ? "Retry credential cleanup" : "Reload saved connection"}</button>
+            </div>
+          ) : null}
           {displayedError || (cloudConfigured ? freeAccountSubmitError : null) ? (
             <div className="cloud-alert cloud-alert--error" role="alert">
               {displayedError ?? freeAccountSubmitError}
@@ -1028,6 +1044,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                 <button
                   className="cloud-button"
                   disabled={busyAction !== null}
+                  ref={cimdRegistrationRef}
                   onClick={() => void setupCIMD()}
                   type="button"
                 >
@@ -1148,6 +1165,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
               {cimdSession?.phase === "connected" ? (
                 <button
                   className="cloud-button cloud-button--danger"
+                  ref={cimdLoginRef}
                   onClick={() => void disconnectCIMD()}
                   type="button"
                 >
@@ -1157,6 +1175,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                 <button
                   className="cloud-button"
                   disabled={cimdLoginBusy}
+                  ref={cimdLoginRef}
                   onClick={() => void loginCIMD()}
                   type="button"
                 >

@@ -176,27 +176,17 @@ configuration, and APIs.
 Splunk Observability Studio can forward received traces and metrics while
 keeping its UI available. Logs remain local.
 
-Create `~/.obstudio/env` with these values:
-
-```dotenv
-OBSTUDIO_SPLUNK_METRICS_EXPORT=true
-OBSTUDIO_SPLUNK_TRACES_EXPORT=true
-SPLUNK_REALM=<your-realm>
-SPLUNK_ACCESS_TOKEN=<org-ingest-token>
-```
-
-```bash
-chmod 600 ~/.obstudio/env
-```
-
-Then reload Splunk Observability Studio. For an agent-managed instance, fully
-restart the coding agent and begin a new task. For a standalone background
-instance, run `./obstudio restart`. For a foreground instance, stop it and
-launch it again.
-
-The default env file is loaded automatically when present. Shell environment
-variables take precedence; use `./obstudio --env-file <path>` for another file.
-Forwarding requires an organization access token with ingest scope.
+- Open **Cloud** in Splunk Observability Studio.
+- Enter the realm and an organization access token with ingest and API scope, then
+  select **Connect**.
+- Use the export switch to pause or resume forwarding. Received telemetry remains
+  available locally.
+- Studio saves connection settings in `~/.obstudio/connections.json` and keeps
+  the token in the operating system credential store. Linux requires an unlocked
+  Secret Service provider.
+- Select **Remove connection** and confirm to forget the saved token. Reconnect
+  with updated details to change the connection.
+- Saved connections and export preferences persist across restarts.
 
 Generating Terraform does not change Splunk; the publish skills described in
 [Using the skills](#using-the-skills) show a live diff and require confirmation

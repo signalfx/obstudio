@@ -53,7 +53,8 @@ export function useCloudBridge(): UseCloudBridgeResult {
 export function isSplunkExportStatus(value: unknown): value is SplunkExportStatus {
   if (typeof value !== "object" || value === null) return false;
   const status = value as Record<string, unknown>;
-  return typeof status.connected === "boolean"
+  return (status.cleanupPending === undefined || typeof status.cleanupPending === "boolean")
+    && typeof status.connected === "boolean"
     && typeof status.enabled === "boolean"
     && (status.realm === undefined || typeof status.realm === "string")
     && typeof status.version === "string"

@@ -292,6 +292,7 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 			return isObserverHostCloudPayload(value)
 				&& hasOnlyCloudPayloadKeys(value, ['skill'])
 				&& isSkillDocsId(value.skill);
+		case 'refresh':
 		case 'forget':
 			return value === undefined
 				|| (isObserverHostCloudPayload(value)

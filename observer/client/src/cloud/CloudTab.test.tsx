@@ -22,6 +22,81 @@ afterEach(() => {
 });
 
 describe("CloudTab", () => {
+  it("reloads a saved connection after credential storage is unlocked", async () => {
+    const paused = disconnectedStatus();
+    paused.metrics.configured = paused.traces.configured = true;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/splunk/export/refresh") return jsonResponse(connectedStatus(true, "us1"));
+      if (String(input) === "/api/splunk/export") return jsonResponse(paused);
+      throw new Error(`unexpected request: ${String(input)}`);
+    }));
+    render(<CloudTab />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Reload saved connection" }));
+    expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Remote telemetry export is on" }).getAttribute("aria-checked")).toBe("true");
+  });
+
+  it.each(["NONE", "CIMD", "O11Y_OAUTH"] as const)("keeps credential cleanup visible and restores focus in %s", async (protocol) => {
+    let status = {...connectedStatus(false, "us1"), registrationAndAuthProtocol: protocol};
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/splunk/export/forget") {
+        status = { ...disconnectedStatus(), registrationAndAuthProtocol: protocol, cleanupPending: true };
+        return jsonResponse({ error: "credential cleanup is pending" }, 500);
+      }
+      if (path === "/api/splunk/export/refresh") {
+        status = { ...status, cleanupPending: false };
+        return jsonResponse(status);
+      }
+      if (path === "/api/splunk/export") return jsonResponse(status);
+      throw new Error(`unexpected request: ${path}`);
+    }));
+    render(<CloudTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Remove connection" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove connection" }));
+    const retry = await screen.findByRole("button", { name: "Retry credential cleanup" });
+    expect(screen.getByText("Credential cleanup is pending. Unlock secure storage, then retry.")).toBeTruthy();
+    vi.useFakeTimers();
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(screen.getByRole("button", { name: "Retry credential cleanup" })).toBe(retry);
+    vi.useRealTimers();
+    retry.focus();
+    await userEvent.setup().keyboard("{Enter}");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry credential cleanup" })).toBeNull());
+    const target = protocol === "CIMD" ? screen.getByRole("button", {name: "Register OAuth client with CIMD"})
+      : screen.getByRole("textbox", {name: protocol === "O11Y_OAUTH" ? "Realm" : "Realm or Observability Cloud URL"});
+    await waitFor(() => expect(document.activeElement).toBe(target));
+  });
+
+  it("retries pending credential cleanup through the IDE capability", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+    bridge.respond(await bridge.next("initialize"), { status: { ...disconnectedStatus(), cleanupPending: true } });
+    fireEvent.click(await screen.findByRole("button", { name: "Retry credential cleanup" }));
+    bridge.respond(await bridge.next("refresh"), { status: { ...disconnectedStatus(), cleanupPending: false } });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry credential cleanup" })).toBeNull());
+  });
+
+  it("reloads a connected destination after a shared-settings conflict", async () => {
+    let status = connectedStatus(true, "us1");
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/splunk/export/enabled") return jsonResponse({error: "Connection settings changed in another session. Refresh or restart Studio, then retry."}, 409);
+      if (String(input) === "/api/splunk/export/refresh") {
+        status = connectedStatus(false, "eu0");
+        return jsonResponse(status);
+      }
+      if (String(input) === "/api/splunk/export") return jsonResponse(status);
+      throw new Error(`unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetch);
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    await user.click(await screen.findByRole("switch", {name: "Remote telemetry export is on"}));
+    await user.click(await screen.findByRole("button", {name: "Reload saved connection"}));
+    expect(await screen.findByText("eu0 · Access token configured")).toBeTruthy();
+    expect(screen.getByRole("switch", {name: "Remote telemetry export is off"}).getAttribute("aria-checked")).toBe("false");
+  });
+
   it("loads standalone status directly without creating a browser session", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);

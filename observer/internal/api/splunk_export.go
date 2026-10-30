@@ -32,7 +32,6 @@ const (
 	maxSplunkRealmPageBytes      = 512 * 1024
 	splunkConnectionTestTimeout  = 10 * time.Second
 	splunkRealmResolutionTimeout = 8 * time.Second
-	splunkExportEnvFileSource    = "env-file"
 	splunkMetricsOTLPTestPath    = "/v2/datapoint/otlp"
 	splunkBrowserRequestHeader   = "X-Obstudio-Browser-Request"
 	splunkRollbackTokenHeader    = "X-Obstudio-Cloud-Rollback-Token"
@@ -58,9 +57,8 @@ var splunkRealmHTTPClient = &http.Client{
 type splunkConnectionVerifier func(context.Context, string, string) error
 
 // SplunkExportConfigurationRefresher reloads an optional local configuration
-// source without changing process-wide environment variables. It reports whether
-// the effective cloud configuration remains managed by that local source.
-type SplunkExportConfigurationRefresher func() (bool, error)
+// source after another local client saves a connection.
+type SplunkExportConfigurationRefresher func() error
 
 // registrationAndAuthProtocol selects which MCP client registration/auth
 // strategy the Cloud tab exposes. Exactly one of these -- or none -- is
@@ -88,6 +86,10 @@ func parseRegistrationAndAuthProtocol(raw string) registrationAndAuthProtocol {
 }
 
 type splunkExportService struct {
+	saveConnection                SplunkCloudSettingsSaver
+	savePreferences               SplunkCloudPreferencesSaver
+	storageManaged                SplunkCloudStorageManaged
+	cleanupPending                SplunkCloudCleanupPending
 	metrics                       *otlp.SplunkMetricsExportController
 	traces                        *otlp.SplunkTracesExportController
 	refresh                       SplunkExportConfigurationRefresher
@@ -98,8 +100,6 @@ type splunkExportService struct {
 	rollbackMetrics               otlp.SplunkMetricsExporterConfig
 	rollbackChanged               bool
 	rollbackTraces                otlp.SplunkTracesExporterConfig
-	rollbackSource                string
-	source                        string
 	registrationAndAuthProtocol   registrationAndAuthProtocol
 	configurationChanged          bool
 	stateVersionKey               [32]byte
@@ -107,6 +107,19 @@ type splunkExportService struct {
 	agentResourceMu               sync.Mutex
 	mu                            sync.Mutex
 }
+
+// ErrConnectionCleanupPending means saved settings must be applied before reporting cleanup failure.
+var ErrConnectionCleanupPending = errors.New("connection settings were saved; credential cleanup is pending, unlock the system credential store and retry")
+
+var ErrConnectionSettingsChanged = errors.New("Connection settings changed in another session. Refresh or restart Studio, then retry.")
+
+var errSplunkCloudSecureSave = errors.New("could not save the connection; check that secure credential storage is unlocked and the settings file is writable")
+
+type SplunkCloudStorageManaged func() bool
+type SplunkCloudCleanupPending func() bool
+
+type SplunkCloudSettingsSaver func(otlp.SplunkMetricsExporterConfig, otlp.SplunkTracesExporterConfig) error
+type SplunkCloudPreferencesSaver SplunkCloudSettingsSaver
 
 type splunkExportSignalStatus struct {
 	Configured      bool        `json:"configured"`
@@ -118,6 +131,8 @@ type splunkExportSignalStatus struct {
 }
 
 type splunkExportStatusResponse struct {
+	CleanupPending              bool                     `json:"cleanupPending,omitempty"`
+	StorageManaged              bool                     `json:"storageManaged"`
 	Connected                   bool                     `json:"connected"`
 	Enabled                     bool                     `json:"enabled"`
 	Realm                       string                   `json:"realm,omitempty"`
@@ -129,6 +144,7 @@ type splunkExportStatusResponse struct {
 }
 
 type configureSplunkExportRequest struct {
+	Enabled         *bool  `json:"enabled,omitempty"`
 	Realm           string `json:"realm"`
 	AccessToken     string `json:"accessToken"`
 	ExpectedVersion string `json:"expectedVersion,omitempty"`
@@ -233,7 +249,7 @@ func (s *splunkExportService) status(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *splunkExportService) configure(w http.ResponseWriter, r *http.Request) {
-	realm, accessToken, expectedVersion, ok := decodeSplunkExportConfiguration(w, r)
+	realm, accessToken, expectedVersion, enabled, ok := decodeSplunkExportConfiguration(w, r)
 	if !ok {
 		return
 	}
@@ -260,27 +276,27 @@ func (s *splunkExportService) configure(w http.ResponseWriter, r *http.Request) 
 		writeSplunkExportError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	s.applyCloudConnection(w, realm, accessToken, issueRollback, requestedRollbackToken)
+	s.applyCloudConnection(w, realm, accessToken, issueRollback, requestedRollbackToken, enabled)
 }
 
-func decodeSplunkExportConfiguration(w http.ResponseWriter, r *http.Request) (string, string, string, bool) {
+func decodeSplunkExportConfiguration(w http.ResponseWriter, r *http.Request) (string, string, string, bool, bool) {
 	var request configureSplunkExportRequest
 	if err := decodeStrictJSON(w, r, &request); err != nil {
 		writeSplunkExportError(w, http.StatusBadRequest, err.Error())
-		return "", "", "", false
+		return "", "", "", false, false
 	}
 
 	realm, err := validateSplunkRealm(request.Realm)
 	if err != nil {
 		writeSplunkExportError(w, http.StatusBadRequest, err.Error())
-		return "", "", "", false
+		return "", "", "", false, false
 	}
 	accessToken, err := validateSplunkAccessToken(request.AccessToken)
 	if err != nil {
 		writeSplunkExportError(w, http.StatusBadRequest, err.Error())
-		return "", "", "", false
+		return "", "", "", false, false
 	}
-	return realm, accessToken, request.ExpectedVersion, true
+	return realm, accessToken, request.ExpectedVersion, request.Enabled != nil && *request.Enabled, true
 }
 
 func (s *splunkExportService) applyCloudConnection(
@@ -289,6 +305,7 @@ func (s *splunkExportService) applyCloudConnection(
 	accessToken string,
 	issueRollback bool,
 	requestedRollbackToken string,
+	enabled bool,
 ) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -301,18 +318,17 @@ func (s *splunkExportService) applyCloudConnection(
 	}
 
 	if err := s.apply(
-		otlp.SplunkMetricsExporterConfig{Realm: realm, AccessToken: accessToken},
-		otlp.SplunkTracesExporterConfig{Realm: realm, AccessToken: accessToken},
+		otlp.SplunkMetricsExporterConfig{Realm: realm, AccessToken: accessToken, Enabled: enabled},
+		otlp.SplunkTracesExporterConfig{Realm: realm, AccessToken: accessToken, Enabled: enabled},
 	); err != nil {
-		if rollbackToken != "" {
+		if rollbackToken != "" && !errors.Is(err, ErrConnectionCleanupPending) {
 			if rollbackErr := s.apply(previousMetrics, previousTraces); rollbackErr == nil {
 				s.clearRollbackLocked()
 			}
 		}
-		writeSplunkExportError(w, http.StatusInternalServerError, "could not configure Splunk Observability Cloud export")
+		writeSplunkCloudMutationError(w, err, "could not configure Splunk Observability Cloud export")
 		return
 	}
-	s.source = ""
 	s.configurationChanged = true
 	status := s.snapshotLocked()
 	status.RollbackToken = rollbackToken
@@ -341,7 +357,6 @@ func (s *splunkExportService) rollback(w http.ResponseWriter, r *http.Request) {
 		writeSplunkExportError(w, http.StatusInternalServerError, "could not roll back Splunk Observability Cloud export")
 		return
 	}
-	s.source = s.rollbackSource
 	s.configurationChanged = s.rollbackChanged
 	s.clearRollbackLocked()
 	writeSameOriginJSON(w, s.snapshotLocked())
@@ -370,6 +385,10 @@ func (s *splunkExportService) setEnabled(w http.ResponseWriter, r *http.Request)
 	defer s.mu.Unlock()
 	metricsConfig := s.metrics.Config()
 	tracesConfig := s.traces.Config()
+	if !enabled && s.saveConnection != nil && (metricsConfig.AccessToken == "" || tracesConfig.AccessToken == "") {
+		writeSplunkExportError(w, http.StatusConflict, "Reconnect the saved connection before changing export state.")
+		return
+	}
 	if enabled && !sameSplunkCloudRealm(
 		metricsConfig.Realm,
 		metricsConfig.AccessToken,
@@ -388,8 +407,8 @@ func (s *splunkExportService) setEnabled(w http.ResponseWriter, r *http.Request)
 	}
 	metricsConfig.Enabled = enabled
 	tracesConfig.Enabled = enabled
-	if err := s.apply(metricsConfig, tracesConfig); err != nil {
-		writeSplunkExportError(w, http.StatusInternalServerError, "could not update Splunk Observability Cloud export")
+	if err := s.applyWithSaver(metricsConfig, tracesConfig, SplunkCloudSettingsSaver(s.savePreferences)); err != nil {
+		writeSplunkCloudMutationError(w, err, "could not update Splunk Observability Cloud export")
 		return
 	}
 	s.configurationChanged = true
@@ -414,20 +433,15 @@ func (s *splunkExportService) forget(w http.ResponseWriter, r *http.Request) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.source == splunkExportEnvFileSource {
-		writeSplunkExportError(w, http.StatusConflict, "remove SPLUNK_ACCESS_TOKEN from the env file before removing this connection")
-		return
-	}
 	rollbackToken, err := s.beginRollbackLocked(issueRollback, requestedRollbackToken)
 	if err != nil {
 		writeSplunkExportError(w, http.StatusInternalServerError, "could not create cloud rollback capability")
 		return
 	}
 	if err := s.apply(otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}); err != nil {
-		writeSplunkExportError(w, http.StatusInternalServerError, "could not remove Splunk Observability Cloud connection")
+		writeSplunkCloudMutationError(w, err, "could not remove Splunk Observability Cloud connection")
 		return
 	}
-	s.source = ""
 	s.configurationChanged = true
 	status := s.snapshotLocked()
 	status.RollbackToken = rollbackToken
@@ -471,7 +485,6 @@ func (s *splunkExportService) beginRollbackLocked(
 	s.rollbackChanged = s.configurationChanged
 	s.rollbackMetrics = s.metrics.Config()
 	s.rollbackTraces = s.traces.Config()
-	s.rollbackSource = s.source
 	return token, nil
 }
 
@@ -480,7 +493,6 @@ func (s *splunkExportService) clearRollbackLocked() {
 	s.rollbackChanged = false
 	s.rollbackMetrics = otlp.SplunkMetricsExporterConfig{}
 	s.rollbackTraces = otlp.SplunkTracesExporterConfig{}
-	s.rollbackSource = ""
 }
 
 func (s *splunkExportService) refreshConfiguration(w http.ResponseWriter, _ *http.Request) {
@@ -503,16 +515,7 @@ func (s *splunkExportService) refreshConfigurationState() error {
 	defer s.mu.Unlock()
 	s.clearRollbackLocked()
 
-	managed, err := s.refresh()
-	if err != nil {
-		return err
-	}
-	if managed {
-		s.source = splunkExportEnvFileSource
-	} else {
-		s.source = ""
-	}
-	return nil
+	return s.refresh()
 }
 
 func requireLocalObserverRequest(
@@ -604,21 +607,52 @@ func isLoopbackHostname(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func (s *splunkExportService) apply(
-	metricsConfig otlp.SplunkMetricsExporterConfig,
-	tracesConfig otlp.SplunkTracesExporterConfig,
-) error {
-	previousMetrics := s.metrics.Config()
-	if err := s.metrics.Configure(metricsConfig); err != nil {
-		return err
+func (s *splunkExportService) apply(metricsConfig otlp.SplunkMetricsExporterConfig, tracesConfig otlp.SplunkTracesExporterConfig) error {
+	return s.applyWithSaver(metricsConfig, tracesConfig, s.saveConnection)
+}
+
+func (s *splunkExportService) applyWithSaver(metricsConfig otlp.SplunkMetricsExporterConfig, tracesConfig otlp.SplunkTracesExporterConfig, save SplunkCloudSettingsSaver) error {
+	if save == nil {
+		save = s.saveConnection
 	}
-	if err := s.traces.Configure(tracesConfig); err != nil {
-		if rollbackErr := s.metrics.Configure(previousMetrics); rollbackErr != nil {
-			return fmt.Errorf("configure traces: %w; rollback metrics: %v", err, rollbackErr)
+	configureMetrics, configureTraces := s.metrics.Configure, s.traces.Configure
+	previousMetrics := s.metrics.Config()
+	previousTraces := s.traces.Config()
+	var cleanupErr error
+	if save != nil {
+		if err := save(metricsConfig, tracesConfig); errors.Is(err, ErrConnectionCleanupPending) {
+			cleanupErr = ErrConnectionCleanupPending
+		} else if err != nil {
+			if errors.Is(err, ErrConnectionSettingsChanged) {
+				return err
+			}
+			return errSplunkCloudSecureSave
+		}
+	}
+	restoreSaved := func(err error) error {
+		if save != nil {
+			if saveErr := save(previousMetrics, previousTraces); saveErr != nil {
+				return errors.New("could not apply connection or restore saved settings")
+			}
 		}
 		return err
 	}
-	return nil
+	if err := configureMetrics(metricsConfig); err != nil {
+		return restoreSaved(err)
+	}
+	if err := configureTraces(tracesConfig); err != nil {
+		if rollbackErr := configureMetrics(previousMetrics); rollbackErr != nil {
+			return restoreSaved(fmt.Errorf("configure traces: %w; rollback metrics: %v", err, rollbackErr))
+		}
+		return restoreSaved(err)
+	}
+	if save != nil {
+		s.configurationChanged = true
+	}
+	if cleanupErr != nil {
+		s.clearRollbackLocked()
+	}
+	return cleanupErr
 }
 
 func (s *splunkExportService) snapshot() splunkExportStatusResponse {
@@ -648,6 +682,8 @@ func (s *splunkExportService) snapshotLocked() splunkExportStatusResponse {
 	}
 
 	return splunkExportStatusResponse{
+		StorageManaged:              s.storageManaged != nil && s.storageManaged(),
+		CleanupPending:              s.cleanupPending != nil && s.cleanupPending(),
 		Connected:                   connected,
 		Enabled:                     connected && metrics.Enabled && traces.Enabled,
 		Realm:                       realm,
@@ -695,18 +731,15 @@ func (s *splunkExportService) acceptExpectedVersion(w http.ResponseWriter, expec
 	return true
 }
 
-// stateVersionLocked includes s.source, so the caller must hold s.mu.
 func (s *splunkExportService) stateVersionLocked(
 	metrics otlp.SplunkMetricsExporterConfig,
 	traces otlp.SplunkTracesExporterConfig,
 ) string {
 	state, err := json.Marshal(struct {
 		Metrics otlp.SplunkMetricsExporterConfig `json:"metrics"`
-		Source  string                           `json:"source"`
 		Traces  otlp.SplunkTracesExporterConfig  `json:"traces"`
 	}{
 		Metrics: metrics,
-		Source:  s.source,
 		Traces:  traces,
 	})
 	if err != nil {
@@ -1040,6 +1073,18 @@ func decodeStrictJSON(w http.ResponseWriter, r *http.Request, destination any) e
 		return fmt.Errorf("invalid JSON request: %w", err)
 	}
 	return nil
+}
+
+func writeSplunkCloudMutationError(w http.ResponseWriter, err error, fallback string) {
+	if errors.Is(err, ErrConnectionSettingsChanged) {
+		writeSplunkExportError(w, http.StatusConflict, ErrConnectionSettingsChanged.Error())
+	} else if errors.Is(err, ErrConnectionCleanupPending) {
+		writeSplunkExportError(w, http.StatusInternalServerError, ErrConnectionCleanupPending.Error())
+	} else if errors.Is(err, errSplunkCloudSecureSave) {
+		writeSplunkExportError(w, http.StatusInternalServerError, errSplunkCloudSecureSave.Error())
+	} else {
+		writeSplunkExportError(w, http.StatusInternalServerError, fallback)
+	}
 }
 
 func writeSplunkExportError(w http.ResponseWriter, status int, message string) {

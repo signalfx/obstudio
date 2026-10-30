@@ -302,23 +302,13 @@ func TestPrepareManagedLaunchStagesEnvFileWeaver(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(previous) })
 	previousWeaver, hadWeaver := os.LookupEnv("WEAVER_PATH")
 	_ = os.Unsetenv("WEAVER_PATH")
-	envFileShellPrecedence.Lock()
-	_, hadPrecedence := envFileShellPrecedence.keys["WEAVER_PATH"]
-	delete(envFileShellPrecedence.keys, "WEAVER_PATH")
-	envFileShellPrecedence.Unlock()
 	t.Cleanup(func() {
 		if hadWeaver {
 			_ = os.Setenv("WEAVER_PATH", previousWeaver)
 		} else {
 			_ = os.Unsetenv("WEAVER_PATH")
 		}
-		envFileShellPrecedence.Lock()
-		if hadPrecedence {
-			envFileShellPrecedence.keys["WEAVER_PATH"] = struct{}{}
-		} else {
-			delete(envFileShellPrecedence.keys, "WEAVER_PATH")
-		}
-		envFileShellPrecedence.Unlock()
+
 	})
 	weaver := filepath.Join(working, "tools", installedWeaverName(os.Args[0]))
 	if err := os.MkdirAll(filepath.Dir(weaver), 0o700); err != nil {

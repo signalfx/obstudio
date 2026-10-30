@@ -308,6 +308,7 @@ export interface SplunkExportSignalStatus {
 export type RegistrationAndAuthProtocol = "NONE" | "CIMD" | "O11Y_OAUTH";
 
 export interface SplunkExportStatus {
+  cleanupPending?: boolean;
   connected: boolean;
   enabled: boolean;
   realm?: string;

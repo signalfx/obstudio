@@ -177,7 +177,7 @@ export async function fetchSplunkExportStatus(signal?: AbortSignal): Promise<Spl
   return fetchJSON<SplunkExportStatus>("/api/splunk/export", { signal });
 }
 
-export type SplunkExportBrowserAction = "connect" | "forget" | "set-enabled";
+export type SplunkExportBrowserAction = "connect" | "forget" | "set-enabled" | "refresh";
 
 export class SplunkExportBrowserActionError extends Error {
   constructor(
@@ -207,7 +207,9 @@ export async function runSplunkExportBrowserAction(
     ? "/api/splunk/export"
     : action === "forget"
       ? "/api/splunk/export/forget"
-      : "/api/splunk/export/enabled";
+      : action === "refresh"
+        ? "/api/splunk/export/refresh"
+        : "/api/splunk/export/enabled";
   return postSplunkBrowserJSON(path, payload) as Promise<SplunkExportStatus>;
 }
 

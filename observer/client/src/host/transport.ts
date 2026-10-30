@@ -19,6 +19,7 @@ export const observerHostCloudActions = [
   "open-skill-docs",
   "register-o11y-oauth",
   "resolve-realm",
+  "refresh",
   "set-enabled",
   "setup-cimd",
 ] as const;

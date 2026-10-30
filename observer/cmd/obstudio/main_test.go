@@ -1,12 +1,12 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/credentials"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 )
 
@@ -79,31 +79,18 @@ func TestRenderStartupBannerUsesFullProductName(t *testing.T) {
 }
 
 func TestSplunkExportConfigurationRefreshKeepsUnchangedExporters(t *testing.T) {
-	envFile := filepath.Join(t.TempDir(), ".env")
-	if err := os.WriteFile(envFile, []byte(strings.Join([]string{
-		"SPLUNK_REALM=us1",
-		"SPLUNK_ACCESS_TOKEN=configured-token",
-		"SPLUNK_METRICS_EXPORT=true",
-		"SPLUNK_TRACES_EXPORT=false",
-	}, "\n")), 0o600); err != nil {
+	path := filepath.Join(t.TempDir(), "connections.json")
+	settings := newTestConnectionPersistence(t, path, credentials.NewWithBackend(&testCredentialBackend{values: map[string]string{}}))
+	metrics := &recordingMetricsExportConfigurator{config: otlp.SplunkMetricsExporterConfig{Enabled: true, Realm: "us1", AccessToken: "configured-token", Timeout: 7 * time.Second}}
+	traces := &recordingTracesExportConfigurator{config: otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: "configured-token", Timeout: 8 * time.Second}}
+	if err := settings.SaveCloud(metrics.config, traces.config); err != nil {
 		t.Fatal(err)
 	}
-	metrics := &recordingMetricsExportConfigurator{config: otlp.SplunkMetricsExporterConfig{
-		Enabled: true, Realm: "us1", AccessToken: "configured-token", Timeout: 7 * time.Second,
-	}}
-	traces := &recordingTracesExportConfigurator{config: otlp.SplunkTracesExporterConfig{
-		Realm: "us1", AccessToken: "configured-token", Timeout: 8 * time.Second,
-	}}
-
-	managed, err := newSplunkExportConfigurationRefresher(envFile, metrics, traces)()
-	if err != nil {
-		t.Fatalf("refresh unchanged configuration: %v", err)
-	}
-	if !managed {
-		t.Fatal("unchanged env-file configuration was not reported as managed")
+	if err := newSplunkExportConfigurationRefresher(metrics, traces, settings)(); err != nil {
+		t.Fatal(err)
 	}
 	if metrics.configureCalls != 0 || traces.configureCalls != 0 {
-		t.Fatalf("unchanged exporters were reconfigured: metrics=%d traces=%d", metrics.configureCalls, traces.configureCalls)
+		t.Fatal("unchanged settings reconfigured exporters")
 	}
 }
 

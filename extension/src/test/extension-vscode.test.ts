@@ -412,9 +412,10 @@ async function startDiscoverableSharedObserver(
 function writeObserverProcessFixture(
 	binaryPath: string,
 	version: string,
-	options: { legacyBearerAuth: boolean },
+	options: { legacyBearerAuth: boolean; cloudStorageTest?: { state: string; requests: string; failure: string } },
 ): void {
 	const source = `#!/usr/bin/env node
+const fs = require('node:fs');
 const http = require('node:http');
 const net = require('node:net');
 
@@ -426,12 +427,16 @@ const baseUrl = 'http://' + host + ':' + port;
 const mcpUrl = baseUrl + '/mcp';
 const controlToken = process.env.OBSTUDIO_CONTROL_TOKEN || '';
 const status = {
+  storageManaged: false,
   connected: false,
   enabled: false,
   metrics: { configured: false },
   traces: { configured: false },
   version: 'VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV',
 };
+
+const migration = ${JSON.stringify(options.cloudStorageTest)};
+if (migration && fs.existsSync(migration.state)) Object.assign(status, JSON.parse(fs.readFileSync(migration.state, 'utf8')));
 
 function sendJson(response, statusCode, value) {
   response.writeHead(statusCode, { 'Content-Type': 'application/json' });
@@ -468,6 +473,25 @@ const server = http.createServer((request, response) => {
   }
   if (!${JSON.stringify(options.legacyBearerAuth)} && request.headers.authorization !== undefined) {
     sendJson(response, 400, { error: 'unexpected authorization' });
+    return;
+  }
+
+  if (migration && request.method === 'POST' && (requestUrl.pathname === '/api/splunk/export' || requestUrl.pathname === '/api/splunk/export/forget')) {
+    let body = '';
+    request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      fs.appendFileSync(migration.requests, JSON.stringify({ path: requestUrl.pathname, body: JSON.parse(body) }) + '\\n');
+      if (fs.existsSync(migration.failure)) {
+        sendJson(response, Number(fs.readFileSync(migration.failure, 'utf8')), { error: 'secure storage unavailable' });
+        return;
+      }
+      const configured = requestUrl.pathname === '/api/splunk/export';
+      const value = JSON.parse(body);
+      Object.assign(status, { connected: configured, enabled: configured && value.enabled === true, storageManaged: true,
+        metrics: { configured }, traces: { configured } });
+      fs.writeFileSync(migration.state, JSON.stringify(status));
+      sendJson(response, 200, status);
+    });
     return;
   }
   if (requestUrl.pathname === '/api/splunk/export/refresh') {
@@ -1400,6 +1424,177 @@ suite('VS Code Host', () => {
 			process.env.USERPROFILE = originalUserProfile;
 			cleanupTempDir(tempHome);
 			await managedObserver.dispose();
+		}
+	});
+
+	test('Cloud initialization retries migration and preserves export state through storage failures', async function() {
+		this.timeout(90_000);
+		if (process.platform === 'win32') { this.skip(); }
+		const extension = await getExtension();
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+		const binary = path.join(extension.extensionPath, 'dist', 'observer', 'obstudio');
+		const contents = fs.readFileSync(binary);
+		const mode = fs.statSync(binary).mode;
+		const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-migration-'));
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		const restoreHome = setTestEnvironmentVariable('HOME', temp);
+		const restoreProfile = setTestEnvironmentVariable('USERPROFILE', temp);
+		const restoreState = setTestEnvironmentVariable('OBSTUDIO_SHARED_OBSERVER_STATE_PATH', path.join(temp, 'shared.json'));
+		const ports = await resolveSharedObserverPorts({});
+		const fixture = { state: path.join(temp, 'state.json'), requests: path.join(temp, 'requests.jsonl'), failure: path.join(temp, 'failure') };
+		const connection = { realm: 'us1', accessToken: 'migration-synthetic-token' };
+		const enabled = process.env.OBSTUDIO_TEST_MIGRATION_EXPORT_ENABLED === '1';
+		const migrationState = async () => {
+			const state = await vscode.commands.executeCommand<{ hasToken: boolean; enabled?: boolean; complete: boolean }>('observability-studio.internal.cloudMigrationStateForTest');
+			return state && { ...state, enabled: state.enabled === true };
+		};
+		const initialize = async () => vscode.commands.executeCommand<{ status: Record<string, unknown>; warning?: string }>('observability-studio.internal.cloudActionForTest', { action: 'initialize' });
+		const seed = (enabled: boolean) => vscode.commands.executeCommand('observability-studio.internal.seedCloudMigrationForTest', JSON.stringify(connection), enabled);
+		try {
+			writeObserverProcessFixture(binary, String(extension.packageJSON.version), { legacyBearerAuth: false, cloudStorageTest: fixture });
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest', ports.ui);
+			await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest', { grpc: ports.grpc, http: ports.http });
+			fs.writeFileSync(fixture.failure, '500');
+			await seed(enabled);
+			assert.deepEqual(await migrationState(), { hasToken: true, enabled, complete: false });
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+			const runtime = await vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState');
+			assert.equal(runtime?.observerUrl, `http://127.0.0.1:${ports.ui}`);
+			for (const status of [500, 401]) {
+				fs.writeFileSync(fixture.failure, String(status));
+				const failed = await initialize();
+				assert.match(failed.warning ?? '', /secure storage unavailable/);
+				assert.equal(failed.status.connected, false);
+				assert.deepEqual(await migrationState(), { hasToken: true, enabled, complete: false });
+				const lastRequest = JSON.parse(fs.readFileSync(fixture.requests, 'utf8').trim().split('\n').at(-1)!);
+				assert.equal(lastRequest.body.enabled, enabled);
+			}
+			fs.unlinkSync(fixture.failure);
+			await vscode.commands.executeCommand('observability-studio.internal.failCloudCleanupForTest', true);
+			const { status: connected } = await initialize();
+			assert.equal(connected?.connected, true);
+			assert.equal(connected?.enabled, enabled);
+			assert.equal((await migrationState())?.hasToken, true);
+			assert.equal((await migrationState())?.complete, true);
+			await vscode.commands.executeCommand('observability-studio.internal.failCloudCleanupForTest', false);
+			const requests = fs.readFileSync(fixture.requests, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { body: Record<string, unknown> });
+			assert.deepEqual(requests.at(-1)?.body, { ...connection, enabled, expectedVersion: 'V'.repeat(43) });
+			const count = requests.length;
+			await initialize();
+			assert.equal((await migrationState())?.hasToken, false);
+			assert.equal((await migrationState())?.complete, true);
+			assert.equal(fs.readFileSync(fixture.requests, 'utf8').trim().split('\n').length, count, 'initialization must import once');
+			await vscode.commands.executeCommand('observability-studio.internal.cloudActionForTest', { action: 'forget' });
+			// A leftover source credential cannot revive a completed disconnect.
+			await seed(enabled);
+			await vscode.commands.executeCommand('observability-studio.internal.failCloudCleanupForTest', false, true);
+			const { status: disconnected } = await initialize();
+			assert.equal(disconnected?.connected, false);
+			assert.equal((await migrationState())?.hasToken, false);
+			assert.equal((await migrationState())?.complete, false);
+			assert.equal(await vscode.commands.executeCommand('observability-studio.internal.cloudCleanupPendingForTest'), true, 'editor-state failure must retain its durable cleanup intent');
+			const poll = await vscode.commands.executeCommand<{status:number; body:string}>('observability-studio.internal.hostRequestForTest', {
+				type:'obstudio.host.request', requestId:'migration-state-recovery-poll', request:{kind:'http',method:'GET',path:'/api/splunk/export'},
+			});
+			assert.equal(poll?.status, 200);
+			assert.equal(JSON.parse(poll!.body).cleanupPending, true, 'polling must expose unfinished editor-state cleanup');
+			await vscode.commands.executeCommand('observability-studio.internal.failCloudCleanupForTest', false);
+			await initialize();
+			const recovered = await migrationState();
+			assert.equal(recovered?.hasToken, false);
+			assert.equal(recovered?.complete, true);
+			assert.equal(await vscode.commands.executeCommand('observability-studio.internal.cloudCleanupPendingForTest'), false);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.internal.failCloudCleanupForTest', false);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.internal.setObserverOtlpPortsForTest');
+			await vscode.commands.executeCommand('observability-studio.internal.setManagedObserverPortForTest');
+			fs.writeFileSync(binary, contents, { mode });
+			fs.chmodSync(binary, mode);
+			restoreHome(); restoreProfile(); restoreState();
+			cleanupTempDir(temp);
+		}
+	});
+
+	test('shared Cloud requires secure storage confirmation and retries editor cleanup', async function() {
+		this.timeout(30_000);
+		const extension = await getExtension();
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		await vscode.commands.executeCommand('observability-studio.stopObserver');
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		const originalURL = config.get<string>('sharedObserverUrl');
+		let storageSupported = false;
+		let connected = false;
+		let mutations = 0;
+		let refreshes = 0;
+		let nativeCleanupPending = false;
+		const server = http.createServer((request, response) => {
+			response.setHeader('Content-Type', 'application/json');
+			if (request.url === '/api/health') {
+				response.end(JSON.stringify({ kind: 'obstudio', apiVersion: 'v1', version: String(extension.packageJSON.version) }));
+				return;
+			}
+			if (request.method === 'POST') {
+				if (request.url === '/api/splunk/export/refresh') { refreshes += 1; nativeCleanupPending = false; }
+				else { mutations += 1; connected = true; }
+			}
+			response.end(JSON.stringify({
+				connected, cleanupPending: nativeCleanupPending, enabled: false, metrics: { configured: connected }, traces: { configured: connected },
+				version: 'V'.repeat(43), ...(storageSupported ? { storageManaged: connected } : {}),
+			}));
+		});
+		await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+		const address = server.address() as net.AddressInfo;
+		const seed = () => vscode.commands.executeCommand('observability-studio.internal.seedCloudMigrationForTest', JSON.stringify({ realm: 'us1', accessToken: 'migration-test-token' }), false);
+		const state = () => vscode.commands.executeCommand<{ hasToken: boolean; complete: boolean; enabled?: boolean }>('observability-studio.internal.cloudMigrationStateForTest');
+		const action = (action: string, payload?: Record<string, unknown>) => vscode.commands.executeCommand('observability-studio.internal.cloudActionForTest', { action, payload });
+		try {
+			await config.update('sharedObserverUrl', `http://127.0.0.1:${address.port}`, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+			await seed();
+			await assert.rejects(Promise.resolve(action('connect', { realm: 'us1', accessToken: 'test-token' })), /Update.*collector/);
+			assert.equal(mutations, 0, 'unsupported collector must receive no connection mutation');
+			assert.deepEqual(await state(), { hasToken: true, enabled: false, complete: false });
+			storageSupported = true;
+			await vscode.commands.executeCommand('observability-studio.internal.failCloudCleanupForTest', true, true);
+			const saved = await action('connect', { realm: 'us1', accessToken: 'test-token' }) as { status: { cleanupPending?: boolean } };
+			assert.equal(saved.status.cleanupPending, true);
+			const pollStatus = async () => {
+				const response = await vscode.commands.executeCommand<{ body: string }>('observability-studio.internal.hostRequestForTest', {
+					type: 'obstudio.host.request', requestId: 'cleanup-status', request: { kind: 'http', method: 'GET', path: '/api/splunk/export' },
+				});
+				return JSON.parse(response!.body) as { cleanupPending?: boolean };
+			};
+			assert.equal((await pollStatus()).cleanupPending, true, 'polling must include editor-owned credential cleanup');
+			assert.equal((await state())?.hasToken, true);
+			assert.equal((await state())?.complete, false);
+			assert.equal(await vscode.commands.executeCommand('observability-studio.internal.cloudCleanupPendingForTest'), true);
+			await vscode.commands.executeCommand('observability-studio.internal.failCloudCleanupForTest', false);
+			await action('initialize');
+			assert.equal((await state())?.hasToken, false);
+			assert.equal((await state())?.complete, true);
+			assert.equal(await vscode.commands.executeCommand('observability-studio.internal.cloudCleanupPendingForTest'), false);
+			assert.equal(mutations, 1, 'editor cleanup must not mutate the shared collector');
+			assert.equal((await pollStatus()).cleanupPending, false);
+			assert.equal(refreshes, 0, 'automatic shared initialization must stay read-only');
+			nativeCleanupPending = true;
+			await action('initialize');
+			assert.equal((await pollStatus()).cleanupPending, true);
+			assert.equal(refreshes, 0);
+			await vscode.commands.executeCommand('observability-studio.internal.hostRequestForTest', {
+				type: 'obstudio.host.request', requestId: 'cleanup-retry', request: { kind: 'cloud', action: 'refresh', payload: { expectedVersion: 'V'.repeat(43) } },
+			});
+			assert.equal(refreshes, 1, 'explicit retry must call the shared collector refresh endpoint');
+			assert.equal((await pollStatus()).cleanupPending, false);
+
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.internal.failCloudCleanupForTest', false);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await config.update('sharedObserverUrl', originalURL, vscode.ConfigurationTarget.Global);
+			await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
 		}
 	});
 

@@ -57,6 +57,10 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	var tracesController *otlp.SplunkTracesExportController
 	var splunkExportRefresher SplunkExportConfigurationRefresher
 	var freeAccountSubmitter freeaccount.Submitter
+	var saveConnection SplunkCloudSettingsSaver
+	var savePreferences SplunkCloudPreferencesSaver
+	var storageManaged SplunkCloudStorageManaged
+	var cleanupPending SplunkCloudCleanupPending
 	var endpointConfig EndpointConfig
 	info := ServerInfo{
 		Kind:       "obstudio",
@@ -100,6 +104,14 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			if value != nil {
 				freeAccountSubmitter = value
 			}
+		case SplunkCloudCleanupPending:
+			cleanupPending = value
+		case SplunkCloudStorageManaged:
+			storageManaged = value
+		case SplunkCloudPreferencesSaver:
+			savePreferences = value
+		case SplunkCloudSettingsSaver:
+			saveConnection = value
 		case EndpointConfig:
 			endpointConfig = value
 		}
@@ -135,7 +147,12 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("GET /api/query/validation/findings", queryValidationFindings(validationService))
 	mux.HandleFunc("DELETE /api/data", localMutation(clearData(s, validationStore)))
 	if metricsController != nil && tracesController != nil {
-		newSplunkExportService(metricsController, tracesController, splunkExportRefresher).register(mux)
+		service := newSplunkExportService(metricsController, tracesController, splunkExportRefresher)
+		service.saveConnection = saveConnection
+		service.savePreferences = savePreferences
+		service.storageManaged = storageManaged
+		service.cleanupPending = cleanupPending
+		service.register(mux)
 	}
 	if freeAccountSubmitter != nil {
 		newFreeAccountAPI(freeAccountSubmitter).register(mux)

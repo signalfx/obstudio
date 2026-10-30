@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -618,7 +619,6 @@ func TestSplunkExportRollbackUsesServerHeldSnapshotAndCallerHeldCapability(t *te
 		AccessToken: "previous-token",
 	})
 	service := newTestSplunkExportService(metrics, traces, nil)
-	service.source = splunkExportEnvFileSource
 	verifyCalls := 0
 	service.verifyConnection = func(context.Context, string, string) error {
 		verifyCalls++
@@ -691,9 +691,6 @@ func TestSplunkExportRollbackUsesServerHeldSnapshotAndCallerHeldCapability(t *te
 	}
 	if got := traces.Config(); !got.Enabled || got.Realm != "us0" || got.AccessToken != "previous-token" {
 		t.Fatalf("rollback did not restore traces config: %+v", got)
-	}
-	if service.source != splunkExportEnvFileSource {
-		t.Fatalf("rollback source = %q, want %q", service.source, splunkExportEnvFileSource)
 	}
 
 	replay := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/rollback",
@@ -772,7 +769,7 @@ func TestSplunkExportAllowsAColdCloudConnectionProbe(t *testing.T) {
 func TestSplunkExportRejectsConcurrentCloudMutations(t *testing.T) {
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	service := newTestSplunkExportService(metrics, traces, func() (bool, error) { return false, nil })
+	service := newTestSplunkExportService(metrics, traces, func() error { return nil })
 	started := make(chan struct{})
 	release := make(chan struct{})
 	var first sync.Once
@@ -1300,9 +1297,9 @@ func TestSplunkExportRefreshUsesConfigurationRefresher(t *testing.T) {
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
 	calls := 0
 	mux := http.NewServeMux()
-	newTestSplunkExportService(metrics, traces, func() (bool, error) {
+	newTestSplunkExportService(metrics, traces, func() error {
 		calls++
-		return false, nil
+		return nil
 	}).register(mux)
 
 	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/refresh", `{}`)
@@ -1311,52 +1308,6 @@ func TestSplunkExportRefreshUsesConfigurationRefresher(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("refresh calls = %d, want 1", calls)
-	}
-}
-
-func TestSplunkExportForgetRefusesEnvManagedConfiguration(t *testing.T) {
-	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
-	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
-	mux := http.NewServeMux()
-	newTestSplunkExportService(metrics, traces, func() (bool, error) {
-		if err := metrics.Configure(otlp.SplunkMetricsExporterConfig{
-			Realm:       "us0",
-			AccessToken: testSplunkAccessToken,
-		}); err != nil {
-			return false, err
-		}
-		if err := traces.Configure(otlp.SplunkTracesExporterConfig{
-			Realm:       "us0",
-			AccessToken: testSplunkAccessToken,
-		}); err != nil {
-			return false, err
-		}
-		return true, nil
-	}).register(mux)
-
-	response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/refresh", `{}`)
-	if response.Code != http.StatusOK {
-		t.Fatalf("refresh status = %d, body = %s", response.Code, response.Body.String())
-	}
-
-	response = splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export/forget", `{}`)
-	if response.Code != http.StatusConflict {
-		t.Fatalf("forget status = %d, body = %s", response.Code, response.Body.String())
-	}
-	if !strings.Contains(response.Body.String(), "remove SPLUNK_ACCESS_TOKEN") {
-		t.Fatalf("forget body = %s", response.Body.String())
-	}
-
-	response = splunkExportRequest(t, mux, http.MethodGet, "/api/splunk/export", "")
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
-	}
-	var status splunkExportStatusResponse
-	if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
-		t.Fatal(err)
-	}
-	if !status.Connected || status.Realm != "us0" {
-		t.Fatalf("env-managed config should remain connected: %+v", status)
 	}
 }
 
@@ -1656,4 +1607,208 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request)
+}
+
+func TestCloudConfigurePersistsInitialExportStateBeforeApplying(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprint(enabled), func(t *testing.T) {
+			metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+			traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+			service := newTestSplunkExportService(metrics, traces, nil)
+			fail := true
+			var storedMetrics otlp.SplunkMetricsExporterConfig
+			var storedTraces otlp.SplunkTracesExporterConfig
+			service.saveConnection = func(m otlp.SplunkMetricsExporterConfig, tr otlp.SplunkTracesExporterConfig) error {
+				if metrics.Status().Configured || traces.Status().Configured {
+					t.Fatal("runtime changed before durable save")
+				}
+				if fail {
+					return errors.New("provider-private-details")
+				}
+				storedMetrics, storedTraces = m, tr
+				return nil
+			}
+			mux := http.NewServeMux()
+			service.register(mux)
+			post := func() *httptest.ResponseRecorder {
+				request := httptest.NewRequest(http.MethodPost, "/api/splunk/export", strings.NewReader(fmt.Sprintf(`{"realm":"us1","accessToken":"%s","enabled":%t}`, testSplunkAccessToken, enabled)))
+				request.RemoteAddr = "127.0.0.1:1234"
+				request.Header.Set("Content-Type", "application/json")
+				response := httptest.NewRecorder()
+				mux.ServeHTTP(response, request)
+				return response
+			}
+			response := post()
+			if response.Code != 500 || metrics.Status().Configured || traces.Status().Configured || strings.Contains(response.Body.String(), "provider-private-details") {
+				t.Fatal("failed secure save changed runtime or exposed provider details")
+			}
+			fail = false
+			response = post()
+			if response.Code != 200 {
+				t.Fatal(response.Code, response.Body.String())
+			}
+			if storedMetrics.AccessToken != testSplunkAccessToken || storedTraces.AccessToken != testSplunkAccessToken || storedMetrics.Enabled != enabled || storedTraces.Enabled != enabled || metrics.Status().Enabled != enabled || traces.Status().Enabled != enabled {
+				t.Fatal("configure did not atomically preserve the initial export preference")
+			}
+		})
+	}
+}
+
+func TestCloudSaveFailureExplainsStorageAndLaunchOwnership(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		cause   error
+		status  int
+		message string
+	}{
+		{"secure storage", errors.New("private-provider-detail"), http.StatusInternalServerError, "secure credential storage is unlocked"},
+		{"changed elsewhere", ErrConnectionSettingsChanged, http.StatusConflict, "changed in another session"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+			traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+			service := newTestSplunkExportService(metrics, traces, nil)
+			service.saveConnection = func(otlp.SplunkMetricsExporterConfig, otlp.SplunkTracesExporterConfig) error { return tc.cause }
+			mux := http.NewServeMux()
+			service.register(mux)
+			request := httptest.NewRequest(http.MethodPost, "/api/splunk/export", strings.NewReader(`{"realm":"us1","accessToken":"test-token"}`))
+			request.RemoteAddr = "127.0.0.1:1234"
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, request)
+			if response.Code != tc.status || !strings.Contains(response.Body.String(), tc.message) || strings.Contains(response.Body.String(), "private-provider-detail") {
+				t.Fatalf("unexpected classified failure: %d %s", response.Code, response.Body.String())
+			}
+			if metrics.Status().Configured || traces.Status().Configured {
+				t.Fatal("failed save changed the live connection")
+			}
+		})
+	}
+}
+
+func TestCloudDisconnectReportsPendingCleanupAfterStoppingExport(t *testing.T) {
+	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: testSplunkAccessToken, Enabled: true})
+	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: testSplunkAccessToken, Enabled: true})
+	service := newTestSplunkExportService(metrics, traces, nil)
+	service.saveConnection = func(otlp.SplunkMetricsExporterConfig, otlp.SplunkTracesExporterConfig) error {
+		return ErrConnectionCleanupPending
+	}
+	pending := true
+	service.cleanupPending = func() bool { return pending }
+	mux := http.NewServeMux()
+	service.register(mux)
+	request := httptest.NewRequest(http.MethodPost, "/api/splunk/export/forget", strings.NewReader(`{}`))
+	request.RemoteAddr = "127.0.0.1:1234"
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != 500 || !strings.Contains(response.Body.String(), "credential cleanup is pending") || metrics.Status().Configured || traces.Status().Configured || service.snapshot().RollbackToken != "" {
+		t.Fatalf("disconnect did not stop export and report pending cleanup: %d %s", response.Code, response.Body.String())
+	}
+	for _, expected := range []bool{true, false} {
+		pending = expected
+		status := httptest.NewRecorder()
+		mux.ServeHTTP(status, httptest.NewRequest(http.MethodGet, "/api/splunk/export", nil))
+		var value splunkExportStatusResponse
+		if err := json.Unmarshal(status.Body.Bytes(), &value); err != nil || value.CleanupPending != expected {
+			t.Fatal("GET status lost pending credential cleanup", err)
+		}
+	}
+}
+
+func TestCloudConfigureKeepsCommittedSettingsWhenCleanupIsPending(t *testing.T) {
+	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: "previous", Enabled: true})
+	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: "previous", Enabled: true})
+	service := newTestSplunkExportService(metrics, traces, nil)
+	saves := 0
+	service.saveConnection = func(otlp.SplunkMetricsExporterConfig, otlp.SplunkTracesExporterConfig) error {
+		saves++
+		return ErrConnectionCleanupPending
+	}
+	mux := http.NewServeMux()
+	service.register(mux)
+	request := httptest.NewRequest(http.MethodPost, "/api/splunk/export", strings.NewReader(`{"realm":"us1","accessToken":"replacement"}`))
+	request.RemoteAddr = "127.0.0.1:1234"
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(splunkRollbackTokenHeader, strings.Repeat("R", 43))
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != 500 || !strings.Contains(response.Body.String(), "credential cleanup is pending") {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	if saves != 1 || metrics.Config().AccessToken != "replacement" || traces.Config().AccessToken != "replacement" || metrics.Status().Enabled || traces.Status().Enabled {
+		t.Fatal("cleanup warning rolled back the committed connection")
+	}
+}
+
+func TestCloudToggleKeepsCommittedStateDuringCleanup(t *testing.T) {
+	for _, pending := range []bool{false, true} {
+		t.Run(strconv.FormatBool(pending), func(t *testing.T) {
+			metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: "token"})
+			traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: "token"})
+			service := newTestSplunkExportService(metrics, traces, nil)
+			service.saveConnection = func(otlp.SplunkMetricsExporterConfig, otlp.SplunkTracesExporterConfig) error {
+				if pending {
+					return ErrConnectionCleanupPending
+				}
+				return nil
+			}
+			mux := http.NewServeMux()
+			service.register(mux)
+			post := func(path, body string) *httptest.ResponseRecorder {
+				request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+				request.RemoteAddr = "127.0.0.1:1234"
+				request.Header.Set("Content-Type", "application/json")
+				response := httptest.NewRecorder()
+				mux.ServeHTTP(response, request)
+				return response
+			}
+			response := post("/api/splunk/export/enabled", `{"enabled":true}`)
+			wantStatus := 200
+			if pending {
+				wantStatus = 500
+			}
+			if response.Code != wantStatus {
+				t.Fatal(response.Code, response.Body.String())
+			}
+			if !service.configurationChanged {
+				t.Fatal("saved change was not retained")
+			}
+			service.saveConnection = func(otlp.SplunkMetricsExporterConfig, otlp.SplunkTracesExporterConfig) error { return nil }
+			response = post("/api/splunk/export/forget", `{}`)
+			if response.Code != 200 || metrics.Status().Configured || traces.Status().Configured {
+				t.Fatal("saved connection could not disconnect", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestCloudPauseRequiresLoadedCredentialsAndDisconnectRemainsAvailable(t *testing.T) {
+	for _, realm := range []string{"", "us1"} {
+		t.Run(realm, func(t *testing.T) {
+			metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{Realm: realm})
+			traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{Realm: realm})
+			service := newTestSplunkExportService(metrics, traces, nil)
+			saves := 0
+			service.saveConnection = func(otlp.SplunkMetricsExporterConfig, otlp.SplunkTracesExporterConfig) error { saves++; return nil }
+			mux := http.NewServeMux()
+			service.register(mux)
+			post := func(path, body string) *httptest.ResponseRecorder {
+				request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+				request.RemoteAddr = "127.0.0.1:1234"
+				request.Header.Set("Content-Type", "application/json")
+				response := httptest.NewRecorder()
+				mux.ServeHTTP(response, request)
+				return response
+			}
+			response := post("/api/splunk/export/enabled", `{"enabled":false}`)
+			if response.Code != 409 || saves != 0 {
+				t.Fatal("tokenless pause reached persistence", response.Code, response.Body.String())
+			}
+			response = post("/api/splunk/export/forget", `{}`)
+			if response.Code != 200 || saves != 1 {
+				t.Fatal("explicit disconnect was blocked", response.Code, response.Body.String())
+			}
+		})
+	}
 }
