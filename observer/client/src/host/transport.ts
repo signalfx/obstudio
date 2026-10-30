@@ -74,7 +74,7 @@ export interface ObserverHostCloudResponse {
 export interface ObserverHostTelemetryMessage {
   data?: unknown;
   signal?: string;
-  type: "connected" | "disconnected" | "paused-update" | "reload" | "update";
+  type: "config-changed" | "connected" | "disconnected" | "paused-update" | "reload" | "update";
 }
 
 interface VSCodeWebviewAPI {
@@ -452,6 +452,6 @@ function isObserverHostTelemetryEnvelope(value: unknown): value is ObserverHostT
   if (typeof envelope.message !== "object" || envelope.message === null) return false;
   const message = envelope.message as Record<string, unknown>;
   return typeof message.type === "string"
-    && ["connected", "disconnected", "paused-update", "reload", "update"].includes(message.type)
+    && ["config-changed", "connected", "disconnected", "paused-update", "reload", "update"].includes(message.type)
     && (message.signal === undefined || typeof message.signal === "string");
 }

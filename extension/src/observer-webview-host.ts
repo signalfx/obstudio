@@ -76,6 +76,9 @@ const observerStateVersionPattern = /^[A-Za-z0-9_-]{43}$/;
 const traceDetailPathPattern = /^\/api\/query\/traces\/[0-9a-fA-F]{32}$/;
 const allowedGetPaths = new Set([
 	'/api/audit/score',
+	'/api/config',
+	'/api/config/definitions',
+	'/api/config/status',
 	'/api/dashboards/preview',
 	'/api/health',
 	'/api/query/logs',
@@ -90,7 +93,7 @@ const allowedGetPaths = new Set([
 	'/api/query/validation/summary',
 	'/api/splunk/export',
 ]);
-const allowedPostPaths = new Set(['/api/validation/run']);
+const allowedPostPaths = new Set(['/api/config', '/api/validation/run']);
 
 export function observerHostResponseByteLimit(url: URL): number {
 	return isLoopbackObserverHost(url.hostname)

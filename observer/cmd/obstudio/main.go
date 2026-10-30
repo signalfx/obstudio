@@ -130,6 +130,9 @@ func newRootCmd(config *runConfig) *cobra.Command {
 	root.AddCommand(newInstallCmd())
 	root.AddCommand(newLifecycleCommands()...)
 	root.AddCommand(newTokenTelemetryCommand())
+	if configManagerEnabled() {
+		root.AddCommand(newTelemetryCommand())
+	}
 	return root
 }
 
@@ -226,17 +229,24 @@ func run(config runConfig) error {
 	if observerMode == managedObserverMode && !managedLaunchAuthorized {
 		observerMode = "standalone"
 	}
+	configManager := configManagerEnabled()
+	userConfig := buildUserConfig(configManager)
+	if userConfig.manager != nil {
+		// Deferred so it runs after srv.Shutdown has drained the handlers.
+		defer userConfig.manager.Close()
+	}
 	stopManaged := make(chan struct{}, 1)
 	freeAccountSubmitter := freeaccount.New(freeaccount.Config{})
 	mux := http.NewServeMux()
 	api.Register(mux, s, v, validatorManager, api.ServerInfo{
-		Kind:       "obstudio",
-		APIVersion: "v1",
-		Version:    version,
-		Owner:      observerOwner,
-		Mode:       observerMode,
-		StartedAt:  startedAt,
-		Exporters:  exporterInfo(splunkExportController, splunkTracesController),
+		Kind:          "obstudio",
+		APIVersion:    "v1",
+		Version:       version,
+		Owner:         observerOwner,
+		Mode:          observerMode,
+		StartedAt:     startedAt,
+		Exporters:     exporterInfo(splunkExportController, splunkTracesController),
+		ConfigManager: configManager,
 	}, dashboards.Config{
 		WorkspaceRoot: envOr("OBSTUDIO_WORKSPACE_ROOT", ""),
 		SpecPath:      envOr("OBSTUDIO_DASHBOARDS_PREVIEW", ""),
@@ -247,7 +257,7 @@ func run(config runConfig) error {
 		MCPURL: observerState.MCPURL,
 	}, splunkExportController, splunkTracesController,
 		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController),
-		freeAccountSubmitter)
+		freeAccountSubmitter, userConfig.api, userConfig.status)
 	mux.Handle("POST /otel/v1/traces", rcv.HTTPHandler())
 	mux.Handle("POST /v2/trace/otlp", rcv.HTTPHandler())
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
@@ -265,6 +275,7 @@ func run(config runConfig) error {
 		splunkTracesController,
 		repositoryCorrelationModeResolver,
 		freeAccountSubmitter,
+		userConfig.status,
 	)
 	webCleanup := web.Register(mux, s, v)
 

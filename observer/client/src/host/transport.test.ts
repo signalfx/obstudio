@@ -67,6 +67,58 @@ describe("Splunk Observability Studio host transport", () => {
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
 
+  it("refuses HTTP methods the host does not forward", async () => {
+    const { posted } = installHost();
+    for (const method of ["PUT", "PATCH", "DELETE"]) {
+      await expect(observerFetch("/api/config", { body: "{}", method })).rejects.toThrow(
+        `Splunk Observability Studio host transport does not support ${method} requests.`,
+      );
+    }
+    expect(posted).toHaveLength(0);
+  });
+
+  it("serves the Config tab's API calls through the host", async () => {
+    const { posted } = installHost();
+
+    const definitions = observerFetch("/api/config/definitions");
+    expect(posted.at(-1)).toMatchObject({ request: { kind: "http", method: "GET", path: "/api/config/definitions" } });
+    respond(posted.at(-1), true, {
+      body: JSON.stringify({ type: "object", properties: {} }),
+      headers: { "content-type": "application/json" },
+      status: 200,
+      statusText: "OK",
+    });
+    await expect((await definitions).json()).resolves.toEqual({ type: "object", properties: {} });
+
+    const values = observerFetch("/api/config");
+    expect(posted.at(-1)).toMatchObject({ request: { kind: "http", method: "GET", path: "/api/config" } });
+    respond(posted.at(-1), true, {
+      body: JSON.stringify({ telemetry: { enabled: true } }),
+      headers: { "content-type": "application/json" },
+      status: 200,
+      statusText: "OK",
+    });
+    await expect((await values).json()).resolves.toEqual({ telemetry: { enabled: true } });
+
+    const rejected = observerFetch("/api/config", {
+      body: '{"telemetry":{"enabled":null}}',
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    expect(posted.at(-1)).toMatchObject({
+      request: { body: '{"telemetry":{"enabled":null}}', kind: "http", method: "POST", path: "/api/config" },
+    });
+    respond(posted.at(-1), true, {
+      body: JSON.stringify({ error: "telemetry.enabled: null is not a valid value" }),
+      headers: { "content-type": "application/json" },
+      status: 400,
+      statusText: "Bad Request",
+    });
+    const response = await rejected;
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "telemetry.enabled: null is not a valid value" });
+  });
+
   it("sends bounded cloud actions and validates the host status", async () => {
     const { posted } = installHost();
     const pending = callObserverHostCloud("connect", {
