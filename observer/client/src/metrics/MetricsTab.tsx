@@ -259,7 +259,8 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
           {visibleMetricList.length > 0 ? (
             <div className="data-table__head data-table__head--metrics metrics-card-list__head">
               <span className="data-table__th">Metric name</span>
-              <span className="data-table__th">Description</span>
+              <span className="data-table__th">Service</span>
+              <span className="data-table__th data-table__th--metric-description">Description</span>
               <span className="data-table__th">Type / Unit</span>
             </div>
           ) : null}
@@ -284,6 +285,9 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
                   >
                     <span className="data-table__td data-table__td--metric-name metric-card__info">
                       <span className="metric-card__name explorer-row__primary">{metric.name}</span>
+                    </span>
+                    <span className="data-table__td data-table__td--metric-service">
+                      <span className="explorer-row__secondary">{metric.serviceName && metric.serviceName !== "unknown" ? metric.serviceName : "--"}</span>
                     </span>
                     <span className="data-table__td data-table__td--metric-description">
                       <span className="metric-card__description explorer-row__secondary">{formatMetricDescription(metric)}</span>
@@ -466,14 +470,10 @@ function formatNumber(value: number): string {
   return value % 1 === 0 ? String(value) : value.toFixed(2);
 }
 
-function formatMetricDescription(metric: { description: string; serviceName: string; scopeName: string }): string {
+function formatMetricDescription(metric: { description: string; scopeName: string }): string {
   const parts: string[] = [];
-  const hasService = metric.serviceName && metric.serviceName !== "unknown";
   if (metric.description) {
     parts.push(metric.description);
-  }
-  if (hasService) {
-    parts.push(metric.serviceName);
   }
   if (metric.scopeName) {
     parts.push(metric.scopeName);
