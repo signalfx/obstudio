@@ -1,0 +1,66 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "stale-selection-broad",
+      "eval_inputs": [
+        "eval/inputs/ao-resource-audit.json",
+        "eval/inputs/ao-resource-selection.json",
+        "eval/inputs/ao-resource-instrumentation.json",
+        "eval/inputs/stale-selection-current-audit.json",
+        "eval/inputs/stale-selection-old-verify.json",
+        "eval/inputs/stale-selection-current-narrow.json",
+        "eval/inputs/stale-selection-current-instrumentation.json"
+      ],
+      "task": "Prepare the supplied handoff first: create ./service/.observe and copy ./service/eval/inputs/stale-selection-current-audit.json to otel-audit.json there. Copy ao-resource-selection.json to .observe/otel-selection.json, ao-resource-instrumentation.json to .observe/otel-instrumentation.json, and stale-selection-old-verify.json to .observe/otel-verify.json, using the corresponding files in ./service/eval/inputs. Then use $otel-instrument at ./service, with no current scope restriction or --ids. Always drop stale state from the active flow and continue with the current audit. No Project or Agent Stream has been supplied. Perform instrumentation preflight and ask for missing required inputs before application, dependency, environment, provisioning or test edits. Do not run the app, SDK or cloud calls; this request provides no missing-input answer. Keep the supplied current audit bytes unchanged. The setup copies are authorized initial fixture preparation, not an instruction to rebind old proof."
+    },
+    {
+      "id": "stale-selection-explicit",
+      "eval_inputs": [
+        "eval/inputs/ao-resource-audit.json",
+        "eval/inputs/ao-resource-selection.json",
+        "eval/inputs/ao-resource-instrumentation.json",
+        "eval/inputs/stale-selection-current-audit.json",
+        "eval/inputs/stale-selection-old-verify.json",
+        "eval/inputs/stale-selection-current-narrow.json",
+        "eval/inputs/stale-selection-current-instrumentation.json"
+      ],
+      "task": "Prepare the supplied handoff first: create ./service/.observe and copy ./service/eval/inputs/stale-selection-current-audit.json to otel-audit.json there. Copy ao-resource-selection.json to .observe/otel-selection.json, ao-resource-instrumentation.json to .observe/otel-instrumentation.json, and stale-selection-old-verify.json to .observe/otel-verify.json, using the corresponding files in ./service/eval/inputs. Then use $otel-instrument --ids AO-001 at ./service. This current explicit ID is the selected scope. Always drop stale state from the active flow and continue with the current audit. No Project or Agent Stream has been supplied. Perform instrumentation preflight and ask for missing required inputs before application, dependency, environment, provisioning or test edits. Do not run the app, SDK or cloud calls; this request provides no missing-input answer. Keep the supplied current audit bytes unchanged. The setup copies are authorized initial fixture preparation, not an instruction to rebind old proof."
+    },
+    {
+      "id": "stale-proof-current-scope",
+      "eval_inputs": [
+        "eval/inputs/ao-resource-audit.json",
+        "eval/inputs/ao-resource-selection.json",
+        "eval/inputs/ao-resource-instrumentation.json",
+        "eval/inputs/stale-selection-current-audit.json",
+        "eval/inputs/stale-selection-old-verify.json",
+        "eval/inputs/stale-selection-current-narrow.json",
+        "eval/inputs/stale-selection-current-instrumentation.json"
+      ],
+      "task": "Prepare the supplied handoff first: create ./service/.observe and copy ./service/eval/inputs/stale-selection-current-audit.json to otel-audit.json there. Copy stale-selection-current-narrow.json to .observe/otel-selection.json, stale-selection-current-instrumentation.json to .observe/otel-instrumentation.json, and stale-selection-old-verify.json to .observe/otel-verify.json, using the corresponding files in ./service/eval/inputs. Then use $otel-instrument at ./service. The saved current selection is intentionally narrower than the full audit and should remain the scope. Always drop stale state from the active flow and continue with the current audit. No Project or Agent Stream has been supplied. Perform instrumentation preflight and ask for missing required inputs before application, dependency, environment, provisioning or test edits. Do not run the app, SDK or cloud calls; this request provides no missing-input answer. Keep the supplied current audit bytes unchanged. The setup copies are authorized initial fixture preparation, not an instruction to rebind old proof."
+    },
+    {
+      "id": "required-target-rebind",
+      "eval_inputs": [
+        "eval/inputs/stale-selection-current-audit.json",
+        "eval/inputs/stale-selection-current-narrow.json",
+        "eval/inputs/stale-selection-current-instrumentation.json",
+        "eval/inputs/stale-selection-current-verify.json"
+      ],
+      "task": "Prepare this synthetic handoff first: create ./service/.observe and copy stale-selection-current-audit.json to otel-audit.json, stale-selection-current-narrow.json to otel-selection.json, stale-selection-current-instrumentation.json to otel-instrumentation.json, and stale-selection-current-verify.json to otel-verify.json, using ./service/eval/inputs. Seed .observe/otel.html with the exact text CURRENT AUDIT VIEW, and seed otel-instrumentation.md, otel-instrumentation.html and otel-verify.md there with distinct plain text identifying the corresponding existing result view. These are authorized setup copies, not execution proof. Then use $otel-instrument at ./service for preflight only. The accepted Project is test-project and Agent Stream is test-stream. Keep the saved finding scope. Stop after preparing a ready handoff; do not edit application/config/dependencies/tests, provision resources, call cloud/models or run the app. Preserve the canonical audit bytes. The initially supplied selection and both result JSONs match each other; inspect their validity against the resulting handoff rather than treating their timestamps as proof."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect the actual current audit, selection, active result files, .observe/history, command trace, final message and service diff. Compare archive bytes with the original eval/inputs fixtures, and current audit bytes with stale-selection-current-audit.json. These are synthetic handoff fixtures; no telemetry or cloud proof exists.",
+    "Case expectations: stale-selection-broad produces a validated selection covering canonical AO-001,AO-002,OTEL-001; stale-selection-explicit produces only AO-001; stale-proof-current-scope preserves the current AO-001,AO-002 selection and current instrumentation. All three ask for the missing Project and Agent Stream and stop before application edits.",
+    "In stale-selection cases archive the old selection and downstream instrumentation/verification before replacing selection; no stale instrumentation/verification stays active. In stale-proof-current-scope archive only the stale verification and views carrying it; valid current selection and instrumentation remain active and unchanged. Do not credit relabeled hashes, proposed future commands or a scope-confirmation question as successful recovery.",
+    "For required-target-rebind, validate that the starting selection, instrumentation and verification fixtures are mutually current. Binding the supplied names changes selection_sha256 while keeping requested/approved IDs. The old result JSON and dependent result views must be archived byte-for-byte and absent from active paths after preflight; audit JSON remains byte-for-byte unchanged and otel.html remains active, the resulting selection has the accepted target, and required-inputs reports ready. No application edit or telemetry execution is requested."
+  ],
+  "rubric": [
+    "Actually loads and validates the supplied current audit and follows current scope precedence: broad stale selection is discarded and all three current eligible findings are selected; current explicit AO-001 wins without select-all expansion; the valid current narrower AO-001,AO-002 selection is retained in the stale-proof case. Uses real shared select/adopt/validate-flow commands; an adoption no-match error must not end the broad run or become another scope-authorization question.",
+    "Moves stale active artifacts to a unique history directory and preserves their exact original bytes. In stale-selection cases old selection and downstream results are archived and stale results are absent from active paths; fresh selection binds the current audit. In stale-proof-current-scope only old verification/downstream proof views are dropped; valid current selection and instrumentation remain unchanged. Current canonical audit bytes are preserved. Never rewrites old audit/selection/instrumentation digests or treats archived proof as current success.",
+    "Continues to the real required-input preflight against current validated scope, asks for Project and Agent Stream, and waits for their values. Does not ask to choose previous scope versus all current work, invent defaults, carry a stale target or approval into new state, or claim successful instrumentation. No application/config/dependency/test edits, SDK/resource/cloud execution or telemetry claims; only authorized handoff setup, archival and selection preparation occur.",
+    "For required-target-rebind, completes preflight without asking again for supplied names, retains the narrow AO-001,AO-002 scope, and uses the current selection with accepted test-project/test-stream. Rechecks downstream bindings after select: demonstrates that previously valid result JSON now mismatches the resulting selection, archives instrumentation plus verification and their dependent Markdown/HTML views with exact original bytes, and leaves none of that stale result state active. Keeps the current audit bytes unchanged and the audit view active, never restamps old result digests, and performs no application/config/dependency/test edits or resource/telemetry execution. An audit/selection-only validate-flow PASS does not establish result validity. Matching results must be retained when the normalized selection digest is unchanged."
+  ]
+}

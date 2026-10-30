@@ -1561,7 +1561,7 @@ class ObserveReportTest(unittest.TestCase):
         self.assertIn("Agent Observability change", html)
         self.assertIn('"type":"configuration"', html)
 
-    def test_grouped_cards_keep_global_priority_in_executed_renderer(self) -> None:
+    def test_grouped_cards_keep_categories_contiguous_in_executed_renderer(self) -> None:
         script = r"""
 const fs = require('node:fs');
 const vm = require('node:vm');
@@ -1601,9 +1601,7 @@ process.stdout.write(cards.innerHTML);
                     check=True,
                 )
                 rendered = result.stdout
-                expected = ["OTEL-001", "AO-001", "AO-002", "OTEL-002"]
-                if recommended_agent_stream:
-                    expected = ["OTEL-001", "AO-001", "OTEL-002", "AO-002"]
+                expected = ["OTEL-001", "OTEL-002", "AO-001", "AO-002"]
                 self.assertEqual(
                     re.findall(r'data-finding-id="([^"]+)"', rendered), expected
                 )
@@ -1612,9 +1610,36 @@ process.stdout.write(cards.innerHTML);
                     r'<h3 id="\1">Splunk Agent Observability findings',
                     rendered,
                 )
-                self.assertEqual(len(labels), 2 if recommended_agent_stream else 1)
+                self.assertEqual(len(labels), 1)
                 self.assertEqual(len(labels), len(set(labels)))
                 self.assertNotIn("OpenTelemetry findings", rendered)
+                ordinary, ao_section = rendered.split('<section class="finding-subsection"', 1)
+                self.assertEqual(re.findall(r'data-finding-id="([^"]+)"', ordinary), ["OTEL-001", "OTEL-002"])
+                self.assertEqual(re.findall(r'data-finding-id="([^"]+)"', ao_section), ["AO-001", "AO-002"])
+
+    def test_display_groups_preserve_canonical_identity_and_selection(self) -> None:
+        data = sample_splunk_agent_observability_report()
+        data["findings"].reverse()  # type: ignore[union-attr]
+        report = MODULE.normalize_audit_report(data)
+        before = copy.deepcopy(report)
+        digest = MODULE.audit_digest(report)
+        closure = MODULE.dependency_closure(report, ["AO-002"])
+
+        self.assertEqual(MODULE.display_finding_ids(report), ["OTEL-001", "OTEL-002", "AO-002", "AO-001"])
+        MODULE.render_html(report, MODULE.empty_selection(report))
+
+        self.assertEqual(report, before)
+        self.assertEqual(MODULE.audit_digest(report), digest)
+        self.assertEqual(MODULE.dependency_closure(report, ["AO-002"]), closure)
+
+    def test_display_group_uses_explicit_field_not_id_prefix(self) -> None:
+        data = sample_splunk_agent_observability_report()
+        serialized = json.dumps(data).replace('OTEL-002', 'AO-777').replace('AO-001', 'OTEL-777')
+        report = MODULE.normalize_audit_report(json.loads(serialized))
+
+        self.assertEqual(MODULE.display_finding_ids(report), ["OTEL-001", "AO-777", "OTEL-777", "AO-002"])
+        self.assertNotIn("finding_group", report["findings"][1])
+        self.assertEqual(report["findings"][2]["finding_group"], "splunk-agent-observability")
 
     def test_grouped_card_detail_headings_are_below_subsection_heading(self) -> None:
         report = MODULE.normalize_audit_report(
@@ -2180,7 +2205,7 @@ process.stdout.write(JSON.stringify({
         self.assertFalse(any(item.startswith("Start with ") for item in summary))
         self.assertFalse(any(item.startswith("Next: ") for item in summary))
 
-    def test_decision_view_explains_one_priority_ordered_list(self) -> None:
+    def test_decision_view_explains_group_then_priority_order(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
 
         html = MODULE.render_decision_overview(
@@ -2196,6 +2221,7 @@ process.stdout.write(JSON.stringify({
             html,
         )
         self.assertIn("ordered by priority, highest first", html)
+        self.assertIn("each group is ordered by priority", html)
         self.assertNotIn("OTEL-001", html)
         self.assertNotIn("priority-action", html)
         self.assertNotIn("action-tag", html)
@@ -3491,7 +3517,7 @@ for (const [serviceRoot, input, expected] of cases) {
         }}, report)
         self.assertEqual(ids["ao_target"]["project_id"], "project-123")
 
-    def test_ao_target_scope_rejects_actual_callback_even_with_ao_ids_and_dependencies(self) -> None:
+    def test_all_agent_work_requires_destination_without_expanding_provisioning_scope(self) -> None:
         fixture = SCRIPT.parents[3] / "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json"
         raw = json.loads(fixture.read_text(encoding="utf-8"))
         target = {"project_name": "project", "agent_stream_name": "stream"}
@@ -3514,12 +3540,14 @@ for (const [serviceRoot, input, expected] of cases) {
             blank = MODULE.normalize_selection(base, report)
             expected = ["AO-001", "AO-002"] if renamed else ["OTEL-001"]
             self.assertEqual(blank["approved_ids"], expected)
-            self.assertFalse(MODULE.has_selected_ao_configuration(report, expected))
+            missing = MODULE.required_input_status(MODULE.required_input_groups(report), blank)
+            self.assertFalse(missing["ready"])
+            self.assertEqual([field["label"] for field in missing["missing_inputs"]], ["Project", "Agent Stream"])
             for value in (target, {"create_if_missing": False}):
-                with self.subTest(renamed=renamed, target=value), self.assertRaisesRegex(
-                    MODULE.ReportError, "requires a selected Agent Observability resource or routing finding"
-                ):
-                    MODULE.normalize_selection({**base, "approved_ids": expected, "ao_target": value}, report)
+                with self.subTest(renamed=renamed, target=value):
+                    accepted = MODULE.normalize_selection({**base, "approved_ids": expected, "ao_target": value}, report)
+                    self.assertEqual(accepted["approved_ids"], expected)
+                    self.assertEqual(MODULE.required_input_status(MODULE.required_input_groups(report), accepted)["ready"], value == target)
 
     def test_ao_target_scope_explicit_marker_and_legacy_names(self) -> None:
         for name in MODULE.AO_TARGET_LEGACY_CONFIGURATION_NAMES:
@@ -3571,22 +3599,65 @@ for (const [serviceRoot, input, expected] of cases) {
         self.assertEqual(MODULE.selection_digest(selection), instrumentation["selection_sha256"])
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript behavior validation")
-    def test_ao_target_ui_uses_server_resource_eligibility(self) -> None:
+    def test_ao_target_ui_requires_destination_for_all_agent_groups(self) -> None:
         fixture = SCRIPT.parents[3] / "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json"
         callback = MODULE.normalize_audit_report(json.loads(fixture.read_text()))
-        reports = [(callback, []), (MODULE.normalize_audit_report(sample_splunk_agent_observability_report()), ["AO-001", "AO-002"])]
-        for report, eligible in reports:
+        reports = [callback, MODULE.normalize_audit_report(sample_splunk_agent_observability_report())]
+        for report in reports:
             rendered = MODULE.render_html(report, MODULE.empty_selection(report))
             payload = json.loads(rendered.split("const DATA = ", 1)[1].split(";\nconst REPORT", 1)[0])
-            self.assertEqual(payload["ao_target_eligible_finding_ids"], eligible)
-            self.assertEqual('id="ao-target-controls"' in rendered, bool(eligible))
+            self.assertIn('id="ao-target-controls"', rendered)
+            self.assertEqual(payload["required_input_groups"][0]["finding_ids"],
+                             [f["id"] for f in report["findings"] if f.get("finding_group") == "splunk-agent-observability"])
             function = rendered[rendered.index("function hasSelectedAoConfiguration()"):rendered.index("function aoTargetArguments()") ]
             script = "const DATA = " + json.dumps(payload) + ";const selected = new Set();" + function
-            script += "selected.add('OTEL-001');if(hasSelectedAoConfiguration())throw new Error('unrelated scope');"
-            if eligible:
-                script += "selected.add('AO-002');if(!hasSelectedAoConfiguration())throw new Error('resource dependency scope');"
+            agent_id = payload["required_input_groups"][0]["finding_ids"][0]
+            script += f"selected.add({json.dumps(agent_id)});if(!hasSelectedAoConfiguration())throw new Error('agent scope requires destination');"
             result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_required_input_status_is_generic_and_never_mutates_scope(self) -> None:
+        groups = [{"key": "deployment", "finding_ids": ["REGION-1"], "fields": [
+            {"key": "region", "label": "Deployment region", "selectors": ["region_name", "region_id"]},
+            {"key": "cluster", "label": "Cluster", "selectors": ["cluster"]},
+        ]}]
+        selection = {"approved_ids": ["REGION-1"], "deployment": {"region_id": "region-1"}}
+        before = copy.deepcopy(selection)
+        state = MODULE.required_input_status(groups, selection)
+        self.assertFalse(state["ready"])
+        self.assertEqual(state["missing_inputs"], [{"key": "deployment.cluster", "label": "Cluster", "provided": False}])
+        self.assertEqual(state["prompt"], "Provide values for these required fields:\nCluster:")
+        self.assertEqual(selection, before)
+        selection["deployment"]["cluster"] = "cluster-1"
+        self.assertTrue(MODULE.required_input_status(groups, selection)["ready"])
+        self.assertTrue(MODULE.required_input_status(groups, {"approved_ids": []})["ready"])
+
+    def test_required_inputs_cli_waits_for_target_and_preserves_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            audit = Path(directory) / "otel-audit.json"
+            path = Path(directory) / "otel-selection.json"
+            raw = sample_splunk_agent_observability_report()
+            report = MODULE.normalize_audit_report(raw)
+            base = {"schema_version": 3, "kind": "otel-selection", "audit_id": report["meta"]["audit_id"],
+                    "audit_sha256": MODULE.audit_digest(report), "requested_ids": ["AO-002"]}
+            audit.write_text(json.dumps(raw))
+            audit_before = audit.read_bytes()
+            for target in (None, {"create_if_missing": False}, {"project_id": "project", "agent_stream_name": "stream"}):
+                raw_selection = {**base, **({"ao_target": target} if target else {})}
+                selection = MODULE.normalize_selection(raw_selection, report)
+                path.write_text(json.dumps(selection))
+                selection_before = path.read_bytes()
+                result = subprocess.run([sys.executable, str(SCRIPT), "required-inputs", str(audit),
+                                         "--selection-json", str(path)], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                state = json.loads(result.stdout)
+                self.assertEqual(state["ready"], bool(target and "project_id" in target))
+                if not state["ready"]:
+                    self.assertEqual(state["prompt"], "Provide values for these required fields:\nProject:\nAgent Stream:")
+                self.assertEqual(audit.read_bytes(), audit_before)
+                self.assertEqual(path.read_bytes(), selection_before)
+            ordinary = MODULE.normalize_selection({**base, "requested_ids": ["OTEL-001"]}, report)
+            self.assertTrue(MODULE.required_input_status(MODULE.required_input_groups(report), ordinary)["ready"])
 
     def test_ao_target_length_counts_unicode_codepoints(self) -> None:
         for key in ("project_name", "project_id", "agent_stream_name", "agent_stream_id"):
@@ -3707,9 +3778,13 @@ for (const [serviceRoot, input, expected] of cases) {
             "ao_target": {"project_id": "project-123", "agent_stream_id": "stream-123"},
         }, report)
         rendered = MODULE.render_html(report, selection)
-        self.assertIn('for="ao-project-value">Project ID</label>', rendered)
-        self.assertIn('value="project-123"', rendered)
+        self.assertIn('for="ao-project-value">Project name (required)</label>', rendered)
+        self.assertIn('This saved selection uses resource IDs.', rendered)
+        self.assertNotIn('value="project-123"', rendered)
+        self.assertIn('for="ao-agent_stream-value">Agent Stream name (required)</label>', rendered)
+        self.assertEqual(re.findall(r'data-ao-value="([^"]+)"', rendered), ["project", "agent_stream"])
         self.assertIn('aria-describedby="ao-target-help ao-target-error"', rendered)
+        self.assertEqual(selection["ao_target"], {"project_id": "project-123", "agent_stream_id": "stream-123", "create_if_missing": True})
         functions = rendered[rendered.index("function shellQuote(value)"):rendered.index("function syncDependencyClosure()")]
         payload = json.loads(rendered.split("const DATA = ", 1)[1].split(";\nconst REPORT", 1)[0])
         payload["service_root"] = "/repo with spaces"
@@ -3719,68 +3794,76 @@ const DATA = DATA_VALUE;
 const selected = new Set(["AO-002"]);
 const decisionAnswers = new Map();
 const nodes = {};
-for (const id of ["ao-project-selector", "ao-agent_stream-selector", "ao-project-value", "ao-agent_stream-value",
-  "ao-project-label", "ao-agent_stream-label", "ao-reuse-only", "ao-target-error", "ao-target-controls", "tray", "instrumentCommand"]) {
-  nodes[id] = {value: "", textContent: "", hidden: true, checked: false, toggleAttribute() {}, setAttribute() {}};
+for (const id of ["ao-project-value", "ao-agent_stream-value", "ao-target-error", "ao-target-controls", "tray", "instrumentCommand"]) {
+  nodes[id] = {value: "", textContent: "", hidden: true, checked: false, toggleAttribute() {}, setAttribute() {}, querySelectorAll() {return [];}};
 }
 const document = {getElementById(id) {return nodes[id];}};
 function orderedRequested() {return selected.has("AO-002") ? ["AO-002"] : [];}
 function orderedDecisionAnswers() {return [];}
 function assert(condition, message) {if (!condition) throw new Error(message);}
 FUNCTIONS_VALUE
-nodes["ao-project-selector"].value = "id";
-nodes["ao-agent_stream-selector"].value = "id";
-nodes["ao-project-value"].value = "project-123";
-nodes["ao-agent_stream-value"].value = "stream-123";
 renderTray();
 assert(!nodes["ao-target-controls"].hidden, "AO selection exposes destination controls");
-assert(nodes.instrumentCommand.value.includes("--ao-project-id project-123"), "saved ID is retained");
-nodes["ao-project-selector"].value = "name";
-updateAoTargetInput("project", true);
-assert(!nodes["ao-project-value"].value, "changing selector clears incompatible value");
-assert(nodes["ao-project-label"].textContent === "Project name", "input label follows selector");
-assert(nodes["ao-target-error"].textContent.includes("Provide both"), "partial target exposes error");
+assert(!nodes.instrumentCommand.value.startsWith("$otel-instrument"), "legacy IDs are not silently used as names");
 nodes["ao-project-value"].value = "checkout's $(project)";
-nodes["ao-reuse-only"].checked = true;
-updateAoTargetInput("project");
+renderInstrumentCommand();
+assert(nodes["ao-target-error"].textContent.includes("required fields: Agent Stream"), "partial target exposes error");
+nodes["ao-agent_stream-value"].value = "checkout stream";
+renderInstrumentCommand();
 assert(!nodes["ao-target-error"].textContent, "complete target clears error");
-assert(nodes.instrumentCommand.value.includes("--ao-reuse-only"), "reuse choice reaches command");
+assert(!nodes.instrumentCommand.value.includes("--ao-project-id"), "new commands use names only");
+assert(!nodes.instrumentCommand.value.includes("--ao-reuse-only"), "new selection has no reuse-only policy");
 const command = nodes.instrumentCommand.value;
 nodes["ao-project-value"].value = "--ao-reuse-only";
 nodes["ao-agent_stream-value"].value = "-stream name";
-nodes["ao-agent_stream-selector"].value = "name";
-nodes["ao-reuse-only"].checked = false;
-updateAoTargetInput("project");
+renderInstrumentCommand();
 const negativeCommand = nodes.instrumentCommand.value;
 assert(negativeCommand.includes("--ao-project=--ao-reuse-only"), "option-like values stay resource values");
 nodes["ao-project-value"].value = "bad\\nname";
-updateAoTargetInput("project");
+renderInstrumentCommand();
 assert(nodes["ao-target-error"].textContent.includes("control characters"), "invalid names block command");
 nodes["ao-project-value"].value = "";
 nodes["ao-agent_stream-value"].value = "";
-nodes["ao-reuse-only"].checked = false;
-updateAoTargetInput("project");
-assert(!nodes.instrumentCommand.value.includes("--ao-"), "cleared target restores application configuration");
-nodes["ao-reuse-only"].checked = true;
-updateAoTargetInput("project");
-assert(!nodes["ao-target-error"].textContent, "reuse-only permits env fallback");
-assert(nodes.instrumentCommand.value.includes("--ao-reuse-only"), "env reuse policy reaches command");
-assert(!nodes.instrumentCommand.value.includes("--ao-project"), "env fallback does not invent selectors");
+renderInstrumentCommand();
+assert(nodes.instrumentCommand.value.includes("required fields: Project, Agent Stream"), "both blank blocks command");
+DATA.selection.ao_target.create_if_missing = false;
+renderInstrumentCommand();
+assert(nodes["ao-target-error"].textContent.includes("required fields"), "saved policy cannot bypass required fields");
+nodes["ao-project-value"].value = "saved project";
+nodes["ao-agent_stream-value"].value = "saved stream";
+renderInstrumentCommand();
+const legacyCommand = nodes.instrumentCommand.value;
+assert(legacyCommand.includes("--ao-reuse-only"), "saved restriction survives removal of checkbox");
+nodes["ao-project-value"].value = "";
+renderInstrumentCommand();
+assert(!nodes.instrumentCommand.value.startsWith("$otel-instrument"), "missing required values block executable command");
 selected.clear();
 renderTray();
-assert(nodes["ao-target-controls"].hidden, "deselecting AO hides optional controls");
-process.stdout.write(JSON.stringify({command, negativeCommand}));
+assert(nodes["ao-target-controls"].hidden, "deselecting AO hides destination controls");
+process.stdout.write(JSON.stringify({command, negativeCommand, legacyCommand}));
 """.replace("REPORT_VALUE", json.dumps(report)).replace("DATA_VALUE", json.dumps(payload)).replace("FUNCTIONS_VALUE", functions)
         result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(shlex.split(json.loads(result.stdout)["command"]), [
             "$otel-instrument", "--ids", "AO-002", "--ao-project", "checkout's $(project)",
-            "--ao-agent-stream-id", "stream-123", "--ao-reuse-only", "/repo with spaces",
+            "--ao-agent-stream", "checkout stream", "/repo with spaces",
         ])
         self.assertEqual(shlex.split(json.loads(result.stdout)["negativeCommand"]), [
             "$otel-instrument", "--ids", "AO-002", "--ao-project=--ao-reuse-only",
             "--ao-agent-stream=-stream name", "/repo with spaces",
         ])
+
+        self.assertEqual(shlex.split(json.loads(result.stdout)["legacyCommand"]), [
+            "$otel-instrument", "--ids", "AO-002", "--ao-project", "saved project",
+            "--ao-agent-stream", "saved stream", "--ao-reuse-only", "/repo with spaces",
+        ])
+        names_selection = copy.deepcopy(selection)
+        names_selection["ao_target"] = {"project_name": "saved project", "agent_stream_name": "saved stream", "create_if_missing": False}
+        before = copy.deepcopy(names_selection)
+        names_html = MODULE.render_html(report, names_selection)
+        self.assertIn('value="saved project"', names_html)
+        self.assertIn('This saved selection forbids resource creation;', names_html)
+        self.assertEqual(names_selection, before)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript behavior validation")
     def test_html_ao_resource_invalid_state_is_specific_to_each_field(self) -> None:
@@ -3794,11 +3877,9 @@ const DATA = DATA_VALUE;
 const selected = new Set(["AO-002"]);
 const nodes = {};
 for (const resource of ["project", "agent_stream"]) {
-  nodes[`ao-${resource}-selector`] = {value: "name"};
   nodes[`ao-${resource}-value`] = {value: "valid", attributes: {},
     setAttribute(name, value) {this.attributes[name] = value;}};
 }
-nodes["ao-reuse-only"] = {checked: false};
 nodes["ao-target-error"] = {textContent: ""};
 const document = {getElementById(id) {return nodes[id];}};
 function assert(condition, message) {if (!condition) throw new Error(message);}
@@ -3811,15 +3892,14 @@ function fill(project, stream) {
 FUNCTIONS_VALUE
 for (const resource of ["project", "agent_stream"]) {
   const other = resource === "project" ? "agent_stream" : "project";
-  for (const mode of ["name", "id"]) {
-    nodes[`ao-${resource}-selector`].value = mode;
+  {
     for (const value of ["x".repeat(513), "🧪".repeat(513), "bad\u202evalue"]) {
       fill("valid-project", "valid-stream");
       nodes[`ao-${resource}-value`].value = value;
       const target = aoTargetArguments();
-      assert(target.error, `${resource}/${mode}: invalid field blocks command`);
-      assert(invalid(resource), `${resource}/${mode}: offending field is invalid`);
-      assert(!invalid(other), `${resource}/${mode}: valid peer stays valid`);
+      assert(target.error, `${resource}: invalid field blocks command`);
+      assert(invalid(resource), `${resource}: offending field is invalid`);
+      assert(!invalid(other), `${resource}: valid peer stays valid`);
       const repaired = fill("valid-project", "valid-stream");
       assert(!repaired.error && !invalid(resource) && !invalid(other), "repair clears field errors");
     }
@@ -3829,7 +3909,7 @@ for (const resource of ["project", "agent_stream"]) {
     assert(invalid(resource) && !invalid(other), "only actually missing selector is invalid");
   }
 }
-assert(!fill("", "").error && !invalid("project") && !invalid("agent_stream"), "empty fallback is valid");
+assert(fill("", "").error && invalid("project") && invalid("agent_stream"), "both required fields are invalid when blank");
 fill("x".repeat(513), "");
 assert(invalid("project") && invalid("agent_stream"), "offending value and missing peer are both invalid");
 fill("valid-project", "");

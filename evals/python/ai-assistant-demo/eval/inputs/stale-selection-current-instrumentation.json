@@ -1,0 +1,51 @@
+{
+  "audit_id": "python-ai-assistant-stale-recovery-current",
+  "audit_sha256": "sha256:1a4f1718718a45e285dfc901307cd4c6ac4ea76b242f954303db9355bff9743f",
+  "findings": [
+    {
+      "changes": [
+        "Current synthetic source snapshot; no implementation or execution proof claimed."
+      ],
+      "evidence": [
+        "eval_runner.py",
+        "eval/inputs/ao-resource-verification-evidence.txt"
+      ],
+      "follow_up_actions": [
+        "Execute the fake SDK app-code matrix before treating this resource behavior as working."
+      ],
+      "id": "AO-001",
+      "resolved_commit": "fixture",
+      "status": "not_proven",
+      "telemetry_changes": [],
+      "tests": []
+    },
+    {
+      "changes": [
+        "Current synthetic source snapshot; no implementation or execution proof claimed."
+      ],
+      "evidence": [
+        "eval_runner.py",
+        "eval/inputs/ao-resource-verification-evidence.txt"
+      ],
+      "follow_up_actions": [
+        "Execute the fake SDK app-code matrix before treating this resource behavior as working."
+      ],
+      "id": "AO-002",
+      "resolved_commit": "fixture",
+      "status": "not_proven",
+      "telemetry_changes": [],
+      "tests": []
+    }
+  ],
+  "kind": "otel-instrumentation",
+  "meta": {
+    "date": "2026-10-27",
+    "result": "Partial",
+    "service_name": "python-ai-assistant-offline-evaluation"
+  },
+  "next_steps": [
+    "Run read-only resource-path verification; real resource and fresh stream receipt proof require a separate configured target."
+  ],
+  "schema_version": 1,
+  "selection_sha256": "sha256:d85f1fd8fe4f3d01b4ab0ac912a4536e36d15ec33d6ee007a37c38d7d68f28c7"
+}
