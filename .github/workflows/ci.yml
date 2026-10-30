@@ -166,7 +166,7 @@ jobs:
             label: win32-x64
           - os: macos-15-intel
             label: darwin-x64
-          - os: macos-14
+          - os: macos-15
             label: darwin-arm64
     steps:
       - uses: actions/checkout@v4
@@ -275,7 +275,7 @@ jobs:
             label: win32-x64
           - os: macos-15-intel
             label: darwin-x64
-          - os: macos-14
+          - os: macos-15
             label: darwin-arm64
     steps:
       - uses: actions/checkout@v4
@@ -320,7 +320,7 @@ jobs:
             label: win32-x64
           - os: macos-15-intel
             label: darwin-x64
-          - os: macos-14
+          - os: macos-15
             label: darwin-arm64
     steps:
       - uses: actions/checkout@v4
