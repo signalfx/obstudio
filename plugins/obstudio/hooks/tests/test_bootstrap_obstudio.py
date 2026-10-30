@@ -23,6 +23,27 @@ def load_bootstrap_module():
 BOOTSTRAP = load_bootstrap_module()
 
 
+RUNTIME_SHA256 = "a" * 64
+
+
+class FakeResponse(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+def write_runtime_manifest(path, version="1.2.3", suffix="linux_amd64.zip", name=None, sha256=RUNTIME_SHA256, **overrides):
+    manifest = {
+        "schemaVersion": 1,
+        "version": version,
+        "artifacts": {suffix: {"name": name or f"obstudio_{version}_{suffix}", "sha256": sha256}},
+    }
+    manifest.update(overrides)
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+
 class DummyProcess:
     def __init__(self, poll_result):
         self._poll_result = poll_result
@@ -464,61 +485,6 @@ class RepositoryCorrelationTest(unittest.TestCase):
         opener.open.assert_called_once()
 
 
-class ResolveReleaseVersionTest(unittest.TestCase):
-    def test_parses_version_from_release_artifact_name(self):
-        got = BOOTSTRAP.resolve_release_version("obstudio_0.0.14_linux_amd64.zip", "linux_amd64.zip")
-        self.assertEqual(got, "0.0.14")
-
-    def test_rejects_artifacts_without_expected_suffix(self):
-        with self.assertRaisesRegex(RuntimeError, "could not parse release version"):
-            BOOTSTRAP.resolve_release_version("obstudio_0.0.14_windows_amd64.zip", "linux_amd64.zip")
-
-    def test_resolve_latest_release_version_uses_latest_tag(self):
-        class FakeResponse(io.BytesIO):
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-        payload = json.dumps({"tag_name": "v0.0.14"}).encode("utf-8")
-        with mock.patch.object(
-            BOOTSTRAP.urllib.request,
-            "urlopen",
-            return_value=FakeResponse(payload),
-        ):
-            got = BOOTSTRAP.resolve_latest_release_version()
-        self.assertEqual(got, "0.0.14")
-
-
-class ParseChecksumTest(unittest.TestCase):
-    def test_matches_exact_release_artifact_name(self):
-        checksums_text = (
-            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef *evil/linux_amd64.zip\n"
-            "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface *obstudio_0.0.14_linux_amd64.zip\n"
-        )
-
-        name, checksum = BOOTSTRAP.parse_checksum(checksums_text, "linux_amd64.zip")
-        self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
-        self.assertEqual(
-            checksum,
-            "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface",
-        )
-
-    def test_matches_release_artifact_with_prerelease_and_build_metadata(self):
-        checksums_text = (
-            "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface "
-            "*obstudio_1.2.3-rc.1+build.2_linux_amd64.zip\n"
-        )
-
-        name, checksum = BOOTSTRAP.parse_checksum(checksums_text, "linux_amd64.zip")
-        self.assertEqual(name, "obstudio_1.2.3-rc.1+build.2_linux_amd64.zip")
-        self.assertEqual(
-            checksum,
-            "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface",
-        )
-
-
 class EnsureProcessRunningTest(unittest.TestCase):
     def test_accepts_running_child(self):
         BOOTSTRAP.ensure_process_running(DummyProcess(None))
@@ -575,6 +541,7 @@ class DownloadObstudioTest(unittest.TestCase):
                     "linux_amd64.zip",
                     "obstudio_0.0.14_linux_amd64.zip",
                     expected_checksum,
+                    "0.0.14",
                 )
 
             self.assertEqual(got, extracted_binary.resolve())
@@ -617,6 +584,7 @@ class DownloadObstudioTest(unittest.TestCase):
                     "linux_amd64.zip",
                     "obstudio_0.0.14_linux_amd64.zip",
                     expected_checksum,
+                    "0.0.14",
                 )
 
             self.assertTrue(old_binary.is_file())
@@ -657,342 +625,235 @@ class ValidateZipEntriesTest(unittest.TestCase):
                     BOOTSTRAP.validate_zip_entries(zf, Path(tempdir) / "extract")
 
 
-class FetchExpectedChecksumTest(unittest.TestCase):
-    def test_pinned_version_reads_checksums_from_the_exact_release_tag(self):
-        class FakeResponse(io.BytesIO):
-            def __enter__(self):
-                return self
+class LoadRuntimeManifestTest(unittest.TestCase):
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tempdir.cleanup)
+        self.manifest_path = Path(self._tempdir.name) / "runtime-manifest.json"
+        patcher = mock.patch.object(BOOTSTRAP, "RUNTIME_MANIFEST_PATH", self.manifest_path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
-            def __exit__(self, exc_type, exc, tb):
-                return False
+    def test_returns_pinned_runtime_for_matching_plugin_version(self):
+        write_runtime_manifest(self.manifest_path)
 
-        checksum_text = (
-            b"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef "
-            b"*obstudio_0.0.14_linux_amd64.zip\n"
-        )
-        with tempfile.TemporaryDirectory() as tempdir:
-            checksums_path = Path(tempdir) / "checksums.txt"
-            with mock.patch.object(
-                BOOTSTRAP.urllib.request,
-                "urlopen",
-                return_value=FakeResponse(checksum_text),
-            ) as urlopen:
-                got = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path, "0.0.14")
+        got = BOOTSTRAP.load_runtime_manifest("linux_amd64.zip", "1.2.3")
 
-        self.assertEqual(
-            got,
-            (
-                "obstudio_0.0.14_linux_amd64.zip",
-                "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-            ),
-        )
-        self.assertEqual(
-            urlopen.call_args.args[0],
-            "https://github.com/signalfx/obstudio/releases/download/v0.0.14/checksums.txt",
-        )
+        self.assertEqual(got, ("1.2.3", "obstudio_1.2.3_linux_amd64.zip", RUNTIME_SHA256))
 
-    def test_falls_back_to_versioned_checksum_manifest(self):
-        class FakeResponse(io.BytesIO):
-            def __enter__(self):
-                return self
+    def test_absolute_path_plugin_version_accepts_manifest_version(self):
+        write_runtime_manifest(self.manifest_path)
+        plugin_root_key = str(Path(self._tempdir.name).resolve())
 
-            def __exit__(self, exc_type, exc, tb):
-                return False
+        got = BOOTSTRAP.load_runtime_manifest("linux_amd64.zip", plugin_root_key)
 
-        def fake_urlopen(url, timeout=0):
-            if url.endswith("/checksums.txt"):
-                raise RuntimeError("stable checksum alias missing")
-            if url.endswith("/releases/latest"):
-                return FakeResponse(json.dumps({"tag_name": "v0.0.14"}).encode("utf-8"))
-            if url.endswith("/obstudio_0.0.14_checksums.txt"):
-                return FakeResponse(
-                    b"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef *obstudio_0.0.14_linux_amd64.zip\n"
-                )
-            raise AssertionError(f"unexpected URL: {url}")
+        self.assertEqual(got[0], "1.2.3")
 
-        with tempfile.TemporaryDirectory() as tempdir:
-            checksums_path = Path(tempdir) / "checksums.txt"
-            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
-                name, checksum = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
+    def test_missing_manifest_fails_closed(self):
+        with self.assertRaisesRegex(RuntimeError, "missing or unreadable"):
+            BOOTSTRAP.load_runtime_manifest("linux_amd64.zip", "1.2.3")
 
-        self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
-        self.assertEqual(checksum, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+    def test_malformed_json_fails_closed(self):
+        self.manifest_path.write_text("{not json", encoding="utf-8")
 
-    def test_creates_checksum_cache_parent_before_writing(self):
-        class FakeResponse(io.BytesIO):
-            def __enter__(self):
-                return self
+        with self.assertRaisesRegex(RuntimeError, "missing or unreadable"):
+            BOOTSTRAP.load_runtime_manifest("linux_amd64.zip", "1.2.3")
 
-            def __exit__(self, exc_type, exc, tb):
-                return False
+    def test_wrong_schema_version_is_rejected(self):
+        write_runtime_manifest(self.manifest_path, schemaVersion=2)
 
-        checksums_text = (
-            b"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef *obstudio_0.0.14_linux_amd64.zip\n"
-        )
-        with tempfile.TemporaryDirectory() as tempdir:
-            checksums_path = Path(tempdir) / "missing" / "checksums.txt"
-            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", return_value=FakeResponse(checksums_text)):
-                BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
+        with self.assertRaisesRegex(RuntimeError, "unsupported schema"):
+            BOOTSTRAP.load_runtime_manifest("linux_amd64.zip", "1.2.3")
 
-            self.assertTrue(checksums_path.is_file())
-            self.assertTrue(BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.14").is_file())
+    def test_non_semver_manifest_version_is_rejected(self):
+        write_runtime_manifest(self.manifest_path, version="latest")
 
-    def test_prefers_exact_versioned_cache_after_resolving_latest(self):
-        class FakeResponse(io.BytesIO):
-            def __enter__(self):
-                return self
+        with self.assertRaisesRegex(RuntimeError, "invalid version"):
+            BOOTSTRAP.load_runtime_manifest("linux_amd64.zip", "latest")
 
-            def __exit__(self, exc_type, exc, tb):
-                return False
+    def test_plugin_version_mismatch_is_rejected(self):
+        write_runtime_manifest(self.manifest_path)
 
-        with tempfile.TemporaryDirectory() as tempdir:
-            checksums_path = Path(tempdir) / "checksums.txt"
-            BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.13").write_text(
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa *obstudio_0.0.13_linux_amd64.zip\n",
-                encoding="utf-8",
-            )
-            BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.14").write_text(
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb *obstudio_0.0.14_linux_amd64.zip\n",
-                encoding="utf-8",
-            )
+        with self.assertRaisesRegex(RuntimeError, "pins 1.2.3 but the plugin is 1.2.4"):
+            BOOTSTRAP.load_runtime_manifest("linux_amd64.zip", "1.2.4")
 
-            def fake_urlopen(url, timeout=0):
-                if url.endswith("/checksums.txt"):
-                    raise RuntimeError("stable checksum alias missing")
-                if url.endswith("/releases/latest"):
-                    return FakeResponse(json.dumps({"tag_name": "v0.0.14"}).encode("utf-8"))
-                raise AssertionError(f"unexpected URL: {url}")
+    def test_platform_without_pinned_runtime_is_rejected(self):
+        write_runtime_manifest(self.manifest_path)
 
-            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
-                name, checksum = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
+        with self.assertRaisesRegex(RuntimeError, "no pinned runtime for darwin_arm64.zip"):
+            BOOTSTRAP.load_runtime_manifest("darwin_arm64.zip", "1.2.3")
 
-        self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
-        self.assertEqual(checksum, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+    def test_artifact_name_mismatch_is_rejected(self):
+        write_runtime_manifest(self.manifest_path, name="obstudio_1.2.3_darwin_arm64.zip")
 
-    def test_malformed_exact_versioned_cache_falls_back_to_remote_manifest(self):
-        class FakeResponse(io.BytesIO):
-            def __enter__(self):
-                return self
+        with self.assertRaisesRegex(RuntimeError, "artifact name for linux_amd64.zip is invalid"):
+            BOOTSTRAP.load_runtime_manifest("linux_amd64.zip", "1.2.3")
 
-            def __exit__(self, exc_type, exc, tb):
-                return False
+    def test_invalid_sha256_is_rejected(self):
+        for bad in (RUNTIME_SHA256.upper(), "abc123", "", None):
+            with self.subTest(sha256=bad):
+                write_runtime_manifest(self.manifest_path, sha256=bad)
 
-        remote_text = (
-            b"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd *obstudio_0.0.14_linux_amd64.zip\n"
-        )
-        with tempfile.TemporaryDirectory() as tempdir:
-            checksums_path = Path(tempdir) / "checksums.txt"
-            versioned_cache = BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.14")
-            versioned_cache.write_text("truncated\n", encoding="utf-8")
-
-            def fake_urlopen(url, timeout=0):
-                if url.endswith("/checksums.txt"):
-                    raise RuntimeError("stable checksum alias missing")
-                if url.endswith("/releases/latest"):
-                    return FakeResponse(json.dumps({"tag_name": "v0.0.14"}).encode("utf-8"))
-                if url.endswith("/obstudio_0.0.14_checksums.txt"):
-                    return FakeResponse(remote_text)
-                raise AssertionError(f"unexpected URL: {url}")
-
-            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
-                name, checksum = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
-
-            self.assertEqual(versioned_cache.read_text(encoding="utf-8"), remote_text.decode("utf-8"))
-            self.assertFalse(list(Path(tempdir).glob(".*.tmp-*")))
-
-        self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
-        self.assertEqual(checksum, "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd")
-
-    def test_fully_offline_cache_fallback_uses_semver_order(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            checksums_path = Path(tempdir) / "checksums.txt"
-            BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.8").write_text(
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa *obstudio_0.0.8_linux_amd64.zip\n",
-                encoding="utf-8",
-            )
-            BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.9").write_text(
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb *obstudio_0.0.9_linux_amd64.zip\n",
-                encoding="utf-8",
-            )
-
-            def fake_urlopen(url, timeout=0):
-                raise RuntimeError(f"network unavailable: {url}")
-
-            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
-                name, checksum = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
-
-        self.assertEqual(name, "obstudio_0.0.9_linux_amd64.zip")
-        self.assertEqual(checksum, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-
-    def test_fully_offline_cache_fallback_reads_plain_checksum_cache(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            checksums_path = Path(tempdir) / "checksums.txt"
-            checksums_path.write_text(
-                "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc *obstudio_0.0.14_linux_amd64.zip\n",
-                encoding="utf-8",
-            )
-
-            def fake_urlopen(url, timeout=0):
-                raise RuntimeError(f"network unavailable: {url}")
-
-            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
-                name, checksum = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
-
-        self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
-        self.assertEqual(checksum, "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
-
-    def test_fully_offline_cache_fallback_sorts_prerelease_numbers(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            checksums_path = Path(tempdir) / "checksums.txt"
-            BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.11-fork9").write_text(
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa *obstudio_0.0.11-fork9_linux_amd64.zip\n",
-                encoding="utf-8",
-            )
-            BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.11-fork10").write_text(
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb *obstudio_0.0.11-fork10_linux_amd64.zip\n",
-                encoding="utf-8",
-            )
-
-            def fake_urlopen(url, timeout=0):
-                raise RuntimeError(f"network unavailable: {url}")
-
-            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
-                name, checksum = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
-
-        self.assertEqual(name, "obstudio_0.0.11-fork10_linux_amd64.zip")
-        self.assertEqual(checksum, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-
-    def test_semver_sort_ignores_build_metadata(self):
-        self.assertEqual(
-            BOOTSTRAP.semver_sort_key("0.0.11-fork10+build2"),
-            BOOTSTRAP.semver_sort_key("0.0.11-fork10+build1"),
-        )
-
-    def test_uses_versioned_checksum_cache_when_stable_alias_is_missing(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            checksums_path = Path(tempdir) / "checksums.txt"
-            versioned_cache = BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.14")
-            checksums_path.write_text(
-                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff *obstudio_0.0.13_linux_amd64.zip\n",
-                encoding="utf-8",
-            )
-            versioned_cache.write_text(
-                "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef *obstudio_0.0.14_linux_amd64.zip\n",
-                encoding="utf-8",
-            )
-
-            def fake_urlopen(url, timeout=0):
-                raise RuntimeError(f"network unavailable: {url}")
-
-            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
-                name, checksum = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
-
-        self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
-        self.assertEqual(checksum, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
-
-    def test_write_text_atomic_replaces_with_complete_text(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            path = Path(tempdir) / "checksums.txt"
-            path.write_text("old\n", encoding="utf-8")
-
-            BOOTSTRAP.write_text_atomic(path, "new\n")
-
-            self.assertEqual(path.read_text(encoding="utf-8"), "new\n")
-            self.assertFalse(list(Path(tempdir).glob(".*.tmp-*")))
+                with self.assertRaisesRegex(RuntimeError, "checksum for linux_amd64.zip is invalid"):
+                    BOOTSTRAP.load_runtime_manifest("linux_amd64.zip", "1.2.3")
 
 
 class ResolveRuntimeReleaseTest(unittest.TestCase):
-    def test_claude_prefers_plugin_version_archive(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            binary = Path(tempdir) / "obstudio"
-            with (
-                mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "claude"}, clear=True),
-                mock.patch.object(
-                    BOOTSTRAP,
-                    "fetch_expected_checksum",
-                    return_value=("obstudio_1.2.3_linux_amd64.zip", "checksum"),
-                ) as fetch_checksum,
-                mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary) as download,
-            ):
-                got = BOOTSTRAP.resolve_runtime_release(
-                    Path(tempdir), "linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3"
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tempdir.cleanup)
+        self.plugin_data = Path(self._tempdir.name) / "data"
+        self.plugin_data.mkdir()
+        self.manifest_path = Path(self._tempdir.name) / "runtime-manifest.json"
+        write_runtime_manifest(self.manifest_path)
+        patcher = mock.patch.object(BOOTSTRAP, "RUNTIME_MANIFEST_PATH", self.manifest_path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_downloads_the_manifest_pinned_archive_for_each_host(self):
+        for host in ("claude", "codex"):
+            with self.subTest(host=host):
+                binary = self.plugin_data / "obstudio"
+                with (
+                    mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": host}, clear=True),
+                    mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary) as download,
+                ):
+                    got = BOOTSTRAP.resolve_runtime_release(self.plugin_data, "linux_amd64.zip", "1.2.3")
+
+                self.assertEqual(got, (binary, "obstudio_1.2.3_linux_amd64.zip", RUNTIME_SHA256, "1.2.3"))
+                download.assert_called_once_with(
+                    self.plugin_data, "linux_amd64.zip", "obstudio_1.2.3_linux_amd64.zip", RUNTIME_SHA256, "1.2.3"
                 )
 
-        self.assertEqual(got, (binary, "obstudio_1.2.3_linux_amd64.zip", "checksum", "1.2.3", False))
-        fetch_checksum.assert_called_once_with("linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3")
-        download.assert_called_once_with(
-            Path(tempdir), "linux_amd64.zip", "obstudio_1.2.3_linux_amd64.zip", "checksum", "1.2.3"
+    def test_missing_pinned_archive_does_not_fall_back(self):
+        not_found = BOOTSTRAP.urllib.error.HTTPError("url", 404, "Not Found", {}, None)
+        with mock.patch.object(BOOTSTRAP, "download_obstudio", side_effect=not_found) as download:
+            with self.assertRaises(BOOTSTRAP.urllib.error.HTTPError):
+                BOOTSTRAP.resolve_runtime_release(self.plugin_data, "linux_amd64.zip", "1.2.3")
+
+        download.assert_called_once()
+
+    def test_invalid_manifest_never_downloads(self):
+        self.manifest_path.write_text("{}", encoding="utf-8")
+        with mock.patch.object(BOOTSTRAP, "download_obstudio") as download:
+            with self.assertRaisesRegex(RuntimeError, "unsupported schema"):
+                BOOTSTRAP.resolve_runtime_release(self.plugin_data, "linux_amd64.zip", "1.2.3")
+
+        download.assert_not_called()
+
+    def test_removes_legacy_checksum_caches_after_install(self):
+        release_dir = self.plugin_data / "release" / "linux_amd64"
+        release_dir.mkdir(parents=True)
+        (release_dir / "checksums.txt").write_text("old\n", encoding="utf-8")
+        (release_dir / "checksums-1.2.2.txt").write_text("old\n", encoding="utf-8")
+        with mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=self.plugin_data / "obstudio"):
+            BOOTSTRAP.resolve_runtime_release(self.plugin_data, "linux_amd64.zip", "1.2.3")
+
+        self.assertEqual(list(release_dir.glob("checksums*.txt")), [])
+
+
+class RemoveLegacyChecksumCachesTest(unittest.TestCase):
+    def test_removes_only_checksum_files(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            release_dir = Path(tempdir) / "release" / "obstudio_1.2.3_linux_amd64"
+            release_dir.mkdir(parents=True)
+            (release_dir / "checksums.txt").write_text("x", encoding="utf-8")
+            (release_dir / "checksums-1.2.3.txt").write_text("x", encoding="utf-8")
+            keep = release_dir / "obstudio_1.2.3_linux_amd64.zip"
+            keep.write_bytes(b"zip")
+
+            BOOTSTRAP.remove_legacy_checksum_caches(Path(tempdir))
+
+            self.assertEqual(sorted(path.name for path in release_dir.iterdir()), [keep.name])
+
+    def test_tolerates_missing_release_directory(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            BOOTSTRAP.remove_legacy_checksum_caches(Path(tempdir))
+
+
+class DownloadPinnedReleaseTest(unittest.TestCase):
+    def archive_bytes(self):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as zf:
+            zf.writestr("obstudio_1.2.3_linux_amd64/obstudio", b"pinned-obstudio")
+        return buffer.getvalue()
+
+    def test_only_requests_the_exact_release_tag_archive(self):
+        archive = self.archive_bytes()
+        urls = []
+
+        def fake_urlopen(url, timeout=None):
+            urls.append(url)
+            return FakeResponse(archive)
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
+                BOOTSTRAP.download_obstudio(
+                    Path(tempdir),
+                    "linux_amd64.zip",
+                    "obstudio_1.2.3_linux_amd64.zip",
+                    BOOTSTRAP.hashlib.sha256(archive).hexdigest(),
+                    "1.2.3",
+                )
+
+        self.assertEqual(
+            urls,
+            ["https://github.com/signalfx/obstudio/releases/download/v1.2.3/obstudio_1.2.3_linux_amd64.zip"],
         )
+        self.assertFalse([url for url in urls if "latest" in url])
 
-    def test_claude_falls_back_to_latest_when_pinned_archive_is_missing(self):
+    def test_not_found_raises_without_trying_another_url(self):
+        not_found = BOOTSTRAP.urllib.error.HTTPError("url", 404, "Not Found", {}, None)
         with tempfile.TemporaryDirectory() as tempdir:
-            binary = Path(tempdir) / "obstudio"
-            not_found = BOOTSTRAP.urllib.error.HTTPError("url", 404, "Not Found", {}, None)
-            with (
-                mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "claude"}, clear=True),
-                mock.patch.object(
-                    BOOTSTRAP,
-                    "fetch_expected_checksum",
-                    side_effect=[
-                        ("obstudio_1.2.3_linux_amd64.zip", "pinned"),
-                        ("obstudio_1.2.4_linux_amd64.zip", "latest"),
-                    ],
-                ) as fetch_checksum,
-                mock.patch.object(BOOTSTRAP, "download_obstudio", side_effect=[not_found, binary]) as download,
-            ):
-                got = BOOTSTRAP.resolve_runtime_release(
-                    Path(tempdir), "linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3"
-                )
+            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=not_found) as urlopen:
+                with self.assertRaises(BOOTSTRAP.urllib.error.HTTPError):
+                    BOOTSTRAP.download_obstudio(
+                        Path(tempdir),
+                        "linux_amd64.zip",
+                        "obstudio_1.2.3_linux_amd64.zip",
+                        RUNTIME_SHA256,
+                        "1.2.3",
+                    )
 
-        self.assertEqual(got, (binary, "obstudio_1.2.4_linux_amd64.zip", "latest", "1.2.4", True))
-        self.assertEqual(fetch_checksum.call_count, 2)
-        self.assertEqual(download.call_count, 2)
+            archive_path = (
+                Path(tempdir) / "release" / "obstudio_1.2.3_linux_amd64" / "obstudio_1.2.3_linux_amd64.zip"
+            )
+            self.assertFalse(archive_path.exists())
 
-    def test_codex_prefers_plugin_version_archive(self):
+        urlopen.assert_called_once()
+        self.assertNotIn("latest", urlopen.call_args.args[0])
+
+    def test_checksum_mismatch_deletes_archive_and_never_extracts_or_runs(self):
+        archive = self.archive_bytes()
         with tempfile.TemporaryDirectory() as tempdir:
-            binary = Path(tempdir) / "obstudio"
+            release_dir = Path(tempdir) / "release" / "obstudio_1.2.3_linux_amd64"
             with (
-                mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "codex"}, clear=True),
-                mock.patch.object(
-                    BOOTSTRAP,
-                    "fetch_expected_checksum",
-                    return_value=("obstudio_1.2.3_linux_amd64.zip", "pinned"),
-                ) as fetch_checksum,
-                mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary) as download,
+                mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", return_value=FakeResponse(archive)),
+                mock.patch.object(BOOTSTRAP.subprocess, "Popen") as popen,
+                mock.patch.object(BOOTSTRAP.subprocess, "run") as run,
             ):
-                got = BOOTSTRAP.resolve_runtime_release(
-                    Path(tempdir), "linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3"
-                )
+                with self.assertRaisesRegex(RuntimeError, "is corrupt"):
+                    BOOTSTRAP.download_obstudio(
+                        Path(tempdir),
+                        "linux_amd64.zip",
+                        "obstudio_1.2.3_linux_amd64.zip",
+                        RUNTIME_SHA256,
+                        "1.2.3",
+                    )
 
-        self.assertEqual(got, (binary, "obstudio_1.2.3_linux_amd64.zip", "pinned", "1.2.3", False))
-        fetch_checksum.assert_called_once_with("linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3")
-        download.assert_called_once_with(
-            Path(tempdir), "linux_amd64.zip", "obstudio_1.2.3_linux_amd64.zip", "pinned", "1.2.3"
-        )
+            self.assertFalse((release_dir / "obstudio_1.2.3_linux_amd64.zip").exists())
+            self.assertFalse((release_dir / "extracted").exists())
+            self.assertEqual([path for path in Path(tempdir).rglob("obstudio") if path.is_file()], [])
+        popen.assert_not_called()
+        run.assert_not_called()
 
-    def test_codex_falls_back_to_latest_when_pinned_archive_is_missing(self):
-        with tempfile.TemporaryDirectory() as tempdir:
-            binary = Path(tempdir) / "obstudio"
-            not_found = BOOTSTRAP.urllib.error.HTTPError("url", 404, "Not Found", {}, None)
-            with (
-                mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "codex"}, clear=True),
-                mock.patch.object(
-                    BOOTSTRAP,
-                    "fetch_expected_checksum",
-                    side_effect=[
-                        ("obstudio_1.2.3_linux_amd64.zip", "pinned"),
-                        ("obstudio_1.2.4_linux_amd64.zip", "latest"),
-                    ],
-                ) as fetch_checksum,
-                mock.patch.object(BOOTSTRAP, "download_obstudio", side_effect=[not_found, binary]) as download,
-            ):
-                got = BOOTSTRAP.resolve_runtime_release(
-                    Path(tempdir), "linux_amd64.zip", Path(tempdir) / "checksums.txt", "1.2.3"
-                )
 
-        self.assertEqual(got, (binary, "obstudio_1.2.4_linux_amd64.zip", "latest", "1.2.4", True))
-        self.assertEqual(fetch_checksum.call_count, 2)
-        self.assertEqual(download.call_count, 2)
+class HookSourceTest(unittest.TestCase):
+    def test_hook_source_has_no_latest_release_path(self):
+        source = (Path(__file__).resolve().parents[1] / "bootstrap_obstudio.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("releases/latest", source)
+        self.assertNotIn("fetch_expected_checksum", source)
 
 
 class RuntimeVersionWarningTest(unittest.TestCase):
@@ -1028,12 +889,10 @@ class RuntimeVersionWarningTest(unittest.TestCase):
             "the existing runtime was left running."
         )
 
-    def test_does_not_probe_owned_runtime_when_pin_is_not_in_fallback(self):
+    def test_does_not_probe_managed_runtime(self):
         with tempfile.TemporaryDirectory() as tempdir:
             state_path = Path(tempdir) / "bootstrap-state.json"
-            state_path.write_text(
-                json.dumps({"mode": "managed", "runtimePinFallback": False}), encoding="utf-8"
-            )
+            state_path.write_text(json.dumps({"mode": "managed"}), encoding="utf-8")
             with mock.patch.object(BOOTSTRAP, "fetch_obstudio_health") as fetch_health:
                 BOOTSTRAP.warn_if_shared_runtime_version_mismatch(state_path, "1.2.3")
 
@@ -1466,8 +1325,8 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
                 mock.patch.object(
                     BOOTSTRAP,
-                    "fetch_expected_checksum",
-                    return_value=("obstudio_0.2.0_linux_amd64.zip", "checksum"),
+                    "load_runtime_manifest",
+                    return_value=("0.2.0", "obstudio_0.2.0_linux_amd64.zip", "checksum"),
                 ),
                 mock.patch.object(BOOTSTRAP, "start_obstudio_background") as start_obstudio_background,
                 mock.patch.object(BOOTSTRAP, "emit_context"),
@@ -1513,13 +1372,13 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
                 mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
                 mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
-                mock.patch.object(BOOTSTRAP, "fetch_expected_checksum") as fetch_expected_checksum,
+                mock.patch.object(BOOTSTRAP, "load_runtime_manifest") as load_runtime_manifest,
                 mock.patch.object(BOOTSTRAP, "start_obstudio_background") as start_obstudio_background,
                 mock.patch.object(BOOTSTRAP, "emit_context") as emit_context,
             ):
                 self.assertEqual(BOOTSTRAP.main(), 0)
 
-            fetch_expected_checksum.assert_not_called()
+            load_runtime_manifest.assert_not_called()
             start_obstudio_background.assert_not_called()
             emit_context.assert_called_once_with(
                 "Splunk Observability Studio MCP is explicitly disabled in Codex config. The plugin hook "
@@ -1565,13 +1424,13 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
                 mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
                 mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
-                mock.patch.object(BOOTSTRAP, "fetch_expected_checksum") as fetch_expected_checksum,
+                mock.patch.object(BOOTSTRAP, "load_runtime_manifest") as load_runtime_manifest,
                 mock.patch.object(BOOTSTRAP, "start_obstudio_background") as start_obstudio_background,
                 mock.patch.object(BOOTSTRAP, "emit_context") as emit_context,
             ):
                 self.assertEqual(BOOTSTRAP.main(), 0)
 
-            fetch_expected_checksum.assert_not_called()
+            load_runtime_manifest.assert_not_called()
             start_obstudio_background.assert_not_called()
             emit_context.assert_called_once_with(
                 "Custom Splunk Observability Studio MCP endpoint detected in Codex config. The plugin hook "
@@ -1722,8 +1581,8 @@ class ReleaseBinarySelectionTest(unittest.TestCase):
                 mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
                 mock.patch.object(
                     BOOTSTRAP,
-                    "fetch_expected_checksum",
-                    return_value=("obstudio_0.1.0_linux_amd64.zip", "checksum"),
+                    "load_runtime_manifest",
+                    return_value=("0.1.0", "obstudio_0.1.0_linux_amd64.zip", "checksum"),
                 ),
                 mock.patch.object(BOOTSTRAP.shutil, "which", return_value=str(path_candidate)) as which,
                 mock.patch.object(BOOTSTRAP.subprocess, "run") as run,
@@ -1814,8 +1673,8 @@ class ReleaseBinarySelectionTest(unittest.TestCase):
                     mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
                     mock.patch.object(
                         BOOTSTRAP,
-                        "fetch_expected_checksum",
-                        return_value=("obstudio_0.1.0_linux_amd64.zip", "checksum"),
+                        "load_runtime_manifest",
+                        return_value=("0.1.0", "obstudio_0.1.0_linux_amd64.zip", "checksum"),
                     ),
                     mock.patch.object(BOOTSTRAP.subprocess, "run"),
                     mock.patch.object(BOOTSTRAP.subprocess, "Popen", side_effect=fake_popen),
@@ -1999,7 +1858,7 @@ class MainOwnershipFlowTest(unittest.TestCase):
                 mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
                 mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
                 mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
-                mock.patch.object(BOOTSTRAP, "fetch_expected_checksum", return_value=("obstudio_0.1.0_linux_amd64.zip", "checksum")),
+                mock.patch.object(BOOTSTRAP, "load_runtime_manifest", return_value=("0.1.0", "obstudio_0.1.0_linux_amd64.zip", "checksum")),
                 mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary),
                 mock.patch.object(
                     BOOTSTRAP,
@@ -2080,8 +1939,8 @@ class MainOwnershipFlowTest(unittest.TestCase):
                 mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
                 mock.patch.object(
                     BOOTSTRAP,
-                    "fetch_expected_checksum",
-                    return_value=("obstudio_0.2.0_linux_amd64.zip", "checksum"),
+                    "load_runtime_manifest",
+                    return_value=("0.2.0", "obstudio_0.2.0_linux_amd64.zip", "checksum"),
                 ),
                 mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary),
                 mock.patch.object(
@@ -2209,8 +2068,8 @@ class MainOwnershipFlowTest(unittest.TestCase):
                 mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
                 mock.patch.object(
                     BOOTSTRAP,
-                    "fetch_expected_checksum",
-                    return_value=("obstudio_0.2.0_linux_amd64.zip", "checksum"),
+                    "load_runtime_manifest",
+                    return_value=("0.2.0", "obstudio_0.2.0_linux_amd64.zip", "checksum"),
                 ),
                 mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary),
                 mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", side_effect=fake_health),
@@ -2320,8 +2179,8 @@ class MainOwnershipFlowTest(unittest.TestCase):
                 mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
                 mock.patch.object(
                     BOOTSTRAP,
-                    "fetch_expected_checksum",
-                    return_value=("obstudio_0.2.0_linux_amd64.zip", "checksum"),
+                    "load_runtime_manifest",
+                    return_value=("0.2.0", "obstudio_0.2.0_linux_amd64.zip", "checksum"),
                 ),
                 mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary),
                 mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", side_effect=fake_health),

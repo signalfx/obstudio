@@ -9,8 +9,13 @@ import json
 import os
 import re
 import shutil
+import sys
 import zipfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import runtime_manifest  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -120,8 +125,43 @@ def main() -> int:
         type=Path,
         help="release checksum manifest used by checksum update commands",
     )
+    parser.add_argument(
+        "--write-runtime-manifest",
+        action="store_true",
+        help="write hooks/runtime-manifest.json for --release-tag from --dist-dir or --checksums-file",
+    )
+    parser.add_argument(
+        "--verify-runtime-manifest",
+        action="store_true",
+        help="verify the archives in --dist-dir hash to the committed runtime manifest for --release-tag",
+    )
+    parser.add_argument(
+        "--check-runtime-manifest",
+        action="store_true",
+        help="verify the committed runtime manifest is valid and pins the committed plugin version",
+    )
+    parser.add_argument("--dist-dir", type=Path, help="GoReleaser dist directory holding the runtime archives")
     args = parser.parse_args()
 
+    if args.write_runtime_manifest:
+        if not args.release_tag or (args.dist_dir is None) == (args.checksums_file is None):
+            raise RuntimeError("--write-runtime-manifest needs --release-tag and exactly one of --dist-dir or --checksums-file")
+        version = release_version_from_tag(args.release_tag)
+        hashes = (
+            runtime_manifest.hashes_from_dist(args.dist_dir, version)
+            if args.dist_dir is not None
+            else runtime_manifest.hashes_from_checksums_file(args.checksums_file, version)
+        )
+        runtime_manifest.write_runtime_manifest(PLUGIN_ROOT, version, hashes)
+        return 0
+    if args.verify_runtime_manifest:
+        if not args.release_tag or args.dist_dir is None:
+            raise RuntimeError("--release-tag and --dist-dir are required with --verify-runtime-manifest")
+        runtime_manifest.verify_runtime_manifest(PLUGIN_ROOT, release_version_from_tag(args.release_tag), args.dist_dir)
+        return 0
+    if args.check_runtime_manifest:
+        check_committed_runtime_manifest(args.release_tag)
+        return 0
     if args.sync_plugin_skills:
         sync_plugin_skills()
         return 0
@@ -238,6 +278,16 @@ def check_committed_manifest_versions(
         check_claude_marketplace_archive(versions["claude"], claude_marketplace_path)
 
     print(f"plugin manifest versions agree: {versions['claude']}")
+
+
+def check_committed_runtime_manifest(release_tag: str = "", plugin_root: Path = PLUGIN_ROOT) -> None:
+    claude_manifest = json.loads((plugin_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    version = claude_manifest.get("version") if isinstance(claude_manifest, dict) else None
+    if not isinstance(version, str) or not SEMVER_PATTERN.fullmatch(version):
+        raise RuntimeError("Claude plugin manifest version must be a semver string")
+    if release_tag and release_version_from_tag(release_tag) != version:
+        raise RuntimeError(f"plugin manifest version {version!r} does not match release tag {release_tag!r}")
+    runtime_manifest.check_runtime_manifest(plugin_root, version)
 
 
 def _write_manifest_version(manifest_path: Path, version: str) -> None:
@@ -421,6 +471,7 @@ def stage_hooks(hooks_output: Path, host: str) -> None:
     copy_path(PLUGIN_ROOT / "hooks" / "bootstrap_obstudio.py", hooks_output / "bootstrap_obstudio.py")
     if host in ("all", "claude"):
         copy_path(PLUGIN_ROOT / "hooks" / "bootstrap_claude.cjs", hooks_output / "bootstrap_claude.cjs")
+    copy_path(PLUGIN_ROOT / runtime_manifest.MANIFEST_RELATIVE_PATH, hooks_output / "runtime-manifest.json")
     hook_files = ("codex-hooks.json", "claude-hooks.json") if host == "all" else (f"{host}-hooks.json",)
     for hook_file in hook_files:
         copy_path(PLUGIN_ROOT / "hooks" / hook_file, hooks_output / hook_file)
@@ -559,6 +610,7 @@ def verify_staged_plugin(output: Path, host: str = "codex", expected_version: st
     if symlinks:
         rendered = "\n".join(str(path.relative_to(output)) for path in symlinks)
         raise RuntimeError(f"staged plugin must not contain symlinks:\n{rendered}")
+    runtime_manifest.read_runtime_manifest(output / runtime_manifest.MANIFEST_RELATIVE_PATH)
     for selected_host in PLUGIN_HOSTS if host == "all" else (host,):
         manifest = output / (".claude-plugin" if selected_host == "claude" else ".codex-plugin") / "plugin.json"
         if not manifest.is_file():

@@ -1,0 +1,22 @@
+{
+  "artifacts": {
+    "darwin_amd64.zip": {
+      "name": "obstudio_0.1.4_darwin_amd64.zip",
+      "sha256": "f9f0472d927b9b3bc7d7cafc015ced641bba65a2fb59867f81434b3db8e8f9e4"
+    },
+    "darwin_arm64.zip": {
+      "name": "obstudio_0.1.4_darwin_arm64.zip",
+      "sha256": "8a1ab09043a846d0bee72d3af31c8c8181926804e5587625582e8942e78d64d3"
+    },
+    "linux_amd64.zip": {
+      "name": "obstudio_0.1.4_linux_amd64.zip",
+      "sha256": "0a9bb124cf0f7e34a3ce0aad8c4c0eeab2686fbb1348c083699e7e4ac00827da"
+    },
+    "windows_amd64.zip": {
+      "name": "obstudio_0.1.4_windows_amd64.zip",
+      "sha256": "5f1d87358a3c31b0df421250f90de3a6c07185a8a032a3a8f4a9d1859c1b7cc0"
+    }
+  },
+  "schemaVersion": 1,
+  "version": "0.1.4"
+}

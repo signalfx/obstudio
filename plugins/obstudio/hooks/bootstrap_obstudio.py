@@ -25,7 +25,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-RELEASE_BASE_URL = "https://github.com/signalfx/obstudio/releases/latest/download"
 RELEASES_BASE_URL = "https://github.com/signalfx/obstudio/releases/download"
 OBSTUDIO_HEALTH_URL = os.environ.get(
     "OBSTUDIO_HEALTH_URL",
@@ -44,10 +43,9 @@ HEALTH_CHECK_SLEEP_SECONDS = 0.5
 HOOK_EXECUTION_DEADLINE_SECONDS = 120
 LOCK_DEADLINE_SAFETY_SECONDS = 2
 LOCK_POLL_SECONDS = 0.25
-CHECKSUM_LINE_PATTERNS = (
-    re.compile(r"^(?P<hash>[0-9a-fA-F]{64})\s+\*?(?P<name>.+)$"),
-    re.compile(r"^SHA256 \((?P<name>.+)\) = (?P<hash>[0-9a-fA-F]{64})$"),
-)
+RUNTIME_MANIFEST_PATH = Path(__file__).resolve().parent / "runtime-manifest.json"
+RUNTIME_MANIFEST_SCHEMA_VERSION = 1
+SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 VERSION_PATTERN = re.compile(r"\b\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\b")
 
 
@@ -448,13 +446,9 @@ def bootstrap_locked(
 
     try:
         artifact_suffix = resolve_release_artifact()
-        release_dir = plugin_data / "release" / artifact_suffix.removesuffix(".zip")
-        release_dir.mkdir(parents=True, exist_ok=True)
-        checksums_path = release_dir / "checksums.txt"
-        obstudio_binary, resolved_artifact, expected_checksum, release_version, pin_fallback = resolve_runtime_release(
+        obstudio_binary, _resolved_artifact, _expected_checksum, release_version = resolve_runtime_release(
             plugin_data,
             artifact_suffix,
-            checksums_path,
             plugin_version,
         )
         install_source = "downloaded"
@@ -550,7 +544,6 @@ def bootstrap_locked(
             {
                 "pluginVersion": plugin_version,
                 "releaseVersion": release_version,
-                "runtimePinFallback": pin_fallback,
                 "installSource": install_source,
                 "obstudioBinary": str(obstudio_binary),
                 "bootstrappedAt": datetime.now(timezone.utc).isoformat(),
@@ -573,10 +566,6 @@ def bootstrap_locked(
             message = (
                 f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills "
                 "and the MCP config points at a shared Splunk Observability Studio service."
-            )
-        if pin_fallback:
-            message += (
-                f" Runtime version {plugin_version} was unavailable; using Observer {release_version} instead."
             )
         running_version = normalize_obstudio_version((live_health or {}).get("version"))
         if (
@@ -796,10 +785,7 @@ def is_bootstrapped(
         return False
     if state.get("owner") == plugin_owner() and state.get("mode") == "managed":
         live_pid = find_pid_listening_on_url(health_url)
-        expected_version = string_state_value(state, "releaseVersion")
-        if state.get("runtimePinFallback") is not True:
-            expected_version = plugin_version
-        return bootstrap_state_proves_managed_owner(state_path, live_pid, health_payload, expected_version)
+        return bootstrap_state_proves_managed_owner(state_path, live_pid, health_payload, plugin_version)
     return True
 
 
@@ -808,7 +794,7 @@ def download_obstudio(
     artifact_suffix: str,
     resolved_artifact: str,
     expected_checksum: str,
-    release_version: str | None = None,
+    release_version: str,
 ) -> Path:
     release_dir = plugin_data / "release" / resolved_artifact.removesuffix(".zip")
     release_dir.mkdir(parents=True, exist_ok=True)
@@ -828,8 +814,7 @@ def download_obstudio(
         if extracted_dir.exists():
             shutil.rmtree(extracted_dir)
 
-    base_url = f"{RELEASES_BASE_URL}/v{release_version}" if release_version else RELEASE_BASE_URL
-    download_url = f"{base_url}/{resolved_artifact}"
+    download_url = f"{RELEASES_BASE_URL}/v{release_version}/{resolved_artifact}"
     for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
         try:
             with urllib.request.urlopen(download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response, archive_path.open("wb") as output:
@@ -837,7 +822,7 @@ def download_obstudio(
             break
         except urllib.error.HTTPError as exc:
             archive_path.unlink(missing_ok=True)
-            if release_version and exc.code == 404:
+            if exc.code == 404:
                 raise
             if attempt == DOWNLOAD_ATTEMPTS:
                 raise RuntimeError(f"failed to download {resolved_artifact} after {DOWNLOAD_ATTEMPTS} attempts") from exc
@@ -853,10 +838,9 @@ def download_obstudio(
     extracted_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        with zipfile.ZipFile(archive_path) as zf:
-            validate_zip_entries(zf, extracted_dir)
         verify_checksum(archive_path, expected_checksum)
         with zipfile.ZipFile(archive_path) as zf:
+            validate_zip_entries(zf, extracted_dir)
             zf.extractall(extracted_dir)
     except (zipfile.BadZipFile, RuntimeError) as exc:
         archive_path.unlink(missing_ok=True)
@@ -871,113 +855,60 @@ def download_obstudio(
     return binary_path
 
 
-def fetch_expected_checksum(
-    artifact_suffix: str,
-    checksums_path: Path,
-    release_version: str | None = None,
-) -> tuple[str, str]:
-    checksums_path.parent.mkdir(parents=True, exist_ok=True)
-    if release_version:
-        cached_path = versioned_checksum_cache_path(checksums_path, release_version)
-        cached_result = parse_cached_checksum(cached_path, artifact_suffix)
-        if cached_result is not None and resolve_release_version(cached_result[0], artifact_suffix) == release_version:
-            return cached_result
-        checksum_url = f"{RELEASES_BASE_URL}/v{release_version}/checksums.txt"
-        with urllib.request.urlopen(checksum_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
-            text = response.read().decode("utf-8")
-        result = parse_checksum(text, artifact_suffix)
-        if resolve_release_version(result[0], artifact_suffix) != release_version:
-            raise RuntimeError(f"checksum manifest does not match pinned release {release_version}")
-        try:
-            write_text_atomic(cached_path, text)
-        except OSError:
-            pass
-        return result
-
-    last_error: Exception | None = None
-    for download_url in (f"{RELEASE_BASE_URL}/checksums.txt",):
-        try:
-            with urllib.request.urlopen(download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
-                text = response.read().decode("utf-8")
-            result = parse_checksum(text, artifact_suffix)
-            try:
-                write_text_atomic(checksums_path, text)
-                cache_versioned_checksums(
-                    checksums_path,
-                    resolve_release_version(result[0], artifact_suffix),
-                    text,
-                )
-            except OSError:
-                pass
-            return result
-        except Exception as exc:  # pragma: no cover - network boundary
-            last_error = exc
-
-    release_version = None
+def load_runtime_manifest(artifact_suffix: str, plugin_version: str) -> tuple[str, str, str]:
+    """Return (release_version, artifact_name, sha256) pinned by the reviewed in-plugin manifest."""
+    hint = "reinstall the plugin to restore hooks/runtime-manifest.json"
     try:
-        release_version = resolve_latest_release_version()
-    except Exception as exc:  # pragma: no cover - network boundary
-        last_error = exc
-    if release_version:
-        versioned_checksums_path = versioned_checksum_cache_path(checksums_path, release_version)
-        if versioned_checksums_path.is_file():
-            cached_result = parse_cached_checksum(versioned_checksums_path, artifact_suffix)
-            if cached_result is not None:
-                return cached_result
-        versioned_download_url = f"{RELEASE_BASE_URL}/obstudio_{release_version}_checksums.txt"
-        try:
-            with urllib.request.urlopen(versioned_download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
-                text = response.read().decode("utf-8")
-            result = parse_checksum(text, artifact_suffix)
-            try:
-                write_text_atomic(checksums_path, text)
-                cache_versioned_checksums(checksums_path, release_version, text)
-            except OSError:
-                pass
-            return result
-        except Exception as exc:  # pragma: no cover - network boundary
-            last_error = exc
-
-    cached_result = newest_cached_checksum(checksums_path, artifact_suffix)
-    if cached_result is not None:
-        return cached_result
-    cached_result = parse_cached_checksum(checksums_path, artifact_suffix)
-    if cached_result is not None:
-        return cached_result
-    raise RuntimeError("failed to download release checksum manifest") from last_error
+        manifest = json.loads(RUNTIME_MANIFEST_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"runtime manifest is missing or unreadable; {hint}") from exc
+    if not isinstance(manifest, dict) or manifest.get("schemaVersion") != RUNTIME_MANIFEST_SCHEMA_VERSION:
+        raise RuntimeError(f"runtime manifest has an unsupported schema; {hint}")
+    version = manifest.get("version")
+    if not isinstance(version, str) or re.fullmatch(VERSION_PATTERN, version) is None:
+        raise RuntimeError(f"runtime manifest has an invalid version; {hint}")
+    # Claude falls back to the plugin root path as its version key when plugin.json has none.
+    if not os.path.isabs(plugin_version) and plugin_version != version:
+        raise RuntimeError(
+            f"runtime manifest pins {version} but the plugin is {plugin_version}; {hint}"
+        )
+    artifacts = manifest.get("artifacts")
+    entry = artifacts.get(artifact_suffix) if isinstance(artifacts, dict) else None
+    if not isinstance(entry, dict):
+        raise RuntimeError(f"runtime manifest has no pinned runtime for {artifact_suffix}")
+    name = entry.get("name")
+    sha256 = entry.get("sha256")
+    if name != f"obstudio_{version}_{artifact_suffix}":
+        raise RuntimeError(f"runtime manifest artifact name for {artifact_suffix} is invalid; {hint}")
+    if not isinstance(sha256, str) or SHA256_PATTERN.fullmatch(sha256) is None:
+        raise RuntimeError(f"runtime manifest checksum for {artifact_suffix} is invalid; {hint}")
+    return version, name, sha256
 
 
 def resolve_runtime_release(
     plugin_data: Path,
     artifact_suffix: str,
-    checksums_path: Path,
     plugin_version: str,
-) -> tuple[Path, str, str, str, bool]:
-    """Download the runtime matching the plugin version, with a latest-release fallback."""
-    plugin_version_is_valid = re.fullmatch(
-        r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", plugin_version
-    ) is not None
-    if plugin_version_is_valid:
-        try:
-            artifact, checksum = fetch_expected_checksum(artifact_suffix, checksums_path, plugin_version)
-            binary = download_obstudio(plugin_data, artifact_suffix, artifact, checksum, plugin_version)
-            return binary, artifact, checksum, plugin_version, False
-        except urllib.error.HTTPError as exc:
-            if exc.code != 404:
-                raise
+) -> tuple[Path, str, str, str]:
+    """Download the runtime pinned by the in-plugin manifest; there is no fallback."""
+    release_version, artifact, checksum = load_runtime_manifest(artifact_suffix, plugin_version)
+    binary = download_obstudio(plugin_data, artifact_suffix, artifact, checksum, release_version)
+    remove_legacy_checksum_caches(plugin_data)
+    return binary, artifact, checksum, release_version
 
-    artifact, checksum = fetch_expected_checksum(artifact_suffix, checksums_path)
-    release_version = resolve_release_version(artifact, artifact_suffix)
-    binary = download_obstudio(plugin_data, artifact_suffix, artifact, checksum)
-    return binary, artifact, checksum, release_version, plugin_version_is_valid
+
+def remove_legacy_checksum_caches(plugin_data: Path) -> None:
+    for cached_path in (plugin_data / "release").glob("*/checksums*.txt"):
+        try:
+            cached_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def warn_if_shared_runtime_version_mismatch(state_path: Path, plugin_version: str) -> None:
     state = read_bootstrap_state(state_path)
     mode = string_state_value(state, "mode")
-    if mode not in {"shared", "external"} and not (
-        mode == "managed" and state.get("runtimePinFallback") is True
-    ):
+    if mode not in {"shared", "external"}:
         return
     health_url = string_state_value(state, "healthUrl") or OBSTUDIO_HEALTH_URL
     health = fetch_obstudio_health(health_url)
@@ -988,82 +919,6 @@ def warn_if_shared_runtime_version_mismatch(state_path: Path, plugin_version: st
             f"{host_name()} plugin version {plugin_version} is using an already-running Observer version "
             f"{running_version}; the existing runtime was left running."
         )
-
-
-def parse_checksum(checksums_text: str, artifact_suffix: str) -> tuple[str, str]:
-    target_name = re.compile(
-        rf"^obstudio_\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?_{re.escape(artifact_suffix)}$"
-    )
-    for raw_line in checksums_text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        for pattern in CHECKSUM_LINE_PATTERNS:
-            match = pattern.fullmatch(line)
-            if match:
-                name = match.group("name")
-                if target_name.fullmatch(Path(name).name):
-                    return Path(name).name, match.group("hash").lower()
-    raise RuntimeError(f"checksum for {artifact_suffix} not found in checksums.txt")
-
-
-def newest_cached_checksum(checksums_path: Path, artifact_suffix: str) -> tuple[str, str] | None:
-    cached_paths = []
-    for cached_path in checksums_path.parent.glob("checksums-*.txt"):
-        release_version = cached_checksum_version(cached_path)
-        if release_version is not None:
-            cached_paths.append((release_version, cached_path))
-    cached_paths.sort(key=lambda item: semver_sort_key(item[0]), reverse=True)
-    for _, cached_path in cached_paths:
-        cached_result = parse_cached_checksum(cached_path, artifact_suffix)
-        if cached_result is not None:
-            return cached_result
-    return None
-
-
-def parse_cached_checksum(path: Path, artifact_suffix: str) -> tuple[str, str] | None:
-    try:
-        return parse_checksum(path.read_text(encoding="utf-8"), artifact_suffix)
-    except OSError:
-        return None
-    except RuntimeError:
-        try:
-            path.unlink(missing_ok=True)
-        except OSError:
-            pass
-        return None
-
-
-def cached_checksum_version(path: Path) -> str | None:
-    match = re.fullmatch(rf"checksums-({VERSION_PATTERN.pattern}).txt", path.name)
-    if not match:
-        return None
-    return match.group(1)
-
-
-def semver_sort_key(version: str) -> tuple[int, int, int, int, tuple[tuple[int, int | str], ...]]:
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?", version)
-    if not match:
-        return (0, 0, 0, 0, ((1, version),))
-    major, minor, patch = (int(match.group(index)) for index in (1, 2, 3))
-    prerelease = match.group(4)
-    stable_rank = 1 if prerelease is None else 0
-    return (major, minor, patch, stable_rank, semver_prerelease_key(prerelease or ""))
-
-
-def semver_prerelease_key(prerelease: str) -> tuple[tuple[int, int | str], ...]:
-    key = []
-    for part in prerelease.split("."):
-        if re.fullmatch(r"\d+", part):
-            key.append((0, int(part)))
-            continue
-        match = re.fullmatch(r"([A-Za-z-]+)(\d+)", part)
-        if match:
-            key.append((1, match.group(1)))
-            key.append((0, int(match.group(2))))
-            continue
-        key.append((1, part))
-    return tuple(key)
 
 
 def archive_is_valid(archive_path: Path, expected_checksum: str) -> bool:
@@ -1152,37 +1007,6 @@ def resolve_release_artifact() -> str:
     )
 
 
-def resolve_latest_release_version() -> str:
-    download_url = "https://api.github.com/repos/signalfx/obstudio/releases/latest"
-    try:
-        with urllib.request.urlopen(download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
-            payload = json.load(response)
-    except Exception as exc:  # pragma: no cover - network boundary
-        raise RuntimeError("failed to determine latest Splunk Observability Studio release version") from exc
-    tag_name = str(payload.get("tag_name", "")).strip()
-    if not tag_name:
-        raise RuntimeError("latest Splunk Observability Studio release is missing a tag name")
-    release_version = tag_name.removeprefix("v").strip()
-    if not release_version:
-        raise RuntimeError(f"could not parse release version from tag {tag_name}")
-    return release_version
-
-
-def resolve_release_version(resolved_artifact: str, artifact_suffix: str) -> str:
-    expected_suffix = f"_{artifact_suffix}"
-    if not resolved_artifact.endswith(expected_suffix):
-        raise RuntimeError(
-            f"could not parse release version from {resolved_artifact}: expected suffix {expected_suffix}"
-        )
-    prefix = resolved_artifact.removesuffix(expected_suffix)
-    if not prefix.startswith("obstudio_"):
-        raise RuntimeError(f"could not parse release version from {resolved_artifact}")
-    release_version = prefix.removeprefix("obstudio_")
-    if not release_version:
-        raise RuntimeError(f"could not parse release version from {resolved_artifact}")
-    return release_version
-
-
 def ensure_process_running(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
         raise RuntimeError("Splunk Observability Studio process exited before becoming healthy")
@@ -1236,28 +1060,6 @@ def ensure_executable(path: Path) -> None:
         return
     mode = path.stat().st_mode
     path.chmod(mode | 0o111)
-
-
-def versioned_checksum_cache_path(checksums_path: Path, release_version: str) -> Path:
-    return checksums_path.with_name(f"checksums-{release_version}.txt")
-
-
-def cache_versioned_checksums(checksums_path: Path, release_version: str, text: str) -> None:
-    versioned_checksums_path = versioned_checksum_cache_path(checksums_path, release_version)
-    try:
-        write_text_atomic(versioned_checksums_path, text)
-    except OSError:
-        pass
-
-
-def write_text_atomic(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_name(f".{path.name}.tmp-{os.getpid()}")
-    try:
-        temp_path.write_text(text, encoding="utf-8")
-        temp_path.replace(path)
-    finally:
-        temp_path.unlink(missing_ok=True)
 
 
 def find_zip_member(zf: zipfile.ZipFile, binary_name: str) -> str | None:

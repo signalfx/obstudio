@@ -30,7 +30,8 @@ behavior.
 
 When the SessionStart hook is reviewed and trusted, it may bootstrap the managed
 Splunk Observability Studio runtime. The bootstrap may download a release
-binary, verify `checksums.txt`, extract the release into plugin data, and start
+binary, verify it against the SHA-256 pinned in the plugin's bundled
+`hooks/runtime-manifest.json`, extract the release into plugin data, and start
 a local process.
 
 When token telemetry is enabled and no repository-correlation mode has been
