@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | splunk-configure |
-| Run ID | 20261028T004749066060Z |
+| Run ID | 20261030T050416942144Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -18,5 +18,6 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
 | dashboards/checkout-configure/qual/configure | dashboards/checkout-configure | 1 | evals/dashboards/checkout-configure/eval/qual/configure.json | 0 | 10 | 0 |
-| python/ai-assistant-demo/qual/ao-target-handoff-configure | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-configure.json | 0 | 3 | 0 |
+| python/ai-assistant-demo/qual/ao-target-handoff-configure | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-configure.json | 0 | 4 | 0 |
+| python/ai-assistant-demo/qual/finding-group-configure | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/finding-group-configure.json | 0 | 7 | 0 |
 | sanity/skill-smoke/sanity/configure | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/eval/sanity/configure.json | 0 | 0 | 0 |

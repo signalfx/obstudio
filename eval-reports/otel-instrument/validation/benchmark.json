@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261028T183327447030Z",
+    "run_id": "20261030T045134351498Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -383,6 +383,38 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/ai-assistant-demo/qual/ao-name-inputs-instrument",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "ao-name-inputs-instrument"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-instrument.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/ao-root-compatibility-instrument",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "ao-root-compatibility-instrument"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-instrument.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 8,
+      "runtime_check_count": 0
+    },
+    {
       "id": "python/ai-assistant-demo/qual/ao-target-handoff-instrument",
       "case": "python/ai-assistant-demo",
       "language": "python",
@@ -412,6 +444,22 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/finding-group-instrument",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "finding-group-instrument"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/finding-group-instrument.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
       "runtime_check_count": 0
     },
     {
@@ -511,6 +559,23 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/ai-assistant-demo/qual/required-input-preflight",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 2,
+      "prompts": [
+        "required-input-both",
+        "required-input-stream"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/required-input-preflight.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 3,
+      "runtime_check_count": 0
+    },
+    {
       "id": "python/ai-assistant-demo/qual/resource-env-bootstrap",
       "case": "python/ai-assistant-demo",
       "language": "python",
@@ -540,6 +605,25 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/stale-selection-recovery",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 4,
+      "prompts": [
+        "required-target-rebind",
+        "stale-proof-current-scope",
+        "stale-selection-broad",
+        "stale-selection-explicit"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/stale-selection-recovery.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 4,
       "runtime_check_count": 0
     },
     {
@@ -708,6 +792,25 @@
       "runtime_check_count": 1
     },
     {
+      "id": "python/flask-basic/qual/dotenv-profiles",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 4,
+      "prompts": [
+        "dotenv-ao-required-origin",
+        "dotenv-profile-legacy",
+        "dotenv-profile-missing",
+        "dotenv-profile-new"
+      ],
+      "definition_path": "evals/python/flask-basic/eval/qual/dotenv-profiles.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
       "id": "python/flask-basic/qual/instrument",
       "case": "python/flask-basic",
       "language": "python",
@@ -874,16 +977,16 @@
     }
   ],
   "summary": {
-    "eval_count": 52,
-    "case_count": 71,
-    "prompt_count": 71,
+    "eval_count": 58,
+    "case_count": 84,
+    "prompt_count": 84,
     "sanity_check_count": 0,
-    "rubric_check_count": 437,
+    "rubric_check_count": 508,
     "runtime_check_count": 9
   },
   "source": {
     "digest_version": 4,
-    "digest": "614829206cd99f4f37ae73cc3dc0adb31ce67e6c9bcc40a9fa230f93d9ec0001",
+    "digest": "787d0f690914e69cba665c2dd58901380c52e04d7450a7b52f822f2af89d1c8d",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -896,8 +999,8 @@
       "evals/go/chi-basic/eval/qual/benchmark-instrument.json": "ca365bb19d97128b41e3e89b17ed52d73e360a49e42cdb0ed5c87d68c90728e0",
       "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
-      "skills/otel-instrument/SKILL.md": "e2f3beb74eb6841add0d8c9ee211e75d90b3c1e3fa320b573f84ad6baeca3a1b",
-      "skills/otel-instrument/references/json-approval-handoff.md": "826c227489a30d4aa605ee3adfe37c292b64cb71d8fea6ac659a2ae10a33c3ac",
+      "skills/otel-instrument/SKILL.md": "c9ab56d8b664de7310d825e3bd01aee9f53caffe929ff3e74f8454954862f495",
+      "skills/otel-instrument/references/json-approval-handoff.md": "eaafa393d5eacd566522f926e814136408076539b2b000f964357e048f4e5fe8",
       "skills/otel-instrument/references/languages/go.md": "62ba4d47f1685230a1eec2ce6929c9b3c9f3b8228f62af729367a1db45fa4d5d",
       "skills/otel-instrument/references/languages/java.md": "4d87147cd6b823f589d2f6c44d2404a92e8a42f9989ad983ff5f19b453871032",
       "skills/otel-instrument/references/languages/node.md": "3e86dadec6b8ebf1e6c344c7528772e08d8ec25706bd6b6962edfa37f407c63c",
@@ -917,13 +1020,13 @@
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
-      "skills/references/report-flow-contract.md": "be4af921d9faf71ca9c206a91ba091db5d8bc878dc87ab6b844bc39cc455eb0e",
-      "skills/references/scripts/observe_report.py": "dc6d5048a117595bd658e7f4ff7f91e11cd512693ee0e37d09080578574e4325",
+      "skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
+      "skills/references/scripts/observe_report.py": "c1653e43458d260cecfe30d87db28d3aa800ad5a06c169b0009c46d86c6915e4",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
-      "skills/references/splunk-agent-observability.md": "e507d91e7fb6b829c28cd50ce9263189bf5d440c7aa9f0adc6a95334092a868b",
+      "skills/references/splunk-agent-observability.md": "819faa9e9f27d2b1b41c13980809801fa242c9b6309eb4eae854688a538f4bf4",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/test_observe_report.py": "39e6e35f16272b4f33f202b03dd13823284d4067fb50ebba48fb80bb67f4ce16",
+      "skills/references/tests/test_observe_report.py": "15eb1f3e299659dd1d219884aac638b168ebf88d8c491f20d8edbaa624a52130",
       "evals/go/chi-basic/eval/qual/instrument-decision-gated.json": "1604ebf6626a7ebc97406d3bc8299a7bf44003d6f2eb6f9bda6f89b408d934df",
       "evals/go/chi-basic/eval/qual/instrument.json": "69732371ba5e2c21a348d443b00070392c6f57f274c985d1c47f6ade30437792",
       "docs/examples.md": "894a8483b2099588d32bd389164df1d4aa528486b35205bd08120a122243e819",
@@ -1140,11 +1243,11 @@
       "skills/connect-splunk-observability-cloud/agents/openai.yaml": "206b920092a097ec7ab0f92b97d457a6e794bdddcc7f2def837955ff8a756407",
       "skills/create-splunk-free-account/SKILL.md": "1ea265ff983db6013c15f96e008b35d83c68eb8b7d041d0bf3660dfbb877d53b",
       "skills/create-splunk-free-account/agents/openai.yaml": "7767ebaee1f22c7cc76c22ff75676dcaf24e02821939b7229cc80a8b66e0a237",
-      "skills/otel-audit/SKILL.md": "2f2c4a2bf4cfa0805ec172b5a3baf189371989fca61555ed25812f6f7976f289",
+      "skills/otel-audit/SKILL.md": "ed6926abbb0ffd161934068d4b186db0e0f950ed0b7dd9e88cb3a2fa4ce3f3f0",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
       "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
       "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
-      "skills/otel-verify/SKILL.md": "5ae01fbc71ae78e7cc7699d241e890e8fb1ca4d529a670c8b8fcee71e8cf6900",
+      "skills/otel-verify/SKILL.md": "118d399def93429d47d58a55028150ef0ab129f8db1509187e2bf8adc3a0ac35",
       "skills/otel-verify/references/app-code-test-authoring.md": "d535a0acb3d123ee01eb5b39c3247378b4900f4977672021022dd0fe3885f91f",
       "skills/otel-verify/references/explorer-witness.md": "ee76d5856b1c0858a6bcb22e4c9c4526ddf550f2ae3122ea01ea21d505b8931a",
       "skills/otel-verify/references/json-approval-handoff.md": "e8c258074665349efecdc5d7e9b25fd0ab6217e3cdc40ae21a434c2c5d11f763",
@@ -1279,14 +1382,18 @@
       "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
       "evals/python/ai-assistant-demo/README.md": "eebd4711ef5b6d9325e15d0488b43da6b3fde8bc48ffff91fa44841fd1dfaf0e",
       "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
-      "evals/python/ai-assistant-demo/eval/inputs/ao-selector-field-validity-snapshot.json": "223ce57e3e5decf8523fd195cbd98fcc8db29fb4e584123410e838541a528921",
-      "evals/python/ai-assistant-demo/eval/inputs/ao-target-handoff-validator-snapshot.json": "7eaa438afe979f93aff33dcb9c46e4eed84338b0aba474a65ffde01b33acf113",
-      "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-instrument.json": "ab1c3af13252ab08a7c7275ea05930901b0ea70fda7c4a64812fbe3cf2a16d79",
+      "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-instrument.json": "c1c2aa25b51768aa2b9bc850c90d3bb2dd0ee907668d134d477c04b87164d1b6",
       "evals/python/ai-assistant-demo/eval_runner.py": "6b685cf5472871a9b227e652e47fd23a68b5ffe38021d4b6f3802236be65e2c8",
       "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
       "evals/python/ai-assistant-demo/pyproject.toml": "90be0bda1c6147fc324325b0f8a65a82499d65840df190a76b633c992e511f00",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-root-compatibility-evidence.json": "335ce70f9753091154b9fcc22c8fc3134ef266faa797b86e31141ef2665c44a6",
+      "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-instrument.json": "56b73b8b731dbdab8eb4d090be13b344f6aa6fcf64350f5cf22435ae765d227e",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-target-handoff-validator-snapshot.json": "1ccaeaf11282a03f73abc7e38a997fb52afaa30907884957a245df807a4c5da5",
+      "evals/python/ai-assistant-demo/eval/inputs/finding-group-snapshot.json": "5878b54e2f3874b837d7457d5332831c0ab5e1d35c5768021d0cf82965365703",
+      "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-instrument.json": "6e0de9906afff9f18a7e5446fc2eafee2d339b86881612f83c1da53087cc7447",
       "evals/python/ai-assistant-demo/eval/inputs/otel-model-content-audit.json": "514cc3edc08f4f5a59746459e4735ae2d4e682fddb0d22e2334c95021c6ac6c6",
       "evals/python/ai-assistant-demo/eval/qual/content-coverage-instrument.json": "b6d350a72ca1b4a819079f48f8f7367df97e982ce8b4b95d27a31122784328bc",
+      "evals/python/ai-assistant-demo/eval/qual/finding-group-instrument.json": "52338df15961f6943cf7f58fda8f1664d080b395a91e391947ade9221cfaeaa7",
       "evals/python/ai-assistant-demo/eval/inputs/ao-gateway-context.json": "ee7d7dc01c0b164afc5b84ea885434912b1812a41f918dfcdbf7ad1dc2dfe72e",
       "evals/python/ai-assistant-demo/eval/inputs/ao-gateway-env-generator.py": "7a3defef88e132fe629e77505876d14e162dca843149f65e2978a8563c0eab39",
       "evals/python/ai-assistant-demo/eval/inputs/ao-gateway-example.env": "ded8c48304a7f81488f54202ec138dfdab45b01a721d48a7beadca9ad38b74a6",
@@ -1310,9 +1417,19 @@
       "evals/python/ai-assistant-demo/eval/inputs/per-function-decorator-gate-evidence.json": "ade2556c260fef65e1952236e26e474c9f24333f78ce18f87667b189505752b9",
       "evals/python/ai-assistant-demo/eval/inputs/per-function-full-conformance-evidence.json": "cfeb7eb26410f9aa70fb7e2c77355ea4a67b5d92b0f9e7f02cd15a8ff528c805",
       "evals/python/ai-assistant-demo/eval/qual/per-function-decorator-instrument.json": "f2a0b21a747260a7146f13afd8864e86c9d22a9eb79fdbda90164721a9b84394",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-resource-audit.json": "adeaac84c71043e2eca8de12fd507f95a63f1f038ffc410efaa8113c278d8efc",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-resource-selection.json": "c5140691210e5a745d1112b7990f273f377aa12c6dde28372e42b6c173dadd8a",
+      "evals/python/ai-assistant-demo/eval/qual/required-input-preflight.json": "e5701e43ca16a7ffb740f3cf17138413d965532bfa474eeb1f324cf0311aa6e4",
       "evals/python/ai-assistant-demo/eval/inputs/ao-resource-env-profile.env": "5cc9cd5c5c8c2369da4b9a89bbee28767b0cc8fcd7a67cc362f8d7e32798dbd6",
       "evals/python/ai-assistant-demo/eval/qual/resource-env-bootstrap.json": "ea3553d3b0a71b8c059ae329148dfe0c11bcbd47b588eaeded2721d021dc2383",
       "evals/python/ai-assistant-demo/eval/qual/resource-sdk-errors.json": "a8da6b7902064c29317407afc0d2636b4712b4641a628b0f91a79ea2229bca40",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-resource-instrumentation.json": "b750b03d75688124f3cd868f90844f25c176ac88ad998506f6249ea38bc8c99a",
+      "evals/python/ai-assistant-demo/eval/inputs/stale-selection-current-audit.json": "8925acbcb05123858413ab3fe81440aa100b685ac66512b54b0d240542a6bbca",
+      "evals/python/ai-assistant-demo/eval/inputs/stale-selection-current-instrumentation.json": "67f8a35cbe6e860e4fd93a044cfe272dc25eb41f1008a580dc7a8482e989398b",
+      "evals/python/ai-assistant-demo/eval/inputs/stale-selection-current-narrow.json": "8812013e65035b94ae7956ea6e77caa46123ba6aa29f119725c65b5607c3df97",
+      "evals/python/ai-assistant-demo/eval/inputs/stale-selection-old-verify.json": "aa5128568dabae8163f920533fc17a5e5f691105d7c689373995424e2f73827d",
+      "evals/python/ai-assistant-demo/eval/qual/stale-selection-recovery.json": "c659f7490d435809c59f588771bd90f811d8f974c54297077f28b43901c6b90a",
+      "evals/python/ai-assistant-demo/eval/inputs/stale-selection-current-verify.json": "342b090c7a079f8c1b800e8b14e8f3a6208192b3d5d78148d67f57908c3a7dc7",
       "evals/python/ai-assistant-demo/eval/inputs/genai-tool-enrichment-evidence.json": "5b991c48950fece0a6935a5ae652f90f8bf3479916c197c3885f6a3361de000e",
       "evals/python/ai-assistant-demo/eval/inputs/genai-tool-message-mapping.json": "4cbd7c4f59c8dd85096cfa1209528b65d29d5772095cc1fef0627e01dfc0c77c",
       "evals/python/ai-assistant-demo/eval/qual/tool-message-mapping-instrument.json": "4b5415adad7a7f68ced87ec9c9068e4e6a79e1fcf54b3d6e18e75a1009c472b9",
@@ -1359,8 +1476,13 @@
       "evals/python/fastapi-celery/eval/runtime/run-traffic.sh": "fc891220f9dd8ca788f33c0ccad6d7982c13cd3504fb1d3c60b1ee47dd27510a",
       "evals/python/flask-basic/Makefile": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe",
       "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
-      "evals/python/flask-basic/eval/qual/instrument.json": "ab95eaf1e80a5f8567f1e0e5a18a6a19d39bd5af1d787eeca20b416bb0f4e6a8",
+      "evals/python/flask-basic/eval/inputs/dotenv-existing.env": "f2466bedbb8498db92032477586d05b7095a31805c122c9a543f23cf9bb1784f",
+      "evals/python/flask-basic/eval/inputs/dotenv-launch.sh": "aec3e5f1639e7b0c9598e5193a28a14382a7fe2bd1eb1e9e6182eec772e944f0",
+      "evals/python/flask-basic/eval/qual/dotenv-profiles.json": "164d9cc9803467e3de1bb8b024ab16c1e1a4ef07b9ac949bdf5c1d604d4f399b",
       "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f",
+      "evals/python/flask-basic/eval/inputs/dotenv-legacy-example.env": "04cecca0eb4967bf4bfcdaa9b76aadecdd04e6069a4600470dfe3bcbc6b021e8",
+      "evals/python/flask-basic/eval/inputs/dotenv-ao-boundary.py": "8e85904cfc9fd1ff3956702e1c4f3969172cb0296fde1dd379dcab540a9e9d54",
+      "evals/python/flask-basic/eval/qual/instrument.json": "ab95eaf1e80a5f8567f1e0e5a18a6a19d39bd5af1d787eeca20b416bb0f4e6a8",
       "evals/python/flask-basic/eval/inputs/python-cli-launcher-policy-cases.json": "63dad2814d1e6b0c9020c898c32ab743079ec77e896633bd5b5bb69ce706c27a",
       "evals/python/flask-basic/eval/qual/local-log-launcher-policy.json": "e5ae5bf6f37b840d917e352d4dcfacec9e0d676988d381a498656923cc3ec0bd",
       "evals/python/flask-basic/eval/runtime/App.Dockerfile": "d0fe3f537e8365ac5c554006235e38b164269aa9a47d3b0d5d7da0cdf77847fa",
@@ -1661,13 +1783,29 @@
         ]
       },
       {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-instrument.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "ao-name-inputs-instrument",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-instrument.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "ao-root-compatibility-instrument",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/ao-root-compatibility-evidence.json"
+        ]
+      },
+      {
         "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-instrument.json",
         "fixture_dir": "evals/python/ai-assistant-demo",
         "prompt_id": "ao-target-handoff-instrument",
         "eval_kind": "rubric",
         "eval_inputs": [
           "eval/inputs/ao-target-handoff-validator-snapshot.json",
-          "eval/inputs/ao-selector-field-validity-snapshot.json"
+          "eval/inputs/finding-group-snapshot.json"
         ]
       },
       {
@@ -1677,6 +1815,15 @@
         "eval_kind": "rubric",
         "eval_inputs": [
           "eval/inputs/otel-model-content-audit.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/finding-group-instrument.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "finding-group-instrument",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/finding-group-snapshot.json"
         ]
       },
       {
@@ -1748,6 +1895,26 @@
         ]
       },
       {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/required-input-preflight.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "required-input-both",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/ao-resource-audit.json",
+          "eval/inputs/ao-resource-selection.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/required-input-preflight.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "required-input-stream",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/ao-resource-audit.json",
+          "eval/inputs/ao-resource-selection.json"
+        ]
+      },
+      {
         "definition_path": "evals/python/ai-assistant-demo/eval/qual/resource-env-bootstrap.json",
         "fixture_dir": "evals/python/ai-assistant-demo",
         "prompt_id": "resource-env-bootstrap",
@@ -1763,6 +1930,63 @@
         "prompt_id": "resource-sdk-errors",
         "eval_kind": "rubric",
         "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/stale-selection-recovery.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "required-target-rebind",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/stale-selection-current-audit.json",
+          "eval/inputs/stale-selection-current-narrow.json",
+          "eval/inputs/stale-selection-current-instrumentation.json",
+          "eval/inputs/stale-selection-current-verify.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/stale-selection-recovery.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "stale-proof-current-scope",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/ao-resource-audit.json",
+          "eval/inputs/ao-resource-selection.json",
+          "eval/inputs/ao-resource-instrumentation.json",
+          "eval/inputs/stale-selection-current-audit.json",
+          "eval/inputs/stale-selection-old-verify.json",
+          "eval/inputs/stale-selection-current-narrow.json",
+          "eval/inputs/stale-selection-current-instrumentation.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/stale-selection-recovery.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "stale-selection-broad",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/ao-resource-audit.json",
+          "eval/inputs/ao-resource-selection.json",
+          "eval/inputs/ao-resource-instrumentation.json",
+          "eval/inputs/stale-selection-current-audit.json",
+          "eval/inputs/stale-selection-old-verify.json",
+          "eval/inputs/stale-selection-current-narrow.json",
+          "eval/inputs/stale-selection-current-instrumentation.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/stale-selection-recovery.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "stale-selection-explicit",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/ao-resource-audit.json",
+          "eval/inputs/ao-resource-selection.json",
+          "eval/inputs/ao-resource-instrumentation.json",
+          "eval/inputs/stale-selection-current-audit.json",
+          "eval/inputs/stale-selection-old-verify.json",
+          "eval/inputs/stale-selection-current-narrow.json",
+          "eval/inputs/stale-selection-current-instrumentation.json"
+        ]
       },
       {
         "definition_path": "evals/python/ai-assistant-demo/eval/qual/tool-message-mapping-instrument.json",
@@ -1913,6 +2137,47 @@
         "prompt_id": "runtime-preserving",
         "eval_kind": "runtime",
         "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/dotenv-profiles.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "dotenv-ao-required-origin",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/dotenv-existing.env",
+          "eval/inputs/dotenv-launch.sh",
+          "eval/inputs/dotenv-ao-boundary.py"
+        ]
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/dotenv-profiles.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "dotenv-profile-legacy",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/dotenv-existing.env",
+          "eval/inputs/dotenv-launch.sh",
+          "eval/inputs/dotenv-legacy-example.env"
+        ]
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/dotenv-profiles.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "dotenv-profile-missing",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/dotenv-launch.sh"
+        ]
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/dotenv-profiles.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "dotenv-profile-new",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/dotenv-existing.env",
+          "eval/inputs/dotenv-launch.sh"
+        ]
       },
       {
         "definition_path": "evals/python/flask-basic/eval/qual/instrument.json",

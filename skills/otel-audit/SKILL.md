@@ -883,6 +883,20 @@ the searched registration/configuration call sites when no setup is reachable).
 Assess project binding, dedicated Agent Stream binding, configured runtime routing,
 span producer, content behavior, and matching teardown for that runtime.
 
+Apply the shared AO reference's **AO-Compatible Trace Root** contract to each
+assessed runtime. Trace the real entrypoint and transport ancestors as well as
+the GenAI operations; identify whether the intended AO representation retains
+the root and connecting parents. Record a source-backed root-compatibility gap
+in the canonical ledger when needed, with a truthful operation mapping and
+local/cloud acceptance. Routing IDs, accepted leaf spans or a root marker alone
+do not close it. Keep unavailable target-contract or cloud evidence unverified;
+audit does not modify the application or fabricate a workflow to close the gap.
+Read that entire shared section and record the physical root separately from
+the outermost GenAI operation. A generic HTTP parent needs its own root finding
+or compatibility blocker; resource/routing findings alone cannot stand in for it.
+Inspect conversation state and commit/rollback ownership before calling a
+single-agent HTTP controller transport-only; apply the shared controller case.
+
 A logger, callback, project, Agent Stream, or `terminate()` path reachable only
 from an evaluation, test, experiment, or demo runner does not cover a separate
 interactive runtime. Likewise, a repository dependency, dormant helper,
@@ -1025,9 +1039,14 @@ Apply the shared AO reference's Project And Agent Stream Inputs and Idempotent
 Resource Provisioning contracts to these findings. State explicitly that
 instrumentation resolves existing resources and creates missing selected,
 named resources, rather than weakening the fix to "configure existing names."
-Offer optional resource-name inputs and reuse-only behavior in the audit
-selection view, with existing configured IDs/names or clearly labeled stable
-service-derived suggestions. Keep these values in the bound selection's
+Show Project and Agent Stream controls first in the Splunk Agent Observability
+subsection, before its cards. Both are required whenever any AO instrumentation
+is selected, including callback/content findings and dependency-selected work.
+Use two name fields, explicit required labels and field-scoped errors, with no
+selector dropdowns or reuse-only checkbox; blank names must block the generated command. Preserve
+entered values through disclosure and selection updates. Existing configured
+names or stable service-derived names may be shown as suggestions, but do
+not silently supply or approve them. Keep these values in the bound selection's
 `ao_target`, not in an unvalidated report note. Bind the shared provisioning
 contract to canonical resource acceptance and mapped scenarios: reuse both
 existing resources without creates; create conclusively missing selected names
@@ -1048,12 +1067,11 @@ its supported loader. Record native selector aliases and whether that exact
 runtime consumes the standard SDK selectors `SPLUNK_AO_PROJECT` /
 `SPLUNK_AO_PROJECT_ID` and `SPLUNK_AO_AGENT_STREAM` /
 `SPLUNK_AO_AGENT_STREAM_ID`; evaluation-only selectors do not establish a live
-application binding. Explain blank-input fallback in the canonical report:
-preserve each existing configured selector independently, and disclose a
-stable service-derived name for each missing resource. Name the profile and
-runner that instrumentation should update/load, with user-supplied selection
-values taking precedence. Record missing or unsupported profile wiring as a
-gap. Audit remains read-only for env files and cloud resources.
+application binding. Disclose existing selectors and stable service-derived
+suggestions, and name the profile and runner that instrumentation should
+update/load. Missing required user inputs trigger the generic instrumentation
+preflight prompt; a suggestion or blank field is not an accepted target. Record
+missing or unsupported profile wiring as a gap. Audit remains read-only for env files and cloud resources.
 Distinguish ordinary local OTLP receipt from AO resource and delivery evidence.
 For existing native OTel, assess the shared reference's Native trace binding
 and recovery contract. User-selected existing resource names still need real
@@ -1083,7 +1101,7 @@ Stream or routing finding depend on a non-executable external item merely
 because the read-only audit cannot call Lab0.
 
 Populate canonical `findings` so the shared renderer can project the single
-priority-ordered finding list; do not hand-author its layout. Use only `required`,
+grouped, priority-ordered finding list; do not hand-author its layout. Use only `required`,
 `recommended`, or `deferred` priorities and only `default`, `fix all`, `manual
 decision`, or `external follow-up` instrument modes. Put baseline correctness,
 trace continuity, error attribution, exporter/resource identity, cardinality
@@ -1279,9 +1297,12 @@ instrumentation, change-impact and proof status move to
 
 In HTML, put selectable findings immediately after the concise decision
 summary. When AO findings exist, render them as a nested
-`Splunk Agent Observability findings` subsection inside the one top-level
-`Findings` section. Ordinary OTel findings remain in the same canonical list
-and selection flow. Do not render a separate top-level Agent Observability
+`Splunk Agent Observability findings` subsection after all ordinary OTel cards
+inside the one top-level `Findings` section. Order by priority within each group;
+keep recommended ordinary OTel cards with the other OTel cards. Group by the
+explicit `finding_group`, preserving IDs and the canonical list/selection order.
+GenAI subject matter or an ID prefix alone does not assign the AO group.
+Do not render a separate top-level Agent Observability
 section. Do not render the component map, connection lanes, component-coverage
 groups, raw flow map, full current-state inventory, or a duplicate all-findings
 decision table. Keep `signal_flow` in canonical JSON for machine use. Reserve
@@ -1345,11 +1366,12 @@ class names, provider topology, exporter details, and other implementation
 jargon into finding evidence or technical highlights unless they are the
 decision itself.
 
-In the HTML decision view, render exactly one findings list ordered by
-machine-readable priority: `required`, then `recommended`, then `deferred`,
-preserving canonical order within the same priority. Priority defines ordering
-only. Put one concise current-baseline sentence and one
-highest-priority-first explanation before the list, then show a compact
+In the HTML decision view, render all ordinary OTel findings together, followed
+by the AO subsection. Within each group, order by machine-readable priority:
+`required`, then `recommended`, then `deferred`, preserving canonical order
+within the same priority. Keep this display projection separate from the
+digest-bound canonical finding and selection order. Put one concise
+current-baseline sentence and one group-and-priority explanation before the list, then show a compact
 `Findings · N` heading immediately above the cards. Keep quick-win, effort,
 severity, priority, and execution-state metadata machine-readable in canonical
 JSON.

@@ -1,0 +1,487 @@
+{
+  "evidence_basis": "Sanitized captured synthetic receiver observations plus independent source fixtures; this file is not a live application/cloud execution.",
+  "captured_on": "2026-10-28",
+  "capture_context": {
+    "transport": "native OTLP/HTTP through Studio 0.1.4 to an AO SaaS test stream",
+    "synthetic": true,
+    "llm_calls": 0,
+    "submitted_spans": 11,
+    "retained_ao_spans": 7,
+    "complete_diagnostic_traces": 2,
+    "acknowledgements": [
+      {
+        "submitted": 5,
+        "http_status": 200,
+        "rejected_spans": 0
+      },
+      {
+        "submitted": 4,
+        "http_status": 200,
+        "rejected_spans": 0
+      },
+      {
+        "submitted": 2,
+        "http_status": 200,
+        "rejected_spans": 0
+      }
+    ],
+    "identity_encoding": "Logical labels replace original identifiers; edges and observed outcomes are preserved.",
+    "common_agent_attributes": {
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.agent.name": "Synthetic diagnostic agent",
+      "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"Synthetic diagnostic operation; no model call.\"}]}]",
+      "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"Synthetic diagnostic completed.\"}]}]",
+      "gen_ai.conversation.id": "Source-owned diagnostic run identity; matching parent association is recorded per case."
+    },
+    "scope": "Initial six diagnostic cases only; later controller cases declare their own capture context."
+  },
+  "documentation": [
+    "https://agent-observability-docs.splunk.com/sdk-api/logging/distributed-tracing-otel",
+    "https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations",
+    "https://github.com/signalfx/splunk-otel-python-contrib/blob/main/util/opentelemetry-util-genai/tests/test_span_metric_event_generator.py",
+    "https://github.com/open-telemetry/semantic-conventions-genai/issues/356"
+  ],
+  "captured_cases": [
+    {
+      "id": "parentless",
+      "native": [
+        {
+          "id": "agent-a",
+          "parent": null,
+          "kind": "INTERNAL",
+          "operation": "invoke_agent"
+        }
+      ],
+      "ao_retained": [
+        "agent-a"
+      ],
+      "ao_complete_trace": true
+    },
+    {
+      "id": "generic-http-parent",
+      "native": [
+        {
+          "id": "http-b",
+          "parent": null,
+          "kind": "SERVER",
+          "attributes": {
+            "http.request.method": "POST"
+          }
+        },
+        {
+          "id": "agent-b",
+          "parent": "http-b",
+          "kind": "INTERNAL",
+          "operation": "invoke_agent"
+        }
+      ],
+      "ao_retained": [
+        "agent-b"
+      ],
+      "ao_complete_trace": false
+    },
+    {
+      "id": "marker-only",
+      "native": [
+        {
+          "id": "http-c",
+          "parent": null,
+          "kind": "SERVER",
+          "attributes": {
+            "http.request.method": "POST"
+          }
+        },
+        {
+          "id": "agent-c",
+          "parent": "http-c",
+          "kind": "INTERNAL",
+          "operation": "invoke_agent",
+          "attributes": {
+            "gen_ai.conversation_root": true
+          }
+        }
+      ],
+      "ao_retained": [
+        "agent-c"
+      ],
+      "ao_complete_trace": false
+    },
+    {
+      "id": "http-input-output",
+      "native_root": {
+        "id": "http-d",
+        "kind": "SERVER",
+        "attributes": {
+          "input.value": "Synthetic request",
+          "output.value": "Synthetic response"
+        }
+      },
+      "native_agent": {
+        "id": "agent-d",
+        "parent": "http-d",
+        "operation": "invoke_agent"
+      },
+      "ao_retained": [
+        "agent-d"
+      ],
+      "ao_complete_trace": false
+    },
+    {
+      "id": "http-openinference-chain",
+      "native_root": {
+        "id": "http-e",
+        "kind": "SERVER",
+        "attributes": {
+          "openinference.span.kind": "CHAIN",
+          "input.value": "Synthetic request",
+          "output.value": "Synthetic response"
+        }
+      },
+      "native_agent": {
+        "id": "agent-e",
+        "parent": "http-e",
+        "operation": "invoke_agent"
+      },
+      "ao_retained": [
+        "agent-e"
+      ],
+      "ao_complete_trace": false
+    },
+    {
+      "id": "explicit-workflow-parent",
+      "native_root": {
+        "id": "http-f",
+        "parent": null,
+        "kind": "SERVER",
+        "attributes": {
+          "gen_ai.operation.name": "invoke_workflow",
+          "gen_ai.workflow.name": "Synthetic staged orchestration",
+          "gen_ai.conversation.id": "fixture-conversation-f",
+          "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"Synthetic staged orchestration request.\"}]}]",
+          "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"Synthetic staged orchestration completed.\"}]}]"
+        }
+      },
+      "native_agent": {
+        "id": "agent-f",
+        "parent": "http-f",
+        "operation": "invoke_agent",
+        "conversation_id": "fixture-conversation-f"
+      },
+      "ao_retained": [
+        "http-f",
+        "agent-f"
+      ],
+      "ao_complete_trace": true
+    },
+    {
+      "id": "http-conversation-controller-success",
+      "capture_context": {
+        "synthetic": true,
+        "source": "Isolated application copy; real Flask HTTP request and native OTLP exporter through Studio, synthetic provider with no real model call.",
+        "captured_on": "2026-10-28",
+        "cloud_identity_check": "Native trace external ID matched in the selected stream; retained controller, agent and model chain shown in AO.",
+        "not_original_application_run": true
+      },
+      "native": [
+        {
+          "id": "controller-success",
+          "parent": null,
+          "name": "POST /chat",
+          "kind": "SERVER",
+          "status": "UNSET",
+          "attributes": {
+            "gen_ai.operation.name": "invoke_workflow",
+            "gen_ai.workflow.name": "Synthetic conversation turn",
+            "gen_ai.conversation.id": "source-session-success",
+            "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"Synthetic conversation success check.\"}]}]",
+            "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"Synthetic response.\"}]}]"
+          }
+        },
+        {
+          "id": "agent-success",
+          "parent": "controller-success",
+          "kind": "INTERNAL",
+          "operation": "invoke_agent",
+          "status": "UNSET"
+        },
+        {
+          "id": "model-success",
+          "parent": "agent-success",
+          "kind": "CLIENT",
+          "operation": "chat",
+          "status": "UNSET"
+        }
+      ],
+      "ao_retained": [
+        "controller-success",
+        "agent-success",
+        "model-success"
+      ],
+      "ao_complete_trace": true,
+      "partial_placeholder": false,
+      "controller_output_present": true
+    },
+    {
+      "id": "http-conversation-controller-error",
+      "capture_context": {
+        "synthetic": true,
+        "source": "Isolated application copy; real Flask HTTP request and native OTLP exporter through Studio, synthetic provider with no real model call.",
+        "captured_on": "2026-10-28",
+        "cloud_identity_check": "Native trace external ID matched in the selected stream; retained controller, agent and model chain shown in AO.",
+        "not_original_application_run": true
+      },
+      "native": [
+        {
+          "id": "controller-error",
+          "parent": null,
+          "name": "POST /chat",
+          "kind": "SERVER",
+          "status": "ERROR",
+          "attributes": {
+            "gen_ai.operation.name": "invoke_workflow",
+            "gen_ai.workflow.name": "Synthetic conversation turn",
+            "gen_ai.conversation.id": "source-session-error",
+            "gen_ai.input.messages": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"Synthetic conversation error check.\"}]}]"
+          }
+        },
+        {
+          "id": "agent-error",
+          "parent": "controller-error",
+          "kind": "INTERNAL",
+          "operation": "invoke_agent",
+          "status": "ERROR"
+        },
+        {
+          "id": "model-error",
+          "parent": "agent-error",
+          "kind": "CLIENT",
+          "operation": "chat",
+          "status": "ERROR"
+        }
+      ],
+      "ao_retained": [
+        "controller-error",
+        "agent-error",
+        "model-error"
+      ],
+      "ao_complete_trace": true,
+      "partial_placeholder": false,
+      "controller_output_present": false
+    }
+  ],
+  "source_cases": [
+    {
+      "id": "transport-only-agent",
+      "ao_selected": true,
+      "existing_stack": "Native OTel Flask provider and exporter; the framework creates the SERVER root, run_agent owns one existing INTERNAL invoke_agent span.",
+      "source": "def post_chat(payload):\n    return run_agent(payload['question'])\n",
+      "source_role_evidence": "This handler only forwards transport input to one agent. No separate workflow is established by this source.",
+      "known_root_mapping": null,
+      "cloud_readback": null
+    },
+    {
+      "id": "staged-controller",
+      "ao_selected": true,
+      "existing_stack": "Native OTel provider, Flask SERVER root and two existing distinct agent producers.",
+      "source": "def post_review(payload, state):\n    draft = research_agent(payload['question'])\n    checked = review_agent(draft)\n    return {'reply': checked}\n",
+      "source_role_evidence": "The controller owns a fixed research-then-review orchestration outside either agent; each called agent retains its own role.",
+      "source_values": {
+        "input": "payload['question']",
+        "output": "checked",
+        "conversation_id": "state.session_id when present",
+        "privacy": "Existing redact_text(value) is the application-owned bounded content sanitizer."
+      },
+      "public_interfaces": [
+        "opentelemetry.trace.get_current_span() inside the controller while the framework SERVER span is current",
+        "Span.set_attribute(key, value) on that same active span",
+        "FlaskInstrumentor.instrument_app(app, request_hook=None, response_hook=None, ...)"
+      ],
+      "target_contract_evidence": "The captured explicit-workflow-parent case is a working combination on the recorded target. A proposal must state which fields and lifecycle hooks it uses and retain source ownership; the snapshot does not prove new execution.",
+      "cloud_readback": null
+    },
+    {
+      "id": "conversation-state-controller",
+      "ao_selected": true,
+      "existing_stack": "Native OTel Flask SERVER root, one distinct invoke_agent child and its model span; selected root-compatibility finding.",
+      "source": "@app.post('/chat')\ndef chat():\n    messages = get_session_history()\n    messages.append({'role': 'user', 'content': request.json['message']})\n    try:\n        reply = run_agent(messages, conversation_id=session.get('sid'))\n    except Exception:\n        messages.pop()\n        return {'error': 'turn failed'}, 502\n    messages.append({'role': 'assistant', 'content': reply})\n    return {'reply': reply}\n\n@app.get('/health')\ndef health():\n    return {'ok': True}\n\n@app.post('/reset')\ndef reset():\n    clear_history()\n    return {'ok': True}\n",
+      "source_values": {
+        "input": "messages before run_agent, excluding private reasoning and applying existing privacy controls",
+        "output": "reply only after successful agent completion",
+        "conversation_id": "session.get('sid') when already present; get_session_history owns creation",
+        "sanitizer": "Existing sanitize_content accepts legacy role/content rows, redacts secrets and limits bytes; unknown nested list fields are stringified. Passing typed parts directly turns parts into a JSON string. MAX_CONTENT_BYTES=8192."
+      },
+      "public_interfaces": [
+        "opentelemetry.trace.get_current_span() inside the real Flask controller",
+        "Span.set_attribute(key, value)",
+        "Span.set_status(StatusCode.ERROR, safe_description) on caught failure"
+      ],
+      "provider_outcomes": [
+        "Success with an actual assistant reply",
+        "Caught provider 401 with rollback and no reply"
+      ],
+      "cloud_readback": null,
+      "review_requirements": [
+        "Decide the controller role from its source lifecycle, separately from the child agent and transport-only-agent case.",
+        "Propose same-span public API mapping for selected root work without introducing another root, changing kind or parent identity.",
+        "Preserve typed parts arrays after the existing legacy sanitizer, redaction and final UTF-8 byte bounds.",
+        "Require real HTTP success/error requests and health/reset controls; a direct-agent test alone is insufficient."
+      ]
+    },
+    {
+      "id": "existing-parentless-agent",
+      "ao_selected": true,
+      "existing_stack": "CLI native OTel; one existing invoke_agent root with no parent, typed input/output and real conversation ID.",
+      "supplied_cloud_observation": {
+        "root": "cli-agent",
+        "retained": [
+          "cli-agent",
+          "cli-model"
+        ],
+        "edges": [
+          [
+            "cli-agent",
+            "cli-model"
+          ]
+        ],
+        "partial_placeholder": false,
+        "evidence_kind": "captured fixture observation only"
+      },
+      "source_role_evidence": "One agent; no separate workflow."
+    },
+    {
+      "id": "nested-agents",
+      "ao_selected": true,
+      "existing_stack": "Existing AO-compatible staged root with parent and child agents.",
+      "native_edges": [
+        [
+          "request-root",
+          "outer-agent"
+        ],
+        [
+          "outer-agent",
+          "inner-agent"
+        ],
+        [
+          "inner-agent",
+          "model"
+        ]
+      ],
+      "source_role_evidence": "The inner agent is not an independent trace/turn root.",
+      "cloud_readback": null
+    },
+    {
+      "id": "provider-error",
+      "ao_selected": true,
+      "owner": "staged-controller",
+      "source_outcome": {
+        "provider_http_status": 401,
+        "root_status": "ERROR",
+        "agent_status": "ERROR",
+        "error_type": "http_401",
+        "model_response": null,
+        "controller_output": null
+      },
+      "local_observation": "The root and selected operations end with the actual error. No successful output was emitted.",
+      "cloud_readback": null
+    },
+    {
+      "id": "ao-excluded",
+      "ao_selected": false,
+      "source_role_evidence": "User explicitly excluded AO work; existing native telemetry and ordinary destination remain selected.",
+      "existing_stack": "Native OTel with ordinary OTLP export",
+      "cloud_readback": null
+    },
+    {
+      "id": "web-entrypoint-root-regression",
+      "ao_selected": true,
+      "evidence_kind": "Sanitized captured manual application observation; not a newly executed fixture run",
+      "source": "FlaskInstrumentor().instrument_app(app)\n@app.post('/chat')\ndef chat():\n    return run_turn(client, model, messages)\n\ndef run_turn(client, model, messages):\n    with tracer.start_as_current_span('invoke_agent Assistant', kind=SpanKind.INTERNAL):\n        return model_tool_feedback_loop(client, model, messages)\n",
+      "source_role_evidence": "HTTP delegates one agent turn. The agent owns its model/tool feedback loop; no separate orchestration workflow is established.",
+      "native_graph": {
+        "physical_root": {
+          "id": "http-root",
+          "name": "POST /chat",
+          "kind": "SERVER",
+          "parent": null,
+          "genai_operation": null
+        },
+        "outermost_genai": {
+          "id": "agent-turn",
+          "name": "invoke_agent Assistant",
+          "kind": "INTERNAL",
+          "parent": "http-root"
+        },
+        "edges": [
+          [
+            "http-root",
+            "agent-turn"
+          ],
+          [
+            "agent-turn",
+            "model-1"
+          ],
+          [
+            "model-1",
+            "http-client-1"
+          ],
+          [
+            "agent-turn",
+            "tool"
+          ],
+          [
+            "tool",
+            "retrieval"
+          ],
+          [
+            "agent-turn",
+            "model-2"
+          ],
+          [
+            "model-2",
+            "http-client-2"
+          ]
+        ]
+      },
+      "supplied_observations": {
+        "bare_run_turn_test": "Passes with a parentless agent in an in-memory exporter; this does not invoke Flask.",
+        "actual_web_entrypoint": "HTTP request through Flask instrumentation emits the 8-span native graph.",
+        "cloud_forwarding": "Enabled; recorded successful batches with zero failed batches.",
+        "ao_retained": [
+          "agent-turn",
+          "model-1",
+          "tool",
+          "retrieval",
+          "model-2"
+        ],
+        "ao_root_record": "Absent; Partial trace placeholder says Waiting for the trace record.",
+        "fresh_fixture_execution": false
+      },
+      "canonical_audit_scope": {
+        "findings": [
+          "project binding",
+          "Agent Stream binding",
+          "runtime routing",
+          "correct the agent role"
+        ],
+        "physical_root_finding": null,
+        "routing_acceptance": "AO-compatible agent root; inspect trace root/connecting parents",
+        "selected_root_compatibility_work": false
+      },
+      "known_truthful_http_root_mapping": null,
+      "review_requirements": [
+        "Identify the physical HTTP root separately from the outermost GenAI span.",
+        "Audit must expose a distinct source-backed root-compatibility gap or exact target blocker, rather than only resource/route or agent-role findings.",
+        "Instrument must not mark root acceptance complete from the direct-function test or silently expand bound scope. Surface missing root work through the audit/selection flow.",
+        "Verify must fail/incomplete the observed AO assembly separately from successful routing; remote unavailability is not the explanation for an observed partial graph.",
+        "Keep the single agent role and real parents; do not relabel every HTTP handler as a workflow or fabricate an unsupported mapping."
+      ]
+    }
+  ],
+  "proof_limits": [
+    "Captured diagnostic outcomes are specific to the recorded target; do not generalize one field or one OpenInference failure to every AO release.",
+    "The successful workflow case changes multiple metadata fields and session association; it does not establish any one field as sufficient.",
+    "No source fixture has newly executed application/cloud proof.",
+    "An error outcome has no model/controller response to fabricate.",
+    "Selecting root compatibility never authorizes new resources or unselected instrumentation."
+  ]
+}

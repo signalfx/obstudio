@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-verify |
-| Run ID | 20261028T004415978688Z |
+| Run ID | 20261030T045226194604Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -19,7 +19,10 @@ This report validates eval JSON, eval directory availability, and skill source a
 |---|---|---:|---|---:|---:|---:|
 | go/chi-basic/qual/verify | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/verify.json | 0 | 5 | 0 |
 | go/native-genai-demo/qual/verify | go/native-genai-demo | 1 | evals/go/native-genai-demo/eval/qual/verify.json | 0 | 7 | 0 |
+| python/ai-assistant-demo/qual/ao-name-inputs-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-verify.json | 0 | 6 | 0 |
+| python/ai-assistant-demo/qual/ao-root-compatibility-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-verify.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/ao-target-handoff-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-verify.json | 0 | 4 | 0 |
+| python/ai-assistant-demo/qual/finding-group-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/finding-group-verify.json | 0 | 7 | 0 |
 | python/ai-assistant-demo/qual/gateway-env-verification | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/gateway-env-verification.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/genai-sdk-required-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-sdk-required-verify.json | 0 | 14 | 0 |
 | python/ai-assistant-demo/qual/per-function-decorator-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/per-function-decorator-verify.json | 0 | 6 | 0 |

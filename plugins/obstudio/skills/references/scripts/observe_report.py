@@ -79,6 +79,16 @@ PROOF_LEVEL_ALIASES = {
 SIGNAL_TYPES = {"span", "metric", "log", "resource", "configuration"}
 FINDING_GROUPS = {"splunk-agent-observability"}
 AO_TARGET_SCOPES = {"resource-routing"}
+REQUIRED_INPUT_GROUPS = (
+    {
+        "key": "ao_target",
+        "finding_group": "splunk-agent-observability",
+        "fields": (
+            {"key": "project", "label": "Project", "selectors": ("project_name", "project_id")},
+            {"key": "agent_stream", "label": "Agent Stream", "selectors": ("agent_stream_name", "agent_stream_id")},
+        ),
+    },
+)
 AO_TARGET_LEGACY_CONFIGURATION_NAMES = {
     "agent-observability.project",
     "agent-observability.agent-stream",
@@ -1472,8 +1482,53 @@ def ao_target_eligible_finding_ids(report: dict[str, Any]) -> list[str]:
     return [finding["id"] for finding in report["findings"] if is_ao_target_configuration(finding)]
 
 
-def has_selected_ao_configuration(report: dict[str, Any], approved_ids: list[str]) -> bool:
-    return any(finding_id in approved_ids for finding_id in ao_target_eligible_finding_ids(report))
+def required_input_groups(report: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {**group, "finding_ids": [
+            finding["id"] for finding in report["findings"]
+            if finding.get("finding_group") == group["finding_group"]
+        ]}
+        for group in REQUIRED_INPUT_GROUPS
+        if any(finding.get("finding_group") == group["finding_group"] for finding in report["findings"])
+    ]
+
+
+def required_input_status(
+    groups: list[dict[str, Any]], selection: dict[str, Any]
+) -> dict[str, Any]:
+    selected = set(selection["approved_ids"])
+    required = []
+    for group in groups:
+        if not selected.intersection(group["finding_ids"]):
+            continue
+        values = selection.get(group["key"], {})
+        for field in group["fields"]:
+            required.append({
+                "key": f"{group['key']}.{field['key']}",
+                "label": field["label"],
+                "provided": any(
+                    isinstance(values.get(key), str) and bool(values[key].strip())
+                    for key in field["selectors"]
+                ),
+            })
+    missing = [field for field in required if not field["provided"]]
+    return {
+        "ready": not missing,
+        "required_inputs": required,
+        "missing_inputs": missing,
+        "prompt": (
+            "Provide values for these required fields:\n"
+            + "\n".join(f"{field['label']}:" for field in missing)
+            if missing else ""
+        ),
+    }
+
+
+def has_selected_agent_instrumentation(report: dict[str, Any], approved_ids: list[str]) -> bool:
+    return any(
+        finding["id"] in approved_ids and finding.get("finding_group") == "splunk-agent-observability"
+        for finding in report["findings"]
+    )
 
 
 def normalize_ao_target(value: Any, path: str) -> dict[str, Any]:
@@ -1568,8 +1623,8 @@ def normalize_selection(data: dict[str, Any], report: dict[str, Any], path: str 
     if "ao_target" in data:
         if schema_version < CURRENT_SELECTION_SCHEMA_VERSION:
             fail(f"{path}.schema_version must be {CURRENT_SELECTION_SCHEMA_VERSION} when ao_target is present")
-        if not has_selected_ao_configuration(report, approved_ids):
-            fail(f"{path}.ao_target requires a selected Agent Observability resource or routing finding")
+        if not has_selected_agent_instrumentation(report, approved_ids):
+            fail(f"{path}.ao_target requires a selected Agent Observability instrumentation finding")
         normalized["ao_target"] = normalize_ao_target(data["ao_target"], f"{path}.ao_target")
     return normalized
 
@@ -2466,6 +2521,7 @@ def display_finding_ids(report: dict[str, Any]) -> list[str]:
     indexed = list(enumerate(report["findings"]))
     indexed.sort(
         key=lambda pair: (
+            pair[1].get("finding_group") == "splunk-agent-observability",
             PRIORITY_RANK[pair[1]["priority"]],
             pair[0],
         )
@@ -2560,7 +2616,7 @@ def decision_summary_bullets(report: dict[str, Any]) -> list[str]:
         None,
     )
     bullets = [
-        f"{len(report['findings'])} findings are listed in highest-priority-first order.",
+        f"{len(report['findings'])} findings are grouped by category, with highest priority first within each group.",
         (
             "Repository evidence identifies "
             f"{source['routes']} routes, {source['spans']} span entries, "
@@ -2818,7 +2874,8 @@ def render_decision_overview(
         f'<p>{esc(baseline)}</p></section>'
         '</div>'
         '<p class="review-note"><strong>Review order:</strong> findings are '
-        'ordered by priority, highest first. Select executable work on its '
+        'grouped with OpenTelemetry first, followed by Splunk Agent Observability; '
+        'each group is ordered by priority, highest first. Select executable work on its '
         'card; answer a telemetry choice only where the card asks for one.</p>'
     )
 
@@ -4235,7 +4292,7 @@ def render_html(
             "report": report,
             "selection": selection,
             "selection_eligibility": selection_eligibility,
-            "ao_target_eligible_finding_ids": ao_target_eligible_finding_ids(report),
+            "required_input_groups": required_input_groups(report),
             "display_finding_ids": display_finding_ids(report),
             "source_references": source_references,
             "service_root": (
@@ -4250,30 +4307,27 @@ def render_html(
     findings = report["findings"]
     ao_target = selection.get("ao_target", {})
     ao_controls = ""
-    if ao_target_eligible_finding_ids(report):
+    if required_input_groups(report):
         resource_controls = []
         for resource, label in (("project", "Project"), ("agent_stream", "Agent Stream")):
-            selector = "id" if f"{resource}_id" in ao_target else "name"
-            value = ao_target.get(f"{resource}_{selector}", "")
+            value = ao_target.get(f"{resource}_name", "")
             resource_controls.append(
-                f'<div class="ao-target-resource"><label for="ao-{resource}-selector">{label} selector</label>'
-                f'<select id="ao-{resource}-selector" data-ao-selector="{resource}">'
-                f'<option value="name"{" selected" if selector == "name" else ""}>Name</option>'
-                f'<option value="id"{" selected" if selector == "id" else ""}>ID</option></select>'
-                f'<label id="ao-{resource}-label" for="ao-{resource}-value">{label} {selector.upper() if selector == "id" else "name"}</label>'
+                f'<div class="ao-target-resource"><label for="ao-{resource}-value">{label} name (required)</label>'
                 f'<input id="ao-{resource}-value" data-ao-value="{resource}" type="text" '
                 f'aria-describedby="ao-target-help ao-target-error" value="{esc(value)}"></div>'
             )
+        legacy_notice = ""
+        if any(f"{resource}_id" in ao_target for resource in ("project", "agent_stream")):
+            legacy_notice += " This saved selection uses resource IDs. Enter both names to generate a new command; the saved selection is unchanged."
+        if ao_target.get("create_if_missing") is False:
+            legacy_notice += " This saved selection forbids resource creation; the generated command preserves that restriction."
         ao_controls = (
             '<fieldset id="ao-target-controls" class="ao-target-controls" hidden inert>'
-            '<legend>Agent Observability destination (optional)</legend>'
-            '<p id="ao-target-help">Provide both resources, or leave both blank to use the application configuration. '
-            'Named resources are reused or created if missing. IDs always select existing resources. '
-            'Changing these values does not select findings.</p>'
+            '<legend>Agent Observability destination (required)</legend>'
+            '<p id="ao-target-help">Project and Agent Stream are required for selected agent instrumentation. '
+            'Enter a name for each. Existing resources are reused; missing resources are created only when selected resource findings authorize creation. '
+            'Changing these values does not select findings.' + legacy_notice + '</p>'
             '<div class="ao-target-grid">' + "".join(resource_controls) + '</div>'
-            '<label class="ao-reuse-only" for="ao-reuse-only"><input id="ao-reuse-only" type="checkbox"'
-            + (' checked' if ao_target.get("create_if_missing") is False else '')
-            + '> Reuse existing resources only</label>'
             '<p id="ao-target-error" class="ao-target-error" aria-live="polite"></p></fieldset>'
         )
     decision_view = render_decision_overview(report, selection)
@@ -4423,13 +4477,12 @@ h1 {{ margin: 8px 0 4px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; }}
 .decision-option strong, .decision-option span {{ grid-column: 2; }}
 .decision-option span {{ color: var(--muted); font-size: 12px; }}
 .decision-clear {{ border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 11px; margin-top: 8px; padding: 0; text-decoration: underline; }}
-.ao-target-controls {{ margin: 20px 0 0; padding: 14px; border: 1px solid var(--line); border-radius: 7px; background: #fbfcfe; min-width: 0; }}
+.ao-target-controls {{ margin: 0 0 14px; padding: 14px; border: 1px solid var(--line); border-radius: 7px; background: #fbfcfe; min-width: 0; }}
 .ao-target-controls legend {{ font-weight: 700; }}
 .ao-target-controls p {{ color: var(--muted); font-size: 12px; }}
 .ao-target-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }}
 .ao-target-resource {{ display: grid; gap: 5px; min-width: 0; }}
-.ao-target-resource input,.ao-target-resource select {{ box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 5px; background: #fff; color: var(--ink); font: inherit; padding: 7px 8px; }}
-.ao-reuse-only {{ display: flex; gap: 7px; align-items: center; margin-top: 12px; }}
+.ao-target-resource input {{ box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 5px; background: #fff; color: var(--ink); font: inherit; padding: 7px 8px; }}
 .ao-target-controls .ao-target-error {{ color: #b42318; margin: 8px 0 0; }}
 @media (max-width: 620px) {{ .ao-target-grid {{ grid-template-columns: 1fr; }} }}
 .caret {{ color: var(--muted); font-size: 20px; }}
@@ -4815,22 +4868,16 @@ function renderFindingCard(f) {{
 }}
 
 function renderCards() {{
+  const aoControls = document.getElementById("ao-target-controls");
   const rendered = DISPLAY_FINDINGS.map(f => ({{finding: f, html: renderFindingCard(f)}}));
-  const bands = [];
-  for (const row of rendered) {{
-    const last = bands[bands.length - 1];
-    if (last && last.priority === row.finding.priority) last.rows.push(row);
-    else bands.push({{priority: row.finding.priority, rows: [row]}});
-  }}
+  const openTelemetry = rendered.filter(row => row.finding.finding_group !== "splunk-agent-observability");
+  const agentObservability = rendered.filter(row => row.finding.finding_group === "splunk-agent-observability");
   const subsection = (id, label, rows) => rows.length
-    ? `<section class="finding-subsection" aria-labelledby="${{esc(id)}}"><h3 id="${{esc(id)}}">${{esc(label)}} <span class="findings-total">· ${{rows.length}}</span></h3>${{rows.map(row => row.html).join("")}}</section>`
+    ? `<section class="finding-subsection" aria-labelledby="${{esc(id)}}"><h3 id="${{esc(id)}}">${{esc(label)}} <span class="findings-total">· ${{rows.length}}</span></h3><div id="ao-target-slot"></div>${{rows.map(row => row.html).join("")}}</section>`
     : "";
-  document.getElementById("cards").innerHTML = bands.map(band => {{
-    const openTelemetry = band.rows.filter(row => row.finding.finding_group !== "splunk-agent-observability");
-    const agentObservability = band.rows.filter(row => row.finding.finding_group === "splunk-agent-observability");
-    return openTelemetry.map(row => row.html).join("")
-      + subsection(`splunk-agent-observability-${{band.priority}}-findings-heading`, "Splunk Agent Observability findings", agentObservability);
-  }}).join("");
+  document.getElementById("cards").innerHTML = openTelemetry.map(row => row.html).join("")
+    + subsection("splunk-agent-observability-findings-heading", "Splunk Agent Observability findings", agentObservability);
+  if (aoControls) document.getElementById("ao-target-slot")?.append(aoControls);
   syncFindingSelectionState();
 }}
 
@@ -4916,56 +4963,45 @@ function renderTray() {{
     const hasAo = hasSelectedAoConfiguration();
     aoControls.hidden = !hasAo;
     aoControls.toggleAttribute("inert", !hasAo);
+    for (const field of aoControls.querySelectorAll("input[data-ao-value]")) field.required = hasAo;
   }}
   renderInstrumentCommand();
 }}
 
 function hasSelectedAoConfiguration() {{
-  return (DATA.ao_target_eligible_finding_ids || []).some(id => selected.has(id));
+  return (DATA.required_input_groups || []).some(group => group.key === "ao_target"
+    && group.finding_ids.some(id => selected.has(id)));
 }}
 
 function aoTargetArguments() {{
   if (!hasSelectedAoConfiguration()) return {{parts: [], error: ""}};
   const resources = ["project", "agent_stream"].map(resource => ({{
     resource,
-    selector: document.getElementById(`ao-${{resource}}-selector`)?.value || "name",
     rawValue: document.getElementById(`ao-${{resource}}-value`)?.value || "",
     value: (document.getElementById(`ao-${{resource}}-value`)?.value || "").trim(),
   }}));
-  const hasValue = resources.some(resource => resource.value);
-  const reuseOnly = document.getElementById("ao-reuse-only")?.checked || false;
   const invalidResources = resources.filter(resource => Array.from(resource.value).length > 512 || /\\p{{C}}/u.test(resource.rawValue));
   const invalid = invalidResources.length > 0;
-  const error = invalid ? "Resource selectors must be at most 512 characters and contain no control characters."
-    : hasValue && resources.some(resource => !resource.value)
-      ? "Provide both the Project and Agent Stream, or clear both fields to use application configuration."
+  const error = invalid ? "Resource names must be at most 512 characters and contain no control characters."
+    : resources.some(resource => !resource.value)
+      ? "Provide values for these required fields: " + resources.filter(resource => !resource.value)
+        .map(resource => resource.resource === "project" ? "Project" : "Agent Stream").join(", ") + "."
       : "";
   const errorNode = document.getElementById("ao-target-error");
   if (errorNode) errorNode.textContent = error;
   for (const resource of resources) {{
     document.getElementById(`ao-${{resource.resource}}-value`)?.setAttribute("aria-invalid",
-      String(invalidResources.includes(resource) || (hasValue && !resource.value)));
+      String(invalidResources.includes(resource) || !resource.value));
   }}
-  if (error || !hasValue) return {{parts: !error && reuseOnly ? ["--ao-reuse-only"] : [], error}};
+  if (error) return {{parts: [], error}};
   const parts = [];
   for (const resource of resources) {{
-    const flag = (resource.resource === "project" ? "--ao-project" : "--ao-agent-stream")
-      + (resource.selector === "id" ? "-id" : "");
+    const flag = resource.resource === "project" ? "--ao-project" : "--ao-agent-stream";
     if (resource.value.startsWith("-")) parts.push(flag + "=" + resource.value);
     else parts.push(flag, resource.value);
   }}
-  if (reuseOnly) parts.push("--ao-reuse-only");
+  if (DATA.selection.ao_target?.create_if_missing === false) parts.push("--ao-reuse-only");
   return {{parts, error: ""}};
-}}
-
-function updateAoTargetInput(resource, selectorChanged = false) {{
-  const selector = document.getElementById(`ao-${{resource}}-selector`);
-  const input = document.getElementById(`ao-${{resource}}-value`);
-  const label = document.getElementById(`ao-${{resource}}-label`);
-  if (selectorChanged && input) input.value = "";
-  if (label) label.textContent = (resource === "project" ? "Project" : "Agent Stream")
-    + (selector?.value === "id" ? " ID" : " name");
-  renderInstrumentCommand();
 }}
 
 function syncDependencyClosure() {{
@@ -5112,15 +5148,6 @@ document.addEventListener("click", event => {{
 }});
 
 document.addEventListener("change", event => {{
-  const aoSelector = event.target.closest("select[data-ao-selector]");
-  if (aoSelector) {{
-    updateAoTargetInput(aoSelector.dataset.aoSelector, true);
-    return;
-  }}
-  if (event.target.id === "ao-reuse-only") {{
-    renderInstrumentCommand();
-    return;
-  }}
   const decisionInput = event.target.closest("input[data-decision-id][data-option-id]");
   if (decisionInput) {{
     applyDecisionAnswer(decisionInput.dataset.decisionId, decisionInput.dataset.optionId);
@@ -5133,7 +5160,7 @@ document.addEventListener("change", event => {{
 
 document.addEventListener("input", event => {{
   const aoInput = event.target.closest("input[data-ao-value]");
-  if (aoInput) updateAoTargetInput(aoInput.dataset.aoValue);
+  if (aoInput) renderInstrumentCommand();
 }});
 
 syncDependencyClosure();
@@ -5534,6 +5561,13 @@ def cmd_select(args: argparse.Namespace) -> int:
         + (f", auto-included dependencies: {','.join(added)}" if added else "")
         + ")"
     )
+    return 0
+
+
+def cmd_required_inputs(args: argparse.Namespace) -> int:
+    report = load_canonical_audit_for_selection(args.audit_json)
+    selection = normalize_selection(load_json(args.selection_json), report)
+    print(json.dumps(required_input_status(required_input_groups(report), selection), indent=2))
     return 0
 
 
@@ -6408,6 +6442,13 @@ def build_parser() -> argparse.ArgumentParser:
     select.add_argument("--ao-agent-stream-id", help="existing Agent Stream ID; lookup only")
     select.add_argument("--ao-reuse-only", action="store_true", help="require existing named AO resources instead of creating missing resources")
     select.set_defaults(func=cmd_select)
+
+    required_inputs = subparsers.add_parser(
+        "required-inputs", help="report missing selected inputs before instrumentation without editing files"
+    )
+    required_inputs.add_argument("audit_json", type=Path)
+    required_inputs.add_argument("--selection-json", type=Path, required=True)
+    required_inputs.set_defaults(func=cmd_required_inputs)
 
     adopt = subparsers.add_parser(
         "adopt-selection",

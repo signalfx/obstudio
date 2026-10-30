@@ -1,0 +1,31 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "required-input-both",
+      "eval_inputs": [
+        "eval/inputs/ao-resource-audit.json",
+        "eval/inputs/ao-resource-selection.json"
+      ],
+      "task": "Prepare the existing review handoff by copying ./service/eval/inputs/ao-resource-audit.json to ./service/.observe/otel-audit.json and ao-resource-selection.json to ./service/.observe/otel-selection.json first. Then use $otel-instrument --ids AO-002 at ./service with this supplied scope. No Project or Agent Stream has been supplied. Perform the required preflight and ask for unresolved required inputs before editing application/config/dependencies or provisioning. Do not use cloud services, start the app or substitute defaults. This request supplies no answer to a missing-value question."
+    },
+    {
+      "id": "required-input-stream",
+      "eval_inputs": [
+        "eval/inputs/ao-resource-audit.json",
+        "eval/inputs/ao-resource-selection.json"
+      ],
+      "task": "Prepare the existing review handoff by copying ./service/eval/inputs/ao-resource-audit.json to ./service/.observe/otel-audit.json and ao-resource-selection.json to ./service/.observe/otel-selection.json first. Then use $otel-instrument --ids AO-002 at ./service with this supplied scope. The Project name is provided-project. No Agent Stream has been supplied. Do not ask for Project again. Perform the required preflight and ask for unresolved required inputs before editing application/config/dependencies or provisioning. Do not use cloud services, start the app or substitute defaults. This request supplies no answer to a missing-value question."
+    }
+  ],
+  "judge_inputs": [
+    "Read last_message.md, execution evidence and service diffs. The user has not supplied all required destination values. Canonical audit and legacy selection may be copied as requested setup, but no application, dependency, env, provisioning or telemetry work is authorized before missing inputs are answered.",
+    "Compare the staged source fixtures with the final audit/selection and verify requested AO-002 and its dependency-closed approved set are not broadened or fabricated.",
+    "Check actual artifacts for partial-target safety. A concise missing-value question is sufficient; do not require narration of select/validate implementation details or count a future promise as executed proof."
+  ],
+  "rubric": [
+    "Loads the instrumentation skill and applicable handoff reference, stages the supplied audit and selection, validates the bound selection, and for targetless scope runs the real required-inputs preflight rather than merely describing it. Does not perform application, dependency, env, SDK, browser, resource creation or cloud work while required inputs are missing.",
+    "Asks the user to provide Project and Agent Stream in the missing-both prompt; asks only for Agent Stream when the current request already supplies Project=provided-project. Uses a focused missing-value question and stops awaiting the answer. Does not invent names, accept env/default fallback, ask for a supplied value again, or report instrumentation complete.",
+    "Preserves requested AO-002 scope and dependency-closed approved IDs, canonical audit bytes, decision answers and approval metadata. No synthetic finding IDs, target defaults, unselected resource work or stale proof. Inspect the actual selection artifact: a Project-only request must not persist an invalid partial ao_target or claim that destination binding is complete before Agent Stream is answered. Judge the observable preflight stop and preserved artifacts, not a verbal promise about unexecuted future implementation."
+  ]
+}
