@@ -63,6 +63,9 @@ PLUGIN_SHARED_PATHS = (
     "assets",
 )
 MAX_DEFAULT_PROMPTS = 3
+# The Claude plugin directory cannot inspect non-image files over 256 KiB and holds the plugin for review.
+MAX_PLUGIN_FILE_BYTES = 240 * 1024
+PLUGIN_SIZE_EXEMPT_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico"})
 PLUGIN_HOSTS = ("codex", "claude")
 SKILL_REFERENCE_PATTERN = re.compile(r"\$([A-Za-z0-9_-]+)")
 SEMVER_IDENTIFIER = r"(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
@@ -127,6 +130,7 @@ def main() -> int:
         return 0
     if args.check_plugin_skills:
         verify_plugin_skills_synced()
+        verify_plugin_file_sizes()
         return 0
     if args.bump_manifests:
         if not args.release_tag:
@@ -559,6 +563,7 @@ def verify_staged_plugin(output: Path, host: str = "codex", expected_version: st
     if symlinks:
         rendered = "\n".join(str(path.relative_to(output)) for path in symlinks)
         raise RuntimeError(f"staged plugin must not contain symlinks:\n{rendered}")
+    verify_plugin_file_sizes(output)
     for selected_host in PLUGIN_HOSTS if host == "all" else (host,):
         manifest = output / (".claude-plugin" if selected_host == "claude" else ".codex-plugin") / "plugin.json"
         if not manifest.is_file():
@@ -679,6 +684,23 @@ def verify_plugin_skills_synced() -> None:
                 "plugin skill copy differs from canonical source: "
                 f"{relative} ({source_hash} != {destination_hash})"
             )
+
+
+def verify_plugin_file_sizes(root: Path = PLUGIN_ROOT, limit: int = MAX_PLUGIN_FILE_BYTES) -> None:
+    oversized = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.is_symlink() or should_ignore(path):
+            continue
+        if ".skills-sync-tmp" in path.parts or path.suffix.lower() in PLUGIN_SIZE_EXEMPT_SUFFIXES:
+            continue
+        size = path.stat().st_size
+        if size > limit:
+            oversized.append(f"{path.relative_to(root)} ({size} bytes)")
+    if oversized:
+        raise RuntimeError(
+            f"plugin files exceed the {limit}-byte limit for the Claude plugin directory; split them:\n"
+            + "\n".join(oversized)
+        )
 
 
 def verify_local_plugin_skills(skills_root: Path) -> None:

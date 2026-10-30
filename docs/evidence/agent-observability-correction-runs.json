@@ -13503,6 +13503,1563 @@
           "benchmark_sha256": "1dd12f7d3b3f92394ffe24cc8619b67696c9cdbb1a1b43bf0e28e39be183644b"
         }
       ]
+    },
+    {
+      "label": "report engine split (BORN-282)",
+      "scope": "Behavior-preserving split of observe_report.py into observe_report_core.py and observe_report_html.py, plus the extracted test modules. The three rubric reports were regenerated at the split source with the tracked agent-role config (gpt-6.1-sol for agent and judge), running the same prompt sets as the merged-main coordinated cohort: audit 4, instrument 9, verify 4. Every grade of the three retained runs is listed. An earlier otel-instrument attempt at this source (run 20261028T193946878866Z) is not part of this ledger: three of its nine prompts ended with the provider error 'Selected model is at capacity' before producing any output and one hit the 2400 second agent timeout, so it never produced a complete graded set. The full nine-prompt set was rerun and that rerun is the retained run.",
+      "runs": [
+        {
+          "benchmark_sha256": "9187f6a0a414634b0385636ef7e3163f9d9c3a9782ea5ea97f198c963c427bec",
+          "failures": [],
+          "grades": [
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Correctly classifies all five branches and preserves existing signal ownership. None remains fresh and eligible for AO creation.",
+                    "evidence": "mode-audit.json modes.*.topology matches app.py conditional provider construction: generic/genai have all three signals, metrics/logs retain their actual SDK pipelines, and none has stdout only."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Operation ledgers, findings and exclusions agree. Existing workflow/model spans receive enrichment; metrics/logs require tracing before creating all five operations.",
+                    "evidence": "Per-mode operation_ledger and OTEL-001\u2013005 preserve workflow -> agent -> {retrieval, tool, model}. Metrics/logs operation findings depend on OTEL-010 and claim no existing trace owner. None's native model exception is narrowly source-justified."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Content acceptance binds real values to owning operations, preserves business results and distinguishes successful null from failed/cancelled no-result.",
+                    "evidence": "field_acceptance, lifecycle_delivery and capture_acceptance specify sanitize_agentdemo_content before capture, 16 messages, 64 parts/message and 8192 final serialized UTF-8 bytes. Every mode embeds the supplied counterexamples exactly, rejects malformed known types without GenericPart fallback, and handles quoted scalars, typed reasoning and aggregate Unicode."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Resource configuration remains executable and independently selectable, without introducing AO producer dependencies into existing modes.",
+                    "evidence": "Generic/genai routing closure is OTEL-006/007/008, excluding operation enrichment/creation. Metrics/logs add only OTEL-010 tracing/startup prerequisites. Resource resolution uses an SDK-free HTTP contract; installed and deployed capabilities remain unproven."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Preserves endpoints, headers, sinks and destinations while keeping routing trace-specific and target-specific.",
+                    "evidence": "Routing acceptance preserves app.endpoint, x-legacy-trace and x-exporter-owner; separates Studio projectid/logstreamid from standalone projectid/agentstreamid; forbids global-header leakage and duplicate AO export. The unsupported exporter-delegate registration seam remains an exact open prerequisite."
+                  },
+                  {
+                    "id": "rubric-6",
+                    "pass": true,
+                    "notes": "Resource acceptance covers the required reuse, creation, reconciliation and failure cases, with distinct delivery proof levels.",
+                    "evidence": "Canonical route.resources and every mode's resource_acceptance cover zero-create reuse, ordered minimal/mixed creation, repeats, bounded project/stream 409 relookup, uncertain creates, supplied-ID ownership and wrong-parent checks, and ambiguous/auth/transport/5xx failures without speculative creation. Resource resolution, wire acceptance and cloud readback remain separate."
+                  },
+                  {
+                    "id": "rubric-7",
+                    "pass": true,
+                    "notes": "Required artifacts are valid and independently addressable. Runtime uncertainty and read-only scope are reported accurately.",
+                    "evidence": "All five embedded audits pass schema normalization; canonical generic equals the supplemental generic audit, and its normalized digest matches otel.html. Source hashes match the baseline. Actor trace contains no application/probe/receiver execution, package installation or model/cloud run; runtime and resource outcomes remain Not proven."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-audit/20261028T170414701823Z/cases/python/existing-otel-agent-demo/active-signal-matrix-audit/with_skill/rubric_grade.json",
+              "sha256": "8715e1060835309bda291028d3520753abbfbe00c32de00d469a55e16973d68b",
+              "task": "active-signal-matrix-audit"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Correctly identifies SmashBot\u2019s model-directed agent behavior, preserves native OTel ownership, and separately authors project, stream, and routing findings for web and CLI.",
+                    "evidence": "chat_core.py contains model-selected tool dispatch and feedback into repeated inference. Canonical OTEL-009\u2013014 have matching missing readiness rows, default selection modes, dependency closure, SDK-free resolution, and loaded-profile/header acceptance."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Separates fresh SDK, existing SDK, and fresh Go ownership. Proposed APIs and runtime support remain distinct from installed proof; SDK creation is distinguished from native transport, with an exact model-operation exception.",
+                    "evidence": "The supplemental inventory proposes new Go provider/exporter setup with Go-specific interfaces and lifecycle APIs. Operation/version/resource receipts reference inventory component IDs. Independently rerunning the checker reproduced rejection of all nine controls, including absent exporter/provider, Python carrier/client proof, and foreign Go lifecycle mutations."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Preserves the existing native provider/exporter and endpoint/protocol, proposes SDK-free resource resolution, and requires atomic trace-header/Resource binding without duplicate export.",
+                    "evidence": "native_otel routing preserves TracerProvider, BatchSpanProcessor, and OTLPSpanExporter. Acceptance requires projectid/logstreamid plus matching trace Resource IDs; standalone agentstreamid is documented separately. Installed adapter and live header-update support remain unverified."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Keeps Galileo resources and routing independent, preserves production and the separate operator sink, and rejects inherited Studio activation requirements.",
+                    "evidence": "Both Galileo cases retain GALILEO_PROJECT=support and GALILEO_LOG_STREAM=production; the mixed case preserves http://127.0.0.1:55318/v1/traces. Native client/configuration consumption and export require proof. Direct and shared Studio-in-Galileo mutations both reject."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Plans ordered, idempotent resource handling with truthful failure isolation and separate resource, local-export, forwarding, and destination-readback proof.",
+                    "evidence": "Resource acceptance covers project-before-stream lookup, lookup-only IDs, ownership/association, reuse-only behavior, ambiguity, conflict, uncertain-create recovery, and no creation after authentication failures or 503. Actual API journals must flow through consumed bootstrap configuration into emitted routing."
+                  },
+                  {
+                    "id": "rubric-6",
+                    "pass": true,
+                    "notes": "Keeps the inference-only control free of agent/resource obligations and preserves canonical/supplemental separation. Application source, configuration, dependencies, and tests remain unchanged.",
+                    "evidence": "non_agent_control has one CLIENT model operation, resource statuses N/A, and ordinary lifecycle acceptance throughout. Independent checks resolved all 449 recorded paths and verified all 14 baseline file hashes. Canonical validation passes; HTML contains the same report with renderer defaults. Both non-agent lifecycle and resource-activation controls reject."
+                  },
+                  {
+                    "id": "rubric-7",
+                    "pass": true,
+                    "notes": "Assesses every case across all four Studio states, separates business progress from telemetry proof, and distinguishes same-process recovery from persisted-binding startup.",
+                    "evidence": "All seven cases cover connected, disconnected, unavailable, and reconnected states. Native startup cases independently require a new process retaining a validated binding across 503/refusal with local OTLP available. Names-only acceptance includes finite request time, capped retry/backoff, bounded pending work, continued progress, and shutdown cancellation; absent settings remain explicit gaps."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-audit/20261028T170414701823Z/cases/python/model-directed-agent/agent-resource-table-audit/with_skill/rubric_grade.json",
+              "sha256": "6c2b03994acc65abb45b9b82d156581fcb54f3ea8e64d9d4d911ca195bb61285",
+              "task": "agent-resource-table-audit"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Explicitly identifies run_turn as the SmashBot model-directed agent from behavior.",
+                    "evidence": "Source-role evidence traces TOOLS, TOOL_IMPLEMENTATIONS dispatch, returned tool messages and repeated model requests until final reply. GenAI readiness names the agent lifecycle and links OTEL-002."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Truthfully inventories the current workflow label and provides a selectable repair of its exact producer.",
+                    "evidence": "Current inventory retains invoke_workflow smashbot_turn. OTEL-002 repairs chat_core.py:214-216 to invoke_agent SmashBot with source-backed identity, Histogram duration in seconds, consumer migration and retained legacy aliases. Duplicate orchestration wrappers are explicitly prohibited; HTML marks OTEL-002 selectable."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Correctly distinguishes both separately callable roles.",
+                    "evidence": "OTEL-005 treats one_shot as one inference without orchestration. OTEL-006 identifies summarize_then_translate as a fixed workflow because translation consumes the summary, with two inference children and no SmashBot agent identity."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Binds the repair to concrete success and failure acceptance scenarios while separating historical expectations from proof.",
+                    "evidence": "Linked scenarios cover no-tool, tool-feedback, recovered invalid arguments, first/later provider failure and unhandled tool failure. They specify one agent, direct child parentage, attempted counts, status and one duration observation matching the span interval. Acceptance preserves business values; historical workflow assertions are explicitly rejected as semantic authority."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Completes a current source audit, preserves protected files and accurately limits proof claims.",
+                    "evidence": "Trace records baseline copying and inspection of CLI, web, core, roles and historical tests. Canonical validation and HTML finalization passed with 12 findings and 36 scenarios. All 13 protected-file hashes match; recorded edits stay under .observe. No application/model execution, dependency installation or browser/UI actions occurred. Native emission, receiver receipt and cloud delivery remain explicitly unproven."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-audit/20261028T170414701823Z/cases/python/model-directed-agent/agent-role-from-behavior/with_skill/rubric_grade.json",
+              "sha256": "98db79e36a73f75d943faac11984b8465864c75f516d97bd6817c37fb433167b",
+              "task": "agent-role-from-behavior"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Assesses all six agent cases and the non-agent control across all four Studio states. Agent resource requirements remain independent of SDK presence and connectivity; the control has no forced AO adoption.",
+                    "evidence": ".observe/connection-modes.json contains seven exact input cases, 28 case/state decisions and four reconnect identity substates per case."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Connected readiness requires resolved ownership/association, consumed routing and fresh destination trace-ID readback. Disconnected mode preserves ordinary local telemetry while blocking unresolved resources and AO delivery; failed lookups authorize neither creation nor destination changes.",
+                    "evidence": "Per-case connected/disconnected decisions, policies.resource_resolution and connected-binding acceptance scenarios distinguish emission, receipt, binding, forwarding and remote visibility."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Correctly treats failed @log preparation as possible business success without span emission. Identifies the public local helper and application-owned decorators, preserves existing producers, and explains creation-time kind/sampling limitations without SDK patches or fake loggers.",
+                    "evidence": "sdk_capability_decision records start_splunk_ao_span(splunk_ao_span: SplunkAOSpan) -> Generator[trace.Span, Any, None], its name-only start, default INTERNAL kind and late attributes. The remote-model exception requires public OTel CLIENT creation with initial attributes and sampler/on_start proof."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Retains complete valid same-destination bindings through transient outages. Names-only native startup requires automatic bounded retries and atomic same-PID header/Resource activation with zero creates. Existing endpoints, headers, sinks and native Galileo configuration are preserved.",
+                    "evidence": "CM-native_otel-retained-reconnect and CM-native_otel-names-only-same-pid, corresponding Go scenarios, and Galileo scenarios preserve GALILEO_* and the explicit internal sink on port 55318."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Separates unavailable-receiver proof from business/in-memory checks, retained routing from fresh resolution, and changed/rejected identities from transient failures. Explicit new-process outage scenarios require the first export to retain the prevalidated binding without successful relookup, independently of same-PID recovery. Runtime results remain unclaimed.",
+                    "evidence": "native_startup_cases.prevalidated_new_process_api_outage references distinct HTTP503 and connection-refused scenarios for Python native and Go fallback, requiring new PID, available separate receiver, first-batch headers and matching trace Resources, zero creates and business/local continuity. All 27 scenarios remain Not run / Not proven; both supplied input hashes match."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-audit/20261028T170414701823Z/cases/python/model-directed-agent/studio-connection-modes/with_skill/rubric_grade.json",
+              "sha256": "8edcab37bf23569d5e59f450acea6cc9ea0cf9c04ba83f2ae243281c793f1aa7",
+              "task": "studio-connection-modes"
+            }
+          ],
+          "run_id": "20261028T170414701823Z",
+          "skill": "otel-audit",
+          "source": {
+            "digest_version": 4,
+            "digest": "0cbae163b67876cdf1ae1f3eb852ab25089d1968205873c2bacbb68981405dcf",
+            "eval_kinds": [
+              "rubric"
+            ],
+            "evaluator_semantics_version": 1,
+            "files": {
+              "evals/codex-evals.agent-role.toml": "fab2556ae2918d8b81d4eb85a81cbd6fca29c79851bccd1b26431a278f5efd0b",
+              "evals/python/existing-otel-agent-demo/Makefile": "a2beb661c8e836e44bb31e4c9430592848e522d2c48b2fa416a2363bcbea6a7a",
+              "evals/python/existing-otel-agent-demo/README.md": "c3b4c2f4260c34551330992b92cd3156604399a0d54eda1d904eb943d42993cd",
+              "evals/python/existing-otel-agent-demo/app.py": "bd65b5623b2f1997eb1523deadca5fce090f76f551609d7b3e0dff680c1e1d5f",
+              "evals/python/existing-otel-agent-demo/eval/inputs/content-counterexamples.json": "cb2a137c61432b814f6fca5d7094140c922989b75cdffaee67b131d87e18c76b",
+              "evals/python/existing-otel-agent-demo/eval/inputs/genai-schema-evidence.json": "cb2d154a37cd662e4ddbcae6d30f7ce5588524d660d6ce19abdf42adc5032a5d",
+              "evals/python/existing-otel-agent-demo/eval/inputs/python-preflight-requirements.txt": "9bc8378353b95a0405d8b052226aa3075aa7f7f32d30c29c235b0a343df6fa3f",
+              "evals/python/existing-otel-agent-demo/eval/qual/audit.json": "fac868c9ea4a9ada1dabec2ff8461e77471af6d651d18b6b6d46cd9d14bc7509",
+              "evals/python/existing-otel-agent-demo/probe.py": "8cc9dd2ba1124e3bf5a20ee65c500c688a0db7429eed9396013485d46d0f737a",
+              "evals/python/existing-otel-agent-demo/pyproject.toml": "dfc360d25da6e430e782c891bdbc92fb5d7b2ddf6a901629d09bc3a874635a25",
+              "skills/otel-audit/SKILL.md": "2f2c4a2bf4cfa0805ec172b5a3baf189371989fca61555ed25812f6f7976f289",
+              "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
+              "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
+              "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
+              "skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",
+              "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
+              "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
+              "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
+              "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
+              "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
+              "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
+              "skills/references/report-flow-contract.md": "be4af921d9faf71ca9c206a91ba091db5d8bc878dc87ab6b844bc39cc455eb0e",
+              "skills/references/scripts/observe_report.py": "efa659cae52212f80ff0551ad0af3c74bacd7537b7bf0602050a45e044e25711",
+              "skills/references/scripts/observe_report_core.py": "368cb85ed55d9dee69e55d58306f9f1941e18de355895598e1f5f668a152d009",
+              "skills/references/scripts/observe_report_html.py": "1d26af367e44433d7a76843676fe25338984a8889f932181529faa242d85901c",
+              "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
+              "skills/references/splunk-agent-observability.md": "e507d91e7fb6b829c28cd50ce9263189bf5d440c7aa9f0adc6a95334092a868b",
+              "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
+              "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
+              "skills/references/tests/observe_report_fixtures.py": "58440bbebb543612a46b7dd63b7a35db7c530e6ea5cb20eb8bda109a3dfe08ed",
+              "skills/references/tests/test_observe_report.py": "ec48a794fe23ff65760179d469a107292d61afe1d7b39a8ea9e93e1d0dd752a5",
+              "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
+              "skills/references/tests/test_observe_report_html.py": "f8f6402f86c495e9045aad78fcdcb127cd990df3e070b62c940b981a0b1c62ef",
+              "skills/references/tests/test_observe_report_selection.py": "28abd02171f9a2ffafae96dda7cf8299858987baae3d8f6f885b19977f99e548",
+              "evals/python/model-directed-agent/README.md": "4df0874e3a6d9596a7362376aa7d143ae4a8537ba5de86033a468702f1e87519",
+              "evals/python/model-directed-agent/agent.py": "a9b953d189a35ac1e7518918651e5d8144754615d6592a5fdcb0e0d2d85da5dd",
+              "evals/python/model-directed-agent/app.py": "f3fefd95b7d2cc84ab2eb58b35b9fecd7b032930776f7052d3affcffbd11ffda",
+              "evals/python/model-directed-agent/chat_core.py": "c228f81a2dbc7e9b66ea1ff7b0280ffbe2879c0421deeb5c0e20ed21655465db",
+              "evals/python/model-directed-agent/checks/review_regressions.py": "6e5d2144c521fea6770844242f7bc4f0fbf2ed9c3cc350c0df8e1e8b528b5c2c",
+              "evals/python/model-directed-agent/eval/inputs/prior-audit.json": "caa997d57a71c06a288f0b8f4b606edc1e6de1058279df292787403378bfca4f",
+              "evals/python/model-directed-agent/eval/qual/audit.json": "492caa234f35abf70d4a16bcc538844e9ee033dfdf8e23025719f185899859ca",
+              "evals/python/model-directed-agent/historical_check.py": "ef408c69e11dc0d60ab584ec881cbb3750a037bece37dfab357adb316a2426fa",
+              "evals/python/model-directed-agent/otel_setup.py": "d7d591e2ca3aeef688aa2df30e4c2d89286917102c22439864fbb5c6a9d53b12",
+              "evals/python/model-directed-agent/probe.py": "f190d42c2b2308660ba60c1f6d12d74207ef62b33162bc526cadbc12295db929",
+              "evals/python/model-directed-agent/recommendations.py": "c0704e3b6baba32477943c826d9e4a2fa9b94e9fcda3c20ad0f4b57179255a09",
+              "evals/python/model-directed-agent/requirements.txt": "fa39473fff95e58feb9dce8bbd6b7129b203f9d1e0209cd62d4a05b9130ac5d4",
+              "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
+              "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
+              "evals/python/model-directed-agent/eval/inputs/agent-resource-cases.json": "1dc1244eb619248ccfda204d8b4d03131aaccdeb7312b21e1fe4232025a9b7f2",
+              "evals/python/model-directed-agent/eval/inputs/sdk-local-routing-evidence.json": "2b10f295f7cf2049bd168f3d30d89d12756f63c1ec3c47c42753610cf5b710e1",
+              "evals/python/model-directed-agent/eval/qual/connection-modes-audit.json": "7f4b4e9dbda4b8d8144dd77b0a2906f8d5953a269f05cc59c255889c558a5768",
+              "evals/python/model-directed-agent/eval/inputs/routing-acceptance-counterexamples.json": "aab834050aeb8b4ef2b1c24dd7962dc0d15fe0d80623c936080ac327af69e0aa",
+              "evals/python/model-directed-agent/eval/qual/resource-table-audit.json": "a02291d9af8f8fb1e2d04b4bbc72d2c25542f7fc8c5b766674787d75fb804c74"
+            },
+            "skill_path": "skills/otel-audit",
+            "shared_reference_consumers": [
+              "skills/references/genai-readiness.md",
+              "skills/references/incident-readiness.md",
+              "skills/references/local-otlp-receiver.md",
+              "skills/references/report-flow-contract.md",
+              "skills/references/scripts/observe_report.py",
+              "skills/references/scripts/observe_report_core.py",
+              "skills/references/scripts/observe_report_html.py",
+              "skills/references/splunk-agent-observability.md"
+            ],
+            "selections": [
+              {
+                "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/audit.json",
+                "fixture_dir": "evals/python/existing-otel-agent-demo",
+                "prompt_id": "active-signal-matrix-audit",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/genai-schema-evidence.json",
+                  "eval/inputs/python-preflight-requirements.txt",
+                  "eval/inputs/content-counterexamples.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/model-directed-agent/eval/qual/audit.json",
+                "fixture_dir": "evals/python/model-directed-agent",
+                "prompt_id": "agent-role-from-behavior",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/prior-audit.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/model-directed-agent/eval/qual/connection-modes-audit.json",
+                "fixture_dir": "evals/python/model-directed-agent",
+                "prompt_id": "studio-connection-modes",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/agent-resource-cases.json",
+                  "eval/inputs/sdk-local-routing-evidence.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/model-directed-agent/eval/qual/resource-table-audit.json",
+                "fixture_dir": "evals/python/model-directed-agent",
+                "prompt_id": "agent-resource-table-audit",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/agent-resource-cases.json",
+                  "eval/inputs/routing-acceptance-counterexamples.json"
+                ]
+              }
+            ],
+            "config_path": "evals/codex-evals.agent-role.toml"
+          },
+          "summary": {
+            "eval_count": 4,
+            "prompt_count": 4,
+            "failure_count": 0,
+            "with_skill": {
+              "prompt_count": 4,
+              "command_count": 199,
+              "duration_seconds": 5574.404,
+              "agent_duration_seconds": 5007.08,
+              "tokens": 20344194,
+              "agent_tokens": 16989456,
+              "error_count": 0,
+              "agent_usage": {
+                "provider": "codex",
+                "source": "cumulative",
+                "observed": true,
+                "usage_record_count": 4,
+                "selected_record_count": 4,
+                "input_tokens": 16838897,
+                "cached_input_tokens": 16242304,
+                "cache_creation_input_tokens": 0,
+                "output_tokens": 150559,
+                "reasoning_output_tokens": 34038,
+                "provider_total_tokens": null,
+                "derived_total_tokens": 16989456,
+                "effective_total_tokens": 16989456,
+                "coverage": {
+                  "record_count": 4,
+                  "modeled_count": 4,
+                  "observed_count": 4,
+                  "recognized_count": 4,
+                  "preferred_total_count": 4,
+                  "field_counts": {
+                    "input_tokens": 4,
+                    "cached_input_tokens": 4,
+                    "cache_creation_input_tokens": 4,
+                    "output_tokens": 4,
+                    "reasoning_output_tokens": 4,
+                    "provider_total_tokens": 0,
+                    "derived_total_tokens": 4
+                  }
+                }
+              },
+              "rubric": {
+                "passed": 24,
+                "total": 24,
+                "average_score": 100.0
+              },
+              "rubric_tokens": 3354738,
+              "rubric_duration_seconds": 566.721,
+              "rubric_usage": {
+                "provider": "codex",
+                "source": "cumulative",
+                "observed": true,
+                "usage_record_count": 4,
+                "selected_record_count": 4,
+                "input_tokens": 3337400,
+                "cached_input_tokens": 2941312,
+                "cache_creation_input_tokens": 0,
+                "output_tokens": 17338,
+                "reasoning_output_tokens": 3155,
+                "provider_total_tokens": null,
+                "derived_total_tokens": 3354738,
+                "effective_total_tokens": 3354738,
+                "coverage": {
+                  "record_count": 4,
+                  "modeled_count": 4,
+                  "observed_count": 4,
+                  "recognized_count": 4,
+                  "preferred_total_count": 4,
+                  "field_counts": {
+                    "input_tokens": 4,
+                    "cached_input_tokens": 4,
+                    "cache_creation_input_tokens": 4,
+                    "output_tokens": 4,
+                    "reasoning_output_tokens": 4,
+                    "provider_total_tokens": 0,
+                    "derived_total_tokens": 4
+                  }
+                }
+              }
+            },
+            "with_baseline": null
+          }
+        },
+        {
+          "benchmark_sha256": "ce06b38093f8c26d3882e18e1bf4857995427d35bd96ed1d808de76c6f0560e5",
+          "failures": [],
+          "grades": [
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Audit snapshot and supported dependency-closed selection preceded dependency restoration and implementation. Audit bytes and acceptance remained unchanged; final report bindings validate.",
+                    "evidence": "trace.jsonl entries 12/14 precede restoration at 39 and implementation at 50. Selection requests AO-003 and approves AO-001/002/003. Supplied audit, canonical audit and snapshot share SHA-256 2145ea19c020d2932a52ea6d60f27434939ae8c788f6f10c8756a40d2f1f5b13. Independently rerun validate-flow passed."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Owned SDK-free HTTP resolution uses existing native aliases and persists returned identities while preserving harmless headers. Public exporter delegation preserves native provider ownership, endpoints and metric/log isolation.",
+                    "evidence": "service/ao_resources.py, native_routing.py and launch.py implement the integration without vendor dependencies, discovery or personal skill runtime paths. telemetry.py differs from its retained original only in the trace-exporter import and construction; original NativeSpanExporter snapshots and provider receipts remain intact."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "The unchanged gateway check ran against the real bundled helper before the unchanged seven-case application probe. Both helper and deployed resolver paths passed reuse, ordered creation and committed-create/lost-response recovery. Wire acceptance checks exact native identities, topology and operations.",
+                    "evidence": "trace.jsonl entry 39 invokes gateway_contract_check.py with the bundled resolve_ao_resources.py; gateway-contract.txt passes. immutable-probe.txt and connection-probe.json show seven passing cases under isolated Python 3.12.14. Protected script hashes match their pre-edit hashes. Independent inspection matched 68 saved wire spans exactly to native records."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Disconnected and unavailable cases preserve valid bindings and native business/telemetry behavior without creating resources. Cached restart forwards with the resource API still unavailable. Invalid identities and wrong-parent resources are rejected.",
+                    "evidence": "Immutable disconnected, unavailable and reconnect cases pass: disconnected retains local routed receipts without forwarding; unavailable has no receiver receipt; restart uses retained binding while resource_available=False. Focused invalid-ID, parent-association and failed-lookup tests pass. Receiver and forwarding evidence is explicitly synthetic, with live_cloud_proof=false."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Names-only recovery preserves one PID through all connection states and activates headers/Resources atomically with zero creates. Additional actual-application evidence proves bounded ongoing retries, late recovery, continued signals and shutdown cancellation.",
+                    "evidence": "Immutable names-only case retains PID 76492 across four states; eight oracle regressions cover split/batched turns, retransmissions and corruption rejection. prolonged-recovery.json records PID 76443, 12.01 seconds of outage, eight lookups with approximately 0.5/1/2-second capped backoff, then recovery. Independent inspection confirms 17 turns, 68 exact spans, counter=17 and 17 correlated logs. A stalled call terminates in 0.501 seconds; pending-retry-shutdown.json shows requests remain at two for 4.27 seconds while the PID stays alive."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-instrument/20261029T160338863738Z/cases/python/agent-connection-demo/native-connection-modes/with_skill/rubric_grade.json",
+              "sha256": "f7004d11b71d4e80f11bd41aab425231c75f43fbc8ac8fcb1b84badc2dfc1db9",
+              "task": "native-connection-modes"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Correctly distinguishes genuinely fresh runtimes from every active-signal and external-launcher case. Preserves existing producers, providers, exporters and destinations while identifying missing GenAI operations.",
+                    "evidence": "The plan's operation/producer ledger covers every supplied scenario, including metrics-only, logs-only, export-only AO and stdout/dependency-only. Incremental cases use preserved OTel hooks without an AO span-creation dependency or duplicate exporter."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Requires useful safe content and applicable vendor fields with concrete bounds, pre-SDK redaction, truthful unavailable values and negative acceptance tests.",
+                    "evidence": "Capture policy P specifies 16 messages, 64 parts per message, 8192 UTF-8 bytes per serialized content attribute, bounded definitions/documents and 128-byte names/IDs. Field rows identify source availability, same-span mappings and absence reasons; tests cover malformed parts, sensitive strings and aggregate multibyte overflow."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Preserves exact, distinct source receipts and correctly reconciles official Opt-In requirements, vendor expectations and fresh versus legacy usage contracts.",
+                    "evidence": "The linked receipt JSON exactly matches the supplied older OTel snapshot, both vendor URLs/checked_at_utc values and newer full registry receipt. Fresh counts map to published input17/output5 and computed assistant.usage.total_tokens=22 with provenance; the proven legacy gen_ai.usage.total_tokens consumer alias remains preserved. App counts are explicitly estimated."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Names supported SDK creators and public helpers, separates example evidence from additional helper evidence, and specifies proposed provider/export registration and owned shutdown without claiming execution.",
+                    "evidence": "Records basic-example.py at revision b5f226e947e1861b5687ee85b39474fe9d63df57 with commit/capture dates and its actual exercised APIs. Separately records the helper import, signature, source and probe. Proposes registered application TracerProvider, BatchSpanProcessor/OTLP exporter, force_flush and shutdown; selected incident transport separately names add_splunk_ao_span_processor. Historical versions remain evidence coordinates."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Assesses source cases and synthetic captures independently, preserving actual parentage and span-only correlation while exposing lifecycle and delivery gaps.",
+                    "evidence": "The captured-case ledger assesses all five ended spans, safe-call-1, available definitions/arguments/results, malformed messages, HTTP/ASGI/auth/SQL as GenAI N/A, the auxiliary timeout without an ended inference/error span, and HTTP200/rejectedSpans1 as partial rejection. Runtime, teardown and receiver proof remain unproven."
+                  },
+                  {
+                    "id": "rubric-6",
+                    "pass": true,
+                    "notes": "Provides actionable boundary and same-span enrichment plans grounded in actual source operations, without inventing remote execution, retrieval or workflow nodes.",
+                    "evidence": "App build_turn, run_tool and call_provider have concrete creators, capture paths, parent/kind decisions and future assertions. call_provider is correctly INTERNAL because it calculates and sleeps in-process. search_docs metadata does not establish retrieval. existing_export_only_ao receives only its missing chat operation, with no invented tool/workflow/retrieval nodes."
+                  },
+                  {
+                    "id": "rubric-7",
+                    "pass": true,
+                    "notes": "Fully assesses the independent selected incident-desk resource/configuration branches while maintaining actual app.py's OTEL-001-only authorization.",
+                    "evidence": "Explicitly proposes Project incident-desk and Agent Stream incident-desk-live; preserves per-selector fallback, reuse-only and lookup-only ID ownership rules. Plans pre-initialization .local/live.env loading, separate 55300 SDK settings versus OTLP55318, direct-cloud isolation, reuse/create/repeat/409/error branches and trace-specific routing. Actual resource actions remain unrun. Canonical bytes and exact selection independently validated."
+                  },
+                  {
+                    "id": "rubric-8",
+                    "pass": true,
+                    "notes": "Uses isolated public-helper evidence appropriately without imposing a blanket logger-sink blocker or claiming application/cloud proof.",
+                    "evidence": "Recognizes same-span tool mappings, successful null through output.value=\"null\", ERROR/no-result failures and preserved parent context. Retains helper-created agent/tool/retrieval paths; isolates the remote model CLIENT-kind exception and initial-sampling limitations. Production sink registration, app lifecycle and OTLP/cloud delivery remain explicitly unproven."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-instrument/20261029T160338863738Z/cases/python/ai-assistant-demo/genai-sdk-default-instrument/with_skill/rubric_grade.json",
+              "sha256": "8ac097199b198aa7afec12431470f439dcd81459a3e50346d8ef247847b334e2",
+              "task": "genai-sdk-default-instrument"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 98,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Selected genai mode retains existing providers, producers, exporters, resources, destinations and lifecycle. No AO span-creation dependency or provider replacement was introduced.",
+                    "evidence": "service/app.py; service/instrumentation.py; service/pyproject.toml; .observe/evidence/owner-lifecycle.json; .observe/evidence/immutable-check.json. Independent hash checks found no immutable-file changes."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Supported hooks enrich existing workflow/model spans and add only agent, retrieval and tool spans. Native captures prove one operation per actual boundary with correct parentage and no invented model/tool roundtrip.",
+                    "evidence": "service/instrumentation.py; service/app.py; .observe/evidence/genai-after.json; .observe/evidence/app-native.json. Independent graph validation passed with scenario span counts 5/4/5/4."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Named sanitization, complete message/concrete-part validation and numeric bounds apply before capture. All supplied counterexamples have completed exported receipts; malformed known parts are rejected, useful markers survive, and successful null remains distinct from failure. Synthetic output seams are explicitly separated.",
+                    "evidence": "service/capture_policy.py; service/genai-schemas.json; service/test_instrumentation.py; .observe/evidence/content/*.json. Independent corpus checks found no forbidden values, schema failures or attributes exceeding 8192 UTF-8 bytes."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Actual baseline capture preceded implementation. Configured probes exercise success, tool/provider errors and cancellation, with preserved outcomes, exactly-once lifecycle and idempotent configuration/shutdown. Rejected trace acceptance remains failed while original metrics/logs and business outcomes continue.",
+                    "evidence": "trace.jsonl; .observe/evidence/manual-commands.json; .observe/evidence/commands.json; .observe/evidence/app-native.json; .observe/evidence/owner-lifecycle.json; .observe/evidence/resources/reject-traces/after.compare.json. Independent comparisons reproduced the expected trace-rejection failure."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Real resource HTTP responses flow through the application bootstrap, consumed profiles and original exporter. Existing, missing, mixed, project/stream races, uncertain creation and failed reconciliation have ordered journals and exact counts. Repeats reuse resources without additional creates.",
+                    "evidence": "service/telemetry_bootstrap.py; .observe/run_verification.py; .observe/evidence/resources/{existing,missing,mixed,race,stream_race,uncertain_create,reconcile_error}/; .observe/evidence/resource-matrix.json."
+                  },
+                  {
+                    "id": "rubric-6",
+                    "pass": true,
+                    "notes": "ID ownership, wrong-parent, ambiguity, authorization, server and later-pagination failures execute through the same bootstrap. Failed lookups remain failures, generate no speculative routing IDs, and preserve ordinary telemetry and unrelated profile settings.",
+                    "evidence": ".observe/evidence/resources/{ids-existing,ids-wrong-parent,wrong_parent,ambiguous,auth,server_error,pagination_error}/; .observe/evidence/commands.json; .observe/evidence/bootstrap/failed-lookup-retry/app-export.json."
+                  },
+                  {
+                    "id": "rubric-7",
+                    "pass": true,
+                    "notes": "Resolved IDs reach the existing trace session with preserved nondefault endpoints and harmless headers. Studio and public captures use their distinct trace-only header pairs; metrics/logs receive neither pair. No duplicate exporter or AO SDK startup configuration appears.",
+                    "evidence": "service/telemetry_bootstrap.py; .observe/evidence/genai-after.json; .observe/evidence/resources/public/after.json; .observe/evidence/owner-lifecycle.json. Independent inspection confirmed one trace request per normal capture and routing isolation."
+                  },
+                  {
+                    "id": "rubric-8",
+                    "pass": true,
+                    "notes": "Canonical reports validate and retain concrete failures and limitations. Exact capture/scenario joins and deliberate swapped-association rejection are recorded. Live Studio/cloud delivery, trace Resource enrichment and same-process reconnection remain explicitly Not proven.",
+                    "evidence": ".observe/otel-{audit,selection,instrumentation,verify}.json; .observe/preserve-existing.md; .observe/evidence/preservation.json; .observe/evidence/report-trace-joins.json; .observe/evidence/trace-scenario-ledger.json. Independent validate-flow passed; all 139 ledger capture hashes matched."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-instrument/20261029T160338863738Z/cases/python/existing-otel-agent-demo/preserve-genai-instrument/with_skill/rubric_grade.json",
+              "sha256": "f429b88267bfa59574c33c6f7bc0d2998449622e3ec782a4ef88e6c67c46006a",
+              "task": "preserve-genai-instrument"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Generic mode preserves all 13 existing telemetry owners, their lifecycle, original signals and configuration. No AO span-creation dependency, replacement provider or additional exporter was introduced.",
+                    "evidence": "service/instrumentation.py; service/pyproject.toml; service/.observe/evidence/studio-after.json original_objects_retained; service/.observe/evidence/immutable-source-check.json. Independently verified source and implementation hashes."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Supported hooks enrich the existing workflow/model spans and add only agent, retrieval and tool spans. Native records prove one node per reached boundary, correct parentage and preserved legacy IDs, names, scopes and events.",
+                    "evidence": "service/app.py ExistingTraceProducer.operation and AgentDemo.operation; service/instrumentation.py configure; service/.observe/evidence/studio-after.json. Independently rerun Studio comparison passed with 18 spans distributed 5/4/5/4 across the four scenarios."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Named sanitization, numeric limits and complete message/concrete-part validation are implemented. All six corpus cases ran through real inputs and separate produced-output seams. Useful markers survive; forbidden values disappear; malformed known parts fail; successful null survives. No unsupported correlation, provider IDs or usage are invented.",
+                    "evidence": "service/telemetry_content.py; service/test_instrumentation.py test_02 and test_03; service/.observe/evidence/content-ledger.json and content/*.json. Independently validated 324 exported message attributes across 12 corpus captures; maximum string attribute size was 4573 UTF-8 bytes, below 8192."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "The real generic baseline preceded implementation. Actor-configured probes exercise success, tool error, provider error and cancellation with repeated configure/start/shutdown. Failed operations have ERROR, error.type and exactly one exception event without fabricated output/usage. Trace rejection remains failed while original metrics/logs and business behavior continue.",
+                    "evidence": "trace.jsonl baseline command precedes implementation writes; service/.observe/evidence/commands.json; tests-final.log; generic-before.json; studio-after.json; reject-after.json. Independently rerun comparisons returned exit 0 for Studio/public and exit 1 solely for the deliberate trace HTTP400; metrics/logs returned HTTP200."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Real resource responses flow through bootstrap, persisted profiles, application startup and native export for existing, missing, mixed, project race, stream race, uncertain creation and failed reconciliation. Ordered requests, bounded creates and same-instance reuse are recorded; created/recovered IDs reach actual trace headers.",
+                    "evidence": "service/bootstrap.py provision/launch; service/test_instrumentation.py test_01; service/.observe/evidence/resources/{existing,missing,mixed,race,stream_race,uncertain_create,reconcile_error}/{journal.json,profile-first.json,startup.json,otlp.json}; resource-order-check.json. Independently checked initial request counts of 2/6/4/6/4/6/3 and successful-case lookup-only repeats."
+                  },
+                  {
+                    "id": "rubric-6",
+                    "pass": true,
+                    "notes": "Existing-ID ownership and wrong-parent ID lookups execute against real HTTP fixtures. Ambiguity, authorization, server and later-pagination failures remain distinct failures without speculative creates or fabricated bindings. The same bootstrap preserves original providers, destinations, business outcomes and unrelated profile settings during failures.",
+                    "evidence": "service/.observe/evidence/resources/{existing,wrong_parent}/startup-ids.json and journal.json; resources/{ambiguous,auth,server_error,pagination_error}/{journal.json,startup.json,otlp.json}; recovery/{proxy-journal.json,same-pid.json,outage-startup.json,outage-startup-otlp.json}. Independently checked failed-case bindings, request sequences and retained original signal receipts."
+                  },
+                  {
+                    "id": "rubric-7",
+                    "pass": true,
+                    "notes": "Actual resolved IDs are applied only to the existing trace session. Studio uses projectid/logstreamid; the separate public branch uses projectid/agentstreamid. Selected endpoints, harmless headers and original signal routes survive, with no alias mixing, routing leakage, duplicate exporter or AO SDK startup requirements.",
+                    "evidence": "service/instrumentation.py _route; service/bootstrap.py launch; service/.observe/evidence/{studio-profile.json,public-profile.json,studio-after.json,public-after.json}; resources/*/otlp.json. Independently rerun both contract comparisons passed; each normal capture contains one trace request and unchanged metric/log receipts."
+                  },
+                  {
+                    "id": "rubric-8",
+                    "pass": true,
+                    "notes": "Canonical reports validate and bind the generic source, selection, implementation and verification evidence. Protected fixture files remain unchanged. Reports retain failed trace acceptance and explicitly leave real Studio forwarding/cloud visibility Not proven. Exact capture/scenario/trace joins and deliberate foreign-scenario rejection are supported by native records.",
+                    "evidence": "service/.observe/{otel-audit.json,otel-selection.json,otel-instrumentation.json,otel-verify.json,preserve-existing.md}; evidence/{commands.json,preserve-existing.json,all-trace-joins.json,swapped-association-rejected.json,external-gates.json}. Independently reran validate-flow successfully, checked all 172 SHA-bound scenario joins and confirmed the swapped association is rejected."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-instrument/20261029T160338863738Z/cases/python/existing-otel-agent-demo/preserve-generic-instrument/with_skill/rubric_grade.json",
+              "sha256": "b6c24898ff2e3f41d9d029de3c4c568d237059d13e3ef7a7a0d27bc3ab821884",
+              "task": "preserve-generic-instrument"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Logs mode retains its original OTel log owners, stdout sink and shutdown lifecycle. Only empty trace slots are populated; no vendor span-creation dependency is introduced.",
+                    "evidence": "service/instrumentation.py; service/app.py; service/.observe/evidence/resource-existing.capture.json; independently verified immutable-input and final-source hashes."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Public operation hooks produce exactly the five source-owned boundaries with correct parentage, request/scenario attributes and no invented provider or tool-call identity.",
+                    "evidence": "service/instrumentation.py:OPERATIONS/configure; service/.observe/evidence/native-lifecycle.json; rerun resource-existing comparison passed with 18 spans across four scenarios."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Named sanitization, complete message/concrete-part validation and numeric limits operate before export. Every supplied counterexample has completed native/wire input and separate output-seam evidence; useful markers survive and forbidden values are absent.",
+                    "evidence": "service/content_policy.py; service/test_instrumentation.py; service/.observe/evidence/content-*.json; malformed-*-input.json; malformed-*-output-seam.json. Independently rechecked all twelve corpus captures for schema validity, privacy, native/wire equality and final UTF-8 bounds."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Baseline precedes implementation. Actual probes cover success, tool/provider errors and cancellation, preserving business outcomes and logs. Native evidence proves exactly-once completion/error handling. Trace rejection remains failed acceptance while logs succeed.",
+                    "evidence": "trace.jsonl baseline command precedes source additions; service/.observe/evidence/baseline.command.json; native-lifecycle.json; tests-final3.log records 41 passing actor tests; rerun reject-traces comparison exits 1 solely for /v1/traces rejection."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Existing, missing, mixed, project/stream races, uncertain creation and failed reconciliation execute through application bootstrap and consumed profiles. Ordered journals show minimal creates, bounded reconciliation and repeat reuse.",
+                    "evidence": "service/telemetry_routing.py; service/test_instrumentation.py:test_resource_result_flows_through_bootstrap_and_export; service/.observe/evidence/resource-*.journal.json and corresponding profile-consumed/capture/command files. All six successful resource comparisons independently rerun and passed."
+                  },
+                  {
+                    "id": "rubric-6",
+                    "pass": true,
+                    "notes": "Actual ID ownership, wrong-parent, ambiguity, authorization, server-error and later-pagination failures fail closed without fabricated bindings. Original owners, destinations and unrelated profile settings survive.",
+                    "evidence": "service/.observe/evidence/id-existing.*; id-wrong_parent.*; resource-ambiguous.*; resource-auth.*; resource-server_error.*; resource-pagination_error.*; resource-wrong_parent.*. Journals and consumed resolution results independently inspected."
+                  },
+                  {
+                    "id": "rubric-7",
+                    "pass": true,
+                    "notes": "Resolved IDs reach one native trace exporter at the retained nondefault endpoint. Studio and public captures use their distinct trace-only header pairs, preserve harmless headers and leave logs unrouted. No AO SDK startup triplet is required.",
+                    "evidence": "service/telemetry_routing.py:RoutedExporter; service/.observe/evidence/resource-existing.capture.json; public-contract.capture.json; recovery-runtime.json. Studio/public comparisons independently passed; log requests contain no routing headers."
+                  },
+                  {
+                    "id": "rubric-8",
+                    "pass": true,
+                    "notes": "Canonical reports are valid and source-bound, with durable commands, journals and preservation evidence. Validators remain byte-identical. Intentional rejection stays failed; real Studio forwarding and cloud visibility remain Not proven.",
+                    "evidence": "service/.observe/otel-{audit,selection,instrumentation,verify}.json; preserve-existing.md/json; evidence/commands.json; external-gates.json; final-report-trace-joins.json. validate-flow independently passed; all 443 report trace associations were independently joined to cited captures/scenarios, with swapped-association rejection recorded."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-instrument/20261029T160338863738Z/cases/python/existing-otel-agent-demo/preserve-logs-instrument/with_skill/rubric_grade.json",
+              "sha256": "1610d870e6ce295a673260b1a25590fea9b52cabc1115283d2a760f398f12af2",
+              "task": "preserve-logs-instrument"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Metrics mode retains its metric provider, reader, exporter, counter and trace session. Tracing fills previously empty supported slots without introducing AO dependencies or replacing existing owners.",
+                    "evidence": "service/instrumentation.py; service/pyproject.toml; service/.observe/evidence/lifecycle.json; service/.observe/evidence/existing.capture.json"
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Public operation hooks produce exactly the five source-backed boundaries with correct parentage. All saved capture graphs validate; no duplicate or invented operations were found.",
+                    "evidence": "service/app.py; service/instrumentation.py; service/.observe/evidence/existing.capture.json; service/test_instrumentation.py"
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Verified all 18 input/output-seam corpus executions: forbidden values are absent, required markers survive, messages validate, and serialized content stays within 8192 UTF-8 bytes. Concrete malformed parts are rejected; structured tool parts and successful null remain intact.",
+                    "evidence": "service/content_capture.py; service/.observe/evidence/content-cases.json; service/.observe/evidence/known-parts.json; service/.observe/evidence/successful-null.json; service/.observe/evidence/tests.txt"
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Baseline preceded implementation. Actual probes cover success, tool error, provider error and cancellation with preserved outcomes, exactly-once lifecycle and idempotence. Independently rerun comparisons pass normally; trace rejection remains failed while original metrics receive HTTP 200.",
+                    "evidence": "trace.jsonl; service/.observe/evidence/before.json; service/.observe/evidence/lifecycle.json; service/.observe/evidence/reject.capture.json; service/.observe/evidence/reject.compare.command.json"
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Actual loopback responses flow through application-owned bootstrap and consumed profiles into native exports. Journals establish ordered creation, minimal creates, repeat reuse, bounded conflict/uncertain-create reconciliation and fail-closed reconciliation errors.",
+                    "evidence": "service/resource_binding.py; service/verify_local.py; service/.observe/evidence/resource-summary.json; service/.observe/evidence/{existing,missing,mixed,race,stream_race,uncertain_create,reconcile_error}.journal.json"
+                  },
+                  {
+                    "id": "rubric-6",
+                    "pass": true,
+                    "notes": "Lookup-only IDs, wrong-parent ownership, ambiguity, authorization, server and later-pagination failures are exercised through the same integration. Failures retain original owners and unrelated profile settings, without fabricated routing IDs or unauthorized creates.",
+                    "evidence": "service/.observe/evidence/{existing.ids,wrong_parent.ids,ambiguous,auth,server_error,wrong_parent,pagination_error}.journal.json; corresponding capture and profile.bootstrap JSON files; service/.observe/evidence/recovery.json"
+                  },
+                  {
+                    "id": "rubric-7",
+                    "pass": true,
+                    "notes": "Resolved IDs match actual trace headers. Studio uses projectid/logstreamid; the separate public branch uses projectid/agentstreamid. Existing endpoints, harmless headers and metric routes survive, with one trace batch and no routing leakage or AO SDK startup requirements.",
+                    "evidence": "service/.observe/evidence/existing.capture.json; service/.observe/evidence/public.capture.json; service/.observe/evidence/public.compare.command.json; service/resource_binding.py; independently rerun Studio/public comparisons"
+                  },
+                  {
+                    "id": "rubric-8",
+                    "pass": true,
+                    "notes": "Canonical report projection validates. Protected-source hashes match, durable commands/results/journals are present, and all 705 recorded scenario associations resolve correctly; a swapped association is rejected. Reports retain rejected trace acceptance as failed and real Studio/cloud visibility as Not proven.",
+                    "evidence": "service/.observe/otel-{audit,selection,instrumentation,verify}.json; service/.observe/preserve-existing.md; service/.observe/evidence/all-commands.json; service/.observe/evidence/final-trace-joins.json; service/.observe/evidence/integrity-runtime.json"
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-instrument/20261029T160338863738Z/cases/python/existing-otel-agent-demo/preserve-metrics-instrument/with_skill/rubric_grade.json",
+              "sha256": "43934bd963332c0aad4b93774589c448daf9379feae881d37d4215adfa9e6883",
+              "task": "preserve-metrics-instrument"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "The byte-identical seed was copied before baseline capture. Completed native spans expose identity and hidden-reasoning sentinels despite capture mode being redacted. Original failure receipts remain unchanged.",
+                    "evidence": "trace.jsonl records copy then successful baseline execution; service/.observe/baseline.json contains six completed spans and the concrete leaks. Baseline manifest hashes independently match both preserved baseline receipts."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "The application adapter sanitizes before setters using protected source categories across nested values, JSON, quoted scalars and labeled strings in both directions. Useful questions and the unchanged successful business result survive.",
+                    "evidence": "service/content_capture.py; after.json; counterexamples-after.json; completed-span-assertions.json. All six supplied counterexamples have native prompt-path and labeled output-seam receipts. Independent checks found no protected payloads in repaired native exports."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Emitted documents and concrete parts receive complete schema validation. Numeric message, aggregate-part and final serialized UTF-8 limits are exercised, including oversized Unicode. Falsey successes remain distinct from unavailable results; malformed known parts are rejected.",
+                    "evidence": "Independently reran all six focused tests successfully. Saved completed-span receipts pass jsonschema validation and aggregate byte/count checks; tests cover every supplied malformed part without GenericPart fallback."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "The six original span identities, topology, metadata, statuses, exception events and legacy fields are preserved, along with four metric points and four logs. Owners and repeated lifecycle calls remain stable.",
+                    "evidence": "Independent comparison of paired-before.json and after.json passes preservation checks, including complete wire resources/scopes and routing headers. Native receipts record retained owner identities, single hooks and exactly three signal export requests."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Focused tests begin with OTEL_SDK_DISABLED=true, enable only provider construction, and restore true before adapter exercise. Recording and completed exported candidates are asserted; synthetic returns are explicitly labeled capture-seam evidence.",
+                    "evidence": "service/tests/content_checks.py:sdk_capture and commands.json. Independent rerun passed six tests and produced 43 completed SDK candidates, including useful input and the actual sanitized/truncated supplied return."
+                  },
+                  {
+                    "id": "rubric-6",
+                    "pass": true,
+                    "notes": "Clean-copy evidence executes only the real app, repaired adapter and declared lossless schema asset. It proves safe useful six-span content, original metrics/logs, unchanged runtime hashes and no evidence-path imports. Reporting remains focused and makes no cloud visibility claim.",
+                    "evidence": "clean-copy.json and clean-copy-manifest.json independently match current source hashes and six-span/four-metric/four-log receipts. commands.json preserves command outcomes, including the failed preservation attempt; content-redaction.md documents its resolution without replacing earlier receipts."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-instrument/20261029T160338863738Z/cases/python/existing-otel-agent-demo/repair-existing-genai-content-redaction/with_skill/rubric_grade.json",
+              "sha256": "43957cfc0ad6966bcc1ac978cb9653e23367ce0bed0bc185b1f0b4b7af369cf0",
+              "task": "repair-existing-genai-content-redaction"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Audit includes default project, dedicated stream and runtime-routing findings for the native OTel baseline. Bundled selection explicitly requests OTEL-002\u2013004 and includes justified prerequisite OTEL-001. Independent role and coverage work remains unselected.",
+                    "evidence": "service/.observe/otel-audit.json; otel-selection.json; trace.jsonl records bundled selection execution. Independently rerun validate-flow passes all canonical bindings; audit bytes match evidence/audit-before.json."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "SDK-free HTTP resolution preserves native span creators, providers and the existing OTLP HTTP exporter. Changes add a supported exporter delegate, transport hook, trace Resource views and lifecycle handling without another producer or destination export.",
+                    "evidence": "Original-to-final otel_setup.py comparison; service/ao_resources.py; trace_routing.py; requirements.lock; evidence/installed-apis.json. Recorded isolated Python 3.13.5 installation and compatibility check cover actual native libraries."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Written bootstrap and actual launcher execute reuse, create, mixed, repeat, wrong ownership, unknown IDs, conflict recovery, uncertain outcomes and lookup/create failure isolation. Delayed visibility proves one committed create across bootstrap, launch and retries.",
+                    "evidence": "service/checks/resource_routing.py; .observe/evidence/routing/commands.json; individual resource_calls and bootstrap receipts; routing-run-final.txt records 25 passing groups. No replacement resolver or fake telemetry SDK supplies this proof."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Consumed profiles load persisted API-returned UUIDs into trace-specific headers before exporter construction. Captured native requests preserve endpoint paths, nondefault ports and inherited harmless headers, with matching trace Resources and no routing/auth fields on metrics or logs.",
+                    "evidence": "service/bootstrap_resources.py; launch.py; trace_routing.py; evidence/routing/{existing,headers-inherited,endpoint-specific,legacy-http}.json. Independent inspection of all 24 receiver-available captures confirms matching header/Resource pairs, signal isolation and no duplicate span exports."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Runtime receipts demonstrate canonical HTTP, workflow, model and tool operations, native metrics/logs, business behavior and graceful shutdown. Reports explicitly distinguish fixture receipt, retained validation and unavailable real Studio/cloud proof, without claiming full readiness.",
+                    "evidence": "service/.observe/otel-instrumentation.md; otel-verify.md; evidence/signal-payload-assertions.json; regressions-recording.txt; probe-native.json; remote-prerequisites.json. Source includes explicit recovery cancellation, provider flush and shutdown."
+                  },
+                  {
+                    "id": "rubric-6",
+                    "pass": true,
+                    "notes": "Actual bootstrap/launcher tests cover connected, resource503-disconnected, unavailable and reconnected modes. Validated bindings survive outages and fresh launches; names-only initial503 recovers automatically in one PID with scoped reuse and zero creates. Changed/rejected identities follow separate resolution paths.",
+                    "evidence": "evidence/routing/{connected-disconnected-reconnected-retained-startup,names-only-recovery,refused-cached-startup,changed-destination,rejected-identity,unavailable}.json and corresponding process logs. Unavailable mode records successful business execution and blocked receiver receipt; separate native in-memory evidence is identified honestly."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-instrument/20261029T160338863738Z/cases/python/model-directed-agent/native-agent-resource-defaults/with_skill/rubric_grade.json",
+              "sha256": "6b765f1cfde3c4c4bda7c9febf6f973b9a39189abd64fce4b986c0b82a35610a",
+              "task": "native-agent-resource-defaults"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Repairs the existing run_turn span to invoke_agent with source-backed SmashBot identity. Preserves the legacy span name, workflow field, providers, exporters and metric aliases; documents the operation-filter migration. No duplicate wrapper or SDK replacement.",
+                    "evidence": "chat_core.py versus .observe/chat_core.py.before; unchanged otel_setup.py and requirements.txt; consumer migration in .observe/otel-instrumentation.md."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Real original-app paths execute with synthetic provider responses in isolated Python 3.12.14. Historical tests adopt the corrected agent expectation and verify mutations, feedback, attempted calls and exception identity, including late failure, timeout and cancellation.",
+                    "evidence": ".observe/check-06.txt records probe.py --expect-agent exit 0; check-07.txt records seven historical turns passing; check-08.txt records six conversation regressions passing. Actor trace confirms execution."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Native records show exactly one SmashBot agent per turn, correct model/tool parentage, truthful attempted-call aggregates and failure status/type. The duration Histogram uses seconds, agent identity and failure-only error.type, with one observation per invocation.",
+                    "evidence": ".observe/probe-native.json contains four agent turns and four duration observations, with errors=[]; historical-native.json contains seven agents and seven observations, including RuntimeError, TimeoutError and KeyboardInterrupt exits."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "The independent probe remains byte-identical to the original actor-read source. Audit copy and artifact bindings validate. Existing model/tool fields and legacy metrics are preserved. Reports correctly limit proof to native application records and explicitly leave receiver/cloud visibility unproven.",
+                    "evidence": "Probe SHA-256 f190d42c2b2308660ba60c1f6d12d74207ef62b33162bc526cadbc12295db929; exact audit-input comparison passed; independent validate-flow passed for audit, selection, instrumentation and verification. Preservation checks and receiver limitations appear in .observe/preservation.txt and otel-verify.md."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-instrument/20261029T160338863738Z/cases/python/model-directed-agent/repair-mislabeled-agent/with_skill/rubric_grade.json",
+              "sha256": "5de782eec3d0c0ed7612ee3a626a6a79887a0febae17bd835dfe6efc0da1e7a6",
+              "task": "repair-mislabeled-agent"
+            }
+          ],
+          "run_id": "20261029T160338863738Z",
+          "skill": "otel-instrument",
+          "source": {
+            "digest_version": 4,
+            "digest": "45bbb8316970d78723d2e035966331f25f71934b0f1c1a9c9efe2c08477b5bd4",
+            "eval_kinds": [
+              "rubric"
+            ],
+            "evaluator_semantics_version": 1,
+            "files": {
+              "evals/codex-evals.agent-role.toml": "fab2556ae2918d8b81d4eb85a81cbd6fca29c79851bccd1b26431a278f5efd0b",
+              "evals/python/agent-connection-demo/README.md": "173b412b7588061ee2a4441451945e6618b522ec4edcae2c96580dae6e910cd2",
+              "evals/python/agent-connection-demo/app.py": "187d093ab61e902969b0f6fabc59a352d45a117f9a3baf93f737087c35926559",
+              "evals/python/agent-connection-demo/checks/probe_regressions.py": "89e4537c9c180ac37113fe95f2bb972c2344b96f66eea31dc776dc6cb1909c36",
+              "evals/python/agent-connection-demo/eval/inputs/otel-audit.json": "2145ea19c020d2932a52ea6d60f27434939ae8c788f6f10c8756a40d2f1f5b13",
+              "evals/python/agent-connection-demo/eval/qual/instrument.json": "1254b2d1e379825a30d4725f0c7f97562b76da6c4e6ff8c3346e67d9e24ac8e4",
+              "evals/python/agent-connection-demo/gateway_contract_check.py": "5fdc06f29366d61539c45cd256c3fe80c4b415002cca536f7d1523a3b81e3d39",
+              "evals/python/agent-connection-demo/launch.py": "ecb23235956a9cc83a0d073dc3a77aa28244abca0fa4029d25693891af454c08",
+              "evals/python/agent-connection-demo/probe.py": "a524290e5b0f4bcede6af0c3b43b53eb4bfafe0304b22a4fc4c7b578978d8313",
+              "evals/python/agent-connection-demo/requirements.txt": "111d5f386631c622f949573be006020cac01acb2787a7e7cae85a62ec24668b2",
+              "evals/python/agent-connection-demo/telemetry.py": "8f3634336baf18baeeba854136d9ea232f16668391b1ddc7a433e1956c6528ff",
+              "skills/otel-instrument/SKILL.md": "e2f3beb74eb6841add0d8c9ee211e75d90b3c1e3fa320b573f84ad6baeca3a1b",
+              "skills/otel-instrument/references/json-approval-handoff.md": "826c227489a30d4aa605ee3adfe37c292b64cb71d8fea6ac659a2ae10a33c3ac",
+              "skills/otel-instrument/references/languages/go.md": "62ba4d47f1685230a1eec2ce6929c9b3c9f3b8228f62af729367a1db45fa4d5d",
+              "skills/otel-instrument/references/languages/java.md": "4d87147cd6b823f589d2f6c44d2404a92e8a42f9989ad983ff5f19b453871032",
+              "skills/otel-instrument/references/languages/node.md": "3e86dadec6b8ebf1e6c344c7528772e08d8ec25706bd6b6962edfa37f407c63c",
+              "skills/otel-instrument/references/languages/python.md": "d8ffc96d962c1ddbe85acce44f1781de6bfe264adf9b4917479b7a2ac71e2f76",
+              "skills/otel-instrument/references/project-runtime-validation.md": "cdbac8880d21bf8b47c7865c8ef21648e7701ca3c6dceb512d666281815ccc38",
+              "skills/otel-instrument/references/signal-mapping-guide.md": "83a5e52a01a1c5b98530a3f7b320b410d364e2799a400b25a155ee1db780efed",
+              "skills/otel-instrument/scripts/observe_report.py": "687f9801e563eb4ad4410eafce10b8bba7191601d654c3c5cb3360baa3dd08af",
+              "skills/otel-instrument/scripts/resolve_ao_resources.py": "1642b95bb4bcb8a2a9cd26191d8176dcf788430cdf9e707b882d5ac6a608182b",
+              "skills/otel-instrument/scripts/validate_gap_closure.py": "2f5e83809f57916e89fb746580fcf4f49fbae187cd08740a56d2699ac83dc1b5",
+              "skills/otel-instrument/tests/test_json_approval_flow.py": "bf1c8eef2055a0c1fb579dbb21f6f2b3aa2edf1cd78d083966eb90ecfa7e4aa0",
+              "skills/otel-instrument/tests/test_resolve_ao_resources.py": "8a69aca1164ff064c11cc32715549479079f784fdf9333b6c4d44b98de55c6be",
+              "skills/otel-instrument/tests/test_validate_gap_closure.py": "750f196fe279ed05c95e53d45f8b2d773ff996ee86468541688b586df7dede18",
+              "skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",
+              "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
+              "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
+              "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
+              "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
+              "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
+              "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
+              "skills/references/report-flow-contract.md": "be4af921d9faf71ca9c206a91ba091db5d8bc878dc87ab6b844bc39cc455eb0e",
+              "skills/references/scripts/observe_report.py": "efa659cae52212f80ff0551ad0af3c74bacd7537b7bf0602050a45e044e25711",
+              "skills/references/scripts/observe_report_core.py": "368cb85ed55d9dee69e55d58306f9f1941e18de355895598e1f5f668a152d009",
+              "skills/references/scripts/observe_report_html.py": "1d26af367e44433d7a76843676fe25338984a8889f932181529faa242d85901c",
+              "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
+              "skills/references/splunk-agent-observability.md": "e507d91e7fb6b829c28cd50ce9263189bf5d440c7aa9f0adc6a95334092a868b",
+              "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
+              "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
+              "skills/references/tests/observe_report_fixtures.py": "58440bbebb543612a46b7dd63b7a35db7c530e6ea5cb20eb8bda109a3dfe08ed",
+              "skills/references/tests/test_observe_report.py": "ec48a794fe23ff65760179d469a107292d61afe1d7b39a8ea9e93e1d0dd752a5",
+              "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
+              "skills/references/tests/test_observe_report_html.py": "f8f6402f86c495e9045aad78fcdcb127cd990df3e070b62c940b981a0b1c62ef",
+              "skills/references/tests/test_observe_report_selection.py": "28abd02171f9a2ffafae96dda7cf8299858987baae3d8f6f885b19977f99e548",
+              "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
+              "evals/python/ai-assistant-demo/README.md": "eebd4711ef5b6d9325e15d0488b43da6b3fde8bc48ffff91fa44841fd1dfaf0e",
+              "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
+              "evals/python/ai-assistant-demo/eval/inputs/genai-default-audit.json": "a9eb87f3275253e6b73f90a91a645573022201633c8bb13f87362fd450d62a2e",
+              "evals/python/ai-assistant-demo/eval/inputs/genai-default-scenarios.json": "2d4640f2f910a698de2a6155fff4fbfbbb8f66583d1986dd53dd4b825941ab6f",
+              "evals/python/ai-assistant-demo/eval/inputs/genai-instrument-core-evidence.json": "40c2b6364a36f2933e8eb1ecb91c24799e38b28ba1e52bb4a462df69a101ce5a",
+              "evals/python/ai-assistant-demo/eval/inputs/genai-required-evidence.json": "b0b3e76d7a66065b4a8d83e77cf207497221e738ba9852447eb441a9c7793c2d",
+              "evals/python/ai-assistant-demo/eval/inputs/genai-sdk-source-snapshot.json": "9d4bb13d28c1892c96cf069f65fe129674e4dc5c86b21adb3823a82b2a378ef6",
+              "evals/python/ai-assistant-demo/eval/inputs/genai-semconv-source-snapshot.json": "37dcf51de2138b706b7272c32e4215d280a94790b3d4bb454000ef66ef24e3ae",
+              "evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json": "8ffa9b4ade3c15f7ca1bf95f42a4e1040f9ae94075fcc7f100cdfdc0447307f1",
+              "evals/python/ai-assistant-demo/eval_runner.py": "6b685cf5472871a9b227e652e47fd23a68b5ffe38021d4b6f3802236be65e2c8",
+              "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
+              "evals/python/ai-assistant-demo/pyproject.toml": "90be0bda1c6147fc324325b0f8a65a82499d65840df190a76b633c992e511f00",
+              "evals/python/existing-otel-agent-demo/Makefile": "a2beb661c8e836e44bb31e4c9430592848e522d2c48b2fa416a2363bcbea6a7a",
+              "evals/python/existing-otel-agent-demo/README.md": "c3b4c2f4260c34551330992b92cd3156604399a0d54eda1d904eb943d42993cd",
+              "evals/python/existing-otel-agent-demo/app.py": "bd65b5623b2f1997eb1523deadca5fce090f76f551609d7b3e0dff680c1e1d5f",
+              "evals/python/existing-otel-agent-demo/eval/inputs/content-counterexamples.json": "cb2a137c61432b814f6fca5d7094140c922989b75cdffaee67b131d87e18c76b",
+              "evals/python/existing-otel-agent-demo/eval/inputs/content_capture_source.py": "58d251371bdb2f16e7461a3c96b5fac073199261f4ee7a822f6d23edd7a5cf64",
+              "evals/python/existing-otel-agent-demo/eval/inputs/genai-schema-evidence.json": "cb2d154a37cd662e4ddbcae6d30f7ce5588524d660d6ce19abdf42adc5032a5d",
+              "evals/python/existing-otel-agent-demo/eval/inputs/python-preflight-requirements.txt": "9bc8378353b95a0405d8b052226aa3075aa7f7f32d30c29c235b0a343df6fa3f",
+              "evals/python/existing-otel-agent-demo/eval/qual/content-redaction-instrument.json": "434bbc0e31e19a32d9bf161a46029e17934b988f1b5fd523776bd49097bcb5b3",
+              "evals/python/existing-otel-agent-demo/probe.py": "8cc9dd2ba1124e3bf5a20ee65c500c688a0db7429eed9396013485d46d0f737a",
+              "evals/python/existing-otel-agent-demo/pyproject.toml": "dfc360d25da6e430e782c891bdbc92fb5d7b2ddf6a901629d09bc3a874635a25",
+              "evals/python/existing-otel-agent-demo/eval/inputs/studio_resources.py": "77dde2b8964e10024448f2254b62ab0a614708ea88c500138b69e2eea3bc5a62",
+              "evals/python/existing-otel-agent-demo/eval/qual/instrument.json": "fc539f2192a9c36d3d0bf38a0fb78f00f7d65d9b8979e612ef4544bbab5bf411",
+              "evals/python/model-directed-agent/README.md": "4df0874e3a6d9596a7362376aa7d143ae4a8537ba5de86033a468702f1e87519",
+              "evals/python/model-directed-agent/agent.py": "a9b953d189a35ac1e7518918651e5d8144754615d6592a5fdcb0e0d2d85da5dd",
+              "evals/python/model-directed-agent/app.py": "f3fefd95b7d2cc84ab2eb58b35b9fecd7b032930776f7052d3affcffbd11ffda",
+              "evals/python/model-directed-agent/chat_core.py": "c228f81a2dbc7e9b66ea1ff7b0280ffbe2879c0421deeb5c0e20ed21655465db",
+              "evals/python/model-directed-agent/checks/review_regressions.py": "6e5d2144c521fea6770844242f7bc4f0fbf2ed9c3cc350c0df8e1e8b528b5c2c",
+              "evals/python/model-directed-agent/eval/inputs/agent-audit.json": "9c73d79f38ddb12c793e55bfbab30f687a6bc97667d4c11719956bf6a899b2c8",
+              "evals/python/model-directed-agent/eval/qual/instrument.json": "6de7dd9958a8deacbecc2cc69e51c75d26157663f4dc447ecd71b201b6bfa090",
+              "evals/python/model-directed-agent/historical_check.py": "ef408c69e11dc0d60ab584ec881cbb3750a037bece37dfab357adb316a2426fa",
+              "evals/python/model-directed-agent/otel_setup.py": "d7d591e2ca3aeef688aa2df30e4c2d89286917102c22439864fbb5c6a9d53b12",
+              "evals/python/model-directed-agent/probe.py": "f190d42c2b2308660ba60c1f6d12d74207ef62b33162bc526cadbc12295db929",
+              "evals/python/model-directed-agent/recommendations.py": "c0704e3b6baba32477943c826d9e4a2fa9b94e9fcda3c20ad0f4b57179255a09",
+              "evals/python/model-directed-agent/requirements.txt": "fa39473fff95e58feb9dce8bbd6b7129b203f9d1e0209cd62d4a05b9130ac5d4",
+              "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
+              "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
+              "evals/python/model-directed-agent/eval/qual/resource-table-instrument.json": "d51be784667e5d99f876a4d127a474a499fb321356a20793f82659e10a520ede"
+            },
+            "skill_path": "skills/otel-instrument",
+            "shared_reference_consumers": [
+              "skills/references/full-runtime-acceptance.md",
+              "skills/references/genai-readiness.md",
+              "skills/references/incident-readiness.md",
+              "skills/references/local-otlp-receiver.md",
+              "skills/references/report-flow-contract.md",
+              "skills/references/scripts/observe_report.py",
+              "skills/references/scripts/observe_report_core.py",
+              "skills/references/scripts/observe_report_html.py",
+              "skills/references/splunk-agent-observability.md"
+            ],
+            "selections": [
+              {
+                "definition_path": "evals/python/agent-connection-demo/eval/qual/instrument.json",
+                "fixture_dir": "evals/python/agent-connection-demo",
+                "prompt_id": "native-connection-modes",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/otel-audit.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json",
+                "fixture_dir": "evals/python/ai-assistant-demo",
+                "prompt_id": "genai-sdk-default-instrument",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/genai-default-scenarios.json",
+                  "eval/inputs/genai-default-audit.json",
+                  "eval/inputs/genai-required-evidence.json",
+                  "eval/inputs/genai-sdk-source-snapshot.json",
+                  "eval/inputs/genai-semconv-source-snapshot.json",
+                  "eval/inputs/genai-instrument-core-evidence.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/content-redaction-instrument.json",
+                "fixture_dir": "evals/python/existing-otel-agent-demo",
+                "prompt_id": "repair-existing-genai-content-redaction",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/content_capture_source.py",
+                  "eval/inputs/genai-schema-evidence.json",
+                  "eval/inputs/python-preflight-requirements.txt",
+                  "eval/inputs/content-counterexamples.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/instrument.json",
+                "fixture_dir": "evals/python/existing-otel-agent-demo",
+                "prompt_id": "preserve-genai-instrument",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/genai-schema-evidence.json",
+                  "eval/inputs/python-preflight-requirements.txt",
+                  "eval/inputs/studio_resources.py",
+                  "eval/inputs/content-counterexamples.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/instrument.json",
+                "fixture_dir": "evals/python/existing-otel-agent-demo",
+                "prompt_id": "preserve-generic-instrument",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/genai-schema-evidence.json",
+                  "eval/inputs/python-preflight-requirements.txt",
+                  "eval/inputs/studio_resources.py",
+                  "eval/inputs/content-counterexamples.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/instrument.json",
+                "fixture_dir": "evals/python/existing-otel-agent-demo",
+                "prompt_id": "preserve-logs-instrument",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/genai-schema-evidence.json",
+                  "eval/inputs/python-preflight-requirements.txt",
+                  "eval/inputs/studio_resources.py",
+                  "eval/inputs/content-counterexamples.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/instrument.json",
+                "fixture_dir": "evals/python/existing-otel-agent-demo",
+                "prompt_id": "preserve-metrics-instrument",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/genai-schema-evidence.json",
+                  "eval/inputs/python-preflight-requirements.txt",
+                  "eval/inputs/studio_resources.py",
+                  "eval/inputs/content-counterexamples.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/model-directed-agent/eval/qual/instrument.json",
+                "fixture_dir": "evals/python/model-directed-agent",
+                "prompt_id": "repair-mislabeled-agent",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/agent-audit.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/model-directed-agent/eval/qual/resource-table-instrument.json",
+                "fixture_dir": "evals/python/model-directed-agent",
+                "prompt_id": "native-agent-resource-defaults",
+                "eval_kind": "rubric",
+                "eval_inputs": []
+              }
+            ],
+            "config_path": "evals/codex-evals.agent-role.toml"
+          },
+          "summary": {
+            "eval_count": 6,
+            "prompt_count": 9,
+            "failure_count": 0,
+            "with_skill": {
+              "prompt_count": 9,
+              "command_count": 534,
+              "duration_seconds": 11568.869,
+              "agent_duration_seconds": 10143.468,
+              "tokens": 60768202,
+              "agent_tokens": 53649158,
+              "error_count": 0,
+              "agent_usage": {
+                "provider": "codex",
+                "source": "cumulative",
+                "observed": true,
+                "usage_record_count": 9,
+                "selected_record_count": 9,
+                "input_tokens": 53266446,
+                "cached_input_tokens": 51425408,
+                "cache_creation_input_tokens": 0,
+                "output_tokens": 382712,
+                "reasoning_output_tokens": 117833,
+                "provider_total_tokens": null,
+                "derived_total_tokens": 53649158,
+                "effective_total_tokens": 53649158,
+                "coverage": {
+                  "record_count": 9,
+                  "modeled_count": 9,
+                  "observed_count": 9,
+                  "recognized_count": 9,
+                  "preferred_total_count": 9,
+                  "field_counts": {
+                    "input_tokens": 9,
+                    "cached_input_tokens": 9,
+                    "cache_creation_input_tokens": 9,
+                    "output_tokens": 9,
+                    "reasoning_output_tokens": 9,
+                    "provider_total_tokens": 0,
+                    "derived_total_tokens": 9
+                  }
+                }
+              },
+              "rubric": {
+                "passed": 61,
+                "total": 61,
+                "average_score": 99.91666666666667
+              },
+              "rubric_tokens": 7119044,
+              "rubric_duration_seconds": 1414.579,
+              "rubric_usage": {
+                "provider": "codex",
+                "source": "cumulative",
+                "observed": true,
+                "usage_record_count": 9,
+                "selected_record_count": 9,
+                "input_tokens": 7065386,
+                "cached_input_tokens": 6228736,
+                "cache_creation_input_tokens": 0,
+                "output_tokens": 53658,
+                "reasoning_output_tokens": 14713,
+                "provider_total_tokens": null,
+                "derived_total_tokens": 7119044,
+                "effective_total_tokens": 7119044,
+                "coverage": {
+                  "record_count": 9,
+                  "modeled_count": 9,
+                  "observed_count": 9,
+                  "recognized_count": 9,
+                  "preferred_total_count": 9,
+                  "field_counts": {
+                    "input_tokens": 9,
+                    "cached_input_tokens": 9,
+                    "cache_creation_input_tokens": 9,
+                    "output_tokens": 9,
+                    "reasoning_output_tokens": 9,
+                    "provider_total_tokens": 0,
+                    "derived_total_tokens": 9
+                  }
+                }
+              }
+            },
+            "with_baseline": null
+          }
+        },
+        {
+          "benchmark_sha256": "8dfb9997b9fb7321cdcad0434c8bf66e8f36493af55c7b2380cfa6baba20dddf",
+          "failures": [],
+          "grades": [
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Executed all four native captures with the provisioned interpreter; each exited 0. Unchanged-baseline Studio comparisons each exited 1, recording 38/53/38/38 failures without claiming application acceptance.",
+                    "evidence": "trace.jsonl item_22; .observe/preserve-existing-verification.json commands and comparisons; four *-baseline.json captures."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Correctly classifies all active modes as preserve-existing, including metrics-only and logs-only. Retains original owners, signals and destinations; treats none as a source-only stdout control.",
+                    "evidence": "service/app.py provider construction; capture original_types/original_objects_retained/resource_proof; report mode_results and none_control."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Reconciles source boundaries, scenario cardinalities and parentage. Identifies missing agent/retrieval/tool spans while preserving existing generic and GenAI workflow/model operations and distinguishing deterministic computation from remote inference.",
+                    "evidence": "Report operations and scenario_inventory; Markdown Operation And Producer Receipt; native traces contain 2/1/2/1 spans per trace mode against required 5/4/5/4."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Leaves absent content missing and fails content acceptance. Uses dated complete schemas and concrete discriminator checks, separates offline schema controls from unrun application counterexamples, and preserves result availability semantics without inventing failed outputs or usage.",
+                    "evidence": "typed_content_validation records zero actual payloads and 60 missing slots; eight malformed-part controls; content_counterexamples includes decoded scalars, protected labels, reasoning and aggregate UTF-8 bounds."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Reviews success, tool-error, provider-error and cancellation across all modes. Reports completed native spans, cancellation status gaps, empty log correlation and actual repeated-shutdown results without fabricating callbacks or cloud delivery.",
+                    "evidence": "Sixteen scenario_inventory entries; lifecycle_and_delivery_evidence; captures show original owners retained and zero second-shutdown requests."
+                  },
+                  {
+                    "id": "rubric-6",
+                    "pass": true,
+                    "notes": "Keeps resource resolution, ID ownership, routing and cloud visibility independently unproven. Distinguishes Studio/public aliases, preserves nondefault endpoints and harmless headers, and identifies missing payload binding without proposing an AO creation dependency.",
+                    "evidence": "resource_and_routing; native request headers; Markdown Project, Stream, Routing And Smallest Repair Ownership explicitly covers lookup/create/reuse/409/error and parent ownership gaps."
+                  },
+                  {
+                    "id": "rubric-7",
+                    "pass": true,
+                    "notes": "Produces the named supplemental reports and scoped handoff without modifying service files or fabricating canonical state. Validates eight capture-specific trace associations and rejects the deliberate swapped-mode association separately from application failures.",
+                    "evidence": "Current service hashes match source_before/source_after; capture hashes match; trace_provenance and trace.jsonl item_28; reader validation exited 0."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-verify/20261028T183710176316Z/cases/python/existing-otel-agent-demo/preserved-baseline-negative-verify/with_skill/rubric_grade.json",
+              "sha256": "9992b3606ebe920105dadcf226dde91c2fc61aa36ac15b7ba772a90035aaea3a",
+              "task": "preserved-baseline-negative-verify"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Correctly identifies SmashBot as an agent. Executes both original checks in isolated Python with fake responses and retains the verification failure despite historical success.",
+                    "evidence": "execution.json records historical_check.py exit 0 and probe.py --expect-agent exit 1. probe-native.json captures four mislabeled workflow roots, missing agent identity and duration, and six model attempts versus counter value five."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Separately reports missing service project, dedicated stream, native routing and exact remote trace proof. Local receiver acceptance does not close resource readiness.",
+                    "evidence": "service/.observe/otel-verify.md rows V12\u2013V14 and their gap explanations distinguish absent binding configuration from unknown resource existence and unproven cloud visibility."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Independently assesses every producer case, preserves existing ownership, and carries non-agent resource N/A through all states without mandatory provisioning. Correctly distinguishes SDK helper creation, native carriers and language-specific routing.",
+                    "evidence": ".observe/agent-resource-cases.json contains seven source-bound cases. SDK helper ownership and sink registration are assessed separately; the Go contract uses ExportSpans, ReadOnlySpan.Resource and Shutdown, with implementation proof unproven."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Preserves Galileo selectors, production stream and mixed native sink independently of Studio. Native AO routing requires a loaded validated binding rather than generic headers or receiver receipt.",
+                    "evidence": "Galileo cases retain GALILEO_PROJECT=support, GALILEO_LOG_STREAM=production and the explicit internal OTLP endpoint. binding_contract requires matching UUID headers and trace Resources; native client consumption and export remain unproven."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Honestly separates source capability, proposed acceptance and executed proof. Produces the requested reports without unauthorized repairs or live model/cloud calls.",
+                    "evidence": "Independently verified original-file hashes, case source hashes and identical report copies. execution.json and temporary harnesses document isolated execution and outbound guards. Reader validation passes all 15 report items."
+                  },
+                  {
+                    "id": "rubric-6",
+                    "pass": true,
+                    "notes": "Covers every Studio state, SDK fail-open risk, retained bindings, same-PID names-only recovery, destination changes and rejected identities. Defines distinct new-process startup cases. Every applicable recovery assessment records missing timeout, retry/backoff, prolonged-progress and shutdown bounds without inventing numbers or imposing a permanent retry cutoff.",
+                    "evidence": "The case report contains 28 state rows, per-case names_only_recovery assessments, and separate HTTP503/connection-refused native_startup_cases. Assertions require complete atomic bindings, zero duplicate creates, producer preservation and independent remote readback; all unexecuted proof remains explicitly unproven."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-verify/20261028T183710176316Z/cases/python/model-directed-agent/agent-resource-table-verify/with_skill/rubric_grade.json",
+              "sha256": "c46989922a981d07ee1e2e94ee05bf817869c74d7d7eb4668736c340496dcc0c",
+              "task": "agent-resource-table-verify"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Correctly identifies SmashBot's model-directed tool/result feedback loop as an agent, independently of its workflow label or framework choice.",
+                    "evidence": "service/chat_core.py::run_turn offers tools, dispatches model-selected calls, feeds results back and repeats inference. The report explicitly reconciles this behavior and distinguishes genuine staged workflows."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Actually executes both unchanged checks in isolated Python 3.12.14 and correctly reports failed agent acceptance despite the historical pass.",
+                    "evidence": "trace.jsonl item_26 and .observe/evidence/commands.json record historical_check.py exit 0 and probe.py --expect-agent exit 1. probe-native.json shows zero agent nodes in all four cases and no required duration histogram. Report states 0/1 agents correctly instrumented."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Preserves application files and existing producers without repairs or fabricated passing proof. Clearly separates native capture, executed loopback OTLP evidence and unperformed cloud/provider checks.",
+                    "evidence": "All 12 current original-file hashes match source-before.json. Recorded edits affect only .observe temporary harnesses and reports. runtime-wire.json supports local exporter receipt; cloud visibility, real-provider behavior and deployment shutdown remain explicitly unproven."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Produces a truthful standalone report naming the affected root and precise semantic, identity, duration and failure-accounting defects while retaining valid model/tool and business-output evidence.",
+                    "evidence": ".observe/otel-verify.md identifies invoke_workflow smashbot_turn at run_turn as the incorrect root; requires one INTERNAL invoke_agent SmashBot with gen_ai.agent.name=SmashBot and no duplicate workflow, plus gen_ai.invoke_agent.duration Histogram in seconds with four observations and agent/error dimensions. Independently reconciles six model calls, two tools, valid parentage, synthetic replies, handled tool-error feedback and propagated provider failure. Reader validation passed."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-verify/20261028T183710176316Z/cases/python/model-directed-agent/reject-green-workflow-test/with_skill/rubric_grade.json",
+              "sha256": "97db2ea90bf5739c835c23a759b144987f9a283efbe8057a423e28c0b23d043b",
+              "task": "reject-green-workflow-test"
+            },
+            {
+              "grade": {
+                "overall_pass": true,
+                "score": 100,
+                "checks": [
+                  {
+                    "id": "rubric-1",
+                    "pass": true,
+                    "notes": "Assesses all six agents and the non-agent control across every supplied Studio state and reconnect variant. Agent resource requirements remain independent of producer and connectivity; the control remains outside mandatory adoption.",
+                    "evidence": ".observe/connection-modes.json#/cases contains 49 case/state decisions; scope and input-hash checks passed."
+                  },
+                  {
+                    "id": "rubric-2",
+                    "pass": true,
+                    "notes": "Requires resolved ownership/association, consumed routing and exact fresh destination trace proof. Separates ordinary local telemetry from blocked resource resolution and AO delivery; failed lookups never authorize creation or a silent destination change.",
+                    "evidence": "acceptance_scenarios: resources.existing, resources.failures, native.binding.atomicity, studio.local_and_unavailable and cloud.exact_readback."
+                  },
+                  {
+                    "id": "rubric-3",
+                    "pass": true,
+                    "notes": "Correctly separates backend decorator fail-open business behavior from span emission. Records the helper signature, effective INTERNAL creation, missing initial sampling fields and exit-time writes. Repairs the prior blanket deferral and correctly classifies all four independent probes, including the named public OTel CLIENT decorator exception. Runtime proof remains unproven.",
+                    "evidence": ".observe/connection-modes.json#/sdk_helper, #/sdk_backend_decorator, #/sdk_helper_boundary_probes and #/prior_report_correction."
+                  },
+                  {
+                    "id": "rubric-4",
+                    "pass": true,
+                    "notes": "Preserves complete valid native bindings through transient outages. Defines automatic same-PID names-only recovery with zero creates, atomic header/Resource activation and continued business/local telemetry. Preserves existing endpoints, protocols, headers, sinks and Galileo native configuration.",
+                    "evidence": "acceptance_scenarios: native.validated_binding.retained, native.names_only.same_pid, native.binding.atomicity and galileo.native_preservation."
+                  },
+                  {
+                    "id": "rubric-5",
+                    "pass": true,
+                    "notes": "Separates unavailable receiver proof from native checks, retained routing from fresh resolution, and changed/rejected identities from transient outages. Includes distinct new-process HTTP503 and connection-refused scenarios requiring the first export to retain the persisted complete binding without successful relookup. Avoids duplicate producers and fabricated runtime results.",
+                    "evidence": "native_startup_cases and corresponding acceptance scenarios explicitly require an available local receiver, preserved business/local signals and zero creates. All 20 scenarios are marked Not run; the reader validator passed."
+                  }
+                ]
+              },
+              "original_path": ".workspace/codex-evals/otel-verify/20261028T183710176316Z/cases/python/model-directed-agent/studio-connection-modes/with_skill/rubric_grade.json",
+              "sha256": "4738c343824e9cf4e833939da7fce8f12ce6ec8e53aae3cbbf4af499d5ec9883",
+              "task": "studio-connection-modes"
+            }
+          ],
+          "run_id": "20261028T183710176316Z",
+          "skill": "otel-verify",
+          "source": {
+            "digest_version": 4,
+            "digest": "effedff618e495439162e7f33d844394a2ce6492adeb7651f521e1d278419e4b",
+            "eval_kinds": [
+              "rubric"
+            ],
+            "evaluator_semantics_version": 1,
+            "files": {
+              "evals/codex-evals.agent-role.toml": "fab2556ae2918d8b81d4eb85a81cbd6fca29c79851bccd1b26431a278f5efd0b",
+              "evals/python/existing-otel-agent-demo/Makefile": "a2beb661c8e836e44bb31e4c9430592848e522d2c48b2fa416a2363bcbea6a7a",
+              "evals/python/existing-otel-agent-demo/README.md": "c3b4c2f4260c34551330992b92cd3156604399a0d54eda1d904eb943d42993cd",
+              "evals/python/existing-otel-agent-demo/app.py": "bd65b5623b2f1997eb1523deadca5fce090f76f551609d7b3e0dff680c1e1d5f",
+              "evals/python/existing-otel-agent-demo/eval/inputs/content-counterexamples.json": "cb2a137c61432b814f6fca5d7094140c922989b75cdffaee67b131d87e18c76b",
+              "evals/python/existing-otel-agent-demo/eval/inputs/genai-schema-evidence.json": "cb2d154a37cd662e4ddbcae6d30f7ce5588524d660d6ce19abdf42adc5032a5d",
+              "evals/python/existing-otel-agent-demo/eval/inputs/python-preflight-requirements.txt": "9bc8378353b95a0405d8b052226aa3075aa7f7f32d30c29c235b0a343df6fa3f",
+              "evals/python/existing-otel-agent-demo/eval/qual/verify.json": "73203448152dcccc42fbb6363cffea1103ff1956fe0b806cfec717cfcdb83a87",
+              "evals/python/existing-otel-agent-demo/probe.py": "8cc9dd2ba1124e3bf5a20ee65c500c688a0db7429eed9396013485d46d0f737a",
+              "evals/python/existing-otel-agent-demo/pyproject.toml": "dfc360d25da6e430e782c891bdbc92fb5d7b2ddf6a901629d09bc3a874635a25",
+              "skills/otel-verify/SKILL.md": "5ae01fbc71ae78e7cc7699d241e890e8fb1ca4d529a670c8b8fcee71e8cf6900",
+              "skills/otel-verify/references/app-code-test-authoring.md": "d535a0acb3d123ee01eb5b39c3247378b4900f4977672021022dd0fe3885f91f",
+              "skills/otel-verify/references/explorer-witness.md": "ee76d5856b1c0858a6bcb22e4c9c4526ddf550f2ae3122ea01ea21d505b8931a",
+              "skills/otel-verify/references/json-approval-handoff.md": "e8c258074665349efecdc5d7e9b25fd0ab6217e3cdc40ae21a434c2c5d11f763",
+              "skills/otel-verify/references/path-scenario-coverage.md": "17569756242fc8f6358c804032a9ce55d9a66e4625329d99bd5b2b6c4de4d065",
+              "skills/otel-verify/references/project-runtime-resolution.md": "fa3db09f81d0cfec8418ecb0da4f3d7859ccfeb51bf40ca89fa2f2c74a48f221",
+              "skills/otel-verify/scripts/observe_report.py": "687f9801e563eb4ad4410eafce10b8bba7191601d654c3c5cb3360baa3dd08af",
+              "skills/otel-verify/scripts/validate_reader_report.py": "80f78e45f31ef7859215d085ec2b001a14805866bd92d4ad8d93684fc4027be0",
+              "skills/otel-verify/tests/test_json_approval_flow.py": "8a02ff9baca8aae109789ef464cafe61f2babeae783889d8580f29f074e8b8f1",
+              "skills/otel-verify/tests/test_validate_reader_report.py": "9d13265c741848d7b878a9dacaf86414e0fa85b8a802f4771a78e095939e95b7",
+              "skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",
+              "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
+              "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
+              "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
+              "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
+              "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
+              "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
+              "skills/references/report-flow-contract.md": "be4af921d9faf71ca9c206a91ba091db5d8bc878dc87ab6b844bc39cc455eb0e",
+              "skills/references/scripts/observe_report.py": "efa659cae52212f80ff0551ad0af3c74bacd7537b7bf0602050a45e044e25711",
+              "skills/references/scripts/observe_report_core.py": "368cb85ed55d9dee69e55d58306f9f1941e18de355895598e1f5f668a152d009",
+              "skills/references/scripts/observe_report_html.py": "1d26af367e44433d7a76843676fe25338984a8889f932181529faa242d85901c",
+              "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
+              "skills/references/splunk-agent-observability.md": "e507d91e7fb6b829c28cd50ce9263189bf5d440c7aa9f0adc6a95334092a868b",
+              "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
+              "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
+              "skills/references/tests/observe_report_fixtures.py": "58440bbebb543612a46b7dd63b7a35db7c530e6ea5cb20eb8bda109a3dfe08ed",
+              "skills/references/tests/test_observe_report.py": "ec48a794fe23ff65760179d469a107292d61afe1d7b39a8ea9e93e1d0dd752a5",
+              "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
+              "skills/references/tests/test_observe_report_html.py": "f8f6402f86c495e9045aad78fcdcb127cd990df3e070b62c940b981a0b1c62ef",
+              "skills/references/tests/test_observe_report_selection.py": "28abd02171f9a2ffafae96dda7cf8299858987baae3d8f6f885b19977f99e548",
+              "evals/python/model-directed-agent/README.md": "4df0874e3a6d9596a7362376aa7d143ae4a8537ba5de86033a468702f1e87519",
+              "evals/python/model-directed-agent/agent.py": "a9b953d189a35ac1e7518918651e5d8144754615d6592a5fdcb0e0d2d85da5dd",
+              "evals/python/model-directed-agent/app.py": "f3fefd95b7d2cc84ab2eb58b35b9fecd7b032930776f7052d3affcffbd11ffda",
+              "evals/python/model-directed-agent/chat_core.py": "c228f81a2dbc7e9b66ea1ff7b0280ffbe2879c0421deeb5c0e20ed21655465db",
+              "evals/python/model-directed-agent/checks/review_regressions.py": "6e5d2144c521fea6770844242f7bc4f0fbf2ed9c3cc350c0df8e1e8b528b5c2c",
+              "evals/python/model-directed-agent/eval/inputs/agent-resource-cases.json": "1dc1244eb619248ccfda204d8b4d03131aaccdeb7312b21e1fe4232025a9b7f2",
+              "evals/python/model-directed-agent/eval/inputs/sdk-helper-boundary-probes.json": "37aab9297e0e6233c0239e8d4aad4194dad8da1ab286da30dc58c1f08b2249de",
+              "evals/python/model-directed-agent/eval/inputs/sdk-local-routing-evidence.json": "2b10f295f7cf2049bd168f3d30d89d12756f63c1ec3c47c42753610cf5b710e1",
+              "evals/python/model-directed-agent/eval/qual/connection-modes-verify.json": "8f4e8fae7df7e680647be2f0bda3d6a372cef27400a9ffb4f481e0893535630c",
+              "evals/python/model-directed-agent/historical_check.py": "ef408c69e11dc0d60ab584ec881cbb3750a037bece37dfab357adb316a2426fa",
+              "evals/python/model-directed-agent/otel_setup.py": "d7d591e2ca3aeef688aa2df30e4c2d89286917102c22439864fbb5c6a9d53b12",
+              "evals/python/model-directed-agent/probe.py": "f190d42c2b2308660ba60c1f6d12d74207ef62b33162bc526cadbc12295db929",
+              "evals/python/model-directed-agent/recommendations.py": "c0704e3b6baba32477943c826d9e4a2fa9b94e9fcda3c20ad0f4b57179255a09",
+              "evals/python/model-directed-agent/requirements.txt": "fa39473fff95e58feb9dce8bbd6b7129b203f9d1e0209cd62d4a05b9130ac5d4",
+              "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
+              "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
+              "evals/python/model-directed-agent/eval/qual/resource-table-verify.json": "1b655b83cefa0af719b163ecaef8032c496a49e525a1098ac719529404151737",
+              "evals/python/model-directed-agent/eval/qual/verify.json": "4b0db81186ae03896112577bc669116059ed6e5cbf7028b512e289ab9c4c94b0"
+            },
+            "skill_path": "skills/otel-verify",
+            "shared_reference_consumers": [
+              "skills/references/full-runtime-acceptance.md",
+              "skills/references/genai-readiness.md",
+              "skills/references/local-otlp-receiver.md",
+              "skills/references/report-flow-contract.md",
+              "skills/references/scripts/observe_report.py",
+              "skills/references/scripts/observe_report_core.py",
+              "skills/references/scripts/observe_report_html.py",
+              "skills/references/splunk-agent-observability.md"
+            ],
+            "selections": [
+              {
+                "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/verify.json",
+                "fixture_dir": "evals/python/existing-otel-agent-demo",
+                "prompt_id": "preserved-baseline-negative-verify",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/genai-schema-evidence.json",
+                  "eval/inputs/python-preflight-requirements.txt",
+                  "eval/inputs/content-counterexamples.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/model-directed-agent/eval/qual/connection-modes-verify.json",
+                "fixture_dir": "evals/python/model-directed-agent",
+                "prompt_id": "studio-connection-modes",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/agent-resource-cases.json",
+                  "eval/inputs/sdk-local-routing-evidence.json",
+                  "eval/inputs/sdk-helper-boundary-probes.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/model-directed-agent/eval/qual/resource-table-verify.json",
+                "fixture_dir": "evals/python/model-directed-agent",
+                "prompt_id": "agent-resource-table-verify",
+                "eval_kind": "rubric",
+                "eval_inputs": [
+                  "eval/inputs/agent-resource-cases.json"
+                ]
+              },
+              {
+                "definition_path": "evals/python/model-directed-agent/eval/qual/verify.json",
+                "fixture_dir": "evals/python/model-directed-agent",
+                "prompt_id": "reject-green-workflow-test",
+                "eval_kind": "rubric",
+                "eval_inputs": []
+              }
+            ],
+            "config_path": "evals/codex-evals.agent-role.toml"
+          },
+          "summary": {
+            "eval_count": 4,
+            "prompt_count": 4,
+            "failure_count": 0,
+            "with_skill": {
+              "prompt_count": 4,
+              "command_count": 136,
+              "duration_seconds": 3754.538,
+              "agent_duration_seconds": 3236.372,
+              "tokens": 10942089,
+              "agent_tokens": 8303226,
+              "error_count": 0,
+              "agent_usage": {
+                "provider": "codex",
+                "source": "cumulative",
+                "observed": true,
+                "usage_record_count": 4,
+                "selected_record_count": 4,
+                "input_tokens": 8196613,
+                "cached_input_tokens": 7787776,
+                "cache_creation_input_tokens": 0,
+                "output_tokens": 106613,
+                "reasoning_output_tokens": 20118,
+                "provider_total_tokens": null,
+                "derived_total_tokens": 8303226,
+                "effective_total_tokens": 8303226,
+                "coverage": {
+                  "record_count": 4,
+                  "modeled_count": 4,
+                  "observed_count": 4,
+                  "recognized_count": 4,
+                  "preferred_total_count": 4,
+                  "field_counts": {
+                    "input_tokens": 4,
+                    "cached_input_tokens": 4,
+                    "cache_creation_input_tokens": 4,
+                    "output_tokens": 4,
+                    "reasoning_output_tokens": 4,
+                    "provider_total_tokens": 0,
+                    "derived_total_tokens": 4
+                  }
+                }
+              },
+              "rubric": {
+                "passed": 22,
+                "total": 22,
+                "average_score": 100.0
+              },
+              "rubric_tokens": 2638863,
+              "rubric_duration_seconds": 512.634,
+              "rubric_usage": {
+                "provider": "codex",
+                "source": "cumulative",
+                "observed": true,
+                "usage_record_count": 4,
+                "selected_record_count": 4,
+                "input_tokens": 2623820,
+                "cached_input_tokens": 2343680,
+                "cache_creation_input_tokens": 0,
+                "output_tokens": 15043,
+                "reasoning_output_tokens": 2419,
+                "provider_total_tokens": null,
+                "derived_total_tokens": 2638863,
+                "effective_total_tokens": 2638863,
+                "coverage": {
+                  "record_count": 4,
+                  "modeled_count": 4,
+                  "observed_count": 4,
+                  "recognized_count": 4,
+                  "preferred_total_count": 4,
+                  "field_counts": {
+                    "input_tokens": 4,
+                    "cached_input_tokens": 4,
+                    "cache_creation_input_tokens": 4,
+                    "output_tokens": 4,
+                    "reasoning_output_tokens": 4,
+                    "provider_total_tokens": 0,
+                    "derived_total_tokens": 4
+                  }
+                }
+              }
+            },
+            "with_baseline": null
+          }
+        }
+      ]
     }
   ],
   "independent_replays": [
