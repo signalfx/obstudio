@@ -8,10 +8,12 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 	"strings"
@@ -19,8 +21,12 @@ import (
 )
 
 const (
-	o11yOAuthClientName        = "Splunk Observability Studio"
-	o11yOAuthClientDescription = "MCP client registration for Splunk Observability Studio (obstudio)"
+	// TEMPORARY: lab0 rejects duplicate client names with a 409, so each registration
+	// appends a random suffix ("obstudio-7fklo9") to allow repeated manual testing.
+	// Revert to a fixed name once registration testing is done.
+	o11yOAuthClientName          = "obstudio"
+	o11yOAuthClientNameSuffixLen = 6
+	o11yOAuthClientDescription   = "MCP client registration for Splunk Observability Studio (obstudio)"
 	// Intentionally the same loopback port CIMD's fixed callback (sisCIMDRedirectURI)
 	// uses -- the two protocols are mutually exclusive via
 	// OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL and never run at once, so there is no
@@ -101,9 +107,26 @@ func registerO11yOAuthClientHandler(w http.ResponseWriter, r *http.Request) {
 	writeSameOriginJSON(w, result)
 }
 
+func uniqueO11yOAuthClientName() (string, error) {
+	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+	suffix := make([]byte, o11yOAuthClientNameSuffixLen)
+	for i := range suffix {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphabet))))
+		if err != nil {
+			return "", err
+		}
+		suffix[i] = alphabet[n.Int64()]
+	}
+	return o11yOAuthClientName + "-" + string(suffix), nil
+}
+
 func registerO11yOAuthClient(ctx context.Context, realm, adminToken string) (*o11yOAuthRegisterResult, error) {
+	clientName, err := uniqueO11yOAuthClientName()
+	if err != nil {
+		return nil, fmt.Errorf("build registration request: %w", err)
+	}
 	body, err := json.Marshal(o11yOAuthClientPayload{
-		Name:        o11yOAuthClientName,
+		Name:        clientName,
 		Description: o11yOAuthClientDescription,
 		CallbackURL: o11yOAuthRegistrationCallbackURL,
 	})

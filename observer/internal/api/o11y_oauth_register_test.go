@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -76,7 +77,10 @@ func TestRegisterO11yOAuthClientSucceedsOnNewClient(t *testing.T) {
 	if gotAdminToken != "the-admin-token" {
 		t.Fatalf("admin token not forwarded correctly: %q", gotAdminToken)
 	}
-	if gotName != o11yOAuthClientName || gotDescription != o11yOAuthClientDescription || gotCallbackURL != o11yOAuthRegistrationCallbackURL {
+	if !regexp.MustCompile(`^obstudio-[a-z0-9]{6}$`).MatchString(gotName) {
+		t.Fatalf("client name should be obstudio-<6 random chars>, got %q", gotName)
+	}
+	if gotDescription != o11yOAuthClientDescription || gotCallbackURL != o11yOAuthRegistrationCallbackURL {
 		t.Fatalf("unexpected registration payload: name=%q description=%q callbackUrl=%q", gotName, gotDescription, gotCallbackURL)
 	}
 }

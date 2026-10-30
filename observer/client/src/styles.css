@@ -7278,12 +7278,26 @@ code {
   white-space: nowrap;
 }
 
+.cloud-cimd-setup__connected {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .cloud-o11y-oauth-fields {
   grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   gap: 12px;
   width: 100%;
+}
+
+.cloud-field--o11y-oauth {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .cloud-masked-field {

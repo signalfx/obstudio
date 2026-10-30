@@ -343,3 +343,19 @@ export interface SISCIMDSessionStatus {
   connectedAt?: string;
   expiresAt?: string;
 }
+
+export interface O11yOAuthLoginStartResult {
+  authorizationUrl: string;
+}
+
+export type O11yOAuthSessionPhase = "disconnected" | "pending" | "connected" | "error";
+
+export interface O11yOAuthSessionStatus {
+  phase: O11yOAuthSessionPhase;
+  error?: string;
+  issuer?: string;
+  realm?: string;
+  orgId?: string;
+  connectedAt?: string;
+  expiresAt?: string;
+}

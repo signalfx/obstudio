@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   detectSplunkFreeAccountRegion,
+  disconnectO11yOAuthSession,
   disconnectSISCIMDSession,
+  fetchO11yOAuthSession,
   fetchSISCIMDSession,
   fetchSplunkExportStatus,
+  loginO11yOAuth,
   loginSISCIMD,
   registerO11yOAuthClient,
   registerSISCIMDClient,
@@ -13,6 +16,7 @@ import {
 } from "../api/client";
 import type {
   O11yOAuthRegistrationResult,
+  O11yOAuthSessionStatus,
   RegistrationAndAuthProtocol,
   SISCIMDSessionStatus,
   SplunkExportSignalStatus,
@@ -76,6 +80,9 @@ type CloudFieldError =
   | "firstName"
   | "lastName"
   | "o11yOAuthAdminToken"
+  | "o11yOAuthClientId"
+  | "o11yOAuthClientSecret"
+  | "o11yOAuthOrgId"
   | "o11yOAuthRealm"
   | "region"
   | "terms"
@@ -102,6 +109,7 @@ interface CloudActionResponse {
   o11yOAuthClientCreated?: boolean;
   o11yOAuthClientId?: string;
   o11yOAuthClientSecret?: string;
+  o11yOAuthSession?: O11yOAuthSessionStatus;
   realm?: string;
   status?: SplunkExportStatus;
 }
@@ -131,6 +139,11 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const [o11yOAuthRealm, setO11yOAuthRealm] = useState("");
   const [o11yOAuthAdminToken, setO11yOAuthAdminToken] = useState("");
   const [o11yOAuthRegistration, setO11yOAuthRegistration] = useState<O11yOAuthRegistrationResult | null>(null);
+  const [o11yOAuthOrgId, setO11yOAuthOrgId] = useState("");
+  const [o11yOAuthClientId, setO11yOAuthClientId] = useState("");
+  const [o11yOAuthClientSecret, setO11yOAuthClientSecret] = useState("");
+  const [o11yOAuthSession, setO11yOAuthSession] = useState<O11yOAuthSessionStatus | null>(null);
+  const [o11yOAuthLoginBusy, setO11yOAuthLoginBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<CloudBridgeAction | null>("initialize");
   const [controlError, setControlError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -157,6 +170,9 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const tokenInputRef = useRef<HTMLInputElement>(null);
   const o11yOAuthRealmInputRef = useRef<HTMLInputElement>(null);
   const o11yOAuthAdminTokenInputRef = useRef<HTMLInputElement>(null);
+  const o11yOAuthOrgIdInputRef = useRef<HTMLInputElement>(null);
+  const o11yOAuthClientIdInputRef = useRef<HTMLInputElement>(null);
+  const o11yOAuthClientSecretInputRef = useRef<HTMLInputElement>(null);
   const freeAccountFirstNameRef = useRef<HTMLInputElement>(null);
   const freeAccountLastNameRef = useRef<HTMLInputElement>(null);
   const freeAccountEmailRef = useRef<HTMLInputElement>(null);
@@ -216,6 +232,9 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
               if (response.cimdSession.phase === "connected") {
                 setCIMDRegistrationVerified(true);
               }
+            }
+            if (response.o11yOAuthSession) {
+              setO11yOAuthSession(response.o11yOAuthSession);
             }
             if (!isSplunkExportStatus(nextStatus)) {
               nextStatus = await fetchSplunkExportStatus(controller.signal);
@@ -470,7 +489,16 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
 
   const runAction = async (
     action: CloudBridgeAction,
-    payload?: { accessToken?: string; adminToken?: string; destination?: string; enabled?: boolean; realm?: string },
+    payload?: {
+      accessToken?: string;
+      adminToken?: string;
+      clientId?: string;
+      clientSecret?: string;
+      destination?: string;
+      enabled?: boolean;
+      orgId?: string;
+      realm?: string;
+    },
   ): Promise<CloudActionResponse | null> => {
     if (busyAction || actionInFlightRef.current || !controlAvailable) return null;
     const expectedVersion = statusRef.current?.version;
@@ -755,6 +783,95 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     }
   };
 
+  const authenticateO11yOAuth = async () => {
+    if (o11yOAuthLoginBusy) return;
+    const realm = o11yOAuthRealm.trim();
+    const orgId = o11yOAuthOrgId.trim();
+    const clientId = o11yOAuthClientId.trim();
+    const clientSecret = o11yOAuthClientSecret.trim();
+    if (realm === "") {
+      setFieldError("o11yOAuthRealm");
+      setError("Enter a valid Splunk Observability Cloud realm.");
+      o11yOAuthRealmInputRef.current?.focus();
+      return;
+    }
+    if (orgId === "") {
+      setFieldError("o11yOAuthOrgId");
+      setError("Enter the O11y organization ID.");
+      o11yOAuthOrgIdInputRef.current?.focus();
+      return;
+    }
+    if (clientId === "") {
+      setFieldError("o11yOAuthClientId");
+      setError("Paste the client ID.");
+      o11yOAuthClientIdInputRef.current?.focus();
+      return;
+    }
+    if (clientSecret === "") {
+      setFieldError("o11yOAuthClientSecret");
+      setError("Paste the client secret.");
+      o11yOAuthClientSecretInputRef.current?.focus();
+      return;
+    }
+
+    if (bridge) {
+      // The extension opens the system browser itself and runs its own loopback
+      // callback listener -- no window.open popup-gesture handling needed here. This
+      // call blocks for the whole flow, same as login-cimd.
+      setO11yOAuthLoginBusy(true);
+      setError(null);
+      setNotice(null);
+      try {
+        const response = await runAction("login-o11y-oauth", { clientId, clientSecret, orgId, realm });
+        if (response?.o11yOAuthSession) setO11yOAuthSession(response.o11yOAuthSession);
+        if (response?.o11yOAuthSession?.phase === "connected") {
+          setNotice("Signed in with O11y OAuth.");
+        }
+      } finally {
+        setO11yOAuthLoginBusy(false);
+      }
+      return;
+    }
+
+    // Open the tab synchronously, inside the click handler, before any await -- see
+    // loginCIMD's identical popup-gesture handling above for why.
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setError("Could not open the O11y OAuth sign-in page. Allow popups for this page and try again.");
+      return;
+    }
+    popup.opener = null;
+    setO11yOAuthLoginBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await loginO11yOAuth(realm, orgId, clientId, clientSecret);
+      popup.location.href = response.authorizationUrl;
+      setNotice("Complete sign-in in the new tab, then return here.");
+    } catch (loginError) {
+      popup.close();
+      setError(errorMessage(loginError, "O11y OAuth sign-in failed."));
+      setO11yOAuthLoginBusy(false);
+    }
+  };
+
+  const disconnectO11yOAuthLogin = async () => {
+    if (bridge) {
+      const response = await runAction("disconnect-o11y-oauth");
+      if (!response) return;
+      if (response.o11yOAuthSession) setO11yOAuthSession(response.o11yOAuthSession);
+      setNotice("O11y OAuth sign-in disconnected.");
+      return;
+    }
+    try {
+      const nextSession = await disconnectO11yOAuthSession();
+      setO11yOAuthSession(nextSession);
+      setNotice("O11y OAuth sign-in disconnected.");
+    } catch (disconnectError) {
+      setError(errorMessage(disconnectError, "Could not disconnect the O11y OAuth sign-in."));
+    }
+  };
+
   useEffect(() => {
     if (bridge || !cimdRegistrationVerified) return undefined;
     let active = true;
@@ -798,6 +915,48 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       window.clearInterval(intervalId);
     };
   }, [bridge, cimdRegistrationVerified, cimdLoginBusy]);
+
+  useEffect(() => {
+    if (bridge || registrationAndAuthProtocol !== "O11Y_OAUTH") return undefined;
+    let active = true;
+    const controller = new AbortController();
+
+    const poll = async () => {
+      try {
+        const nextSession = await fetchO11yOAuthSession(controller.signal);
+        if (!active) return;
+        setO11yOAuthSession(nextSession);
+        if (nextSession.phase === "connected" || nextSession.phase === "error") {
+          setO11yOAuthLoginBusy(false);
+        } else if (nextSession.phase === "pending") {
+          // A reload (or opening this tab fresh) can land here with a sign-in already
+          // under way elsewhere -- without this, the one-shot "not busy" poll below
+          // would see "pending" and simply never check again. Flipping busy true here
+          // re-runs this effect and switches it onto the recurring interval branch.
+          setO11yOAuthLoginBusy(true);
+        }
+      } catch {
+        // Keep the last known session state if a background poll fails.
+      }
+    };
+
+    if (!o11yOAuthLoginBusy) {
+      // Same rationale as the CIMD poll effect above: check once on mount/protocol
+      // change so the UI knows whether to show "Authenticate" or "Disconnect", but do
+      // not keep polling once a session reaches a terminal phase.
+      void poll();
+      return () => {
+        active = false;
+        controller.abort();
+      };
+    }
+    const intervalId = window.setInterval(() => void poll(), sisCIMDSessionPollIntervalMs);
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [bridge, registrationAndAuthProtocol, o11yOAuthLoginBusy]);
 
   const openExternalLink = (
     event: React.MouseEvent<HTMLAnchorElement>,
@@ -1128,6 +1287,128 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   ) : null}
                 </div>
               ) : null}
+            </section>
+          ) : null}
+
+          {!cloudConfigured && registrationAndAuthProtocol === "O11Y_OAUTH" ? (
+            <section aria-labelledby="cloud-o11y-oauth-login-title" className="cloud-cimd-setup">
+              <div>
+                <h3 id="cloud-o11y-oauth-login-title">O11y OAuth sign-in</h3>
+                <p>
+                  {o11yOAuthSession?.phase === "connected"
+                    ? "Signed in with O11y OAuth. Cloud export is still disconnected."
+                    : o11yOAuthSession?.phase === "pending" && !bridge
+                      ? "Waiting for sign-in to complete in the other tab..."
+                      : o11yOAuthSession?.phase === "error"
+                        ? `Sign-in failed: ${o11yOAuthSession.error ?? "unknown error"}`
+                        : "Paste the Client ID and secret an organization admin registered, then "
+                          + "authenticate to get an O11y access token for the O11y MCP server."}
+                </p>
+              </div>
+              {o11yOAuthSession?.phase === "connected" ? (
+                <div className="cloud-cimd-setup__connected">
+                  <span className="cloud-cimd-setup__status" role="status">User successfully logged in</span>
+                  <button
+                    className="cloud-button cloud-button--danger"
+                    onClick={() => void disconnectO11yOAuthLogin()}
+                    type="button"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              ) : (
+                <div className="cloud-field cloud-field--o11y-oauth">
+                  <div className="cloud-field cloud-field--region">
+                    <div className="cloud-field__control">
+                      <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-org-id">Org ID</label>
+                      <input
+                        aria-invalid={fieldError === "o11yOAuthOrgId"}
+                        aria-label="Org ID"
+                        autoCapitalize="none"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        id="cloud-o11y-oauth-org-id"
+                        onChange={(event) => {
+                          setO11yOAuthOrgId(event.target.value);
+                          if (fieldError === "o11yOAuthOrgId") setFieldError(null);
+                          setError(null);
+                        }}
+                        placeholder="O11y organization ID"
+                        ref={o11yOAuthOrgIdInputRef}
+                        spellCheck={false}
+                        value={o11yOAuthOrgId}
+                      />
+                    </div>
+                    {fieldError === "o11yOAuthOrgId" ? (
+                      <p className="cloud-field__error">Enter the O11y organization ID.</p>
+                    ) : null}
+                  </div>
+                  <div className="cloud-field cloud-field--region">
+                    <div className="cloud-field__control">
+                      <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-login-client-id">Sign-in client ID</label>
+                      <input
+                        aria-invalid={fieldError === "o11yOAuthClientId"}
+                        aria-label="Sign-in client ID"
+                        autoCapitalize="none"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        id="cloud-o11y-oauth-login-client-id"
+                        onChange={(event) => {
+                          setO11yOAuthClientId(event.target.value);
+                          if (fieldError === "o11yOAuthClientId") setFieldError(null);
+                          setError(null);
+                        }}
+                        placeholder="Client ID"
+                        ref={o11yOAuthClientIdInputRef}
+                        spellCheck={false}
+                        value={o11yOAuthClientId}
+                      />
+                    </div>
+                    {fieldError === "o11yOAuthClientId" ? (
+                      <p className="cloud-field__error">Paste the client ID.</p>
+                    ) : null}
+                  </div>
+                  <div className="cloud-field cloud-field--token">
+                    <div className="cloud-field__control">
+                      <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-login-client-secret">Sign-in client secret</label>
+                      <input
+                        aria-invalid={fieldError === "o11yOAuthClientSecret"}
+                        autoCapitalize="none"
+                        autoComplete="new-password"
+                        autoCorrect="off"
+                        id="cloud-o11y-oauth-login-client-secret"
+                        onChange={(event) => {
+                          setO11yOAuthClientSecret(event.target.value);
+                          if (fieldError === "o11yOAuthClientSecret") setFieldError(null);
+                          setError(null);
+                        }}
+                        placeholder="Client secret"
+                        ref={o11yOAuthClientSecretInputRef}
+                        spellCheck={false}
+                        type="password"
+                        value={o11yOAuthClientSecret}
+                      />
+                    </div>
+                    {fieldError === "o11yOAuthClientSecret" ? (
+                      <p className="cloud-field__error">Paste the client secret.</p>
+                    ) : null}
+                  </div>
+                  <button
+                    className="cloud-button"
+                    disabled={
+                      o11yOAuthLoginBusy
+                      || o11yOAuthRealm.trim() === ""
+                      || o11yOAuthOrgId.trim() === ""
+                      || o11yOAuthClientId.trim() === ""
+                      || o11yOAuthClientSecret.trim() === ""
+                    }
+                    onClick={() => void authenticateO11yOAuth()}
+                    type="button"
+                  >
+                    {o11yOAuthLoginBusy ? "Authenticating..." : "Authenticate"}
+                  </button>
+                </div>
+              )}
             </section>
           ) : null}
 
