@@ -33,6 +33,18 @@ class ObserveReportTest(unittest.TestCase):
                 with self.subTest(name=name):
                     self.assertIs(getattr(MODULE, name), value)
 
+    def test_entry_file_without_sibling_modules_exits_with_bundle_message(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            lone = Path(tmp) / "observe_report.py"
+            lone.write_bytes(Path(SCRIPT).read_bytes())
+            result = subprocess.run(
+                [sys.executable, str(lone), "--help"], capture_output=True, text=True, check=False
+            )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("observe_report_core.py", result.stderr)
+        self.assertIn("complete Splunk Observability Studio skill bundle", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
     def test_markdown_web_link_targets_loopback_report(self) -> None:
         self.assertEqual(
             MODULE.markdown_web_link(

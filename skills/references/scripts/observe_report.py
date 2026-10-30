@@ -29,6 +29,13 @@ else:
 
 def _load_sibling(filename: str) -> Any:
     path = Path(__file__).resolve().with_name(filename)
+    if not path.is_file():
+        print(
+            f"OpenTelemetry report helper is missing: {path}. "
+            "Install or copy the complete Splunk Observability Studio skill bundle.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
     name = f"_{path.stem}_{hashlib.sha256(str(path).encode()).hexdigest()[:16]}"
     module = sys.modules.get(name)
     if module is None:
