@@ -12,6 +12,11 @@ export const observerHostCloudActions = [
   "open-free-edition",
   "open-free-edition-terms",
   "open-ingest-token-help",
+  "open-hec-token-help",
+  "open-observability-cloud",
+  "open-observability-metrics",
+  "open-observability-traces",
+  "open-splunk-search",
   "open-realm-help",
   "open-observability-cloud-demo",
   "open-observability-data-course",
@@ -43,10 +48,13 @@ export type ObserverHostSkillId = typeof observerHostSkillIds[number];
 
 export interface ObserverHostCloudPayload {
   accessToken?: string;
+  reuseSavedToken?: boolean;
+  preserveEnabled?: boolean;
   adminToken?: string;
   destination?: string;
   email?: string;
   enabled?: boolean;
+  scope?: "observability";
   expectedVersion?: string;
   firstName?: string;
   lastName?: string;
@@ -408,6 +416,7 @@ function isSplunkExportStatus(value: unknown): value is SplunkExportStatus {
     && /^[A-Za-z0-9_-]{43}$/.test(status.version)
     && isSplunkExportSignalStatus(status.metrics)
     && isSplunkExportSignalStatus(status.traces)
+    && (status.logs === undefined || isSplunkExportSignalStatus(status.logs))
     && (status.registrationAndAuthProtocol === undefined
       || isRegistrationAndAuthProtocol(status.registrationAndAuthProtocol));
 }

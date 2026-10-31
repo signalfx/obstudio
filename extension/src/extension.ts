@@ -8,6 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import * as vscode from 'vscode';
+
 import {
 	createAgentIntegrationConfigFingerprint,
 	codexObstudioHasNoAuthorization,
@@ -74,6 +75,8 @@ import {
 	cloudStatusConnected,
 	cloudStatusHasNoConfiguration,
 	cloudStatusVersion,
+	splunkCloudConnectionSecretKey,
+	splunkSearchURLFromStatus,
 	freeAccountSubmissionFailureIsOutcomeUnknown,
 	initializeCloudBridgeState,
 	initializeSplunkCloudStatus,
@@ -85,7 +88,6 @@ import {
 	parseStoredSplunkCloudConnection,
 	skillDocsUrl,
 	ObserverCloudResponseError,
-	splunkCloudConnectionSecretKey,
 	type CloudBridgeAction,
 	type RegistrationAndAuthProtocol,
 	type StoredSplunkCloudConnection,
@@ -189,7 +191,7 @@ const extensionManagedObserverOwner = 'vscode-extension';
 const extensionManagedObserverMode = 'managed';
 const sharedObserverStartupWindowMs = 15_000;
 const observerCloudRequestTimeoutMs = 15_000;
-const observerCloudRollbackTokenHeader = 'X-Obstudio-Cloud-Rollback-Token';
+const splunkCloudExportEnabledStateKey = 'splunkCloudExportEnabled.v1';
 const observerShutdownTerminationTimeoutMs = 2_000;
 const observerShutdownPostExitDelayMs = 300;
 const observerExtensionUnloadDeadlineMs = 4_500;
@@ -201,7 +203,6 @@ const outdatedManagedObserverForceShutdownTimeoutMs = 2_000;
 const agentIntegrationPromptDismissedPrefix = 'agentIntegrationPromptDismissed.';
 const agentSkillsBundleVersionPrefix = 'agentSkillsBundleVersion.';
 const agentIntegrationConfigFingerprintPrefix = 'agentIntegrationConfigFingerprint.v1.';
-const splunkCloudExportEnabledStateKey = 'splunkCloudExportEnabled.v1';
 const freeAccountRequestTimeoutMs = 30_000;
 
 // The extension exposes a stable OTLP endpoint so instrumented apps can target a
@@ -721,8 +722,11 @@ export async function activate(context: vscode.ExtensionContext) {
 					await deleteSecretForTest(key);
 				};
 			}),
-			vscode.commands.registerCommand('observability-studio.internal.cloudActionForTest',(request: { action: CloudBridgeAction; payload?: ObserverHostCloudPayload }) => performCloudBridgeAction(context,request)),
 
+			vscode.commands.registerCommand(
+				'observability-studio.internal.cloudActionForTest',
+				(action: CloudBridgeAction, payload?: ObserverHostCloudPayload) => performCloudBridgeAction(context, { action, payload }),
+			),
 			vscode.commands.registerCommand(
 				'observability-studio.internal.createFreeAccountForTest',
 				() => performCloudBridgeAction(context, {
@@ -2335,6 +2339,24 @@ async function performCloudBridgeActionExclusive(
 		case 'open-ingest-token-help':
 			await openCloudExternalUrl(splunkIngestTokenHelpUrl);
 			return {};
+		case 'open-hec-token-help':
+			await openCloudExternalUrl('https://help.splunk.com/en/data-management/collect-http-event-data/use-hec-in-splunk-enterprise/set-up-and-use-http-event-collector-in-splunk-web');
+			return {};
+		case 'open-observability-cloud':
+		case 'open-observability-metrics':
+		case 'open-observability-traces': {
+			const realm = splunkRealmFromResponse(await getObserverCloudJSON('/api/splunk/export'));
+			const path = request.action === 'open-observability-metrics' ? '#/metric-explorer'
+				: request.action === 'open-observability-traces' ? '#/apm/traces' : '';
+			await openCloudExternalUrl(`https://app.${realm}.observability.splunkcloud.com/${path}`);
+			return {};
+		}
+		case 'open-splunk-search': {
+			const searchURL = splunkSearchURLFromStatus(await getObserverCloudJSON('/api/splunk/logs'));
+			if (!searchURL) { throw new Error('Splunk Web URL is unavailable for this logs destination.'); }
+			await openCloudExternalUrl(searchURL);
+			return {};
+		}
 		case 'open-realm-help':
 			await openCloudExternalUrl(splunkRealmHelpUrl);
 			return {};
@@ -2485,9 +2507,17 @@ async function performCloudBridgeActionExclusive(
 			return { cimdSession: await currentSISCIMDSessionStatus(context) };
 		}
 		case 'connect': {
-			const connection = cloudConnectionFromRequest(request);
+			const reuseSavedToken = request.payload?.reuseSavedToken === true;
+			const requestedRealm = request.payload?.realm?.trim().toLowerCase() ?? '';
+			if (reuseSavedToken && (request.payload?.accessToken !== '' || !/^[a-z]{2,12}[0-9]+$/.test(requestedRealm))) {
+				throw new Error('Enter a valid saved connection realm.');
+			}
+			const connection = reuseSavedToken ? { realm: requestedRealm, accessToken: '' } : cloudConnectionFromRequest(request);
+			const expectedVersion = cloudExpectedVersionFromRequest(request);
 			const status = await postObserverCloudJSON('/api/splunk/export', {
-				...connection, expectedVersion: cloudExpectedVersionFromRequest(request),
+					...connection, expectedVersion,
+					...(reuseSavedToken ? { reuseSavedToken: true } : {}),
+					...(request.payload?.preserveEnabled ? { preserveEnabled: true } : {}),
 			});
 			await completeCloudStorageMigration(context);
 			return { status };
@@ -2499,17 +2529,15 @@ async function performCloudBridgeActionExclusive(
 			const expectedVersion = cloudExpectedVersionFromRequest(request);
 			return {
 				status: await postObserverCloudJSON('/api/splunk/export/enabled', {
-					enabled: request.payload.enabled, expectedVersion,
+					enabled: request.payload.enabled, expectedVersion, scope: request.payload?.scope,
 				}),
 			};
 		}
 		case 'forget': {
-			const status = await postObserverCloudJSON('/api/splunk/export/forget', {
-				expectedVersion: cloudExpectedVersionFromRequest(request),
-			});
-			await completeCloudStorageMigration(context);
-			return { status };
-		}
+ const status = await postObserverCloudJSON('/api/splunk/export/forget', { expectedVersion: cloudExpectedVersionFromRequest(request) });
+ await completeCloudStorageMigration(context);
+ return { status };
+ }
 
 	}
 }

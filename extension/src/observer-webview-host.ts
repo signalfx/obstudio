@@ -15,10 +15,13 @@ import { isLoopbackObserverHost } from './backend';
 
 export type ObserverHostCloudPayload = {
 	accessToken?: string;
+	reuseSavedToken?: boolean;
+	preserveEnabled?: boolean;
 	adminToken?: string;
 	destination?: string;
 	email?: string;
 	enabled?: boolean;
+	scope?: 'observability';
 	expectedVersion?: string;
 	firstName?: string;
 	lastName?: string;
@@ -89,8 +92,9 @@ const allowedGetPaths = new Set([
 	'/api/query/validation/latest',
 	'/api/query/validation/summary',
 	'/api/splunk/export',
+	'/api/splunk/logs',
 ]);
-const allowedPostPaths = new Set(['/api/validation/run']);
+const allowedPostPaths = new Set(['/api/validation/run', '/api/splunk/logs', '/api/splunk/logs/enabled', '/api/splunk/logs/disconnect']);
 
 export function observerHostResponseByteLimit(url: URL): number {
 	return isLoopbackObserverHost(url.hostname)
@@ -244,7 +248,7 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 	switch (action) {
 		case 'connect':
 			return isObserverHostCloudPayload(value)
-				&& hasOnlyCloudPayloadKeys(value, ['accessToken', 'expectedVersion', 'realm'])
+				&& hasOnlyCloudPayloadKeys(value, ['accessToken', 'expectedVersion', 'realm', 'reuseSavedToken', 'preserveEnabled'])
 				&& typeof value.accessToken === 'string'
 				&& typeof value.realm === 'string';
 		case 'resolve-realm':
@@ -286,7 +290,7 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 				&& value.termsAccepted === true;
 		case 'set-enabled':
 			return isObserverHostCloudPayload(value)
-				&& hasOnlyCloudPayloadKeys(value, ['enabled', 'expectedVersion'])
+				&& hasOnlyCloudPayloadKeys(value, ['enabled', 'expectedVersion', 'scope'])
 				&& typeof value.enabled === 'boolean';
 		case 'open-skill-docs':
 			return isObserverHostCloudPayload(value)
@@ -311,6 +315,11 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 		case 'open-free-edition':
 		case 'open-free-edition-terms':
 		case 'open-ingest-token-help':
+		case 'open-hec-token-help':
+		case 'open-observability-cloud':
+		case 'open-observability-metrics':
+		case 'open-observability-traces':
+		case 'open-splunk-search':
 		case 'open-realm-help':
 		case 'open-observability-cloud-demo':
 		case 'open-observability-data-course':
@@ -326,10 +335,13 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 	const payload = value as Record<string, unknown>;
 	return Object.keys(payload).every((key) => [
 		'accessToken',
+		'reuseSavedToken',
+		'preserveEnabled',
 		'adminToken',
 		'destination',
 		'email',
 		'enabled',
+		'scope',
 		'expectedVersion',
 		'firstName',
 		'lastName',
@@ -349,6 +361,9 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 				&& Buffer.byteLength(payload.destination, 'utf8') <= maxCloudDestinationBytes))
 		&& (payload.email === undefined || typeof payload.email === 'string')
 		&& (payload.enabled === undefined || typeof payload.enabled === 'boolean')
+		&& (payload.reuseSavedToken === undefined || typeof payload.reuseSavedToken === 'boolean')
+		&& (payload.preserveEnabled === undefined || typeof payload.preserveEnabled === 'boolean')
+		&& (payload.scope === undefined || payload.scope === 'observability')
 		&& (payload.expectedVersion === undefined
 			|| (typeof payload.expectedVersion === 'string'
 				&& observerStateVersionPattern.test(payload.expectedVersion)))

@@ -1520,14 +1520,15 @@ def test_observer_integration_proves_trace_metric_cloud_boundary_for_logs() -> N
         "logsConsumer, err := consumer.NewLogs",
         1,
     )[1].split("if err != nil", 1)[0]
-    for fields in (handler_fields, receiver_config):
-        assert not any(
-            "log" in line.lower() and "export" in line.lower()
-            for line in fields.splitlines()
-        )
-    assert "export" not in log_handler.lower()
-    assert "export" not in logs_consumer.lower()
-    assert "WithLogsExporter" not in receiver
+    assert "logsExporter" in handler_fields
+    assert "logsExporter" in receiver_config
+    assert "exportLogsAsync(h.logsExporter, ld)" in log_handler
+    assert "exportLogsAsync(config.logsExporter, ld)" in logs_consumer
+    assert "WithLogsExporter" in receiver
+    for consumer in (log_handler, logs_consumer):
+        assert "exportMetricsAsync" not in consumer
+        assert "exportTracesAsync" not in consumer
+    assert "TestPostLogsDualDelivery" in handler_test
 
     readme = _read(ROOT / "evals/README.md")
     assert "supplies live receiver-side proof" in readme

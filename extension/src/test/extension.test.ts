@@ -34,6 +34,7 @@ import {
 	auditReportPath,
 	auditReportUrl,
 	cloudBridgeActionRequiresLifecycleSerialization,
+	splunkSearchURLFromStatus,
 	freeAccountSubmissionFailureIsOutcomeUnknown,
 	initializeCloudBridgeState,
 	initializeSplunkCloudStatus,
@@ -64,6 +65,14 @@ import {
 } from '../observer-port-handoff';
 
 const extensionRoot = path.resolve(__dirname, '..', '..');
+
+test('Splunk Search consumes the backend Web URL and does not guess from HEC', () => {
+	const searchURL = 'https://stack.splunkcloud.com/en-US/app/search/search?q=search+index%3D%22studio%22';
+	assert.equal(splunkSearchURLFromStatus({ endpoint: 'https://http-inputs-stack.splunkcloud.com/services/collector', index: 'studio', searchURL }), searchURL);
+	for (const value of [undefined, {}, { endpoint: 'https://enterprise.example:8088/services/collector', index: 'studio' }, { searchURL: 'javascript:alert(1)' }, { searchURL: 'https://user:secret@example.com/' }, { searchURL: 'bad URL' }]) {
+		assert.equal(splunkSearchURLFromStatus(value), undefined);
+	}
+});
 const {
 	buildClientAssets,
 	bundleCopilotSkills,
@@ -160,6 +169,14 @@ test('IDE host transport accepts only bounded known cloud requests', () => {
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('set-enabled', {
 		enabled: true,
 	})), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('set-enabled', {
+		enabled: true,
+		scope: 'observability',
+	})), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('set-enabled', {
+		enabled: true,
+		scope: 'unknown',
+	})), false);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('forget', { expectedVersion })), true);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('forget')), true);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('resolve-realm', {
@@ -619,10 +636,16 @@ test('IDE host transport restricts HTTP paths, cancellation, and telemetry comma
 		'/api/query/traces?service=checkout',
 		'/api/query/traces/0123456789abcdef0123456789abcdef',
 		'/api/splunk/export',
+		'/api/splunk/logs',
 	]) {
 		assert.equal(isAllowedObserverHostHTTPPath('GET', path), true, path);
 	}
 	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/validation/run'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/splunk/logs'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/splunk/logs/enabled'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/splunk/logs/disconnect'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/splunk/logs/disconnect'), false);
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/splunk/logs/unknown'), false);
 	for (const path of [
 		'https://evil.example/api/health',
 		'//evil.example/api/health',
@@ -2417,3 +2440,17 @@ class FakeObserverWebSocket {
 		this.close();
 	}
 }
+
+test('IDE connection edits accept explicit reuse flags without accepting destination URLs from the webview', () => {
+ const request = (action: string, payload?: Record<string, unknown>) => ({ type: 'obstudio.host.request', requestId: 'edit-123', request: { kind: 'cloud', action, payload } });
+ const payload = { realm: 'us1', accessToken: '', expectedVersion: 'V'.repeat(43), reuseSavedToken: true, preserveEnabled: true };
+ assert.equal(isObserverHostRequestEnvelope(request('connect', payload)), true);
+ for (const key of ['reuseSavedToken', 'preserveEnabled']) {
+  assert.equal(isObserverHostRequestEnvelope(request('connect', { ...payload, [key]: 'true' })), false);
+ }
+ for (const action of ['open-hec-token-help', 'open-observability-cloud', 'open-observability-metrics', 'open-observability-traces', 'open-splunk-search'] as const) {
+  assert.equal(isObserverHostRequestEnvelope(request(action)), true);
+  assert.equal(isObserverHostRequestEnvelope(request(action, { destination: 'https://example.test' })), false);
+  assert.equal(cloudBridgeActionRequiresLifecycleSerialization(action), false);
+ }
+});

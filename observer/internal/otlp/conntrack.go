@@ -44,6 +44,7 @@ type ConnTracker struct {
 	backendCC      *grpc.ClientConn
 	exporter       MetricsExporter
 	tracesExporter TracesExporter
+	logsExporter   LogsExporter
 
 	mu sync.Mutex
 
@@ -80,11 +81,13 @@ func StartConnTracker(
 	internalGRPCAddr string,
 	exporter MetricsExporter,
 	tracesExporter TracesExporter,
+	logsExporter LogsExporter,
 ) (*ConnTracker, error) {
 	ct := &ConnTracker{
 		store:           s,
 		exporter:        exporter,
 		tracesExporter:  tracesExporter,
+		logsExporter:    logsExporter,
 		grpcConns:       make(map[string]struct{}),
 		httpConnsByAddr: make(map[string]*httpConn),
 		httpConnsByID:   make(map[string]*httpConn),
@@ -483,7 +486,7 @@ type ctxKeyRawConn struct{}
 // directly (instead of proxying to an internal receiver). This lets us
 // resolve the PID from the connection and tag data with the connection ID.
 func (ct *ConnTracker) startHTTPHandler(listenAddr string) error {
-	handler := &otlpHTTPHandler{store: ct.store, ct: ct, exporter: ct.exporter, tracesExporter: ct.tracesExporter}
+	handler := &otlpHTTPHandler{store: ct.store, ct: ct, exporter: ct.exporter, tracesExporter: ct.tracesExporter, logsExporter: ct.logsExporter}
 
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {

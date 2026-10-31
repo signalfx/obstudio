@@ -2,6 +2,7 @@ package otlp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/config/configmiddleware"
 	"go.opentelemetry.io/collector/config/configopaque"
 	"go.opentelemetry.io/collector/config/configoptional"
 	"go.opentelemetry.io/collector/exporter"
@@ -18,6 +20,7 @@ import (
 	"go.opentelemetry.io/collector/exporter/otlphttpexporter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/zap"
@@ -102,6 +105,15 @@ func NewSplunkMetricsExportController(config SplunkMetricsExporterConfig) (*Splu
 
 // Configure replaces the live exporter after validating the supplied config.
 func (c *SplunkMetricsExportController) Configure(config SplunkMetricsExporterConfig) error {
+	return c.configure(config, false)
+}
+
+// ConfigureKeepingActivity replaces a connection without resetting its activity counters.
+func (c *SplunkMetricsExportController) ConfigureKeepingActivity(config SplunkMetricsExporterConfig) error {
+	return c.configure(config, true)
+}
+
+func (c *SplunkMetricsExportController) configure(config SplunkMetricsExporterConfig, keepActivity bool) error {
 	exporter, err := newConfiguredSplunkMetricsExporter(config)
 	if err != nil {
 		return err
@@ -109,13 +121,17 @@ func (c *SplunkMetricsExportController) Configure(config SplunkMetricsExporterCo
 	c.exportMu.Lock()
 	c.mu.Lock()
 	old := c.exporter
-	c.config = normalizeSplunkMetricsExporterConfig(config)
+	normalized := normalizeSplunkMetricsExporterConfig(config)
+	destinationChanged := c.config.Realm != normalized.Realm || c.config.Endpoint != normalized.Endpoint || c.config.AccessToken != normalized.AccessToken
+	c.config = normalized
 	c.exporter = exporter
-	c.lastExport = SplunkMetricsExportAttempt{}
-	c.hasLastExport = false
-	c.exportedBatches = 0
-	c.exportedDataPoints = 0
-	c.failedBatches = 0
+	if !keepActivity {
+		c.exportedBatches, c.exportedDataPoints, c.failedBatches = 0, 0, 0
+	}
+	if !keepActivity || destinationChanged || !c.lastExport.Success {
+		c.lastExport = SplunkMetricsExportAttempt{}
+		c.hasLastExport = false
+	}
 	c.mu.Unlock()
 	c.exportMu.Unlock()
 	if old != nil {
@@ -244,6 +260,10 @@ func (c *SplunkMetricsExportController) recordExport(err error, dataPoints int) 
 	if err != nil {
 		c.failedBatches++
 		c.lastExport.Error = sanitizeExportError(err, c.config.AccessToken)
+		var partial *splunkOTLPPartialExportError
+		if errors.As(err, &partial) {
+			c.exportedDataPoints += uint64(partial.accepted)
+		}
 		return
 	}
 	c.exportedBatches++
@@ -327,7 +347,8 @@ func NewSplunkMetricsExporter(config SplunkMetricsExporterConfig) (*SplunkMetric
 	cfg := factory.CreateDefaultConfig().(*otlphttpexporter.Config)
 	cfg.MetricsEndpoint = endpoint
 	cfg.ClientConfig = confighttp.ClientConfig{
-		Timeout: effectiveSplunkMetricsTimeout(config.Timeout),
+		Timeout:     effectiveSplunkMetricsTimeout(config.Timeout),
+		Middlewares: []configmiddleware.Config{{ID: splunkOTLPStatusMiddlewareID}},
 		Headers: configopaque.MapList{
 			{Name: "X-SF-Token", Value: configopaque.String(token)},
 		},
@@ -346,7 +367,7 @@ func NewSplunkMetricsExporter(config SplunkMetricsExporterConfig) (*SplunkMetric
 	if err != nil {
 		return nil, fmt.Errorf("create Splunk metrics exporter: %w", err)
 	}
-	if err := exp.Start(context.Background(), minimalHost{}); err != nil {
+	if err := exp.Start(context.Background(), splunkOTLPExportHost{}); err != nil {
 		_ = exp.Shutdown(context.Background())
 		return nil, fmt.Errorf("start Splunk metrics exporter: %w", err)
 	}
@@ -374,7 +395,19 @@ func (e *SplunkMetricsExporter) ExportMetrics(ctx context.Context, md pmetric.Me
 	if e == nil {
 		return nil
 	}
-	return e.exp.ConsumeMetrics(ctx, md)
+	attempt := &splunkOTLPExportAttempt{decode: func(body []byte, contentType string) (int64, error) {
+		response := pmetricotlp.NewExportResponse()
+		var err error
+		switch contentType {
+		case "application/json":
+			err = response.UnmarshalJSON(body)
+		case "application/x-protobuf":
+			err = response.UnmarshalProto(body)
+		}
+		return response.PartialSuccess().RejectedDataPoints(), err
+	}}
+	err := e.exp.ConsumeMetrics(context.WithValue(ctx, splunkOTLPExportAttemptKey{}, attempt), md)
+	return attempt.result(err, md.DataPointCount())
 }
 
 // Shutdown stops the underlying exporter component.
