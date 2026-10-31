@@ -17,6 +17,7 @@ require (
 	github.com/evanw/esbuild v0.28.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/ulikunitz/xz v0.5.15
+	github.com/zalando/go-keyring v0.2.6
 	go.opentelemetry.io/collector/config/configgrpc v0.149.0
 	go.opentelemetry.io/collector/config/confighttp v0.149.0
 	go.opentelemetry.io/collector/config/confignet v1.55.0
@@ -33,8 +34,10 @@ require (
 )
 
 require (
+	al.essio.dev/pkg/shellescape v1.5.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/danieljoos/wincred v1.2.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/foxboron/go-tpm-keyfiles v0.0.0-20251226215517-609e4778396f // indirect
@@ -43,6 +46,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/hashicorp/go-version v1.8.0 // indirect
