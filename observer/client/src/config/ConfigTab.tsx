@@ -1,13 +1,59 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { EmptyState } from "../components/EmptyState";
-import type { ConfigKeySpec } from "../api/types";
-import { type DraftValue, displayDescription, displayLabel, fieldKind, groupSections } from "./model";
-import { type FieldState, useConfig } from "./useConfig";
+import { Switch } from "../components/Switch";
+import type { ConfigEditsState, FieldValue } from "./configEdits";
+import { saveErrorText, type SendOutcome, useConfigEdits } from "./useConfigEdits";
+import { observerFetch } from "../host/transport";
+import type { ConfigStatus } from "./configStatus";
+import {
+  type ConfigDefinition,
+  type ConfigSection,
+  editFields,
+  hasChoices,
+  parseDefinitions,
+  parseText,
+  toText,
+} from "./model";
 
-/** Settings generated from the server's config schema, saved automatically as they are edited. */
-export function ConfigTab(): React.ReactElement {
-  const { edit, fields, flush, loadError, loadState, reset, retry, specs } = useConfig();
-  const sections = useMemo(() => groupSections(specs), [specs]);
+const SAVED_INDICATOR_MS = 1500;
+
+interface ConfigTabProps {
+  /** The observer's config status, read once by AppView; null when there is none. */
+  status: ConfigStatus | null;
+}
+
+/** Settings generated from the observer's config definitions, saved as they are edited. */
+export function ConfigTab({ status }: ConfigTabProps): React.ReactElement {
+  const [sections, setSections] = useState<ConfigSection[] | null>(null);
+  const [definitionsFailed, setDefinitionsFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (sections !== null) return undefined;
+    let active = true;
+    observerFetch("/api/config/definitions")
+      .then(async (response) => (response.ok ? parseDefinitions(await response.json()) : null))
+      .catch(() => null)
+      .then((parsed) => {
+        if (!active) return;
+        if (parsed !== null) setSections(parsed);
+        setDefinitionsFailed(parsed === null);
+      });
+    return () => {
+      active = false;
+    };
+    // Only a retry asks again; once the definitions are loaded they stay.
+  }, [attempt]);
+
+  const fields = useMemo(() => (sections === null ? null : editFields(sections)), [sections]);
+  const { edit, outcomes, refresh, state } = useConfigEdits(fields);
+
+  const loadFailed = definitionsFailed || state?.loadFailed === true;
+  const ready = sections !== null && state !== null && state.server !== null;
+  const retry = (): void => {
+    if (sections === null) setAttempt((count) => count + 1);
+    refresh();
+  };
 
   return (
     <section id="panel-config" aria-label="Config" className="tab-panel config-tab" role="tabpanel">
@@ -17,38 +63,38 @@ export function ConfigTab(): React.ReactElement {
           <p>Changes are saved automatically.</p>
         </header>
 
-        {loadState === "loading" ? (
+        {status !== null && status.message !== "" ? <ConfigProblems status={status} /> : null}
+
+        {!ready && !loadFailed ? (
           <p className="explorer__status" role="status">Loading configuration…</p>
         ) : null}
 
-        {loadState === "error" ? (
+        {loadFailed ? (
           <div className="cloud-alert cloud-alert--error config-alert" role="alert">
-            <span>{loadError ?? "Could not load the configuration."}</span>
+            <span>Could not load the configuration.</span>
             <button className="cloud-button" onClick={retry} type="button">Retry</button>
           </div>
         ) : null}
 
-        {loadState === "ready" && specs.length === 0 ? (
-          <EmptyState title="No settings available" hint="The server did not report any configurable settings." />
+        {ready && sections.length === 0 ? (
+          <EmptyState title="No settings available" hint="Splunk Observability Studio did not report any settings." />
         ) : null}
 
-        {loadState === "ready" ? sections.map((section) => (
-          <section aria-labelledby={`config-section-${section.id}`} className="config-section" key={section.id}>
-            <h3 className="config-section__title" id={`config-section-${section.id}`}>{section.title}</h3>
-            {section.specs.map((spec) => {
-              const state = fields[spec.key];
-              if (state === undefined) return null;
-              return (
-                <ConfigField
-                  key={spec.key}
-                  onEdit={edit}
-                  onFlush={flush}
-                  onReset={reset}
-                  spec={spec}
-                  state={state}
-                />
-              );
-            })}
+        {ready ? sections.map((section) => (
+          <section aria-labelledby={`config-section-${section.name}`} className="config-section" key={section.name}>
+            <h3 className="config-section__title" id={`config-section-${section.name}`}>{section.title}</h3>
+            {section.description ? <p className="config-section__description">{section.description}</p> : null}
+            {section.definitions.map((definition) => (
+              <ConfigField
+                definition={definition}
+                error={outcomes[definition.path]?.ok === false ? state.error : null}
+                inFlight={state.inFlight.has(definition.path)}
+                key={definition.path}
+                onEdit={edit}
+                outcome={outcomes[definition.path]}
+                value={state.values[definition.path]}
+              />
+            ))}
           </section>
         )) : null}
       </div>
@@ -57,77 +103,99 @@ export function ConfigTab(): React.ReactElement {
 }
 
 interface ConfigFieldProps {
-  spec: ConfigKeySpec;
-  state: FieldState;
-  onEdit: (key: string, draft: DraftValue, immediate?: boolean) => void;
-  onFlush: (key: string) => void;
-  onReset: (key: string) => void;
+  definition: ConfigDefinition;
+  /** What configEdits says the field displays. */
+  value: FieldValue | undefined;
+  inFlight: boolean;
+  outcome: SendOutcome | undefined;
+  /** The send error, when the latest send carrying this field failed. */
+  error: ConfigEditsState["error"];
+  onEdit: (path: string, value: FieldValue) => void;
 }
 
-function rangeHint(spec: ConfigKeySpec): string | null {
-  const { minimum, maximum } = spec;
+function rangeHint(definition: ConfigDefinition): string | null {
+  const { minimum, maximum } = definition;
   if (minimum !== undefined && maximum !== undefined) return `Whole number from ${minimum} to ${maximum}`;
   if (minimum !== undefined) return `Whole number, at least ${minimum}`;
   if (maximum !== undefined) return `Whole number, at most ${maximum}`;
   return null;
 }
 
-function ConfigField({ spec, state, onEdit, onFlush, onReset }: ConfigFieldProps): React.ReactElement {
-  const kind = fieldKind(spec);
-  const id = `config-field-${spec.key.replace(/[^A-Za-z0-9_-]/g, "-")}`;
-  const labelId = `${id}-label`;
+/** "Saved" for a moment after a send carrying the field succeeds. */
+function useSavedIndicator(outcome: SendOutcome | undefined): boolean {
+  const [shownFor, setShownFor] = useState<number | null>(null);
+  useEffect(() => {
+    if (outcome === undefined || !outcome.ok) {
+      setShownFor(null);
+      return undefined;
+    }
+    setShownFor(outcome.seq);
+    const timer = setTimeout(() => setShownFor(null), SAVED_INDICATOR_MS);
+    return () => clearTimeout(timer);
+  }, [outcome]);
+  return shownFor !== null && shownFor === outcome?.seq;
+}
+
+function ConfigField({ definition, value, inFlight, outcome, error, onEdit }: ConfigFieldProps): React.ReactElement {
+  // Text the user typed. Kept while it does not parse, or while it still
+  // matches the displayed value; dropped when the server's value replaces it.
+  const [draft, setDraft] = useState<{ text: string; error: string | null } | null>(null);
+  const saved = useSavedIndicator(outcome);
+
+  useEffect(() => {
+    setDraft((current) => {
+      if (current === null || current.error !== null) return current;
+      const parsed = parseText(definition, current.text);
+      return parsed.ok && parsed.value === value ? current : null;
+    });
+  }, [definition, value]);
+
+  const id = `config-field-${definition.path.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+  const titleId = `${id}-title`;
   const descriptionId = `${id}-description`;
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
-  const label = displayLabel(spec);
-  const description = displayDescription(spec);
-  const hint = kind === "integer" && !(spec.allowedValues?.length) ? rangeHint(spec) : null;
-  const describedBy = [
-    description !== null ? descriptionId : null,
-    hint !== null ? hintId : null,
-    state.error !== null ? errorId : null,
-  ]
-    .filter((value): value is string => value !== null)
-    .join(" ") || undefined;
-  const invalid = state.error !== null;
-  const statusText = state.status === "saving" ? "Saving…" : state.status === "saved" ? "Saved" : "";
-  const draftText = typeof state.draft === "string" ? state.draft : "";
-  const choices = spec.allowedValues !== undefined && spec.allowedValues.length > 0 && kind !== "boolean"
-    ? spec.allowedValues.map(String)
-    : null;
+  const choices = hasChoices(definition) ? (definition.enum ?? []).map(String) : null;
+  const hints = [
+    definition.type === "integer" && choices === null ? rangeHint(definition) : null,
+    definition.apply === "restart" ? "Takes effect after a restart." : null,
+  ].filter((hint): hint is string => hint !== null);
+  const hint = hints.length > 0 ? hints.join(" ") : null;
+  const errorText = draft?.error ?? (error ? saveErrorText(error) : null);
+  const describedBy = [descriptionId, hint !== null ? hintId : null, errorText !== null ? errorId : null]
+    .filter((part): part is string => part !== null)
+    .join(" ");
+  const status = inFlight ? "saving" : saved ? "saved" : "idle";
+  const statusText = status === "saving" ? "Saving…" : status === "saved" ? "Saved" : "";
 
   let control: React.ReactElement;
-  if (kind === "boolean") {
-    const on = state.draft === true;
+  if (definition.type === "boolean") {
     control = (
-      <button
-        aria-checked={on}
+      <Switch
         aria-describedby={describedBy}
-        aria-labelledby={labelId}
-        className={on ? "cloud-switch cloud-switch--on" : "cloud-switch"}
+        aria-labelledby={titleId}
+        busy={inFlight}
+        checked={value === true}
         id={id}
-        onClick={() => onEdit(spec.key, !on, true)}
-        role="switch"
-        type="button"
-      >
-        <span aria-hidden="true" className="cloud-switch__track"><span /></span>
-        <span aria-hidden="true">{on ? "On" : "Off"}</span>
-      </button>
+        onToggle={(next) => onEdit(definition.path, next)}
+      />
     );
-  } else if (kind === "unsupported") {
-    control = <code className="config-field__readonly" id={id}>{draftText === "" ? "—" : draftText}</code>;
   } else if (choices !== null) {
-    const known = choices.includes(draftText);
+    const text = toText(value);
     control = (
       <select
         aria-describedby={describedBy}
-        aria-invalid={invalid}
+        aria-disabled={inFlight || undefined}
+        aria-invalid={errorText !== null}
         className="config-select"
         id={id}
-        onChange={(event) => onEdit(spec.key, event.target.value, true)}
-        value={draftText}
+        onChange={(event) => {
+          const parsed = parseText(definition, event.target.value);
+          if (parsed.ok && !inFlight) onEdit(definition.path, parsed.value);
+        }}
+        value={text}
       >
-        {known ? null : <option value={draftText}>{draftText === "" ? "(not set)" : `${draftText} (not allowed)`}</option>}
+        {choices.includes(text) ? null : <option value={text}>{text === "" ? "(not set)" : `${text} (not allowed)`}</option>}
         {choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
       </select>
     );
@@ -135,49 +203,54 @@ function ConfigField({ spec, state, onEdit, onFlush, onReset }: ConfigFieldProps
     control = (
       <input
         aria-describedby={describedBy}
-        aria-invalid={invalid}
+        aria-invalid={errorText !== null}
         autoComplete="off"
         className="config-input"
         id={id}
-        inputMode={kind === "integer" ? "numeric" : undefined}
-        onBlur={() => onFlush(spec.key)}
-        onChange={(event) => onEdit(spec.key, event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") onFlush(spec.key);
+        inputMode={definition.type === "integer" ? "numeric" : undefined}
+        onChange={(event) => {
+          const text = event.target.value;
+          const parsed = parseText(definition, text);
+          setDraft({ error: parsed.ok ? null : parsed.error, text });
+          if (parsed.ok) onEdit(definition.path, parsed.value);
         }}
         spellCheck={false}
         type="text"
-        value={draftText}
+        value={draft?.text ?? toText(value)}
       />
     );
   }
 
   return (
-    <div className="config-field" data-status={state.status}>
+    <div className="config-field" data-status={status}>
       <div className="config-field__text">
-        <label className="config-field__label" htmlFor={id} id={labelId}>{label}</label>
-        {description !== null ? <p className="config-field__description" id={descriptionId}>{description}</p> : null}
-        {label !== spec.key ? <code className="config-field__key">{spec.key}</code> : null}
+        <label className="config-field__label" htmlFor={id} id={titleId}>{definition.title}</label>
+        <p className="config-field__description" id={descriptionId}>{definition.description}</p>
+        <code className="config-field__key">{definition.path}</code>
         {hint !== null ? <p className="config-field__hint" id={hintId}>{hint}</p> : null}
       </div>
       <div className="config-field__control">
         {control}
         <span className="config-field__status" role="status">{statusText}</span>
       </div>
-      {state.error !== null ? (
-        <p className="config-field__error" id={errorId} role="alert">
-          <span>{state.error}</span>
-          {state.status === "error" ? (
-            <button
-              aria-label={`Reset ${label} to its saved value`}
-              className="config-field__reset"
-              onClick={() => onReset(spec.key)}
-              type="button"
-            >
-              Reset to saved
-            </button>
-          ) : null}
-        </p>
+      {errorText !== null ? (
+        <p className="config-field__error" id={errorId} role="alert">{errorText}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/** The status message and one line per diagnostic, as served. */
+function ConfigProblems({ status }: { status: ConfigStatus }): React.ReactElement {
+  return (
+    <div className="config-problems">
+      <p>{status.message}</p>
+      {status.diagnostics.length > 0 ? (
+        <ul>
+          {status.diagnostics.map((d, i) => (
+            <li key={i}>{d.line === 0 ? d.message : `${d.message} (line ${d.line})`}</li>
+          ))}
+        </ul>
       ) : null}
     </div>
   );

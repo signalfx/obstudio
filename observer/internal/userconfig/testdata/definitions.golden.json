@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "telemetry": {
+      "type": "object",
+      "title": "Privacy",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "Send pseudonymous usage data",
+          "description": "Allow Cisco to collect pseudonymous usage data about Splunk Observability Studio itself. This setting does not change what Splunk Observability Studio collects from your agents or shows you locally.",
+          "default": true,
+          "x-obstudio-failSafe": false,
+          "x-obstudio-apply": "live"
+        }
+      }
+    }
+  }
+}

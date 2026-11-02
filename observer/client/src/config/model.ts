@@ -1,93 +1,142 @@
-import type { ConfigKeySpec } from "../api/types";
+import type { FieldKind, FieldValue } from "./configEdits";
 
-export type FieldKind = "boolean" | "integer" | "string" | "unsupported";
+/** A setting's value type, as the definitions document names it in `type`. */
+export type ValueType = "boolean" | "integer" | "string";
 
-/** What a control shows: booleans are toggled, everything else is typed or chosen as text. */
-export type DraftValue = string | boolean;
+/** Whether a change takes effect while the observer runs or after a restart. */
+export type Apply = "live" | "restart";
+
+/** One definition, as GET /api/config/definitions serves it. */
+export interface DefinitionNode {
+  type: ValueType;
+  title: string;
+  description: string;
+  default: FieldValue;
+  enum?: FieldValue[];
+  minimum?: number;
+  maximum?: number;
+  "x-obstudio-failSafe": FieldValue;
+  "x-obstudio-apply": Apply;
+}
+
+/** One section: its properties are its definitions, by name. */
+export interface SectionNode {
+  type: "object";
+  title: string;
+  description?: string;
+  properties: Record<string, DefinitionNode>;
+}
+
+/** The GET /api/config/definitions document: its properties are the sections, by name. */
+export interface DefinitionsDocument {
+  type: "object";
+  properties: Record<string, SectionNode>;
+}
+
+/** One setting, with the served field names and its dotted path. */
+export interface ConfigDefinition
+  extends Pick<DefinitionNode, "title" | "description">,
+    Partial<Pick<DefinitionNode, "default" | "enum" | "minimum" | "maximum">> {
+  /** `<section>.<name>`, such as telemetry.enabled. */
+  path: string;
+  type: ValueType;
+  apply?: Apply;
+}
+
+export interface ConfigSection extends Pick<SectionNode, "title" | "description"> {
+  name: string;
+  definitions: ConfigDefinition[];
+}
 
 export type ParseResult =
-  | { ok: true; value: string | number | boolean }
+  | { ok: true; value: FieldValue }
   | { ok: false; error: string };
 
-export interface ConfigSection {
-  id: string;
-  title: string;
-  specs: ConfigKeySpec[];
+/** A served shape whose values have not been checked yet. */
+type Unchecked<T> = { [K in keyof T]?: unknown };
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function fieldKind(spec: ConfigKeySpec): FieldKind {
-  switch (spec.type) {
-    case "boolean":
-    case "integer":
-    case "string":
-      return spec.type;
-    default:
-      return "unsupported";
-  }
+function isValueType(value: unknown): value is ValueType {
+  return value === "boolean" || value === "integer" || value === "string";
 }
 
-/** The server's label for the key, or the exact key when it has none. */
-export function displayLabel(spec: ConfigKeySpec): string {
-  const label = spec.label?.trim();
-  return label !== undefined && label !== "" ? label : spec.key;
+function isFieldValue(value: unknown): value is FieldValue {
+  return typeof value === "boolean" || typeof value === "number" || typeof value === "string";
 }
 
-/** The server's description for the key, if it has one. */
-export function displayDescription(spec: ConfigKeySpec): string | null {
-  const description = spec.description?.trim();
-  return description !== undefined && description !== "" ? description : null;
+function readDefinition(path: string, node: Unchecked<DefinitionNode>): ConfigDefinition | null {
+  if (!isValueType(node.type) || typeof node.title !== "string" || typeof node.description !== "string") return null;
+  const definition: ConfigDefinition = { description: node.description, path, title: node.title, type: node.type };
+  if (isFieldValue(node.default)) definition.default = node.default;
+  if (Array.isArray(node.enum) && node.enum.every(isFieldValue)) definition.enum = node.enum;
+  if (typeof node.minimum === "number") definition.minimum = node.minimum;
+  if (typeof node.maximum === "number") definition.maximum = node.maximum;
+  // The one renamed field: x-obstudio-apply is read into apply here and nowhere else.
+  const apply = node["x-obstudio-apply"];
+  if (apply === "live" || apply === "restart") definition.apply = apply;
+  return definition;
 }
 
-function sectionKey(key: string): string {
-  const segments = key.split(".");
-  return segments.length > 1 ? segments[0] : "";
-}
-
-/** Group keys by their first path segment. Single-segment keys go in a leading "General" section. */
-export function groupSections(specs: ConfigKeySpec[]): ConfigSection[] {
-  const sorted = [...specs].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  const sections = new Map<string, ConfigSection>();
-  for (const spec of sorted) {
-    const name = sectionKey(spec.key);
-    let section = sections.get(name);
-    if (section === undefined) {
-      section = {
-        id: name === "" ? "general" : name,
-        specs: [],
-        title: name === "" ? "General" : name,
-      };
-      sections.set(name, section);
+/**
+ * Read the definitions document into sections, in the order the server lists
+ * them. Settings of a type the tab has no control for, or without the served
+ * title and description, are left out, as are sections without a title.
+ * Returns null when the document does not have the served shape.
+ */
+export function parseDefinitions(document: unknown): ConfigSection[] | null {
+  if (!isObject(document)) return null;
+  const root: Unchecked<DefinitionsDocument> = document;
+  if (!isObject(root.properties)) return null;
+  const sections: ConfigSection[] = [];
+  for (const [name, section] of Object.entries(root.properties)) {
+    if (!isObject(section)) continue;
+    const node: Unchecked<SectionNode> = section;
+    if (!isObject(node.properties) || typeof node.title !== "string") continue;
+    const definitions: ConfigDefinition[] = [];
+    for (const [leaf, definitionNode] of Object.entries(node.properties)) {
+      const definition = isObject(definitionNode) ? readDefinition(`${name}.${leaf}`, definitionNode) : null;
+      if (definition !== null) definitions.push(definition);
     }
-    section.specs.push(spec);
+    if (definitions.length === 0) continue;
+    const parsed: ConfigSection = { definitions, name, title: node.title };
+    if (typeof node.description === "string") parsed.description = node.description;
+    sections.push(parsed);
   }
-  const general = sections.get("");
-  const rest = [...sections.entries()].filter(([name]) => name !== "").map(([, section]) => section);
-  return general === undefined ? rest : [general, ...rest];
+  return sections;
 }
 
-/** Read a dotted key out of the nested GET /api/config values. */
-export function lookupValue(values: Record<string, unknown>, key: string): unknown {
-  let node: unknown = values;
-  for (const segment of key.split(".")) {
-    if (typeof node !== "object" || node === null || Array.isArray(node)) return undefined;
-    node = (node as Record<string, unknown>)[segment];
+/** Discrete controls send at once; typed ones wait for the debounce. */
+export function fieldKind(definition: ConfigDefinition): FieldKind {
+  return definition.type === "boolean" || hasChoices(definition) ? "immediate" : "debounced";
+}
+
+export function hasChoices(definition: ConfigDefinition): boolean {
+  return definition.type !== "boolean" && definition.enum !== undefined && definition.enum.length > 0;
+}
+
+/** The configEdits fields for every setting in the sections. */
+export function editFields(sections: readonly ConfigSection[]): Record<string, FieldKind> {
+  const fields: Record<string, FieldKind> = {};
+  for (const section of sections) {
+    for (const definition of section.definitions) fields[definition.path] = fieldKind(definition);
   }
-  return node;
+  return fields;
 }
 
-export function toDraft(spec: ConfigKeySpec, value: unknown): DraftValue {
-  if (fieldKind(spec) === "boolean") return value === true;
-  if (value === undefined || value === null) return "";
-  if (fieldKind(spec) === "unsupported" && typeof value === "object") return JSON.stringify(value);
-  return String(value);
+/** How a value is shown in a text field or select. */
+export function toText(value: FieldValue | undefined): string {
+  return value === undefined ? "" : String(value);
 }
 
-function describeAllowed(values: Array<string | number | boolean>): string {
+function describeAllowed(values: readonly FieldValue[]): string {
   return `Must be one of: ${values.join(", ")}`;
 }
 
-function rangeError(spec: ConfigKeySpec, value: number): string | null {
-  const { minimum, maximum } = spec;
+function rangeError(definition: ConfigDefinition, value: number): string | null {
+  const { minimum, maximum } = definition;
   if (minimum !== undefined && maximum !== undefined && (value < minimum || value > maximum)) {
     return `Must be a whole number between ${minimum} and ${maximum}`;
   }
@@ -96,28 +145,24 @@ function rangeError(spec: ConfigKeySpec, value: number): string | null {
   return null;
 }
 
-/** Check a draft against the schema before sending it. The server stays authoritative. */
-export function parseDraft(spec: ConfigKeySpec, draft: DraftValue): ParseResult {
-  const allowed = spec.allowedValues !== undefined && spec.allowedValues.length > 0 ? spec.allowedValues : null;
-  switch (fieldKind(spec)) {
-    case "boolean":
-      return { ok: true, value: draft === true };
+/** Check typed or chosen text against the definition before sending it. The server stays authoritative. */
+export function parseText(definition: ConfigDefinition, text: string): ParseResult {
+  const allowed = hasChoices(definition) ? definition.enum ?? null : null;
+  switch (definition.type) {
     case "integer": {
-      const text = typeof draft === "string" ? draft.trim() : "";
-      if (!/^[+-]?\d+$/.test(text)) return { ok: false, error: "Enter a whole number" };
-      const value = Number(text);
+      const trimmed = text.trim();
+      if (!/^[+-]?\d+$/.test(trimmed)) return { ok: false, error: "Enter a whole number" };
+      const value = Number(trimmed);
       if (!Number.isSafeInteger(value)) return { ok: false, error: "Enter a smaller whole number" };
-      const outOfRange = rangeError(spec, value);
+      const outOfRange = rangeError(definition, value);
       if (outOfRange !== null) return { ok: false, error: outOfRange };
       if (allowed !== null && !allowed.includes(value)) return { ok: false, error: describeAllowed(allowed) };
       return { ok: true, value };
     }
-    case "string": {
-      const text = typeof draft === "string" ? draft : "";
+    case "string":
       if (allowed !== null && !allowed.includes(text)) return { ok: false, error: describeAllowed(allowed) };
       return { ok: true, value: text };
-    }
-    default:
-      return { ok: false, error: "This setting's type is not supported here" };
+    case "boolean":
+      return { ok: true, value: text === "true" };
   }
 }

@@ -49,6 +49,22 @@ make fmt            # go fmt
 make tidy           # go mod tidy
 ```
 
+#### Config Manager (off by default)
+
+**The Config Manager is off by default.** It is in development. While
+it is off, Splunk Observability Studio does not read or create
+`~/.obstudio/config.yaml` and shows no Config tab. To turn it on for
+local development, add this line to `~/.obstudio/env`:
+
+```dotenv
+OBSTUDIO_CONFIG_MANAGER=true
+```
+
+The variable is read when Splunk Observability Studio starts, so
+restart it after a change. A value set in the shell environment
+overrides the env file. For how the pieces fit together and how to
+add a setting, see [docs/config-manager.md](docs/config-manager.md).
+
 ### VS Code-Compatible Editor Extension
 
 ```sh

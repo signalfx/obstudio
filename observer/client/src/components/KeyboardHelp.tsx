@@ -3,6 +3,8 @@ import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 
 interface KeyboardHelpProps {
   onClose: () => void;
+  /** Whether the Config Manager capability is on; the `9` row shows only then. */
+  configManager: boolean;
 }
 
 const shortcuts = [
@@ -17,11 +19,13 @@ const shortcuts = [
   { key: "6", description: "Switch to Validation tab" },
   { key: "7", description: "Switch to Dashboards tab" },
   { key: "8", description: "Switch to Cloud tab" },
-  { key: "9", description: "Switch to Config tab" },
 ];
 
+const configShortcut = { key: "9", description: "Switch to Config tab" };
+
 /** Modal overlay listing available keyboard shortcuts. */
-export function KeyboardHelp({ onClose }: KeyboardHelpProps): React.ReactElement {
+export function KeyboardHelp({ onClose, configManager }: KeyboardHelpProps): React.ReactElement {
+  const rows = configManager ? [...shortcuts, configShortcut] : shortcuts;
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -68,7 +72,7 @@ export function KeyboardHelp({ onClose }: KeyboardHelpProps): React.ReactElement
           </button>
         </div>
         <div className="keyboard-help__body">
-          {shortcuts.map((s) => (
+          {rows.map((s) => (
             <div key={s.key} className="keyboard-help__row">
               <span className="keyboard-help__key">{s.key}</span>
               <span className="keyboard-help__desc">{s.description}</span>

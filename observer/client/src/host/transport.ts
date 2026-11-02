@@ -74,7 +74,7 @@ export interface ObserverHostCloudResponse {
 export interface ObserverHostTelemetryMessage {
   data?: unknown;
   signal?: string;
-  type: "connected" | "disconnected" | "paused-update" | "reload" | "update";
+  type: "config-changed" | "connected" | "disconnected" | "paused-update" | "reload" | "update";
 }
 
 interface VSCodeWebviewAPI {
@@ -85,7 +85,7 @@ type ObserverHostRequest =
   | {
     body?: string;
     kind: "http";
-    method: "GET" | "POST" | "PUT";
+    method: "GET" | "POST";
     path: string;
   }
   | {
@@ -172,7 +172,7 @@ export async function observerFetch(path: string, init?: RequestInit): Promise<R
   if (!api) return fetch(path, init);
 
   const method = (init?.method ?? "GET").toUpperCase();
-  if (method !== "GET" && method !== "POST" && method !== "PUT") {
+  if (method !== "GET" && method !== "POST") {
     throw new Error(`Splunk Observability Studio host transport does not support ${method} requests.`);
   }
   if (init?.body !== undefined && typeof init.body !== "string") {
@@ -452,6 +452,6 @@ function isObserverHostTelemetryEnvelope(value: unknown): value is ObserverHostT
   if (typeof envelope.message !== "object" || envelope.message === null) return false;
   const message = envelope.message as Record<string, unknown>;
   return typeof message.type === "string"
-    && ["connected", "disconnected", "paused-update", "reload", "update"].includes(message.type)
+    && ["config-changed", "connected", "disconnected", "paused-update", "reload", "update"].includes(message.type)
     && (message.signal === undefined || typeof message.signal === "string");
 }
