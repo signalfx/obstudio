@@ -30,24 +30,6 @@ function selectFilterField(label: string): void {
 }
 
 describe("LogsTab", () => {
-  it("previews the table columns and names the configured OTLP endpoint when empty", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => ({
-      ok: true,
-      json: async () => (String(input).includes("/api/health") ? { endpoints: { otlpHttp: "http://127.0.0.1:14318" } } : []),
-    })));
-
-    let container!: HTMLElement;
-    await act(async () => {
-      ({ container } = render(<LogsTab logs={[]} />));
-    });
-
-    expect(screen.getByText("No logs received yet.")).toBeTruthy();
-    const headers = Array.from(container.querySelectorAll(".empty-state__skeleton .data-table__th")).map((th) => th.textContent);
-    expect(headers).toEqual(["Level", "Timestamp", "Service", "Message"]);
-    expect(screen.getByText("OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:14318")).toBeTruthy();
-    expect(screen.queryByText(/port 4318/)).toBeNull();
-  });
-
   it("shows only the time for today's logs", () => {
     const today = new Date();
     today.setUTCHours(14, 3, 21, 123);

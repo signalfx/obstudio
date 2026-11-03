@@ -51,7 +51,7 @@ export const OTEL_VERIFY_SKILL: OverviewSkillRef = {
 interface OverviewTabProps {
   /** Invoked by checklist steps that hand off to the Cloud tab. */
   onOpenCloud?: () => void;
-  /** Whether any telemetry has arrived; `undefined` while unknown. */
+  /** Whether any telemetry has arrived, or undefined while loading. */
   hasTelemetry?: boolean;
 }
 

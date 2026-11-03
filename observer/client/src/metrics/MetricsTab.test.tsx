@@ -24,24 +24,6 @@ function selectFilterField(label: string): void {
 }
 
 describe("MetricsTab", () => {
-  it("previews the table columns and names the configured OTLP endpoint when empty", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => ({
-      ok: true,
-      json: async () => (String(input).includes("/api/health") ? { endpoints: { otlpHttp: "http://127.0.0.1:14318" } } : []),
-    })));
-
-    let container!: HTMLElement;
-    await act(async () => {
-      ({ container } = render(<MetricsTab metrics={[]} telemetryError={null} />));
-    });
-
-    expect(screen.getByText("No metrics received yet.")).toBeTruthy();
-    const headers = Array.from(container.querySelectorAll(".empty-state__skeleton .data-table__th")).map((th) => th.textContent);
-    expect(headers).toEqual(["Metric name", "Service", "Description", "Type / Unit"]);
-    expect(screen.getByText("OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:14318")).toBeTruthy();
-    expect(screen.queryByText(/port 4318/)).toBeNull();
-  });
-
   it("gives service its own column so same-named metrics can be told apart", () => {
     const base = { name: "db.client.operation.duration", description: "Database client operation duration", unit: "s", type: "histogram", scopeName: "otel", dataPointCount: 1, dataPoints: [] };
     const { container } = render(

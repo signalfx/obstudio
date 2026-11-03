@@ -88,7 +88,6 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
     ? summary?.lastRunCompletedAt
     : null;
   const actionLabel = hasResult ? "Re-validate" : "Validate";
-  const runStartedAt = summary?.lastRunStartedAt;
 
   useEffect(() => {
     if (!hasExplicitSignalTabSelection && activeSignalTab !== firstAvailableFilteredSignal) {
@@ -189,15 +188,11 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
     <section id="panel-validation" className="tab-panel findings-tab" role="tabpanel" aria-label="Validation">
       <div className={`signal-view${hasDetail ? " signal-view--with-panel" : ""}`}>
         <div className="signal-view__content">
-          {/* Until a run has produced results there is nothing to count or
-              filter, so the toolbar and filters wait and the empty state
-              below carries the Validate action. */}
-          {showResultState ? (
-          <>
-          <div className="explorer__toolbar findings-tab__header">
+          {/* Nothing to count or filter until a run has results. */}
+          <div className="explorer__toolbar findings-tab__header" hidden={!showResultState}>
             <div className="findings-tab__header-meta">
-              <span className="findings-tab__header-count">{filteredIssues.length} {filteredIssues.length === 1 ? "issue" : "issues"}</span>
-              {completedAt ? <span className="findings-tab__header-separator" aria-hidden="true">·</span> : null}
+              {showResultState ? <span className="findings-tab__header-count">{filteredIssues.length} {filteredIssues.length === 1 ? "issue" : "issues"}</span> : null}
+              {showResultState && completedAt ? <span className="findings-tab__header-separator" aria-hidden="true">·</span> : null}
               {completedAt ? (
                 <span className="findings-tab__header-timestamp" title={new Date(completedAt).toLocaleString()}>
                   Validated {formatTimestamp(completedAt)}
@@ -207,7 +202,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
             {validateButton}
           </div>
 
-          <div className="findings-tab__filters">
+          <div className="findings-tab__filters" hidden={!showResultState}>
             <select
               aria-label="Filter by severity"
               className="validation-panel__select"
@@ -255,39 +250,9 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
               })}
             </div>
           </div>
-          </>
-          ) : null}
 
           {summary?.status === "disabled" ? (
-            showResultState ? (
-              <p className="explorer__status">{summary.message ?? "Validator unavailable."}</p>
-            ) : (
-              <EmptyState title="Validator unavailable." hint={summary.message ?? "The weaver binary may be missing."} />
-            )
-          ) : !showResultState ? (
-            <>
-              {summary?.status === "error" ? (
-                <p className="explorer__status explorer__status--error">{summary.lastError ?? summary.message ?? "Validation failed."}</p>
-              ) : null}
-              {runError ? (
-                <p className="explorer__status explorer__status--error">{runError}</p>
-              ) : null}
-              {isRunning ? (
-                <EmptyState
-                  title="Validation is running."
-                  hint={isMeaningfulTimestamp(runStartedAt)
-                    ? `Started ${formatTimestamp(runStartedAt)}. Results appear here when it finishes.`
-                    : "Results appear here when it finishes."}
-                  actions={validateButton}
-                />
-              ) : (
-                <EmptyState
-                  title="Validation has not been run yet."
-                  hint="Run validation to analyze the current telemetry snapshot."
-                  actions={validateButton}
-                />
-              )}
-            </>
+            <p className="explorer__status">{summary.message ?? "Validator unavailable."}</p>
           ) : (
             <>
               {summary?.status === "running" ? (
@@ -300,6 +265,13 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
               ) : null}
               {runError ? (
                 <p className="explorer__status explorer__status--error">{runError}</p>
+              ) : null}
+              {summary && !summary.hasResult && !isRunning ? (
+                <EmptyState
+                  title="Validation has not been run yet."
+                  hint="Run validation to analyze the current telemetry snapshot."
+                  actions={validateButton}
+                />
               ) : null}
               {summary?.hasResult ? (
                 filteredIssues.length === 0 ? (

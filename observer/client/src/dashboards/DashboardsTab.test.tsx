@@ -34,32 +34,21 @@ describe("DashboardsTab", () => {
     }
   });
 
-  it("hides the preview badge, refresh cadence, and time window until a preview exists", async () => {
-    const fetchMock = stubFetchOnce(makePreviewResponse({ available: false, groups: [], message: "Run $splunk-dashboard." }));
-    render(<DashboardsTab />);
-
+  it("hides the preview badge and controls until there is a preview", async () => {
+    stubFetchOnce(makePreviewResponse({ available: false, groups: [], message: "Run $splunk-dashboard." }));
+    const { container } = render(<DashboardsTab />);
     await waitFor(() => expect(screen.getByText(/No dashboard preview yet/i)).toBeTruthy());
-    expect(screen.queryByText(/Approximate · local-data preview/i)).toBeNull();
-    expect(screen.queryByText(/auto-refresh/i)).toBeNull();
+    expect(container.querySelector(".dashboards-tab__bar")?.hasAttribute("hidden")).toBe(true);
     expect(screen.queryByRole("combobox", { name: "Time window" })).toBeNull();
-
-    // The empty state carries the next steps instead.
     expect(screen.getByRole("button", { name: "Copy $splunk-dashboard command" })).toBeTruthy();
-    const callsBefore = fetchMock.mock.calls.length;
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(callsBefore));
   });
 
-  it("shows the preview badge and time window once a preview is available", async () => {
+  it("shows the preview badge and controls once there is a preview", async () => {
     stubFetchOnce(makePreviewResponse());
-    render(<DashboardsTab />);
-
-    await waitFor(() => expect(screen.getByText(/Approximate · local-data preview/i)).toBeTruthy());
-    expect(screen.getByText(/auto-refresh 5s/i)).toBeTruthy();
-    const windowSelect = screen.getByRole("combobox", { name: "Time window" }) as HTMLSelectElement;
-    expect(Array.from(windowSelect.options).map((o) => o.textContent)).toEqual(["1 min", "5 min", "1 hour", "24 hrs", "All"]);
-    fireEvent.change(windowSelect, { target: { value: String(5 * 60_000) } });
-    expect(windowSelect.value).toBe(String(5 * 60_000));
+    const { container } = render(<DashboardsTab />);
+    await waitFor(() => expect(screen.getByText("Checkout RED")).toBeTruthy());
+    expect(container.querySelector(".dashboards-tab__bar")?.hasAttribute("hidden")).toBe(false);
+    expect(screen.getByRole("combobox", { name: "Time window" })).toBeTruthy();
   });
 
   it("renders the available:false empty state with the spec message", async () => {

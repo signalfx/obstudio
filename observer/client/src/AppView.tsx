@@ -32,8 +32,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   const backendValidationIssues = state.validation?.issues ?? [];
   // Rows in the Metrics table, or the stats count until the metric list has loaded.
   const metricCount = state.metrics?.length || state.stats?.metricNameCount;
-  // Unknown until the first stats response, so Overview does not flash a
-  // "no telemetry" card while loading.
+  // Undefined until stats load, so Overview doesn't flash its "no telemetry" card.
   const hasTelemetry = state.stats
     ? state.stats.spanCount + state.stats.dataPointCount + state.stats.logCount > 0
     : undefined;

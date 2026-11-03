@@ -3456,8 +3456,7 @@ code {
   margin-top: 4px;
 }
 
-/* The exporter variable is long, so it wraps inside its chip in narrow
-   panels instead of forcing horizontal scrolling. */
+/* Let long commands wrap in narrow panels. */
 .empty-state__command {
   max-width: 100%;
 }
@@ -3470,8 +3469,7 @@ code {
   text-align: left;
 }
 
-/* Skeleton table behind the message: the real column headers plus static
-   placeholder rows. No shimmer, because nothing is loading. */
+/* Static placeholder rows, no shimmer, since nothing is loading. */
 .empty-state--skeleton {
   position: relative;
   flex: 1;
@@ -3481,12 +3479,7 @@ code {
 
 .empty-state__skeleton {
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 35%, transparent 95%);
-  mask-image: linear-gradient(to bottom, #000 0, #000 35%, transparent 95%);
-}
-
-.empty-state__skeleton-row {
-  cursor: default;
+  mask-image: linear-gradient(to bottom, #000 35%, transparent 95%);
 }
 
 .empty-state__bar {
@@ -3497,16 +3490,14 @@ code {
   background: var(--chrome-2);
 }
 
-.empty-state__bar--1 {
+.empty-state__skeleton > :nth-child(3n) .empty-state__bar {
   width: 45%;
 }
 
-.empty-state__bar--2 {
+.empty-state__skeleton > :nth-child(3n + 1) .empty-state__bar {
   width: 85%;
 }
 
-/* Sits over the upper skeleton rows, so the preview reads as the table the
-   message is about rather than a separate block above empty space. */
 .empty-state__overlay {
   position: absolute;
   inset: 32px 0 0;
@@ -3518,15 +3509,7 @@ code {
   text-align: center;
 }
 
-.empty-state__overlay .empty-state__message {
-  padding: 18px 20px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--chrome);
-  line-height: 1.6;
-}
-
-/* Inline variant, e.g. at the top of Overview. */
+.empty-state__overlay .empty-state__message,
 .empty-state-card {
   padding: 16px 18px;
   border: 1px solid var(--border);
@@ -3542,6 +3525,13 @@ code {
 
 .empty-state-card .empty-state__actions {
   justify-content: flex-start;
+}
+
+/* Toolbars that wait for results (Validation, Dashboards). */
+.explorer__toolbar[hidden],
+.findings-tab__filters[hidden],
+.dashboards-tab__bar[hidden] {
+  display: none;
 }
 
 /* ======================================
@@ -8336,8 +8326,7 @@ code {
 
 /* The row is a flex container, which suppresses ::marker, so the bullet is
    drawn explicitly. */
-/* Wraps so the command and docs link move under the label in narrow panels
-   (and when a scrollbar takes width) instead of overflowing the card. */
+/* Wraps so the command and docs link fit in narrow panels. */
 .overview-checklist__item {
   display: flex;
   flex-wrap: wrap;

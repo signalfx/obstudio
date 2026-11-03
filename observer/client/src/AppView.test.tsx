@@ -952,7 +952,7 @@ describe("AppView dashboards tab", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: /dashboards/i }));
 
-    await waitFor(() => expect(screen.getByText(/No dashboard preview yet/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Approximate · local-data preview/i)).toBeTruthy());
   });
 
   it("deep-links to the dashboards tab via ?tab=dashboards", async () => {
@@ -962,6 +962,6 @@ describe("AppView dashboards tab", () => {
     render(<AppView telemetry={telemetry} />);
 
     expect(screen.getByRole("tab", { name: /dashboards/i }).getAttribute("aria-selected")).toBe("true");
-    await waitFor(() => expect(screen.getByText(/No dashboard preview yet/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Approximate · local-data preview/i)).toBeTruthy());
   });
 });

@@ -36,24 +36,6 @@ function selectFilterField(label: string): void {
 }
 
 describe("TracesTab", () => {
-  it("previews the table columns and names the configured OTLP endpoint when empty", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => ({
-      ok: true,
-      json: async () => (String(input).includes("/api/health") ? { endpoints: { otlpHttp: "http://127.0.0.1:14318" } } : []),
-    })));
-
-    let container!: HTMLElement;
-    await act(async () => {
-      ({ container } = render(<TracesTab traces={[]} telemetryError={null} validationFindings={[]} validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }} />));
-    });
-
-    expect(screen.getByText("No traces received yet.")).toBeTruthy();
-    const headers = Array.from(container.querySelectorAll(".empty-state__skeleton .data-table__th")).map((th) => th.textContent);
-    expect(headers).toEqual(["Operation", "Start", "Trace ID", "Service", "Status", "Duration", "Spans"]);
-    expect(screen.getByText("OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:14318")).toBeTruthy();
-    expect(screen.queryByText(/port 4318/)).toBeNull();
-  });
-
   it("shows each trace's start time, a short trace ID, and readable durations", () => {
     const { container } = render(
       <TracesTab

@@ -42,19 +42,18 @@ const TRACE_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "maxSpanCount", label: "Max Span Count", kind: "number", placeholder: "10", chipLabel: "Max Span Count", operatorLabels: { eq: "<=", neq: ">" }, step: 1 },
 ];
 const TRACE_SUGGESTIBLE_FIELDS = new Set(["rootSpanName", "serviceName"]);
-// Same columns and classes as the table head below, so the empty state
-// previews the real layout at every width.
+// Matches the table head below.
 const TRACES_SKELETON: EmptyStateSkeleton = {
   headClassName: "data-table__head data-table__head--traces",
   rowClassName: "data-table__row data-table__row--traces",
   columns: [
-    { label: "Operation", modifiers: ["operation"] },
-    { label: "Start", modifiers: ["start"] },
-    { label: "Trace ID", modifiers: ["trace-id"] },
-    { label: "Service", modifiers: ["service"] },
-    { label: "Status", modifiers: ["status"] },
-    { label: "Duration", modifiers: ["duration", "numeric"] },
-    { label: "Spans", modifiers: ["spans", "numeric"] },
+    { label: "Operation", className: "data-table__th--operation" },
+    { label: "Start", className: "data-table__th--start" },
+    { label: "Trace ID", className: "data-table__th--trace-id" },
+    { label: "Service", className: "data-table__th--service" },
+    { label: "Status", className: "data-table__th--status" },
+    { label: "Duration", className: "data-table__th--duration data-table__th--numeric" },
+    { label: "Spans", className: "data-table__th--spans data-table__th--numeric" },
   ],
 };
 const TRACE_DETAIL_PANEL_DEFAULT_WIDTH = "min(1600px, calc(100vw - 320px))";

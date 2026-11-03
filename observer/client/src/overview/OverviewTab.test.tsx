@@ -406,7 +406,7 @@ describe("OverviewTab", () => {
     expect(screen.getAllByRole("button", { name: "Copy $otel-instrument command" })).toHaveLength(1);
   });
 
-  it("omits the send-telemetry card once telemetry arrives or while it is unknown", async () => {
+  it("hides that card once telemetry arrives or while loading", async () => {
     stubStatusFetch({ connected: false });
     const view = render(<OverviewTab hasTelemetry />);
     await waitFor(() => expect(view.container.querySelector(".overview-score__value")).toBeTruthy());

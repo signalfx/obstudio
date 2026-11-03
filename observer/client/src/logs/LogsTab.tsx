@@ -26,16 +26,15 @@ const LOG_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "scopeName", label: "Scope", kind: "text", placeholder: "demo.logs" },
 ];
 const LOG_SUGGESTIBLE_FIELDS = new Set(["serviceName", "scopeName", "severityDisplay"]);
-// Same columns and classes as the table head below, so the empty state
-// previews the real layout at every width.
+// Matches the table head below.
 const LOGS_SKELETON: EmptyStateSkeleton = {
   headClassName: "data-table__head data-table__head--logs",
   rowClassName: "data-table__row data-table__row--logs",
   columns: [
-    { label: "Level", modifiers: ["severity"] },
-    { label: "Timestamp", modifiers: ["timestamp"] },
-    { label: "Service", modifiers: ["service"] },
-    { label: "Message", modifiers: ["message"] },
+    { label: "Level", className: "data-table__th--severity" },
+    { label: "Timestamp", className: "data-table__th--timestamp" },
+    { label: "Service", className: "data-table__th--service" },
+    { label: "Message", className: "data-table__th--message" },
   ],
 };
 

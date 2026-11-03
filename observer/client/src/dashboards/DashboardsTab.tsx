@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { CommandChip, EmptyState } from "../components/EmptyState";
+import { CommandChip, EmptyState, useOtlpEndpoint } from "../components/EmptyState";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
-import { useOtlpEndpoint } from "../hooks/useOtlpEndpoint";
 import { DashboardGrid } from "./DashboardGrid";
 import { DashboardPanel, OtlpEndpointContext } from "./DashboardPanel";
 import { useDashboardPreview } from "./useDashboardPreview";
@@ -29,8 +28,6 @@ const TIME_WINDOWS = [
 ] as const;
 
 const DEFAULT_WINDOW_MS = 60_000;
-
-const SPLUNK_DASHBOARD_COMMAND = "$splunk-dashboard";
 
 interface DashboardsTabProps {
   telemetryError?: string | null;
@@ -104,40 +101,37 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
     // unmatched-panel hint names the real receiver (#19).
     <OtlpEndpointContext.Provider value={otlpEndpoint}>
     <section id="panel-dashboards" className="dashboards-tab" role="tabpanel" aria-label="Dashboards">
-      {/* The badge, refresh cadence, and time window describe a rendered
-          preview, so they wait until there is one. */}
-      {data?.available ? (
-        <div className="dashboards-tab__bar">
-          <span className="dashboards-tab__badge" title="SignalFlow executes on Splunk's backend; this previews layout and metric targeting using local OTLP data.">
-            Approximate · local-data preview
+      {/* Hidden until there is a preview for these controls to describe. */}
+      <div className="dashboards-tab__bar" hidden={!data?.available}>
+        <span className="dashboards-tab__badge" title="SignalFlow executes on Splunk's backend; this previews layout and metric targeting using local OTLP data.">
+          Approximate · local-data preview
+        </span>
+        <div className="dashboards-tab__bar-actions">
+          {data?.generatedAt ? (
+            <span className="dashboards-tab__hint">generated {data.generatedAt}</span>
+          ) : null}
+          <span className="dashboards-tab__hint dashboards-tab__hint--live">
+            {paused ? "⏸ paused" : "↻ auto-refresh 5s"}
           </span>
-          <div className="dashboards-tab__bar-actions">
-            {data.generatedAt ? (
-              <span className="dashboards-tab__hint">generated {data.generatedAt}</span>
-            ) : null}
-            <span className="dashboards-tab__hint dashboards-tab__hint--live">
-              {paused ? "⏸ paused" : "↻ auto-refresh 5s"}
-            </span>
-            <select
-              className="dashboards-tab__window-select"
-              value={windowMs}
-              onChange={(e) => setWindowMs(Number(e.target.value))}
-              aria-label="Time window"
-            >
-              {TIME_WINDOWS.map((w) => (
-                <option key={w.ms} value={w.ms}>{w.label}</option>
-              ))}
-            </select>
-            <button type="button" className="pill pill--small pill--muted" onClick={refresh}>
-              Refresh
-            </button>
-          </div>
+          <select
+            className="dashboards-tab__window-select"
+            value={windowMs}
+            onChange={(e) => setWindowMs(Number(e.target.value))}
+            aria-label="Time window"
+          >
+            {TIME_WINDOWS.map((w) => (
+              <option key={w.ms} value={w.ms}>{w.label}</option>
+            ))}
+          </select>
+          <button type="button" className="pill pill--small pill--muted" onClick={refresh}>
+            Refresh
+          </button>
         </div>
-      ) : null}
+      </div>
 
       {telemetryError ? <div className="pill pill--error">{telemetryError}</div> : null}
 
-      {renderState({ data, loading, error, windowMs, onExpand: setExpandedId, onRefresh: refresh })}
+      {renderState({ data, loading, error, windowMs, onExpand: setExpandedId })}
 
       {expandedPanel ? (
         <div className="dashboard-expand-overlay" onClick={() => setExpandedId(null)}>
@@ -182,14 +176,12 @@ function renderState({
   error,
   windowMs,
   onExpand,
-  onRefresh,
 }: {
   data: ReturnType<typeof useDashboardPreview>["data"];
   loading: boolean;
   error: string | null;
   windowMs: number;
   onExpand: (id: PanelId) => void;
-  onRefresh: () => void;
 }): React.ReactElement {
   if (loading && !data) {
     return <div className="dashboards-tab__message">Loading dashboard preview…</div>;
@@ -206,14 +198,7 @@ function renderState({
       <EmptyState
         title="No dashboard preview yet."
         hint={data?.message ?? "Run $splunk-dashboard to generate .observe/dashboards.preview.json."}
-        actions={
-          <>
-            <CommandChip text={SPLUNK_DASHBOARD_COMMAND} label={`${SPLUNK_DASHBOARD_COMMAND} command`} />
-            <button type="button" className="pill pill--small pill--muted" onClick={onRefresh}>
-              Refresh
-            </button>
-          </>
-        }
+        actions={<CommandChip text="$splunk-dashboard" label="$splunk-dashboard command" />}
       />
     );
   }

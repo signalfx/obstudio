@@ -23,15 +23,14 @@ const METRIC_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "scopeName", label: "Scope", kind: "text", placeholder: "otel.http" },
 ];
 const METRIC_SUGGESTIBLE_FIELDS = new Set(["metricName", "serviceName", "scopeName"]);
-// Same columns and classes as the metric list head, so the empty state
-// previews the real layout at every width.
+// Matches the metric list head below.
 const METRICS_SKELETON: EmptyStateSkeleton = {
   headClassName: "data-table__head data-table__head--metrics",
   rowClassName: "data-table__row data-table__row--metrics",
   columns: [
     { label: "Metric name" },
     { label: "Service" },
-    { label: "Description", modifiers: ["metric-description"] },
+    { label: "Description", className: "data-table__th--metric-description" },
     { label: "Type / Unit" },
   ],
 };

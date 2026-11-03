@@ -27,21 +27,20 @@ function formatAvg(ms: number | null): string {
   return ms !== null ? formatDurationMs(ms) : "—";
 }
 
-// Same columns and classes as the services table head, so the empty state
-// previews the real layout at every width.
+// Matches the services table head below.
 const SERVICES_SKELETON: EmptyStateSkeleton = {
   tableClassName: "services-table",
   headClassName: "services-table__head",
   rowClassName: "services-table__row",
   columns: [
     { label: "Service" },
-    { label: "Traces", modifiers: ["numeric"], className: "services-table__col--secondary" },
-    { label: "Spans", modifiers: ["numeric"], className: "services-table__col--secondary" },
-    { label: "Errors", modifiers: ["numeric"] },
-    { label: "Error rate", modifiers: ["numeric"] },
-    { label: "Avg Duration", modifiers: ["numeric"] },
-    { label: "Avg Client", modifiers: ["numeric"], className: "services-table__col--secondary" },
-    { label: "Avg Server", modifiers: ["numeric"], className: "services-table__col--secondary" },
+    { label: "Traces", className: "data-table__th--numeric services-table__col--secondary" },
+    { label: "Spans", className: "data-table__th--numeric services-table__col--secondary" },
+    { label: "Errors", className: "data-table__th--numeric" },
+    { label: "Error rate", className: "data-table__th--numeric" },
+    { label: "Avg Duration", className: "data-table__th--numeric" },
+    { label: "Avg Client", className: "data-table__th--numeric services-table__col--secondary" },
+    { label: "Avg Server", className: "data-table__th--numeric services-table__col--secondary" },
   ],
 };
 
