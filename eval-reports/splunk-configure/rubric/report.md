@@ -7,9 +7,9 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | splunk-configure |
-| Run ID | 20261030T205410031742Z |
-| Agent model | gpt-6-luna |
-| Judge model | gpt-6-luna |
+| Run ID | 20261103T221937338334Z |
+| Agent model | gpt-6.1-sol |
+| Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
 | Workers | 1 |
 | Config | evals/codex-evals.toml |
@@ -18,19 +18,19 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/finding-group-configure | python/ai-assistant-demo | 1 | 100% (6/6), avg score 96 | 342.0K | 3.6m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/finding-group-configure | python/ai-assistant-demo | 1 | 100% (7/7), avg score 100 | 515.9K | 4.4m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/finding-group-configure | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 334514 | 290816 | 0 | 7500 | 1959 | unknown | 342014 |
+| with_skill | python/ai-assistant-demo/qual/finding-group-configure | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 507024 | 450816 | 0 | 8921 | 885 | unknown | 515945 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/finding-group-configure | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 270498 | 241536 | 0 | 2336 | 948 | unknown | 272834 |
+| with_skill | python/ai-assistant-demo/qual/finding-group-configure | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 298580 | 236160 | 0 | 2518 | 239 | unknown | 301098 |
 
 ## Rubric Failures
 

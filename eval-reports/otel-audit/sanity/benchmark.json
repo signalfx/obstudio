@@ -7,8 +7,8 @@
     "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "otel-audit",
-    "run_id": "20261030T205916938879Z",
-    "agent_model": "gpt-6-luna",
+    "run_id": "20261103T222858735543Z",
+    "agent_model": "gpt-6.1-sol",
     "judge_model": "-",
     "rubric_enabled": false,
     "runtime_enabled": false,
@@ -18,14 +18,14 @@
   "summary": {
     "eval_count": 1,
     "prompt_count": 2,
-    "failure_count": 1,
+    "failure_count": 0,
     "with_skill": {
       "prompt_count": 2,
-      "command_count": 1,
-      "duration_seconds": 17.074,
-      "agent_duration_seconds": 17.036,
-      "tokens": 128016,
-      "agent_tokens": 128016,
+      "command_count": 2,
+      "duration_seconds": 17.994,
+      "agent_duration_seconds": 17.949,
+      "tokens": 179109,
+      "agent_tokens": 179109,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 2,
         "selected_record_count": 2,
-        "input_tokens": 127713,
-        "cached_input_tokens": 62336,
+        "input_tokens": 178928,
+        "cached_input_tokens": 92416,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 303,
-        "reasoning_output_tokens": 227,
+        "output_tokens": 181,
+        "reasoning_output_tokens": 70,
         "provider_total_tokens": null,
-        "derived_total_tokens": 128016,
-        "effective_total_tokens": 128016,
+        "derived_total_tokens": 179109,
+        "effective_total_tokens": 179109,
         "coverage": {
           "record_count": 2,
           "modeled_count": 2,
@@ -59,7 +59,7 @@
         }
       },
       "checks": {
-        "passed": 5,
+        "passed": 6,
         "total": 6,
         "skipped": 0
       }
@@ -79,11 +79,11 @@
       ],
       "with_skill": {
         "prompt_count": 2,
-        "command_count": 1,
-        "duration_seconds": 17.074,
-        "agent_duration_seconds": 17.036,
-        "tokens": 128016,
-        "agent_tokens": 128016,
+        "command_count": 2,
+        "duration_seconds": 17.994,
+        "agent_duration_seconds": 17.949,
+        "tokens": 179109,
+        "agent_tokens": 179109,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -91,14 +91,14 @@
           "observed": true,
           "usage_record_count": 2,
           "selected_record_count": 2,
-          "input_tokens": 127713,
-          "cached_input_tokens": 62336,
+          "input_tokens": 178928,
+          "cached_input_tokens": 92416,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 303,
-          "reasoning_output_tokens": 227,
+          "output_tokens": 181,
+          "reasoning_output_tokens": 70,
           "provider_total_tokens": null,
-          "derived_total_tokens": 128016,
-          "effective_total_tokens": 128016,
+          "derived_total_tokens": 179109,
+          "effective_total_tokens": 179109,
           "coverage": {
             "record_count": 2,
             "modeled_count": 2,
@@ -117,7 +117,7 @@
           }
         },
         "checks": {
-          "passed": 5,
+          "passed": 6,
           "total": 6,
           "skipped": 0
         }
@@ -125,32 +125,22 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20261030T205916938879Z/results/sanity/skill-smoke/sanity-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20261030T205916938879Z/results/sanity/skill-smoke/sanity-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20261030T205916938879Z/results/sanity/skill-smoke/sanity-audit/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-audit/20261103T222858735543Z/results/sanity/skill-smoke/sanity-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20261103T222858735543Z/results/sanity/skill-smoke/sanity-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20261103T222858735543Z/results/sanity/skill-smoke/sanity-audit/with_baseline.json"
       }
     }
   ],
-  "failures": [
-    {
-      "service": "sanity/skill-smoke",
-      "side": "with_skill",
-      "prompt": "direct",
-      "category": "sanity",
-      "result": "sanity:skill-instructions-read FAIL",
-      "evidence": "Did not successfully read all of otel-audit/SKILL.md before another action",
-      "mode": "with_skill"
-    }
-  ],
+  "failures": [],
   "source": {
     "digest_version": 4,
-    "digest": "baa2262c8f45ac331ba99eb418f4cd8b53cfa23e4a69299fef5e5aca84c6be71",
+    "digest": "fa834962c4e7826ce8e0e9eb676839de9030f65d4c0ec5083f9908ddbcd28cee",
     "eval_kinds": [
       "sanity"
     ],
     "evaluator_semantics_version": 1,
     "files": {
-      "evals/codex-evals.toml": "7b79be88bd6dab0555354bf0509e2d0f85fb659782dc34ac49e594220d286e4d",
+      "evals/codex-evals.toml": "d89dac81794f47361a312db0b9e303f37a0e5ff60a075e2924ff3c9589ee472b",
       "evals/sanity/skill-smoke/eval/sanity/audit.json": "c4cff2ee3e25984e1a0ffb60052dce0a2cf3c44fd9b3d1d06fb49851d4abd44b",
       "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9",
       "skills/otel-audit/SKILL.md": "ed6926abbb0ffd161934068d4b186db0e0f950ed0b7dd9e88cb3a2fa4ce3f3f0",
