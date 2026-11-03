@@ -130,6 +130,11 @@ func newRootCmd(config *runConfig) *cobra.Command {
 	root.AddCommand(newInstallCmd())
 	root.AddCommand(newLifecycleCommands()...)
 	root.AddCommand(newTokenTelemetryCommand())
+	// --env-file is not parsed yet, so the gate uses OBSTUDIO_ENV_FILE or
+	// ~/.obstudio/env.
+	if configManagerEnabled("") {
+		root.AddCommand(newTelemetryCommand())
+	}
 	return root
 }
 
@@ -226,17 +231,24 @@ func run(config runConfig) error {
 	if observerMode == managedObserverMode && !managedLaunchAuthorized {
 		observerMode = "standalone"
 	}
+	configManager := configManagerEnabled(config.envFile)
+	userConfig := buildUserConfig(configManager)
+	if userConfig.manager != nil {
+		// Deferred so it runs after srv.Shutdown has drained the handlers.
+		defer userConfig.manager.Close()
+	}
 	stopManaged := make(chan struct{}, 1)
 	freeAccountSubmitter := freeaccount.New(freeaccount.Config{})
 	mux := http.NewServeMux()
 	api.Register(mux, s, v, validatorManager, api.ServerInfo{
-		Kind:       "obstudio",
-		APIVersion: "v1",
-		Version:    version,
-		Owner:      observerOwner,
-		Mode:       observerMode,
-		StartedAt:  startedAt,
-		Exporters:  exporterInfo(splunkExportController, splunkTracesController),
+		Kind:          "obstudio",
+		APIVersion:    "v1",
+		Version:       version,
+		Owner:         observerOwner,
+		Mode:          observerMode,
+		StartedAt:     startedAt,
+		Exporters:     exporterInfo(splunkExportController, splunkTracesController),
+		ConfigManager: configManager,
 	}, dashboards.Config{
 		WorkspaceRoot: envOr("OBSTUDIO_WORKSPACE_ROOT", ""),
 		SpecPath:      envOr("OBSTUDIO_DASHBOARDS_PREVIEW", ""),
@@ -247,7 +259,7 @@ func run(config runConfig) error {
 		MCPURL: observerState.MCPURL,
 	}, splunkExportController, splunkTracesController,
 		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController),
-		freeAccountSubmitter)
+		freeAccountSubmitter, userConfig.api, userConfig.status)
 	mux.Handle("POST /otel/v1/traces", rcv.HTTPHandler())
 	mux.Handle("POST /v2/trace/otlp", rcv.HTTPHandler())
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
@@ -256,16 +268,19 @@ func run(config runConfig) error {
 	repositoryCorrelationModeResolver := mcp.RepositoryCorrelationModeResolver(func(provider string) string {
 		return providerRepositoryCorrelationMode(tokenTelemetryStatePath(), provider)
 	})
-	mcp.Register(
-		mux,
-		s,
+	// One parameter list for both MCP transports, so HTTP and stdio expose the
+	// same tools and status. With the gate off userConfig.status is a nil
+	// *configstatus.Builder, which NewDispatcher ignores.
+	mcpParams := []any{
 		v,
 		validatorManager,
 		splunkExportController,
 		splunkTracesController,
 		repositoryCorrelationModeResolver,
 		freeAccountSubmitter,
-	)
+		userConfig.status,
+	}
+	mcp.Register(mux, s, mcpParams...)
 	webCleanup := web.Register(mux, s, v)
 
 	srv := &http.Server{Addr: mainAddr, Handler: mux, ConnContext: rcv.HTTPConnContext}
@@ -332,17 +347,7 @@ func run(config runConfig) error {
 	fmt.Fprint(os.Stderr, renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr))
 	warnStaleMCPPortConfigs(os.Stderr, port)
 
-	go mcp.RunStdio(
-		s,
-		os.Stdin,
-		os.Stdout,
-		v,
-		validatorManager,
-		splunkExportController,
-		splunkTracesController,
-		repositoryCorrelationModeResolver,
-		freeAccountSubmitter,
-	)
+	go mcp.RunStdio(s, os.Stdin, os.Stdout, mcpParams...)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -387,12 +392,18 @@ func defaultEnvFilePath() string {
 	return userHome() + "/.obstudio/env"
 }
 
-func configuredEnvFilePath(flagValue string) (string, bool) {
-	if strings.TrimSpace(flagValue) != "" {
-		return strings.TrimSpace(flagValue), true
+// explicitEnvFilePath returns the env file named by flagValue, else by
+// OBSTUDIO_ENV_FILE, else "". It never exits.
+func explicitEnvFilePath(flagValue string) string {
+	if value := strings.TrimSpace(flagValue); value != "" {
+		return value
 	}
-	if value := strings.TrimSpace(os.Getenv("OBSTUDIO_ENV_FILE")); value != "" {
-		return value, true
+	return strings.TrimSpace(os.Getenv("OBSTUDIO_ENV_FILE"))
+}
+
+func configuredEnvFilePath(flagValue string) (string, bool) {
+	if path := explicitEnvFilePath(flagValue); path != "" {
+		return path, true
 	}
 	return defaultEnvFilePath(), false
 }
