@@ -169,7 +169,70 @@ describe("FindingsTab", () => {
     );
 
     expect(view.queryByText(/Validated /)).toBeNull();
-    expect(view.getByText("Validation has not been run yet. Run validation to analyze the current telemetry snapshot.")).toBeTruthy();
+    expect(view.getByText("Validation has not been run yet.")).toBeTruthy();
+    expect(view.getByText("Run validation to analyze the current telemetry snapshot.")).toBeTruthy();
+  });
+
+  it("hides the filters before the first run and offers Validate next to the message", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const idleSummary: ValidationSummary = { ...makeSummary(), hasResult: false, status: "idle" };
+
+    const view = render(<FindingsTab issues={[]} summary={idleSummary} />);
+
+    expect(view.queryByRole("combobox", { name: "Filter by severity" })).toBeNull();
+    expect(view.queryByRole("radiogroup", { name: "Validation signals" })).toBeNull();
+    expect(view.queryByText(/\d+ issues?$/)).toBeNull();
+
+    const validate = view.getByRole("button", { name: "Validate" });
+    expect(validate.closest(".empty-state__actions")).toBeTruthy();
+    expect(view.getAllByRole("button", { name: /validate/i })).toHaveLength(1);
+
+    validate.focus();
+    expect(document.activeElement).toBe(validate);
+    fireEvent.click(validate);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/validation/run", expect.objectContaining({ method: "POST" })));
+  });
+
+  it("keeps the action disabled in the empty state while the first run is in progress", () => {
+    const runningSummary: ValidationSummary = {
+      ...makeSummary(),
+      hasResult: false,
+      status: "running",
+      lastRunStartedAt: new Date().toISOString(),
+    };
+
+    const view = render(<FindingsTab issues={[]} summary={runningSummary} />);
+
+    expect(view.getByText("Validation is running.")).toBeTruthy();
+    expect(view.getByText(/^Started .*Results appear here when it finishes\.$/)).toBeTruthy();
+    expect((view.getByRole("button", { name: "Validating..." }) as HTMLButtonElement).disabled).toBe(true);
+    expect(view.queryByRole("combobox", { name: "Filter by severity" })).toBeNull();
+  });
+
+  it("explains an unavailable validator without offering an action", () => {
+    const disabledSummary: ValidationSummary = {
+      ...makeSummary(),
+      enabled: false,
+      hasResult: false,
+      status: "disabled",
+      message: "weaver binary not found",
+    };
+
+    const view = render(<FindingsTab issues={[]} summary={disabledSummary} />);
+
+    expect(view.getByText("Validator unavailable.")).toBeTruthy();
+    expect(view.getByText("weaver binary not found")).toBeTruthy();
+    expect(view.queryByRole("button", { name: /validate/i })).toBeNull();
+    expect(view.queryByRole("combobox", { name: "Filter by severity" })).toBeNull();
+  });
+
+  it("shows the filters and the header action once a result exists", () => {
+    const view = render(<FindingsTab issues={buildValidationIssues([makeFinding({})])} summary={makeSummary()} />);
+
+    expect(view.getByRole("combobox", { name: "Filter by severity" })).toBeTruthy();
+    expect(view.getByRole("radiogroup", { name: "Validation signals" })).toBeTruthy();
+    expect(view.getByRole("button", { name: "Re-validate" }).closest(".findings-tab__header")).toBeTruthy();
   });
 
   it("refreshes relative validation timestamps as time passes", () => {

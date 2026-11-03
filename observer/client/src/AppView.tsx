@@ -32,6 +32,11 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   const backendValidationIssues = state.validation?.issues ?? [];
   // Rows in the Metrics table, or the stats count until the metric list has loaded.
   const metricCount = state.metrics?.length || state.stats?.metricNameCount;
+  // Unknown until the first stats response, so Overview does not flash a
+  // "no telemetry" card while loading.
+  const hasTelemetry = state.stats
+    ? state.stats.spanCount + state.stats.dataPointCount + state.stats.logCount > 0
+    : undefined;
   const validationIndex = useMemo(() => buildValidationIndex(validationFindings), [validationFindings]);
   const validationIssues = useMemo(
     () => (backendValidationIssues.length > 0 || validationFindings.length === 0
@@ -339,7 +344,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
         </div>
 
         {activeTab === "overview" ? (
-          <OverviewTab onOpenCloud={() => switchTab("cloud")} />
+          <OverviewTab onOpenCloud={() => switchTab("cloud")} hasTelemetry={hasTelemetry} />
         ) : null}
         {activeTab === "services" ? (
           <ServicesTab

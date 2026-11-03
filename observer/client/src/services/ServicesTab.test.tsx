@@ -194,6 +194,24 @@ describe("ServicesTab", () => {
     expect(screen.getByText(/No services observed yet/)).toBeTruthy();
   });
 
+  it("previews the services columns and names the configured OTLP endpoint when empty", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => ({
+      ok: true,
+      json: async () => (String(input).includes("/api/health") ? { endpoints: { otlpHttp: "http://127.0.0.1:14318" } } : []),
+    })));
+
+    let container!: HTMLElement;
+    await act(async () => {
+      ({ container } = render(<ServicesTab serviceNames={[]} />));
+    });
+
+    const headers = Array.from(container.querySelectorAll(".empty-state__skeleton .data-table__th")).map((th) => th.textContent);
+    expect(headers).toEqual(["Service", "Traces", "Spans", "Errors", "Error rate", "Avg Duration", "Avg Client", "Avg Server"]);
+    expect(container.querySelector(".empty-state__skeleton.services-table")).toBeTruthy();
+    expect(screen.getByText("OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:14318")).toBeTruthy();
+    expect(screen.queryByText(/port 4318/)).toBeNull();
+  });
+
   it("= filter keeps only the exact-match service (case-insensitive)", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,

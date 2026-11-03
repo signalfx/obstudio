@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
-import { EmptyState } from "../components/EmptyState";
+import { TelemetryEmptyState, type EmptyStateSkeleton } from "../components/EmptyState";
 import { fetchServiceStats, type ServiceStats } from "../api/client";
 import { formatDurationMs } from "../format";
 
@@ -26,6 +26,24 @@ function formatErrorRate(row: ServiceStats): string {
 function formatAvg(ms: number | null): string {
   return ms !== null ? formatDurationMs(ms) : "—";
 }
+
+// Same columns and classes as the services table head, so the empty state
+// previews the real layout at every width.
+const SERVICES_SKELETON: EmptyStateSkeleton = {
+  tableClassName: "services-table",
+  headClassName: "services-table__head",
+  rowClassName: "services-table__row",
+  columns: [
+    { label: "Service" },
+    { label: "Traces", modifiers: ["numeric"], className: "services-table__col--secondary" },
+    { label: "Spans", modifiers: ["numeric"], className: "services-table__col--secondary" },
+    { label: "Errors", modifiers: ["numeric"] },
+    { label: "Error rate", modifiers: ["numeric"] },
+    { label: "Avg Duration", modifiers: ["numeric"] },
+    { label: "Avg Client", modifiers: ["numeric"], className: "services-table__col--secondary" },
+    { label: "Avg Server", modifiers: ["numeric"], className: "services-table__col--secondary" },
+  ],
+};
 
 const SERVICE_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "serviceName", label: "Service", kind: "text", placeholder: "checkout" },
@@ -98,10 +116,7 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
   if (rows.length === 0 && serviceNames.length === 0) {
     return (
       <section id="panel-services" className="tab-panel" role="tabpanel" aria-label="Services">
-        <EmptyState
-          title="No services observed yet."
-          hint="Send OTLP telemetry to port 4318 to begin exploring."
-        />
+        <TelemetryEmptyState title="No services observed yet." skeleton={SERVICES_SKELETON} />
       </section>
     );
   }

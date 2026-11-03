@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { EmptyState } from "../components/EmptyState";
+import { TelemetryEmptyState, type EmptyStateSkeleton } from "../components/EmptyState";
 import { fetchMetricFilterValues, fetchMetrics, type MetricsQuery } from "../api/client";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
 import { TimeSeriesChart } from "./TimeSeriesChart";
@@ -23,6 +23,18 @@ const METRIC_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "scopeName", label: "Scope", kind: "text", placeholder: "otel.http" },
 ];
 const METRIC_SUGGESTIBLE_FIELDS = new Set(["metricName", "serviceName", "scopeName"]);
+// Same columns and classes as the metric list head, so the empty state
+// previews the real layout at every width.
+const METRICS_SKELETON: EmptyStateSkeleton = {
+  headClassName: "data-table__head data-table__head--metrics",
+  rowClassName: "data-table__row data-table__row--metrics",
+  columns: [
+    { label: "Metric name" },
+    { label: "Service" },
+    { label: "Description", modifiers: ["metric-description"] },
+    { label: "Type / Unit" },
+  ],
+};
 
 function assignQueryFilter(query: MetricsQuery, clause: FilterClause): void {
   const targetKey = clause.op === "neq" ? "notFilters" : "filters";
@@ -242,10 +254,7 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
           ) : null}
 
           {visibleMetricList.length === 0 && liveMetrics.length === 0 && !hasActiveFilter ? (
-            <EmptyState
-              title="No metrics received yet."
-              hint="Send OTLP telemetry to port 4318 to begin exploring."
-            />
+            <TelemetryEmptyState title="No metrics received yet." skeleton={METRICS_SKELETON} />
           ) : isFiltering && hasActiveFilter && visibleMetricList.length === 0 ? (
             <p className="metrics-explorer__empty">
               Updating filtered metrics...

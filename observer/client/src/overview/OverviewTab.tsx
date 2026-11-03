@@ -6,6 +6,7 @@ import {
 } from "../api/client";
 import { useCloudBridge, type SkillDocsId } from "../cloud/bridge";
 import { CLOUD_CONNECT_DESCRIPTION } from "../cloud/copy";
+import { TelemetryEmptyState } from "../components/EmptyState";
 import { CopyTextButton } from "../layout";
 
 /** Agent skill a checklist step hands off to. */
@@ -50,6 +51,8 @@ export const OTEL_VERIFY_SKILL: OverviewSkillRef = {
 interface OverviewTabProps {
   /** Invoked by checklist steps that hand off to the Cloud tab. */
   onOpenCloud?: () => void;
+  /** Whether any telemetry has arrived; `undefined` while unknown. */
+  hasTelemetry?: boolean;
 }
 
 // --- Stub data -------------------------------------------------------------
@@ -250,7 +253,7 @@ export function scoreTone(score: number): "good" | "warn" | "bad" {
  * progress. The score is derived from the latest `$otel-audit` report; the
  * instrumentation skill list is fixed.
  */
-export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactElement {
+export function OverviewTab({ onOpenCloud, hasTelemetry }: OverviewTabProps): React.ReactElement {
   const { bridge, callBridge } = useCloudBridge();
   const [docsError, setDocsError] = useState<string | null>(null);
   const [scoreReport, setScoreReport] = useState<InstrumentationScore | null>(null);
@@ -375,6 +378,9 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
   return (
     <section id="panel-overview" className="tab-panel overview-tab" role="tabpanel" aria-label="Overview">
       <div className="overview-tab__scroll">
+        {hasTelemetry === false ? (
+          <TelemetryEmptyState title="No telemetry received yet." variant="card" includeSkill={false} />
+        ) : null}
         <div className="overview-tab__top">
           {scored ? (
             <article

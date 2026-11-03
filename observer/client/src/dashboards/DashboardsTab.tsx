@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { observerFetch } from "../host/transport";
-import { EmptyState } from "../components/EmptyState";
+import { CommandChip, EmptyState } from "../components/EmptyState";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
+import { useOtlpEndpoint } from "../hooks/useOtlpEndpoint";
 import { DashboardGrid } from "./DashboardGrid";
 import { DashboardPanel, OtlpEndpointContext } from "./DashboardPanel";
 import { useDashboardPreview } from "./useDashboardPreview";
@@ -30,34 +30,7 @@ const TIME_WINDOWS = [
 
 const DEFAULT_WINDOW_MS = 60_000;
 
-/** Shape of the fields we read from GET /api/health. */
-interface HealthResponse {
-  endpoints?: { otlpHttp?: string; otlpGrpc?: string; rest?: string; mcp?: string };
-}
-
-/**
- * Fetch the OTLP/HTTP receiver endpoint from /api/health once on mount so the
- * unmatched-panel hint names the actually-configured receiver instead of a
- * hardcoded port (#19). Returns `null` until loaded or on failure; the hint
- * falls back to a port-free message in that case.
- */
-function useOtlpEndpoint(): string | null {
-  const [endpoint, setEndpoint] = useState<string | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    observerFetch("/api/health", { signal: controller.signal })
-      .then((r) => (r.ok ? (r.json() as Promise<HealthResponse>) : null))
-      .then((health) => {
-        const otlpHttp = health?.endpoints?.otlpHttp;
-        if (otlpHttp) setEndpoint(otlpHttp);
-      })
-      .catch(() => {
-        /* leave null → hint uses the port-free fallback */
-      });
-    return () => controller.abort();
-  }, []);
-  return endpoint;
-}
+const SPLUNK_DASHBOARD_COMMAND = "$splunk-dashboard";
 
 interface DashboardsTabProps {
   telemetryError?: string | null;
@@ -131,36 +104,40 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
     // unmatched-panel hint names the real receiver (#19).
     <OtlpEndpointContext.Provider value={otlpEndpoint}>
     <section id="panel-dashboards" className="dashboards-tab" role="tabpanel" aria-label="Dashboards">
-      <div className="dashboards-tab__bar">
-        <span className="dashboards-tab__badge" title="SignalFlow executes on Splunk's backend; this previews layout and metric targeting using local OTLP data.">
-          Approximate · local-data preview
-        </span>
-        <div className="dashboards-tab__bar-actions">
-          {data?.generatedAt ? (
-            <span className="dashboards-tab__hint">generated {data.generatedAt}</span>
-          ) : null}
-          <span className="dashboards-tab__hint dashboards-tab__hint--live">
-            {paused ? "⏸ paused" : "↻ auto-refresh 5s"}
+      {/* The badge, refresh cadence, and time window describe a rendered
+          preview, so they wait until there is one. */}
+      {data?.available ? (
+        <div className="dashboards-tab__bar">
+          <span className="dashboards-tab__badge" title="SignalFlow executes on Splunk's backend; this previews layout and metric targeting using local OTLP data.">
+            Approximate · local-data preview
           </span>
-          <select
-            className="dashboards-tab__window-select"
-            value={windowMs}
-            onChange={(e) => setWindowMs(Number(e.target.value))}
-            aria-label="Time window"
-          >
-            {TIME_WINDOWS.map((w) => (
-              <option key={w.ms} value={w.ms}>{w.label}</option>
-            ))}
-          </select>
-          <button type="button" className="pill pill--small pill--muted" onClick={refresh}>
-            Refresh
-          </button>
+          <div className="dashboards-tab__bar-actions">
+            {data.generatedAt ? (
+              <span className="dashboards-tab__hint">generated {data.generatedAt}</span>
+            ) : null}
+            <span className="dashboards-tab__hint dashboards-tab__hint--live">
+              {paused ? "⏸ paused" : "↻ auto-refresh 5s"}
+            </span>
+            <select
+              className="dashboards-tab__window-select"
+              value={windowMs}
+              onChange={(e) => setWindowMs(Number(e.target.value))}
+              aria-label="Time window"
+            >
+              {TIME_WINDOWS.map((w) => (
+                <option key={w.ms} value={w.ms}>{w.label}</option>
+              ))}
+            </select>
+            <button type="button" className="pill pill--small pill--muted" onClick={refresh}>
+              Refresh
+            </button>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {telemetryError ? <div className="pill pill--error">{telemetryError}</div> : null}
 
-      {renderState({ data, loading, error, windowMs, onExpand: setExpandedId })}
+      {renderState({ data, loading, error, windowMs, onExpand: setExpandedId, onRefresh: refresh })}
 
       {expandedPanel ? (
         <div className="dashboard-expand-overlay" onClick={() => setExpandedId(null)}>
@@ -205,12 +182,14 @@ function renderState({
   error,
   windowMs,
   onExpand,
+  onRefresh,
 }: {
   data: ReturnType<typeof useDashboardPreview>["data"];
   loading: boolean;
   error: string | null;
   windowMs: number;
   onExpand: (id: PanelId) => void;
+  onRefresh: () => void;
 }): React.ReactElement {
   if (loading && !data) {
     return <div className="dashboards-tab__message">Loading dashboard preview…</div>;
@@ -227,6 +206,14 @@ function renderState({
       <EmptyState
         title="No dashboard preview yet."
         hint={data?.message ?? "Run $splunk-dashboard to generate .observe/dashboards.preview.json."}
+        actions={
+          <>
+            <CommandChip text={SPLUNK_DASHBOARD_COMMAND} label={`${SPLUNK_DASHBOARD_COMMAND} command`} />
+            <button type="button" className="pill pill--small pill--muted" onClick={onRefresh}>
+              Refresh
+            </button>
+          </>
+        }
       />
     );
   }

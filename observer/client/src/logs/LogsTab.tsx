@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { EmptyState } from "../components/EmptyState";
+import { TelemetryEmptyState, type EmptyStateSkeleton } from "../components/EmptyState";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { LogRecord } from "../api/types";
 import { fetchLogFilterValues, fetchLogs, type LogsQuery } from "../api/client";
@@ -26,6 +26,18 @@ const LOG_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "scopeName", label: "Scope", kind: "text", placeholder: "demo.logs" },
 ];
 const LOG_SUGGESTIBLE_FIELDS = new Set(["serviceName", "scopeName", "severityDisplay"]);
+// Same columns and classes as the table head below, so the empty state
+// previews the real layout at every width.
+const LOGS_SKELETON: EmptyStateSkeleton = {
+  headClassName: "data-table__head data-table__head--logs",
+  rowClassName: "data-table__row data-table__row--logs",
+  columns: [
+    { label: "Level", modifiers: ["severity"] },
+    { label: "Timestamp", modifiers: ["timestamp"] },
+    { label: "Service", modifiers: ["service"] },
+    { label: "Message", modifiers: ["message"] },
+  ],
+};
 
 function assignQueryFilter(query: LogsQuery, clause: FilterClause): void {
   const targetKey = clause.op === "neq" ? "notFilters" : "filters";
@@ -292,10 +304,7 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
           {filterError ? (
             <p className="explorer__status explorer__status--error" role="status">{filterError}</p>
           ) : liveLogs.length === 0 && !hasActiveFilter ? (
-            <EmptyState
-              title="No logs received yet."
-              hint="Send OTLP telemetry to port 4318 to begin exploring."
-            />
+            <TelemetryEmptyState title="No logs received yet." skeleton={LOGS_SKELETON} />
           ) : isFiltering && hasActiveFilter && visibleLogs.length === 0 ? (
             <p className="explorer__status" role="status">Updating filtered logs...</p>
           ) : visibleLogs.length === 0 ? (
