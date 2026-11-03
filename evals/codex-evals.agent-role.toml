@@ -1,4 +1,4 @@
-# Focused agent-role regression runs; keep the normal eval model defaults unchanged.
+# Focused agent-role regression runs; same models as the default config.
 [run]
 mode = "with_skill"
 [rubric]
