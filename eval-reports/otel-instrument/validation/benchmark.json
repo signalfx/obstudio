@@ -986,7 +986,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "406a6316647cecca1cc2c9d23bfece776e75af45f4f9ae4af8ea88e66836e28f",
+    "digest": "b3ef12dc961398db6966990d82b7a57bb6cee734313ed843cf183bdd8b11b724",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1062,8 +1062,8 @@
       "observer/client/src/components/EmptyState.test.tsx": "7ef7484ce79428d5f0e18446f84ef3d9b789b2c8a11c38bfc12b9d9b9009d6aa",
       "observer/client/src/components/EmptyState.tsx": "8dd0e1a96cf29f4c2201ba99110102060365512ebf44afb6268f0ee3007c0014",
       "observer/client/src/components/FindingsTab.style.test.tsx": "41e3d1cf1a560a8e4d9ddf81a6499a0e4dfaf84b8cbe22297dd2b0c27ba9842e",
-      "observer/client/src/components/FindingsTab.test.tsx": "17fbfde5445193369742f9fa8ce6fc08b699398a79fd495d47fe70fa1c256b7c",
-      "observer/client/src/components/FindingsTab.tsx": "0ea91680a63b88e9162cba9d249525076439d73c61e9e62d098841734b60f6b3",
+      "observer/client/src/components/FindingsTab.test.tsx": "f12b2ef43096bbb09026d3974a1a5516b83d8103ec3ae1e6968dc9273a369786",
+      "observer/client/src/components/FindingsTab.tsx": "6213e590287da1958a3d34b09c67226d8e58273c0e3ea759510295b229126868",
       "observer/client/src/components/KVTable.tsx": "0f8805947285a30ee8d1be5876a6530566b35ab81e98decc95197775a62ab9c9",
       "observer/client/src/components/KeyboardHelp.tsx": "6ec90542c406e9c6aae0a6cdb26dc2062fc48c9ce5186b9ad91b3e4c58ffe629",
       "observer/client/src/components/ValidationBadge.tsx": "e97a1d4fa0f6213a523efc3accfdf57a6fcb1c4b7c1606f40d8f3dfe5eaf6588",

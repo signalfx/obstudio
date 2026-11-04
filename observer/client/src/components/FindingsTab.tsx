@@ -266,12 +266,17 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
               {runError ? (
                 <p className="explorer__status explorer__status--error">{runError}</p>
               ) : null}
+              {/* A failed first run keeps the button, since it is the only retry. */}
               {summary && !summary.hasResult && !isRunning ? (
-                <EmptyState
-                  title="Validation has not been run yet."
-                  hint="Run validation to analyze the current telemetry snapshot."
-                  actions={validateButton}
-                />
+                summary.status === "error" || runError ? (
+                  <EmptyState title="Validation failed." hint="See the error above, then try again." actions={validateButton} />
+                ) : (
+                  <EmptyState
+                    title="Validation has not been run yet."
+                    hint="Run validation to analyze the current telemetry snapshot."
+                    actions={validateButton}
+                  />
+                )
               ) : null}
               {summary?.hasResult ? (
                 filteredIssues.length === 0 ? (

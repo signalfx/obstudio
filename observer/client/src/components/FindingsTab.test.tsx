@@ -172,6 +172,17 @@ describe("FindingsTab", () => {
     expect(view.getByText("Validation has not been run yet.")).toBeTruthy();
   });
 
+  it("says a failed first run failed and keeps Validate to retry", () => {
+    const view = render(
+      <FindingsTab issues={[]} summary={{ ...makeSummary(), hasResult: false, status: "error", lastError: "weaver exited 1" }} />,
+    );
+
+    expect(view.getByText("weaver exited 1")).toBeTruthy();
+    expect(view.getByText("Validation failed.")).toBeTruthy();
+    expect(view.queryByText("Validation has not been run yet.")).toBeNull();
+    expect(view.getByRole("button", { name: "Validate" }).closest(".empty-state__actions")).toBeTruthy();
+  });
+
   it("hides the filters until there are results and puts Validate next to the message", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
