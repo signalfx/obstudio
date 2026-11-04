@@ -1901,7 +1901,12 @@ class StartObstudioBackgroundTest(unittest.TestCase):
                         "AWS_SECRET_ACCESS_KEY": "aws-secret",
                         "GITHUB_TOKEN": "ghp_secret",
                         "SPLUNK_REALM": "us0",
+                        "SPLUNK_ACCESS_TOKEN": "synthetic-export-token",
+                        "OBSTUDIO_SPLUNK_HEC_TOKEN": "synthetic-hec-token",
+                        "OBSTUDIO_WORKSPACE_ROOT": "/workspace",
+                        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
                     },
+                    clear=True,
                 ),
                 mock.patch.object(BOOTSTRAP.subprocess, "Popen", side_effect=fake_popen),
             ):
@@ -1914,9 +1919,7 @@ class StartObstudioBackgroundTest(unittest.TestCase):
         self.assertEqual(process.pid, 1234)
         self.assertEqual(captured["command"], [str(binary)])
         self.assertEqual(captured["kwargs"]["env"]["HOST"], "127.0.0.1")
-        # Binary reads only OBSTUDIO_PORT; it is derived from the health URL the
-        # caller passed (not the dead bare PORT), and an inherited OBSTUDIO_PORT
-        # is scrubbed first so it cannot leak.
+        # Listener settings come from the health URL and local OTLP defaults.
         self.assertEqual(captured["kwargs"]["env"]["OBSTUDIO_PORT"], "17900")
         self.assertNotIn("PORT", captured["kwargs"]["env"])
         self.assertNotIn("OTLP_PORT", captured["kwargs"]["env"])
@@ -1924,9 +1927,16 @@ class StartObstudioBackgroundTest(unittest.TestCase):
         self.assertEqual(captured["kwargs"]["env"]["OTLP_GRPC_PORT"], "4317")
         self.assertEqual(captured["kwargs"]["env"]["OBSTUDIO_OWNER"], "codex-plugin")
         self.assertEqual(captured["kwargs"]["env"]["OBSTUDIO_MODE"], "managed")
-        self.assertEqual(captured["kwargs"]["env"]["SPLUNK_REALM"], "us0")
-        for name in ("ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"):
-            self.assertNotIn(name, captured["kwargs"]["env"])
+        self.assertEqual(captured["kwargs"]["env"], {
+            "HOST": "127.0.0.1",
+            "OBSTUDIO_PORT": "17900",
+            "OTLP_HTTP_PORT": "4318",
+            "OTLP_GRPC_PORT": "4317",
+            "OBSTUDIO_OWNER": "codex-plugin",
+            "OBSTUDIO_MODE": "managed",
+            "OBSTUDIO_WORKSPACE_ROOT": "/workspace",
+            "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+        })
         self.assertEqual(log_path.name, "obstudio.log")
 
     def test_child_env_excludes_unrelated_credentials(self):
@@ -1950,11 +1960,11 @@ class StartObstudioBackgroundTest(unittest.TestCase):
         self.assertEqual(child_env["HOME"], "/home/user")
         self.assertEqual(child_env["HTTPS_PROXY"], "http://proxy.example:8080")
         self.assertEqual(child_env["LC_ALL"], "C")
-        self.assertEqual(child_env["SPLUNK_ACCESS_TOKEN"], "splunk-token")
         self.assertEqual(child_env["WEAVER_PATH"], "/opt/weaver/bin/weaver")
         self.assertEqual(child_env["MAX_FLOW_NODE_SPAN_LIST_SIZE"], "5000")
-        for name in ("ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "OPENAI_API_KEY", "GITHUB_TOKEN"):
-            self.assertNotIn(name, child_env)
+        self.assertEqual(set(child_env), {
+            "PATH", "HOME", "HTTPS_PROXY", "LC_ALL", "WEAVER_PATH", "MAX_FLOW_NODE_SPAN_LIST_SIZE",
+        })
 
 
 class MainOwnershipFlowTest(unittest.TestCase):

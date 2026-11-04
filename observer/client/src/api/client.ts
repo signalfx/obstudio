@@ -177,7 +177,7 @@ export async function fetchSplunkExportStatus(signal?: AbortSignal): Promise<Spl
   return fetchJSON<SplunkExportStatus>("/api/splunk/export", { signal });
 }
 
-export type SplunkExportBrowserAction = "connect" | "forget" | "set-enabled";
+export type SplunkExportBrowserAction = "connect" | "forget" | "set-enabled" | "refresh";
 
 export class SplunkExportBrowserActionError extends Error {
   constructor(
@@ -185,6 +185,7 @@ export class SplunkExportBrowserActionError extends Error {
     readonly statusCode: number,
     readonly code?: string,
     readonly retrySafe?: boolean,
+    readonly platform?: string,
   ) {
     super(message);
     this.name = "SplunkExportBrowserActionError";
@@ -197,6 +198,7 @@ const splunkBrowserRequestHeader = "X-Obstudio-Browser-Request";
 export async function runSplunkExportBrowserAction(
   action: SplunkExportBrowserAction,
   payload: {
+    sessionOnly?: boolean;
     accessToken?: string;
     enabled?: boolean;
     expectedVersion?: string;
@@ -207,7 +209,9 @@ export async function runSplunkExportBrowserAction(
     ? "/api/splunk/export"
     : action === "forget"
       ? "/api/splunk/export/forget"
-      : "/api/splunk/export/enabled";
+      : action === "refresh"
+        ? "/api/splunk/export/refresh"
+        : "/api/splunk/export/enabled";
   return postSplunkBrowserJSON(path, payload) as Promise<SplunkExportStatus>;
 }
 
@@ -296,7 +300,7 @@ async function fetchSplunkBrowserJSON(
       : `Splunk Observability Studio request failed with HTTP ${response.status}.`;
     const code = typeof errorResponse.code === "string" ? errorResponse.code : undefined;
     const retrySafe = typeof errorResponse.retrySafe === "boolean" ? errorResponse.retrySafe : undefined;
-    throw new SplunkExportBrowserActionError(message, response.status, code, retrySafe);
+    throw new SplunkExportBrowserActionError(message, response.status, code, retrySafe, typeof errorResponse.platform === "string" ? errorResponse.platform : undefined);
   }
   return parsed;
 }

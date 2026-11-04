@@ -176,27 +176,30 @@ configuration, and APIs.
 Splunk Observability Studio can forward received traces and metrics while
 keeping its UI available. Logs remain local.
 
-Create `~/.obstudio/env` with these values:
+- Open **Cloud** in Splunk Observability Studio.
+- Enter the realm and an organization access token with ingest scope, then
+  select **Connect**.
+- Use the export switch to pause or resume forwarding. Received telemetry remains
+  available locally.
+- Studio saves connection settings in `~/.obstudio/connections.json` and keeps
+  the token in the operating system credential store. Linux requires an unlocked
+  Secret Service provider.
+- Select **Remove connection** and confirm to forget the saved token. Reconnect
+  with updated details to change the connection.
+- Saved connections and export preferences persist across restarts.
+- If secure storage refuses a save, follow the setup link below the token field
+  and restart Studio, or choose **Connect for this session** to keep the
+  token in memory until Studio stops.
+  Enter the token again after Studio restarts. Session mode leaves saved
+  settings intact; restoring a saved connection requires access to secure storage.
 
-```dotenv
-OBSTUDIO_SPLUNK_METRICS_EXPORT=true
-OBSTUDIO_SPLUNK_TRACES_EXPORT=true
-SPLUNK_REALM=<your-realm>
-SPLUNK_ACCESS_TOKEN=<org-ingest-token>
-```
+### Secure token storage
 
-```bash
-chmod 600 ~/.obstudio/env
-```
+Studio uses secure storage on the computer running the collector:
 
-Then reload Splunk Observability Studio. For an agent-managed instance, fully
-restart the coding agent and begin a new task. For a standalone background
-instance, run `./obstudio restart`. For a foreground instance, stop it and
-launch it again.
-
-The default env file is loaded automatically when present. Shell environment
-variables take precedence; use `./obstudio --env-file <path>` for another file.
-Forwarding requires an organization access token with ingest scope.
+- **macOS:** Unlock the login keychain in [Keychain Access](https://support.apple.com/guide/keychain-access/welcome/mac).
+- **Windows:** Use [Credential Manager](https://support.microsoft.com/en-us/windows/security/credential-manager-in-windows) in your Windows user session. If access is restricted, contact your system administrator.
+- **Linux:** Run a Secret Service provider in the collector’s desktop D-Bus session with an unlocked login or default keyring. Your distribution provides installation instructions. For GNOME, see [Unlock your keyrings](https://help.gnome.org/seahorse/keyring-unlock.html).
 
 Generating Terraform does not change Splunk; the publish skills described in
 [Using the skills](#using-the-skills) show a live diff and require confirmation
@@ -206,7 +209,10 @@ before creating resources. Both generator skills write Terraform under
 
 The local dashboard preview is approximate because SignalFlow runs in Splunk
 Observability Cloud. Publisher skills require an API token with permission to
-create their resources; an ingest-only token is not sufficient.
+create their resources; an ingest-only token is not sufficient. Set
+`SPLUNK_ACCESS_TOKEN` and, optionally, `SPLUNK_REALM` in the coding agent's
+environment before starting the agent. The Cloud UI keeps its saved export
+token in the operating system credential store.
 
 ## Troubleshooting
 

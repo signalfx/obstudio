@@ -67,7 +67,7 @@ func TestNewSplunkTracesExporterRequiresRealmOrEndpoint(t *testing.T) {
 		Enabled:     true,
 		AccessToken: "test-token",
 	})
-	if err == nil || !strings.Contains(err.Error(), "SPLUNK_REALM") {
+	if err == nil || !strings.Contains(err.Error(), "realm") {
 		t.Fatalf("expected realm error, got %v", err)
 	}
 }
@@ -77,7 +77,7 @@ func TestNewSplunkTracesExporterRequiresAccessToken(t *testing.T) {
 		Enabled: true,
 		Realm:   "us1",
 	})
-	if err == nil || !strings.Contains(err.Error(), "SPLUNK_ACCESS_TOKEN") {
+	if err == nil || !strings.Contains(err.Error(), "access token") {
 		t.Fatalf("expected token error, got %v", err)
 	}
 }

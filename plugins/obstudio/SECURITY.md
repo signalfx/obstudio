@@ -128,12 +128,12 @@ the one-time release download from GitHub described below.
   `/v1/logs` endpoint. The hook rejects any other host or path.
 - The Studio child process receives an allowlisted environment (`PATH`, `HOME`,
   temp and locale variables, proxy and CA-bundle variables, `WEAVER_PATH`,
-  `MAX_FLOW_NODE_SPAN_LIST_SIZE`, and `SPLUNK_*`, `SIGNALFX_*`, `OBSTUDIO_*`,
-  `OTLP_*`). These cover every setting the Studio server reads. It does not
+  `MAX_FLOW_NODE_SPAN_LIST_SIZE`, the Linux session-bus address, and Studio
+  runtime, `OTLP_*`, and XDG settings).
+  Remote export is configured through Cloud, with tokens in the OS credential
+  store. The child does not
   inherit unrelated variables such as `ANTHROPIC_*`, `AWS_*`, `OPENAI_*`, or
-  `GITHUB_TOKEN`. `SPLUNK_ACCESS_TOKEN`, if set, is forwarded on purpose: it is
-  the user's own Splunk ingest token, which Studio uses to export to the user's
-  Splunk organization.
+  `GITHUB_TOKEN`.
 - `resolve_ao_resources.py` reads `SPLUNK_AO_PROJECT`, `SPLUNK_AO_PROJECT_ID`,
   `SPLUNK_AO_AGENT_STREAM`, and `SPLUNK_AO_AGENT_STREAM_ID` (resource names, not
   secrets). The `splunk_ao` SDK reads its own `SPLUNK_AO_*` settings and sends

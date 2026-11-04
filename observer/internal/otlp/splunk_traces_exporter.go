@@ -649,7 +649,7 @@ func NewSplunkTracesExporter(config SplunkTracesExporterConfig) (*SplunkTracesEx
 	if endpoint == "" {
 		realm := strings.TrimSpace(config.Realm)
 		if realm == "" {
-			return nil, fmt.Errorf("splunk traces export requires SPLUNK_REALM or OBSTUDIO_SPLUNK_TRACES_ENDPOINT")
+			return nil, fmt.Errorf("splunk traces export requires a realm or endpoint")
 		}
 		endpoint = fmt.Sprintf("https://ingest.%s.observability.splunkcloud.com%s", realm, splunkTracesOTLPPath)
 	}
@@ -658,7 +658,7 @@ func NewSplunkTracesExporter(config SplunkTracesExporterConfig) (*SplunkTracesEx
 	}
 	token := strings.TrimSpace(config.AccessToken)
 	if token == "" {
-		return nil, fmt.Errorf("splunk traces export requires SPLUNK_ACCESS_TOKEN")
+		return nil, fmt.Errorf("splunk traces export requires an access token")
 	}
 
 	factory := otlphttpexporter.NewFactory()

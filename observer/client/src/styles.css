@@ -7537,6 +7537,11 @@ code {
   color: var(--blue);
 }
 
+.cloud-field__help.cloud-storage-notice,
+.cloud-storage-notice .cloud-field__help-link {
+  color: var(--yellow);
+}
+
 .cloud-connect-form__action {
   display: flex;
   justify-content: flex-start;

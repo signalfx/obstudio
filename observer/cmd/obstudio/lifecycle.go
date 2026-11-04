@@ -796,19 +796,17 @@ func readManagedLaunch() (managedLaunch, error) {
 	return state, nil
 }
 
+var managedEnvironmentKeys = []string{
+	"HOST", observerPortEnv, "OTLP_HOST", "OTLP_PORT", "OTLP_HTTP_PORT", "OTLP_GRPC_HOST", "OTLP_GRPC_PORT",
+	observerPublicMCPURLEnv,
+	"OBSTUDIO_WORKSPACE_ROOT", "OBSTUDIO_DASHBOARDS_PREVIEW", "OBSTUDIO_AUDIT_REPORT",
+	"OBSTUDIO_VALIDATOR_HEALTH_TIMEOUT",
+	"WEAVER_PATH", "MAX_FLOW_NODE_SPAN_LIST_SIZE",
+}
+
 func currentManagedEnvironment() []string {
-	keys := []string{
-		"HOST", observerPortEnv, "OTLP_HOST", "OTLP_PORT", "OTLP_HTTP_PORT", "OTLP_GRPC_HOST", "OTLP_GRPC_PORT",
-		observerPublicMCPURLEnv,
-		"OBSTUDIO_WORKSPACE_ROOT", "OBSTUDIO_DASHBOARDS_PREVIEW", "OBSTUDIO_AUDIT_REPORT",
-		"OBSTUDIO_SPLUNK_REALM", "SPLUNK_REALM", "SPLUNK_ACCESS_TOKEN",
-		"OBSTUDIO_SPLUNK_METRICS_EXPORT", "SPLUNK_METRICS_EXPORT", "OBSTUDIO_SPLUNK_TRACES_EXPORT", "SPLUNK_TRACES_EXPORT",
-		"OBSTUDIO_SPLUNK_METRICS_ENDPOINT", "OBSTUDIO_SPLUNK_TRACES_ENDPOINT",
-		"OBSTUDIO_SPLUNK_METRICS_TIMEOUT", "OBSTUDIO_SPLUNK_TRACES_TIMEOUT", "OBSTUDIO_VALIDATOR_HEALTH_TIMEOUT",
-		"WEAVER_PATH", "MAX_FLOW_NODE_SPAN_LIST_SIZE",
-	}
-	values := make([]string, 0, len(keys))
-	for _, key := range keys {
+	values := make([]string, 0, len(managedEnvironmentKeys))
+	for _, key := range managedEnvironmentKeys {
 		if value, ok := os.LookupEnv(key); ok {
 			if key == "WEAVER_PATH" && value != "" && !filepath.IsAbs(value) {
 				if absolute, err := filepath.Abs(value); err == nil {
@@ -824,7 +822,7 @@ func currentManagedEnvironment() []string {
 func mergeManagedEnvironment(saved, current []string) []string {
 	merged := make(map[string]string, len(saved)+len(current))
 	for _, entry := range append(append([]string{}, saved...), current...) {
-		if key, value, ok := strings.Cut(entry, "="); ok {
+		if key, value, ok := strings.Cut(entry, "="); ok && slices.Contains(managedEnvironmentKeys, key) {
 			merged[key] = value
 		}
 	}

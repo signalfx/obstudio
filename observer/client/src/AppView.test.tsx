@@ -556,8 +556,9 @@ describe("AppView cloud connection status chip", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Configured, not connected"));
-    expect(screen.getByRole("status").className).toContain("stream-toggle--paused");
+    const connectionStatus = await screen.findByText("Configured, not connected");
+    expect(connectionStatus.getAttribute("role")).toBe("status");
+    expect(connectionStatus.className).toContain("stream-toggle--paused");
   });
 
   it("shows Connected with live style when the connection is active", async () => {

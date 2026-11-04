@@ -10,6 +10,7 @@ import {
   resolveSplunkCloudRealm,
   runSplunkExportBrowserAction,
   submitSplunkFreeAccount,
+  SplunkExportBrowserActionError,
 } from "../api/client";
 import type {
   O11yOAuthRegistrationResult,
@@ -26,6 +27,7 @@ import {
   type CloudBridgeResponse,
 } from "./bridge";
 import { CLOUD_CONNECT_DESCRIPTION } from "./copy";
+import { SecureStorageNotice } from "./SecureStorageNotice";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 import { CopyTextButton } from "../layout/DetailPanel";
 
@@ -108,6 +110,10 @@ interface CloudActionResponse {
 
 export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElement {
   const { bridge, callBridge } = useCloudBridge();
+  const sessionExportRef = useRef<HTMLButtonElement | null>(null);
+  const connectionSubmitRef = useRef<HTMLButtonElement | null>(null);
+  const [storagePlatform, setStoragePlatform] = useState<string>();
+  const [sessionFallbackAvailable, setSessionFallbackAvailable] = useState(false);
   const [status, setStatus] = useState<SplunkExportStatus | null>(null);
   const [region, setRegion] = useState("");
   const [accessToken, setAccessToken] = useState("");
@@ -133,7 +139,11 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const [o11yOAuthRegistration, setO11yOAuthRegistration] = useState<O11yOAuthRegistrationResult | null>(null);
   const [busyAction, setBusyAction] = useState<CloudBridgeAction | null>("initialize");
   const [controlError, setControlError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setCloudError] = useState<{ message: string; needsConnectionReload: boolean } | null>(null);
+  const setError = useCallback((message: string | null, needsConnectionReload = false) => {
+    setCloudError(message === null ? null : { message, needsConnectionReload });
+  }, []);
+  const [cloudOutcomeUnknown, setCloudOutcomeUnknown] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [forgetOpen, setForgetOpen] = useState(false);
   const actionGenerationRef = useRef(0);
@@ -152,8 +162,11 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const forgetCancelRef = useRef<HTMLButtonElement>(null);
   const forgetConfirmRef = useRef<HTMLButtonElement>(null);
   const forgetTriggerRef = useRef<HTMLButtonElement>(null);
+  const reloadConnectionRef = useRef<HTMLButtonElement>(null);
   const regionValueRef = useRef("");
   const regionInputRef = useRef<HTMLInputElement>(null);
+  const cimdRegistrationRef = useRef<HTMLButtonElement>(null);
+  const cimdLoginRef = useRef<HTMLButtonElement>(null);
   const tokenInputRef = useRef<HTMLInputElement>(null);
   const o11yOAuthRealmInputRef = useRef<HTMLInputElement>(null);
   const o11yOAuthAdminTokenInputRef = useRef<HTMLInputElement>(null);
@@ -183,12 +196,16 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   }, []);
 
   useEffect(() => {
+    if (cloudOutcomeUnknown && forgetOpen) closeForgetDialog();
+  }, [cloudOutcomeUnknown, forgetOpen, closeForgetDialog]);
+
+  useEffect(() => {
     if (forgetOpen || !restoreFocusAfterForgetCloseRef.current) return;
-    const focusTarget = forgetTriggerRef.current ?? regionInputRef.current;
+    const focusTarget = cloudOutcomeUnknown ? reloadConnectionRef.current : forgetTriggerRef.current ?? regionInputRef.current;
     if (!focusTarget) return;
     restoreFocusAfterForgetCloseRef.current = false;
     focusTarget.focus();
-  }, [forgetOpen, status]);
+  }, [forgetOpen, status, cloudOutcomeUnknown]);
 
   useEffect(() => {
     setBusyAction("initialize");
@@ -209,6 +226,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             nextStatus = response.status;
             if (response.warning?.trim()) {
               controlInitializationError = new Error(response.warning);
+              if (response.warningCode === "outcome_unknown") setCloudOutcomeUnknown(true);
             }
             registrationAndAuthProtocolFromBridge = response.registrationAndAuthProtocol;
             if (response.cimdSession) {
@@ -223,6 +241,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           } catch (initializationError) {
             if (controller.signal.aborted) return;
             controlInitializationError = initializationError;
+            if (isOutcomeUnknown(initializationError)) setCloudOutcomeUnknown(true);
             nextStatus = await fetchSplunkExportStatus(controller.signal);
           }
         } else {
@@ -274,6 +293,12 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     if (freeAccountSuccess) freeAccountSuccessRef.current?.focus();
   }, [freeAccountSuccess]);
 
+  useEffect(() => setSessionFallbackAvailable(false), [region, accessToken, status?.version]);
+
+  useEffect(() => {
+    if (sessionFallbackAvailable && busyAction === null && document.activeElement === document.body) connectionSubmitRef.current?.focus();
+  }, [sessionFallbackAvailable, busyAction]);
+
   const connected = status?.connected === true;
   // Once the initial probe has completed, let an explicit user action retry the
   // Splunk Observability Studio even when that probe failed. The mutation endpoints accept an omitted
@@ -282,7 +307,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const mutationsDisabled = busyAction !== null
     || !controlAvailable
     || freeAccountMutationState === "uncertain";
-  const displayedError = error ?? controlError;
+  const connectionMutationsDisabled = mutationsDisabled || cloudOutcomeUnknown;
+  const displayedError = error?.message ?? controlError;
 
   const applyObserverStatus = useCallback((
     nextStatus: SplunkExportStatus,
@@ -470,12 +496,15 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
 
   const runAction = async (
     action: CloudBridgeAction,
-    payload?: { accessToken?: string; adminToken?: string; destination?: string; enabled?: boolean; realm?: string },
+    payload?: { sessionOnly?: boolean; accessToken?: string; adminToken?: string; destination?: string; enabled?: boolean; realm?: string },
   ): Promise<CloudActionResponse | null> => {
     if (busyAction || actionInFlightRef.current || !controlAvailable) return null;
+    const connectionAction = ["connect", "forget", "set-enabled", "refresh"].includes(action);
+    if (cloudOutcomeUnknown && connectionAction && action !== "refresh") return null;
     const expectedVersion = statusRef.current?.version;
-    const versionedPayload = { ...payload, expectedVersion };
+    const versionedPayload = { ...payload, ...(bridge && action === "forget" && statusRef.current?.sessionOnly ? { sessionOnly: true } : {}), ...(expectedVersion ? { expectedVersion } : {}) };
     const actionGeneration = ++actionGenerationRef.current;
+    if (action !== "connect") setSessionFallbackAvailable(false);
     actionInFlightRef.current = true;
     setBusyAction(action);
     setFieldError(null);
@@ -486,7 +515,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       if (bridge) {
         response = await callBridge(action, versionedPayload);
       } else {
-        if (action !== "connect" && action !== "forget" && action !== "set-enabled") {
+        if (action !== "connect" && action !== "forget" && action !== "set-enabled" && action !== "refresh") {
           throw new Error("This cloud action requires an IDE session.");
         }
         response = {
@@ -494,19 +523,28 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         };
       }
       if (response.status) setStatus(response.status);
+      if (action === "connect" || action === "forget") setSessionFallbackAvailable(false);
+      if (action === "refresh" && response.status) setCloudOutcomeUnknown(false);
       setControlError(null);
       if (response.cimdRegistrationVerified !== undefined) {
         setCIMDRegistrationVerified(response.cimdRegistrationVerified);
       }
       return response;
     } catch (actionError) {
-      const message = errorMessage(actionError, "The cloud connection request failed.");
-      if (bridge && isObserverHostCloudTimeoutError(actionError)) {
-        setError(message);
-        setControlError(null);
-      } else {
-        setError(message);
+      const storageRefused = action === "connect" && (actionError as { code?: string })?.code === "credential_storage_unavailable";
+      if (action === "connect") setSessionFallbackAvailable(storageRefused);
+      if (storageRefused) {
+        setStoragePlatform((actionError as { platform?: string }).platform);
+        setError(null);
+        return null;
       }
+      const message = errorMessage(actionError, "The cloud connection request failed.");
+      const outcomeUnknown = isOutcomeUnknown(actionError) || !bridge && !(actionError instanceof SplunkExportBrowserActionError);
+      const settingsConflict = (actionError as { code?: string })?.code === "settings_changed"
+        || actionError instanceof SplunkExportBrowserActionError && actionError.statusCode === 409;
+      if (connectionAction && outcomeUnknown) setCloudOutcomeUnknown(true);
+      setError(message, connectionAction && (outcomeUnknown || settingsConflict || action === "refresh"));
+      if (bridge && isObserverHostCloudTimeoutError(actionError)) setControlError(null);
       void reconcileFailedAction(actionGeneration);
       return null;
     } finally {
@@ -550,9 +588,9 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     }
   };
 
-  const connect = async (event: React.FormEvent<HTMLFormElement>) => {
+  const connect = async (event: React.SyntheticEvent, sessionOnly = sessionFallbackAvailable) => {
     event.preventDefault();
-    if (mutationsDisabled) return;
+    if (connectionMutationsDisabled) return;
     const submittedAccessToken = accessToken;
     const token = submittedAccessToken.trim();
     const destination = region.trim();
@@ -581,9 +619,13 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     if (realm === null || regionValueRef.current.trim() !== destination) return;
     const response = await runAction("connect", {
       accessToken: token,
+      ...(sessionOnly ? { sessionOnly: true } : {}),
       realm,
     });
-    if (!response) return;
+    if (!response) {
+      window.requestAnimationFrame(() => { if (document.activeElement === document.body) (reloadConnectionRef.current ?? connectionSubmitRef.current)?.focus(); });
+      return;
+    }
     if (response.status?.connected !== true) {
       setError("Splunk Observability Cloud did not confirm the connection.");
       return;
@@ -592,6 +634,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       currentAccessToken === submittedAccessToken ? "" : currentAccessToken
     ));
     setNotice("Cloud destination connected.");
+    if (sessionOnly) window.requestAnimationFrame(() => sessionExportRef.current?.focus());
   };
 
   const submitConnectionOnEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -824,7 +867,10 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
 
   const forget = async () => {
     const response = await runAction("forget");
-    if (!response) return;
+    if (!response) {
+      window.requestAnimationFrame(() => { if (document.activeElement === document.body) (reloadConnectionRef.current ?? connectionSubmitRef.current)?.focus(); });
+      return;
+    }
     closeForgetDialog();
     setRegion("");
     setAccessToken("");
@@ -972,6 +1018,23 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     <section id="panel-cloud" aria-label="Cloud" className="tab-panel cloud-tab" role="tabpanel">
       <div className="cloud-tab__content">
         <div aria-atomic="true" aria-live="polite" className="cloud-alert-region">
+          {status?.cleanupPending && !status.sessionOnly || cloudConfigured && !connected || error?.needsConnectionReload && !fieldError || cloudOutcomeUnknown || busyAction === "refresh" ? (
+            <div className="cloud-alert cloud-alert--error" role="status">
+              <p>{status?.cleanupPending && !status.sessionOnly ? "Credential cleanup is pending. Unlock secure storage, then retry." : cloudConfigured && !connected ? "Saved credentials are unavailable. Unlock secure storage, then reload the connection." : status?.sessionOnly ? "Reload the current session before retrying this change." : "Reload saved settings before retrying this change."}</p>
+              <button className="cloud-button" disabled={mutationsDisabled} ref={reloadConnectionRef} type="button" onClick={async () => {
+                const response = await runAction("refresh");
+                if (response?.status && !response.status.cleanupPending) {
+                  window.requestAnimationFrame(() => {
+                    if (response.status?.connected) forgetTriggerRef.current?.focus();
+                    else (regionInputRef.current ?? o11yOAuthRealmInputRef.current ?? cimdLoginRef.current ?? cimdRegistrationRef.current)?.focus();
+                  });
+                } else {
+                  window.requestAnimationFrame(() => (reloadConnectionRef.current ?? forgetTriggerRef.current ?? regionInputRef.current ?? o11yOAuthRealmInputRef.current ?? cimdLoginRef.current ?? cimdRegistrationRef.current)?.focus());
+                }
+              }}>{status?.cleanupPending && !status.sessionOnly ? "Retry credential cleanup" : status?.sessionOnly ? "Reload session connection" : "Reload saved connection"}</button>
+            </div>
+          ) : null}
+          {status?.sessionOnly && status.cleanupPending ? <p className="cloud-alert" role="status">Credential cleanup is pending. Save a connection after secure storage is available to retry.</p> : null}
           {displayedError || (cloudConfigured ? freeAccountSubmitError : null) ? (
             <div className="cloud-alert cloud-alert--error" role="alert">
               {displayedError ?? freeAccountSubmitError}
@@ -1001,7 +1064,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
               <div className="cloud-panel__actions">
                 <button
                   className="cloud-button cloud-button--danger"
-                  disabled={mutationsDisabled}
+                  disabled={connectionMutationsDisabled}
                   onClick={() => setForgetOpen(true)}
                   ref={forgetTriggerRef}
                   type="button"
@@ -1028,6 +1091,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                 <button
                   className="cloud-button"
                   disabled={busyAction !== null}
+                  ref={cimdRegistrationRef}
                   onClick={() => void setupCIMD()}
                   type="button"
                 >
@@ -1148,6 +1212,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
               {cimdSession?.phase === "connected" ? (
                 <button
                   className="cloud-button cloud-button--danger"
+                  ref={cimdLoginRef}
                   onClick={() => void disconnectCIMD()}
                   type="button"
                 >
@@ -1157,6 +1222,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                 <button
                   className="cloud-button"
                   disabled={cimdLoginBusy}
+                  ref={cimdLoginRef}
                   onClick={() => void loginCIMD()}
                   type="button"
                 >
@@ -1177,8 +1243,9 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   aria-checked={exportEnabled}
                   aria-label={`Remote telemetry export is ${exportStateLabel}`}
                   className={exportEnabled ? "cloud-switch cloud-switch--on" : "cloud-switch"}
-                  disabled={mutationsDisabled}
+                  disabled={connectionMutationsDisabled}
                   onClick={() => void toggleExport()}
+                  ref={sessionExportRef}
                   role="switch"
                   type="button"
                 >
@@ -1244,7 +1311,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                 <div className="cloud-field__control">
                   <label className="cloud-field__label" htmlFor="cloud-access-token">Access token</label>
                   <input
-                    aria-describedby={fieldError === "token" ? "cloud-token-help cloud-token-error" : "cloud-token-help"}
+                    aria-describedby={[fieldError === "token" ? "cloud-token-help cloud-token-error" : "cloud-token-help", sessionFallbackAvailable ? "cloud-storage-help" : ""].filter(Boolean).join(" ")}
                     aria-invalid={fieldError === "token"}
                     autoCapitalize="none"
                     autoComplete="new-password"
@@ -1301,6 +1368,14 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                     access tokens
                   </a>
                 </p>
+                {sessionFallbackAvailable ? <SecureStorageNotice id="cloud-storage-help" platform={storagePlatform} onOpenHelp={(event, platform) => {
+                  setSessionFallbackAvailable(false);
+                  if (bridge) {
+                    event.preventDefault();
+                    void callBridge("open-credential-storage-help", platform ? { platform } : undefined).catch((reason) => setError(errorMessage(reason, "Could not open secure storage help.")));
+                  }
+                  window.requestAnimationFrame(() => connectionSubmitRef.current?.focus());
+                }} /> : null}
                 {fieldError === "token" ? (
                   <p className="cloud-field__error" id="cloud-token-error">Paste the full access token.</p>
                 ) : null}
@@ -1308,10 +1383,11 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
               <div className="cloud-connect-form__action">
                 <button
                   className="cloud-button cloud-button--primary"
-                  disabled={mutationsDisabled}
+                  ref={connectionSubmitRef}
+                  disabled={connectionMutationsDisabled}
                   type="submit"
                 >
-                  {busyAction === "connect" || busyAction === "resolve-realm" ? "Connecting..." : "Connect"}
+                  {busyAction === "connect" || busyAction === "resolve-realm" ? "Connecting..." : sessionFallbackAvailable ? "Connect for this session" : "Connect"}
                 </button>
               </div>
             </form>
@@ -1567,7 +1643,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           >
             <h2 id="cloud-forget-title">Remove connection?</h2>
             <p id="cloud-forget-description">
-              This removes the saved region and access token and turns off remote export.
+              {status?.sessionOnly ? "This clears the token from this session and turns off remote export." : "This removes the saved region and access token and turns off remote export."}
             </p>
             <div>
               <button
@@ -1581,7 +1657,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
               </button>
               <button
                 className="cloud-button cloud-button--danger"
-                disabled={busyAction === "forget"}
+                disabled={busyAction === "forget" || cloudOutcomeUnknown}
                 onClick={() => void forget()}
                 ref={forgetConfirmRef}
                 type="button"

@@ -239,7 +239,6 @@ func TestConfigManagerGateNoSideEffects(t *testing.T) {
 // so the framework restores whatever loadConfiguredEnvFile sets.
 func afterLoadHome(t *testing.T) string {
 	t.Helper()
-	resetEnvFileShellPrecedence(t)
 	home := gateHome(t)
 	unsetEnv(t, "SPLUNK_REALM")
 	return home
