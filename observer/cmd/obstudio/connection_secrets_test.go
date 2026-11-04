@@ -19,6 +19,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"go.opentelemetry.io/collector/pdata/plog"
+	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/ptrace"
 	"time"
 )
 
@@ -723,6 +727,49 @@ func TestCloudRefreshPausesUntilSavedCredentialsCanBeRead(t *testing.T) {
 	}
 }
 
+func TestCloudHTTPRefreshPreservesAcceptedCountsThroughCredentialRecovery(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))
+	defer remote.Close()
+	backend := &testCredentialBackend{values: map[string]string{}}
+	settings := newTestConnectionPersistence(t, filepath.Join(t.TempDir(), "connections.json"), credentials.NewWithBackend(backend))
+	m := otlp.SplunkMetricsExporterConfig{Realm: "us1", Endpoint: remote.URL, AccessToken: "test", Enabled: true}
+	tr := otlp.SplunkTracesExporterConfig{Realm: "us1", Endpoint: remote.URL, AccessToken: "test", Enabled: true}
+	if err := settings.SaveCloud(m, tr); err != nil {
+		t.Fatal(err)
+	}
+	metrics, _ := otlp.NewSplunkMetricsExportController(m)
+	traces, _ := otlp.NewSplunkTracesExportController(tr)
+	defer metrics.Shutdown(context.Background())
+	defer traces.Shutdown(context.Background())
+	md := pmetric.NewMetrics()
+	metric := md.ResourceMetrics().AppendEmpty().ScopeMetrics().AppendEmpty().Metrics().AppendEmpty()
+	metric.SetName("accepted.count")
+	metric.SetEmptyGauge().DataPoints().AppendEmpty().SetIntValue(1)
+	td := ptrace.NewTraces()
+	td.ResourceSpans().AppendEmpty().ScopeSpans().AppendEmpty().Spans().AppendEmpty().SetName("accepted")
+	if err := metrics.ExportMetrics(context.Background(), md); err != nil {
+		t.Fatal(err)
+	}
+	if err := traces.ExportTraces(context.Background(), td); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	api.Register(mux, store.New(), metrics, traces, newSplunkExportConfigurationRefresher(metrics, traces, settings))
+	for _, unavailable := range []bool{true, false} {
+		backend.readFail = unavailable
+		response := connectionTestRequest(t, mux, "POST", "/api/splunk/export/refresh", map[string]any{})
+		if unavailable && response.Code != 400 || !unavailable && response.Code != 200 {
+			t.Fatal(response.Code, response.Body.String())
+		}
+		if !metrics.Status().Enabled || !traces.Status().Enabled {
+			t.Fatal("an unchanged saved connection must retain its live credential")
+		}
+		if metrics.Status().ExportedDataPoints != 1 || traces.Status().ExportedSpans != 1 || metrics.Status().ExportedBatches != 1 || traces.Status().ExportedBatches != 1 {
+			t.Fatal("reload discarded accepted metrics or traces", metrics.Status(), traces.Status())
+		}
+	}
+}
+
 func TestCloudStartupRestoresOneLockedSnapshot(t *testing.T) {
 	for _, change := range []string{"pause", "disconnect", "replace"} {
 		t.Run(change, func(t *testing.T) {
@@ -1091,6 +1138,681 @@ func TestConnectionLockFlushesNewDirectoriesBeforeCredentialWrite(t *testing.T) 
 	}
 }
 
+func TestConnectionSecretsSaveAndRestoreIndependently(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "connections.json")
+	backend := &testCredentialBackend{values: map[string]string{}}
+	vault := credentials.NewWithBackend(backend)
+	settings := newTestConnectionPersistence(t, path, vault)
+	metrics := otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: "cloud-test-secret", Enabled: true}
+	traces := otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: metrics.AccessToken, Enabled: true}
+	logs := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://hec.example/services/collector", Index: "studio", Token: "logs-test-secret", ConnectionVerified: true}
+	if err := settings.SaveLogs(logs); err != nil {
+		t.Fatal(err)
+	}
+	if settings.CloudStorageManaged() {
+		t.Fatal("saving logs claimed ownership of the Cloud connection")
+	}
+	if err := settings.SaveCloud(metrics, traces); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), metrics.AccessToken) || strings.Contains(string(data), logs.Token) {
+		t.Fatal("settings exposed a token")
+	}
+	restoredMetrics := otlp.SplunkMetricsExporterConfig{}
+	restoredTraces := otlp.SplunkTracesExporterConfig{}
+	restoredLogs := otlp.SplunkHECLogsExporterConfig{}
+	reloaded := newTestConnectionPersistence(t, path, vault)
+	cloudErr, logsErr := reloaded.Restore(&restoredMetrics, &restoredTraces, &restoredLogs)
+	if cloudErr != nil || logsErr != nil || restoredMetrics.AccessToken != metrics.AccessToken || restoredTraces.AccessToken != traces.AccessToken || restoredLogs.Token != logs.Token {
+		t.Fatal("secure connections did not restore")
+	}
+	if !restoredMetrics.Enabled || restoredLogs.Enabled {
+		t.Fatal("independent export preferences were not restored")
+	}
+	// A destination edit cannot retrieve the token for the saved destination.
+	if err := writeConnectionSettings(path, map[string]string{"logsEndpoint": "https://other.example/services/collector"}); err != nil {
+		t.Fatal(err)
+	}
+	_, logsErr = reloaded.Restore(&restoredMetrics, &restoredTraces, &restoredLogs)
+	if logsErr == nil || restoredLogs.Token != "" || restoredLogs.Enabled || restoredMetrics.AccessToken != metrics.AccessToken {
+		t.Fatal("credential failure was not isolated to logs")
+	}
+	if err := writeConnectionSettings(path, map[string]string{"logsEndpoint": logs.Endpoint}); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SaveCloud(otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	values := mustReadConnectionValues(t, path)
+	if values[cloudSecretRef] != "" || values[logsSecretRef] == "" {
+		t.Fatal("disconnect changed the other connection")
+	}
+	// A rollback can restore the previous connection after disconnect.
+	if err := settings.SaveCloud(metrics, traces); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustReadConnectionValues(t *testing.T, path string) map[string]string {
+	t.Helper()
+	values, err := readConnectionSettings(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return values
+}
+
+func TestSecureSaveFailurePreservesSettingsAndPreviousToken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "connections.json")
+	backend := &testCredentialBackend{values: map[string]string{}}
+	vault := credentials.NewWithBackend(backend)
+	settings := newTestConnectionPersistence(t, path, vault)
+	logs := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://hec.example/services/collector", Token: "first-secret", Index: "studio"}
+	if err := settings.SaveLogs(logs); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(path)
+	backend.fail = true
+	logs.Token = "replacement-secret"
+	if err := settings.SaveLogs(logs); !errors.Is(err, credentials.ErrUnavailable) {
+		t.Fatal("unavailable vault accepted a save")
+	}
+	after, _ := os.ReadFile(path)
+	if string(after) != string(before) {
+		t.Fatal("failed secure save changed settings")
+	}
+	backend.fail = false
+	backend.afterSet = func() {
+		backend.afterSet = nil
+		if err := os.Rename(path, path+".saved"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	backend.deleteFail = true
+	if err := settings.SaveLogs(logs); err == nil || errors.Is(err, api.ErrConnectionCleanupPending) {
+		t.Fatal("failed publication was reported as committed", err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(path+".saved", path); err != nil {
+		t.Fatal(err)
+	}
+	backend.deleteFail = false
+	logs.Token = ""
+	metrics, traces := otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}
+	_, err := newTestConnectionPersistence(t, path, vault).Restore(&metrics, &traces, &logs)
+	if err != nil || logs.Token != "first-secret" || len(backend.values) != 1 {
+		t.Fatal("failed save replaced saved credential")
+	}
+}
+
+func TestLogsRefusalBeforeWriteDoesNotCreateAConnectionOrPendingCleanup(t *testing.T) {
+	backend := &testCredentialBackend{values: map[string]string{}, setError: credentials.ErrWriteNotStarted, deleteFail: true}
+	settings := newTestConnectionPersistence(t, filepath.Join(t.TempDir(), "connections.json"), credentials.NewWithBackend(backend))
+	config := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Token: "session-token", Index: "studio"}
+	if err := settings.SaveLogs(config); !errors.Is(err, api.ErrCredentialStorageUnavailable) {
+		t.Fatal(err)
+	}
+	if settings.HasLogsCredential() || settings.LogsCleanupPending() || len(backend.values) != 0 {
+		t.Fatal("unwritten token created a saved connection or required native cleanup")
+	}
+	if _, err := os.Stat(settings.path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("refusal published connection settings", err)
+	}
+}
+
+func TestLogsDisconnectForgetsSecureTokenAndPreservesCloud(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "connections.json")
+	backend := &testCredentialBackend{values: map[string]string{}}
+	vault := credentials.NewWithBackend(backend)
+	settings := newTestConnectionPersistence(t, path, vault)
+	metrics := otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: "cloud-test-token", Enabled: true}
+	traces := otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: metrics.AccessToken, Enabled: true}
+	logs := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://hec.example/services/collector", Index: "studio", Token: "hec-test-token", ConnectionVerified: true}
+	if err := settings.SaveCloud(metrics, traces); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SaveLogs(logs); err != nil {
+		t.Fatal(err)
+	}
+	previous := mustReadConnectionValues(t, path)
+	logs.Token, logs.Enabled, logs.ConnectionVerified = "", false, false
+	if err := settings.SaveLogs(logs); err != nil {
+		t.Fatal(err)
+	}
+	values := mustReadConnectionValues(t, path)
+	if values[logsSecretRef] != "" || values[cloudSecretRef] != previous[cloudSecretRef] {
+		t.Fatal("disconnect did not remove only the logs credential reference")
+	}
+	if _, err := vault.Get(settings.path, "logs", logs.Endpoint, previous[logsSecretRef]); !errors.Is(err, credentials.ErrNotFound) {
+		t.Fatal("HEC token remains in secure storage")
+	}
+	if len(backend.values) != 1 {
+		t.Fatal("disconnect changed the unrelated cloud credential")
+	}
+	if values["logsEndpoint"] != logs.Endpoint || values["logsIndex"] != logs.Index {
+		t.Fatal("disconnect lost destination fields")
+	}
+	reloaded := newTestConnectionPersistence(t, path, vault)
+	cloudErr, logsErr := reloaded.Restore(&metrics, &traces, &logs)
+	if cloudErr != nil || logsErr != nil || logs.Token != "" || metrics.AccessToken != "cloud-test-token" || reloaded.HasLogsCredential() {
+		t.Fatal("restart restored a forgotten token or changed the cloud connection")
+	}
+}
+
+func TestLogsReplacementCleanupDoesNotBlockPauseDisconnectOrRestore(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "connections.json")
+	backend := &testCredentialBackend{values: map[string]string{}}
+	vault := credentials.NewWithBackend(backend)
+	settings := newTestConnectionPersistence(t, path, vault)
+	config := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Token: "first-token", Index: "studio", Enabled: true, ConnectionVerified: true}
+	if err := settings.SaveLogs(config); err != nil {
+		t.Fatal(err)
+	}
+	backend.deleteFail = true
+	config.Token = "replacement-token"
+	if err := settings.SaveLogs(config); !errors.Is(err, api.ErrConnectionCleanupPending) {
+		t.Fatal(err)
+	}
+	restore := func(enabled bool) {
+		t.Helper()
+		logs := otlp.SplunkHECLogsExporterConfig{}
+		metrics, traces := otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}
+		if _, err := newTestConnectionPersistence(t, path, vault).Restore(&metrics, &traces, &logs); !errors.Is(err, api.ErrConnectionCleanupPending) {
+			t.Fatal("cleanup warning was not reported", err)
+		}
+		if logs.Token != config.Token || logs.Enabled != enabled || !logs.ConnectionVerified {
+			t.Fatal("cleanup blocked active logs restoration")
+		}
+	}
+	restore(true)
+	config.Enabled = false
+	if err := settings.SaveLogs(config); !errors.Is(err, api.ErrConnectionCleanupPending) {
+		t.Fatal("pause was blocked", err)
+	}
+	restore(false)
+	config.Token, config.ConnectionVerified = "", false
+	if err := settings.SaveLogs(config); !errors.Is(err, api.ErrConnectionCleanupPending) {
+		t.Fatal("disconnect was blocked", err)
+	}
+	values, err := readConnectionSettings(path)
+	if err != nil || values[logsSecretRef] != "" || len(backend.values) != 2 {
+		t.Fatal("disconnect lost cleanup state", err)
+	}
+	backend.deleteFail = false
+	metrics, traces := otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}
+	if _, err := newTestConnectionPersistence(t, path, vault).Restore(&metrics, &traces, &config); err != nil {
+		t.Fatal(err)
+	}
+	if config.Enabled || config.Token != "" || len(backend.values) != 0 {
+		t.Fatal("retry revived export or kept a credential")
+	}
+}
+
+func TestLogsMutationsRespectDestinationState(t *testing.T) {
+	for _, change := range []string{"cloud", "disconnect"} {
+		t.Run(change, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "connections.json")
+			backend := &testCredentialBackend{values: map[string]string{}}
+			vault := credentials.NewWithBackend(backend)
+			writer, reader := newTestConnectionPersistence(t, path, vault), newTestConnectionPersistence(t, path, vault)
+			logs := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Token: "token", Index: "studio", Enabled: true, ConnectionVerified: true}
+			if err := writer.SaveLogs(logs); err != nil {
+				t.Fatal(err)
+			}
+			m, tr := otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}
+			if _, err := reader.Restore(&m, &tr, &logs); err != nil {
+				t.Fatal(err)
+			}
+			if change == "cloud" {
+				if err := writer.SaveCloud(otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: "cloud"}, otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: "cloud"}); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				disconnected := logs
+				disconnected.Token, disconnected.Enabled, disconnected.ConnectionVerified = "", false, false
+				if err := writer.SaveLogs(disconnected); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before, _ := os.ReadFile(path)
+			logs.Enabled = false
+			err := reader.SaveLogsPreferences(logs)
+			if change == "cloud" {
+				if err != nil {
+					t.Fatal("Cloud changes blocked logs", err)
+				}
+			} else {
+				if !errors.Is(err, api.ErrConnectionSettingsChanged) {
+					t.Fatal("stale logs toggle was accepted", err)
+				}
+				after, _ := os.ReadFile(path)
+				if string(before) != string(after) || len(backend.values) != 0 {
+					t.Fatal("stale toggle recreated a disconnected logs credential")
+				}
+			}
+		})
+	}
+}
+
+func TestLogsStartupRestoresFreshDestinationSettings(t *testing.T) {
+	for _, change := range []string{"pause", "disconnect", "replace"} {
+		t.Run(change, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "connections.json")
+			vault := credentials.NewWithBackend(&testCredentialBackend{values: map[string]string{}})
+			writer, reader := newTestConnectionPersistence(t, path, vault), newTestConnectionPersistence(t, path, vault)
+			initial := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Token: "first", Index: "studio", Enabled: true, ConnectionVerified: true}
+			if err := writer.SaveLogs(initial); err != nil {
+				t.Fatal(err)
+			}
+			current, next := initial, initial
+			current.Token = ""
+			switch change {
+			case "pause":
+				next.Enabled = false
+			case "disconnect":
+				next.Token, next.Enabled, next.ConnectionVerified = "", false, false
+			case "replace":
+				next.Endpoint, next.Token, next.Index = "https://other.example/services/collector", "second", "other"
+			}
+			if err := writer.SaveLogs(next); err != nil {
+				t.Fatal(err)
+			}
+			m, tr := otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}
+			if _, err := reader.Restore(&m, &tr, &current); err != nil {
+				t.Fatal(err)
+			}
+			if current.Endpoint != next.Endpoint || current.Token != next.Token || current.Index != next.Index || current.Enabled != next.Enabled || current.ConnectionVerified != next.ConnectionVerified {
+				t.Fatal("logs startup mixed destination settings")
+			}
+		})
+	}
+}
+
+func TestLogsUnavailableCredentialKeepsDisconnectAvailable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "connections.json")
+	backend := &testCredentialBackend{values: map[string]string{}}
+	vault := credentials.NewWithBackend(backend)
+	writer := newTestConnectionPersistence(t, path, vault)
+	logs := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Index: "studio", Token: "stored-token", Enabled: true, ConnectionVerified: true}
+	if err := writer.SaveLogs(logs); err != nil {
+		t.Fatal(err)
+	}
+	backend.readFail = true
+	reader := newTestConnectionPersistence(t, path, vault)
+	metrics, traces := otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}
+	if _, err := reader.Restore(&metrics, &traces, &logs); !errors.Is(err, credentials.ErrUnavailable) {
+		t.Fatal(err)
+	}
+	if logs.Enabled || logs.Token != "" || logs.ConnectionVerified {
+		t.Fatal("unavailable token remained active")
+	}
+	if err := reader.SaveLogs(logs); err != nil {
+		t.Fatal("explicit Disconnect was blocked", err)
+	}
+	values, err := readConnectionSettings(path)
+	if err != nil || values[logsSecretRef] != "" || len(backend.values) != 0 {
+		t.Fatal("Disconnect kept the saved credential", err)
+	}
+}
+
+func TestLogsHTTPDisconnectRecoversStoredCredentialFailures(t *testing.T) {
+	for _, failure := range []string{"credential read", "credential cleanup"} {
+		t.Run(failure, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "connections.json")
+			backend := &testCredentialBackend{values: map[string]string{}}
+			vault := credentials.NewWithBackend(backend)
+			writer := newTestConnectionPersistence(t, path, vault)
+			logs := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Token: "stored-token", Index: "studio", Enabled: true, ConnectionVerified: true}
+			if err := writer.SaveLogs(logs); err != nil {
+				t.Fatal(err)
+			}
+			if failure == "credential cleanup" {
+				backend.deleteFail = true
+				logs.Token, logs.Enabled, logs.ConnectionVerified = "", false, false
+				if err := writer.SaveLogs(logs); !errors.Is(err, api.ErrConnectionCleanupPending) {
+					t.Fatal(err)
+				}
+			} else {
+				backend.readFail = true
+			}
+			reader := newTestConnectionPersistence(t, path, vault)
+			metrics, traces := otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}
+			if _, err := reader.Restore(&metrics, &traces, &logs); err == nil {
+				t.Fatal("credential failure was not reported")
+			}
+			controller := otlp.NewSplunkHECLogsExportController(logs)
+			defer controller.Shutdown(context.Background())
+			mux := http.NewServeMux()
+			api.Register(mux, store.New(), api.SplunkLogsSettings{Controller: controller, Save: reader.SaveLogs, HasCredential: reader.HasLogsCredential})
+			status := func() struct {
+				Version                                   string
+				CanDisconnect, TokenConfigured, Connected bool
+			} {
+				t.Helper()
+				response := httptest.NewRecorder()
+				mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/splunk/logs", nil))
+				var value struct {
+					Version                                   string
+					CanDisconnect, TokenConfigured, Connected bool
+				}
+				if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &value) != nil {
+					t.Fatal("status failed", response.Code)
+				}
+				return value
+			}
+			before := status()
+			if !before.CanDisconnect || before.TokenConfigured || before.Connected {
+				t.Fatal("saved credential cannot be forgotten from the disconnected state", before)
+			}
+			backend.readFail, backend.deleteFail = false, false
+			body, _ := json.Marshal(map[string]string{"expectedVersion": before.Version})
+			request := httptest.NewRequest(http.MethodPost, "/api/splunk/logs/disconnect", strings.NewReader(string(body)))
+			request.RemoteAddr = "127.0.0.1:1234"
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, request)
+			after := status()
+			if response.Code != 200 || after.CanDisconnect || after.Connected || after.TokenConfigured || len(backend.values) != 0 {
+				t.Fatal("HTTP Disconnect did not finish credential cleanup", response.Code, after)
+			}
+		})
+	}
+}
+
+func connectionTestRequest(t *testing.T, mux *http.ServeMux, method, path string, body map[string]any) *httptest.ResponseRecorder {
+	t.Helper()
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(method, "http://localhost"+path, strings.NewReader(string(encoded)))
+	request.RemoteAddr = "127.0.0.1:1234"
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Obstudio-Browser-Request", "1")
+	request.Header.Set("Origin", "http://localhost")
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	return response
+}
+
+func TestLogsNativeSaveKeepsCloudHTTPStatusResponsive(t *testing.T) {
+	backend := &testCredentialBackend{values: map[string]string{}}
+	settings := newTestConnectionPersistence(t, filepath.Join(t.TempDir(), "connections.json"), credentials.NewWithBackend(backend))
+	m := otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: "cloud"}
+	tr := otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: "cloud"}
+	if err := settings.SaveCloud(m, tr); err != nil {
+		t.Fatal(err)
+	}
+	metrics, _ := otlp.NewSplunkMetricsExportController(m)
+	traces, _ := otlp.NewSplunkTracesExportController(tr)
+	logs := otlp.NewSplunkHECLogsExportController(otlp.SplunkHECLogsExporterConfig{})
+	defer logs.Shutdown(context.Background())
+	mux := http.NewServeMux()
+	api.Register(mux, store.New(), metrics, traces, api.SplunkCloudStorageManaged(settings.CloudStorageManaged), api.SplunkCloudCleanupPending(settings.CloudCleanupPending), api.SplunkLogsSettings{Controller: logs, Save: settings.SaveLogs, HasCredential: settings.HasLogsCredential, CleanupPending: settings.LogsCleanupPending})
+	started, release := make(chan struct{}), make(chan struct{})
+	backend.afterSet = func() { close(started); <-release }
+	released := false
+	defer func() {
+		if !released {
+			close(release)
+		}
+	}()
+	saved := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		saved <- connectionTestRequest(t, mux, "POST", "/api/splunk/logs", map[string]any{"expectedVersion": logs.Status().Version, "endpoint": "https://logs.example/services/collector", "token": "logs", "index": "studio", "enabled": false})
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("save did not reach native storage")
+	}
+	status := make(chan *httptest.ResponseRecorder, 1)
+	go func() { status <- connectionTestRequest(t, mux, "GET", "/api/splunk/export", nil) }()
+	select {
+	case response := <-status:
+		var snapshot struct{ Connected, StorageManaged bool }
+		if err := json.Unmarshal(response.Body.Bytes(), &snapshot); err != nil || response.Code != 200 || !snapshot.Connected || !snapshot.StorageManaged {
+			t.Fatal("independent Cloud status changed", response.Body.String(), err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("native logs save blocked independent Cloud status")
+	}
+	close(release)
+	released = true
+	select {
+	case response := <-saved:
+		if response.Code != 200 {
+			t.Fatal(response.Body.String())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("save did not finish")
+	}
+}
+
+func TestLogsHTTPRefreshReconcilesSavedSettings(t *testing.T) {
+	for _, failure := range []string{"external change", "credential read", "unchanged credential read", "credential cleanup", "publication flush", "invalid settings", "invalid timeout", "directory sync"} {
+		t.Run(failure, func(t *testing.T) {
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{"code":0}`)) }))
+			defer remote.Close()
+			backend := &testCredentialBackend{values: map[string]string{}}
+			vault := credentials.NewWithBackend(backend)
+			path := filepath.Join(t.TempDir(), "connections.json")
+			writer, reader := newTestConnectionPersistence(t, path, vault), newTestConnectionPersistence(t, path, vault)
+			config := otlp.SplunkHECLogsExporterConfig{Endpoint: remote.URL + "/services/collector", Token: "first", Index: "studio", Enabled: true, ConnectionVerified: true, Timeout: time.Second}
+			if err := writer.SaveLogs(config); err != nil {
+				t.Fatal(err)
+			}
+			m, tr := otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}
+			if _, err := reader.Restore(&m, &tr, &config); err != nil {
+				t.Fatal(err)
+			}
+			logs := otlp.NewSplunkHECLogsExportController(config)
+			defer logs.Shutdown(context.Background())
+			payload := plog.NewLogs()
+			payload.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords().AppendEmpty().Body().SetStr("accepted log")
+			logs.QueueLogs(payload)
+			deadline := time.Now().Add(2 * time.Second)
+			for logs.Status().ExportedRecords != 1 && time.Now().Before(deadline) {
+				time.Sleep(time.Millisecond)
+			}
+			if logs.Status().ExportedRecords != 1 {
+				t.Fatal("test log did not export")
+			}
+			mux := http.NewServeMux()
+			api.Register(mux, store.New(), api.SplunkLogsSettings{Controller: logs, Save: reader.SaveLogs, SavePreferences: reader.SaveLogsPreferences, HasCredential: reader.HasLogsCredential, CleanupPending: reader.LogsCleanupPending, Refresh: func() error { return reader.RefreshLogs(logs) }})
+			if failure != "unchanged credential read" {
+				config.Token, config.Index = "replacement", "updated"
+			}
+			if failure == "credential cleanup" {
+				backend.deleteFail = true
+			}
+			var saveErr error
+			if failure != "unchanged credential read" {
+				saveErr = writer.SaveLogs(config)
+			}
+			if failure == "credential cleanup" {
+				if !errors.Is(saveErr, api.ErrConnectionCleanupPending) {
+					t.Fatal(saveErr)
+				}
+			} else if saveErr != nil {
+				t.Fatal(saveErr)
+			}
+			if failure == "publication flush" {
+				values, err := reader.values()
+				if err != nil {
+					t.Fatal(err)
+				}
+				values["logsIndex"] = "published"
+				data, _ := json.Marshal(values)
+				if err := writeDurableConnectionFileWithSync(path, data, func(target string) error {
+					if target == path {
+						return errors.New("flush failed")
+					}
+					return syncConnectionSettingsDirectory(target)
+				}); !errors.Is(err, errConnectionSettingsPublished) {
+					t.Fatal(err)
+				}
+				config.Index = "published"
+			}
+			if failure != "unchanged credential read" {
+				stale := connectionTestRequest(t, mux, "POST", "/api/splunk/logs/enabled", map[string]any{"enabled": false, "expectedVersion": logs.Status().Version})
+				if stale.Code != 409 {
+					t.Fatal("stale settings were overwritten", stale.Body.String())
+				}
+			}
+			var saved []byte
+			if failure == "invalid settings" || failure == "invalid timeout" {
+				var err error
+				saved, err = os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if failure == "invalid settings" {
+					err = os.WriteFile(path, []byte("{"), 0600)
+				} else {
+					err = writeConnectionSettings(path, map[string]string{"logsTimeout": "invalid"})
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if failure == "directory sync" {
+				reader.syncDirectory = func(string) error { return errors.New("directory unavailable") }
+			}
+			if failure == "credential read" || failure == "unchanged credential read" {
+				backend.readFail = true
+			}
+			if failure != "external change" && failure != "publication flush" {
+				response := connectionTestRequest(t, mux, "POST", "/api/splunk/logs/refresh", map[string]any{})
+				wantCode := 500
+				if failure == "credential cleanup" {
+					wantCode = 200
+				}
+				if response.Code != wantCode {
+					t.Fatal("unexpected reload result", response.Code, response.Body.String())
+				}
+				if failure == "credential cleanup" {
+					var status struct{ CleanupPending, Connected, Enabled bool }
+					if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil || !status.CleanupPending || !status.Connected || !status.Enabled {
+						t.Fatal("active cleanup status lost", response.Body.String(), err)
+					}
+				} else if failure == "unchanged credential read" {
+					if !logs.Status().Enabled || !logs.Status().TokenConfigured || logs.Config().Token != config.Token {
+						t.Fatal("unchanged active credential was discarded")
+					}
+				} else if logs.Status().Enabled || logs.Status().TokenConfigured {
+					t.Fatal("unreadable credentials remained active")
+				}
+			}
+			backend.deleteFail, backend.readFail = false, false
+			reader.syncDirectory = syncConnectionSettingsDirectory
+			if saved != nil {
+				if err := os.WriteFile(path, saved, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			response := connectionTestRequest(t, mux, "POST", "/api/splunk/logs/refresh", map[string]any{})
+			if response.Code != 200 {
+				t.Fatal(response.Body.String())
+			}
+			status := logs.Status()
+			if !status.Enabled || !status.Connected || status.Index != config.Index || logs.Config().Token != config.Token || reader.LogsCleanupPending() {
+				t.Fatal("refresh failed to reconcile saved connection", status)
+			}
+			if status.ExportedRecords != 1 {
+				t.Fatal("cleanup/reload reset export activity", status)
+			}
+			response = connectionTestRequest(t, mux, "POST", "/api/splunk/logs/enabled", map[string]any{"enabled": false, "expectedVersion": status.Version})
+			if response.Code != 200 || logs.Status().Enabled {
+				t.Fatal("reconciled revision still rejected mutations", response.Body.String())
+			}
+		})
+	}
+}
+
+func TestLogsHTTPReloadAllowsRepairingMalformedSettings(t *testing.T) {
+	for _, action := range []string{"connect", "disconnect"} {
+		t.Run(action, func(t *testing.T) {
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{"code":0}`)) }))
+			defer remote.Close()
+			settings := newTestConnectionPersistence(t, filepath.Join(t.TempDir(), "connections.json"), credentials.NewWithBackend(&testCredentialBackend{values: map[string]string{}}))
+			config := otlp.SplunkHECLogsExporterConfig{Endpoint: remote.URL + "/services/collector", Token: "synthetic-token", Index: "studio", ConnectionVerified: true}
+			if err := settings.SaveLogs(config); err != nil {
+				t.Fatal(err)
+			}
+			logs := otlp.NewSplunkHECLogsExportController(config)
+			defer logs.Shutdown(context.Background())
+			mux := http.NewServeMux()
+			api.Register(mux, store.New(), api.SplunkLogsSettings{Controller: logs, Save: settings.SaveLogs, HasCredential: settings.HasLogsCredential, CleanupPending: settings.LogsCleanupPending, Refresh: func() error { return settings.RefreshLogs(logs) }})
+			if err := writeConnectionSettings(settings.path, map[string]string{"logsTimeout": "invalid"}); err != nil {
+				t.Fatal(err)
+			}
+			response := connectionTestRequest(t, mux, "POST", "/api/splunk/logs/refresh", map[string]any{})
+			if response.Code != 500 {
+				t.Fatal("malformed configuration was accepted", response.Body.String())
+			}
+			path := "/api/splunk/logs/disconnect"
+			body := map[string]any{"expectedVersion": logs.Status().Version}
+			if action == "connect" {
+				path = "/api/splunk/logs"
+				body["endpoint"], body["token"], body["index"], body["source"], body["verifyConnection"] = config.Endpoint, config.Token, "studio", "otel", true
+			}
+			response = connectionTestRequest(t, mux, "POST", path, body)
+			if response.Code != 200 {
+				t.Fatal("invalid saved settings blocked explicit recovery", response.Code, response.Body.String())
+			}
+			values, err := settings.values()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := time.ParseDuration(values["logsTimeout"]); err != nil {
+				t.Fatal("recovery did not replace malformed settings", err)
+			}
+			if logs.Status().Connected != (action == "connect") {
+				t.Fatal("recovery did not apply the requested connection state")
+			}
+		})
+	}
+}
+
+func TestLogsHTTPExportPreferencesDoNotRequireCredentialAccess(t *testing.T) {
+	backend := &testCredentialBackend{values: map[string]string{}}
+	settings := newTestConnectionPersistence(t, filepath.Join(t.TempDir(), "connections.json"), credentials.NewWithBackend(backend))
+	config := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Token: "synthetic-token", Index: "studio", Enabled: true, ConnectionVerified: true}
+	if err := settings.SaveLogs(config); err != nil {
+		t.Fatal(err)
+	}
+	before := mustReadConnectionValues(t, settings.path)[logsSecretRef]
+	logs := otlp.NewSplunkHECLogsExportController(config)
+	defer logs.Shutdown(context.Background())
+	mux := http.NewServeMux()
+	api.Register(mux, store.New(), api.SplunkLogsSettings{Controller: logs, Save: settings.SaveLogs, SavePreferences: settings.SaveLogsPreferences})
+	backend.fail = true
+	for _, enabled := range []bool{false, true, false} {
+		w := connectionTestRequest(t, mux, "POST", "/api/splunk/logs/enabled", map[string]any{"enabled": enabled, "expectedVersion": logs.Status().Version})
+		values := mustReadConnectionValues(t, settings.path)
+		if w.Code != http.StatusOK || logs.Status().Enabled != enabled || values["logsEnabled"] != strconv.FormatBool(enabled) || values[logsSecretRef] != before || len(backend.values) != 1 {
+			t.Fatal("credential access blocked logs preference", w.Code, w.Body.String())
+		}
+	}
+	config.Token = "replacement-token"
+	if err := settings.SaveLogs(config); !errors.Is(err, credentials.ErrUnavailable) {
+		t.Fatal("replacement bypassed secure storage", err)
+	}
+	if mustReadConnectionValues(t, settings.path)[logsSecretRef] != before {
+		t.Fatal("failed replacement changed the saved credential")
+	}
+}
+
 func TestConcurrentFirstConnectionsFlushJournalDirectoriesBeforeNativeWrite(t *testing.T) {
 	for _, blockJournal := range []bool{false, true} {
 		t.Run(strconv.FormatBool(blockJournal), func(t *testing.T) {
@@ -1200,6 +1922,36 @@ func TestCloudPublishedPreferencesRemainConsistentDuringRecovery(t *testing.T) {
 	}
 }
 
+func TestLogsPublishedPreferencesRemainConsistentDuringRecovery(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "connections.json")
+	backend := &testCredentialBackend{values: map[string]string{}}
+	settings := newTestConnectionPersistence(t, path, credentials.NewWithBackend(backend))
+	config := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://stack.splunkcloud.com/services/collector", Token: "token", Index: "studio", ConnectionVerified: true}
+	if err := settings.SaveLogs(config); err != nil {
+		t.Fatal(err)
+	}
+	fail := true
+	settings.syncDirectory = func(target string) error {
+		if fail && target == settings.path {
+			return errors.New("directory flush failed")
+		}
+		return syncConnectionSettingsDirectory(target)
+	}
+	config.Enabled = true
+	if err := settings.SaveLogsPreferences(config); !errors.Is(err, api.ErrConnectionCleanupPending) || !settings.LogsCleanupPending() {
+		t.Fatal("visible publication must report a committed recovery state", err)
+	}
+	reopened := newTestConnectionPersistence(t, path, credentials.NewWithBackend(backend))
+	var restored otlp.SplunkHECLogsExporterConfig
+	if err := reopened.restoreLogs(&restored, nil, true); err != nil || !restored.Enabled || restored.Token != "token" {
+		t.Fatal("restart disagreed with the reported published preference", err, restored.Enabled)
+	}
+	fail = false
+	if err := settings.restoreLogs(&restored, nil, true); err != nil || settings.LogsCleanupPending() {
+		t.Fatal("confirmed publication did not clear recovery", err)
+	}
+}
+
 func TestCloudCredentialPublicationRejectsInterveningSettingsAndCleansCandidate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "connections.json")
 	backend := &testCredentialBackend{values: map[string]string{}}
@@ -1290,6 +2042,173 @@ func TestCredentialCleanupBoundsWorkAndRetainsRecoveryReferences(t *testing.T) {
 	}
 }
 
+func TestDestinationPreferencesAndDisconnectProceedDuringAnotherCredentialWrite(t *testing.T) {
+	for _, writing := range []string{"cloud", "logs"} {
+		for _, action := range []string{"pause", "disconnect"} {
+			t.Run(writing+"/"+action, func(t *testing.T) {
+				path := filepath.Join(t.TempDir(), "connections.json")
+				backend := &testCredentialBackend{values: map[string]string{}}
+				settings := newTestConnectionPersistence(t, path, credentials.NewWithBackend(backend))
+				metrics := otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: "cloud-original", Enabled: true}
+				traces := otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: "cloud-original", Enabled: true}
+				logs := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Token: "logs-original", Index: "studio", Enabled: true, ConnectionVerified: true}
+				if err := settings.SaveCloud(metrics, traces); err != nil {
+					t.Fatal(err)
+				}
+				if err := settings.SaveLogs(logs); err != nil {
+					t.Fatal(err)
+				}
+				started, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
+				var once sync.Once
+				unblock := func() { once.Do(func() { close(release) }) }
+				backend.beforeSet = func() { close(started); <-release }
+				var saveErr error
+				go func() {
+					if writing == "cloud" {
+						nextM, nextT := metrics, traces
+						nextM.AccessToken, nextT.AccessToken = "cloud-new", "cloud-new"
+						saveErr = settings.SaveCloud(nextM, nextT)
+					} else {
+						next := logs
+						next.Token = "logs-new"
+						saveErr = settings.SaveLogs(next)
+					}
+					close(finished)
+				}()
+				t.Cleanup(func() {
+					unblock()
+					select {
+					case <-finished:
+					case <-time.After(time.Second):
+						t.Error("credential writer did not finish")
+					}
+				})
+				waitForCredentialSignal(t, started, "credential operation start")
+				changed := make(chan error, 1)
+				go func() {
+					if writing == "cloud" {
+						next := logs
+						next.Enabled = false
+						if action == "disconnect" {
+							next.Token, next.ConnectionVerified = "", false
+							changed <- settings.SaveLogs(next)
+						} else {
+							changed <- settings.SaveLogsPreferences(next)
+						}
+					} else {
+						nextM, nextT := metrics, traces
+						nextM.Enabled, nextT.Enabled = false, false
+						if action == "disconnect" {
+							changed <- settings.SaveCloud(otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{})
+						} else {
+							changed <- settings.SaveCloudPreferences(nextM, nextT)
+						}
+					}
+				}()
+				select {
+				case err := <-changed:
+					if err != nil && !errors.Is(err, api.ErrConnectionCleanupPending) {
+						t.Fatal(err)
+					}
+				case <-time.After(time.Second):
+					t.Fatal("another destination's credential write blocked this export control")
+				}
+				select {
+				case <-finished:
+					t.Fatal("credential write was not still blocked")
+				default:
+				}
+				unblock()
+				waitForCredentialSignal(t, finished, "credential operation completion")
+				if saveErr != nil {
+					t.Fatal(saveErr)
+				}
+				values, err := settings.values()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if writing == "cloud" {
+					if values["logsEnabled"] == "true" || action == "disconnect" && values[logsSecretRef] != "" {
+						t.Fatal("later Cloud publication lost the logs control", values)
+					}
+				} else if values["metricsEnabled"] == "true" || values["tracesEnabled"] == "true" || action == "disconnect" && values[cloudSecretRef] != "" {
+					t.Fatal("later logs publication lost the Cloud control", values)
+				}
+			})
+		}
+	}
+}
+
+type deleteHookCredentialBackend struct {
+	*testCredentialBackend
+	beforeDelete func(string)
+}
+
+func (b *deleteHookCredentialBackend) Delete(key string) error {
+	if b.beforeDelete != nil {
+		b.beforeDelete(key)
+	}
+	return b.testCredentialBackend.Delete(key)
+}
+
+func TestCredentialCleanupPreservesAnotherDestinationJournalUpdates(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "connections.json")
+	backend := &deleteHookCredentialBackend{testCredentialBackend: &testCredentialBackend{values: map[string]string{}}}
+	settings := newTestConnectionPersistence(t, path, credentials.NewWithBackend(backend))
+	metrics := otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: "cloud-original"}
+	traces := otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: "cloud-original"}
+	logs := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Token: "logs-original", Index: "studio"}
+	if err := settings.SaveCloud(metrics, traces); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SaveLogs(logs); err != nil {
+		t.Fatal(err)
+	}
+	started, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	backend.beforeDelete = func(key string) {
+		if strings.Contains(key, ".cloud.") {
+			close(started)
+			<-release
+		}
+	}
+	var cloudErr error
+	metrics.AccessToken, traces.AccessToken = "cloud-new", "cloud-new"
+	go func() { cloudErr = settings.SaveCloud(metrics, traces); close(finished) }()
+	t.Cleanup(func() {
+		unblock()
+		select {
+		case <-finished:
+		case <-time.After(time.Second):
+			t.Error("credential cleanup did not finish")
+		}
+	})
+	waitForCredentialSignal(t, started, "credential operation start")
+	logs.Token = "logs-new"
+	parallel := newTestConnectionPersistence(t, path, credentials.NewWithBackend(backend))
+	if err := parallel.SaveLogs(logs); err != nil {
+		t.Fatal(err)
+	}
+	unblock()
+	waitForCredentialSignal(t, finished, "credential operation completion")
+	if cloudErr != nil {
+		t.Fatal(cloudErr)
+	}
+	entries, err := settings.credentialJournal()
+	if err != nil || len(entries) != 2 || len(backend.values) != 2 {
+		t.Fatal("cleanup discarded another destination's references", entries, err)
+	}
+	reopened := newTestConnectionPersistence(t, path, credentials.NewWithBackend(backend))
+	var restoredMetrics otlp.SplunkMetricsExporterConfig
+	var restoredTraces otlp.SplunkTracesExporterConfig
+	var restoredLogs otlp.SplunkHECLogsExporterConfig
+	cloudErr, logsErr := reopened.Restore(&restoredMetrics, &restoredTraces, &restoredLogs)
+	if cloudErr != nil || logsErr != nil || restoredMetrics.AccessToken != "cloud-new" || restoredLogs.Token != "logs-new" {
+		t.Fatal("parallel cleanup lost a saved credential", cloudErr, logsErr)
+	}
+}
+
 func TestCloudRestoreLockFailureRequiresFreshSnapshotBeforeSave(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "connections.json")
 	backend := &testCredentialBackend{values: map[string]string{}}
@@ -1314,6 +2233,32 @@ func TestCloudRestoreLockFailureRequiresFreshSnapshotBeforeSave(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := reader.SaveCloud(nextM, nextT); err != nil {
+		t.Fatal("save failed after recovery", err)
+	}
+}
+
+func TestLogsRestoreLockFailureRequiresFreshSnapshotBeforeSave(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "connections.json")
+	backend := &testCredentialBackend{values: map[string]string{}}
+	writer := newTestConnectionPersistence(t, path, credentials.NewWithBackend(backend))
+	logs := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Token: "original", Index: "studio"}
+	if err := writer.SaveLogs(logs); err != nil {
+		t.Fatal(err)
+	}
+	reader := newTestConnectionPersistence(t, path, credentials.NewWithBackend(backend))
+	reader.syncDirectory = func(string) error { return errors.New("directory unavailable") }
+	if err := reader.restoreLogs(&logs, nil, true); err == nil {
+		t.Fatal("restore must report the lock preflight failure")
+	}
+	reader.syncDirectory = syncConnectionSettingsDirectory
+	next := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Token: "replacement", Index: "studio"}
+	if err := reader.SaveLogs(next); !errors.Is(err, api.ErrConnectionSettingsChanged) {
+		t.Fatal("save accepted an unread snapshot", err)
+	}
+	if err := reader.restoreLogs(&logs, nil, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.SaveLogs(next); err != nil {
 		t.Fatal("save failed after recovery", err)
 	}
 }

@@ -33,6 +33,12 @@ export const cloudBridgeActions = [
 	'open-free-edition-terms',
 	'open-ingest-token-help',
 	'open-credential-storage-help',
+	'open-hec-token-help',
+	'open-splunk-platform-trial',
+	'open-observability-cloud',
+	'open-observability-metrics',
+	'open-observability-traces',
+	'open-splunk-search',
 	'open-realm-help',
 	'open-observability-cloud-demo',
 	'open-observability-data-course',
@@ -435,15 +441,6 @@ export function cloudStatusConnected(value: unknown): boolean {
 		&& (value as Record<string, unknown>).connected === true;
 }
 
-export function cloudStatusHasNoConfiguration(value: unknown): boolean {
-	if (typeof value !== 'object' || value === null) {
-		return false;
-	}
-	const status = value as Record<string, unknown>;
-	return cloudSignalConfigured(status.metrics) === false
-		&& cloudSignalConfigured(status.traces) === false;
-}
-
 export function cloudStatusHasConfiguration(value: unknown): boolean {
 	if (cloudStatusConnected(value)) {
 		return true;
@@ -456,22 +453,15 @@ export function cloudStatusHasConfiguration(value: unknown): boolean {
 		|| cloudSignalConfigured(status.traces) === true;
 }
 
-export function cloudStatusEnabled(value: unknown): boolean | undefined {
-	if (typeof value !== 'object' || value === null) {
-		return undefined;
-	}
-	const enabled = (value as Record<string, unknown>).enabled;
-	return typeof enabled === 'boolean' ? enabled : undefined;
-}
-
-export function cloudStatusVersion(value: unknown): string | undefined {
-	if (typeof value !== 'object' || value === null) {
-		return undefined;
-	}
-	const version = (value as Record<string, unknown>).version;
-	return typeof version === 'string' && /^[A-Za-z0-9_-]{43}$/.test(version)
-		? version
-		: undefined;
+export function splunkSearchURLFromStatus(value: unknown): string | undefined {
+	if (!value || typeof value !== 'object') { return undefined; }
+	const searchURL = (value as Record<string, unknown>).searchURL;
+	if (typeof searchURL !== 'string') { return undefined; }
+	try {
+		const url = new URL(searchURL);
+		if (url.protocol !== 'https:' || url.username || url.password) { return undefined; }
+		return url.href;
+	} catch { return undefined; }
 }
 
 function cloudSignalConfigured(value: unknown): boolean | undefined {
@@ -480,4 +470,25 @@ function cloudSignalConfigured(value: unknown): boolean | undefined {
 	}
 	const configured = (value as Record<string, unknown>).configured;
 	return typeof configured === 'boolean' ? configured : undefined;
+}
+
+export function cloudStatusHasNoConfiguration(value: unknown): boolean {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+	const status = value as Record<string, unknown>;
+	return cloudSignalConfigured(status.metrics) === false
+		&& cloudSignalConfigured(status.traces) === false;
+}
+
+
+export function cloudStatusVersion(value: unknown): string | undefined {
+	if (typeof value !== 'object' || value === null) {
+		return undefined;
+	}
+	const status = value as Record<string, unknown>;
+	const version = status.cloudVersion ?? status.version;
+	return typeof version === 'string' && /^[A-Za-z0-9_-]{43}$/.test(version)
+		? version
+		: undefined;
 }

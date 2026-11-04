@@ -433,7 +433,9 @@ describe("AppView validation tab", () => {
     window.history.replaceState({}, "", "/?tab=metrics");
     stubCloudStatusFetch();
     const telemetry = makeTelemetryHandle([]);
-    render(<AppView telemetry={telemetry} />);
+    await act(async () => {
+      render(<AppView telemetry={telemetry} />);
+    });
     await screen.findByRole("tab", { name: "Config" });
 
     fireEvent.keyDown(window, { key: "9" });

@@ -7,13 +7,15 @@ const maxCredentialCleanupReferences = 2;
 const nativeCredentialBudgetMs = (nativeReferenceOperations + 2 * maxCredentialCleanupReferences) * nativeCredentialOperationTimeoutMs;
 const replyGraceMs = 5_000;
 
-// api/splunk_export.go bounds its connection probe to 10 s.
+// api/splunk_export.go and api/splunk_logs.go bound their probes to 10 s and 8 s.
 const cloudMutationTimeoutMs = 10_000 + nativeCredentialBudgetMs + replyGraceMs;
 // Connection actions may read status before a mutation and reconcile after a lost reply.
 const cloudHostRequestTimeoutMs = 15_000 + cloudMutationTimeoutMs + 15_000 + replyGraceMs;
+const logsMutationTimeoutMs = 8_000 + nativeCredentialBudgetMs + replyGraceMs;
+const logsHostRequestTimeoutMs = logsMutationTimeoutMs + replyGraceMs;
 
 // Initialization can refresh the managed connection, import an IDE credential,
 // then fall back to a status read after a failure. Bound both connection phases.
 const cloudInitializeHostRequestTimeoutMs = 2 * cloudHostRequestTimeoutMs + replyGraceMs;
 
-module.exports = { cloudMutationTimeoutMs, cloudHostRequestTimeoutMs, cloudInitializeHostRequestTimeoutMs };
+module.exports = { cloudMutationTimeoutMs, cloudHostRequestTimeoutMs, cloudInitializeHostRequestTimeoutMs, logsMutationTimeoutMs, logsHostRequestTimeoutMs };

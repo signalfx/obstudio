@@ -239,10 +239,9 @@ Correlated totals therefore use the richer Codex logs and task spans.
 
 ## Optional Splunk Observability Cloud forwarding
 
-Splunk Observability Studio can optionally forward received traces and metrics
-to Splunk while keeping its UI available. Logs remain local. The [user
-guide](../docs/USER.md#forward-to-splunk-observability-cloud) provides the
-UI connection steps and credential requirements.
+Use **Cloud** to forward metrics and traces to Observability Cloud and
+[logs to Splunk Platform through HEC](../docs/USER.md#splunk-platform-logs-hec)
+while keeping received telemetry available locally.
 
 ## REST API
 

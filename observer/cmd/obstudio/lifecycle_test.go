@@ -152,6 +152,14 @@ func TestStartupServesRecoveryWhileCredentialCleanupIsBlocked(t *testing.T) {
 	if err := settings.SaveCloud(metrics, traces); !errors.Is(err, api.ErrConnectionCleanupPending) {
 		t.Fatal("test did not retain a retired credential", err)
 	}
+	logs := otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Index: "studio", Source: "otel", Token: "first-logs-token"}
+	if err := settings.SaveLogs(logs); err != nil {
+		t.Fatal(err)
+	}
+	logs.Token = "replacement-logs-token"
+	if err := settings.SaveLogs(logs); !errors.Is(err, api.ErrConnectionCleanupPending) {
+		t.Fatal("test did not retain a retired logs credential", err)
+	}
 	backend.deleteFail = false
 	release := make(chan struct{})
 	backend.block, backend.started = release, make(chan struct{})
@@ -163,9 +171,11 @@ func TestStartupServesRecoveryWhileCredentialCleanupIsBlocked(t *testing.T) {
 	go func() {
 		defer close(connectionReleased)
 		_ = withTokenTelemetryStateLock(settings.path+".connection-cloud", func() error {
-			close(connectionLocked)
-			<-releaseConnection
-			return nil
+			return withTokenTelemetryStateLock(settings.path+".connection-logs", func() error {
+				close(connectionLocked)
+				<-releaseConnection
+				return nil
+			})
 		})
 	}()
 	t.Cleanup(func() {
@@ -221,9 +231,8 @@ func TestStartupServesRecoveryWhileCredentialCleanupIsBlocked(t *testing.T) {
 	}
 	unlockConnection()
 	waitForCredentialSignal(t, connectionReleased, "connection lock release")
-	reloaded := make(chan error, 1)
-	go func() {
-		request, _ := http.NewRequest(http.MethodPost, "http://"+listener.Addr().String()+"/api/splunk/export/refresh", strings.NewReader("{}"))
+	reload := func(path string) error {
+		request, _ := http.NewRequest(http.MethodPost, "http://"+listener.Addr().String()+path, strings.NewReader("{}"))
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("X-Obstudio-Browser-Request", "1")
 		response, err := (&http.Client{Timeout: 5 * time.Second}).Do(request)
@@ -237,8 +246,10 @@ func TestStartupServesRecoveryWhileCredentialCleanupIsBlocked(t *testing.T) {
 				err = fmt.Errorf("cleanup retry status %d, pending=%t", response.StatusCode, status.CleanupPending)
 			}
 		}
-		reloaded <- err
-	}()
+		return err
+	}
+	reloaded := make(chan error, 1)
+	go func() { reloaded <- reload("/api/splunk/export/refresh") }()
 	waitForCredentialSignal(t, backend.started, "explicit credential cleanup retry")
 	unblock()
 	select {
@@ -248,6 +259,12 @@ func TestStartupServesRecoveryWhileCredentialCleanupIsBlocked(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("explicit credential cleanup did not complete")
+	}
+	if !settings.LogsCleanupPending() {
+		t.Fatal("Cloud cleanup must retain the independent logs cleanup")
+	}
+	if err := reload("/api/splunk/logs/refresh"); err != nil {
+		t.Fatal(err)
 	}
 }
 

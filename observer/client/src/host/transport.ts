@@ -1,4 +1,4 @@
-import { cloudInitializeHostRequestTimeoutMs, cloudHostRequestTimeoutMs } from "../../../../shared/connection-limits.cjs";
+import { cloudInitializeHostRequestTimeoutMs, cloudHostRequestTimeoutMs, logsHostRequestTimeoutMs } from "../../../../shared/connection-limits.cjs";
 import type { O11yOAuthSessionStatus, RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 
 export const observerHostCloudActions = [
@@ -17,6 +17,12 @@ export const observerHostCloudActions = [
   "open-free-edition-terms",
   "open-ingest-token-help",
   "open-credential-storage-help",
+  "open-hec-token-help",
+  "open-splunk-platform-trial",
+  "open-observability-cloud",
+  "open-observability-metrics",
+  "open-observability-traces",
+  "open-splunk-search",
   "open-realm-help",
   "open-observability-cloud-demo",
   "open-observability-data-course",
@@ -51,6 +57,8 @@ export interface ObserverHostCloudPayload {
   sessionOnly?: boolean;
   platform?: string;
   accessToken?: string;
+  reuseSavedToken?: boolean;
+  preserveEnabled?: boolean;
   adminToken?: string;
   clientId?: string;
   clientSecret?: string;
@@ -146,8 +154,12 @@ const hostRequestTimeoutMs = 15_000;
 const hostCloudRequestTimeoutMs = 60_000;
 const cimdCloudRequestTimeoutMs = 6 * 60_000;
 
+function isLogsMutation(request: ObserverHostRequest): boolean {
+  return request.kind === "http" && request.method === "POST" && (request.path === "/api/splunk/logs" || request.path.startsWith("/api/splunk/logs/"));
+}
+
 function requestTimeoutMs(request: ObserverHostRequest): number {
-  if (request.kind === "http") return hostRequestTimeoutMs;
+  if (request.kind === "http") return isLogsMutation(request) ? logsHostRequestTimeoutMs : hostRequestTimeoutMs;
   if (cimdCloudActions.has(request.action)) return cimdCloudRequestTimeoutMs;
   if (request.action === "initialize") return cloudInitializeHostRequestTimeoutMs;
   if (connectionCloudActions.has(request.action)) return cloudHostRequestTimeoutMs;
@@ -320,7 +332,7 @@ function callObserverHost(request: ObserverHostRequest, signal?: AbortSignal): P
         if (!pending) return;
         pendingHostRequests.delete(requestId);
         pending.cleanup?.();
-        if (request.kind === "http") {
+        if (request.kind === "http" && !isLogsMutation(request)) {
           api.postMessage({ requestId, type: "obstudio.host.cancel" } satisfies ObserverHostCancelEnvelope);
           reject(new Error("The IDE did not respond. Try again."));
           return;
@@ -328,8 +340,10 @@ function callObserverHost(request: ObserverHostRequest, signal?: AbortSignal): P
         // Do not cancel an accepted cloud mutation: the extension must finish
         // synchronizing Splunk Observability Studio state and secure storage. The caller fails
         // closed until reload instead of permitting an uncertain retry.
-        reject(new ObserverHostCloudTimeoutError(request.kind === "cloud" && connectionCloudActions.has(request.action)
-          ? "The connection request outcome is unknown. Reload saved connection before trying again." : undefined));
+        let message: string | undefined;
+        if (isLogsMutation(request)) message = "The logs request outcome is unknown. Reload saved logs settings before trying again.";
+        else if (request.kind === "cloud" && connectionCloudActions.has(request.action)) message = "The connection request outcome is unknown. Reload saved connection before trying again.";
+        reject(new ObserverHostCloudTimeoutError(message));
       }, requestTimeoutMs(request));
     const abort = signal
       ? () => {
@@ -443,8 +457,11 @@ export function isSplunkExportStatus(value: unknown): value is SplunkExportStatu
     && (status.realm === undefined || typeof status.realm === "string")
     && typeof status.version === "string"
     && /^[A-Za-z0-9_-]{43}$/.test(status.version)
+    && (status.cloudVersion === undefined
+      || (typeof status.cloudVersion === "string" && /^[A-Za-z0-9_-]{43}$/.test(status.cloudVersion)))
     && isSplunkExportSignalStatus(status.metrics)
     && isSplunkExportSignalStatus(status.traces)
+    && (status.logs === undefined || isSplunkExportSignalStatus(status.logs))
     && (status.registrationAndAuthProtocol === undefined
       || isRegistrationAndAuthProtocol(status.registrationAndAuthProtocol));
 }

@@ -161,9 +161,14 @@ func run(config runConfig) error {
 	if connectionSettings == nil {
 		connectionSettings = newConnectionPersistence("", nil)
 	}
+	logsConfig := otlp.SplunkHECLogsExporterConfig{}
 	// Retired credentials are handled by Refresh/Retry cleanup after startup.
-	if err := connectionSettings.restoreCloud(&splunkConfig, &splunkTracesConfig, false); err != nil {
-		log.Printf("[splunk-export] restore saved cloud connection: %v", err)
+	cloudSecretsErr, logsSecretsErr := connectionSettings.restoreConnections(&splunkConfig, &splunkTracesConfig, &logsConfig, false)
+	if cloudSecretsErr != nil {
+		log.Printf("[splunk-export] restore saved cloud connection: %v", cloudSecretsErr)
+	}
+	if logsSecretsErr != nil {
+		log.Printf("[splunk-logs] restore saved HEC connection: %v", logsSecretsErr)
 	}
 	splunkExportController, err := otlp.NewSplunkMetricsExportController(splunkConfig)
 	if err != nil {
@@ -187,10 +192,20 @@ func run(config runConfig) error {
 		)
 	}
 
-	rcv, err := otlp.StartReceiver(ctx, s, otlpGRPCAddr, otlpHTTPAddr,
+	// Log forwarding is optional: a bad or incomplete configuration disables it
+	// and leaves the receiver, UI, and other exporters running.
+	logsController := otlp.NewSplunkHECLogsExportController(logsConfig)
+	defer func() {
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		logsController.Shutdown(shutdownContext)
+	}()
+	receiverOptions := []otlp.ReceiverOption{
 		otlp.WithMetricsExporter(splunkExportController),
 		otlp.WithTracesExporter(splunkTracesController),
-	)
+		otlp.WithLogsExporter(logsController),
+	}
+	rcv, err := otlp.StartReceiver(ctx, s, otlpGRPCAddr, otlpHTTPAddr, receiverOptions...)
 	if err != nil {
 		// The OTLP ports (4317/4318) are the singleton lock: they are fixed and
 		// shared across the one obstudio instance. If they are already bound and
@@ -202,6 +217,14 @@ func run(config runConfig) error {
 			return nil
 		}
 		log.Fatalf("failed to start OTLP receiver: %v", err)
+	}
+
+	// Logged only once the receiver owns the OTLP ports: a deferred start
+	// forwards nothing, so announcing it earlier would be misleading.
+	if logsStatus := logsController.Status(); logsStatus.Enabled {
+		log.Printf("[splunk-logs] logs forwarding enabled: endpoint=%s index=%s channel=%s", logsStatus.Endpoint, logsStatus.Index, logsController.Config().Channel)
+	} else if logsStatus.LastExportError != "" {
+		log.Printf("[splunk-logs] logs forwarding disabled: %s", logsStatus.LastExportError)
 	}
 
 	observerOwner := envOr("OBSTUDIO_OWNER", "cli")
@@ -237,8 +260,8 @@ func run(config runConfig) error {
 		MCPURL: observerState.MCPURL,
 	}, splunkExportController, splunkTracesController,
 		newSplunkExportConfigurationRefresher(splunkExportController, splunkTracesController, connectionSettings),
-		freeAccountSubmitter, userConfig.api, userConfig.status,
-		api.SplunkCloudSettingsSaver(connectionSettings.SaveCloud), api.SplunkCloudPreferencesSaver(connectionSettings.SaveCloudPreferences), api.SplunkCloudStorageManaged(connectionSettings.CloudStorageManaged), api.SplunkCloudCleanupPending(connectionSettings.CloudCleanupPending))
+		freeAccountSubmitter, userConfig.api, userConfig.status, api.SplunkCloudSettingsSaver(connectionSettings.SaveCloud), api.SplunkCloudPreferencesSaver(connectionSettings.SaveCloudPreferences), api.SplunkCloudStorageManaged(connectionSettings.CloudStorageManaged), api.SplunkCloudCleanupPending(connectionSettings.CloudCleanupPending),
+		api.SplunkLogsSettings{Controller: logsController, Save: connectionSettings.SaveLogs, SavePreferences: connectionSettings.SaveLogsPreferences, HasCredential: connectionSettings.HasLogsCredential, CleanupPending: connectionSettings.LogsCleanupPending, Refresh: func() error { return connectionSettings.RefreshLogs(logsController) }})
 	mux.Handle("POST /otel/v1/traces", rcv.HTTPHandler())
 	mux.Handle("POST /v2/trace/otlp", rcv.HTTPHandler())
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
@@ -346,6 +369,7 @@ func run(config runConfig) error {
 	webCleanup()
 	validatorManager.Shutdown(shutCtx)
 	rcv.Shutdown(shutCtx)
+	logsController.Shutdown(shutCtx)
 	splunkExportController.Shutdown(shutCtx)
 	splunkTracesController.Shutdown(shutCtx)
 	return runErr
@@ -543,12 +567,12 @@ func resolveRunConfig(config runConfig) runConfig {
 
 type splunkMetricsExportConfigurator interface {
 	Config() otlp.SplunkMetricsExporterConfig
-	Configure(otlp.SplunkMetricsExporterConfig) error
+	ConfigureKeepingActivity(otlp.SplunkMetricsExporterConfig) error
 }
 
 type splunkTracesExportConfigurator interface {
 	Config() otlp.SplunkTracesExporterConfig
-	Configure(otlp.SplunkTracesExporterConfig) error
+	ConfigureKeepingActivity(otlp.SplunkTracesExporterConfig) error
 }
 
 func newSplunkExportConfigurationRefresher(metrics splunkMetricsExportConfigurator, traces splunkTracesExportConfigurator, settings *connectionPersistence) api.SplunkExportConfigurationRefresher {

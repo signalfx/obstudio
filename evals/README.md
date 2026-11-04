@@ -120,12 +120,11 @@ require it only in the preserved sink and require zero service records in
 Splunk Observability Studio.
 
 The standard Python, Node.js, and Go runtime topologies use an isolated local
-Splunk Observability Studio. A shared Splunk Observability Studio OTLP-handler integration test enables its trace and
-metric forwarding surfaces, ingests all three signals, proves the matching
-exporters receive traces and metrics, and proves logs remain locally queryable
-without any log-forwarding surface. This supplies live receiver-side proof of
-the trace/metric-only cloud boundary without duplicating a fake cloud service in
-every language topology.
+Splunk Observability Studio. Shared OTLP receiver integration tests ingest all
+three signals and verify remote metrics and traces. Logs remain locally
+queryable while independent HEC forwarding is enabled, paused, or failing.
+This supplies live receiver-side proof of local and remote delivery without
+duplicating a fake cloud service in every language topology.
 
 ## Isolated Codex Home for Live Evals
 

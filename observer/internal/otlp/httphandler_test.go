@@ -3,6 +3,8 @@ package otlp
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,8 +13,11 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
+	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // createTestSpan creates a minimal test span for marshaling.
@@ -247,6 +252,184 @@ func TestPostLogsRemainsLocalWhenCloudExportersConfigured(t *testing.T) {
 	case <-tracesExporter.ch:
 		t.Fatal("log request unexpectedly invoked the Splunk traces exporter")
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestPostLogsDualDelivery(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		enabled bool
+		reject  bool
+	}{
+		{name: "enabled", enabled: true},
+		{name: "paused"},
+		{name: "remote failure", enabled: true, reject: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			received := make(chan hecEvent, 1)
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var event hecEvent
+				if err := json.NewDecoder(hecRequestBody(t, r)).Decode(&event); err != nil {
+					t.Error(err)
+				}
+				received <- event
+				if test.reject {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				_, _ = w.Write([]byte(`{"code":0}`))
+			}))
+			defer remote.Close()
+			controller := NewSplunkHECLogsExportController(SplunkHECLogsExporterConfig{
+				Endpoint: remote.URL + "/services/collector", Token: "test-token", Index: "studio", Enabled: test.enabled,
+			})
+			defer controller.Shutdown(context.Background())
+			local := store.New()
+			handler := &otlpHTTPHandler{store: local, ct: &ConnTracker{}, logsExporter: controller}
+			body, err := (&plog.JSONMarshaler{}).MarshalLogs(createTestLog())
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := httptest.NewRequest(http.MethodPost, "/v1/logs", bytes.NewReader(body))
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusOK {
+				t.Fatalf("local ingest: %d", response.Code)
+			}
+			logs := local.QueryLogs(10)
+			if len(logs) != 1 || logs[0].Body != "test log message" || logs[0].Resource.ServiceName != "test-service" {
+				t.Fatalf("log missing locally: %#v", logs)
+			}
+			if !test.enabled {
+				select {
+				case <-received:
+					t.Fatal("paused log was exported")
+				case <-time.After(50 * time.Millisecond):
+				}
+				return
+			}
+			select {
+			case event := <-received:
+				if event.Event != logs[0].Body || event.Index != "studio" {
+					t.Fatalf("local and remote logs differ: %#v", event)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("remote export missing")
+			}
+			deadline := time.Now().Add(2 * time.Second)
+			for {
+				status := controller.Status()
+				if (test.reject && status.FailedBatches == 1) || (!test.reject && status.ExportedRecords == 1) {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("export did not finish: %#v", status)
+				}
+				time.Sleep(time.Millisecond)
+			}
+			if len(local.QueryLogs(10)) != 1 {
+				t.Fatal("remote export removed the local log")
+			}
+		})
+	}
+}
+
+func TestLogIngestKeepsItsDestinationDuringStateChanges(t *testing.T) {
+	for _, protocol := range []string{"http", "grpc"} {
+		for _, change := range []string{"resume", "replace"} {
+			t.Run(protocol+"/"+change, func(t *testing.T) {
+				received := make(chan string, 8)
+				sink := func(destination string) *httptest.Server {
+					return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						var event hecEvent
+						if err := json.NewDecoder(hecRequestBody(t, r)).Decode(&event); err != nil {
+							t.Error(err)
+						}
+						received <- destination + ":" + event.Event.(string)
+						_, _ = w.Write([]byte(`{"code":0}`))
+					}))
+				}
+				first, second := sink("a"), sink("b")
+				defer first.Close()
+				defer second.Close()
+				controller := NewSplunkHECLogsExportController(SplunkHECLogsExporterConfig{Endpoint: first.URL, Token: "test", Enabled: change == "replace"})
+				defer controller.Shutdown(context.Background())
+				local := store.New()
+				receiver, err := StartReceiver(context.Background(), local, "127.0.0.1:0", "127.0.0.1:0", WithLogsExporter(controller))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer receiver.Shutdown(context.Background())
+				conn, err := grpc.NewClient(receiver.connTracker.grpcLn.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer conn.Close()
+				local.SetChangeCallback(func(time.Time) {
+					local.SetChangeCallback(nil)
+					if change == "resume" {
+						if err := controller.SetEnabled(true); err != nil {
+							t.Error(err)
+						}
+						return
+					}
+					config := controller.Config()
+					config.Endpoint = second.URL
+					exp, err := NewSplunkHECLogsExporter(config)
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					controller.Apply(config, exp)
+				})
+				ingest := func(body string) {
+					t.Helper()
+					logs := createTestLog()
+					logs.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).Body().SetStr(body)
+					request := plogotlp.NewExportRequestFromLogs(logs)
+					if protocol == "grpc" {
+						ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+						defer cancel()
+						if _, err := plogotlp.NewGRPCClient(conn).Export(ctx, request); err != nil {
+							t.Fatal(err)
+						}
+						return
+					}
+					data, err := request.MarshalJSON()
+					if err != nil {
+						t.Fatal(err)
+					}
+					response, err := http.Post("http://"+receiver.connTracker.httpLn.Addr().String()+"/v1/logs", "application/json", bytes.NewReader(data))
+					if err != nil {
+						t.Fatal(err)
+					}
+					response.Body.Close()
+					if response.StatusCode != 200 {
+						t.Fatal(response.StatusCode)
+					}
+				}
+				ingest("during change")
+				ingest("after change")
+				want := "a:after change"
+				if change == "replace" {
+					want = "b:after change"
+				}
+				select {
+				case got := <-received:
+					if got != want {
+						t.Fatal("ingestion moved to a new export state", got)
+					}
+				case <-time.After(3 * time.Second):
+					t.Fatal("fresh log was not exported")
+				}
+				waitForHECDelivery(t, func() bool { return controller.Status().ExportedRecords == 1 })
+				controller.Shutdown(context.Background())
+				if len(received) != 0 || len(local.QueryLogs(10)) != 2 {
+					t.Fatal("state change lost local logs or exported a stale batch")
+				}
+			})
+		}
 	}
 }
 

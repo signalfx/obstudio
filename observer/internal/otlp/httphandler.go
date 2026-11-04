@@ -31,6 +31,7 @@ type otlpHTTPHandler struct {
 	ct             *ConnTracker
 	exporter       MetricsExporter
 	tracesExporter TracesExporter
+	logsExporter   LogsExporter
 }
 
 func (h *otlpHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -171,7 +172,9 @@ func (h *otlpHTTPHandler) handleLogs(w http.ResponseWriter, body []byte, isProto
 		http.Error(w, fmt.Sprintf("unmarshal: %v", err), http.StatusBadRequest)
 		return
 	}
+	exporter := logsExporterForIngest(h.logsExporter)
 	h.store.AddLogsForConnection(connID, ConvertLogs(ld))
+	exportLogsAsync(exporter, ld)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("{}"))
