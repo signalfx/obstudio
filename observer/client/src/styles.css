@@ -3428,15 +3428,115 @@ code {
   text-align: center;
 }
 
+.empty-state__message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 560px;
+  min-width: 0;
+}
+
 .empty-state__title {
+  margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
 }
 
 .empty-state__hint {
+  margin: 0;
   font-size: 13px;
   color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.empty-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 100%;
+  margin-top: 4px;
+}
+
+/* Let long commands wrap in narrow panels. */
+.empty-state__command {
+  max-width: 100%;
+}
+
+.empty-state__command .overview-checklist__command {
+  height: auto;
+  min-height: 24px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+/* Static placeholder rows, no shimmer, since nothing is loading. */
+.empty-state--skeleton {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.empty-state__skeleton {
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, #000 35%, transparent 95%);
+}
+
+.empty-state__bar {
+  display: block;
+  width: 70%;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--chrome-2);
+}
+
+.empty-state__skeleton > :nth-child(3n) .empty-state__bar {
+  width: 45%;
+}
+
+.empty-state__skeleton > :nth-child(3n + 1) .empty-state__bar {
+  width: 85%;
+}
+
+.empty-state__overlay {
+  position: absolute;
+  inset: 32px 0 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(24px, 12vh, 120px) 16px 16px;
+  overflow-y: auto;
+  text-align: center;
+}
+
+.empty-state__overlay .empty-state__message,
+.empty-state-card {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--chrome);
+  line-height: 1.6;
+}
+
+.empty-state-card .empty-state__message {
+  align-items: flex-start;
+  max-width: none;
+}
+
+.empty-state-card .empty-state__actions {
+  justify-content: flex-start;
+}
+
+/* Toolbars that wait for results (Validation, Dashboards). */
+.explorer__toolbar[hidden],
+.findings-tab__filters[hidden],
+.dashboards-tab__bar[hidden] {
+  display: none;
 }
 
 /* ======================================
@@ -8232,10 +8332,12 @@ code {
 
 /* The row is a flex container, which suppresses ::marker, so the bullet is
    drawn explicitly. */
+/* Wraps so the command and docs link fit in narrow panels. */
 .overview-checklist__item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 6px 10px;
   font-size: var(--font-body);
   color: var(--text);
 }

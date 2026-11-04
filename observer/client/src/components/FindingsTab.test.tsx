@@ -169,7 +169,36 @@ describe("FindingsTab", () => {
     );
 
     expect(view.queryByText(/Validated /)).toBeNull();
-    expect(view.getByText("Validation has not been run yet. Run validation to analyze the current telemetry snapshot.")).toBeTruthy();
+    expect(view.getByText("Validation has not been run yet.")).toBeTruthy();
+  });
+
+  it("says a failed first run failed and keeps Validate to retry", () => {
+    const view = render(
+      <FindingsTab issues={[]} summary={{ ...makeSummary(), hasResult: false, status: "error", lastError: "weaver exited 1" }} />,
+    );
+
+    expect(view.getByText("weaver exited 1")).toBeTruthy();
+    expect(view.getByText("Validation failed.")).toBeTruthy();
+    expect(view.queryByText("Validation has not been run yet.")).toBeNull();
+    expect(view.getByRole("button", { name: "Validate" }).closest(".empty-state__actions")).toBeTruthy();
+  });
+
+  it("hides the filters until there are results and puts Validate next to the message", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(<FindingsTab issues={[]} summary={{ ...makeSummary(), hasResult: false, status: "idle" }} />);
+
+    expect(view.queryByRole("combobox", { name: "Filter by severity" })).toBeNull();
+    expect(view.queryByRole("radiogroup", { name: "Validation signals" })).toBeNull();
+    const validate = view.getByRole("button", { name: "Validate" });
+    expect(validate.closest(".empty-state__actions")).toBeTruthy();
+
+    fireEvent.click(validate);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/validation/run", expect.objectContaining({ method: "POST" })));
+
+    view.rerender(<FindingsTab issues={buildValidationIssues([makeFinding({})])} summary={makeSummary()} />);
+    expect(view.getByRole("combobox", { name: "Filter by severity" })).toBeTruthy();
+    expect(view.getByRole("button", { name: "Re-validate" }).closest(".findings-tab__header")).toBeTruthy();
   });
 
   it("refreshes relative validation timestamps as time passes", () => {
