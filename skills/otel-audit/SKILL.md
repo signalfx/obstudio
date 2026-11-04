@@ -12,7 +12,7 @@ description: >-
   faster to detect or localize, or asks whether GenAI/LLM workflows follow
   OpenTelemetry semantic conventions. Do NOT use for implementing code changes
   -- use $otel-instrument instead.
-allowed-tools: Read Grep Glob Write
+allowed-tools: Read Grep Glob Edit(**/.observe/**)
 ---
 
 # Audit -- Observability Coverage Scan

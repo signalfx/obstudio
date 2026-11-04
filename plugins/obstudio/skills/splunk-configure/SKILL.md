@@ -10,7 +10,7 @@ description: >-
   coverage, distinguish app-down from degraded impact, build blast-radius
   views, improve MTTD or incident localization, or add GenAI/LLM detector
   coverage.
-allowed-tools: Read, Write, Grep, Glob, Bash(terraform version *), Bash(terraform fmt *), Bash(terraform init *), Bash(terraform validate *), Bash(terraform plan *)
+allowed-tools: Read, Edit(**/.observe/**), Grep, Glob, Bash(terraform version *), Bash(terraform fmt *), Bash(terraform init *), Bash(terraform validate *), Bash(terraform plan *)
 metadata:
   author: otel-studio
   version: 0.2.0
