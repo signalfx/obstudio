@@ -14,6 +14,45 @@
           "x-obstudio-apply": "live"
         }
       }
+    },
+    "o11yOAuth": {
+      "type": "object",
+      "title": "O11y OAuth sign-in",
+      "description": "Saved values for signing in to Splunk Observability Cloud with O11y OAuth.",
+      "properties": {
+        "realm": {
+          "type": "string",
+          "title": "Realm",
+          "description": "The Splunk Observability Cloud realm to sign in to, for example us0. Leave empty to enter it at sign-in.",
+          "default": "",
+          "x-obstudio-failSafe": "",
+          "x-obstudio-apply": "live"
+        },
+        "orgId": {
+          "type": "string",
+          "title": "Organization ID",
+          "description": "The Splunk Observability Cloud organization ID to sign in to. Leave empty to enter it at sign-in.",
+          "default": "",
+          "x-obstudio-failSafe": "",
+          "x-obstudio-apply": "live"
+        },
+        "clientId": {
+          "type": "string",
+          "title": "Client ID",
+          "description": "The client ID of the O11y OAuth client an organization admin registered. Leave empty to enter it at sign-in.",
+          "default": "",
+          "x-obstudio-failSafe": "",
+          "x-obstudio-apply": "live"
+        },
+        "clientSecret": {
+          "type": "string",
+          "title": "Client secret",
+          "description": "The client secret of the O11y OAuth client, stored in plain text in this file. Leave empty to enter it at sign-in.",
+          "default": "",
+          "x-obstudio-failSafe": "",
+          "x-obstudio-apply": "live"
+        }
+      }
     }
   }
 }
