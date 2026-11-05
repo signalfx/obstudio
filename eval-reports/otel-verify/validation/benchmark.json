@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261030T210100949262Z",
+    "run_id": "20261105T170352409529Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -336,7 +336,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "29d90dbb78c5facaf2444313733b8e6381d23861eb1b22deefb648a48b623412",
+    "digest": "a178a771efc68938426f2396ae775217196b447080e5cab0a6bf22dfccd57894",
     "eval_kinds": [
       "rubric"
     ],
@@ -438,7 +438,7 @@
       "evals/python/ai-assistant-demo/eval/qual/resource-selector-failures.json": "630135f49ec0d4334185aa8778f56f1ed24ca1372be34f50b0b2c45154f9efcd",
       "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json": "0aa217a1410c384a8afda2ab7608e19c93bb9e5ae5483a87e5bec66e8bf5ea1d",
       "evals/python/ai-assistant-demo/eval/qual/resource-selector-length-verify.json": "952fb1f6a120610e80de94a21d211892f3836a946cc800f794d755fef41a877c",
-      "evals/python/ai-assistant-demo/eval/inputs/ao-resource-resolver.py": "1642b95bb4bcb8a2a9cd26191d8176dcf788430cdf9e707b882d5ac6a608182b",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-resource-resolver.py": "f89793e32d84071b0e986ac5e98eace4c7385c0eb00b89b088e49e107568b6f7",
       "evals/python/ai-assistant-demo/eval/qual/reuse-env-policy-verification.json": "549779746b1ff60c7949d40b6fb7ea08be4677205d190715cfa783174bffadc6",
       "evals/python/ai-assistant-demo/eval/inputs/genai-tool-enrichment-evidence.json": "5b991c48950fece0a6935a5ae652f90f8bf3479916c197c3885f6a3361de000e",
       "evals/python/ai-assistant-demo/eval/inputs/genai-tool-message-mapping.json": "4cbd7c4f59c8dd85096cfa1209528b65d29d5772095cc1fef0627e01dfc0c77c",
