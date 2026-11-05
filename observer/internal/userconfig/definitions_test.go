@@ -27,30 +27,58 @@ const (
 
 func assertV1Definitions(t *testing.T, defs []Definition) {
 	t.Helper()
-	if len(defs) != 1 {
-		t.Fatalf("got %d definitions, want 1", len(defs))
+	want := []Definition{
+		{
+			Path:        "telemetry.enabled",
+			Section:     "telemetry",
+			Type:        TypeBool,
+			Title:       v1Title,
+			Description: v1Description,
+			Default:     true,
+			FailSafe:    false,
+			Apply:       ApplyLive,
+		},
 	}
-	d := defs[0]
-	want := Definition{
-		Path:        "telemetry.enabled",
-		Section:     "telemetry",
-		Type:        TypeBool,
-		Title:       v1Title,
-		Description: v1Description,
-		Default:     true,
-		FailSafe:    false,
-		Apply:       ApplyLive,
+	for _, o := range []struct{ name, title string }{
+		{"realm", "Realm"},
+		{"orgId", "Organization ID"},
+		{"clientId", "Client ID"},
+		{"clientSecret", "Client secret"},
+	} {
+		want = append(want, Definition{
+			Path:    "o11yOAuth." + o.name,
+			Section: "o11yOAuth",
+			Type:    TypeString,
+			Title:   o.title,
+			// Description is checked for presence below; its wording is pinned by the
+			// definitions golden.
+			Default:  "",
+			FailSafe: "",
+			Apply:    ApplyLive,
+		})
 	}
-	if !reflect.DeepEqual(d, want) {
-		t.Fatalf("definition = %#v, want %#v", d, want)
+	if len(defs) != len(want) {
+		t.Fatalf("got %d definitions, want %d", len(defs), len(want))
+	}
+	for i := range want {
+		got := defs[i]
+		if i > 0 {
+			if got.Description == "" {
+				t.Errorf("%s has no description", got.Path)
+			}
+			got.Description = ""
+		}
+		if !reflect.DeepEqual(got, want[i]) {
+			t.Errorf("definition %d = %#v, want %#v", i, got, want[i])
+		}
 	}
 }
 
 func TestTableV1(t *testing.T) {
 	defs := Definitions()
 	assertV1Definitions(t, defs)
-	if secs := sections(); !reflect.DeepEqual(secs, []Section{SectionTelemetry}) {
-		t.Errorf("sections() = %v, want [SectionTelemetry]", secs)
+	if secs := sections(); !reflect.DeepEqual(secs, []Section{SectionTelemetry, SectionO11yOAuth}) {
+		t.Errorf("sections() = %v, want [SectionTelemetry SectionO11yOAuth]", secs)
 	}
 	if SectionTelemetry.title() != v1SectionTitle || SectionTelemetry.description() != "" {
 		t.Errorf("SectionTelemetry title %q description %q", SectionTelemetry.title(), SectionTelemetry.description())

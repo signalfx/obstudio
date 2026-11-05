@@ -7390,6 +7390,43 @@ code {
   gap: 12px;
 }
 
+/* MCP client registration: an admin-only drawer, closed until the user opens it. */
+.cloud-o11y-oauth-registration__admin-note {
+  color: var(--text-dim);
+}
+
+/* The two buttons stack, at one shared width, so the row stays short and the
+   description beside them keeps more room. */
+.cloud-o11y-oauth-signin__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.cloud-o11y-oauth-signin__drawer {
+  grid-column: 1 / -1;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.cloud-o11y-oauth-signin__drawer[hidden] {
+  display: none;
+}
+
+.cloud-o11y-oauth-registration__drawer {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.cloud-o11y-oauth-registration__drawer[hidden] {
+  display: none;
+}
+
 .cloud-o11y-oauth-fields {
   grid-column: 1 / -1;
   display: flex;

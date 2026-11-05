@@ -29,6 +29,8 @@ import {
   type CloudBridgeAction,
   type CloudBridgeResponse,
 } from "./bridge";
+import type { FieldKind } from "../config/configEdits";
+import { saveErrorText, useConfigEdits } from "../config/useConfigEdits";
 import { CLOUD_CONNECT_DESCRIPTION } from "./copy";
 import { SecureStorageNotice } from "./SecureStorageNotice";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
@@ -86,6 +88,7 @@ type CloudFieldError =
   | "o11yOAuthClientId"
   | "o11yOAuthClientSecret"
   | "o11yOAuthOrgId"
+  | "o11yOAuthLoginRealm"
   | "o11yOAuthRealm"
   | "region"
   | "terms"
@@ -109,6 +112,19 @@ interface CloudActionResponse {
   realm?: string;
   status?: SplunkExportStatus;
 }
+
+/** The O11y OAuth sign-in values saved through the Config Manager, edited here and in the Config tab. */
+const O11Y_OAUTH_CONFIG_FIELDS: Readonly<Record<string, FieldKind>> = {
+  "o11yOAuth.clientId": "debounced",
+  "o11yOAuth.clientSecret": "debounced",
+  "o11yOAuth.orgId": "debounced",
+  "o11yOAuth.realm": "debounced",
+};
+
+type O11yOAuthSavedField = "clientId" | "clientSecret" | "orgId" | "realm";
+
+/** What the Config Manager accepts as a realm; anything else is rejected there, so it is not sent. */
+const SAVED_REALM_PATTERN = /^[a-z0-9-]+$/;
 
 export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElement {
   const [logsDetails, setLogsDetails] = useState<LogsConnectionDetails>({ status: null, editing: false, unavailable: false, failed: false });
@@ -148,6 +164,9 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const [o11yOAuthRealm, setO11yOAuthRealm] = useState("");
   const [o11yOAuthAdminToken, setO11yOAuthAdminToken] = useState("");
   const [o11yOAuthRegistration, setO11yOAuthRegistration] = useState<O11yOAuthRegistrationResult | null>(null);
+  // The MCP client registration drawer is closed by default: registration is an
+  // organization-admin task and most users only sign in.
+  const [o11yOAuthRegistrationOpen, setO11yOAuthRegistrationOpen] = useState(false);
   const [o11yOAuthOrgId, setO11yOAuthOrgId] = useState("");
   const [o11yOAuthClientId, setO11yOAuthClientId] = useState("");
   const [o11yOAuthClientSecret, setO11yOAuthClientSecret] = useState("");
@@ -162,6 +181,18 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const [o11yOAuthLoginStarting, setO11yOAuthLoginStarting] = useState(false);
   const [o11yOAuthWaiting, setO11yOAuthWaiting] = useState(false);
   const o11yOAuthLoginBusy = o11yOAuthLoginStarting || o11yOAuthWaiting;
+  // The sign-in details drawer: null until the saved values have loaded and the form has
+  // been pre-filled, so its default (closed when complete, open otherwise) is decided once
+  // from the real values instead of flashing one way and then the other.
+  const [o11yOAuthSignInOpen, setO11yOAuthSignInOpen] = useState<boolean | null>(null);
+  const [o11yOAuthFormReady, setO11yOAuthFormReady] = useState(false);
+  // Loads the saved values and writes edits back (debounced) through the Config Manager.
+  const o11yConfig = useConfigEdits(registrationAndAuthProtocol === "O11Y_OAUTH" ? O11Y_OAUTH_CONFIG_FIELDS : null);
+  const o11yConfigState = o11yConfig.state;
+  // Loaded: the saved values arrived, or the Config Manager is off / unreachable (nothing saved).
+  const o11yConfigLoaded = o11yConfigState !== null && (o11yConfigState.server !== null || o11yConfigState.loadFailed);
+  // Edits are written back only when the Config Manager answered; when it is off they are skipped silently.
+  const o11ySavingAvailable = o11yConfigState !== null && o11yConfigState.server !== null && !o11yConfigState.loadFailed;
   const [busyAction, setBusyAction] = useState<CloudBridgeAction | null>("initialize");
   const [controlError, setControlError] = useState<string | null>(null);
   const [error, setCloudError] = useState<{ message: string; needsConnectionReload: boolean } | null>(null);
@@ -197,7 +228,12 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     if (cloudEditing) regionInputRef.current?.focus();
     else if (restoreCloudEditFocus.current) { restoreCloudEditFocus.current = false; cloudEditRef.current?.focus(); }
   }, [cloudEditing]);
+  // Realm appears in both the MCP client registration drawer and the sign-in form. They
+  // edit the same value but are separate inputs, so each has its own ref and error flag.
   const o11yOAuthRealmInputRef = useRef<HTMLInputElement>(null);
+  const o11yOAuthLoginRealmInputRef = useRef<HTMLInputElement>(null);
+  const o11yOAuthRealmRef = useRef("");
+  o11yOAuthRealmRef.current = o11yOAuthRealm;
   const o11yOAuthAdminTokenInputRef = useRef<HTMLInputElement>(null);
   const o11yOAuthOrgIdInputRef = useRef<HTMLInputElement>(null);
   const o11yOAuthClientIdInputRef = useRef<HTMLInputElement>(null);
@@ -882,12 +918,44 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     }
   };
 
-  // The client secret is only needed until the sign-in settles; do not keep it in
-  // component state for the life of the tab once the attempt has a terminal outcome.
-  const clearO11yOAuthSecretIfSettled = (session: O11yOAuthSessionStatus) => {
-    if (session.phase === "connected" || session.phase === "error") {
+  // What a sign-in's terminal outcome does to the form. On success the client secret is no
+  // longer needed in component state (it stays in the Config Manager if saved), and clearing
+  // it here is not an edit, so it is never written back. On failure the drawer opens so the
+  // user can correct the details, which are kept as they were.
+  const settleO11yOAuthSignIn = (session: O11yOAuthSessionStatus) => {
+    if (session.phase === "connected") {
       setO11yOAuthClientSecret("");
+    } else if (session.phase === "error") {
+      setO11yOAuthSignInOpen(true);
     }
+  };
+
+  // Every edit of a sign-in field goes through here: it updates the form and, when the Config
+  // Manager is available, writes the trimmed value back (debounced). An empty value clears the
+  // saved one. A realm the Config Manager would reject is not sent, so it cannot take other
+  // pending edits down with it.
+  const changeO11yOAuthField = (field: O11yOAuthSavedField, value: string) => {
+    if (field === "realm") setO11yOAuthRealm(value);
+    else if (field === "orgId") setO11yOAuthOrgId(value);
+    else if (field === "clientId") setO11yOAuthClientId(value);
+    else setO11yOAuthClientSecret(value);
+    if (!o11ySavingAvailable) return;
+    const trimmed = value.trim();
+    if (field === "realm" && trimmed !== "" && !SAVED_REALM_PATTERN.test(trimmed)) return;
+    o11yConfig.edit(`o11yOAuth.${field}`, trimmed);
+  };
+
+  // What to show under a sign-in field about saving it: why a realm was not saved, or the
+  // Config Manager's reason a save failed. Nothing when saving is simply not available.
+  const o11yOAuthSaveNote = (field: O11yOAuthSavedField) => {
+    const realm = o11yOAuthRealm.trim();
+    if (field === "realm" && realm !== "" && !SAVED_REALM_PATTERN.test(realm)) {
+      return <p className="cloud-field__error">A realm uses only lowercase letters, digits and hyphens, so this was not saved.</p>;
+    }
+    if (o11ySavingAvailable && o11yConfigState?.error && o11yConfig.outcomes[`o11yOAuth.${field}`]?.ok === false) {
+      return <p className="cloud-field__error">{saveErrorText(o11yConfigState.error)}</p>;
+    }
+    return null;
   };
 
   const authenticateO11yOAuth = async () => {
@@ -897,9 +965,9 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     const clientId = o11yOAuthClientId.trim();
     const clientSecret = o11yOAuthClientSecret.trim();
     if (realm === "") {
-      setFieldError("o11yOAuthRealm");
+      setFieldError("o11yOAuthLoginRealm");
       setError("Enter a valid Splunk Observability Cloud realm.");
-      o11yOAuthRealmInputRef.current?.focus();
+      o11yOAuthLoginRealmInputRef.current?.focus();
       return;
     }
     if (orgId === "") {
@@ -930,9 +998,11 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       setNotice(null);
       try {
         const response = await runAction("login-o11y-oauth", { clientId, clientSecret, orgId, realm });
+        // No response means the action failed (the error is already shown): let the user fix the details.
+        if (!response) setO11yOAuthSignInOpen(true);
         if (response?.o11yOAuthSession) {
           setO11yOAuthSession(response.o11yOAuthSession);
-          clearO11yOAuthSecretIfSettled(response.o11yOAuthSession);
+          settleO11yOAuthSignIn(response.o11yOAuthSession);
         }
         if (response?.o11yOAuthSession?.phase === "connected") {
           setNotice("Signed in with O11y OAuth.");
@@ -963,6 +1033,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     } catch (loginError) {
       popup.close();
       setError(errorMessage(loginError, "O11y OAuth sign-in failed."));
+      setO11yOAuthSignInOpen(true);
     } finally {
       setO11yOAuthLoginStarting(false);
     }
@@ -1055,7 +1126,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
         // connected / error / disconnected are all terminal once a sign-in is being
         // waited on (disconnected: e.g. cancelled from the IDE, which resets the shared
         // backend). Starting-phase stale reads never reach here -- see the effect guard.
-        clearO11yOAuthSecretIfSettled(nextSession);
+        settleO11yOAuthSignIn(nextSession);
         setO11yOAuthWaiting(false);
       } catch {
         // Keep the last known session state if a background poll fails.
@@ -1083,6 +1154,50 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       window.clearInterval(intervalId);
     };
   }, [bridge, callBridge, registrationAndAuthProtocol, o11yOAuthLoginStarting, o11yOAuthWaiting]);
+
+  // Pre-fill the sign-in form from the saved values, once each time the form is shown.
+  // Only saved (non-blank) values are used, and only for fields that are still empty, so
+  // anything the user already typed is kept and an unsaved field is left for them to fill in.
+  // Once per show, so a later config refresh cannot refill a field the user just cleared.
+  // The form is shown again after a disconnect (the secret is dropped once sign-in succeeds).
+  const o11yOAuthSignedIn = o11yOAuthSession?.phase === "connected";
+  useEffect(() => {
+    if (registrationAndAuthProtocol !== "O11Y_OAUTH") return;
+    if (o11yOAuthSignedIn) {
+      setO11yOAuthFormReady(false);
+      setO11yOAuthSignInOpen(null);
+      return;
+    }
+    if (!o11yConfigLoaded || o11yOAuthFormReady) return;
+    const saved = o11yConfigState?.server ?? {};
+    const fillIfEmpty = (value: unknown) => (current: string) =>
+      typeof value === "string" && value.trim() !== "" && current.trim() === "" ? value.trim() : current;
+    setO11yOAuthRealm(fillIfEmpty(saved["o11yOAuth.realm"]));
+    setO11yOAuthOrgId(fillIfEmpty(saved["o11yOAuth.orgId"]));
+    setO11yOAuthClientId(fillIfEmpty(saved["o11yOAuth.clientId"]));
+    setO11yOAuthClientSecret(fillIfEmpty(saved["o11yOAuth.clientSecret"]));
+    setO11yOAuthFormReady(true);
+  }, [registrationAndAuthProtocol, o11yOAuthSignedIn, o11yConfigLoaded, o11yConfigState, o11yOAuthFormReady]);
+
+  // Decide the drawer's default once the form is pre-filled: closed when everything needed to
+  // sign in is already there, open so the user can fill it in otherwise. After that it only
+  // changes when the user toggles it or a sign-in fails, never while they are typing.
+  const o11yOAuthSignInComplete = SAVED_REALM_PATTERN.test(o11yOAuthRealm.trim())
+    && o11yOAuthOrgId.trim() !== ""
+    && o11yOAuthClientId.trim() !== ""
+    && o11yOAuthClientSecret.trim() !== "";
+  useEffect(() => {
+    if (!o11yOAuthFormReady || o11yOAuthSignInOpen !== null) return;
+    setO11yOAuthSignInOpen(!o11yOAuthSignInComplete);
+  }, [o11yOAuthFormReady, o11yOAuthSignInOpen, o11yOAuthSignInComplete]);
+
+  // Opening the registration drawer moves focus to the first thing an admin still needs to
+  // fill in: the realm if it is empty, otherwise the admin token.
+  useEffect(() => {
+    if (!o11yOAuthRegistrationOpen) return;
+    const realmEmpty = o11yOAuthRealmRef.current.trim() === "";
+    (realmEmpty ? o11yOAuthRealmInputRef : o11yOAuthAdminTokenInputRef).current?.focus();
+  }, [o11yOAuthRegistrationOpen]);
 
   const openExternalLink = (
     event: React.MouseEvent<HTMLAnchorElement>,
@@ -1309,11 +1424,11 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   window.requestAnimationFrame(() => {
                     if (document.activeElement !== document.body && !cloudDestinationRef.current?.contains(document.activeElement)) return;
                     if (response.status?.connected) forgetTriggerRef.current?.focus();
-                    else (regionInputRef.current ?? o11yOAuthRealmInputRef.current ?? cimdLoginRef.current ?? cimdRegistrationRef.current)?.focus();
+                    else (regionInputRef.current ?? o11yOAuthLoginRealmInputRef.current ?? cimdLoginRef.current ?? cimdRegistrationRef.current)?.focus();
                   });
                 } else {
                   window.requestAnimationFrame(() => {
-                    if (document.activeElement === document.body || cloudDestinationRef.current?.contains(document.activeElement)) (reloadConnectionRef.current ?? forgetTriggerRef.current ?? regionInputRef.current ?? o11yOAuthRealmInputRef.current ?? cimdLoginRef.current ?? cimdRegistrationRef.current)?.focus();
+                    if (document.activeElement === document.body || cloudDestinationRef.current?.contains(document.activeElement)) (reloadConnectionRef.current ?? forgetTriggerRef.current ?? regionInputRef.current ?? o11yOAuthLoginRealmInputRef.current ?? cimdLoginRef.current ?? cimdRegistrationRef.current)?.focus();
                   });
                 }
               }}>{status?.cleanupPending && !status.sessionOnly ? "Retry credential cleanup" : status?.sessionOnly ? "Reload session connection" : "Reload saved connection"}</button>
@@ -1364,21 +1479,35 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           ) : null}
 
           {!cloudConfigured && registrationAndAuthProtocol === "O11Y_OAUTH" ? (
-            <section aria-labelledby="cloud-o11y-oauth-title" className="cloud-cimd-setup">
+            <section aria-labelledby="cloud-o11y-oauth-title" className="cloud-cimd-setup cloud-o11y-oauth-registration">
               <div>
                 <h3 id="cloud-o11y-oauth-title">MCP client registration</h3>
+                <p className="cloud-o11y-oauth-registration__admin-note">Only organization admins should do this.</p>
+              </div>
+              <button
+                aria-controls="cloud-o11y-oauth-registration-drawer"
+                aria-expanded={o11yOAuthRegistrationOpen}
+                className="cloud-button"
+                onClick={() => setO11yOAuthRegistrationOpen((open) => !open)}
+                type="button"
+              >
+                {o11yOAuthRegistrationOpen ? "Hide client registration" : "Show client registration"}
+              </button>
+              <div
+                className="cloud-o11y-oauth-registration__drawer"
+                hidden={!o11yOAuthRegistrationOpen}
+                id="cloud-o11y-oauth-registration-drawer"
+              >
                 <p>
                   {o11yOAuthRegistration
                     ? "Registered as an MCP OAuth client for this organization."
-                    : "Register obstudio as an MCP OAuth client for this organization. This step is "
-                      + "intended for an organization administrator, pasting their own admin X-SF-TOKEN "
-                      + "below -- it is used once and never stored."}
+                    : "Register obstudio as an MCP OAuth client for this realm, pasting your own admin "
+                      + "X-SF-TOKEN below -- it is used once and never stored."}
                 </p>
-              </div>
-              {o11yOAuthRegistration ? (
-                <span className="cloud-cimd-setup__status" role="status">Registration verified</span>
-              ) : (
-                <div className="cloud-field cloud-field--o11y-oauth">
+                {o11yOAuthRegistration ? (
+                  <span className="cloud-cimd-setup__status" role="status">Registration verified</span>
+                ) : (
+                  <div className="cloud-field cloud-field--o11y-oauth">
                   <div className="cloud-field cloud-field--region">
                     <div className="cloud-field__control">
                       <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-realm">Realm</label>
@@ -1390,7 +1519,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                         autoCorrect="off"
                         id="cloud-o11y-oauth-realm"
                         onChange={(event) => {
-                          setO11yOAuthRealm(event.target.value);
+                          changeO11yOAuthField("realm", event.target.value);
                           if (fieldError === "o11yOAuthRealm") setFieldError(null);
                           setError(null);
                         }}
@@ -1403,6 +1532,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                     {fieldError === "o11yOAuthRealm" ? (
                       <p className="cloud-field__error">Enter a valid Splunk Observability Cloud realm.</p>
                     ) : null}
+                    {o11yOAuthSaveNote("realm")}
                   </div>
                   <div className="cloud-field cloud-field--token">
                     <div className="cloud-field__control">
@@ -1428,32 +1558,33 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                       <p className="cloud-field__error">Paste the admin X-SF-TOKEN.</p>
                     ) : null}
                   </div>
-                  <button
-                    className="cloud-button"
-                    disabled={mutationsDisabled}
-                    onClick={() => void registerO11yOAuth()}
-                    type="button"
-                  >
-                    {busyAction === "register-o11y-oauth" ? "Registering..." : "Register MCP client"}
-                  </button>
-                </div>
-              )}
-              {o11yOAuthRegistration ? (
-                <div className="cloud-o11y-oauth-fields">
-                  <MaskedValueField
-                    id="cloud-o11y-oauth-client-id"
-                    label="Client ID"
-                    value={o11yOAuthRegistration.clientId}
-                  />
-                  {o11yOAuthRegistration.clientSecret ? (
+                    <button
+                      className="cloud-button"
+                      disabled={mutationsDisabled}
+                      onClick={() => void registerO11yOAuth()}
+                      type="button"
+                    >
+                      {busyAction === "register-o11y-oauth" ? "Registering..." : "Register MCP client"}
+                    </button>
+                  </div>
+                )}
+                {o11yOAuthRegistration ? (
+                  <div className="cloud-o11y-oauth-fields">
                     <MaskedValueField
-                      id="cloud-o11y-oauth-client-secret"
-                      label="Client secret"
-                      value={o11yOAuthRegistration.clientSecret}
+                      id="cloud-o11y-oauth-client-id"
+                      label="Client ID"
+                      value={o11yOAuthRegistration.clientId}
                     />
-                  ) : null}
-                </div>
-              ) : null}
+                    {o11yOAuthRegistration.clientSecret ? (
+                      <MaskedValueField
+                        id="cloud-o11y-oauth-client-secret"
+                        label="Client secret"
+                        value={o11yOAuthRegistration.clientSecret}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </section>
           ) : null}
 
@@ -1484,82 +1615,17 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   </button>
                 </div>
               ) : (
-                <div className="cloud-field cloud-field--o11y-oauth">
-                  <div className="cloud-field cloud-field--region">
-                    <div className="cloud-field__control">
-                      <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-org-id">Org ID</label>
-                      <input
-                        aria-invalid={fieldError === "o11yOAuthOrgId"}
-                        aria-label="Org ID"
-                        autoCapitalize="none"
-                        autoComplete="off"
-                        autoCorrect="off"
-                        id="cloud-o11y-oauth-org-id"
-                        onChange={(event) => {
-                          setO11yOAuthOrgId(event.target.value);
-                          if (fieldError === "o11yOAuthOrgId") setFieldError(null);
-                          setError(null);
-                        }}
-                        placeholder="O11y organization ID"
-                        ref={o11yOAuthOrgIdInputRef}
-                        spellCheck={false}
-                        value={o11yOAuthOrgId}
-                      />
-                    </div>
-                    {fieldError === "o11yOAuthOrgId" ? (
-                      <p className="cloud-field__error">Enter the O11y organization ID.</p>
-                    ) : null}
-                  </div>
-                  <div className="cloud-field cloud-field--region">
-                    <div className="cloud-field__control">
-                      <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-login-client-id">Sign-in client ID</label>
-                      <input
-                        aria-invalid={fieldError === "o11yOAuthClientId"}
-                        aria-label="Sign-in client ID"
-                        autoCapitalize="none"
-                        autoComplete="off"
-                        autoCorrect="off"
-                        id="cloud-o11y-oauth-login-client-id"
-                        onChange={(event) => {
-                          setO11yOAuthClientId(event.target.value);
-                          if (fieldError === "o11yOAuthClientId") setFieldError(null);
-                          setError(null);
-                        }}
-                        placeholder="Client ID"
-                        ref={o11yOAuthClientIdInputRef}
-                        spellCheck={false}
-                        value={o11yOAuthClientId}
-                      />
-                    </div>
-                    {fieldError === "o11yOAuthClientId" ? (
-                      <p className="cloud-field__error">Paste the client ID.</p>
-                    ) : null}
-                  </div>
-                  <div className="cloud-field cloud-field--token">
-                    <div className="cloud-field__control">
-                      <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-login-client-secret">Sign-in client secret</label>
-                      <input
-                        aria-invalid={fieldError === "o11yOAuthClientSecret"}
-                        autoCapitalize="none"
-                        autoComplete="new-password"
-                        autoCorrect="off"
-                        id="cloud-o11y-oauth-login-client-secret"
-                        onChange={(event) => {
-                          setO11yOAuthClientSecret(event.target.value);
-                          if (fieldError === "o11yOAuthClientSecret") setFieldError(null);
-                          setError(null);
-                        }}
-                        placeholder="Client secret"
-                        ref={o11yOAuthClientSecretInputRef}
-                        spellCheck={false}
-                        type="password"
-                        value={o11yOAuthClientSecret}
-                      />
-                    </div>
-                    {fieldError === "o11yOAuthClientSecret" ? (
-                      <p className="cloud-field__error">Paste the client secret.</p>
-                    ) : null}
-                  </div>
+                <>
+                  <div className="cloud-o11y-oauth-signin__actions">
+                    <button
+                      aria-controls="cloud-o11y-oauth-signin-drawer"
+                      aria-expanded={o11yOAuthSignInOpen === true}
+                      className="cloud-button"
+                      onClick={() => setO11yOAuthSignInOpen((open) => !open)}
+                      type="button"
+                    >
+                      {o11yOAuthSignInOpen === true ? "Hide sign-in details" : "Edit sign-in details"}
+                    </button>
                   <button
                     className="cloud-button"
                     disabled={
@@ -1574,7 +1640,118 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   >
                     {o11yOAuthLoginBusy ? "Authenticating..." : "Authenticate"}
                   </button>
-                </div>
+                  </div>
+                  <div
+                    className="cloud-field cloud-field--o11y-oauth cloud-o11y-oauth-signin__drawer"
+                    hidden={o11yOAuthSignInOpen !== true}
+                    id="cloud-o11y-oauth-signin-drawer"
+                  >
+                  <div className="cloud-field cloud-field--region">
+                    <div className="cloud-field__control">
+                      <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-login-realm">Sign-in realm</label>
+                      <input
+                        aria-invalid={fieldError === "o11yOAuthLoginRealm"}
+                        aria-label="Sign-in realm"
+                        autoCapitalize="none"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        id="cloud-o11y-oauth-login-realm"
+                        onChange={(event) => {
+                          changeO11yOAuthField("realm", event.target.value);
+                          if (fieldError === "o11yOAuthLoginRealm") setFieldError(null);
+                          setError(null);
+                        }}
+                        placeholder="e.g. us0"
+                        ref={o11yOAuthLoginRealmInputRef}
+                        spellCheck={false}
+                        value={o11yOAuthRealm}
+                      />
+                    </div>
+                    {fieldError === "o11yOAuthLoginRealm" ? (
+                      <p className="cloud-field__error">Enter a valid Splunk Observability Cloud realm.</p>
+                    ) : null}
+                    {o11yOAuthSaveNote("realm")}
+                  </div>
+                  <div className="cloud-field cloud-field--region">
+                    <div className="cloud-field__control">
+                      <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-org-id">Org ID</label>
+                      <input
+                        aria-invalid={fieldError === "o11yOAuthOrgId"}
+                        aria-label="Org ID"
+                        autoCapitalize="none"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        id="cloud-o11y-oauth-org-id"
+                        onChange={(event) => {
+                          changeO11yOAuthField("orgId", event.target.value);
+                          if (fieldError === "o11yOAuthOrgId") setFieldError(null);
+                          setError(null);
+                        }}
+                        placeholder="O11y organization ID"
+                        ref={o11yOAuthOrgIdInputRef}
+                        spellCheck={false}
+                        value={o11yOAuthOrgId}
+                      />
+                    </div>
+                    {fieldError === "o11yOAuthOrgId" ? (
+                      <p className="cloud-field__error">Enter the O11y organization ID.</p>
+                    ) : null}
+                    {o11yOAuthSaveNote("orgId")}
+                  </div>
+                  <div className="cloud-field cloud-field--region">
+                    <div className="cloud-field__control">
+                      <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-login-client-id">Sign-in client ID</label>
+                      <input
+                        aria-invalid={fieldError === "o11yOAuthClientId"}
+                        aria-label="Sign-in client ID"
+                        autoCapitalize="none"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        id="cloud-o11y-oauth-login-client-id"
+                        onChange={(event) => {
+                          changeO11yOAuthField("clientId", event.target.value);
+                          if (fieldError === "o11yOAuthClientId") setFieldError(null);
+                          setError(null);
+                        }}
+                        placeholder="Client ID"
+                        ref={o11yOAuthClientIdInputRef}
+                        spellCheck={false}
+                        value={o11yOAuthClientId}
+                      />
+                    </div>
+                    {fieldError === "o11yOAuthClientId" ? (
+                      <p className="cloud-field__error">Paste the client ID.</p>
+                    ) : null}
+                    {o11yOAuthSaveNote("clientId")}
+                  </div>
+                  <div className="cloud-field cloud-field--token">
+                    <div className="cloud-field__control">
+                      <label className="cloud-field__label" htmlFor="cloud-o11y-oauth-login-client-secret">Sign-in client secret</label>
+                      <input
+                        aria-invalid={fieldError === "o11yOAuthClientSecret"}
+                        autoCapitalize="none"
+                        autoComplete="new-password"
+                        autoCorrect="off"
+                        id="cloud-o11y-oauth-login-client-secret"
+                        onChange={(event) => {
+                          changeO11yOAuthField("clientSecret", event.target.value);
+                          if (fieldError === "o11yOAuthClientSecret") setFieldError(null);
+                          setError(null);
+                        }}
+                        placeholder="Client secret"
+                        ref={o11yOAuthClientSecretInputRef}
+                        spellCheck={false}
+                        type="password"
+                        value={o11yOAuthClientSecret}
+                      />
+                    </div>
+                    {fieldError === "o11yOAuthClientSecret" ? (
+                      <p className="cloud-field__error">Paste the client secret.</p>
+                    ) : null}
+                    {o11yOAuthSaveNote("clientSecret")}
+                  </div>
+                  </div>
+                </>
               )}
             </section>
           ) : null}
