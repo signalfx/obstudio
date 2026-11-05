@@ -14,6 +14,8 @@ import {
 import { isLoopbackObserverHost } from './backend';
 
 export type ObserverHostCloudPayload = {
+	sessionOnly?: boolean;
+	platform?: string;
 	accessToken?: string;
 	adminToken?: string;
 	destination?: string;
@@ -54,6 +56,7 @@ export type ObserverHostCancelEnvelope = {
 
 export type ObserverHostResponseEnvelope = {
 	code?: string;
+	platform?: string;
 	error?: string;
 	ok: boolean;
 	requestId: string;
@@ -247,7 +250,7 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 	switch (action) {
 		case 'connect':
 			return isObserverHostCloudPayload(value)
-				&& hasOnlyCloudPayloadKeys(value, ['accessToken', 'expectedVersion', 'realm'])
+				&& hasOnlyCloudPayloadKeys(value, ['sessionOnly', 'accessToken', 'expectedVersion', 'realm'])
 				&& typeof value.accessToken === 'string'
 				&& typeof value.realm === 'string';
 		case 'resolve-realm':
@@ -296,6 +299,8 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 				&& hasOnlyCloudPayloadKeys(value, ['skill'])
 				&& isSkillDocsId(value.skill);
 		case 'forget':
+			return value === undefined || (isObserverHostCloudPayload(value) && hasOnlyCloudPayloadKeys(value, ['expectedVersion', 'sessionOnly']));
+		case 'refresh':
 			return value === undefined
 				|| (isObserverHostCloudPayload(value)
 					&& hasOnlyCloudPayloadKeys(value, ['expectedVersion']));
@@ -308,6 +313,9 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 			return value === undefined
 				|| (isObserverHostCloudPayload(value)
 					&& hasOnlyCloudPayloadKeys(value, ['expectedVersion']));
+		case 'open-credential-storage-help':
+			return value === undefined || (isObserverHostCloudPayload(value) && hasOnlyCloudPayloadKeys(value, ['platform'])
+				&& (value.platform === undefined || ['darwin', 'linux', 'windows'].includes(value.platform)));
 		case 'detect-free-account-region':
 		case 'initialize':
 		case 'open-audit-report':
@@ -328,6 +336,8 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 	}
 	const payload = value as Record<string, unknown>;
 	return Object.keys(payload).every((key) => [
+		'sessionOnly',
+		'platform',
 		'accessToken',
 		'adminToken',
 		'destination',
@@ -351,6 +361,8 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 			|| (typeof payload.destination === 'string'
 				&& Buffer.byteLength(payload.destination, 'utf8') <= maxCloudDestinationBytes))
 		&& (payload.email === undefined || typeof payload.email === 'string')
+		&& (payload.platform === undefined || typeof payload.platform === 'string')
+		&& (payload.sessionOnly === undefined || typeof payload.sessionOnly === 'boolean')
 		&& (payload.enabled === undefined || typeof payload.enabled === 'boolean')
 		&& (payload.expectedVersion === undefined
 			|| (typeof payload.expectedVersion === 'string'

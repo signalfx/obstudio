@@ -15,8 +15,13 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/signalfx/obstudio/observer/internal/api"
+	"github.com/signalfx/obstudio/observer/internal/credentials"
+	"github.com/signalfx/obstudio/observer/internal/otlp"
 )
 
 type failingObserverListener struct{}
@@ -113,6 +118,136 @@ func TestManagedServeFailureReturnsErrorAndCleansState(t *testing.T) {
 		if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
 			t.Fatalf("serve failure left state %s: %v", path, statErr)
 		}
+	}
+}
+
+type delayedStartupCleanup struct {
+	testCredentialBackend
+	block   <-chan struct{}
+	started chan struct{}
+	once    sync.Once
+}
+
+func (b *delayedStartupCleanup) Delete(key string) error {
+	if b.block != nil {
+		b.once.Do(func() { close(b.started) })
+		<-b.block
+	}
+	return b.testCredentialBackend.Delete(key)
+}
+
+func TestStartupServesRecoveryWhileCredentialCleanupIsBlocked(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	backend := &delayedStartupCleanup{testCredentialBackend: testCredentialBackend{values: map[string]string{}}}
+	settings := newTestConnectionPersistence(t, filepath.Join(home, "connections.json"), credentials.NewWithBackend(backend))
+	metrics := otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: "first-token"}
+	traces := otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: metrics.AccessToken}
+	if err := settings.SaveCloud(metrics, traces); err != nil {
+		t.Fatal(err)
+	}
+	backend.deleteFail = true
+	metrics.AccessToken, traces.AccessToken = "replacement-token", "replacement-token"
+	if err := settings.SaveCloud(metrics, traces); !errors.Is(err, api.ErrConnectionCleanupPending) {
+		t.Fatal("test did not retain a retired credential", err)
+	}
+	backend.deleteFail = false
+	release := make(chan struct{})
+	backend.block, backend.started = release, make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	connectionLocked, releaseConnection, connectionReleased := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var releaseConnectionOnce sync.Once
+	unlockConnection := func() { releaseConnectionOnce.Do(func() { close(releaseConnection) }) }
+	go func() {
+		defer close(connectionReleased)
+		_ = withTokenTelemetryStateLock(settings.path+".connection-cloud", func() error {
+			close(connectionLocked)
+			<-releaseConnection
+			return nil
+		})
+	}()
+	t.Cleanup(func() {
+		unlockConnection()
+		waitForCredentialSignal(t, connectionReleased, "connection lock release")
+	})
+	waitForCredentialSignal(t, connectionLocked, "another collector's connection lock")
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalListen := listenObserverHTTP
+	listenObserverHTTP = func(string, string) (net.Listener, error) { return listener, nil }
+	done := make(chan error, 1)
+	t.Cleanup(func() {
+		unblock()
+		unlockConnection()
+		_ = listener.Close()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Error("collector did not stop after the test")
+		}
+		listenObserverHTTP = originalListen
+	})
+	httpPort, grpcPort := pickSmokePort(t), pickSmokePort(t)
+	go func() {
+		done <- run(runConfig{
+			host: "127.0.0.1", observerHTTPPort: strconv.Itoa(listener.Addr().(*net.TCPAddr).Port),
+			otlpHTTPPort: strconv.Itoa(httpPort), otlpGRPCHost: "127.0.0.1", otlpGRPCPort: strconv.Itoa(grpcPort),
+			connectionSettings: settings,
+		})
+	}()
+	client := &http.Client{Timeout: 200 * time.Millisecond}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		response, requestErr := client.Get("http://" + listener.Addr().String() + "/api/splunk/export")
+		if requestErr == nil {
+			var status struct {
+				CleanupPending bool `json:"cleanupPending"`
+			}
+			decodeErr := json.NewDecoder(response.Body).Decode(&status)
+			_ = response.Body.Close()
+			if response.StatusCode != http.StatusOK || decodeErr != nil || !status.CleanupPending {
+				t.Fatal("recovery status was not available during cleanup", response.StatusCode, decodeErr)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("credential cleanup delayed the recovery listener", requestErr)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	unlockConnection()
+	waitForCredentialSignal(t, connectionReleased, "connection lock release")
+	reloaded := make(chan error, 1)
+	go func() {
+		request, _ := http.NewRequest(http.MethodPost, "http://"+listener.Addr().String()+"/api/splunk/export/refresh", strings.NewReader("{}"))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("X-Obstudio-Browser-Request", "1")
+		response, err := (&http.Client{Timeout: 5 * time.Second}).Do(request)
+		if err == nil {
+			var status struct {
+				CleanupPending bool `json:"cleanupPending"`
+			}
+			err = json.NewDecoder(response.Body).Decode(&status)
+			_ = response.Body.Close()
+			if response.StatusCode != http.StatusOK || status.CleanupPending {
+				err = fmt.Errorf("cleanup retry status %d, pending=%t", response.StatusCode, status.CleanupPending)
+			}
+		}
+		reloaded <- err
+	}()
+	waitForCredentialSignal(t, backend.started, "explicit credential cleanup retry")
+	unblock()
+	select {
+	case err := <-reloaded:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("explicit credential cleanup did not complete")
 	}
 }
 
@@ -287,6 +422,40 @@ func TestPrepareManagedLaunchDoesNotPersistStagedWeaverPath(t *testing.T) {
 	}
 }
 
+func TestManagedRestartUsesSupportedRuntimeEnvironment(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HOST", "127.0.0.1")
+	if err := writeManagedLaunch(managedLaunch{Env: []string{
+		"OBSTUDIO_AUDIT_REPORT=/tmp/report.json", "UNRELATED_PRIVATE_KEY=synthetic-value",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	launch, err := prepareManagedLaunch(runConfig{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, environment := range [][]string{launch.state.Env, launch.environment} {
+		if managedEnvironmentValue(environment, "OBSTUDIO_AUDIT_REPORT") != "/tmp/report.json" {
+			t.Fatal("restart lost its saved runtime setting")
+		}
+		for _, entry := range environment {
+			key, _, _ := strings.Cut(entry, "=")
+			if !slices.Contains(managedEnvironmentKeys, key) {
+				t.Fatalf("restart forwarded an unsupported setting: %s", key)
+			}
+		}
+	}
+	if err := writeManagedLaunch(launch.state); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := readManagedLaunch()
+	if err != nil || !reflect.DeepEqual(saved.Env, launch.state.Env) {
+		t.Fatal("restart did not persist the supported runtime settings", err)
+	}
+}
+
 func TestPrepareManagedLaunchStagesEnvFileWeaver(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -302,23 +471,13 @@ func TestPrepareManagedLaunchStagesEnvFileWeaver(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(previous) })
 	previousWeaver, hadWeaver := os.LookupEnv("WEAVER_PATH")
 	_ = os.Unsetenv("WEAVER_PATH")
-	envFileShellPrecedence.Lock()
-	_, hadPrecedence := envFileShellPrecedence.keys["WEAVER_PATH"]
-	delete(envFileShellPrecedence.keys, "WEAVER_PATH")
-	envFileShellPrecedence.Unlock()
 	t.Cleanup(func() {
 		if hadWeaver {
 			_ = os.Setenv("WEAVER_PATH", previousWeaver)
 		} else {
 			_ = os.Unsetenv("WEAVER_PATH")
 		}
-		envFileShellPrecedence.Lock()
-		if hadPrecedence {
-			envFileShellPrecedence.keys["WEAVER_PATH"] = struct{}{}
-		} else {
-			delete(envFileShellPrecedence.keys, "WEAVER_PATH")
-		}
-		envFileShellPrecedence.Unlock()
+
 	})
 	weaver := filepath.Join(working, "tools", installedWeaverName(os.Args[0]))
 	if err := os.MkdirAll(filepath.Dir(weaver), 0o700); err != nil {

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { cloudInitializeHostRequestTimeoutMs, cloudHostRequestTimeoutMs } from "../../../../shared/connection-limits.cjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   callObserverHostCloud,
@@ -27,6 +28,17 @@ afterEach(() => {
 });
 
 describe("Splunk Observability Studio host transport", () => {
+  it("allows initialization to finish its refresh and credential-import budget", async () => {
+    vi.useFakeTimers();
+    const { posted } = installHost();
+    const pending = callObserverHostCloud("initialize");
+    const request = posted.at(-1);
+    await vi.advanceTimersByTimeAsync(cloudInitializeHostRequestTimeoutMs - 1);
+    respond(request, true, { status: disconnectedStatus() });
+    expect(await pending).toEqual({ status: disconnectedStatus() });
+    expect(posted.some((message) => message.type === "obstudio.host.cancel")).toBe(false);
+  });
+
   it("keeps native fetch for the standalone browser", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("browser", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -152,6 +164,13 @@ describe("Splunk Observability Studio host transport", () => {
     await expect(invalidProtocol).rejects.toThrow("invalid cloud response");
   });
 
+  it.each(["yes", "false", 1, null])("rejects malformed credential cleanup status from host mutations (%s)", async (cleanupPending) => {
+    const { posted } = installHost();
+    const pending = callObserverHostCloud("refresh");
+    respond(posted.at(-1), true, { status: { ...disconnectedStatus(), cleanupPending } });
+    await expect(pending).rejects.toThrow("invalid cloud response");
+  });
+
   it("preserves allowlisted cloud failure metadata for outcome handling", async () => {
     const { posted } = installHost();
     const pending = callObserverHostCloud("create-free-account", {
@@ -207,9 +226,9 @@ describe("Splunk Observability Studio host transport", () => {
     });
     const request = posted.at(-1);
     const timedOut = expect(pending).rejects
-      .toThrow(/Reload the window to reconcile its final state/);
+      .toThrow(/Reload saved connection/);
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(cloudHostRequestTimeoutMs);
 
     await timedOut;
     expect(posted.some((message) => message.type === "obstudio.host.cancel")).toBe(false);

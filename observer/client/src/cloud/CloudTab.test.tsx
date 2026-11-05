@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 import { CloudTab } from "./CloudTab";
+import { cloudHostRequestTimeoutMs } from "../../../../shared/connection-limits.cjs";
 
 const disconnectedVersion = "D".repeat(43);
 const connectedVersion = "C".repeat(43);
@@ -22,6 +23,206 @@ afterEach(() => {
 });
 
 describe("CloudTab", () => {
+  it.each([
+    { protocol: "CIMD", action: "setup-cimd", button: "Register OAuth client with CIMD" },
+    { protocol: "CIMD", action: "login-cimd", button: "Sign in to SIS" },
+    { protocol: "O11Y_OAUTH", action: "register-o11y-oauth", button: "Register MCP client" },
+  ] as const)("keeps $action recovery within its own sign-in controls", async ({ protocol, action, button }) => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+    bridge.respond(await bridge.next("initialize"), { registrationAndAuthProtocol: protocol, status: disconnectedStatus() });
+    if (action === "login-cimd") {
+      fireEvent.click(await screen.findByRole("button", { name: "Register OAuth client with CIMD" }));
+      bridge.respond(await bridge.next("setup-cimd"), { cimdRegistrationVerified: true });
+    }
+    await screen.findByRole("button", { name: button });
+    if (protocol === "O11Y_OAUTH") {
+      fireEvent.change(screen.getByLabelText("Realm"), { target: { value: "us1" } });
+      fireEvent.change(screen.getByLabelText("Admin X-SF-TOKEN"), { target: { value: "synthetic-admin-token" } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: button }));
+    bridge.reject(await bridge.next(action), "Sign-in provider is unavailable.");
+    expect((await screen.findByRole("alert")).textContent).toContain("Sign-in provider is unavailable.");
+    expect(screen.getByRole("button", { name: button }).hasAttribute("disabled")).toBe(false);
+    expect(screen.queryByRole("button", { name: "Reload saved connection" })).toBeNull();
+  });
+
+  it.each(["browser", "IDE"] as const)("recovers an uncertain Cloud mutation without resubmitting (%s)", async (host) => {
+    let current = connectedStatus(true, "us1");
+    let mutations = 0;
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/splunk/export/enabled" && init?.method === "POST") {
+        mutations += 1;
+        throw new TypeError("The connection closed before confirmation.");
+      }
+      if (path === "/api/splunk/export/refresh") { current = connectedStatus(false, "us1"); return jsonResponse(current); }
+      return jsonResponse(current);
+    });
+    vi.stubGlobal("fetch", fetch);
+    const bridge = host === "IDE" ? installBridge({ httpStatus: current }) : undefined;
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    if (bridge) bridge.respond(await bridge.next("initialize"), { status: current });
+    const toggle = await screen.findByRole("switch", { name: "Remote telemetry export is on" });
+    await user.click(toggle);
+    if (bridge) bridge.reject(await bridge.next("set-enabled"), "The connection outcome is unknown.", { code: "outcome_unknown", retrySafe: false });
+    const reload = await screen.findByRole("button", { name: "Reload saved connection" });
+    await waitFor(() => expect(toggle.hasAttribute("disabled")).toBe(true));
+    expect(reload.hasAttribute("disabled")).toBe(false);
+    await user.click(toggle);
+    expect(mutations).toBe(host === "IDE" ? 0 : 1);
+    expect(bridge?.requests().filter(({ action }) => action === "set-enabled") ?? []).toHaveLength(0);
+    reload.focus();
+    await user.keyboard("{Enter}");
+    if (bridge) bridge.respond(await bridge.next("refresh"), { status: connectedStatus(false, "us1") });
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Remote telemetry export is off" }).hasAttribute("disabled")).toBe(false));
+  });
+
+  it("moves an uncertain Disconnect out of its dialog to saved-state recovery", async () => {
+    const bridge = installBridge({ httpStatus: connectedStatus(true, "us1") });
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    bridge.respond(await bridge.next("initialize"), { status: connectedStatus(true, "us1") });
+    await user.click(await screen.findByRole("button", { name: "Remove connection" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove connection" }));
+    bridge.reject(await bridge.next("forget"), "Disconnect outcome is unknown.", { code: "outcome_unknown", retrySafe: false });
+    const reload = await screen.findByRole("button", { name: "Reload saved connection" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(reload));
+    expect(reload.hasAttribute("disabled")).toBe(false);
+    await user.keyboard("{Enter}");
+    bridge.respond(await bridge.next("refresh"), { status: disconnectedStatus() });
+    await waitFor(() => expect(screen.getByLabelText("Realm or Observability Cloud URL").hasAttribute("disabled")).toBe(false));
+  });
+
+  it("keeps the reload action mounted and restores keyboard focus after refresh fails", async () => {
+    let failRefresh!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/splunk/export/enabled") return jsonResponse({ error: "Settings changed" }, 409);
+      if (path === "/api/splunk/export/refresh") return new Promise<Response>((resolve) => { failRefresh = resolve; });
+      if (path === "/api/splunk/export") return jsonResponse(connectedStatus(true, "us1"));
+      throw new Error(`unexpected request: ${path}`);
+    }));
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    await user.click(await screen.findByRole("switch", { name: "Remote telemetry export is on" }));
+    const reload = await screen.findByRole("button", { name: "Reload saved connection" });
+    reload.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Reload saved connection" })).toBe(reload);
+    expect(reload.hasAttribute("disabled")).toBe(true);
+    await act(async () => failRefresh(jsonResponse({ error: "Storage unavailable" }, 500)));
+    await waitFor(() => expect(document.activeElement).toBe(reload));
+    expect(reload.hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("alert").textContent).toContain("Storage unavailable");
+  });
+
+  it.each(["browser", "IDE"] as const)("reloads a first connection saved by another collector after a disconnected conflict (%s)", async (host) => {
+    let status = disconnectedStatus();
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/splunk/export" && init?.method === "POST") return jsonResponse({ error: "Settings changed in another session" }, 409);
+      if (path === "/api/splunk/export/refresh") { status = connectedStatus(true, "eu0"); return jsonResponse(status); }
+      if (path === "/api/splunk/export") return jsonResponse(status);
+      throw new Error(`unexpected request: ${path}`);
+    }));
+    const bridge = host === "IDE" ? installBridge() : undefined;
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    if (bridge) bridge.respond(await bridge.next("initialize"), { status });
+    await screen.findByRole("button", { name: "Connect" });
+    fireEvent.change(screen.getByLabelText("Realm or Observability Cloud URL"), { target: { value: "us1" } });
+    fireEvent.change(screen.getByLabelText("Access token"), { target: { value: "browser_token_123456789" } });
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    if (bridge) bridge.reject(await bridge.next("connect"), "Settings changed in another session", { code: "settings_changed" });
+    const reload = await screen.findByRole("button", { name: "Reload saved connection" });
+    reload.focus();
+    await user.keyboard("{Enter}");
+    if (bridge) bridge.respond(await bridge.next("refresh"), { status: connectedStatus(true, "eu0") });
+    expect(await screen.findByRole("switch", { name: "Remote telemetry export is on" })).toBeTruthy();
+    expect(screen.queryByRole("form", { name: "Cloud connection" })).toBeNull();
+  });
+
+  it("reloads a saved connection after credential storage is unlocked", async () => {
+    const paused = disconnectedStatus();
+    paused.metrics.configured = paused.traces.configured = true;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/splunk/export/refresh") return jsonResponse(connectedStatus(true, "us1"));
+      if (String(input) === "/api/splunk/export") return jsonResponse(paused);
+      throw new Error(`unexpected request: ${String(input)}`);
+    }));
+    render(<CloudTab />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Reload saved connection" }));
+    expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Remote telemetry export is on" }).getAttribute("aria-checked")).toBe("true");
+  });
+
+  it.each(["NONE", "CIMD", "O11Y_OAUTH"] as const)("keeps credential cleanup visible and restores focus in %s", async (protocol) => {
+    vi.useFakeTimers();
+    let status = {...connectedStatus(false, "us1"), registrationAndAuthProtocol: protocol};
+    let statusReads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/splunk/export/forget") {
+        status = { ...disconnectedStatus(), registrationAndAuthProtocol: protocol, cleanupPending: true };
+        return jsonResponse({ error: "credential cleanup is pending" }, 500);
+      }
+      if (path === "/api/splunk/export/refresh") {
+        status = { ...status, cleanupPending: false };
+        return jsonResponse(status);
+      }
+      if (path === "/api/splunk/export") { statusReads += 1; return jsonResponse(status); }
+      throw new Error(`unexpected request: ${path}`);
+    }));
+    await act(async () => { render(<CloudTab />); });
+    fireEvent.click(screen.getByRole("button", { name: "Remove connection" }));
+    await act(async () => { fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove connection" })); });
+    const retry = screen.getByRole("button", { name: "Retry credential cleanup" });
+    expect(screen.getByText("Credential cleanup is pending. Unlock secure storage, then retry.")).toBeTruthy();
+    const readsBeforePoll = statusReads;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(statusReads).toBe(readsBeforePoll + 1);
+    expect(screen.getByRole("button", { name: "Retry credential cleanup" })).toBe(retry);
+    vi.useRealTimers();
+    retry.focus();
+    await userEvent.setup().keyboard("{Enter}");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry credential cleanup" })).toBeNull());
+    const target = protocol === "CIMD" ? screen.getByRole("button", {name: "Register OAuth client with CIMD"})
+      : screen.getByRole("textbox", {name: protocol === "O11Y_OAUTH" ? "Realm" : "Realm or Observability Cloud URL"});
+    await waitFor(() => expect(document.activeElement).toBe(target));
+  });
+
+  it("retries pending credential cleanup through the IDE capability", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+    bridge.respond(await bridge.next("initialize"), { status: { ...disconnectedStatus(), cleanupPending: true } });
+    fireEvent.click(await screen.findByRole("button", { name: "Retry credential cleanup" }));
+    bridge.respond(await bridge.next("refresh"), { status: { ...disconnectedStatus(), cleanupPending: false } });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry credential cleanup" })).toBeNull());
+  });
+
+  it("reloads a connected destination after a shared-settings conflict", async () => {
+    let status = connectedStatus(true, "us1");
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/splunk/export/enabled") return jsonResponse({error: "Connection settings changed in another session. Refresh or restart Studio, then retry."}, 409);
+      if (String(input) === "/api/splunk/export/refresh") {
+        status = connectedStatus(false, "eu0");
+        return jsonResponse(status);
+      }
+      if (String(input) === "/api/splunk/export") return jsonResponse(status);
+      throw new Error(`unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetch);
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    await user.click(await screen.findByRole("switch", {name: "Remote telemetry export is on"}));
+    await user.click(await screen.findByRole("button", {name: "Reload saved connection"}));
+    expect(await screen.findByText("eu0 · Access token configured")).toBeTruthy();
+    expect(screen.getByRole("switch", {name: "Remote telemetry export is off"}).getAttribute("aria-checked")).toBe("false");
+  });
+
   it("loads standalone status directly without creating a browser session", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
@@ -538,6 +739,24 @@ describe("CloudTab", () => {
       .toBe(false);
   });
 
+  it("reloads an uncertain startup migration before accepting another connection", async () => {
+    const bridge = installBridge();
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    bridge.respond(await bridge.next("initialize"), {
+      status: disconnectedStatus(),
+      warning: "Migration outcome is unknown. Reload saved connection.",
+      warningCode: "outcome_unknown",
+    });
+    const reload = await screen.findByRole("button", { name: "Reload saved connection" });
+    expect(screen.getByRole("button", { name: "Connect" }).hasAttribute("disabled")).toBe(true);
+    reload.focus();
+    await user.keyboard("{Enter}");
+    bridge.respond(await bridge.next("refresh"), { status: disconnectedStatus() });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Connect" }).hasAttribute("disabled")).toBe(false));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Realm or Observability Cloud URL")));
+  });
+
   it("keeps Connect available when IDE initialization returns a status warning", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
@@ -546,14 +765,14 @@ describe("CloudTab", () => {
     vi.useFakeTimers();
     bridge.respond(initialize, {
       status: disconnectedStatus(),
-      warning: "Could not parse the configured env file.",
+      warning: "Could not refresh the saved connection.",
     });
     await act(async () => {
       await Promise.resolve();
     });
 
     expect(screen.getByRole("alert").textContent)
-      .toContain("Could not parse the configured env file.");
+      .toContain("Could not refresh the saved connection.");
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).disabled).toBe(false);
     expect((screen.getByLabelText("Access token") as HTMLInputElement).disabled).toBe(false);
     expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled)
@@ -563,7 +782,7 @@ describe("CloudTab", () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
     expect(screen.getByRole("alert").textContent)
-      .toContain("Could not parse the configured env file.");
+      .toContain("Could not refresh the saved connection.");
   });
 
   it("supports human-like standalone editing, paste, Enter, enable, disable, and forget", async () => {
@@ -725,6 +944,7 @@ describe("CloudTab", () => {
     expect(regionInput.disabled).toBe(false);
     expect(tokenInput.disabled).toBe(false);
     expect(tokenInput.value).toBe("rejected_token");
+    expect(screen.queryByRole("button", { name: "Reload saved connection" })).toBeNull();
 
     await user.clear(tokenInput);
     await user.type(tokenInput, "corrected_token");
@@ -2073,7 +2293,7 @@ describe("CloudTab", () => {
     expect(screen.queryByText("Cloud destination connected.")).toBeNull();
   });
 
-  it("allows an explicit retry if the IDE does not confirm completion of Connect", async () => {
+  it("requires saved-state recovery when the IDE cannot confirm Connect", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
 
@@ -2090,16 +2310,18 @@ describe("CloudTab", () => {
     });
     expect(bridge.requests().some((request) => request.action === "connect")).toBe(true);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(cloudHostRequestTimeoutMs);
       await Promise.resolve();
     });
 
     expect(screen.getByRole("alert").textContent)
-      .toContain("Reload the window to reconcile its final state");
+      .toContain("Reload saved connection before trying again.");
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).disabled).toBe(false);
     expect(tokenInput.disabled).toBe(false);
     expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled)
-      .toBe(false);
+      .toBe(true);
+    expect(screen.getByRole("button", { name: "Reload saved connection" }).hasAttribute("disabled")).toBe(false);
+    expect(tokenInput.value).toBe("opaque_token");
   });
 
   it("does not report success unless Splunk Observability Studio confirms the connection", async () => {
@@ -3092,7 +3314,7 @@ function installBridge(options: {
     ok: boolean,
     result?: unknown,
     error?: string,
-    metadata: { code?: string; retrySafe?: boolean } = {},
+    metadata: { code?: string; retrySafe?: boolean; platform?: string } = {},
   ) => {
     act(() => {
       window.dispatchEvent(new MessageEvent("message", {
@@ -3134,10 +3356,11 @@ function installBridge(options: {
       region?: string;
       status?: SplunkExportStatus;
       warning?: string;
+    warningCode?: string;
     }) {
       dispatchResponse(request.requestId, true, result);
     },
-    reject(request: BridgeRequest, message: string, metadata: { code?: string; retrySafe?: boolean } = {}) {
+    reject(request: BridgeRequest, message: string, metadata: { code?: string; retrySafe?: boolean; platform?: string } = {}) {
       dispatchResponse(request.requestId, false, undefined, message, metadata);
     },
     respondHTTP(request: HostHTTPRequest, body: unknown, status = 200) {
@@ -3227,3 +3450,121 @@ function freeAccountResult(region = "us", realm = "us1"): Record<string, unknown
     region,
   };
 }
+
+const storageHelpCases = [
+  { platform: "darwin", os: "macOS", url: "https://support.apple.com/guide/keychain-access/welcome/mac" },
+  { platform: "windows", os: "Windows", url: "https://support.microsoft.com/en-us/windows/security/credential-manager-in-windows" },
+  { platform: "linux", os: "Linux", url: "https://github.com/signalfx/obstudio/blob/main/docs/USER.md#secure-token-storage" },
+].flatMap(help => (["browser", "IDE"] as const).map(host => ({ ...help, host })));
+
+it.each(storageHelpCases)("offers an explicit session connection after a definite storage refusal ($host, $platform)", async ({ host, platform, os, url }) => {
+ const bridge=host==="IDE"?installBridge():null;
+ const disconnected=disconnectedStatus();
+ const session={...connectedStatus(true,"us1"),sessionOnly:true,cleanupPending:true};
+ let current=disconnected;
+ const fetch=vi.fn(async (_url:unknown,init?:RequestInit)=>{
+  if(init?.method==="POST"){
+   const body=JSON.parse(String(init.body));
+   if(!body.sessionOnly)return jsonResponse({error:"Secure storage is unavailable",code:"credential_storage_unavailable",retrySafe:true,platform},503);
+   current=session;
+  }
+  return jsonResponse(current);
+ });
+ if(!bridge)vi.stubGlobal("fetch",fetch);
+ const user=userEvent.setup();render(<CloudTab/>);
+ if(bridge)bridge.respond(await bridge.next("initialize"),{status:disconnected});
+ await user.type(await screen.findByLabelText("Realm or Observability Cloud URL"),"us1");
+ await user.type(screen.getByLabelText("Access token"),"session-token");
+ const originalSubmit=screen.getByRole("button",{name:"Connect"});
+ await user.click(originalSubmit);
+ if(bridge)bridge.reject(await bridge.next("connect"),"Secure storage is unavailable",{code:"credential_storage_unavailable",retrySafe:true,platform});
+ let use=await screen.findByRole("button",{name:"Connect for this session"});
+ expect(use).toBe(originalSubmit);
+ expect(screen.getByLabelText("Access token").getAttribute("aria-describedby")).toContain("cloud-storage-help");
+ expect(screen.getByRole("link",{name:`Set up secure storage on ${os}`}).getAttribute("href")).toBe(url);
+ expect(screen.queryByRole("button",{name:"Reload saved connection"})).toBeNull();
+ if (bridge) {
+  await user.click(screen.getByRole("link",{name:"access tokens"}));
+  bridge.reject(await bridge.next("open-ingest-token-help"),"Token help could not be opened");
+  expect((await screen.findByRole("alert")).textContent).toContain("Token help could not be opened");
+  use=screen.getByRole("button",{name:"Connect for this session"});
+ }
+ expect((screen.getByLabelText("Access token") as HTMLInputElement).value).toBe("session-token");
+ use.focus();await user.keyboard("{Enter}");
+ if(bridge){const request=await bridge.next("connect");expect(request.payload).toMatchObject({sessionOnly:true,accessToken:"session-token",realm:"us1"});bridge.respond(request,{status:session});}
+ else expect(fetch.mock.calls.some(([,init])=>init?.body&&JSON.parse(String(init.body)).sessionOnly===true)).toBe(true);
+ const exportSwitch=await screen.findByRole("switch",{name:"Remote telemetry export is on"});
+ expect(screen.queryByRole("button",{name:"Retry credential cleanup"})).toBeNull();
+ expect(screen.queryByRole("button",{name:"Connect for this session"})).toBeNull();
+ await waitFor(()=>expect(document.activeElement).toBe(exportSwitch));
+ await user.click(screen.getByRole("button",{name:"Remove connection"}));
+ expect(screen.getByRole("dialog").textContent).toContain("This clears the token from this session");
+ await user.click(within(screen.getByRole("dialog")).getByRole("button",{name:"Cancel"}));
+ if (bridge) {
+  await user.click(screen.getByRole("button",{name:"Remove connection"}));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button",{name:"Remove connection"}));
+  const forget=await bridge.next("forget");expect(forget.payload).toMatchObject({sessionOnly:true});
+  bridge.respond(forget,{status:{...disconnectedStatus(),sessionOnly:true}});
+  await screen.findByLabelText("Access token");
+ }
+});
+
+
+it.each([["browser", "draft"], ["IDE", "draft"], ["browser", "help"], ["IDE", "help"]] as const)("retries a saved Cloud connection after %s/%s recovery", async (host, recovery) => {
+  const bridge = host === "IDE" ? installBridge() : null;
+  const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => init?.method === "POST"
+    ? jsonResponse({error:"Storage unavailable",code:"credential_storage_unavailable",retrySafe:true,platform:"linux"},503)
+    : jsonResponse(disconnectedStatus()));
+  if (!bridge) vi.stubGlobal("fetch", fetch);
+  const user=userEvent.setup(); render(<CloudTab/>);
+  if (bridge) bridge.respond(await bridge.next("initialize"),{status:disconnectedStatus()});
+  await user.type(await screen.findByLabelText("Realm or Observability Cloud URL"),"us1");
+  await user.type(screen.getByLabelText("Access token"),"first-token");
+  await user.click(screen.getByRole("button",{name:"Connect"}));
+  if (bridge) bridge.reject(await bridge.next("connect"),"Storage unavailable",{code:"credential_storage_unavailable",retrySafe:true,platform:"linux"});
+  await screen.findByRole("button",{name:"Connect for this session"});
+  if (recovery === "draft") await user.type(screen.getByLabelText("Access token"),"-changed");
+  else {
+    await user.click(screen.getByRole("link",{name:"Set up secure storage on Linux"}));
+    if (bridge) {
+      const help=await bridge.next("open-credential-storage-help");
+      expect(help.payload).toMatchObject({platform:"linux"});
+      bridge.respond(help,{});
+    }
+  }
+  await user.click(screen.getByRole("button",{name:"Connect"}));
+  const request=bridge ? await bridge.next("connect") : null;
+  const payload=request ? request.payload : JSON.parse(String(fetch.mock.calls.filter(([,init])=>init?.method==="POST").at(-1)?.[1]?.body));
+  expect(payload).toMatchObject({accessToken:recovery === "draft" ? "first-token-changed" : "first-token"});
+  expect(payload?.sessionOnly).toBeUndefined();
+  if (bridge && request) bridge.reject(request,"Storage unavailable",{code:"credential_storage_unavailable",retrySafe:true});
+  await screen.findByRole("button",{name:"Connect for this session"});
+});
+
+
+it.each(["browser", "IDE"] as const)("keeps focus on a usable control after a failed session Cloud submit (%s)",async(host)=>{
+ const pending={...disconnectedStatus(),cleanupPending:true};
+ const bridge=host==="IDE"?installBridge({httpStatus:pending}):null;
+ let failSession: ((response:Response)=>void)|undefined;
+ if(!bridge)vi.stubGlobal("fetch",vi.fn(async(_url:unknown,init?:RequestInit)=>{
+  if(init?.method!=="POST")return jsonResponse(pending);
+  if(JSON.parse(String(init.body)).sessionOnly)return new Promise<Response>(resolve=>{failSession=resolve;});
+  return jsonResponse({error:"Storage unavailable",code:"credential_storage_unavailable",retrySafe:true},503);
+ }));
+ const user=userEvent.setup();render(<CloudTab/>);
+ if(bridge)bridge.respond(await bridge.next("initialize"),{status:pending});
+ await user.type(await screen.findByLabelText("Realm or Observability Cloud URL"),"us1");
+ await user.type(screen.getByLabelText("Access token"),"session-token");
+ await user.click(screen.getByRole("button",{name:"Connect"}));
+ if(bridge)bridge.reject(await bridge.next("connect"),"Storage unavailable",{code:"credential_storage_unavailable",retrySafe:true});
+ const submit=await screen.findByRole("button",{name:"Connect for this session"});
+ await waitFor(()=>expect(document.activeElement).toBe(submit));
+ await user.click(submit);submit.blur();
+ if(bridge)bridge.reject(await bridge.next("connect"),"Token refused");
+ else failSession!(jsonResponse({error:"Token refused"},401));
+ await screen.findByText("Token refused");
+ await waitFor(()=>{
+  expect(document.activeElement).toBe(screen.getByRole("button",{name:"Connect"}));
+  expect((document.activeElement as HTMLButtonElement).disabled).toBe(false);
+ });
+});

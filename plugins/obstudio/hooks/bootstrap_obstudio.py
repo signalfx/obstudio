@@ -1283,9 +1283,10 @@ CHILD_ENV_ALLOWED_NAMES = frozenset(
         "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
         "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS",
         "WEAVER_PATH", "MAX_FLOW_NODE_SPAN_LIST_SIZE",
+        "DBUS_SESSION_BUS_ADDRESS",
     }
 )
-CHILD_ENV_ALLOWED_PREFIXES = ("LC_", "XDG_", "SPLUNK_", "SIGNALFX_", "OBSTUDIO_", "OTLP_")
+CHILD_ENV_ALLOWED_PREFIXES = ("LC_", "XDG_", "OBSTUDIO_", "OTLP_")
 
 
 def build_child_env(parent_env: Mapping[str, str]) -> dict[str, str]:
@@ -1293,7 +1294,8 @@ def build_child_env(parent_env: Mapping[str, str]) -> dict[str, str]:
     return {
         key: value
         for key, value in parent_env.items()
-        if key.upper() in CHILD_ENV_ALLOWED_NAMES or key.upper().startswith(CHILD_ENV_ALLOWED_PREFIXES)
+        if (key.upper() in CHILD_ENV_ALLOWED_NAMES or key.upper().startswith(CHILD_ENV_ALLOWED_PREFIXES))
+        and not key.upper().startswith("OBSTUDIO_SPLUNK_")
     }
 
 

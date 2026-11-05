@@ -1,14 +1,104 @@
 package main
 
 import (
-	"os"
+	"encoding/json"
+	"io"
+	"net"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/credentials"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 )
+
+func TestRunServesConfigManagerAndSecureCloudConnection(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(configManagerGateEnv, "true")
+	t.Setenv("OBSTUDIO_OWNER", "cli")
+	t.Setenv("OBSTUDIO_MODE", "standalone")
+	t.Setenv("OBSTUDIO_SHARED_OBSERVER_STATE_PATH", filepath.Join(home, "shared.json"))
+	settings := newTestConnectionPersistence(t, filepath.Join(home, ".obstudio", "connections.json"), credentials.NewWithBackend(&testCredentialBackend{values: map[string]string{}}))
+	if err := settings.SaveCloud(otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: "connection-test-token"}, otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: "connection-test-token"}); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousListen := listenObserverHTTP
+	listenObserverHTTP = func(_, _ string) (net.Listener, error) { return listener, nil }
+	done := make(chan error, 1)
+	go func() {
+		done <- run(runConfig{host: "127.0.0.1", observerHTTPPort: "0", otlpGRPCHost: "127.0.0.1", otlpGRPCPort: "0", otlpHTTPPort: "0", connectionSettings: settings})
+	}()
+	t.Cleanup(func() {
+		_ = listener.Close()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Error("collector did not stop")
+		}
+		listenObserverHTTP = previousListen
+	})
+	base := "http://" + listener.Addr().String()
+	client := &http.Client{Timeout: time.Second}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		response, err := client.Get(base + "/api/health")
+		if err == nil {
+			_ = response.Body.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("collector did not start: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	for _, path := range []string{"/api/config", "/api/config/status", "/api/splunk/export"} {
+		response, err := client.Get(base + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s: status %d", path, response.StatusCode)
+		}
+	}
+	response, err := client.Post(base+"/api/splunk/export/enabled", "application/json", strings.NewReader(`{"enabled":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("save Cloud connection: status %d, %s", response.StatusCode, body)
+	}
+	var status struct{ Connected, StorageManaged bool }
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil || !status.Connected || !status.StorageManaged {
+		t.Fatalf("saved Cloud status: %+v, %v", status, err)
+	}
+	var metrics otlp.SplunkMetricsExporterConfig
+	var traces otlp.SplunkTracesExporterConfig
+	if err := settings.RestoreCloud(&metrics, &traces); err != nil || metrics.AccessToken != "connection-test-token" || traces.AccessToken != metrics.AccessToken || !metrics.Enabled || !traces.Enabled {
+		t.Fatalf("Cloud export preference was not saved: %v", err)
+	}
+	response, err = client.Post(base+"/api/splunk/export/forget", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("disconnect Cloud connection: status %d", response.StatusCode)
+	}
+	if err := settings.RestoreCloud(&metrics, &traces); err != nil || metrics.AccessToken != "" || traces.AccessToken != "" {
+		t.Fatalf("Cloud connection was not removed: %v", err)
+	}
+}
 
 func TestValidateRunConfigRejectsNonLoopbackObserverHost(t *testing.T) {
 	t.Setenv("OBSTUDIO_MODE", "")
@@ -79,31 +169,18 @@ func TestRenderStartupBannerUsesFullProductName(t *testing.T) {
 }
 
 func TestSplunkExportConfigurationRefreshKeepsUnchangedExporters(t *testing.T) {
-	envFile := filepath.Join(t.TempDir(), ".env")
-	if err := os.WriteFile(envFile, []byte(strings.Join([]string{
-		"SPLUNK_REALM=us1",
-		"SPLUNK_ACCESS_TOKEN=configured-token",
-		"SPLUNK_METRICS_EXPORT=true",
-		"SPLUNK_TRACES_EXPORT=false",
-	}, "\n")), 0o600); err != nil {
+	path := filepath.Join(t.TempDir(), "connections.json")
+	settings := newTestConnectionPersistence(t, path, credentials.NewWithBackend(&testCredentialBackend{values: map[string]string{}}))
+	metrics := &recordingMetricsExportConfigurator{config: otlp.SplunkMetricsExporterConfig{Enabled: true, Realm: "us1", AccessToken: "configured-token", Timeout: 7 * time.Second}}
+	traces := &recordingTracesExportConfigurator{config: otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: "configured-token", Timeout: 8 * time.Second}}
+	if err := settings.SaveCloud(metrics.config, traces.config); err != nil {
 		t.Fatal(err)
 	}
-	metrics := &recordingMetricsExportConfigurator{config: otlp.SplunkMetricsExporterConfig{
-		Enabled: true, Realm: "us1", AccessToken: "configured-token", Timeout: 7 * time.Second,
-	}}
-	traces := &recordingTracesExportConfigurator{config: otlp.SplunkTracesExporterConfig{
-		Realm: "us1", AccessToken: "configured-token", Timeout: 8 * time.Second,
-	}}
-
-	managed, err := newSplunkExportConfigurationRefresher(envFile, metrics, traces)()
-	if err != nil {
-		t.Fatalf("refresh unchanged configuration: %v", err)
-	}
-	if !managed {
-		t.Fatal("unchanged env-file configuration was not reported as managed")
+	if err := newSplunkExportConfigurationRefresher(metrics, traces, settings)(); err != nil {
+		t.Fatal(err)
 	}
 	if metrics.configureCalls != 0 || traces.configureCalls != 0 {
-		t.Fatalf("unchanged exporters were reconfigured: metrics=%d traces=%d", metrics.configureCalls, traces.configureCalls)
+		t.Fatal("unchanged settings reconfigured exporters")
 	}
 }
 

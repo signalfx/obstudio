@@ -480,11 +480,10 @@ describe("OverviewTab", () => {
 
     const cloudCard = container.querySelector("#overview-cloud-skills")!;
     await waitFor(() => {
-      expect(cloudCard.querySelector(".stream-toggle")).toBeTruthy();
+      expect(cloudCard.querySelector(".stream-toggle")?.textContent).toContain("Connected");
     });
 
     const badge = cloudCard.querySelector(".stream-toggle")!;
-    expect(badge.textContent).toContain("Connected");
     expect(badge.className).toContain("stream-toggle--live");
   });
 
@@ -494,11 +493,10 @@ describe("OverviewTab", () => {
 
     const cloudCard = container.querySelector("#overview-cloud-skills")!;
     await waitFor(() => {
-      expect(cloudCard.querySelector(".stream-toggle")).toBeTruthy();
+      expect(cloudCard.querySelector(".stream-toggle")?.textContent).toContain("Not connected");
     });
 
     const badge = cloudCard.querySelector(".stream-toggle")!;
-    expect(badge.textContent).toContain("Not connected");
     expect(badge.className).toContain("stream-toggle--muted");
   });
 
