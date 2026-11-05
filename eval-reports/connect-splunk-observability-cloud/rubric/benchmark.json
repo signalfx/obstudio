@@ -7,9 +7,9 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "connect-splunk-observability-cloud",
-    "run_id": "20261105T170736837341Z",
-    "agent_model": "-",
-    "judge_model": "-",
+    "run_id": "20261105T174727058451Z",
+    "agent_model": "gpt-6.1-sol",
+    "judge_model": "gpt-6.1-sol",
     "rubric_enabled": true,
     "runtime_enabled": false,
     "workers": "1",
@@ -22,10 +22,10 @@
     "with_skill": {
       "prompt_count": 4,
       "command_count": 4,
-      "duration_seconds": 191.319,
-      "agent_duration_seconds": 63.833,
-      "tokens": 316517,
-      "agent_tokens": 138743,
+      "duration_seconds": 186.989,
+      "agent_duration_seconds": 67.28,
+      "tokens": 279086,
+      "agent_tokens": 138885,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 4,
         "selected_record_count": 4,
-        "input_tokens": 137082,
-        "cached_input_tokens": 115072,
+        "input_tokens": 137531,
+        "cached_input_tokens": 116096,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 1661,
-        "reasoning_output_tokens": 624,
+        "output_tokens": 1354,
+        "reasoning_output_tokens": 363,
         "provider_total_tokens": null,
-        "derived_total_tokens": 138743,
-        "effective_total_tokens": 138743,
+        "derived_total_tokens": 138885,
+        "effective_total_tokens": 138885,
         "coverage": {
           "record_count": 4,
           "modeled_count": 4,
@@ -61,24 +61,24 @@
       "rubric": {
         "passed": 42,
         "total": 44,
-        "average_score": 95.25
+        "average_score": 95.75
       },
-      "rubric_tokens": 177774,
-      "rubric_duration_seconds": 127.392,
+      "rubric_tokens": 140201,
+      "rubric_duration_seconds": 119.609,
       "rubric_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
         "usage_record_count": 4,
         "selected_record_count": 4,
-        "input_tokens": 173281,
-        "cached_input_tokens": 99712,
+        "input_tokens": 135891,
+        "cached_input_tokens": 104960,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 4493,
-        "reasoning_output_tokens": 762,
+        "output_tokens": 4310,
+        "reasoning_output_tokens": 673,
         "provider_total_tokens": null,
-        "derived_total_tokens": 177774,
-        "effective_total_tokens": 177774,
+        "derived_total_tokens": 140201,
+        "effective_total_tokens": 140201,
         "coverage": {
           "record_count": 4,
           "modeled_count": 4,
@@ -115,10 +115,10 @@
       "with_skill": {
         "prompt_count": 4,
         "command_count": 4,
-        "duration_seconds": 191.319,
-        "agent_duration_seconds": 63.833,
-        "tokens": 316517,
-        "agent_tokens": 138743,
+        "duration_seconds": 186.989,
+        "agent_duration_seconds": 67.28,
+        "tokens": 279086,
+        "agent_tokens": 138885,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -126,14 +126,14 @@
           "observed": true,
           "usage_record_count": 4,
           "selected_record_count": 4,
-          "input_tokens": 137082,
-          "cached_input_tokens": 115072,
+          "input_tokens": 137531,
+          "cached_input_tokens": 116096,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 1661,
-          "reasoning_output_tokens": 624,
+          "output_tokens": 1354,
+          "reasoning_output_tokens": 363,
           "provider_total_tokens": null,
-          "derived_total_tokens": 138743,
-          "effective_total_tokens": 138743,
+          "derived_total_tokens": 138885,
+          "effective_total_tokens": 138885,
           "coverage": {
             "record_count": 4,
             "modeled_count": 4,
@@ -154,24 +154,24 @@
         "rubric": {
           "passed": 42,
           "total": 44,
-          "average_score": 95.25
+          "average_score": 95.75
         },
-        "rubric_tokens": 177774,
-        "rubric_duration_seconds": 127.392,
+        "rubric_tokens": 140201,
+        "rubric_duration_seconds": 119.609,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 4,
           "selected_record_count": 4,
-          "input_tokens": 173281,
-          "cached_input_tokens": 99712,
+          "input_tokens": 135891,
+          "cached_input_tokens": 104960,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 4493,
-          "reasoning_output_tokens": 762,
+          "output_tokens": 4310,
+          "reasoning_output_tokens": 673,
           "provider_total_tokens": null,
-          "derived_total_tokens": 177774,
-          "effective_total_tokens": 177774,
+          "derived_total_tokens": 140201,
+          "effective_total_tokens": 140201,
           "coverage": {
             "record_count": 4,
             "modeled_count": 4,
@@ -193,9 +193,9 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/connect-splunk-observability-cloud/20261105T170736837341Z/results/plugins/obstudio/qual-connect-splunk-observability-cloud/eval.json",
-        "with_skill": ".workspace/codex-evals/connect-splunk-observability-cloud/20261105T170736837341Z/results/plugins/obstudio/qual-connect-splunk-observability-cloud/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/connect-splunk-observability-cloud/20261105T170736837341Z/results/plugins/obstudio/qual-connect-splunk-observability-cloud/with_baseline.json"
+        "eval": ".workspace/codex-evals/connect-splunk-observability-cloud/20261105T174727058451Z/results/plugins/obstudio/qual-connect-splunk-observability-cloud/eval.json",
+        "with_skill": ".workspace/codex-evals/connect-splunk-observability-cloud/20261105T174727058451Z/results/plugins/obstudio/qual-connect-splunk-observability-cloud/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/connect-splunk-observability-cloud/20261105T174727058451Z/results/plugins/obstudio/qual-connect-splunk-observability-cloud/with_baseline.json"
       }
     }
   ],
@@ -206,7 +206,7 @@
       "prompt": "newly-ready-organization-browser",
       "category": "rubric",
       "result": "rubric:rubric-1 FAIL",
-      "evidence": "Assumed endpoints.rest is \"http://127.0.0.1:17900\"; no wildcard normalization is modeled.",
+      "evidence": "Instead describes the assumed endpoint as already being http://127.0.0.1:17900.",
       "mode": "with_skill"
     },
     {
@@ -215,20 +215,20 @@
       "prompt": "terminal-clickable-fallback",
       "category": "rubric",
       "result": "rubric:rubric-1 FAIL",
-      "evidence": "Assumed result: {\"endpoints\":{\"rest\":\"http://127.0.0.1:17900\"}}; modeled call: observer_status().",
+      "evidence": "Assumed result is endpoints.rest = http://127.0.0.1:17900; no 0.0.0.0 normalization is modeled.",
       "mode": "with_skill"
     }
   ],
   "source": {
     "digest_version": 4,
-    "digest": "1b54a408599d4a0953b933b7d1e679b49117a2b320d08b2804344ac7151b94c3",
+    "digest": "bdaecbeadc0f6754f268829e315caf71c1630194a642e5b3788a89ecce9dcc65",
     "eval_kinds": [
       "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
       "evals/codex-evals.model-override.toml": "c7970ebc775726a79f5263ebfcbc51a22c3ef4122083d2554d47db96064e30af",
-      "evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json": "00475408afc5da5eab8e6d7696b635f020b0ec9045bc29724d32a08fcf3e5f9e",
+      "evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json": "070f9f51c99ab24fed272945288a0d04af46926bb2ac5d718944c8cf6fc41378",
       "skills/connect-splunk-observability-cloud/SKILL.md": "7c8737a2e3ad2491d224b65c1cd738af457278edacead7328206fd5f383e066b",
       "skills/connect-splunk-observability-cloud/agents/openai.yaml": "206b920092a097ec7ab0f92b97d457a6e794bdddcc7f2def837955ff8a756407",
       "skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",

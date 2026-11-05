@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "connect-splunk-observability-cloud",
-    "run_id": "20261105T170035378049Z",
+    "run_id": "20261105T175047619105Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -51,14 +51,14 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "770a37c387a7e16035fa8c21b1fc790d89bb5c09f6c20417f562deda62e46dea",
+    "digest": "839c5f98e6b7b58b1084b8f321c56af1d2f16bf43366e9f31e3fd6581f0b422e",
     "eval_kinds": [
       "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
       "evals/codex-evals.validation.toml": "503794fa37e80a742e98969f1d4bbdd17d1f9cfe7d6607c4012498c43905b53e",
-      "evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json": "00475408afc5da5eab8e6d7696b635f020b0ec9045bc29724d32a08fcf3e5f9e",
+      "evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json": "070f9f51c99ab24fed272945288a0d04af46926bb2ac5d718944c8cf6fc41378",
       "skills/connect-splunk-observability-cloud/SKILL.md": "7c8737a2e3ad2491d224b65c1cd738af457278edacead7328206fd5f383e066b",
       "skills/connect-splunk-observability-cloud/agents/openai.yaml": "206b920092a097ec7ab0f92b97d457a6e794bdddcc7f2def837955ff8a756407",
       "skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",
