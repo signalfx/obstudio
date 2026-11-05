@@ -2257,6 +2257,56 @@ func TestSessionReset_GapGreaterThan30sClears(t *testing.T) {
 	}
 }
 
+func TestInternalLogsPreserveTelemetryAndApplicationSessionClock(t *testing.T) {
+	s := New()
+	now := time.Now()
+	s.AddSpansForConnection("app", []Span{newTestSpan("trace", "span", "request", now, 10)})
+	s.AddMetricsForConnection("app", []MetricDataPoint{newTestMetric("requests", 1, now)})
+	s.AddLogsForConnection("app", []LogRecord{newTestLog("application", now)})
+	idle := now.Add(-35 * time.Second)
+	s.mu.Lock()
+	s.lastIngest = idle
+	s.mu.Unlock()
+	changed := 0
+	s.SetChangeCallback(func(time.Time) { changed++ })
+	s.AddInternalLogs([]LogRecord{newTestLog("connection probe", now)})
+	if changed != 0 || len(s.SnapshotTelemetry().Logs) != 1 {
+		t.Fatal("internal diagnostics affected application validation")
+	}
+	if stats := s.Stats(); stats.SpanCount != 1 || stats.DataPointCount != 1 || stats.LogCount != 2 {
+		t.Fatalf("internal log erased the application capture: %+v", stats)
+	}
+	s.mu.RLock()
+	unchanged := s.lastIngest.Equal(idle)
+	probe := s.logs.snapshot()[1]
+	s.mu.RUnlock()
+	if !unchanged || probe.Body != "connection probe" || probe.ID == "" {
+		t.Fatalf("internal log changed the clock or was not retained: clock unchanged=%v probe=%+v", unchanged, probe)
+	}
+	s.AddLogsForConnection("app", []LogRecord{newTestLog("next session", now)})
+	if stats := s.Stats(); stats.SpanCount != 0 || stats.DataPointCount != 0 || stats.LogCount != 1 {
+		t.Fatalf("application ingestion no longer resets an expired session: %+v", stats)
+	}
+}
+
+func TestInternalLogEvictionMarksApplicationValidationChanged(t *testing.T) {
+	s := New()
+	s.logs = newRingBuffer[LogRecord](1)
+	now := time.Now()
+	s.AddLogsForConnection("app", []LogRecord{newTestLog("application", now)})
+	lastIngest := s.lastIngest
+	changed := 0
+	s.SetChangeCallback(func(time.Time) { changed++ })
+	s.AddInternalLogs([]LogRecord{newTestLog("connection probe", now)})
+	if changed != 1 || len(s.SnapshotTelemetry().Logs) != 0 || !s.lastIngest.Equal(lastIngest) {
+		t.Fatal("probe eviction must invalidate the changed application snapshot without advancing its session", changed)
+	}
+	s.AddInternalLogs([]LogRecord{newTestLog("next probe", now)})
+	if changed != 1 || s.QueryLogs(1)[0].Body != "next probe" {
+		t.Fatal("replacing an internal diagnostic must retain it without invalidating application validation", changed)
+	}
+}
+
 func TestSessionReset_GapLessThan30sDoesNotClear(t *testing.T) {
 	s := New()
 	now := time.Now()

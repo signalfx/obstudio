@@ -201,7 +201,7 @@ jobs:
           dbus-run-session -- bash -euo pipefail <<'NATIVE_TEST'
             printf '%s' 'obstudio-ci-only' | gnome-keyring-daemon --unlock --components=secrets --daemonize
             go test ./internal/credentials -run '^(TestSystemCredentialStoreRoundTrip|TestLinux.*)$' -count=1 -timeout=60s -v
-            go test ./cmd/obstudio -run '^TestSystemCloudConnectionPersistenceLifecycle$' -count=1 -timeout=60s -v
+            go test ./cmd/obstudio -run '^TestSystem(Cloud|Logs)ConnectionPersistenceLifecycle$' -count=1 -timeout=60s -v
           NATIVE_TEST
 
       - name: Verify Windows native credential lifecycle
@@ -212,7 +212,7 @@ jobs:
         run: |
           go test ./internal/credentials -run '^TestSystemCredentialStoreRoundTrip$' -count=1 -timeout=60s -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          go test ./cmd/obstudio -run '^TestSystemCloudConnectionPersistenceLifecycle$' -count=1 -timeout=60s -v
+          go test ./cmd/obstudio -run '^TestSystem(Cloud|Logs)ConnectionPersistenceLifecycle$' -count=1 -timeout=60s -v
           exit $LASTEXITCODE
 
       - name: Verify storage refusal and session-only fallback
@@ -221,8 +221,8 @@ jobs:
         run: |
           set -euo pipefail
           go test ./internal/credentials -run '^Test(NativeWriteRefusalDistinguishesUnwrittenAndPartialCredentials|StoreClassifiesOnlyDefiniteProviderRefusal|LateUnsubmittedCredentialWriteDoesNotRequireNativeCleanup)$' -count=1 -timeout=60s -v
-          go test ./cmd/obstudio -run '^Test(CloudRefusalBeforeWriteKeepsSavedStateWithoutPendingCleanup)$' -count=1 -timeout=60s -v
-          go test ./internal/api -run '^(TestSplunkCloudSessionConnectionLeavesSavedSettingsUntouched|TestCloudSessionRollbackRestoresRuntimeWithoutSaving|TestCloudSaveFailureExplainsStorageAndLaunchOwnership)$' -count=1 -timeout=60s -v
+          go test ./cmd/obstudio -run '^Test(CloudRefusalBeforeWriteKeepsSavedStateWithoutPendingCleanup|LogsRefusalBeforeWriteDoesNotCreateAConnectionOrPendingCleanup)$' -count=1 -timeout=60s -v
+          go test ./internal/api -run '^(TestSplunkCloudSessionConnectionLeavesSavedSettingsUntouched|TestCloudSessionRollbackRestoresRuntimeWithoutSaving|TestCloudSaveFailureExplainsStorageAndLaunchOwnership|TestLogsSessionConnectionDoesNotUsePersistence)$' -count=1 -timeout=60s -v
 
       - name: Run Splunk Observability Studio plugin Claude hook shim tests
         run: node --test plugins/obstudio/hooks/tests/test_bootstrap_claude.js

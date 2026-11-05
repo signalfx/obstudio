@@ -314,8 +314,10 @@ export interface SplunkExportStatus {
   enabled: boolean;
   realm?: string;
   version: string;
+  cloudVersion?: string;
   metrics: SplunkExportSignalStatus;
   traces: SplunkExportSignalStatus;
+  logs?: SplunkExportSignalStatus;
   registrationAndAuthProtocol?: RegistrationAndAuthProtocol;
 }
 
@@ -360,4 +362,28 @@ export interface O11yOAuthSessionStatus {
   orgId?: string;
   connectedAt?: string;
   expiresAt?: string;
+}
+
+export interface SplunkLogsStatus {
+  sessionOnly?: boolean;
+  version: string;
+  configured: boolean;
+  connected?: boolean;
+  enabled: boolean;
+  endpoint: string;
+  searchURL?: string;
+  index: string;
+  source: string;
+  sourcetype: string;
+  insecureSkipVerify: boolean;
+  tokenConfigured: boolean;
+  canDisconnect?: boolean;
+  cleanupPending?: boolean;
+  exportedRecords: number;
+  exportedBatches?: number;
+  failedBatches: number;
+  lastExportError?: string;
+  lastExportSuccess?: string;
+  lastHTTPStatus?: number;
+  lastHECCode?: number;
 }

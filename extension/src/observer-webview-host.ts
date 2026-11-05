@@ -17,6 +17,8 @@ export type ObserverHostCloudPayload = {
 	sessionOnly?: boolean;
 	platform?: string;
 	accessToken?: string;
+	reuseSavedToken?: boolean;
+	preserveEnabled?: boolean;
 	adminToken?: string;
 	clientId?: string;
 	clientSecret?: string;
@@ -45,6 +47,11 @@ export type ObserverHostRequest =
 		kind: 'cloud';
 		payload?: ObserverHostCloudPayload;
 	};
+
+export function isLogsMutation(request: ObserverHostRequest): boolean {
+	return request.kind === 'http' && request.method === 'POST'
+		&& (request.path === '/api/splunk/logs' || request.path.startsWith('/api/splunk/logs/'));
+}
 
 export type ObserverHostRequestEnvelope = {
 	request: ObserverHostRequest;
@@ -98,8 +105,9 @@ const allowedGetPaths = new Set([
 	'/api/query/validation/latest',
 	'/api/query/validation/summary',
 	'/api/splunk/export',
+	'/api/splunk/logs',
 ]);
-const allowedPostPaths = new Set(['/api/config', '/api/validation/run']);
+const allowedPostPaths = new Set(['/api/config', '/api/validation/run', '/api/splunk/logs', '/api/splunk/logs/enabled', '/api/splunk/logs/disconnect', '/api/splunk/logs/refresh']);
 
 export function observerHostResponseByteLimit(url: URL): number {
 	return isLoopbackObserverHost(url.hostname)
@@ -253,7 +261,7 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 	switch (action) {
 		case 'connect':
 			return isObserverHostCloudPayload(value)
-				&& hasOnlyCloudPayloadKeys(value, ['sessionOnly', 'accessToken', 'expectedVersion', 'realm'])
+				&& hasOnlyCloudPayloadKeys(value, ['sessionOnly', 'accessToken', 'enabled', 'expectedVersion', 'realm', 'reuseSavedToken', 'preserveEnabled'])
 				&& typeof value.accessToken === 'string'
 				&& typeof value.realm === 'string';
 		case 'resolve-realm':
@@ -344,6 +352,12 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 		case 'open-free-edition':
 		case 'open-free-edition-terms':
 		case 'open-ingest-token-help':
+		case 'open-hec-token-help':
+		case 'open-splunk-platform-trial':
+		case 'open-observability-cloud':
+		case 'open-observability-metrics':
+		case 'open-observability-traces':
+		case 'open-splunk-search':
 		case 'open-realm-help':
 		case 'open-observability-cloud-demo':
 		case 'open-observability-data-course':
@@ -361,6 +375,8 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 		'sessionOnly',
 		'platform',
 		'accessToken',
+		'reuseSavedToken',
+		'preserveEnabled',
 		'adminToken',
 		'clientId',
 		'clientSecret',
@@ -397,6 +413,8 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 		&& (payload.platform === undefined || typeof payload.platform === 'string')
 		&& (payload.sessionOnly === undefined || typeof payload.sessionOnly === 'boolean')
 		&& (payload.enabled === undefined || typeof payload.enabled === 'boolean')
+		&& (payload.reuseSavedToken === undefined || typeof payload.reuseSavedToken === 'boolean')
+		&& (payload.preserveEnabled === undefined || typeof payload.preserveEnabled === 'boolean')
 		&& (payload.expectedVersion === undefined
 			|| (typeof payload.expectedVersion === 'string'
 				&& observerStateVersionPattern.test(payload.expectedVersion)))

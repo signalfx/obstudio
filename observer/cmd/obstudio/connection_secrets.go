@@ -23,6 +23,7 @@ import (
 var errConnectionSettingsPublished = errors.New("settings were published but durability could not be confirmed")
 
 const cloudSecretRef = "cloudTokenRef"
+const logsSecretRef = "logsTokenRef"
 
 type connectionSnapshot struct {
 	revision [32]byte
@@ -345,6 +346,79 @@ func (p *connectionPersistence) checkRevision(kind string, values map[string]str
 	return nil
 }
 
+func (p *connectionPersistence) SaveLogs(config otlp.SplunkHECLogsExporterConfig) error {
+	return p.saveLogs(config, false)
+}
+
+func (p *connectionPersistence) SaveLogsPreferences(config otlp.SplunkHECLogsExporterConfig) error {
+	return p.saveLogs(config, true)
+}
+
+func (p *connectionPersistence) saveLogs(config otlp.SplunkHECLogsExporterConfig, preferencesOnly bool) error {
+	return p.withConnectionLock("logs", func() error {
+		var previous map[string]string
+		if err := p.withCredentialLock(func() error {
+			var err error
+			previous, err = p.values()
+			if err != nil {
+				return err
+			}
+			if err := p.checkRevision("logs", previous, logsConnectionKeys()); err != nil {
+				return err
+			}
+			return p.trackCredential("logs", previous["logsEndpoint"], previous[logsSecretRef], false)
+		}); err != nil {
+			return err
+		}
+		values := logsSettingsValues(config)
+		var ref string
+		if preferencesOnly {
+			if previous[logsSecretRef] == "" || previous["logsEndpoint"] != config.Endpoint {
+				return api.ErrConnectionSettingsChanged
+			}
+			values = map[string]string{"logsEnabled": strconv.FormatBool(config.Enabled)}
+			ref = previous[logsSecretRef]
+		} else if config.Token != "" {
+			var err error
+			ref, err = p.reference("logs", config.Endpoint, config.Token, previous[logsSecretRef])
+			if err != nil {
+				_ = p.cleanupCurrentCredential("logs", logsSecretRef)
+				return err
+			}
+		} else if config.Enabled || config.ConnectionVerified {
+			return errors.New("a connected logs destination requires a HEC token")
+		}
+		values[logsSecretRef] = ref
+		if err := p.publishConnection("logs", logsConnectionKeys(), previous, values); err != nil {
+			if !errors.Is(err, api.ErrConnectionCleanupPending) {
+				_ = p.cleanupCurrentCredential("logs", logsSecretRef)
+			}
+			return err
+		}
+		return p.cleanupCredential("logs", ref)
+	})
+}
+
+func (p *connectionPersistence) HasLogsCredential() bool {
+	values, err := p.values()
+	if err != nil || values[logsSecretRef] != "" {
+		return true
+	}
+	if p.journalPath == "" {
+		return false
+	}
+	entries, err := p.credentialJournal()
+	if err != nil {
+		return true
+	}
+	for _, entry := range entries {
+		if entry.Kind == "logs" {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *connectionPersistence) publishConnection(kind string, keys []string, previous, changes map[string]string) error {
 	return p.withSettingsLock(func() error {
 		current, err := p.values()
@@ -493,14 +567,14 @@ func (p *connectionPersistence) refreshCloud(values map[string]string, metrics s
 	}
 	metricsChanged := metricsConfig != previousMetrics
 	if metricsChanged {
-		if err := metrics.Configure(metricsConfig); err != nil {
+		if err := metrics.ConfigureKeepingActivity(metricsConfig); err != nil {
 			return errors.Join(loadErr, err)
 		}
 	}
 	if tracesConfig != previousTraces {
-		if err := traces.Configure(tracesConfig); err != nil {
+		if err := traces.ConfigureKeepingActivity(tracesConfig); err != nil {
 			if metricsChanged {
-				return errors.Join(loadErr, err, metrics.Configure(previousMetrics))
+				return errors.Join(loadErr, err, metrics.ConfigureKeepingActivity(previousMetrics))
 			}
 			return errors.Join(loadErr, err)
 		}
@@ -684,6 +758,111 @@ func syncConnectionSettingsDirectory(path string) error {
 func (p *connectionPersistence) CloudStorageManaged() bool {
 	values, err := p.values()
 	return err == nil && values["cloudStorageVersion"] == "1"
+}
+
+func (p *connectionPersistence) Restore(metrics *otlp.SplunkMetricsExporterConfig, traces *otlp.SplunkTracesExporterConfig, logs *otlp.SplunkHECLogsExporterConfig) (error, error) {
+	return p.restoreConnections(metrics, traces, logs, true)
+}
+
+func (p *connectionPersistence) restoreConnections(metrics *otlp.SplunkMetricsExporterConfig, traces *otlp.SplunkTracesExporterConfig, logs *otlp.SplunkHECLogsExporterConfig, cleanup bool) (error, error) {
+	cloudDone := make(chan error, 1)
+	go func() { cloudDone <- p.restoreCloud(metrics, traces, cleanup) }()
+	logsErr := p.restoreLogs(logs, nil, cleanup)
+	return <-cloudDone, logsErr
+}
+
+func (p *connectionPersistence) RefreshLogs(controller *otlp.SplunkHECLogsExportController) error {
+	current := controller.Config()
+	restored := current
+	return p.restoreLogs(&restored, func(next otlp.SplunkHECLogsExporterConfig) error {
+		next.Channel = current.Channel
+		if next.Timeout <= 0 {
+			next.Timeout = current.Timeout
+		}
+		if next == current {
+			return nil
+		}
+		var exporter *otlp.SplunkHECLogsExporter
+		var err error
+		if next.Token != "" {
+			exporter, err = otlp.NewSplunkHECLogsExporter(next)
+			if err != nil {
+				next.Token, next.Enabled, next.ConnectionVerified = "", false, false
+			}
+		}
+		controller.ApplyKeepingActivity(next, exporter)
+		return err
+	}, true)
+}
+
+func (p *connectionPersistence) restoreLogs(logs *otlp.SplunkHECLogsExporterConfig, apply func(otlp.SplunkHECLogsExporterConfig) error, cleanup bool) error {
+	reconciled := false
+	previousRevision := p.revision("logs")
+	p.revisions.Store("logs", connectionSnapshot{})
+	restore := func() error {
+		var values map[string]string
+		if err := p.withSettingsLock(func() error {
+			var err error
+			values, err = p.values()
+			return err
+		}); err != nil {
+			return err
+		}
+		if _, err := os.Stat(p.path); err == nil {
+			if err := syncConnectionSettingsDirectory(p.path); err != nil {
+				return err
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		p.rememberRevision("logs", values, logsConnectionKeys())
+		next, err := logsConfigurationFromSettings(values)
+		if err != nil {
+			return err
+		}
+		var credentialErr error
+		if ref := values[logsSecretRef]; ref != "" {
+			next.Token, credentialErr = p.store.Get(p.path, "logs", next.Endpoint, ref)
+		}
+		if credentialErr != nil && apply != nil && logs.Token != "" && previousRevision.ready && previousRevision == p.revision("logs") {
+			reconciled = true
+			return credentials.ErrUnavailable
+		}
+		if credentialErr != nil || next.Token == "" {
+			next.Token, next.Enabled, next.ConnectionVerified = "", false, false
+		}
+		if apply != nil {
+			reconciled = true
+			if err := apply(next); err != nil {
+				return err
+			}
+		}
+		*logs = next
+		if credentialErr != nil {
+			return credentials.ErrUnavailable
+		}
+		if cleanup {
+			return p.cleanupCredential("logs", values[logsSecretRef])
+		}
+		return nil
+	}
+	var err error
+	if cleanup {
+		err = p.withConnectionLock("logs", restore)
+	} else {
+		err = restore()
+	}
+	if err != nil && !errors.Is(err, api.ErrConnectionCleanupPending) && !reconciled {
+		logs.Token, logs.Enabled, logs.ConnectionVerified = "", false, false
+		if apply != nil {
+			return errors.Join(err, apply(*logs))
+		}
+	}
+	return err
+}
+
+func (p *connectionPersistence) LogsCleanupPending() bool {
+	return p.connectionCleanupPending("logs", logsSecretRef)
 }
 
 func (p *connectionPersistence) CloudCleanupPending() bool {

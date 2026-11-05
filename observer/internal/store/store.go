@@ -135,6 +135,7 @@ type MetricDataPoint struct {
 
 // LogRecord represents an OpenTelemetry log record.
 type LogRecord struct {
+	internal          bool
 	ID                string         `json:"id"`
 	Timestamp         time.Time      `json:"timeUnixNano"`
 	ObservedTimestamp *time.Time     `json:"observedTimeUnixNano,omitempty"`
@@ -586,8 +587,17 @@ func (s *Store) AddMetricsForConnection(connID string, metrics []MetricDataPoint
 
 // AddLogsForConnection adds logs with an associated connection ID for later eviction.
 func (s *Store) AddLogsForConnection(connID string, logs []LogRecord) {
+	s.addLogs(connID, logs, true)
+}
+
+// AddInternalLogs retains diagnostic logs without changing the application session clock.
+func (s *Store) AddInternalLogs(logs []LogRecord) {
+	s.addLogs("", logs, false)
+}
+
+func (s *Store) addLogs(connID string, logs []LogRecord, applicationIngest bool) {
 	s.mu.Lock()
-	reset := s.checkSessionReset()
+	reset := applicationIngest && s.checkSessionReset()
 	changedAt := time.Now()
 	if connID != "" {
 		for i := range logs {
@@ -595,12 +605,16 @@ func (s *Store) AddLogsForConnection(connID string, logs []LogRecord) {
 		}
 	}
 	for i := range logs {
+		logs[i].internal = !applicationIngest
 		if logs[i].ID == "" {
 			s.nextLogID++
 			logs[i].ID = "log-" + strconv.FormatUint(s.nextLogID, 10)
 		}
 	}
-	s.logs.push(logs)
+	applicationChanged := applicationIngest
+	for _, evicted := range s.logs.pushWithEvicted(logs) {
+		applicationChanged = applicationChanged || !evicted.internal
+	}
 	providerLogs := make([]LogRecord, 0)
 	providerRepositoryCorrelations := make([]ProviderRepositoryCorrelation, 0)
 	for _, record := range logs {
@@ -631,12 +645,16 @@ func (s *Store) AddLogsForConnection(connID string, logs []LogRecord) {
 			s.providerRepositoryCorrelationUnavailableThrough = evictedAt
 		}
 	}
-	s.lastIngest = changedAt
+	if applicationIngest {
+		s.lastIngest = changedAt
+	}
 	s.mu.Unlock()
 	if reset {
 		s.runInvalidateCallback()
 	}
-	s.runChangeCallback(changedAt)
+	if applicationChanged {
+		s.runChangeCallback(changedAt)
+	}
 	if reset {
 		s.notify(SignalTraces)
 		s.notify(SignalMetrics)
@@ -1522,7 +1540,7 @@ func (s *Store) ServiceStatsAll() []ServiceStats {
 	return result
 }
 
-// SnapshotTelemetry returns a point-in-time copy of all retained telemetry.
+// SnapshotTelemetry returns a point-in-time copy of received application telemetry.
 func (s *Store) SnapshotTelemetry() TelemetrySnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1530,11 +1548,17 @@ func (s *Store) SnapshotTelemetry() TelemetrySnapshot {
 	spans := s.spans.snapshot()
 	metrics := s.metrics.snapshot()
 	logs := s.logs.snapshot()
+	applicationLogs := make([]LogRecord, 0, len(logs))
+	for _, record := range logs {
+		if !record.internal {
+			applicationLogs = append(applicationLogs, record)
+		}
+	}
 
 	return TelemetrySnapshot{
 		Spans:   append([]Span(nil), spans...),
 		Metrics: append([]MetricDataPoint(nil), metrics...),
-		Logs:    append([]LogRecord(nil), logs...),
+		Logs:    applicationLogs,
 	}
 }
 

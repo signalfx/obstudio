@@ -1,4 +1,4 @@
-import { cloudMutationTimeoutMs } from '../../shared/connection-limits.cjs';
+import { cloudMutationTimeoutMs, logsMutationTimeoutMs } from '../../shared/connection-limits.cjs';
 import * as cp from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
@@ -88,6 +88,7 @@ import {
 	skillDocsUrl,
 	ObserverCloudResponseError,
 	splunkCloudConnectionSecretKey,
+	splunkSearchURLFromStatus,
 	waitForO11yOAuthLoginOutcome,
 	type CloudBridgeAction,
 	type RegistrationAndAuthProtocol,
@@ -95,6 +96,7 @@ import {
 } from './cloud-bridge';
 import {
 	collectObserverHostHTTPResponse,
+	isLogsMutation,
 	isObserverHostCancelEnvelope,
 	isObserverHostRequestEnvelope,
 	isObserverHostTelemetryEnvelope,
@@ -761,8 +763,11 @@ export async function activate(context: vscode.ExtensionContext) {
 				if (!isObserverHostRequestEnvelope(message)) { throw new Error('Invalid host request envelope'); }
 				return performObserverHostRequest(context, message.request, new AbortController().signal);
 			}),
-			vscode.commands.registerCommand('observability-studio.internal.cloudActionForTest',(request: { action: CloudBridgeAction; payload?: ObserverHostCloudPayload }) => performCloudBridgeAction(context,request)),
 
+			vscode.commands.registerCommand(
+				'observability-studio.internal.cloudActionForTest',
+				(action: CloudBridgeAction, payload?: ObserverHostCloudPayload) => performCloudBridgeAction(context, { action, payload }),
+			),
 			vscode.commands.registerCommand(
 				'observability-studio.internal.createFreeAccountForTest',
 				() => performCloudBridgeAction(context, {
@@ -2364,7 +2369,7 @@ async function handleObserverWebviewMessage(
 		// Read-only HTTP requests are safe to abort. Cloud mutations deliberately
 		// finish after the panel closes; lifecycle transitions share their queue so
 		// Splunk Observability Studio state and IDE secure storage remain on the same committed version.
-		if (message.request.kind === 'http') {
+		if (message.request.kind === 'http' && !isLogsMutation(message.request)) {
 			controller.abort();
 		}
 	});
@@ -2492,6 +2497,27 @@ async function performCloudBridgeActionExclusive(
 		case 'open-ingest-token-help':
 			await openCloudExternalUrl(splunkIngestTokenHelpUrl);
 			return {};
+		case 'open-splunk-platform-trial':
+			await openCloudExternalUrl('https://www.splunk.com/en_us/download/splunk-cloud.html');
+			return {};
+		case 'open-hec-token-help':
+			await openCloudExternalUrl('https://help.splunk.com/en/data-management/collect-http-event-data/use-hec-in-splunk-enterprise/set-up-and-use-http-event-collector-in-splunk-web');
+			return {};
+		case 'open-observability-cloud':
+		case 'open-observability-metrics':
+		case 'open-observability-traces': {
+			const realm = splunkRealmFromResponse(await getObserverCloudJSON('/api/splunk/export'));
+			const path = request.action === 'open-observability-metrics' ? '#/metric-explorer'
+				: request.action === 'open-observability-traces' ? '#/apm/traces' : '';
+			await openCloudExternalUrl(`https://app.${realm}.observability.splunkcloud.com/${path}`);
+			return {};
+		}
+		case 'open-splunk-search': {
+			const searchURL = splunkSearchURLFromStatus(await getObserverCloudJSON('/api/splunk/logs'));
+			if (!searchURL) { throw new Error('Splunk Web URL is unavailable for this logs destination.'); }
+			await openCloudExternalUrl(searchURL);
+			return {};
+		}
 		case 'open-realm-help':
 			await openCloudExternalUrl(splunkRealmHelpUrl);
 			return {};
@@ -2678,15 +2704,24 @@ async function performCloudBridgeActionExclusive(
 			return { o11yOAuthSession: await currentO11yOAuthSessionStatus() };
 		}
 		case 'connect': {
-			const connection = cloudConnectionFromRequest(request);
+			const reuseSavedToken = request.payload?.reuseSavedToken === true;
+			const requestedRealm = request.payload?.realm?.trim().toLowerCase() ?? '';
+			if (reuseSavedToken && (request.payload?.accessToken !== '' || !/^[a-z]{2,12}[0-9]+$/.test(requestedRealm))) {
+				throw new Error('Enter a valid saved connection realm.');
+			}
+			const connection = reuseSavedToken ? { realm: requestedRealm, accessToken: '' } : cloudConnectionFromRequest(request);
+			const expectedVersion = cloudExpectedVersionFromRequest(request);
 			const current = await getObserverCloudJSON('/api/splunk/export');
 			if (typeof current !== 'object' || current === null
 				|| typeof (current as { storageManaged?: boolean }).storageManaged !== 'boolean') {
 				throw new Error('Update the connected Splunk Observability Studio collector to save connections securely.');
 			}
 			const status = await reconcileCloudMutation('/api/splunk/export', {
-				...connection, expectedVersion: cloudExpectedVersionFromRequest(request),
+				...connection, expectedVersion,
 				...(request.payload?.sessionOnly === true ? { sessionOnly: true } : {}),
+				enabled: request.payload?.enabled ?? true,
+				...(reuseSavedToken ? { reuseSavedToken: true } : {}),
+				...(request.payload?.preserveEnabled ? { preserveEnabled: true } : {}),
 			}, saved => confirmedCloudConnection(saved, current, connection.realm));
 			if (request.payload?.sessionOnly === true && cloudSessionOnly(status) && cloudStatusConnected(status)) { return { status }; }
 			if (!cloudStorageManaged(status)) {
@@ -2903,19 +2938,23 @@ async function requestObserverHostHTTP(
 	status: number;
 	statusText: string;
 }> {
+	const mutation = isLogsMutation({ kind: 'http', method, path: pathname.split('?')[0] });
+	const notSent = (error: Error) => mutation
+		? new ObserverCloudRequestError(error.message, 'request_not_sent', true)
+		: error;
 	if (observerBaseUrl === undefined || observerLifecycleState.status !== 'running') {
-		throw new Error('Splunk Observability Studio is not running.');
+		throw notSent(new Error('Splunk Observability Studio is not running.'));
 	}
 	if (signal.aborted) {
-		throw new Error('Splunk Observability Studio request was cancelled.');
+		throw notSent(new Error('Splunk Observability Studio request was cancelled.'));
 	}
 
 	const url = buildObserverApiUrl(pathname);
 	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error('Splunk Observability Studio requests require HTTP or HTTPS.');
+		throw notSent(new Error('Splunk Observability Studio requests require HTTP or HTTPS.'));
 	}
 	if (!isLoopbackObserverHost(url.hostname)) {
-		throw new Error('Splunk Observability Studio requests require a loopback service.');
+		throw notSent(new Error('Splunk Observability Studio requests require a loopback service.'));
 	}
 
 	const payload = body === undefined ? undefined : Buffer.from(body, 'utf8');
@@ -2928,6 +2967,8 @@ async function requestObserverHostHTTP(
 	const transport = url.protocol === 'https:' ? https : http;
 	return new Promise((resolve, reject) => {
 		let settled = false;
+		let sent = false;
+		let timedOut = false;
 		const finish = (callback: () => void) => {
 			if (settled) {
 				return;
@@ -2936,6 +2977,13 @@ async function requestObserverHostHTTP(
 			signal.removeEventListener('abort', onAbort);
 			callback();
 		};
+		const fail = (error: Error) => finish(() => {
+			if (mutation && (sent || timedOut)) {
+				reject(new ObserverCloudRequestError('The logs request outcome is unknown. Reload saved logs settings before trying again.', 'outcome_unknown', false));
+			} else {
+				reject(notSent(error));
+			}
+		});
 		const request = transport.request(url, { headers, method }, (response) => {
 			void collectObserverHostHTTPResponse(response, request, responseByteLimit).then(
 				(result) => finish(() => {
@@ -2945,15 +2993,17 @@ async function requestObserverHostHTTP(
 					}
 					resolve(result);
 				}),
-				(error: Error) => finish(() => reject(error)),
+				fail,
 			);
 		});
 		const onAbort = () => request.destroy(new Error('Splunk Observability Studio request was cancelled.'));
 		signal.addEventListener('abort', onAbort, { once: true });
-		request.setTimeout(15_000, () => {
+		request.once('finish', () => { sent = true; });
+		request.setTimeout(mutation ? logsMutationTimeoutMs : 15_000, () => {
+			timedOut = true;
 			request.destroy(new Error('Splunk Observability Studio request timed out.'));
 		});
-		request.once('error', (error) => finish(() => reject(error)));
+		request.once('error', fail);
 		request.end(payload);
 	});
 }

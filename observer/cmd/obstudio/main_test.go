@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -97,6 +98,88 @@ func TestRunServesConfigManagerAndSecureCloudConnection(t *testing.T) {
 	}
 	if err := settings.RestoreCloud(&metrics, &traces); err != nil || metrics.AccessToken != "" || traces.AccessToken != "" {
 		t.Fatalf("Cloud connection was not removed: %v", err)
+	}
+}
+
+func TestStartupServesLocalTelemetryWhenBothCredentialReadsBlock(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	backend := &testCredentialBackend{values: map[string]string{}}
+	settings := newTestConnectionPersistence(t, filepath.Join(home, "connections.json"), credentials.NewWithBackend(backend))
+	if err := settings.SaveCloud(otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: "cloud-token", Enabled: true}, otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: "cloud-token", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SaveLogs(otlp.SplunkHECLogsExporterConfig{Endpoint: "https://logs.example/services/collector", Token: "logs-token", Index: "studio", Enabled: true, ConnectionVerified: true}); err != nil {
+		t.Fatal(err)
+	}
+	release := make(chan struct{})
+	backend.readBlock = release
+	otlpPort := strconv.Itoa(pickSmokePort(t))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousListen := listenObserverHTTP
+	listenObserverHTTP = func(_, _ string) (net.Listener, error) { return listener, nil }
+	done := make(chan error, 1)
+	t.Cleanup(func() {
+		close(release)
+		_ = listener.Close()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Error("collector did not stop")
+		}
+		listenObserverHTTP = previousListen
+	})
+	go func() {
+		done <- run(runConfig{host: "127.0.0.1", observerHTTPPort: "0", otlpGRPCHost: "127.0.0.1", otlpGRPCPort: "0", otlpHTTPPort: otlpPort, connectionSettings: settings})
+	}()
+	base := "http://" + listener.Addr().String()
+	client := &http.Client{Timeout: 200 * time.Millisecond}
+	deadline := time.Now().Add(7 * time.Second)
+	for {
+		response, err := client.Get(base + "/api/health")
+		if err == nil {
+			_ = response.Body.Close()
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("health status = %d", response.StatusCode)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("blocked credential reads delayed the local listener: %v", err)
+		}
+	}
+	for _, path := range []string{"/api/splunk/export", "/api/splunk/logs"} {
+		response, err := client.Get(base + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var status struct{ Connected, Enabled bool }
+		decodeErr := json.NewDecoder(response.Body).Decode(&status)
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusOK || decodeErr != nil || status.Connected || status.Enabled {
+			t.Fatalf("unavailable connection at %s was not paused: %+v, %v", path, status, decodeErr)
+		}
+	}
+	response, err := client.Post("http://127.0.0.1:"+otlpPort+"/v1/logs", "application/json", strings.NewReader(`{"resourceLogs":[{"scopeLogs":[{"logRecords":[{"body":{"stringValue":"local ingestion while both credentials are blocked"}}]}]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("local logs status = %d", response.StatusCode)
+	}
+	response, err = client.Get(base + "/api/query/stats")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var stats struct{ LogCount int }
+	if err := json.NewDecoder(response.Body).Decode(&stats); err != nil || response.StatusCode != http.StatusOK || stats.LogCount != 1 {
+		t.Fatalf("local logs were not retained: %+v, %v", stats, err)
 	}
 }
 
@@ -193,7 +276,7 @@ func (c *recordingMetricsExportConfigurator) Config() otlp.SplunkMetricsExporter
 	return c.config
 }
 
-func (c *recordingMetricsExportConfigurator) Configure(config otlp.SplunkMetricsExporterConfig) error {
+func (c *recordingMetricsExportConfigurator) ConfigureKeepingActivity(config otlp.SplunkMetricsExporterConfig) error {
 	c.configureCalls++
 	c.config = config
 	return nil
@@ -208,7 +291,7 @@ func (c *recordingTracesExportConfigurator) Config() otlp.SplunkTracesExporterCo
 	return c.config
 }
 
-func (c *recordingTracesExportConfigurator) Configure(config otlp.SplunkTracesExporterConfig) error {
+func (c *recordingTracesExportConfigurator) ConfigureKeepingActivity(config otlp.SplunkTracesExporterConfig) error {
 	c.configureCalls++
 	c.config = config
 	return nil
