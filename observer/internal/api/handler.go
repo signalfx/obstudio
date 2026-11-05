@@ -186,7 +186,11 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	}
 	registerSISCIMDLoginRoutes(mux)
 	registerO11yOAuthRoutes(mux)
-	registerO11yOAuthLoginRoutes(mux)
+	var o11yTokenApplier o11yOAuthTokenApplier
+	if splunkExport != nil {
+		o11yTokenApplier = splunkExport
+	}
+	registerO11yOAuthLoginRoutes(mux, o11yTokenApplier)
 }
 
 func queryTraces(s *store.Store) http.HandlerFunc {

@@ -162,6 +162,22 @@ the one-time release download from GitHub described below.
   store. The child does not
   inherit unrelated variables such as `ANTHROPIC_*`, `AWS_*`, `OPENAI_*`, or
   `GITHUB_TOKEN`.
+- Observability Cloud access tokens. By default, the user pastes an
+  organization access token into Cloud, and Studio keeps it in the OS
+  credential store. When `OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL=O11Y_OAUTH`
+  is set, the user can sign in with O11y OAuth instead. Studio exchanges the
+  authorization code (PKCE, plus the registered client ID and secret) for an
+  O11y access token, and that token replaces the pasted one for metrics and
+  traces export. It is held only in the Studio process's memory, is never
+  written to disk or the credential store, is never returned to the browser,
+  and is lost on restart. Disconnecting the sign-in stops export from using
+  it (export is off until the user signs in again or pastes a token); a token
+  saved before sign-in is not restored until restart. The intermediate SIS token is
+  discarded immediately. With the flag off, only the pasted token is used.
+  Both tokens are sent only to the user's Splunk Observability Cloud realm.
+  The OAuth client ID and secret can be saved in `~/.obstudio/config.yaml` when
+  the off-by-default Config Manager is on; the secret is stored in plain text
+  in that user-private file. With the Config Manager off, nothing is saved.
 - `resolve_ao_resources.py` reads `SPLUNK_AO_PROJECT`, `SPLUNK_AO_PROJECT_ID`,
   `SPLUNK_AO_AGENT_STREAM`, and `SPLUNK_AO_AGENT_STREAM_ID` (resource names, not
   secrets). The `splunk_ao` SDK reads its own `SPLUNK_AO_*` settings and sends

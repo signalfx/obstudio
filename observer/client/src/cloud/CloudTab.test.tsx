@@ -100,6 +100,8 @@ describe("CloudTab", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Register OAuth client with CIMD" }));
       bridge.respond(await bridge.next("setup-cimd"), { cimdRegistrationVerified: true });
     }
+    // MCP client registration lives in a drawer that is closed until the user opens it.
+    if (protocol === "O11Y_OAUTH") fireEvent.click(await screen.findByRole("button", { name: "Show client registration" }));
     await screen.findByRole("button", { name: button });
     if (protocol === "O11Y_OAUTH") {
       fireEvent.change(screen.getByLabelText("Realm"), { target: { value: "us1" } });
@@ -303,7 +305,7 @@ describe("CloudTab", () => {
     await userEvent.setup().keyboard("{Enter}");
     await waitFor(() => expect(screen.queryByRole("button", { name: "Retry credential cleanup" })).toBeNull());
     const target = protocol === "CIMD" ? screen.getByRole("button", {name: "Register OAuth client with CIMD"})
-      : screen.getByRole("textbox", {name: protocol === "O11Y_OAUTH" ? "Realm" : "Realm or Observability Cloud URL"});
+      : screen.getByRole("textbox", {name: protocol === "O11Y_OAUTH" ? "Sign-in realm" : "Realm or Observability Cloud URL"});
     await waitFor(() => expect(document.activeElement).toBe(target));
   });
 
@@ -3220,6 +3222,7 @@ describe("CloudTab", () => {
     })));
 
     render(<CloudTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Show client registration" }));
     const registerButton = await screen.findByRole("button", { name: "Register MCP client" });
 
     fireEvent.click(registerButton);
@@ -3247,6 +3250,7 @@ describe("CloudTab", () => {
 
     render(<CloudTab />);
     fireEvent.change(await screen.findByLabelText("Realm"), { target: { value: "us0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show client registration" }));
     fireEvent.change(screen.getByLabelText("Admin X-SF-TOKEN"), { target: { value: "admin-token" } });
     fireEvent.click(screen.getByRole("button", { name: "Register MCP client" }));
 
@@ -3275,6 +3279,7 @@ describe("CloudTab", () => {
     bridge.respond(initialize, { registrationAndAuthProtocol: "O11Y_OAUTH", status: disconnectedStatus() });
 
     fireEvent.change(await screen.findByLabelText("Realm"), { target: { value: "us0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show client registration" }));
     fireEvent.change(screen.getByLabelText("Admin X-SF-TOKEN"), { target: { value: "admin-token" } });
     fireEvent.click(screen.getByRole("button", { name: "Register MCP client" }));
 
@@ -3286,6 +3291,371 @@ describe("CloudTab", () => {
     const clientIdField = await screen.findByLabelText("Client ID") as HTMLInputElement;
     expect(clientIdField.value).toBe("*".repeat("existing-client-id".length));
     expect(screen.queryByLabelText("Client secret")).toBeNull();
+  });
+
+  it("keeps MCP client registration in a closed drawer, with an admins-only note, until it is opened", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      ...disconnectedStatus(),
+      registrationAndAuthProtocol: "O11Y_OAUTH",
+    })));
+
+    render(<CloudTab />);
+
+    const toggle = await screen.findByRole("button", { name: "Show client registration" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    const drawer = document.getElementById(toggle.getAttribute("aria-controls") ?? "");
+    expect(drawer).toBeTruthy();
+    expect(drawer?.hasAttribute("hidden")).toBe(true);
+    // The warning is visible before the drawer is opened.
+    expect(screen.getByText("Only organization admins should do this.")).toBeTruthy();
+    expect(drawer?.contains(screen.getByText("Only organization admins should do this."))).toBe(false);
+    // Nothing from inside the drawer is reachable while it is closed.
+    expect(screen.queryByRole("button", { name: "Register MCP client" })).toBeNull();
+    // (Label queries ignore `hidden`, so check the field sits inside the hidden drawer.)
+    expect(screen.getByLabelText("Admin X-SF-TOKEN").closest("[hidden]")).toBe(drawer);
+
+    fireEvent.click(toggle);
+    expect(toggle.textContent).toBe("Hide client registration");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(drawer?.hasAttribute("hidden")).toBe(false);
+    expect(screen.getByRole("button", { name: "Register MCP client" })).toBeTruthy();
+    // Opening the drawer puts focus on the first field still to fill in: the realm,
+    // which is empty here.
+    expect(document.activeElement).toBe(screen.getByLabelText("Realm"));
+
+    fireEvent.click(toggle);
+    expect(toggle.textContent).toBe("Show client registration");
+    expect(drawer?.hasAttribute("hidden")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Register MCP client" })).toBeNull();
+  });
+
+  it("shows the same realm in the registration drawer and the sign-in form, and keeps their errors separate", async () => {
+    stubSavedO11yOAuthConfig(savedConfigBody({ clientId: "", clientSecret: "", orgId: "", realm: "us0" }));
+
+    render(<CloudTab />);
+    const loginRealm = await screen.findByRole("textbox", { name: "Sign-in realm" }) as HTMLInputElement;
+    const registrationRealm = screen.getByLabelText("Realm") as HTMLInputElement;
+    await waitFor(() => expect(loginRealm.value).toBe("us0"));
+    expect(registrationRealm.value).toBe("us0");
+
+    // One value, two inputs: editing either updates both.
+    fireEvent.change(registrationRealm, { target: { value: "eu0" } });
+    expect(loginRealm.value).toBe("eu0");
+    fireEvent.change(loginRealm, { target: { value: "lab0" } });
+    expect(registrationRealm.value).toBe("lab0");
+
+    // A missing realm flags only the field of the form the user submitted.
+    fireEvent.change(loginRealm, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show client registration" }));
+    fireEvent.change(screen.getByLabelText("Admin X-SF-TOKEN"), { target: { value: "admin-token" } });
+    fireEvent.click(screen.getByRole("button", { name: "Register MCP client" }));
+    await screen.findByRole("alert");
+    expect(registrationRealm.getAttribute("aria-invalid")).toBe("true");
+    expect(loginRealm.getAttribute("aria-invalid")).toBe("false");
+    expect(document.activeElement).toBe(registrationRealm);
+  });
+
+  it("opens the registration drawer on the admin token when the realm is already filled", async () => {
+    stubSavedO11yOAuthConfig(savedConfigBody({ clientId: "", clientSecret: "", orgId: "", realm: "us0" }));
+
+    render(<CloudTab />);
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "Sign-in realm" }) as HTMLInputElement).value).toBe("us0"));
+    fireEvent.click(screen.getByRole("button", { name: "Show client registration" }));
+    expect(document.activeElement).toBe(screen.getByLabelText("Admin X-SF-TOKEN"));
+  });
+
+  it("keeps the drawer open after registering so the one-time client secret can be copied", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/splunk/o11y-oauth/register") && init?.method === "POST") {
+        return jsonResponse({ clientId: "new-client-id", clientSecret: "the-one-time-secret", created: true });
+      }
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "O11Y_OAUTH" });
+    }));
+
+    render(<CloudTab />);
+    fireEvent.change(await screen.findByLabelText("Realm"), { target: { value: "us0" } });
+    const toggle = screen.getByRole("button", { name: "Show client registration" });
+    fireEvent.click(toggle);
+    fireEvent.change(screen.getByLabelText("Admin X-SF-TOKEN"), { target: { value: "admin-token" } });
+    fireEvent.click(screen.getByRole("button", { name: "Register MCP client" }));
+
+    expect(await screen.findByLabelText("Client secret")).toBeTruthy();
+    expect(screen.getByText("Registration verified")).toBeTruthy();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  // A fake Splunk Observability Studio backend for the O11y OAuth form: the Config Manager
+  // (GET/POST /api/config, or off when `saved` is null), plus sign-in and session endpoints.
+  function installO11yOAuthBackend(options: {
+    saved: Record<string, string> | null;
+    login?: () => Response;
+    postConfig?: (body: Record<string, Record<string, string>>) => Response | undefined;
+    session?: () => Record<string, unknown>;
+    register?: () => Response;
+  }) {
+    const saved = { clientId: "", clientSecret: "", orgId: "", realm: "", ...options.saved };
+    const posts: Array<{ body: Record<string, Record<string, string>>; headers: Headers }> = [];
+    const calls = { login: 0, disconnect: 0 };
+    vi.stubGlobal("open", vi.fn(() => fakePopup()));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/config")) {
+        if (options.saved === null) return new Response("not found", { status: 404 });
+        if (init?.method === "POST") {
+          const body = JSON.parse(String(init.body)) as Record<string, Record<string, string>>;
+          posts.push({ body, headers: new Headers(init.headers) });
+          const override = options.postConfig?.(body);
+          if (override) return override;
+          Object.assign(saved, body.o11yOAuth);
+        }
+        return jsonResponse({ o11yOAuth: { ...saved }, telemetry: { enabled: true } });
+      }
+      if (url.includes("/api/splunk/o11y-oauth/register") && init?.method === "POST" && options.register) {
+        return options.register();
+      }
+      if (url.includes("/api/splunk/o11y-oauth/login") && init?.method === "POST") {
+        calls.login += 1;
+        return options.login?.() ?? jsonResponse({ authorizationUrl: "https://api.us0.signalfx.com/authorize?state=abc" });
+      }
+      if (url.includes("/api/splunk/o11y-oauth/session/disconnect")) {
+        calls.disconnect += 1;
+        return jsonResponse({ phase: "disconnected" });
+      }
+      if (url.includes("/api/splunk/o11y-oauth/session")) return jsonResponse(options.session?.() ?? { phase: "disconnected" });
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "O11Y_OAUTH" });
+    }));
+    return { calls, posts };
+  }
+
+  it.each([
+    ["a fresh registration", { clientId: "new-client-id", clientSecret: "the-one-time-secret", created: true }, "the-one-time-secret"],
+    ["a reused client, which returns no secret", { clientId: "new-client-id", created: false }, "old-secret"],
+  ])("carries %s into the sign-in details and the Config Manager", async (_name, registered, expectedSecret) => {
+    const backend = installO11yOAuthBackend({
+      saved: { clientId: "", clientSecret: expectedSecret === "old-secret" ? "old-secret" : "", orgId: "", realm: "us0" },
+      register: () => jsonResponse(registered),
+    });
+
+    render(<CloudTab />);
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "Sign-in realm" }) as HTMLInputElement).value).toBe("us0"));
+    fireEvent.click(screen.getByRole("button", { name: "Show client registration" }));
+    fireEvent.change(screen.getByLabelText("Admin X-SF-TOKEN"), { target: { value: "admin-token" } });
+    fireEvent.click(screen.getByRole("button", { name: "Register MCP client" }));
+
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "Sign-in client ID" }) as HTMLInputElement).value).toBe("new-client-id"));
+    await waitFor(() => {
+      const written = Object.assign({}, ...backend.posts.map((post) => post.body.o11yOAuth));
+      expect(written.clientId).toBe("new-client-id");
+      if (expectedSecret === "old-secret") expect("clientSecret" in written).toBe(false);
+      else expect(written.clientSecret).toBe(expectedSecret);
+    }, { timeout: 2000 });
+  });
+
+  const completeSavedSignIn = { clientId: "saved-client-id", clientSecret: "saved-secret", orgId: "saved-org", realm: "us0" };
+  const signInToggle = () => screen.findByRole("button", { name: /sign-in details$/ });
+  // The sign-in form renders before the saved values arrive; wait until they have filled it in.
+  const readyAuthenticate = async () => {
+    const button = await screen.findByRole("button", { name: "Authenticate" }) as HTMLButtonElement;
+    await waitFor(() => expect(button.disabled).toBe(false));
+    return button;
+  };
+  const settle = (ms = 700) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it("collapses the sign-in details behind Authenticate when everything is saved", async () => {
+    const backend = installO11yOAuthBackend({ saved: completeSavedSignIn });
+
+    render(<CloudTab />);
+
+    const authenticate = await readyAuthenticate();
+    const toggle = await signInToggle();
+    expect(toggle.textContent).toBe("Edit sign-in details");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    const drawer = document.getElementById("cloud-o11y-oauth-signin-drawer");
+    expect(drawer?.hasAttribute("hidden")).toBe(true);
+    expect(screen.queryByRole("textbox", { name: "Org ID" })).toBeNull();
+    // The fields are still filled in behind the closed drawer, so Authenticate is one click.
+    expect((screen.getByLabelText("Org ID") as HTMLInputElement).value).toBe("saved-org");
+    expect(authenticate.disabled).toBe(false);
+
+    fireEvent.click(toggle);
+    expect(toggle.textContent).toBe("Hide sign-in details");
+    expect(drawer?.hasAttribute("hidden")).toBe(false);
+    expect(screen.getByRole("textbox", { name: "Org ID" })).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(drawer?.hasAttribute("hidden")).toBe(true);
+
+    await settle();
+    expect(backend.posts).toHaveLength(0); // pre-filling and toggling are not edits
+  });
+
+  it.each([
+    ["only some of the details are saved", { orgId: "saved-org", realm: "us0" }, true],
+    ["nothing is saved", {}, true],
+    ["the saved realm is not a valid realm", { ...completeSavedSignIn, realm: "NOT A REALM" }, false],
+    ["a saved detail is blank", { ...completeSavedSignIn, clientSecret: "   " }, true],
+  ] as const)("opens the sign-in details so they can be filled in when %s", async (_name, saved, authenticateDisabled) => {
+    installO11yOAuthBackend({ saved });
+
+    render(<CloudTab />);
+
+    const toggle = await signInToggle();
+    await waitFor(() => expect(toggle.getAttribute("aria-expanded")).toBe("true"));
+    expect(screen.getByRole("textbox", { name: "Sign-in client ID" })).toBeTruthy();
+    // A blank detail keeps Authenticate off; an invalid realm is left for the server to reject.
+    expect((screen.getByRole("button", { name: "Authenticate" }) as HTMLButtonElement).disabled).toBe(authenticateDisabled);
+  });
+
+  it("opens the sign-in details, empty, when the Config Manager is off", async () => {
+    const backend = installO11yOAuthBackend({ saved: null });
+
+    render(<CloudTab />);
+
+    const toggle = await signInToggle();
+    await waitFor(() => expect(toggle.getAttribute("aria-expanded")).toBe("true"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Org ID" }), { target: { value: "typed-org" } });
+    await settle();
+    expect(backend.posts).toHaveLength(0);
+    expect(screen.queryByText(/could not be saved/)).toBeNull();
+  });
+
+  it("does not close the sign-in details while the user is filling them in", async () => {
+    installO11yOAuthBackend({ saved: {} });
+
+    render(<CloudTab />);
+    const toggle = await signInToggle();
+    await waitFor(() => expect(toggle.getAttribute("aria-expanded")).toBe("true"));
+
+    fireEvent.change(screen.getByLabelText("Sign-in realm"), { target: { value: "us0" } });
+    fireEvent.change(screen.getByLabelText("Org ID"), { target: { value: "org-1" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client ID"), { target: { value: "client-1" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client secret"), { target: { value: "secret-1" } });
+
+    expect((screen.getByRole("button", { name: "Authenticate" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("opens the sign-in details when starting the sign-in fails", async () => {
+    installO11yOAuthBackend({
+      saved: completeSavedSignIn,
+      login: () => jsonResponse({ error: "could not reach the O11y OAuth server" }, 502),
+    });
+
+    render(<CloudTab />);
+    const authenticate = await readyAuthenticate();
+    const toggle = await signInToggle();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(authenticate);
+
+    expect((await screen.findByRole("alert")).textContent).toContain("could not reach the O11y OAuth server");
+    await waitFor(() => expect(toggle.getAttribute("aria-expanded")).toBe("true"));
+    // The details are kept as they were, ready to correct.
+    expect((screen.getByLabelText("Sign-in client secret") as HTMLInputElement).value).toBe("saved-secret");
+  });
+
+  it("opens the sign-in details when the sign-in ends in an error, but not when it is cancelled", async () => {
+    for (const [outcome, expectOpen] of [[{ error: "access_denied", phase: "error" }, true], [{ phase: "disconnected" }, false]] as const) {
+      cleanup();
+      let polls = 0;
+      installO11yOAuthBackend({
+        saved: completeSavedSignIn,
+        session: () => (polls++ === 0 ? { phase: "disconnected" } : polls === 2 ? { phase: "pending" } : outcome),
+      });
+      render(<CloudTab />);
+      const authenticate = await readyAuthenticate();
+      const toggle = await signInToggle();
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+      fireEvent.click(authenticate);
+
+      await waitFor(
+        () => expect((screen.getByRole("button", { name: /Authenticat/ }) as HTMLButtonElement).textContent).toBe("Authenticate"),
+        { timeout: 6_000 },
+      );
+      expect(toggle.getAttribute("aria-expanded")).toBe(expectOpen ? "true" : "false");
+    }
+  }, 20_000);
+
+  it("shows the sign-in details closed again after Disconnect when everything is saved", async () => {
+    installO11yOAuthBackend({ saved: completeSavedSignIn, session: () => ({ orgId: "saved-org", phase: "connected", realm: "us0" }) });
+
+    render(<CloudTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
+
+    const toggle = await signInToggle();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    await waitFor(() => expect((screen.getByRole("button", { name: "Authenticate" }) as HTMLButtonElement).disabled).toBe(false));
+    expect((screen.getByLabelText("Sign-in client secret") as HTMLInputElement).value).toBe("saved-secret");
+  });
+
+  it("writes edits to the sign-in details back to the Config Manager, debounced, trimmed, in one request", async () => {
+    const backend = installO11yOAuthBackend({ saved: {} });
+
+    render(<CloudTab />);
+    const toggle = await signInToggle();
+    await waitFor(() => expect(toggle.getAttribute("aria-expanded")).toBe("true"));
+    await waitFor(() => expect(backend.posts).toHaveLength(0));
+
+    fireEvent.change(screen.getByLabelText("Sign-in realm"), { target: { value: "u" } });
+    fireEvent.change(screen.getByLabelText("Sign-in realm"), { target: { value: " us0 " } });
+    fireEvent.change(screen.getByLabelText("Org ID"), { target: { value: "org-1" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client ID"), { target: { value: "client-1" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client secret"), { target: { value: "secret-1" } });
+    expect(backend.posts).toHaveLength(0); // still inside the debounce window
+
+    await waitFor(() => expect(backend.posts).toHaveLength(1), { timeout: 3_000 });
+    expect(backend.posts[0].body).toEqual({
+      o11yOAuth: { clientId: "client-1", clientSecret: "secret-1", orgId: "org-1", realm: "us0" },
+    });
+    expect(backend.posts[0].headers.get("X-Obstudio-Browser-Request")).toBe("1");
+
+    // Clearing a field clears the saved value.
+    fireEvent.change(screen.getByLabelText("Sign-in client secret"), { target: { value: "" } });
+    await waitFor(() => expect(backend.posts).toHaveLength(2), { timeout: 3_000 });
+    expect(backend.posts[1].body).toEqual({ o11yOAuth: { clientSecret: "" } });
+  });
+
+  it("writes the realm back from the registration drawer too, since it is the same setting", async () => {
+    const backend = installO11yOAuthBackend({ saved: {} });
+
+    render(<CloudTab />);
+    await signInToggle();
+    fireEvent.click(screen.getByRole("button", { name: "Show client registration" }));
+    fireEvent.change(screen.getByLabelText("Realm"), { target: { value: "eu0" } });
+
+    await waitFor(() => expect(backend.posts).toHaveLength(1), { timeout: 3_000 });
+    expect(backend.posts[0].body).toEqual({ o11yOAuth: { realm: "eu0" } });
+    expect((screen.getByLabelText("Sign-in realm") as HTMLInputElement).value).toBe("eu0");
+  });
+
+  it("does not send a realm the Config Manager would reject, and still saves the other edits", async () => {
+    const backend = installO11yOAuthBackend({ saved: {} });
+
+    render(<CloudTab />);
+    await waitFor(async () => expect((await signInToggle()).getAttribute("aria-expanded")).toBe("true"));
+
+    fireEvent.change(screen.getByLabelText("Sign-in realm"), { target: { value: "US0.example.com" } });
+    fireEvent.change(screen.getByLabelText("Org ID"), { target: { value: "org-1" } });
+
+    expect(screen.getAllByText("A realm uses only lowercase letters, digits and hyphens, so this was not saved.").length).toBeGreaterThan(0);
+    await waitFor(() => expect(backend.posts).toHaveLength(1), { timeout: 3_000 });
+    expect(backend.posts[0].body).toEqual({ o11yOAuth: { orgId: "org-1" } });
+  });
+
+  it("shows the Config Manager's reason under a sign-in field when saving it fails", async () => {
+    installO11yOAuthBackend({
+      saved: {},
+      postConfig: () => jsonResponse({ error: "o11yOAuth.orgId: is not valid" }, 400),
+    });
+
+    render(<CloudTab />);
+    await waitFor(async () => expect((await signInToggle()).getAttribute("aria-expanded")).toBe("true"));
+
+    fireEvent.change(screen.getByLabelText("Org ID"), { target: { value: "org-1" } });
+
+    expect(await screen.findByText("o11yOAuth.orgId: is not valid", {}, { timeout: 3_000 })).toBeTruthy();
+    // The typed value stays in the form for the user to correct.
+    expect((screen.getByLabelText("Org ID") as HTMLInputElement).value).toBe("org-1");
   });
 
   it("keeps the Authenticate button disabled until realm, org ID, client ID, and client secret are all filled", async () => {
@@ -3588,6 +3958,89 @@ describe("CloudTab", () => {
     });
     expect(await screen.findByText("Signed in with O11y OAuth. Cloud export is still disconnected.")).toBeTruthy();
     expect(await screen.findByRole("button", { name: "Disconnect" })).toBeTruthy();
+  });
+
+  function stubSavedO11yOAuthConfig(config: Response | Promise<Response>) {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/config")) return config instanceof Promise ? config : config.clone();
+      if (url.includes("/api/splunk/o11y-oauth/session")) return jsonResponse({ phase: "disconnected" });
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "O11Y_OAUTH" });
+    }));
+  }
+
+  const savedConfigBody = (o11yOAuth: Record<string, string>) =>
+    jsonResponse({ o11yOAuth, telemetry: { enabled: true } });
+
+  it("pre-fills the sign-in form from saved config values so Authenticate is one click", async () => {
+    stubSavedO11yOAuthConfig(savedConfigBody({
+      clientId: "saved-client-id",
+      clientSecret: "saved-secret",
+      orgId: "saved-org",
+      realm: "us0",
+    }));
+
+    render(<CloudTab />);
+
+    await waitFor(() => expect((screen.getByLabelText("Realm") as HTMLInputElement).value).toBe("us0"));
+    expect((screen.getByLabelText("Org ID") as HTMLInputElement).value).toBe("saved-org");
+    expect((screen.getByLabelText("Sign-in client ID") as HTMLInputElement).value).toBe("saved-client-id");
+    expect((screen.getByLabelText("Sign-in client secret") as HTMLInputElement).value).toBe("saved-secret");
+    expect((screen.getByRole("button", { name: "Authenticate" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("pre-fills only the saved fields and leaves the rest for the user", async () => {
+    // Unsaved values come back from the Config Manager as empty strings.
+    stubSavedO11yOAuthConfig(savedConfigBody({ clientId: "", clientSecret: "", orgId: "saved-org", realm: "us0" }));
+
+    render(<CloudTab />);
+
+    await waitFor(() => expect((screen.getByLabelText("Realm") as HTMLInputElement).value).toBe("us0"));
+    expect((screen.getByLabelText("Org ID") as HTMLInputElement).value).toBe("saved-org");
+    expect((screen.getByLabelText("Sign-in client ID") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("Sign-in client secret") as HTMLInputElement).value).toBe("");
+    expect((screen.getByRole("button", { name: "Authenticate" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Sign-in client ID"), { target: { value: "typed-id" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client secret"), { target: { value: "typed-secret" } });
+    expect((screen.getByRole("button", { name: "Authenticate" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("leaves the form blank for manual entry when the Config Manager is off or has nothing saved", async () => {
+    for (const config of [
+      new Response("not found", { status: 404 }),
+      savedConfigBody({ clientId: "", clientSecret: "", orgId: "", realm: "" }),
+      jsonResponse({ telemetry: { enabled: true } }),
+      new Response("not json", { status: 200 }),
+    ]) {
+      cleanup();
+      stubSavedO11yOAuthConfig(config);
+      render(<CloudTab />);
+      const realm = await screen.findByLabelText("Realm") as HTMLInputElement;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(realm.value).toBe("");
+      expect((screen.getByLabelText("Org ID") as HTMLInputElement).value).toBe("");
+      expect((screen.getByLabelText("Sign-in client ID") as HTMLInputElement).value).toBe("");
+      expect((screen.getByLabelText("Sign-in client secret") as HTMLInputElement).value).toBe("");
+      fireEvent.change(realm, { target: { value: "lab0" } });
+      expect(realm.value).toBe("lab0");
+    }
+  });
+
+  it("does not overwrite what the user typed while the saved values were loading", async () => {
+    let release!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => { release = resolve; });
+    stubSavedO11yOAuthConfig(pending);
+
+    render(<CloudTab />);
+    const realm = await screen.findByLabelText("Realm") as HTMLInputElement;
+    fireEvent.change(realm, { target: { value: "typed-realm" } });
+
+    release(savedConfigBody({ clientId: "saved-client-id", clientSecret: "", orgId: "saved-org", realm: "us0" }));
+
+    await waitFor(() => expect((screen.getByLabelText("Org ID") as HTMLInputElement).value).toBe("saved-org"));
+    expect(realm.value).toBe("typed-realm");
+    expect((screen.getByLabelText("Sign-in client ID") as HTMLInputElement).value).toBe("saved-client-id");
   });
 
   it("keeps cloud controls available on a fresh install with current Splunk Observability Studio status", async () => {
