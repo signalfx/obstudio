@@ -1,8 +1,8 @@
 {
   "evidence_basis": "Executed Python normalizers and Node VM renderCards with a stub card renderer; no browser, application, SDK, Terraform or cloud execution.",
   "producer": {
-    "engine_sha256": "c1653e43458d260cecfe30d87db28d3aa800ad5a06c169b0009c46d86c6915e4",
-    "script_sha256": "88846bdf7159175d411b8dd627bee79fd1e5e9e1d5a8431644199fcbb8825c0a",
+    "engine_sha256": "4ee2b08fcb823d932242821665e15341cffddaeadd3606ba62475d5c8cec6b9a",
+    "script_sha256": "427f6c9ca92efb17555ef16595bca62f7b9a8548def8d443f0d6943341b53432",
     "functions": [
       "normalize_audit_report",
       "normalize_selection",

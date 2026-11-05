@@ -233,8 +233,8 @@ Set the judge model with:
 
 ```toml
 [models]
-agent = "gpt-6-luna"
-judge = "gpt-6-luna"
+agent = "gpt-6.1-sol"
+judge = "gpt-6.1-sol"
 
 [runtime]
 enabled = false

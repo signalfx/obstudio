@@ -7,9 +7,9 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-audit |
-| Run ID | 20261030T045027111200Z |
-| Agent model | gpt-6-luna |
-| Judge model | gpt-6-luna |
+| Run ID | 20261103T213955588520Z |
+| Agent model | gpt-6.1-sol |
+| Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
 | Workers | 1 |
 | Config | evals/codex-evals.toml |
@@ -18,22 +18,22 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/ao-name-inputs-audit | python/ai-assistant-demo | 1 | 100% (7/7), avg score 100 | 776.1K | 4.8m | - | - | - |
-| with_skill | python/ai-assistant-demo/qual/finding-group-audit | python/ai-assistant-demo | 1 | 100% (7/7), avg score 100 | 531.8K | 4.5m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/ao-name-inputs-audit | python/ai-assistant-demo | 1 | 100% (6/6), avg score 100 | 1.4M | 8.3m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/finding-group-audit | python/ai-assistant-demo | 1 | 100% (7/7), avg score 100 | 647.8K | 6.2m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/ao-name-inputs-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 764093 | 669952 | 0 | 12048 | 4051 | unknown | 776141 |
-| with_skill | python/ai-assistant-demo/qual/finding-group-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 520419 | 437760 | 0 | 11421 | 4087 | unknown | 531840 |
+| with_skill | python/ai-assistant-demo/qual/ao-name-inputs-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1364940 | 1264384 | 0 | 15550 | 2208 | unknown | 1380490 |
+| with_skill | python/ai-assistant-demo/qual/finding-group-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 634852 | 568704 | 0 | 12993 | 1971 | unknown | 647845 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/ao-name-inputs-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 147073 | 121984 | 0 | 2407 | 1160 | unknown | 149480 |
-| with_skill | python/ai-assistant-demo/qual/finding-group-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 127232 | 87808 | 0 | 2150 | 1086 | unknown | 129382 |
+| with_skill | python/ai-assistant-demo/qual/ao-name-inputs-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 169569 | 128000 | 0 | 1914 | 303 | unknown | 171483 |
+| with_skill | python/ai-assistant-demo/qual/finding-group-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 536599 | 470528 | 0 | 2766 | 344 | unknown | 539365 |
 
 ## Rubric Failures
 
