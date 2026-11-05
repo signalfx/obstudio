@@ -180,6 +180,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	}
 	registerSISCIMDLoginRoutes(mux)
 	registerO11yOAuthRoutes(mux)
+	registerO11yOAuthLoginRoutes(mux)
 }
 
 func queryTraces(s *store.Store) http.HandlerFunc {

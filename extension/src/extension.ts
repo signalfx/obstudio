@@ -88,6 +88,7 @@ import {
 	skillDocsUrl,
 	ObserverCloudResponseError,
 	splunkCloudConnectionSecretKey,
+	waitForO11yOAuthLoginOutcome,
 	type CloudBridgeAction,
 	type RegistrationAndAuthProtocol,
 	type StoredSplunkCloudConnection,
@@ -975,6 +976,102 @@ async function performSISCIMDOAuthSignIn(
 
 	await storeSISCIMDOAuthSession(context.secrets, session);
 	return true;
+}
+
+function o11yOAuthSessionStatusFromResponse(value: unknown): O11yOAuthSessionStatus {
+	const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : undefined;
+	const phase = record?.phase;
+	if (phase !== 'connected' && phase !== 'disconnected' && phase !== 'error' && phase !== 'pending') {
+		throw new Error('Splunk Observability Studio returned an invalid O11y OAuth session response.');
+	}
+	const optionalString = (field: string): string | undefined => {
+		const fieldValue = record?.[field];
+		return typeof fieldValue === 'string' ? fieldValue : undefined;
+	};
+	return {
+		connectedAt: optionalString('connectedAt'),
+		error: optionalString('error'),
+		expiresAt: optionalString('expiresAt'),
+		issuer: optionalString('issuer'),
+		orgId: optionalString('orgId'),
+		phase,
+		realm: optionalString('realm'),
+	};
+}
+
+function o11yOAuthLoginStartResultFromResponse(value: unknown): { authorizationUrl: string } {
+	const authorizationUrl = typeof value === 'object' && value !== null
+		? (value as Record<string, unknown>).authorizationUrl
+		: undefined;
+	if (typeof authorizationUrl !== 'string' || authorizationUrl === '') {
+		throw new Error('Splunk Observability Studio returned an invalid O11y OAuth authorization URL.');
+	}
+	return { authorizationUrl };
+}
+
+async function currentO11yOAuthSessionStatus(): Promise<O11yOAuthSessionStatus> {
+	return o11yOAuthSessionStatusFromResponse(await getObserverCloudJSON('/api/splunk/o11y-oauth/session'));
+}
+
+function waitForO11yOAuthSessionOutcome(isCancelled: () => boolean): Promise<O11yOAuthSessionStatus> {
+	return waitForO11yOAuthLoginOutcome({
+		delay,
+		intervalMs: o11yOAuthSessionPollIntervalMs,
+		isCancelled,
+		readSession: currentO11yOAuthSessionStatus,
+	});
+}
+
+// Unlike signInToSISWithCIMD (a fully extension-native PKCE/callback implementation),
+// the actual authorization-code and token-exchange flow here runs in the Go backend
+// (o11y_oauth_login.go); this just starts it, opens the resulting URL in the system
+// browser, and polls the backend's session status until it reaches a terminal phase.
+async function signInWithO11yOAuth(
+	realm: string,
+	orgId: string,
+	clientId: string,
+	clientSecret: string,
+): Promise<O11yOAuthSessionStatus> {
+	const start = o11yOAuthLoginStartResultFromResponse(
+		await postObserverCloudJSON('/api/splunk/o11y-oauth/login', { clientId, clientSecret, orgId, realm }),
+	);
+
+	return vscode.window.withProgress(
+		{
+			cancellable: true,
+			location: vscode.ProgressLocation.Notification,
+			title: 'Signing in with O11y OAuth',
+		},
+		async (progress, cancellationToken) => {
+			progress.report({ message: 'Complete authorization in your browser...' });
+			let cancelled = false;
+			const cancellationDisposable = cancellationToken.onCancellationRequested(() => {
+				cancelled = true;
+				void postObserverCloudJSON('/api/splunk/o11y-oauth/session/disconnect', {}).catch(() => undefined);
+			});
+			try {
+				let opened = false;
+				try {
+					opened = await vscode.env.openExternal(vscode.Uri.parse(start.authorizationUrl));
+				} catch {
+					opened = false;
+				}
+				if (!opened) {
+					// Without the browser page nothing can complete this attempt; release the
+					// pending backend attempt now so an immediate retry isn't rejected with 409.
+					await postObserverCloudJSON('/api/splunk/o11y-oauth/session/disconnect', {}).catch(() => undefined);
+					throw new Error('Could not open the browser to complete O11y OAuth sign-in. Try again.');
+				}
+				const status = await waitForO11yOAuthSessionOutcome(() => cancelled);
+				if (cancelled) {
+					throw new Error('O11y OAuth sign-in was cancelled.');
+				}
+				return status;
+			} finally {
+				cancellationDisposable.dispose();
+			}
+		},
+	);
 }
 
 async function runSISCIMDOAuthCommand(context: vscode.ExtensionContext): Promise<boolean> {
@@ -2200,6 +2297,7 @@ type CloudActionResult = {
 	o11yOAuthClientCreated?: boolean;
 	o11yOAuthClientId?: string;
 	o11yOAuthClientSecret?: string;
+	o11yOAuthSession?: O11yOAuthSessionStatus;
 	realm?: string;
 	region?: string;
 	registrationAndAuthProtocol?: RegistrationAndAuthProtocol;
@@ -2207,6 +2305,21 @@ type CloudActionResult = {
 	warning?: string;
 	warningCode?: string;
 };
+
+// O11y OAuth Step 2's session lives in the Go backend's own in-memory state
+// (o11y_oauth_login.go), not in context.secrets like CIMD's -- this type and the
+// functions below just describe/proxy that backend's HTTP responses.
+type O11yOAuthSessionStatus = {
+	connectedAt?: string;
+	error?: string;
+	expiresAt?: string;
+	issuer?: string;
+	orgId?: string;
+	phase: 'connected' | 'disconnected' | 'error' | 'pending';
+	realm?: string;
+};
+
+const o11yOAuthSessionPollIntervalMs = 1_500;
 
 class ObserverCloudRequestError extends Error {
 	constructor(
@@ -2361,6 +2474,7 @@ async function performCloudBridgeActionExclusive(
 			// context.secrets and is restored here whenever CIMD is enabled.
 			return initializeCloudBridgeState({
 				readCimdSession: () => currentSISCIMDSessionStatus(context),
+				readO11yOAuthSession: () => currentO11yOAuthSessionStatus(),
 				readStatus: () => getObserverCloudJSON('/api/splunk/export'),
 				refreshStatus: () => migrateStoredCloudConnection(context),
 				registrationAndAuthProtocol: getRegistrationAndAuthProtocol(),
@@ -2536,6 +2650,32 @@ async function performCloudBridgeActionExclusive(
 				await completeCloudStorageMigration(context);
 			}
 			return { status };
+		}
+		case 'login-o11y-oauth': {
+			const realm = request.payload?.realm?.trim() ?? '';
+			const orgId = request.payload?.orgId?.trim() ?? '';
+			const clientId = request.payload?.clientId?.trim() ?? '';
+			const clientSecret = request.payload?.clientSecret?.trim() ?? '';
+			if (realm === '') {
+				throw new Error('Enter a valid Splunk Observability Cloud realm.');
+			}
+			if (orgId === '') {
+				throw new Error('Enter the O11y organization ID.');
+			}
+			if (clientId === '') {
+				throw new Error('Paste the client ID.');
+			}
+			if (clientSecret === '') {
+				throw new Error('Paste the client secret.');
+			}
+			return { o11yOAuthSession: await signInWithO11yOAuth(realm, orgId, clientId, clientSecret) };
+		}
+		case 'get-o11y-oauth-session': {
+			return { o11yOAuthSession: await currentO11yOAuthSessionStatus() };
+		}
+		case 'disconnect-o11y-oauth': {
+			await postObserverCloudJSON('/api/splunk/o11y-oauth/session/disconnect', {});
+			return { o11yOAuthSession: await currentO11yOAuthSessionStatus() };
 		}
 		case 'connect': {
 			const connection = cloudConnectionFromRequest(request);
