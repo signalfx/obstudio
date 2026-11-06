@@ -274,7 +274,7 @@ jobs:
 
   sync-plugin-manifests:
     name: Sync plugin manifest versions
-    needs: publish-release
+    needs: [publish-release, post-publish-smoke]
     permissions:
       contents: write
       pull-requests: write

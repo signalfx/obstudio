@@ -133,7 +133,7 @@ func ensureCachedBinary(ctx context.Context, target target) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cacheDir := filepath.Join(cacheRoot, target.goos+"-"+target.goarch)
+	cacheDir := targetCacheDir(cacheRoot, target)
 	cachedBinary := filepath.Join(cacheDir, target.bundledBinaryName)
 	if _, err := os.Stat(cachedBinary); err == nil {
 		return cachedBinary, nil
@@ -171,6 +171,17 @@ func ensureCachedBinary(ctx context.Context, target target) (string, error) {
 		return "", fmt.Errorf("finalize cache binary: %w", err)
 	}
 	return cachedBinary, nil
+}
+
+// targetCacheDir keys the cache on the pinned archive hash as well as the
+// platform. A binary cached before verification existed, or under a previous
+// pin, lives in a different directory and is never reused unverified.
+func targetCacheDir(versionRoot string, target target) string {
+	pin := target.sha256
+	if len(pin) > 12 {
+		pin = pin[:12]
+	}
+	return filepath.Join(versionRoot, target.goos+"-"+target.goarch+"-"+pin)
 }
 
 func weaverCacheDir() (string, error) {
