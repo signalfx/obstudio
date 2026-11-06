@@ -94,9 +94,10 @@ type flushHarness struct {
 	flushes atomic.Int32
 }
 
-// newFlushHarness builds the pipeline the way cmd/obstudio does: S2 exporter,
-// S1 confirming exporter around it, S2 reader over the wrapper, and the
-// reader's ForceFlush injected into S1 through a counting wrapper.
+// newFlushHarness builds the pipeline the way cmd/obstudio does: the adoption
+// exporter, the emitter's confirming exporter around it, the periodic reader
+// over the wrapper, and the reader's ForceFlush injected into the emitter
+// through a counting wrapper.
 func newFlushHarness(t *testing.T, dir string, g *fakeGate, s *sink, interval time.Duration) *flushHarness {
 	t.Helper()
 	h := &flushHarness{dir: dir, g: g, sink: s}

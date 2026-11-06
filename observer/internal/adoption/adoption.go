@@ -1,13 +1,14 @@
-// Package adoption holds obstudio's own pseudonymous adoption data (BORN-34
-// S1): three counters that say whether obstudio was installed, started,
-// connected, used for validation, fed application data, and used from MCP or
-// the UI. It is not the telemetry obstudio ingests from the user's apps; that
-// is why the package is not called telemetry, even though the user-facing
-// switch is telemetry.enabled.
+// Package adoption holds obstudio's own pseudonymous adoption data: three
+// counters that say whether obstudio was installed, started, connected, used
+// for validation, fed application data, and used from MCP or the UI. It is
+// not the telemetry obstudio ingests from the user's apps; that is why the
+// package is not called telemetry, even though the user-facing switch is
+// telemetry.enabled.
 //
 // The install ID sent as obstudio.user_hash is a random UUIDv4 kept in
 // ~/.obstudio/install_id. It is pseudonymous, not anonymous: it is stable for
-// the install and the edge re-keys it, but it is one identifier per install.
+// the install and the ingest proxy re-keys it, but it is one identifier per
+// install.
 //
 // The package records in memory whatever the user's consent; the adoption
 // gate decides per export whether anything leaves the process. A point counts
@@ -43,7 +44,7 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/store"
 )
 
-// Signal names and their single dimensions (the v1 catalog, roadmap §3.7).
+// Signal names and their single dimensions.
 const (
 	MetricFirstUse     = "obstudio.first_use"
 	MetricActive       = "obstudio.active"
@@ -71,8 +72,8 @@ var launchers = map[string]bool{"vscode-extension": true, "cursor-extension": tr
 
 var uuidV4 = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
-// Gate is what the emitter reads from the S-I gate: Decide before creating an
-// install ID, and the opt-out state for the wipe.
+// Gate is what the emitter reads from the telemetry gate (package gate):
+// Decide before creating an install ID, and the opt-out state for the wipe.
 type Gate interface {
 	Decide() gate.Decision
 	OptedOut() bool
@@ -83,7 +84,7 @@ type Gate interface {
 type Config struct {
 	// Dir is ~/.obstudio. Required.
 	Dir string
-	// Gate is the S-I gate. Required; a nil *gate.Gate is a closed gate.
+	// Gate is the telemetry gate. Required; a nil *gate.Gate is a closed gate.
 	Gate Gate
 	// Version is the build's ldflags version, sent as service.version.
 	Version string
@@ -183,7 +184,7 @@ func (e *Emitter) SetFlush(fn func(context.Context) error) {
 }
 
 // Exporter returns the confirming exporter the adoption reader must export
-// through. It wraps next, the S2 exporter.
+// through. It wraps next, the adoption exporter from package export.
 func (e *Emitter) Exporter(next sdkmetric.Exporter) sdkmetric.Exporter {
 	return &confirming{e: e, next: next}
 }
@@ -197,7 +198,7 @@ func (e *Emitter) Start(reader sdkmetric.Reader) error {
 		return nil
 	}
 	// The resource set here is replaced at export; exemplars are off because
-	// the edge drops any point that carries one.
+	// the ingest proxy drops any point that carries one.
 	mp := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(reader),
 		sdkmetric.WithResource(resource.Empty()),
@@ -460,7 +461,8 @@ const (
 
 // confirming is the exporter the adoption reader calls. It stamps the batch
 // with the six resource attributes and the current install ID, forwards it
-// to S2, and applies S2's outcome to the delivery states.
+// to the adoption exporter, and applies the export outcome to the delivery
+// states.
 type confirming struct {
 	e    *Emitter
 	next sdkmetric.Exporter

@@ -1,4 +1,4 @@
-// Package export ships obstudio's own adoption data off-box (S2): one
+// Package export ships obstudio's own adoption data off-box: one
 // OTLP/HTTP metrics exporter to one endpoint, asked of the adoption gate
 // immediately before every export, and a periodic reader built in a separate
 // step so the caller can put another exporter between the two.
@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	// DefaultEndpoint is the single production endpoint (Interface I1). The
-	// exporter posts to DefaultEndpoint + "/v1/metrics".
+	// DefaultEndpoint is the single production endpoint. The exporter posts
+	// to DefaultEndpoint + "/v1/metrics".
 	DefaultEndpoint = "https://obstudio-ingest.observability.splunkcloud.com"
 
 	// EndpointEnv overrides DefaultEndpoint for local, dev and test runs. A
@@ -35,9 +35,10 @@ const (
 	EndpointEnv = "OBSTUDIO_ADOPTION_OTLP_ENDPOINT"
 
 	// ExportIntervalLongRunning is the periodic export interval for the
-	// long-running observer: the cost/coverage-balanced default from the
-	// BORN-34 architect assessment. The clean-exit flush covers sessions
-	// shorter than one interval.
+	// long-running observer. Ingest cost falls steeply up to one hour and
+	// barely after it, while a longer interval would lose more short
+	// sessions. The clean-exit flush covers sessions shorter than one
+	// interval.
 	ExportIntervalLongRunning = time.Hour
 
 	// FlushTimeout bounds every export: the shutdown flush, the install
@@ -93,8 +94,8 @@ func (e *failedError) Error() string        { return ErrFailed.Error() + ": " + 
 func (e *failedError) Unwrap() error        { return e.err }
 func (e *failedError) Is(target error) bool { return target == ErrFailed }
 
-// Decider is the part of the S-I gate the export path uses. A nil *gate.Gate
-// is a valid, closed Decider.
+// Decider is the part of the telemetry gate the export path uses. A nil
+// *gate.Gate is a valid, closed Decider.
 type Decider interface{ Decide() gate.Decision }
 
 // Endpoint returns the endpoint base URL and whether the override was set.
@@ -108,8 +109,8 @@ func Endpoint(getenv func(string) string) (string, bool) {
 	return DefaultEndpoint, false
 }
 
-// Exporter is the S2 exporter: it asks the gate before every export and sends
-// through the OTLP/HTTP exporter only when the gate is open.
+// Exporter is the adoption exporter: it asks the gate before every export
+// and sends through the OTLP/HTTP exporter only when the gate is open.
 type Exporter struct {
 	gate    Decider
 	inner   sdkmetric.Exporter
@@ -129,8 +130,8 @@ type ExporterConfig struct {
 	Timeout time.Duration
 }
 
-// NewExporter builds the S2 exporter (the FR17 exporter step). It opens no
-// connection; the gate is applied per export, not here.
+// NewExporter builds the adoption exporter. It opens no connection; the gate
+// is applied per export, not here.
 func NewExporter(cfg ExporterConfig) (*Exporter, error) {
 	if cfg.ClientType != ClientTypeLongRunning {
 		return nil, fmt.Errorf("adoption export: unsupported client type %q", cfg.ClientType)
@@ -225,9 +226,9 @@ type Reader struct {
 	*sdkmetric.PeriodicReader
 }
 
-// NewReader builds the periodic reader over any exporter (the FR17 reader
-// step). Its timer starts now, relative to process start, with no wall-clock
-// anchor, and the reader keeps the exporter's temporality.
+// NewReader builds the periodic reader over any exporter. Its timer starts
+// now, relative to process start, with no wall-clock anchor, and the reader
+// keeps the exporter's temporality.
 func NewReader(exp sdkmetric.Exporter, cfg ReaderConfig) (*Reader, error) {
 	if cfg.ClientType != ClientTypeLongRunning {
 		return nil, fmt.Errorf("adoption export: unsupported client type %q", cfg.ClientType)

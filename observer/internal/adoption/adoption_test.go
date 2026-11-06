@@ -21,7 +21,7 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/store"
 )
 
-// fakeGate is a controllable S-I gate.
+// fakeGate is a controllable telemetry gate.
 type fakeGate struct {
 	mu      sync.Mutex
 	allowed bool
@@ -82,23 +82,23 @@ func (g *fakeGate) optOutEntry() {
 	}
 }
 
-// fakeS2 records batches and returns a scripted result.
-type fakeS2 struct {
+// fakeExporter records batches and returns a scripted result.
+type fakeExporter struct {
 	mu      sync.Mutex
 	next    []error
 	batches []metricdata.ResourceMetrics
 	block   chan struct{}
 }
 
-func (f *fakeS2) Temporality(sdkmetric.InstrumentKind) metricdata.Temporality {
+func (f *fakeExporter) Temporality(sdkmetric.InstrumentKind) metricdata.Temporality {
 	return metricdata.CumulativeTemporality
 }
-func (f *fakeS2) Aggregation(k sdkmetric.InstrumentKind) sdkmetric.Aggregation {
+func (f *fakeExporter) Aggregation(k sdkmetric.InstrumentKind) sdkmetric.Aggregation {
 	return sdkmetric.DefaultAggregationSelector(k)
 }
-func (f *fakeS2) ForceFlush(context.Context) error { return nil }
-func (f *fakeS2) Shutdown(context.Context) error   { return nil }
-func (f *fakeS2) Export(_ context.Context, rm *metricdata.ResourceMetrics) error {
+func (f *fakeExporter) ForceFlush(context.Context) error { return nil }
+func (f *fakeExporter) Shutdown(context.Context) error   { return nil }
+func (f *fakeExporter) Export(_ context.Context, rm *metricdata.ResourceMetrics) error {
 	f.mu.Lock()
 	f.batches = append(f.batches, *rm)
 	block := f.block
@@ -114,19 +114,19 @@ func (f *fakeS2) Export(_ context.Context, rm *metricdata.ResourceMetrics) error
 	return err
 }
 
-func (f *fakeS2) results(errs ...error) {
+func (f *fakeExporter) results(errs ...error) {
 	f.mu.Lock()
 	f.next = append(f.next, errs...)
 	f.mu.Unlock()
 }
 
-func (f *fakeS2) count() int {
+func (f *fakeExporter) count() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.batches)
 }
 
-func (f *fakeS2) last() metricdata.ResourceMetrics {
+func (f *fakeExporter) last() metricdata.ResourceMetrics {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.batches[len(f.batches)-1]
@@ -158,7 +158,7 @@ type harness struct {
 	t      *testing.T
 	dir    string
 	g      *fakeGate
-	s2     *fakeS2
+	next   *fakeExporter
 	clock  *clock
 	reader *sdkmetric.ManualReader
 	e      *Emitter
@@ -169,7 +169,7 @@ const validID = "3f1c2a9e-7b4d-4e2a-9c1f-0a8b6d5e4f32"
 
 func newHarness(t *testing.T, open bool) *harness {
 	t.Helper()
-	h := &harness{t: t, dir: filepath.Join(t.TempDir(), ".obstudio"), g: &fakeGate{allowed: open}, s2: &fakeS2{}, clock: &clock{}}
+	h := &harness{t: t, dir: filepath.Join(t.TempDir(), ".obstudio"), g: &fakeGate{allowed: open}, next: &fakeExporter{}, clock: &clock{}}
 	h.clock.set("2026-11-02T10:00:00Z")
 	return h
 }
@@ -201,7 +201,7 @@ func (h *harness) start(launcher string) *harness {
 		h.t.Fatal(err)
 	}
 	h.e = e
-	h.wrap = e.Exporter(h.s2)
+	h.wrap = e.Exporter(h.next)
 	h.reader = sdkmetric.NewManualReader(sdkmetric.WithTemporalitySelector(h.wrap.Temporality))
 	if err := e.Start(h.reader); err != nil {
 		h.t.Fatal(err)
@@ -275,7 +275,7 @@ func TestFirstUseOncePerFeature(t *testing.T) {
 	if err := h.export(); err != nil {
 		t.Fatal(err)
 	}
-	got := points(h.s2.last())
+	got := points(h.next.last())
 	want := map[string]int64{firstUse(FeatureObserverStart): 1, firstUse(FeatureConnect): 1, firstUse(FeatureValidationRun): 1}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("batch 1 = %v", got)
@@ -283,10 +283,10 @@ func TestFirstUseOncePerFeature(t *testing.T) {
 	h.e.ObserverStarted()
 	h.e.Connected()
 	h.e.ValidationRun()
-	n := h.s2.count()
+	n := h.next.count()
 	_ = h.export()
-	if h.s2.count() != n {
-		t.Fatalf("batch 2 forwarded: %v", points(h.s2.last()))
+	if h.next.count() != n {
+		t.Fatalf("batch 2 forwarded: %v", points(h.next.last()))
 	}
 }
 
@@ -295,19 +295,19 @@ func TestActiveOncePerUTCDay(t *testing.T) {
 	h.e.ActiveMCP()
 	h.e.ActiveMCP()
 	_ = h.export()
-	if got := points(h.s2.last()); got[active(SurfaceMCP)] != 1 || len(got) != 1 {
+	if got := points(h.next.last()); got[active(SurfaceMCP)] != 1 || len(got) != 1 {
 		t.Fatalf("day one = %v", got)
 	}
-	n := h.s2.count()
+	n := h.next.count()
 	h.e.ActiveMCP()
 	_ = h.export()
-	if h.s2.count() != n {
+	if h.next.count() != n {
 		t.Fatal("same day exported again")
 	}
 	h.clock.set("2026-11-03T00:05:00Z")
 	h.e.ActiveMCP()
 	_ = h.export()
-	if got := points(h.s2.last()); got[active(SurfaceMCP)] != 1 {
+	if got := points(h.next.last()); got[active(SurfaceMCP)] != 1 {
 		t.Fatalf("day two = %v", got)
 	}
 	if a := h.state()["active"].(map[string]any); a["mcp"] != "2026-11-03" {
@@ -321,7 +321,7 @@ func TestResourceAttrsExact(t *testing.T) {
 	h := newHarness(t, true).withID(validID).start("vscode-extension")
 	h.e.ObserverStarted()
 	_ = h.export()
-	res := h.s2.last().Resource
+	res := h.next.last().Resource
 	got := map[string]string{}
 	for _, kv := range res.Attributes() {
 		got[string(kv.Key)] = kv.Value.AsString()
@@ -351,12 +351,12 @@ func TestLauncherBounded(t *testing.T) {
 func TestExportConfirmedDelivery(t *testing.T) {
 	h := newHarness(t, true).withID(validID).withState(`{"first_use":{"install":"delivered"},"active":{}}`).start("cli")
 	h.e.ObserverStarted()
-	h.s2.results(errFailed, dropped(), nil, nil)
+	h.next.results(errFailed, dropped(), nil, nil)
 
 	if err := h.export(); !errors.Is(err, errFailed) {
 		t.Fatalf("export 1 = %v", err)
 	}
-	if points(h.s2.last())[firstUse(FeatureObserverStart)] != 1 {
+	if points(h.next.last())[firstUse(FeatureObserverStart)] != 1 {
 		t.Fatal("batch 1 missing the point")
 	}
 	if fu := h.state()["first_use"].(map[string]any); fu["observer_start"] != "pending" {
@@ -373,7 +373,7 @@ func TestExportConfirmedDelivery(t *testing.T) {
 	if string(before) != string(after) || !fi1.ModTime().Equal(fi2.ModTime()) {
 		t.Fatal("dropped export wrote the state file")
 	}
-	if points(h.s2.last())[firstUse(FeatureObserverStart)] != 1 {
+	if points(h.next.last())[firstUse(FeatureObserverStart)] != 1 {
 		t.Fatal("batch 2 missing the point")
 	}
 	if err := h.export(); err != nil {
@@ -382,9 +382,9 @@ func TestExportConfirmedDelivery(t *testing.T) {
 	if fu := h.state()["first_use"].(map[string]any); fu["observer_start"] != "delivered" {
 		t.Fatalf("after sent: %v", fu)
 	}
-	n := h.s2.count()
+	n := h.next.count()
 	_ = h.export()
-	if h.s2.count() != n {
+	if h.next.count() != n {
 		t.Fatal("delivered point exported again")
 	}
 }
@@ -404,12 +404,12 @@ func TestNoFilesWhileGateClosed(t *testing.T) {
 			if entries, _ := os.ReadDir(h.dir); len(entries) != 0 {
 				t.Fatalf("files while closed: %v", entries)
 			}
-			if h.s2.count() != 0 {
+			if h.next.count() != 0 {
 				t.Fatal("batch forwarded while closed")
 			}
 			h.g.set(true)
 			_ = h.export()
-			got := points(h.s2.last())
+			got := points(h.next.last())
 			if got[firstUse(FeatureObserverStart)] != 1 || got[active(SurfaceMCP)] != 1 {
 				t.Fatalf("pending points not carried: %v", got)
 			}
@@ -466,7 +466,7 @@ func TestInstallIDInvalidRegenerates(t *testing.T) {
 		h.e.ObserverStarted()
 		time.Sleep(30 * time.Millisecond)
 		_ = h.export()
-		if h.s2.count() != 0 {
+		if h.next.count() != 0 {
 			t.Fatal("batch forwarded with no ID")
 		}
 	})
@@ -487,15 +487,15 @@ func waitFor(t *testing.T, cond func() bool) {
 func TestFirstUsePendingSurvivesRestart(t *testing.T) {
 	h := newHarness(t, true).withID(validID).withState(`{"first_use":{"install":"delivered"},"active":{}}`).start("cli")
 	h.e.Connected()
-	h.s2.results(errFailed)
+	h.next.results(errFailed)
 	_ = h.export()
 	if fu := h.state()["first_use"].(map[string]any); fu["connect"] != "pending" {
 		t.Fatalf("state = %v", fu)
 	}
-	h2 := &harness{t: t, dir: h.dir, g: h.g, s2: &fakeS2{}, clock: h.clock}
+	h2 := &harness{t: t, dir: h.dir, g: h.g, next: &fakeExporter{}, clock: h.clock}
 	h2.start("cli")
 	_ = h2.export()
-	if points(h2.s2.last())[firstUse(FeatureConnect)] != 1 {
+	if points(h2.next.last())[firstUse(FeatureConnect)] != 1 {
 		t.Fatal("pending connect not re-recorded at start")
 	}
 	if fu := h2.state()["first_use"].(map[string]any); fu["connect"] != "delivered" {
@@ -508,21 +508,21 @@ func TestActivePendingLapsesAtMidnight(t *testing.T) {
 	h.clock.set("2026-11-02T23:50:00Z")
 	h.e.ActiveMCP()
 	h.e.OTLPReceipt(appReceipt())
-	h.s2.results(errFailed, errFailed, nil)
+	h.next.results(errFailed, errFailed, nil)
 	_ = h.export()
 	h.clock.set("2026-11-03T00:10:00Z")
 	_ = h.export() // carries the re-recorded 11-02 points; fails; they lapse
 	h.e.ActiveMCP()
 	h.e.OTLPReceipt(appReceipt())
 	_ = h.export()
-	for i, b := range h.s2.batches {
+	for i, b := range h.next.batches {
 		for k, v := range points(b) {
 			if v != 1 {
 				t.Fatalf("batch %d: %s = %d", i, k, v)
 			}
 		}
 	}
-	if got := points(h.s2.last()); got[active(SurfaceMCP)] != 1 || got[MetricIngestActive] != 1 {
+	if got := points(h.next.last()); got[active(SurfaceMCP)] != 1 || got[MetricIngestActive] != 1 {
 		t.Fatalf("new-date batch = %v", got)
 	}
 	st := h.state()
@@ -530,10 +530,10 @@ func TestActivePendingLapsesAtMidnight(t *testing.T) {
 		t.Fatalf("state = %v", st)
 	}
 	// One more export: the lapsed 11-02 keys are not recorded again.
-	n := h.s2.count()
+	n := h.next.count()
 	_ = h.export()
-	if h.s2.count() != n {
-		t.Fatalf("lapsed keys re-recorded: %v", points(h.s2.last()))
+	if h.next.count() != n {
+		t.Fatalf("lapsed keys re-recorded: %v", points(h.next.last()))
 	}
 }
 
@@ -553,8 +553,8 @@ func TestOptOutWipe(t *testing.T) {
 	}
 	h.g.set(true)
 	_ = h.export()
-	if h.s2.count() != 0 {
-		t.Fatalf("wiped connect still exported: %v", points(h.s2.last()))
+	if h.next.count() != 0 {
+		t.Fatalf("wiped connect still exported: %v", points(h.next.last()))
 	}
 	newID := readInstallID(filepath.Join(h.dir, installIDFile))
 	if newID == "" || newID == validID {
@@ -562,7 +562,7 @@ func TestOptOutWipe(t *testing.T) {
 	}
 	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return flushes == 1 })
 	_ = h.export()
-	if got := points(h.s2.last()); got[firstUse(FeatureInstall)] != 1 {
+	if got := points(h.next.last()); got[firstUse(FeatureInstall)] != 1 {
 		t.Fatalf("install not pending after re-creation: %v", got)
 	}
 
@@ -590,12 +590,12 @@ func TestOptOutWipe(t *testing.T) {
 func TestOutcomeDiscardedAfterIDChange(t *testing.T) {
 	h := newHarness(t, true).withID(validID).withState(`{"first_use":{"install":"delivered"},"active":{}}`).start("cli")
 	h.e.ObserverStarted()
-	h.s2.block = make(chan struct{})
+	h.next.block = make(chan struct{})
 	done := make(chan error)
 	go func() { done <- h.export() }()
-	waitFor(t, func() bool { return h.s2.count() == 1 })
+	waitFor(t, func() bool { return h.next.count() == 1 })
 	h.g.optOutEntry()
-	close(h.s2.block)
+	close(h.next.block)
 	<-done
 	for _, f := range []string{installIDFile, stateFile} {
 		if _, err := os.Stat(filepath.Join(h.dir, f)); !errors.Is(err, os.ErrNotExist) {
@@ -615,9 +615,9 @@ func TestInstallFlushOnlyForInstall(t *testing.T) {
 	h.e.ActiveMCP()
 	h.e.ActiveUI()
 	h.e.OTLPReceipt(appReceipt())
-	h.s2.results(errFailed, nil)
+	h.next.results(errFailed, nil)
 	_ = h.export()
-	if got := points(h.s2.last()); len(got) != 7 {
+	if got := points(h.next.last()); len(got) != 7 {
 		t.Fatalf("first batch = %v", got)
 	}
 	_ = h.export()
@@ -677,14 +677,14 @@ func TestIngestQualifyingReceipt(t *testing.T) {
 	for _, r := range excluded {
 		h.e.OTLPReceipt(r)
 	}
-	n := h.s2.count()
+	n := h.next.count()
 	_ = h.export()
-	if h.s2.count() != n {
-		t.Fatalf("an excluded receipt qualified: %v", points(h.s2.last()))
+	if h.next.count() != n {
+		t.Fatalf("an excluded receipt qualified: %v", points(h.next.last()))
 	}
 	h.e.OTLPReceipt(appReceipt())
 	_ = h.export()
-	got := points(h.s2.last())
+	got := points(h.next.last())
 	if got[firstUse(FeatureIngest)] != 1 || got[MetricIngestActive] != 1 || len(got) != 2 {
 		t.Fatalf("batch = %v", got)
 	}
@@ -692,10 +692,10 @@ func TestIngestQualifyingReceipt(t *testing.T) {
 	if st["first_use"].(map[string]any)["ingest"] != "delivered" || st["ingest_active"] != "2026-11-02" {
 		t.Fatalf("state = %v", st)
 	}
-	n = h.s2.count()
+	n = h.next.count()
 	h.e.OTLPReceipt(appReceipt())
 	_ = h.export()
-	if h.s2.count() != n {
+	if h.next.count() != n {
 		t.Fatal("same-day receipt exported again")
 	}
 	h.clock.set("2026-11-03T09:00:00Z")
@@ -704,11 +704,11 @@ func TestIngestQualifyingReceipt(t *testing.T) {
 		Spans:   []store.Span{{Name: "GET /cart", Resource: store.Resource{ServiceName: "checkout"}}},
 	})
 	_ = h.export()
-	got = points(h.s2.last())
+	got = points(h.next.last())
 	if got[MetricIngestActive] != 1 || got[firstUse(FeatureIngest)] != 0 {
 		t.Fatalf("mixed batch = %v", got)
 	}
-	for _, b := range h.s2.batches {
+	for _, b := range h.next.batches {
 		for k := range points(b) {
 			if k == active(SurfaceMCP) || k == active(SurfaceUI) {
 				t.Fatal("ingest qualified active")

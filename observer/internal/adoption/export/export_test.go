@@ -615,7 +615,7 @@ func TestSingleDestinationNoMode(t *testing.T) {
 	}
 }
 
-func TestS2DoesNotImportS1(t *testing.T) {
+func TestExportDoesNotImportAdoption(t *testing.T) {
 	out, err := exec.Command("go", "list", "-deps", ".").Output()
 	if err != nil {
 		t.Skipf("go list unavailable: %v", err)

@@ -1,5 +1,5 @@
 // Package gate is the one place that decides whether obstudio's own adoption
-// data may leave the process right now (S-I). Allowed means: a Config Manager
+// data may leave the process right now. Allowed means: a Config Manager
 // exists, ~/.obstudio/config.yaml is healthy and says telemetry.enabled: true,
 // no kill switch (CI, DO_NOT_TRACK, host off) is set, and a destination is
 // configured. Every other state is closed, with exactly one reason.
@@ -271,8 +271,10 @@ const (
 	matchBothSet
 )
 
-// ciTable is spec parameter P1 (roadmap §3.5 D5). Agent variables such as
-// CLAUDECODE are deliberately absent.
+// ciTable lists the environment variables that mark a CI run, where nothing
+// is sent: CI use is not adoption. It follows the .NET SDK and Flutter CLI
+// telemetry lists; to add a CI system, add a row. Agent variables such as
+// CLAUDECODE are deliberately absent: agents are obstudio's main launch path.
 var ciTable = []struct {
 	vars  []string
 	match ciMatch
