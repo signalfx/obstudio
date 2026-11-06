@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -108,7 +109,7 @@ func TestFetchTargetUsesCachedBinaryFromOverride(t *testing.T) {
 		t.Fatalf("findTarget returned error: %v", err)
 	}
 
-	cacheBinary := filepath.Join(cacheRoot, weaverVersion, target.goos+"-"+target.goarch, target.bundledBinaryName)
+	cacheBinary := filepath.Join(targetCacheDir(filepath.Join(cacheRoot, weaverVersion), target), target.bundledBinaryName)
 	if err := os.MkdirAll(filepath.Dir(cacheBinary), 0o755); err != nil {
 		t.Fatalf("create cache dir: %v", err)
 	}
@@ -274,5 +275,92 @@ func TestInstallGuidesUsePortableReleaseCommands(t *testing.T) {
 				t.Fatalf("%s should show the portable install command %q", tc.path, tc.installCommand)
 			}
 		})
+	}
+}
+
+func TestSupportedTargetsPinSHA256(t *testing.T) {
+	t.Parallel()
+
+	for _, target := range supportedTargets {
+		if len(target.sha256) != 64 {
+			t.Fatalf("%s: sha256 must be 64 hex chars, got %q", target.asset, target.sha256)
+		}
+		if strings.ToLower(target.sha256) != target.sha256 {
+			t.Fatalf("%s: sha256 must be lowercase hex", target.asset)
+		}
+	}
+}
+
+func TestVerifyFileSHA256(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "archive")
+	if err := os.WriteFile(path, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const helloSHA256 = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+	if err := verifyFileSHA256(path, helloSHA256); err != nil {
+		t.Fatalf("expected matching checksum to pass: %v", err)
+	}
+	err := verifyFileSHA256(path, strings.Repeat("0", 64))
+	if err == nil || !strings.Contains(err.Error(), "sha256 mismatch") {
+		t.Fatalf("expected sha256 mismatch error, got %v", err)
+	}
+}
+
+func TestEnsureCachedBinaryIgnoresBinaryCachedUnderPreviousLayout(t *testing.T) {
+	cacheRoot := t.TempDir()
+	t.Setenv("OBSTUDIO_WEAVER_CACHE_DIR", cacheRoot)
+
+	target, err := findTarget("darwin", "arm64")
+	if err != nil {
+		t.Fatalf("findTarget returned error: %v", err)
+	}
+	versionRoot := filepath.Join(cacheRoot, weaverVersion)
+
+	// A binary cached before pins existed sat at <version>/<os>-<arch>/ and was
+	// never verified. It must not satisfy a lookup now.
+	legacy := filepath.Join(versionRoot, target.goos+"-"+target.goarch, target.bundledBinaryName)
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o755); err != nil {
+		t.Fatalf("create legacy cache dir: %v", err)
+	}
+	if err := os.WriteFile(legacy, []byte("unverified-weaver"), 0o755); err != nil {
+		t.Fatalf("write legacy binary: %v", err)
+	}
+
+	// A cancelled context makes a cache miss fail fast (the download is
+	// attempted first), while a cache hit returns the binary without error.
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if got, err := ensureCachedBinary(cancelled, target); err == nil {
+		t.Fatalf("legacy cached binary was reused unverified: %s", got)
+	}
+
+	// A binary stored under the current pin is a hit.
+	pinned := filepath.Join(targetCacheDir(versionRoot, target), target.bundledBinaryName)
+	if err := os.MkdirAll(filepath.Dir(pinned), 0o755); err != nil {
+		t.Fatalf("create pinned cache dir: %v", err)
+	}
+	if err := os.WriteFile(pinned, []byte("verified-weaver"), 0o755); err != nil {
+		t.Fatalf("write pinned binary: %v", err)
+	}
+	got, err := ensureCachedBinary(cancelled, target)
+	if err != nil {
+		t.Fatalf("pinned cached binary was not reused: %v", err)
+	}
+	if got != pinned {
+		t.Fatalf("unexpected cache path %q, want %q", got, pinned)
+	}
+}
+
+func TestTargetCacheDirChangesWhenPinChanges(t *testing.T) {
+	t.Parallel()
+
+	base := target{goos: "linux", goarch: "amd64", sha256: strings.Repeat("a", 64)}
+	other := base
+	other.sha256 = strings.Repeat("b", 64)
+	if targetCacheDir("root", base) == targetCacheDir("root", other) {
+		t.Fatal("cache directory must change when the pinned hash changes")
 	}
 }
