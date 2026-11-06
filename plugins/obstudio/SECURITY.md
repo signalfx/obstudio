@@ -122,15 +122,14 @@ the one-time release download from GitHub described below.
 
 ### What is downloaded, and how it is verified
 
-- Studio release zip (bootstrap hook). Fetched from
-  `https://github.com/signalfx/obstudio/releases` using the release matching the
-  plugin version, together with that release's `checksums.txt`. Before anything
-  is extracted or executed, the hook checks the zip entries for path traversal and
-  verifies the archive SHA-256 against `checksums.txt`. If the pinned release is
-  not found, the hook falls back to the latest release and records
-  `runtimePinFallback` in its state. Because `checksums.txt` comes from the same
-  release origin as the archive, the check detects corruption but not a
-  compromised release. Embedding the expected checksum in the plugin is planned.
+- Studio release zip (bootstrap hook). Fetched only from
+  `https://github.com/signalfx/obstudio/releases/download/v<plugin version>`,
+  the release matching the plugin version. Before anything is extracted or
+  executed, the hook checks the zip entries for path traversal and verifies the
+  archive SHA-256 against `hooks/runtime-manifest.json`, which ships inside the
+  reviewed plugin (see "Pinned runtime"). It does not fetch `checksums.txt` and
+  does not fall back to another release. A missing or invalid manifest, a missing
+  platform entry, or a hash mismatch stops the hook before extraction.
 - OpenTelemetry Java agent (documentation only). `java.md` shows a template for
   the user's build or setup step. It requires an explicit pinned version from
   Maven Central and a SHA-256 the user records for that version, checked before
