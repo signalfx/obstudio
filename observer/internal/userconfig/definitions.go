@@ -79,10 +79,80 @@ var TelemetryEnabled = define(SectionTelemetry, "enabled", defSpec[bool]{
 	Field:       func(s *Settings) *bool { return &s.Telemetry.Enabled },
 })
 
+// SectionO11yOAuth holds the values a user would otherwise paste in each time
+// they sign in with O11y OAuth, so that sign-in can be a single click.
+var SectionO11yOAuth = section("o11yOAuth", sectionSpec{
+	Title:       "O11y OAuth sign-in",
+	Description: "Saved values for signing in to Splunk Observability Cloud with O11y OAuth.",
+})
+
+var O11yOAuthRealm = define(SectionO11yOAuth, "realm", defSpec[string]{
+	Title:       "Realm",
+	Description: "The Splunk Observability Cloud realm to sign in to, for example us0. Leave empty to enter it at sign-in.",
+	Default:     "",
+	FailSafe:    "",
+	Apply:       ApplyLive,
+	Validate:    validateO11yOAuthRealm,
+	Field:       func(s *Settings) *string { return &s.O11yOAuth.Realm },
+})
+
+var O11yOAuthOrgID = define(SectionO11yOAuth, "orgId", defSpec[string]{
+	Title:       "Organization ID",
+	Description: "The Splunk Observability Cloud organization ID to sign in to. Leave empty to enter it at sign-in.",
+	Default:     "",
+	FailSafe:    "",
+	Apply:       ApplyLive,
+	Field:       func(s *Settings) *string { return &s.O11yOAuth.OrgId },
+})
+
+var O11yOAuthClientID = define(SectionO11yOAuth, "clientId", defSpec[string]{
+	Title:       "Client ID",
+	Description: "The client ID of the O11y OAuth client an organization admin registered. Leave empty to enter it at sign-in.",
+	Default:     "",
+	FailSafe:    "",
+	Apply:       ApplyLive,
+	Field:       func(s *Settings) *string { return &s.O11yOAuth.ClientId },
+})
+
+// O11yOAuthClientSecret is a credential. It is stored in plain text in
+// config.yaml, as approved for this setting; the file is created private to
+// the user. Nothing here masks it in the HTTP API or the Config tab.
+var O11yOAuthClientSecret = define(SectionO11yOAuth, "clientSecret", defSpec[string]{
+	Title:       "Client secret",
+	Description: "The client secret of the O11y OAuth client, stored in plain text in this file. Leave empty to enter it at sign-in.",
+	Default:     "",
+	FailSafe:    "",
+	Apply:       ApplyLive,
+	Field:       func(s *Settings) *string { return &s.O11yOAuth.ClientSecret },
+})
+
+// validateO11yOAuthRealm accepts an empty realm (not saved) or a plain realm
+// name such as us0 or lab0. It only rejects characters that could not be part
+// of one; the sign-in flow still validates the realm it uses.
+func validateO11yOAuthRealm(v string) error {
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
+			return errors.New("must be a realm name such as us0, in lowercase letters, digits and hyphens")
+		}
+	}
+	return nil
+}
+
 // Settings holds one value per declared setting, grouped by section.
-type Settings struct{ Telemetry TelemetrySettings }
+type Settings struct {
+	Telemetry TelemetrySettings
+	O11yOAuth O11yOAuthSettings
+}
 
 type TelemetrySettings struct{ Enabled bool }
+
+type O11yOAuthSettings struct {
+	Realm        string
+	OrgId        string
+	ClientId     string
+	ClientSecret string
+}
 
 // DefaultSettings returns every setting at the value a fresh file has.
 func DefaultSettings() Settings {

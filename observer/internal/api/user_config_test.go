@@ -112,10 +112,14 @@ func tempManager(t *testing.T, content string) (*userconfig.Manager, string) {
 	return m, path
 }
 
+// o11yOAuthDefaultsJSON is the o11yOAuth section of the settings JSON while none
+// of its values have been saved.
+const o11yOAuthDefaultsJSON = `"o11yOAuth":{"realm":"","orgId":"","clientId":"","clientSecret":""}`
+
 func TestUserConfigGetShape(t *testing.T) {
 	f := &fakeUserConfig{snaps: []userconfig.Snapshot{snapshotWith(true), snapshotWith(false)}}
 	mux := configMux(f)
-	for _, want := range []string{`{"telemetry":{"enabled":true}}`, `{"telemetry":{"enabled":false}}`} {
+	for _, want := range []string{`{"telemetry":{"enabled":true},` + o11yOAuthDefaultsJSON + `}`, `{"telemetry":{"enabled":false},` + o11yOAuthDefaultsJSON + `}`} {
 		w := serve(mux, "GET", "/api/config", "")
 		if w.Code != 200 || w.Body.String() != want {
 			t.Errorf("GET = %d %q, want %q", w.Code, w.Body.String(), want)
@@ -166,7 +170,7 @@ func TestUserConfigRoutesAbsentWithoutManager(t *testing.T) {
 func TestUserConfigPostLocalNoOrigin(t *testing.T) {
 	m, path := tempManager(t, userconfig.Scaffold())
 	w := serve(configMux(NewUserConfig(m)), "POST", "/api/config", `{"telemetry":{"enabled":false}}`)
-	if w.Code != 200 || w.Body.String() != `{"telemetry":{"enabled":false}}` {
+	if w.Code != 200 || w.Body.String() != `{"telemetry":{"enabled":false},`+o11yOAuthDefaultsJSON+`}` {
 		t.Errorf("POST = %d %q", w.Code, w.Body.String())
 	}
 	assertConfigHeaders(t, w)
@@ -265,7 +269,7 @@ func TestUserConfigPostBodyValidation(t *testing.T) {
 func TestUserConfigPostEmptyBody(t *testing.T) {
 	f := &fakeUserConfig{snaps: []userconfig.Snapshot{snapshotWith(false)}}
 	w := serve(configMux(f), "POST", "/api/config", `{}`)
-	if w.Code != 200 || w.Body.String() != `{"telemetry":{"enabled":false}}` {
+	if w.Code != 200 || w.Body.String() != `{"telemetry":{"enabled":false},`+o11yOAuthDefaultsJSON+`}` {
 		t.Errorf("fake: %d %q", w.Code, w.Body.String())
 	}
 	if len(f.updates) != 1 || f.updates[0].Len() != 0 {
@@ -278,7 +282,7 @@ func TestUserConfigPostEmptyBody(t *testing.T) {
 		t.Fatal(err)
 	}
 	w = serve(configMux(NewUserConfig(m)), "POST", "/api/config", `{}`)
-	if w.Code != 200 || w.Body.String() != `{"telemetry":{"enabled":true}}` {
+	if w.Code != 200 || w.Body.String() != `{"telemetry":{"enabled":true},`+o11yOAuthDefaultsJSON+`}` {
 		t.Errorf("manager: %d %q", w.Code, w.Body.String())
 	}
 	content, _ := os.ReadFile(path)
@@ -330,7 +334,7 @@ func TestUserConfigPostUpdateErrors(t *testing.T) {
 func TestUserConfigPostReturnsGet(t *testing.T) {
 	f := &fakeUserConfig{snaps: []userconfig.Snapshot{snapshotWith(true)}}
 	w := serve(configMux(f), "POST", "/api/config", `{"telemetry":{"enabled":false}}`)
-	if w.Body.String() != `{"telemetry":{"enabled":true}}` {
+	if w.Body.String() != `{"telemetry":{"enabled":true},`+o11yOAuthDefaultsJSON+`}` {
 		t.Errorf("body %q", w.Body.String())
 	}
 }
@@ -397,7 +401,7 @@ func TestConfigStatusEndpointShape(t *testing.T) {
 	if !sameSet(keys, want) {
 		t.Errorf("keys %v", keys)
 	}
-	if string(raw["effective"]) != `{"telemetry":{"enabled":false}}` ||
+	if string(raw["effective"]) != `{"telemetry":{"enabled":false},`+o11yOAuthDefaultsJSON+`}` ||
 		string(raw["effective"]) != string(userconfig.EncodeSettings(m.Get().Settings)) {
 		t.Errorf("effective %s", raw["effective"])
 	}

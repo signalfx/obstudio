@@ -751,13 +751,15 @@ func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 			"  Agent setup:         obstudio install --target=<agent>[,<agent>...]\n"+
 			"\nEnvironment Variables\n"+
 			"  OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL: %s\n"+
-			"  OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL: %s\n\n",
+			"  OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL: %s\n"+
+			"  OBSTUDIO_CONFIG_MANAGER: %s\n\n",
 		observerBrowserURL(mainAddr),
 		otlpHTTPAddr,
 		otlpGRPCAddr,
 		mainAddr,
 		strings.TrimSpace(os.Getenv("OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL")),
 		strings.TrimSpace(os.Getenv("OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL")),
+		strings.TrimSpace(os.Getenv("OBSTUDIO_CONFIG_MANAGER")),
 	)
 }
 
