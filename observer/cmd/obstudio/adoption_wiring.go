@@ -102,6 +102,15 @@ func (w adoptionWiring) cloudConnected() api.SplunkCloudConnected {
 	return w.emitter.Connected
 }
 
+// validationRan reports a validation run started from the REST API. With no
+// emitter it is nil, which the api package ignores.
+func (w adoptionWiring) validationRan() api.ValidationRunExecuted {
+	if w.emitter == nil {
+		return nil
+	}
+	return w.emitter.ValidationRun
+}
+
 // observerStarted records first_use{observer_start}.
 func (w adoptionWiring) observerStarted() { w.emitter.ObserverStarted() }
 
@@ -121,9 +130,10 @@ func (w adoptionWiring) shutdown() {
 // Splunk Observability Studio panel is visible and focused.
 const surfaceHeader = "X-Obstudio-Surface"
 
-// handler wraps the HTTP mux to observe UI activity and UI validation runs.
-// Connects are reported by the api package (cloudConnected). With no emitter
-// it returns next unchanged.
+// handler wraps the HTTP mux to observe UI activity. It sits outside the mux
+// because the surface header can arrive on any route. Connects and validation
+// runs are reported by the api package instead. With no emitter it returns
+// next unchanged.
 func (w adoptionWiring) handler(next http.Handler) http.Handler {
 	em := w.emitter
 	if em == nil {
@@ -135,35 +145,6 @@ func (w adoptionWiring) handler(next http.Handler) http.Handler {
 			path != "/api/health" && !strings.HasPrefix(path, "/api/splunk/") {
 			em.ActiveUI()
 		}
-		if r.Method != http.MethodPost || path != "/api/validation/run" {
-			next.ServeHTTP(rw, r)
-			return
-		}
-		sw := &statusWriter{ResponseWriter: rw, status: http.StatusOK}
-		next.ServeHTTP(sw, r)
-		if sw.status >= 200 && sw.status < 300 {
-			em.ValidationRun()
-		}
+		next.ServeHTTP(rw, r)
 	})
 }
-
-// statusWriter records the response status of a plain JSON handler.
-type statusWriter struct {
-	http.ResponseWriter
-	status  int
-	written bool
-}
-
-func (w *statusWriter) WriteHeader(code int) {
-	if !w.written {
-		w.status, w.written = code, true
-	}
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *statusWriter) Write(b []byte) (int, error) {
-	w.written = true
-	return w.ResponseWriter.Write(b)
-}
-
-func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

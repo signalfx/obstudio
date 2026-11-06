@@ -14,7 +14,9 @@ import (
 
 	"github.com/signalfx/obstudio/observer/internal/adoption"
 	"github.com/signalfx/obstudio/observer/internal/adoption/gate"
+	"github.com/signalfx/obstudio/observer/internal/api"
 	"github.com/signalfx/obstudio/observer/internal/store"
+	"github.com/signalfx/obstudio/observer/internal/validator"
 )
 
 type closedGate struct{}
@@ -40,6 +42,9 @@ func TestBuildAdoptionWithoutManagerIsInert(t *testing.T) {
 	hooks.Connect()
 	if w.cloudConnected() != nil {
 		t.Fatal("cloud connect hook built with no emitter")
+	}
+	if w.validationRan() != nil {
+		t.Fatal("validation run hook built with no emitter")
 	}
 	w.observerStarted()
 	w.shutdown()
@@ -87,8 +92,7 @@ func newTestEmitter(t *testing.T) (*adoption.Emitter, *sdkmetric.ManualReader) {
 func TestAdoptionHandlerObservesUIAndRoutes(t *testing.T) {
 	em, r := newTestEmitter(t)
 	w := adoptionWiring{emitter: em}
-	status := http.StatusOK
-	h := w.handler(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) { rw.WriteHeader(status) }))
+	h := w.handler(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) { rw.WriteHeader(http.StatusOK) }))
 	do := func(method, path string, ui bool) {
 		req := httptest.NewRequest(method, path, nil)
 		if ui {
@@ -100,29 +104,45 @@ func TestAdoptionHandlerObservesUIAndRoutes(t *testing.T) {
 	do(http.MethodGet, "/api/health", true)
 	do(http.MethodGet, "/api/splunk/export", true)
 	do(http.MethodGet, "/api/query/traces", false)
-	status = http.StatusInternalServerError
-	do(http.MethodPost, "/api/validation/run", false)
 	if got := recordedPoints(t, r); len(got) != 0 {
 		t.Fatalf("recorded %v", got)
 	}
 
-	status = http.StatusOK
 	do(http.MethodGet, "/api/query/traces", true)
+	// The api package reports connects and validation runs; a 2xx here is
+	// neither.
 	do(http.MethodPost, "/api/validation/run", false)
-	// The api package reports connects; a 2xx here is not one.
 	do(http.MethodPost, "/api/splunk/export", false)
 	got := recordedPoints(t, r)
-	want := map[string]int64{
-		adoption.MetricActive + "{ui}":               1,
-		adoption.MetricFirstUse + "{validation_run}": 1,
-	}
-	if len(got) != len(want) {
+	if len(got) != 1 || got[adoption.MetricActive+"{ui}"] != 1 {
 		t.Fatalf("recorded %v", got)
 	}
-	for k, v := range want {
-		if got[k] != v {
-			t.Fatalf("recorded %v", got)
-		}
+}
+
+type startedRunner struct{}
+
+func (startedRunner) Run(context.Context) validator.Summary {
+	return validator.Summary{Enabled: true, Status: validator.StatusRunning, ActiveRunID: "run-1"}
+}
+
+func TestAdoptionValidationRunFromREST(t *testing.T) {
+	em, r := newTestEmitter(t)
+	w := adoptionWiring{emitter: em}
+	mux := http.NewServeMux()
+	api.Register(mux, store.New(), validator.NewStore(), validator.Runner(startedRunner{}), w.validationRan())
+	server := httptest.NewServer(w.handler(mux))
+	defer server.Close()
+
+	resp, err := http.Post(server.URL+"/api/validation/run", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	if got := recordedPoints(t, r); len(got) != 1 || got[adoption.MetricFirstUse+"{validation_run}"] != 1 {
+		t.Fatalf("recorded %v", got)
 	}
 }
 
