@@ -5,7 +5,8 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CLOUD_CONNECT_DESCRIPTION } from "../cloud/copy";
-import { OverviewTab, formatScoreValue, scoreTone, shortCommit } from "./OverviewTab";
+import type { LogRecord, TraceSummary } from "../api/types";
+import { OverviewTab, formatScoreValue, latestRecordMs, scoreTone, shortCommit } from "./OverviewTab";
 
 interface BridgeRequest {
   action: string;
@@ -1081,5 +1082,108 @@ describe("OverviewTab outstanding work and formatting", () => {
     expect(event.defaultPrevented).toBe(false);
     expect(link.getAttribute("href")).toBe("/api/audit/report");
     expect(link.getAttribute("target")).toBe("_blank");
+  });
+});
+
+describe("Overview telemetry summary", () => {
+  const stats = { spanCount: 42, dataPointCount: 10, metricNameCount: 7, logCount: 3, traceCount: 5, serviceNames: ["checkout", "cart"] };
+
+  function makeLog(overrides: Partial<LogRecord>): LogRecord {
+    return {
+      id: "log",
+      timeUnixNano: "1762300000000000000",
+      body: "",
+      attributes: {},
+      resource: { serviceName: "checkout", attributes: {} },
+      scope: { name: "test" },
+      ...overrides,
+    } as LogRecord;
+  }
+
+  function stubSummaryFetch(services: unknown) {
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/api/query/stats/services")) {
+        if (services instanceof Error) throw services;
+        return ok(services);
+      }
+      if (url.includes("/api/splunk/export")) return ok(statusBody(false));
+      return ok(makeScore({}));
+    }));
+  }
+
+  it("shows counts, services with errors, and recent error logs", async () => {
+    stubSummaryFetch([
+      { name: "cart", traceCount: 1, spanCount: 10, errorCount: 1 },
+      { name: "checkout", traceCount: 2, spanCount: 20, errorCount: 4 },
+      { name: "quiet", traceCount: 1, spanCount: 5, errorCount: 0 },
+    ]);
+    const onOpenServices = vi.fn();
+    const onOpenLogs = vi.fn();
+    render(
+      <OverviewTab
+        hasTelemetry
+        stats={stats}
+        logs={[
+          makeLog({ id: "old", severityNumber: 17, body: "older failure", timeUnixNano: "1762300000000000000" }),
+          makeLog({ id: "info", severityNumber: 9, body: "all good" }),
+          makeLog({ id: "new", severityNumber: 21, body: "fatal crash", timeUnixNano: "1762300005000000000" }),
+        ]}
+        onOpenServices={onOpenServices}
+        onOpenLogs={onOpenLogs}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "Telemetry Received" });
+    expect(card.textContent).toContain("Spans42");
+    expect(card.textContent).toContain("Metrics7");
+    expect(card.textContent).toContain("Latest record");
+
+    const services = await screen.findByRole("region", { name: "Services with errors" });
+    await waitFor(() => expect(services.querySelectorAll("li")).toHaveLength(2));
+    expect(Array.from(services.querySelectorAll("li")).map((li) => li.textContent)).toEqual(["checkout4 errors", "cart1 error"]);
+
+    const logs = screen.getByRole("region", { name: "Recent error logs" });
+    const bodies = Array.from(logs.querySelectorAll(".overview-summary__text")).map((el) => el.textContent);
+    expect(bodies).toEqual(["fatal crash", "older failure"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "View services" }));
+    fireEvent.click(screen.getByRole("button", { name: "View logs" }));
+    expect(onOpenServices).toHaveBeenCalledOnce();
+    expect(onOpenLogs).toHaveBeenCalledOnce();
+  });
+
+  it("says so when nothing is failing", async () => {
+    stubSummaryFetch([{ name: "checkout", traceCount: 1, spanCount: 5, errorCount: 0 }]);
+    render(<OverviewTab hasTelemetry stats={stats} logs={[makeLog({ severityNumber: 9 })]} />);
+
+    expect(await screen.findByText("No service errors.")).toBeTruthy();
+    expect(screen.getByText("No error logs.")).toBeTruthy();
+  });
+
+  it("reports a failed service stats request", async () => {
+    stubSummaryFetch(new Error("network down"));
+    render(<OverviewTab hasTelemetry stats={stats} />);
+
+    expect(await screen.findByText("Could not load service errors.")).toBeTruthy();
+  });
+
+  it("is hidden until telemetry arrives", () => {
+    stubSummaryFetch([]);
+    render(<OverviewTab hasTelemetry={false} stats={{ ...stats, spanCount: 0, logCount: 0, dataPointCount: 0 }} />);
+
+    expect(screen.queryByRole("article", { name: "Telemetry Received" })).toBeNull();
+  });
+});
+
+describe("latestRecordMs", () => {
+  it("returns the newest log or trace time", () => {
+    const log = { timeUnixNano: "1762300000000000000" } as LogRecord;
+    const trace = { startTime: "2025-11-04T23:46:45.000Z" } as TraceSummary;
+    expect(latestRecordMs([log], [trace])).toBe(Date.parse("2025-11-04T23:46:45.000Z"));
+    expect(latestRecordMs([log], [])).toBe(1762300000000);
+    expect(latestRecordMs([{ timeUnixNano: "0", observedTimeUnixNano: "1762300001000000000" } as LogRecord], [])).toBe(1762300001000);
+    expect(latestRecordMs([{ timeUnixNano: "2025-11-04T23:46:50Z" } as LogRecord], [])).toBe(Date.parse("2025-11-04T23:46:50Z"));
+    expect(latestRecordMs([{ timeUnixNano: "" } as LogRecord], [{ startTime: "nope" } as TraceSummary])).toBeNull();
   });
 });

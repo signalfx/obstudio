@@ -1,12 +1,16 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   fetchInstrumentationScore,
+  fetchServiceStats,
   fetchSplunkExportStatus,
   type InstrumentationScore,
+  type ServiceStats,
 } from "../api/client";
+import type { LogRecord, Stats, TraceSummary } from "../api/types";
 import { useCloudBridge, type SkillDocsId } from "../cloud/bridge";
 import { CLOUD_CONNECT_DESCRIPTION } from "../cloud/copy";
 import { TelemetryEmptyState } from "../components/EmptyState";
+import { formatUtcTimestamp } from "../format";
 import { CopyTextButton } from "../layout";
 
 /** Agent skill a checklist step hands off to. */
@@ -53,6 +57,11 @@ interface OverviewTabProps {
   onOpenCloud?: () => void;
   /** Whether any telemetry has arrived, or undefined while loading. */
   hasTelemetry?: boolean;
+  stats?: Stats | null;
+  logs?: LogRecord[];
+  traces?: TraceSummary[];
+  onOpenServices?: () => void;
+  onOpenLogs?: () => void;
 }
 
 // --- Stub data -------------------------------------------------------------
@@ -230,6 +239,148 @@ function SkillCard({ id, title, items, onOpenSkillDocs, empty, badge }: {
   );
 }
 
+/** OTLP severity number where ERROR starts. */
+const ERROR_SEVERITY_NUMBER = 17;
+const SUMMARY_LIMIT = 5;
+
+/** Parses a log time, which the API sends as nanoseconds or RFC 3339; 0 when unset. */
+function nanosToMs(ts: string | undefined): number {
+  if (!ts) return 0;
+  if (/^\d+$/.test(ts)) return Number(BigInt(ts) / BigInt(1_000_000));
+  const ms = Date.parse(ts);
+  return Number.isFinite(ms) && ms > 0 ? ms : 0;
+}
+
+/** Event time, or the observed time when the producer left the event time unset. */
+function logTimeMs(log: LogRecord): number {
+  return nanosToMs(log.timeUnixNano) || nanosToMs(log.observedTimeUnixNano);
+}
+
+/** Newest log or trace timestamp in the client's buffer, or null when none parse. */
+export function latestRecordMs(logs: LogRecord[], traces: TraceSummary[]): number | null {
+  let latest = 0;
+  for (const log of logs) latest = Math.max(latest, logTimeMs(log));
+  for (const trace of traces) {
+    const ms = trace.startTime ? Date.parse(trace.startTime) : NaN;
+    if (Number.isFinite(ms)) latest = Math.max(latest, ms);
+  }
+  return latest > 0 ? latest : null;
+}
+
+/** What has arrived so far: counts, services with errors, and recent error logs. */
+function TelemetrySummary({ stats, logs, traces, onOpenServices, onOpenLogs }: {
+  stats: Stats;
+  logs: LogRecord[];
+  traces: TraceSummary[];
+  onOpenServices?: () => void;
+  onOpenLogs?: () => void;
+}): React.ReactElement {
+  const [services, setServices] = useState<ServiceStats[] | "error" | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchServiceStats(controller.signal)
+      .then((rows) => {
+        if (!controller.signal.aborted) setServices(rows);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setServices("error");
+      });
+    return () => controller.abort();
+  }, [stats.spanCount]);
+
+  const erroringServices = Array.isArray(services)
+    ? services.filter((s) => s.errorCount > 0).sort((a, b) => b.errorCount - a.errorCount).slice(0, SUMMARY_LIMIT)
+    : [];
+  const errorLogs = logs
+    .filter((log) => (log.severityNumber ?? 0) >= ERROR_SEVERITY_NUMBER)
+    .sort((a, b) => logTimeMs(b) - logTimeMs(a))
+    .slice(0, SUMMARY_LIMIT);
+  const latest = latestRecordMs(logs, traces);
+  const counts: [string, number][] = [
+    ["Traces", stats.traceCount],
+    ["Spans", stats.spanCount],
+    ["Metrics", stats.metricNameCount],
+    ["Logs", stats.logCount],
+  ];
+
+  return (
+    <article className="overview-checklist" aria-labelledby="overview-summary-title">
+      <div className="overview-checklist__header">
+        <h2 className="overview-checklist__title" id="overview-summary-title">Telemetry Received</h2>
+        {latest !== null ? (
+          <span className="overview-summary__meta">Latest record {formatUtcTimestamp(new Date(latest))}</span>
+        ) : null}
+      </div>
+      <dl className="overview-summary__counts">
+        {counts.map(([label, value]) => (
+          <div key={label} className="overview-summary__count">
+            <dt className="overview-summary__meta">{label}</dt>
+            <dd className="overview-summary__count-value">{value.toLocaleString()}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="overview-summary__columns">
+        <section aria-labelledby="overview-summary-services">
+          <div className="overview-checklist__header">
+            <h3 className="overview-checklist__title" id="overview-summary-services">Services with errors</h3>
+            {onOpenServices ? (
+              <button type="button" className="overview-checklist__nav" onClick={onOpenServices}>
+                View services <span aria-hidden="true">→</span>
+              </button>
+            ) : null}
+          </div>
+          {services === null ? (
+            <p className="overview-skills__empty-hint">Loading…</p>
+          ) : services === "error" ? (
+            <p className="overview-skills__empty-hint">Could not load service errors.</p>
+          ) : erroringServices.length === 0 ? (
+            <p className="overview-skills__empty-hint">No service errors.</p>
+          ) : (
+            <ul className="overview-checklist__list">
+              {erroringServices.map((s) => (
+                <li key={s.name} className="overview-checklist__item">
+                  <span className="overview-summary__text">{s.name}</span>
+                  <span className="overview-summary__meta">
+                    {s.errorCount} {s.errorCount === 1 ? "error" : "errors"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section aria-labelledby="overview-summary-logs">
+          <div className="overview-checklist__header">
+            <h3 className="overview-checklist__title" id="overview-summary-logs">Recent error logs</h3>
+            {onOpenLogs ? (
+              <button type="button" className="overview-checklist__nav" onClick={onOpenLogs}>
+                View logs <span aria-hidden="true">→</span>
+              </button>
+            ) : null}
+          </div>
+          {errorLogs.length === 0 ? (
+            <p className="overview-skills__empty-hint">No error logs.</p>
+          ) : (
+            <ul className="overview-checklist__list">
+              {errorLogs.map((log, index) => (
+                <li key={log.id || index} className="overview-checklist__item overview-summary__log">
+                  {logTimeMs(log) > 0 ? (
+                    <span className="overview-summary__meta">{formatUtcTimestamp(new Date(logTimeMs(log)))}</span>
+                  ) : null}
+                  {log.resource?.serviceName ? (
+                    <span className="overview-summary__meta">{log.resource.serviceName}</span>
+                  ) : null}
+                  <span className="overview-summary__text">{log.body}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </article>
+  );
+}
+
 /** Abbreviates a commit id for display, tolerating an unknown value. */
 export function shortCommit(commit: string | undefined): string {
   const value = (commit ?? "").trim();
@@ -253,7 +404,15 @@ export function scoreTone(score: number): "good" | "warn" | "bad" {
  * progress. The score is derived from the latest `$otel-audit` report; the
  * instrumentation skill list is fixed.
  */
-export function OverviewTab({ onOpenCloud, hasTelemetry }: OverviewTabProps): React.ReactElement {
+export function OverviewTab({
+  onOpenCloud,
+  hasTelemetry,
+  stats,
+  logs = [],
+  traces = [],
+  onOpenServices,
+  onOpenLogs,
+}: OverviewTabProps): React.ReactElement {
   const { bridge, callBridge } = useCloudBridge();
   const [docsError, setDocsError] = useState<string | null>(null);
   const [scoreReport, setScoreReport] = useState<InstrumentationScore | null>(null);
@@ -567,6 +726,16 @@ export function OverviewTab({ onOpenCloud, hasTelemetry }: OverviewTabProps): Re
             ) : null}
           </div>
         </div>
+
+        {hasTelemetry && stats ? (
+          <TelemetrySummary
+            stats={stats}
+            logs={logs}
+            traces={traces}
+            onOpenServices={onOpenServices}
+            onOpenLogs={onOpenLogs}
+          />
+        ) : null}
 
         {scored ? (
           <div className={reportOpen ? "overview-disclosure is-open" : "overview-disclosure"}>
