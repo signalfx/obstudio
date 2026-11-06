@@ -122,7 +122,7 @@ func (w adoptionWiring) shutdown() {
 	w.gate.Close()
 }
 
-// surfaceHeader is set by the extension host on requests made while the
+// surfaceHeader must be set by the extension host on requests made while the
 // Splunk Observability Studio panel is visible and focused.
 const surfaceHeader = "X-Obstudio-Surface"
 
