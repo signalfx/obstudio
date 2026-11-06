@@ -27,11 +27,6 @@ type adoptionWiring struct {
 	emitter *adoption.Emitter
 }
 
-// resolveObserverOwner is what started this observer: the OBSTUDIO_OWNER
-// launcher contract, cli when unset. It is reported in the server info and,
-// bucketed to the launcher set, as obstudio.launcher in usage data.
-func resolveObserverOwner() string { return envOr("OBSTUDIO_OWNER", "cli") }
-
 // buildAdoption wires adoption telemetry over the Config Manager. With no
 // Manager the gate could never open, so nothing is built. path is the
 // Manager's config.yaml; its directory is ~/.obstudio. owner is the resolved

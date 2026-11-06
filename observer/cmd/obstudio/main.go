@@ -390,6 +390,12 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+// resolveObserverOwner names what started this observer. Whatever launches
+// obstudio (the VS Code extension, a managed start, the eval image) sets
+// OBSTUDIO_OWNER in its environment; a person running the binary directly
+// sets nothing, so the default is cli.
+func resolveObserverOwner() string { return envOr("OBSTUDIO_OWNER", "cli") }
+
 func envBool(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
 	case "1", "true", "yes", "y", "on":
