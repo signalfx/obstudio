@@ -10,6 +10,7 @@ import (
 
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.opentelemetry.io/otel/sdk/resource"
 
 	"github.com/signalfx/obstudio/observer/internal/adoption"
 	"github.com/signalfx/obstudio/observer/internal/adoption/gate"
@@ -133,5 +134,80 @@ func TestAdoptionMCPHooks(t *testing.T) {
 	got := recordedPoints(t, r)
 	if got[adoption.MetricActive+"{mcp}"] != 1 || got[adoption.MetricFirstUse+"{validation_run}"] != 1 || got[adoption.MetricFirstUse+"{connect}"] != 1 {
 		t.Fatalf("recorded %v", got)
+	}
+}
+
+type openGate struct{}
+
+func (openGate) Decide() gate.Decision         { return gate.Decision{Allowed: true} }
+func (openGate) OptedOut() bool                { return false }
+func (openGate) SubscribeOptOut(func()) func() { return func() {} }
+
+// captureExporter keeps the last resource the emitter forwarded.
+type captureExporter struct{ res *resource.Resource }
+
+func (*captureExporter) Temporality(sdkmetric.InstrumentKind) metricdata.Temporality {
+	return metricdata.DeltaTemporality
+}
+func (*captureExporter) Aggregation(k sdkmetric.InstrumentKind) sdkmetric.Aggregation {
+	return sdkmetric.DefaultAggregationSelector(k)
+}
+func (c *captureExporter) Export(_ context.Context, rm *metricdata.ResourceMetrics) error {
+	c.res = rm.Resource
+	return nil
+}
+func (*captureExporter) ForceFlush(context.Context) error { return nil }
+func (*captureExporter) Shutdown(context.Context) error   { return nil }
+
+func TestAdoptionLauncherFromObserverOwner(t *testing.T) {
+	cases := []struct {
+		name, owner, otelAttrs, want string
+		unset                        bool
+	}{
+		{name: "unset", unset: true, want: "cli"},
+		{name: "vscode extension", owner: "vscode-extension", want: "vscode-extension"},
+		{name: "plugin", owner: "codex-plugin", want: adoption.LauncherOther},
+		{name: "otel env ignored", owner: "codex-eval", otelAttrs: "obstudio.launcher=cli", want: adoption.LauncherOther},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("OBSTUDIO_OWNER", tc.owner)
+			if tc.unset {
+				_ = os.Unsetenv("OBSTUDIO_OWNER")
+			}
+			t.Setenv("OTEL_RESOURCE_ATTRIBUTES", tc.otelAttrs)
+			dir := filepath.Join(t.TempDir(), ".obstudio")
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "install_id"), []byte("3f1c2a9e-7b4d-4e2a-9c1f-0a8b6d5e4f32\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			em, err := adoption.New(adoption.Config{Dir: dir, Gate: openGate{}, Version: "test", Launcher: resolveObserverOwner()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			capture := &captureExporter{}
+			wrap := em.Exporter(capture)
+			r := sdkmetric.NewManualReader(sdkmetric.WithTemporalitySelector(wrap.Temporality))
+			if err := em.Start(r); err != nil {
+				t.Fatal(err)
+			}
+			em.ObserverStarted()
+			var rm metricdata.ResourceMetrics
+			if err := r.Collect(context.Background(), &rm); err != nil {
+				t.Fatal(err)
+			}
+			if err := wrap.Export(context.Background(), &rm); err != nil {
+				t.Fatal(err)
+			}
+			if capture.res == nil {
+				t.Fatal("nothing forwarded")
+			}
+			got, _ := capture.res.Set().Value("obstudio.launcher")
+			if got.AsString() != tc.want {
+				t.Fatalf("obstudio.launcher = %q, want %q", got.AsString(), tc.want)
+			}
+		})
 	}
 }

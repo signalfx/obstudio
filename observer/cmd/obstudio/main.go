@@ -61,7 +61,6 @@ type runConfig struct {
 	otlpHTTPPort       string
 	envFile            string
 	publicMCPURL       string
-	launcher           string
 	connectionSettings *connectionPersistence
 	// portExplicit is true when the UI port came from an explicit source
 	// (--port flag or OBSTUDIO_PORT env) rather than the fixed default. It
@@ -103,7 +102,6 @@ func newRootCmd(config *runConfig) *cobra.Command {
 	root.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Splunk Observability Studio web UI, REST API, and MCP HTTP port")
 	_ = root.Flags().MarkDeprecated("observer-http-port", "use --port instead")
 	root.Flags().StringVar(&config.envFile, "env-file", "", "Load KEY=VALUE settings from an env file before startup")
-	root.Flags().StringVar(&config.launcher, "launcher", "", "What started obstudio, for usage data: vscode-extension, cursor-extension, windsurf-extension, kiro-extension or cli")
 
 	root.AddCommand(newInstallCmd())
 	root.AddCommand(newLifecycleCommands()...)
@@ -229,7 +227,7 @@ func run(config runConfig) error {
 		log.Printf("[splunk-logs] logs forwarding disabled: %s", logsStatus.LastExportError)
 	}
 
-	observerOwner := envOr("OBSTUDIO_OWNER", "cli")
+	observerOwner := resolveObserverOwner()
 	observerMode := envOr("OBSTUDIO_MODE", "standalone")
 	if observerMode == managedObserverMode && !managedLaunchAuthorized {
 		observerMode = "standalone"
@@ -241,8 +239,9 @@ func run(config runConfig) error {
 		defer userConfig.manager.Close()
 	}
 	// With no Manager this is inert. Deferred after the Manager's Close so it
-	// runs first: the shutdown flush, then the gate's Close.
-	adoptionTelemetry := buildAdoption(userConfig.manager, userConfig.path, config.launcher, s)
+	// runs first: the shutdown flush, then the gate's Close. The launcher sent
+	// with usage data is the resolved owner, bucketed by the emitter.
+	adoptionTelemetry := buildAdoption(userConfig.manager, userConfig.path, observerOwner, s)
 	defer adoptionTelemetry.shutdown()
 	stopManaged := make(chan struct{}, 1)
 	freeAccountSubmitter := freeaccount.New(freeaccount.Config{})
@@ -569,7 +568,6 @@ func resolveRunConfig(config runConfig) runConfig {
 		otlpGRPCPort:     valueOrEnv(config.otlpGRPCPort, "OTLP_GRPC_PORT", "4317"),
 		envFile:          config.envFile,
 		publicMCPURL:     valueOrEnv(config.publicMCPURL, observerPublicMCPURLEnv, ""),
-		launcher:         config.launcher,
 		portExplicit:     portExplicit,
 	}
 }

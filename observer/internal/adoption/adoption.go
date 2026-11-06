@@ -87,8 +87,8 @@ type Config struct {
 	Gate Gate
 	// Version is the build's ldflags version, sent as service.version.
 	Version string
-	// Launcher is the --launcher value; anything outside the known set is
-	// sent as "other".
+	// Launcher is the resolved OBSTUDIO_OWNER value; anything outside the
+	// known set is sent as "other".
 	Launcher string
 	// Now is the clock; nil means time.Now. Dates are UTC.
 	Now func() time.Time
@@ -166,7 +166,7 @@ func New(cfg Config) (*Emitter, error) {
 	return e, nil
 }
 
-// BoundLauncher maps a --launcher value to the launcher set, else "other".
+// BoundLauncher maps an OBSTUDIO_OWNER value to the launcher set, else "other".
 func BoundLauncher(v string) string {
 	if launchers[v] {
 		return v

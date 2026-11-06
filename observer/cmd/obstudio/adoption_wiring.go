@@ -26,10 +26,16 @@ type adoptionWiring struct {
 	emitter *adoption.Emitter
 }
 
+// resolveObserverOwner is what started this observer: the OBSTUDIO_OWNER
+// launcher contract, cli when unset. It is reported in the server info and,
+// bucketed to the launcher set, as obstudio.launcher in usage data.
+func resolveObserverOwner() string { return envOr("OBSTUDIO_OWNER", "cli") }
+
 // buildAdoption wires adoption telemetry over the Config Manager. With no
 // Manager the gate could never open, so nothing is built. path is the
-// Manager's config.yaml; its directory is ~/.obstudio.
-func buildAdoption(m *userconfig.Manager, path, launcher string, s *store.Store) adoptionWiring {
+// Manager's config.yaml; its directory is ~/.obstudio. owner is the resolved
+// OBSTUDIO_OWNER; a value outside the launcher set is sent as "other".
+func buildAdoption(m *userconfig.Manager, path, owner string, s *store.Store) adoptionWiring {
 	if m == nil || path == "" {
 		return adoptionWiring{}
 	}
@@ -41,7 +47,7 @@ func buildAdoption(m *userconfig.Manager, path, launcher string, s *store.Store)
 		// so a local build never sends to the production endpoint.
 		DestinationSet: overrideSet || version != "dev",
 	})
-	w, err := startAdoption(g, filepath.Dir(path), launcher)
+	w, err := startAdoption(g, filepath.Dir(path), owner)
 	if err != nil {
 		log.Printf("adoption telemetry is unavailable: %v", err)
 		g.Close()
@@ -51,12 +57,12 @@ func buildAdoption(m *userconfig.Manager, path, launcher string, s *store.Store)
 	return w
 }
 
-func startAdoption(g *gate.Gate, dir, launcher string) (adoptionWiring, error) {
+func startAdoption(g *gate.Gate, dir, owner string) (adoptionWiring, error) {
 	exp, err := export.NewExporter(export.ExporterConfig{ClientType: export.ClientTypeLongRunning, Gate: g})
 	if err != nil {
 		return adoptionWiring{}, err
 	}
-	em, err := adoption.New(adoption.Config{Dir: dir, Gate: g, Version: version, Launcher: launcher})
+	em, err := adoption.New(adoption.Config{Dir: dir, Gate: g, Version: version, Launcher: owner})
 	if err != nil {
 		return adoptionWiring{}, err
 	}
