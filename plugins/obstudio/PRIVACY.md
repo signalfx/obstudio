@@ -187,10 +187,16 @@ hook does not pass `SPLUNK_*` or `OBSTUDIO_SPLUNK_*` variables to the Studio
 process, and the `obstudio` managed lifecycle no longer records them in
 `~/.obstudio/managed-observer.json`.
 
-<!-- TODO(confirm): whether an older managed-observer.json written by a previous
-release can still contain SPLUNK_ACCESS_TOKEN until it is rewritten, and whether
-Studio scrubs it. Also confirm Studio restores a stored connection from its
-credential-store reference after restart. -->
+A `managed-observer.json` written by an older release may still contain
+`SPLUNK_ACCESS_TOKEN` and other `SPLUNK_*` values. Current releases never read
+those keys back: on load, only the fixed list of non-secret managed keys (host,
+ports, workspace paths, `WEAVER_PATH` and similar) is kept, so a stale token is
+not passed to the Studio process. The old file is not scrubbed when it is read.
+It is replaced with a filtered copy the next time the managed Studio starts
+successfully. To remove a stale token immediately, delete
+`~/.obstudio/managed-observer.json`. At startup Studio restores a saved Cloud or
+logs connection by looking up its credential-store reference, not from this
+file.
 
 ## Privacy policy and contact
 
