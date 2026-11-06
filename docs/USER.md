@@ -242,9 +242,14 @@ can use a custom port. See Splunk's [HEC endpoint reference](https://help.splunk
 
 - **Source.** The form retains the saved source or defaults to `otel`;
   sourcetype defaults to `otel:logs`. These fields are not shown in the form.
-- **TLS.** New endpoints verify the server certificate. Editing the same
-  endpoint retains its saved TLS setting. The form has no option to skip
-  certificate verification.
+- **TLS.** New endpoints verify the server certificate. Use **Skip TLS
+  certificate verification** for development indexes, such as trial accounts
+  whose HEC endpoint has an untrusted certificate. TLS still encrypts the
+  connection, but Studio skips server identity checks. Leave this unchecked
+  when the endpoint has a trusted certificate. Select **Edit token** to
+  review or change the saved TLS choice. Changing the endpoint clears it.
+- **Disconnect.** Confirm **Disconnect** to remove the HEC token and turn
+  off logs export. Logs remain available locally.
 - **Forwarding.** Only logs received while export is enabled are forwarded,
   apart from the explicit connection test. Paused or disconnected logs stay
   local and are not replayed on resume. Pause, Disconnect and destination

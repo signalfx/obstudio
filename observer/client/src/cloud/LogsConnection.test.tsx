@@ -45,6 +45,171 @@ const connected: SplunkLogsStatus = {
   lastExportSuccess: new Date().toISOString(),
 };
 
+it.each(["browser", "IDE"] as const)("saves an explicit TLS verification exception through the logs form (%s)", async (host) => {
+  const { posts } = backend(empty, host);
+  const user = userEvent.setup();
+  render(<LogsConnection />);
+  await user.type(await screen.findByLabelText("HEC endpoint"), configured.endpoint);
+  await user.type(screen.getByLabelText("HEC token"), "test-hec-token");
+  await user.type(screen.getByLabelText("Logs index"), "studio");
+  const checkbox = screen.getByRole("checkbox", { name: "Skip TLS certificate verification" }) as HTMLInputElement;
+  expect(checkbox.checked).toBe(false);
+  expect(checkbox.getAttribute("aria-describedby")).toBe("cloud-logs-insecure-help");
+  checkbox.focus();
+  await user.keyboard(" ");
+  expect(checkbox.checked).toBe(true);
+  await user.click(screen.getByRole("button", { name: "Connect Splunk Platform" }));
+  await screen.findByRole("switch", { name: "Logs export is on" });
+  expect(posts).toEqual([expect.objectContaining({ insecureSkipVerify: true, verifyConnection: true, enabled: true })]);
+  await user.click(screen.getByRole("button", { name: "Edit token for Splunk Platform" }));
+  expect((screen.getByRole("checkbox", { name: "Skip TLS certificate verification" }) as HTMLInputElement).checked).toBe(true);
+});
+
+it.each(["browser", "IDE"] as const)("restores TLS on Cancel and resets the exception when the endpoint changes (%s)", async (host) => {
+  const { posts } = backend({ ...connected, insecureSkipVerify: true }, host);
+  const user = userEvent.setup();
+  const view = render(<LogsConnection refreshKey="first" />);
+  await user.click(await screen.findByRole("button", { name: "Edit token for Splunk Platform" }));
+  const tls = () => screen.getByRole("checkbox", { name: "Skip TLS certificate verification" }) as HTMLInputElement;
+  expect(tls().checked).toBe(true);
+  await user.click(tls());
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  await user.click(screen.getByRole("button", { name: "Edit token for Splunk Platform" }));
+  expect(tls().checked).toBe(true);
+  await user.clear(screen.getByLabelText("HEC endpoint"));
+  await user.type(screen.getByLabelText("HEC endpoint"), "https://other.example/services/collector");
+  expect(tls().checked).toBe(false);
+  view.rerender(<LogsConnection refreshKey="second" />);
+  await act(async () => {});
+  expect(tls().checked).toBe(false);
+  await user.type(screen.getByLabelText("HEC token"), "new-endpoint-token");
+  await user.click(screen.getByRole("button", { name: "Save Splunk Platform changes" }));
+  await screen.findByRole("switch", { name: "Logs export is on" });
+  expect(posts).toEqual([expect.objectContaining({ endpoint: "https://other.example/services/collector", insecureSkipVerify: false, preserveEnabled: true })]);
+});
+
+it.each(["browser", "IDE"] as const)("saves TLS verification enabled for the same endpoint (%s)", async (host) => {
+  const { posts } = backend({ ...connected, insecureSkipVerify: true }, host);
+  const user = userEvent.setup();
+  render(<LogsConnection />);
+  await user.click(await screen.findByRole("button", { name: "Edit token for Splunk Platform" }));
+  await user.click(screen.getByRole("checkbox", { name: "Skip TLS certificate verification" }));
+  await user.click(screen.getByRole("button", { name: "Save Splunk Platform changes" }));
+  await screen.findByRole("switch", { name: "Logs export is on" });
+  expect(posts[0]).toMatchObject({ endpoint: configured.endpoint, insecureSkipVerify: false, token: "", preserveEnabled: true });
+});
+
+it.each((["browser", "IDE"] as const).flatMap(host => [false, true].map(cleanupPending => ({ host, cleanupPending }))))("confirms logs Disconnect and returns focus when cancelled ($host, cleanup=$cleanupPending)", async ({ host, cleanupPending }) => {
+  const { posts } = backend({ ...connected, cleanupPending }, host);
+  const user = userEvent.setup();
+  render(<LogsConnection />);
+  const trigger = await screen.findByRole("button", { name: "Disconnect Splunk Platform" });
+  expect(trigger.textContent).toBe("Disconnect");
+  trigger.focus();
+  await user.keyboard("{Enter}");
+  const dialog = screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" });
+  const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+  const confirm = within(dialog).getByRole("button", { name: "Disconnect Splunk Platform" });
+  expect(document.activeElement).toBe(cancel);
+  expect(dialog.textContent).toContain("removes the saved HEC token");
+  expect(posts).toHaveLength(0);
+  await user.click(within(dialog).getByRole("heading", { name: "Disconnect Splunk Platform?" }));
+  expect(document.activeElement).toBe(dialog);
+  await user.tab({ shift: true });
+  expect(document.activeElement).toBe(confirm);
+  await user.tab();
+  expect(document.activeElement).toBe(cancel);
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(posts).toHaveLength(0);
+  await user.click(trigger);
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+  expect(posts).toHaveLength(0);
+  await user.click(screen.getByRole("button", { name: "Edit token for Splunk Platform" }));
+  await user.click(screen.getByRole("button", { name: "Disconnect Splunk Platform" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect Splunk Platform" }));
+  await screen.findByText("Logs disconnected.");
+  expect(posts).toEqual([{ expectedVersion: "v1" }]);
+  expect((screen.getByRole("checkbox", { name: "Skip TLS certificate verification" }) as HTMLInputElement).checked).toBe(false);
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("HEC endpoint")));
+});
+
+it.each((["browser", "IDE"] as const).flatMap(host => [false, true].map(clickMovesFocus => ({ host, clickMovesFocus }))))("keeps Disconnect confirmation focused while pending and returns to recovery on failure ($host, mouse focus=$clickMovesFocus)", async ({ host, clickMovesFocus }) => {
+  const { fetch } = backend(connected, host);
+  const user = userEvent.setup();
+  render(<LogsConnection />);
+  const trigger = await screen.findByRole("button", { name: "Disconnect Splunk Platform" });
+  await user.click(trigger);
+  let finish!: (response: Response) => void;
+  fetch.mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
+  const dialog = screen.getByRole("dialog");
+  const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+  const confirm = within(dialog).getByRole("button", { name: "Disconnect Splunk Platform" });
+  if (clickMovesFocus) await user.click(confirm);
+  else fireEvent.click(confirm);
+  expect(confirm.getAttribute("aria-disabled")).toBe("true");
+  expect(cancel.getAttribute("aria-disabled")).toBe("true");
+  expect(confirm.textContent).toBe("Disconnecting...");
+  await user.keyboard("{Tab}{Escape}{Enter}");
+  expect(document.activeElement).toBe(clickMovesFocus ? confirm : cancel);
+  await user.click(cancel);
+  await user.click(dialog.parentElement!);
+  expect(document.activeElement).toBe(cancel);
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  expect(fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  await act(async () => { finish(new Response(JSON.stringify({ error: "Could not disconnect logs." }), { status: 503 })); });
+  await screen.findByRole("alert");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+  expect(screen.getByRole("switch", { name: "Logs export is on" })).toBeTruthy();
+});
+
+it.each((["browser", "IDE"] as const).flatMap(host => ["status", "disabled"].map(unavailable => ({ host, unavailable }))))("explains unavailable Disconnect and preserves Cancel focus ($host, $unavailable)", async ({ host, unavailable }) => {
+  const { fetch, posts } = backend(connected, host);
+  const user = userEvent.setup();
+  const view = render(<LogsConnection refreshKey="first" />);
+  const trigger = await screen.findByRole("button", { name: "Disconnect Splunk Platform" });
+  await user.click(trigger);
+  if (unavailable === "status") fetch.mockRejectedValueOnce(new Error("Collector unavailable."));
+  view.rerender(<LogsConnection refreshKey="unavailable" disabled={unavailable === "disabled"} />);
+  const dialog = screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" });
+  expect((await within(dialog).findByRole("alert")).textContent).toBe("Disconnect is unavailable. Cancel to review the connection status.");
+  const confirm = within(dialog).getByRole("button", { name: "Disconnect Splunk Platform" });
+  expect(confirm.getAttribute("aria-disabled")).toBe("true");
+  await user.click(confirm);
+  expect(posts).toHaveLength(0);
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("region", { name: "Splunk Platform" })));
+  view.rerender(<LogsConnection refreshKey="recovered" />);
+  await waitFor(() => expect(trigger.hasAttribute("disabled")).toBe(false));
+  await user.click(trigger);
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+  expect(posts).toHaveLength(0);
+});
+
+it.each(["browser", "IDE"] as const)("keeps Disconnect bound to the connection shown when confirmation opened (%s)", async (host) => {
+  const { posts, setStatus } = backend(connected, host);
+  const user = userEvent.setup();
+  const view = render(<LogsConnection refreshKey="first" />);
+  await user.click(await screen.findByRole("button", { name: "Disconnect Splunk Platform" }));
+  setStatus({ ...connected, version: "v2", endpoint: "https://new.example/services/collector" });
+  view.rerender(<LogsConnection refreshKey="second" />);
+  await waitFor(() => expect(screen.getByText(/new.example/)).toBeTruthy());
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect Splunk Platform" }));
+  expect((await screen.findByRole("alert")).textContent).toContain("Logs settings changed");
+  expect(posts).toEqual([{ expectedVersion: "v1" }]);
+  expect(screen.getByRole("switch", { name: "Logs export is on" })).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Reload saved logs settings" }));
+  await user.click(screen.getByRole("button", { name: "Disconnect Splunk Platform" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect Splunk Platform" }));
+  await screen.findByText("Logs disconnected.");
+  expect(posts.at(-1)).toEqual({ expectedVersion: "v2" });
+});
+
 it.each(["browser", "IDE"] as const)("keeps focus in Cloud when a pending logs reload succeeds (%s)", async (host) => {
   const { fetch } = backend({ ...connected, cleanupPending: true }, host);
   const user = userEvent.setup();
@@ -227,6 +392,7 @@ it.each(["browser", "IDE"] as const)("keeps Disconnect uncertain while its saved
   await screen.findByRole("button", { name: "Disconnect Splunk Platform" });
   fetch.mockRejectedValueOnce(new TypeError("Disconnect response lost."));
   await user.click(screen.getByRole("button", { name: "Disconnect Splunk Platform" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
   expect((await screen.findByRole("alert")).textContent).toContain("Disconnect response lost.");
   expect(onSaved).not.toHaveBeenCalled();
   expect(screen.getByRole("button", { name: "Connect Splunk Platform" }).closest("fieldset")?.hasAttribute("disabled")).toBe(true);
@@ -570,6 +736,7 @@ it.each((["browser", "IDE"] as const).flatMap(host => [false, true].map(reconnec
     return new Response(JSON.stringify({ error: "Connection settings were saved; credential cleanup is pending. Unlock the system credential store and retry." }), { status: 500 });
   });
   await user.click(disconnect);
+  await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
   await screen.findByRole("button", { name: "Connect Splunk Platform" });
   expect(await screen.findByText("Credential cleanup is pending. Unlock secure storage, then retry.")).toBeTruthy();
   expect(screen.queryByText("Logs disconnected.")).toBeNull();
@@ -612,6 +779,7 @@ it.each((["browser", "IDE"] as const).flatMap(host => [false,true].map(cleanupPe
   const disconnect = await screen.findByRole("button", { name: "Disconnect Splunk Platform" });
   disconnect.focus();
   await user.keyboard("{Enter}");
+  await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
   await screen.findByText("Logs disconnected.");
   expect(posts).toEqual([{ expectedVersion: "v1" }]);
   expect(screen.queryByRole("button", { name: "Disconnect Splunk Platform" })).toBeNull();
@@ -632,6 +800,7 @@ it.each(["browser", "IDE"] as const)("can retry saved credential cleanup after r
     return new Response(JSON.stringify({ error: "Credential cleanup is pending." }), { status: 500 });
   });
   await user.click(disconnect);
+  await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
   await screen.findByRole("button", { name: "Retry credential cleanup" });
   first.unmount();
   fetch.mockResolvedValueOnce(new Response(JSON.stringify({ ...empty, endpoint: configured.endpoint, index: "studio", version: "v2", canDisconnect: true, cleanupPending: true })));
@@ -657,6 +826,7 @@ it.each(["browser", "IDE"] as const)("reconciles an inline disconnect after its 
     throw new Error("Disconnect response lost");
   });
   await user.click(screen.getByRole("button", { name: "Disconnect Splunk Platform" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
   await screen.findByRole("button", { name: "Connect Splunk Platform" });
   expect(screen.queryByRole("button", { name: "Save Splunk Platform changes" })).toBeNull();
   expect((screen.getByLabelText("Logs index") as HTMLInputElement).value).toBe("");
@@ -685,6 +855,7 @@ it.each((["browser", "IDE"] as const).flatMap(host => [false, true].map(restarte
     throw new Error("Disconnect request lost");
   });
   await user.click(screen.getByRole("button", { name: "Disconnect Splunk Platform" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
   expect((await screen.findByRole("alert")).textContent).toContain("Disconnect request lost");
   expect(screen.queryByText("Logs disconnected.")).toBeNull();
   expect((screen.getByLabelText("Logs index") as HTMLInputElement).value).toBe("studio-draft");
@@ -705,6 +876,7 @@ it.each(["browser", "IDE"] as const)("retains credential cleanup after a lost Di
     throw new Error("Disconnect response lost");
   });
   await user.click(disconnect);
+  await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
   const retry = await screen.findByRole("button", { name: "Retry credential cleanup" });
   expect(screen.getByText("Credential cleanup is pending. Unlock secure storage, then retry.")).toBeTruthy();
   expect(screen.queryByText("Logs disconnected.")).toBeNull();
@@ -731,6 +903,8 @@ it("accepts pasted connection fields, submits with Enter, and clears the token",
   await user.tab();
   await user.clear(screen.getByLabelText("Logs index"));
   await user.paste("studio");
+  await user.tab();
+  expect(document.activeElement).toBe(screen.getByRole("checkbox", { name: "Skip TLS certificate verification" }));
   await user.tab();
   expect(document.activeElement).toBe(
     screen.getByRole("button", { name: "Connect Splunk Platform" }),
@@ -943,6 +1117,7 @@ it.each([true, false])("clears a failed logs edit after disconnect (cancel first
     expect(onDetailsChange.mock.lastCall?.[0].failed).toBe(false);
   }
   await user.click(screen.getByRole("button", { name: "Disconnect Splunk Platform" }));
+  await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
   await screen.findByText("Logs disconnected.");
   expect(screen.queryByText("Connection failed")).toBeNull();
   expect(screen.getByText("Not connected")).toBeTruthy();
@@ -1069,6 +1244,7 @@ it("hides connected fields and opens an empty form after Disconnect", async () =
   expect(screen.queryByRole("form", { name: "Logs connection" })).toBeNull();
   disconnect.focus();
   await user.keyboard("{Enter}");
+  await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
   await screen.findByRole("form", { name: "Logs connection" });
   expect(posts[1]).toEqual({ expectedVersion: "v2" });
   expect(screen.queryByRole("switch")).toBeNull();
@@ -1095,10 +1271,12 @@ it("keeps the connected view usable when disconnect fails, then retries", async 
   const disconnect = await screen.findByRole("button", { name: "Disconnect Splunk Platform" });
   fetch.mockImplementationOnce(async () => new Response(JSON.stringify({ error: "Could not disconnect logs." }), { status: 500 }));
   await user.click(disconnect);
+  await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
   expect((await screen.findByRole("alert")).textContent).toContain("Could not disconnect logs.");
   expect(screen.queryByRole("form", { name: "Logs connection" })).toBeNull();
   expect(screen.getByRole("switch", { name: "Logs export is on" }).hasAttribute("disabled")).toBe(false);
   await user.click(disconnect);
+  await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
   await screen.findByRole("form", { name: "Logs connection" });
 });
 
@@ -1255,6 +1433,7 @@ it.each(storageHelpCases)("uses a session token explicitly and clears it on Disc
  expect(screen.queryByText("Saved",{exact:true})).toBeNull();
  await user.click(screen.getByRole("button",{name:"Cancel"}));
  await user.click(screen.getByRole("button",{name:"Disconnect Splunk Platform"}));
+ await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
  await screen.findByRole("button",{name:"Connect Splunk Platform"});
  expect((screen.getByLabelText("HEC token") as HTMLInputElement).value).toBe("");
 });
@@ -1281,6 +1460,7 @@ it("shows a failed Disconnect after offering a session connection",async()=>{
  await screen.findByRole("button",{name:"Save Splunk Platform for this session"});
  fetch.mockResolvedValueOnce(new Response(JSON.stringify({error:"Disconnect conflicted with changed settings"}),{status:409}));
  await user.click(screen.getByRole("button",{name:"Disconnect Splunk Platform"}));
+ await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
  expect((await screen.findByRole("alert")).textContent).toContain("Disconnect conflicted with changed settings");
  expect(screen.queryByRole("button",{name:"Save Splunk Platform for this session"})).toBeNull();
 });

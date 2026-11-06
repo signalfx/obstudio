@@ -7323,7 +7323,8 @@ code {
   outline-offset: 2px;
 }
 
-.cloud-button:disabled {
+.cloud-button:disabled,
+.cloud-button[aria-disabled="true"] {
   cursor: default;
   opacity: 0.48;
 }
@@ -8917,6 +8918,11 @@ code {
 .cloud-tab--connections .destination-body form { min-width: 0; }
 .cloud-tab--connections .destination-body fieldset { display: flex; flex-direction: column; gap: 16px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .destination-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.destination-tls { display: flex; flex-direction: column; gap: 6px; }
+.destination-tls label { display: flex; align-items: flex-start; gap: 9px; color: var(--row-primary-text); font-size: var(--font-body); line-height: 20px; }
+.destination-tls input { flex: 0 0 auto; width: 18px; height: 18px; margin: 1px 0; accent-color: var(--accent); }
+.destination-tls input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.destination-tls small { margin-left: 27px; color: var(--text-dim); font-size: var(--font-meta); line-height: 18px; }
 .destination-label-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
 .destination-label-row label { flex: 1; }
 .destination-field .cloud-field__label { margin-bottom: 0; }
