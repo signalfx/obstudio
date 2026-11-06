@@ -76,7 +76,8 @@ running and reported as requiring recovery.
 This section answers directory-review findings (`MCP_FORWARDS_CREDENTIAL_ENV`
 and `RUNTIME_FETCH_EXEC`) from the repository alone. Nothing leaves the machine
 by default: every network call the plugin code makes goes to loopback, except
-the one-time release download from GitHub described below.
+the release download from GitHub described below and the user-initiated Splunk
+flows (account signup, organization connection, export) listed in PRIVACY.md.
 
 ### What runs locally
 

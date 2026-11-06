@@ -108,6 +108,76 @@ If a project command, package manager, test runtime, OTLP exporter, or user
 configuration performs network access, that traffic belongs to the selected
 tooling or project configuration, not to plugin telemetry code.
 
+## Outbound network flows
+
+The flows below are the plugin and Studio code paths that contact a remote
+host. Nothing here is analytics, telemetry about the plugin itself, or an
+update check; none of that was found.
+
+### Release download (bootstrap hook)
+
+- Destination: `github.com/signalfx/obstudio/releases` (the release zip and its
+  `checksums.txt`) and, when the pinned release is not found,
+  `api.github.com/repos/signalfx/obstudio/releases/latest`.
+- Trigger: the SessionStart hook, when the managed runtime is missing or does
+  not match the plugin version and the hook is trusted.
+- Data sent: plain GET requests with no user payload. GitHub sees the source IP
+  address and normal HTTP headers.
+- Opt-out: do not trust the hook, or disable managed startup.
+
+### Splunk Observability Cloud Free Edition signup
+
+- Destination: `www.splunk.com/api/bin/user/location` (GET, no body; splunk.com
+  sees the source IP address) and `www.splunk.com/api/bin/observability/sfx-signup`
+  (POST).
+- Trigger: only after the user explicitly consents to create a free account.
+- Data sent: the first name, last name, and email the user supplies, an optional
+  region, and terms acceptance, plus the country, state, city, and postal code
+  returned by the location lookup. Fixed fields are also sent: title
+  `Developer`, a default company name, an empty phone number, and
+  `MarketingOptIn` set to 0.
+- Persistence: the plugin package does not store these values.
+- Opt-out: decline or do not invoke the signup skill.
+
+### Connecting a Splunk Observability Cloud organization
+
+- Destination: the organization URL the user enters, the ingest endpoint
+  `ingest.<realm>.observability.splunkcloud.com`, and the app endpoint
+  `app.<realm>.observability.splunkcloud.com` (used by the Agent Observability
+  proxy).
+- Trigger: the user types the URL and access token into the Cloud tab of the
+  local Studio UI. They are never entered in chat.
+- Data sent: an unauthenticated GET to the entered URL. The token is sent as the
+  `X-SF-Token` header to the ingest and app endpoints. The connection test to
+  ingest has an empty body. After that, the user's metrics and traces are
+  exported to ingest while the export toggle is enabled.
+- Persistence: a token entered in the Cloud tab is held in memory only and is
+  lost when Studio restarts.
+- Opt-out: do not connect an organization, or turn the export toggle off.
+
+### Access token from the environment
+
+- If `SPLUNK_ACCESS_TOKEN` is set in the shell environment or in
+  `~/.obstudio/env`, the SessionStart hook passes it to the Studio process it
+  starts. The hook starts the Studio binary directly and does not use the
+  `obstudio` command line managed lifecycle, so the hook does not write the
+  token to disk.
+- If the user instead starts Studio through the `obstudio` command line managed
+  background path, the token is copied into `~/.obstudio/managed-observer.json`
+  (file mode 0600 in a 0700 directory) and may be restored on later runs.
+  Delete that file to remove the stored token.
+- The token is sent only to the Splunk endpoints described above.
+
+### Other
+
+- `OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL` can override the OAuth registration
+  endpoint. It defaults to a loopback mock, so nothing leaves the machine unless
+  the user sets it.
+
+<!-- TODO(confirm): verify no other code path starts the Studio server via the
+CLI managed lifecycle (observer/cmd/obstudio/lifecycle.go) on behalf of the hook,
+and that the Studio server process never writes managed-observer.json itself. -->
+
 ## Privacy policy and contact
 
 The privacy policy for this plugin is the
