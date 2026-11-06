@@ -81,6 +81,23 @@ jobs:
       - name: Validate obstudio plugin and marketplace manifest
         run: make check-claude-plugin-validate
 
+  codex-manifest-validate:
+    name: Plugin - Codex manifest validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Stage and verify the Codex plugin manifest
+        run: |
+          set -euo pipefail
+          python3 plugins/obstudio/scripts/stage_obstudio_plugin.py --host codex
+          python3 plugins/obstudio/scripts/stage_obstudio_plugin.py --host codex --check
+          python3 plugins/obstudio/scripts/stage_obstudio_plugin.py --check-manifest-versions
+
   skill-description-length:
     name: Skills - Description length cap check
     runs-on: ubuntu-latest
@@ -422,6 +439,7 @@ jobs:
       - plugin-skills-synced
       - plugin-manifest-versions
       - claude-plugin-validate
+      - codex-manifest-validate
       - skill-description-length
       - observer
       - interactive-otel-scripts

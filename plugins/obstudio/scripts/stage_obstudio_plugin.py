@@ -63,6 +63,19 @@ PLUGIN_SHARED_PATHS = (
     "assets",
 )
 MAX_DEFAULT_PROMPTS = 3
+# Dotted paths of required string fields in the Codex plugin manifest. This list may change
+# after the OpenAI submission-path spike (BORN-411).
+CODEX_REQUIRED_MANIFEST_FIELDS = (
+    "name",
+    "version",
+    "description",
+    "author.name",
+    "license",
+    "interface.displayName",
+    "interface.shortDescription",
+    "interface.developerName",
+    "interface.category",
+)
 # The Claude plugin directory cannot inspect non-image files over 256 KiB and holds the plugin for review.
 MAX_PLUGIN_FILE_BYTES = 240 * 1024
 PLUGIN_SIZE_EXEMPT_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico"})
@@ -601,6 +614,22 @@ def verify_plugin_manifest(
                 f"{MAX_DEFAULT_PROMPTS} entries"
             )
     verify_manifest_skill_references(manifest, available_skill_names(skills_root))
+    if host == "codex":
+        verify_codex_required_fields(manifest, manifest_path)
+
+
+def verify_codex_required_fields(manifest: object, manifest_path: Path) -> None:
+    missing = []
+    for dotted in CODEX_REQUIRED_MANIFEST_FIELDS:
+        value: object = manifest
+        for key in dotted.split("."):
+            value = value.get(key) if isinstance(value, dict) else None
+        if not isinstance(value, str) or not value.strip():
+            missing.append(dotted)
+    if missing:
+        raise RuntimeError(
+            f"plugin manifest {manifest_path} is missing required fields: {', '.join(missing)}"
+        )
 
 
 def verify_manifest_skill_references(manifest: object, skill_names: set[str]) -> None:
