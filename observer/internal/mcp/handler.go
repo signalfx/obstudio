@@ -154,8 +154,9 @@ type UsageHooks struct {
 	ToolsCall func()
 	// ValidationRun runs after a validation tool call that executed a run.
 	ValidationRun func()
-	// Connect runs after a tool call that enabled Splunk Observability Cloud
-	// export succeeded.
+	// Connect runs after a tool call succeeds and the observer then holds a
+	// realm and access token for a Splunk Observability Cloud org. Whether
+	// export is enabled does not matter.
 	Connect func()
 }
 
@@ -537,7 +538,7 @@ func (d *Dispatcher) splunkMetricsExportConfigure(args map[string]any) toolResul
 	if err := d.splunkMetricsCtrl.Configure(cfg); err != nil {
 		return errorResult(fmt.Sprintf("configure Splunk metrics export: %v", err))
 	}
-	if cfg.Enabled {
+	if held := d.splunkMetricsCtrl.Config(); held.Realm != "" && held.AccessToken != "" && held.Endpoint == "" {
 		runHook(d.hooks.Connect)
 	}
 	return jsonToolResult(d.splunkMetricsCtrl.Status())

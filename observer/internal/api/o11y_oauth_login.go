@@ -281,16 +281,19 @@ func (s *o11yOAuthLoginState) beginPending(cancelFunc func()) (uint64, bool) {
 	return s.generation, true
 }
 
-func (s *o11yOAuthLoginState) succeed(generation uint64, session *o11yOAuthSession) {
+// succeed reports whether the session was established; a stale generation
+// is dropped.
+func (s *o11yOAuthLoginState) succeed(generation uint64, session *o11yOAuthSession) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if generation != s.generation {
-		return
+		return false
 	}
 	s.phase = o11yOAuthLoginPhaseConnected
 	s.session = session
 	s.errorMsg = ""
 	s.cancelFunc = nil
+	return true
 }
 
 func (s *o11yOAuthLoginState) fail(generation uint64, err error) {
@@ -323,7 +326,12 @@ type o11yOAuthExchangeConfig struct {
 // exclusive via OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL), and returns the authorization
 // URL for the browser to open. The actual code exchange happens in the background; poll
 // o11yOAuthSessionStatusHandler for the result.
-func startO11yOAuthLoginHandler(w http.ResponseWriter, r *http.Request) {
+// connected runs once the background exchange establishes the session.
+func startO11yOAuthLoginHandler(connected SplunkCloudConnected) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) { runO11yOAuthLogin(w, r, connected) }
+}
+
+func runO11yOAuthLogin(w http.ResponseWriter, r *http.Request, connected SplunkCloudConnected) {
 	var request o11yOAuthLoginRequest
 	if err := decodeStrictJSON(w, r, &request); err != nil {
 		writeO11yOAuthRegistrationError(w, http.StatusBadRequest, err.Error())
@@ -374,7 +382,7 @@ func startO11yOAuthLoginHandler(w http.ResponseWriter, r *http.Request) {
 		exchangeURL:   resolveO11yOAuthExchangeURL(realm),
 	}
 
-	listener, err := startO11yOAuthCallbackListener(state, client, discovery.Issuer, verifier, exchangeConfig)
+	listener, err := startO11yOAuthCallbackListener(state, client, discovery.Issuer, verifier, exchangeConfig, connected)
 	if err != nil {
 		writeO11yOAuthRegistrationError(w, http.StatusConflict, err.Error())
 		return
@@ -415,6 +423,7 @@ func startO11yOAuthCallbackListener(
 	expectedIssuer string,
 	verifier string,
 	exchangeConfig o11yOAuthExchangeConfig,
+	connected SplunkCloudConnected,
 ) (*o11yOAuthCallbackListener, error) {
 	mux := http.NewServeMux()
 	server := &http.Server{Handler: mux}
@@ -507,7 +516,9 @@ func startO11yOAuthCallbackListener(
 				globalO11yOAuthLoginState.fail(generation, result.err)
 				return
 			}
-			globalO11yOAuthLoginState.succeed(generation, result.session)
+			if globalO11yOAuthLoginState.succeed(generation, result.session) {
+				connected.notify()
+			}
 		}()
 	}
 
@@ -628,11 +639,11 @@ func exchangeO11ySISTokenForAccessToken(ctx context.Context, client *http.Client
 // registerO11yOAuthLoginRoutes wires the local-only login/session routes onto mux,
 // alongside registerO11yOAuthRoutes's registration route. Same local-request gate as
 // everywhere else in this file family.
-func registerO11yOAuthLoginRoutes(mux *http.ServeMux) {
+func registerO11yOAuthLoginRoutes(mux *http.ServeMux, connected SplunkCloudConnected) {
 	gate := func(next http.HandlerFunc) http.HandlerFunc {
 		return requireLocalObserverRequest(next, writeO11yOAuthRegistrationError)
 	}
-	mux.HandleFunc("POST /api/splunk/o11y-oauth/login", gate(startO11yOAuthLoginHandler))
+	mux.HandleFunc("POST /api/splunk/o11y-oauth/login", gate(startO11yOAuthLoginHandler(connected)))
 	mux.HandleFunc("GET /api/splunk/o11y-oauth/session", gate(o11yOAuthSessionStatusHandler))
 	mux.HandleFunc("POST /api/splunk/o11y-oauth/session/disconnect", gate(disconnectO11yOAuthSessionHandler))
 }

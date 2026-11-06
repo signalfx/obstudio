@@ -38,6 +38,9 @@ func TestBuildAdoptionWithoutManagerIsInert(t *testing.T) {
 	hooks.ToolsCall()
 	hooks.ValidationRun()
 	hooks.Connect()
+	if w.cloudConnected() != nil {
+		t.Fatal("cloud connect hook built with no emitter")
+	}
 	w.observerStarted()
 	w.shutdown()
 	if _, err := os.Stat(filepath.Join(home, ".obstudio")); !os.IsNotExist(err) {
@@ -99,7 +102,6 @@ func TestAdoptionHandlerObservesUIAndRoutes(t *testing.T) {
 	do(http.MethodGet, "/api/query/traces", false)
 	status = http.StatusInternalServerError
 	do(http.MethodPost, "/api/validation/run", false)
-	do(http.MethodPost, "/api/splunk/export", false)
 	if got := recordedPoints(t, r); len(got) != 0 {
 		t.Fatalf("recorded %v", got)
 	}
@@ -107,12 +109,12 @@ func TestAdoptionHandlerObservesUIAndRoutes(t *testing.T) {
 	status = http.StatusOK
 	do(http.MethodGet, "/api/query/traces", true)
 	do(http.MethodPost, "/api/validation/run", false)
+	// The api package reports connects; a 2xx here is not one.
 	do(http.MethodPost, "/api/splunk/export", false)
 	got := recordedPoints(t, r)
 	want := map[string]int64{
 		adoption.MetricActive + "{ui}":               1,
 		adoption.MetricFirstUse + "{validation_run}": 1,
-		adoption.MetricFirstUse + "{connect}":        1,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("recorded %v", got)
@@ -121,6 +123,14 @@ func TestAdoptionHandlerObservesUIAndRoutes(t *testing.T) {
 		if got[k] != v {
 			t.Fatalf("recorded %v", got)
 		}
+	}
+}
+
+func TestAdoptionCloudConnected(t *testing.T) {
+	em, r := newTestEmitter(t)
+	adoptionWiring{emitter: em}.cloudConnected()()
+	if got := recordedPoints(t, r); got[adoption.MetricFirstUse+"{connect}"] != 1 {
+		t.Fatalf("recorded %v", got)
 	}
 }
 

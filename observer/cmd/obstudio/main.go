@@ -266,7 +266,8 @@ func run(config runConfig) error {
 	}, splunkExportController, splunkTracesController,
 		newSplunkExportConfigurationRefresher(splunkExportController, splunkTracesController, connectionSettings),
 		freeAccountSubmitter, userConfig.api, userConfig.status, api.SplunkCloudSettingsSaver(connectionSettings.SaveCloud), api.SplunkCloudPreferencesSaver(connectionSettings.SaveCloudPreferences), api.SplunkCloudStorageManaged(connectionSettings.CloudStorageManaged), api.SplunkCloudCleanupPending(connectionSettings.CloudCleanupPending),
-		api.SplunkLogsSettings{Controller: logsController, Save: connectionSettings.SaveLogs, SavePreferences: connectionSettings.SaveLogsPreferences, HasCredential: connectionSettings.HasLogsCredential, CleanupPending: connectionSettings.LogsCleanupPending, Refresh: func() error { return connectionSettings.RefreshLogs(logsController) }})
+		api.SplunkLogsSettings{Controller: logsController, Save: connectionSettings.SaveLogs, SavePreferences: connectionSettings.SaveLogsPreferences, HasCredential: connectionSettings.HasLogsCredential, CleanupPending: connectionSettings.LogsCleanupPending, Refresh: func() error { return connectionSettings.RefreshLogs(logsController) }},
+		adoptionTelemetry.cloudConnected())
 	mux.Handle("POST /otel/v1/traces", rcv.HTTPHandler())
 	mux.Handle("POST /v2/trace/otlp", rcv.HTTPHandler())
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {

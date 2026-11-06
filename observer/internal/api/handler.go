@@ -70,6 +70,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	var cleanupPending SplunkCloudCleanupPending
 	var userConfig UserConfig
 	var configStatus *configstatus.Builder
+	var cloudConnected SplunkCloudConnected
 	info := ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
@@ -116,6 +117,8 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			tracesController = value
 		case SplunkExportConfigurationRefresher:
 			splunkExportRefresher = value
+		case SplunkCloudConnected:
+			cloudConnected = value
 		case freeaccount.Submitter:
 			if value != nil {
 				freeAccountSubmitter = value
@@ -143,6 +146,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 		splunkExport.savePreferences = savePreferences
 		splunkExport.storageManaged = storageManaged
 		splunkExport.cleanupPending = cleanupPending
+		splunkExport.connected = cloudConnected
 		splunkExport.register(mux)
 	}
 	registerSplunkLogs(mux, s, logsSettings)
@@ -186,7 +190,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	}
 	registerSISCIMDLoginRoutes(mux)
 	registerO11yOAuthRoutes(mux)
-	registerO11yOAuthLoginRoutes(mux)
+	registerO11yOAuthLoginRoutes(mux, cloudConnected)
 }
 
 func queryTraces(s *store.Store) http.HandlerFunc {

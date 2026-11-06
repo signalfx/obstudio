@@ -13,6 +13,7 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/adoption"
 	"github.com/signalfx/obstudio/observer/internal/adoption/export"
 	"github.com/signalfx/obstudio/observer/internal/adoption/gate"
+	"github.com/signalfx/obstudio/observer/internal/api"
 	"github.com/signalfx/obstudio/observer/internal/mcp"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/userconfig"
@@ -96,6 +97,16 @@ func (w adoptionWiring) mcpHooks() mcp.UsageHooks {
 	return mcp.UsageHooks{ToolsCall: em.ActiveMCP, ValidationRun: em.ValidationRun, Connect: em.Connected}
 }
 
+// cloudConnected reports a Splunk Observability Cloud connect from the REST
+// API: a verified token connection or an established O11y OAuth session.
+// With no emitter it is nil, which the api package ignores.
+func (w adoptionWiring) cloudConnected() api.SplunkCloudConnected {
+	if w.emitter == nil {
+		return nil
+	}
+	return w.emitter.Connected
+}
+
 // observerStarted records first_use{observer_start}.
 func (w adoptionWiring) observerStarted() { w.emitter.ObserverStarted() }
 
@@ -115,9 +126,9 @@ func (w adoptionWiring) shutdown() {
 // Splunk Observability Studio panel is visible and focused.
 const surfaceHeader = "X-Obstudio-Surface"
 
-// handler wraps the HTTP mux to observe UI activity, UI validation runs and
-// successful Splunk Observability Cloud connects. With no emitter it returns
-// next unchanged.
+// handler wraps the HTTP mux to observe UI activity and UI validation runs.
+// Connects are reported by the api package (cloudConnected). With no emitter
+// it returns next unchanged.
 func (w adoptionWiring) handler(next http.Handler) http.Handler {
 	em := w.emitter
 	if em == nil {
@@ -129,23 +140,14 @@ func (w adoptionWiring) handler(next http.Handler) http.Handler {
 			path != "/api/health" && !strings.HasPrefix(path, "/api/splunk/") {
 			em.ActiveUI()
 		}
-		var event func()
-		if r.Method == http.MethodPost {
-			switch path {
-			case "/api/validation/run":
-				event = em.ValidationRun
-			case "/api/splunk/export":
-				event = em.Connected
-			}
-		}
-		if event == nil {
+		if r.Method != http.MethodPost || path != "/api/validation/run" {
 			next.ServeHTTP(rw, r)
 			return
 		}
 		sw := &statusWriter{ResponseWriter: rw, status: http.StatusOK}
 		next.ServeHTTP(sw, r)
 		if sw.status >= 200 && sw.status < 300 {
-			event()
+			em.ValidationRun()
 		}
 	})
 }
