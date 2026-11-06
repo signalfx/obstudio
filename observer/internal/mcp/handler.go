@@ -149,7 +149,8 @@ type RepositoryCorrelationModeResolver func(provider string) string
 // UsageHooks lets the composition root observe tool use without this package
 // knowing who listens. Nil fields are ignored.
 type UsageHooks struct {
-	// ToolsCall runs after a tools/call request is served on POST /mcp.
+	// ToolsCall runs after a tools/call request is served, on POST /mcp or
+	// on stdio.
 	ToolsCall func()
 	// ValidationRun runs after a validation tool call that executed a run.
 	ValidationRun func()
@@ -255,7 +256,9 @@ func (d *Dispatcher) DispatchContext(ctx context.Context, req jsonRPCRequest) (j
 	case "tools/list":
 		return d.handleToolsList(req), true
 	case "tools/call":
-		return d.handleToolsCall(ctx, req), true
+		resp := d.handleToolsCall(ctx, req)
+		runHook(d.hooks.ToolsCall)
+		return resp, true
 	default:
 		return rpcError(req.ID, -32601, fmt.Sprintf("Method not found: %s", req.Method)), true
 	}

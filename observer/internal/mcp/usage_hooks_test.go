@@ -1,9 +1,12 @@
 package mcp
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/signalfx/obstudio/observer/internal/store"
@@ -37,4 +40,21 @@ func TestUsageHooksAbsentAreIgnored(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"observer_status"}}`))
 	req.RemoteAddr = "127.0.0.1:50000"
 	mux.ServeHTTP(httptest.NewRecorder(), req)
+}
+
+func TestUsageHooksToolsCallOnStdio(t *testing.T) {
+	var calls atomic.Int32
+	hooks := UsageHooks{ToolsCall: func() { calls.Add(1) }}
+	run := func(lines ...string) {
+		var out bytes.Buffer
+		RunStdio(store.New(), io.NopCloser(strings.NewReader(strings.Join(lines, "\n")+"\n")), &out, hooks)
+	}
+	run(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	if n := calls.Load(); n != 0 {
+		t.Fatalf("stdio tools/list fired the hook %d times", n)
+	}
+	run(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"observer_status","arguments":{}}}`)
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("stdio tools/call fired the hook %d times", n)
+	}
 }

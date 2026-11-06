@@ -268,7 +268,7 @@ func (e *Emitter) Connected() { e.firstUseEvent(FeatureConnect) }
 // whatever its verdict.
 func (e *Emitter) ValidationRun() { e.firstUseEvent(FeatureValidationRun) }
 
-// ActiveMCP records active{mcp}: a tools/call served on POST /mcp.
+// ActiveMCP records active{mcp}: a tools/call served on POST /mcp or stdio.
 func (e *Emitter) ActiveMCP() { e.activeEvent(SurfaceMCP) }
 
 // ActiveUI records active{ui}: a request carrying X-Obstudio-Surface: ui.

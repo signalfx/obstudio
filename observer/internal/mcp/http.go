@@ -112,9 +112,6 @@ func (h *httpHandler) handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, handled := h.dispatcher.DispatchContext(r.Context(), req)
-	if req.Method == "tools/call" {
-		runHook(h.dispatcher.hooks.ToolsCall)
-	}
 	if !handled {
 		w.WriteHeader(http.StatusAccepted)
 		return
