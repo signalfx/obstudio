@@ -150,33 +150,47 @@ update check; none of that was found.
 - Data sent: an unauthenticated GET to the entered URL. The token is sent as the
   `X-SF-Token` header to the ingest and app endpoints. The connection test to
   ingest has an empty body. After that, the user's metrics and traces are
-  exported to ingest while the export toggle is enabled.
-- Persistence: a token entered in the Cloud tab is held in memory only and is
-  lost when Studio restarts.
-- Opt-out: do not connect an organization, or turn the export toggle off.
+  exported to ingest while the Observability Cloud export toggle is enabled.
+- Credential storage: the token is stored in the operating system credential
+  store (for example macOS Keychain, Windows Credential Manager, or the Linux
+  Secret Service over D-Bus). `~/.obstudio/connections.json` holds only a
+  reference to it, plus the realm, enable flags, and endpoints. There is no
+  plaintext fallback: if the credential store refuses the token, the connection
+  is session-only, kept in memory, and lost when Studio restarts.
+- Opt-out: do not connect an organization, turn the export toggle off, or
+  disconnect in the Cloud tab.
 
-### Access token from the environment
+### Splunk Platform HEC log delivery
 
-- If `SPLUNK_ACCESS_TOKEN` is set in the shell environment or in
-  `~/.obstudio/env`, the SessionStart hook passes it to the Studio process it
-  starts. The hook starts the Studio binary directly and does not use the
-  `obstudio` command line managed lifecycle, so the hook does not write the
-  token to disk.
-- If the user instead starts Studio through the `obstudio` command line managed
-  background path, the token is copied into `~/.obstudio/managed-observer.json`
-  (file mode 0600 in a 0700 directory) and may be restored on later runs.
-  Delete that file to remove the stored token.
-- The token is sent only to the Splunk endpoints described above.
+- Destination: the HTTP Event Collector URL the user enters, an HTTPS URL whose
+  path is `/services/collector` or `/services/collector/event`. A loopback host
+  may use HTTP.
+- Trigger: the user enters the URL, token, and index in the Cloud tab and
+  enables log export. This is off by default and is a separate toggle from
+  Observability Cloud metrics and traces export; either can be on without the
+  other. Connecting sends one test log event.
+- Data sent: after the test, OTLP logs received by the local Studio instance are
+  exported as HEC events with an `Authorization: Splunk <token>` header, to the
+  chosen index, with sourcetype `otel:logs` and source `otel` unless the user
+  changes them. Log bodies and attributes are sent as received, so they can
+  contain whatever the user's applications log.
+- Credential storage: the HEC token is stored in the operating system
+  credential store, with the same reference and session-only behavior as above.
+- TLS: an optional setting skips certificate verification for self-signed
+  Splunk certificates. It is off by default.
+- Opt-out: do not configure it, turn the logs toggle off, or disconnect.
 
-### Other
+### Access tokens from the environment
 
-- `OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL` can override the OAuth registration
-  endpoint. It defaults to a loopback mock, so nothing leaves the machine unless
-  the user sets it.
+Studio no longer reads `SPLUNK_ACCESS_TOKEN` or `SPLUNK_REALM`. The SessionStart
+hook does not pass `SPLUNK_*` or `OBSTUDIO_SPLUNK_*` variables to the Studio
+process, and the `obstudio` managed lifecycle no longer records them in
+`~/.obstudio/managed-observer.json`.
 
-<!-- TODO(confirm): verify no other code path starts the Studio server via the
-CLI managed lifecycle (observer/cmd/obstudio/lifecycle.go) on behalf of the hook,
-and that the Studio server process never writes managed-observer.json itself. -->
+<!-- TODO(confirm): whether an older managed-observer.json written by a previous
+release can still contain SPLUNK_ACCESS_TOKEN until it is rewritten, and whether
+Studio scrubs it. Also confirm Studio restores a stored connection from its
+credential-store reference after restart. -->
 
 ## Privacy policy and contact
 

@@ -77,7 +77,8 @@ This section answers directory-review findings (`MCP_FORWARDS_CREDENTIAL_ENV`
 and `RUNTIME_FETCH_EXEC`) from the repository alone. Nothing leaves the machine
 by default: every network call the plugin code makes goes to loopback, except
 the release download from GitHub described below and the user-initiated Splunk
-flows (account signup, organization connection, export) listed in PRIVACY.md.
+flows (account signup, organization connection, metrics and traces export, and
+optional Splunk Platform HEC log export) listed in PRIVACY.md.
 
 ### What runs locally
 
@@ -129,8 +130,9 @@ flows (account signup, organization connection, export) listed in PRIVACY.md.
   temp and locale variables, proxy and CA-bundle variables, `WEAVER_PATH`,
   `MAX_FLOW_NODE_SPAN_LIST_SIZE`, the Linux session-bus address, and Studio
   runtime, `OTLP_*`, and XDG settings).
-  Remote export is configured through Cloud, with tokens in the OS credential
-  store. The child does not
+  `SPLUNK_*` and `OBSTUDIO_SPLUNK_*` variables are not forwarded. Remote export
+  is configured through the Cloud tab, with tokens in the OS credential store.
+  The child does not
   inherit unrelated variables such as `ANTHROPIC_*`, `AWS_*`, `OPENAI_*`, or
   `GITHUB_TOKEN`.
 - `resolve_ao_resources.py` reads `SPLUNK_AO_PROJECT`, `SPLUNK_AO_PROJECT_ID`,
