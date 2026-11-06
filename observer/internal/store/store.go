@@ -383,6 +383,9 @@ type Store struct {
 
 	changeMu sync.RWMutex
 	change   func(time.Time)
+
+	receiptMu sync.RWMutex
+	receipt   func(Receipt)
 }
 
 // ringBuffer is a fixed-capacity circular buffer. When full, the oldest
@@ -518,6 +521,7 @@ func New() *Store {
 
 // AddSpansForConnection adds spans with an associated connection ID for later eviction.
 func (s *Store) AddSpansForConnection(connID string, spans []Span) {
+	defer s.runReceiptCallback(Receipt{Spans: spans})
 	s.mu.Lock()
 	reset := s.checkSessionReset()
 	for i := range spans {
@@ -551,6 +555,7 @@ func (s *Store) AddSpansForConnection(connID string, spans []Span) {
 
 // AddMetricsForConnection adds metrics with an associated connection ID for later eviction.
 func (s *Store) AddMetricsForConnection(connID string, metrics []MetricDataPoint) {
+	defer s.runReceiptCallback(Receipt{Metrics: metrics})
 	s.mu.Lock()
 	reset := s.checkSessionReset()
 	changedAt := time.Now()
@@ -588,6 +593,7 @@ func (s *Store) AddMetricsForConnection(connID string, metrics []MetricDataPoint
 // AddLogsForConnection adds logs with an associated connection ID for later eviction.
 func (s *Store) AddLogsForConnection(connID string, logs []LogRecord) {
 	s.addLogs(connID, logs, true)
+	s.runReceiptCallback(Receipt{Logs: logs})
 }
 
 // AddInternalLogs retains diagnostic logs without changing the application session clock.

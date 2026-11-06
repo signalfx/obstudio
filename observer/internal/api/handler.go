@@ -70,6 +70,8 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	var cleanupPending SplunkCloudCleanupPending
 	var userConfig UserConfig
 	var configStatus *configstatus.Builder
+	var cloudConnected SplunkCloudConnected
+	var validationRan ValidationRunExecuted
 	info := ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
@@ -116,6 +118,10 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			tracesController = value
 		case SplunkExportConfigurationRefresher:
 			splunkExportRefresher = value
+		case SplunkCloudConnected:
+			cloudConnected = value
+		case ValidationRunExecuted:
+			validationRan = value
 		case freeaccount.Submitter:
 			if value != nil {
 				freeAccountSubmitter = value
@@ -143,6 +149,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 		splunkExport.savePreferences = savePreferences
 		splunkExport.storageManaged = storageManaged
 		splunkExport.cleanupPending = cleanupPending
+		splunkExport.connected = cloudConnected
 		splunkExport.register(mux)
 	}
 	registerSplunkLogs(mux, s, logsSettings)
@@ -170,7 +177,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("GET /api/query/validation/summary", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/status", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/latest", queryValidationLatest(validationService))
-	mux.HandleFunc("POST /api/validation/run", localMutation(runValidation(validationService)))
+	mux.HandleFunc("POST /api/validation/run", localMutation(runValidation(validationService, validationRan)))
 	mux.HandleFunc("POST /api/validation/refresh", localMutation(refreshValidation(validationService)))
 	mux.HandleFunc("POST /api/validation/analyze", localMutation(analyzeValidation(validationService)))
 	mux.HandleFunc("GET /api/query/validation/findings", queryValidationFindings(validationService))
@@ -186,7 +193,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	}
 	registerSISCIMDLoginRoutes(mux)
 	registerO11yOAuthRoutes(mux)
-	registerO11yOAuthLoginRoutes(mux)
+	registerO11yOAuthLoginRoutes(mux, cloudConnected)
 }
 
 func queryTraces(s *store.Store) http.HandlerFunc {
@@ -478,7 +485,13 @@ func refreshValidation(service *validator.Service) http.HandlerFunc {
 	}
 }
 
-func runValidation(service *validator.Service) http.HandlerFunc {
+// ValidationRunExecuted runs after POST /api/validation/run reaches a runner
+// that can validate, whatever the run's verdict turns out to be. A request
+// that finds no runner, or a runner without its Weaver runtime, does not
+// count. A nil value is ignored.
+type ValidationRunExecuted func()
+
+func runValidation(service *validator.Service, ran ValidationRunExecuted) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		summary, err := service.Run(r.Context())
 		if err != nil {
@@ -486,6 +499,9 @@ func runValidation(service *validator.Service) http.HandlerFunc {
 			w.WriteHeader(statusCode)
 			writeSameOriginJSON(w, payload)
 			return
+		}
+		if ran != nil && summary.Enabled {
+			ran()
 		}
 		writeSameOriginJSON(w, summary)
 	}

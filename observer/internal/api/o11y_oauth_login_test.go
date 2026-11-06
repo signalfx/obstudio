@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -156,7 +157,7 @@ func startO11yOAuthLogin(t *testing.T, loginMux *http.ServeMux) o11yOAuthLoginSt
 
 func TestO11yOAuthLoginRequiresAllFields(t *testing.T) {
 	loginMux := http.NewServeMux()
-	registerO11yOAuthLoginRoutes(loginMux)
+	registerO11yOAuthLoginRoutes(loginMux, nil)
 
 	cases := []string{
 		`{"realm":"","orgId":"org","clientId":"id","clientSecret":"secret"}`,
@@ -178,7 +179,8 @@ func TestO11yOAuthLoginSucceedsAfterCallback(t *testing.T) {
 	mock.setEnv(t)
 
 	loginMux := http.NewServeMux()
-	registerO11yOAuthLoginRoutes(loginMux)
+	connects := make(chan struct{}, 2)
+	registerO11yOAuthLoginRoutes(loginMux, func() { connects <- struct{}{} })
 
 	start := startO11yOAuthLogin(t, loginMux)
 
@@ -203,6 +205,14 @@ func TestO11yOAuthLoginSucceedsAfterCallback(t *testing.T) {
 	}
 	if connected.ExpiresAt == "" {
 		t.Fatal("expected a non-empty expiresAt")
+	}
+	select {
+	case <-connects:
+	case <-time.After(5 * time.Second):
+		t.Fatal("established session did not report a connect")
+	}
+	if len(connects) != 0 {
+		t.Fatal("connect reported more than once")
 	}
 
 	// The token endpoint must receive both HTTP Basic clientId:clientSecret and a PKCE
@@ -245,7 +255,8 @@ func TestO11yOAuthLoginSurfacesExchangeFailureWithoutReflectingBody(t *testing.T
 	mock.setEnv(t)
 
 	loginMux := http.NewServeMux()
-	registerO11yOAuthLoginRoutes(loginMux)
+	var connects atomic.Int32
+	registerO11yOAuthLoginRoutes(loginMux, func() { connects.Add(1) })
 
 	start := startO11yOAuthLogin(t, loginMux)
 
@@ -259,6 +270,9 @@ func TestO11yOAuthLoginSurfacesExchangeFailureWithoutReflectingBody(t *testing.T
 	if want := "HTTP 401"; !containsString(failed.Error, want) {
 		t.Fatalf("error = %q, want to contain %q", failed.Error, want)
 	}
+	if n := connects.Load(); n != 0 {
+		t.Fatalf("failed sign-in reported %d connects", n)
+	}
 }
 
 func TestO11yOAuthLoginRoutesRejectCrossOriginRequests(t *testing.T) {
@@ -267,7 +281,7 @@ func TestO11yOAuthLoginRoutesRejectCrossOriginRequests(t *testing.T) {
 	mock.setEnv(t)
 
 	loginMux := http.NewServeMux()
-	registerO11yOAuthLoginRoutes(loginMux)
+	registerO11yOAuthLoginRoutes(loginMux, nil)
 
 	for _, route := range []struct {
 		method string
@@ -295,7 +309,7 @@ func TestO11yOAuthLoginRejectsAConcurrentLoginAttempt(t *testing.T) {
 	mock.setEnv(t)
 
 	loginMux := http.NewServeMux()
-	registerO11yOAuthLoginRoutes(loginMux)
+	registerO11yOAuthLoginRoutes(loginMux, nil)
 
 	startO11yOAuthLogin(t, loginMux)
 

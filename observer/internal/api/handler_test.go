@@ -1182,6 +1182,37 @@ func TestRunValidationEndpoint(t *testing.T) {
 	}
 }
 
+func TestRunValidationReportsExecutedRuns(t *testing.T) {
+	cases := []struct {
+		name   string
+		runner validator.Runner
+		want   int
+	}{
+		{name: "run started", runner: &fakeValidationRunner{summary: validator.Summary{Enabled: true, Status: validator.StatusRunning, ActiveRunID: "run-1"}}, want: 1},
+		{name: "no weaver runtime", runner: &fakeValidationRunner{summary: validator.Summary{Status: validator.StatusDisabled}}},
+		{name: "no runner"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ran := 0
+			params := []any{validator.NewStore(), ValidationRunExecuted(func() { ran++ })}
+			if tc.runner != nil {
+				params = append(params, tc.runner)
+			}
+			mux := http.NewServeMux()
+			Register(mux, store.New(), params...)
+			server := httptest.NewServer(mux)
+			defer server.Close()
+
+			resp := mustDo(t, mustNewRequest(t, http.MethodPost, server.URL+"/api/validation/run", nil))
+			resp.Body.Close()
+			if ran != tc.want {
+				t.Fatalf("hook ran %d times, want %d (status %d)", ran, tc.want, resp.StatusCode)
+			}
+		})
+	}
+}
+
 func TestQueryMetricsSuccess(t *testing.T) {
 	s := store.New()
 	metric := store.MetricDataPoint{

@@ -61,6 +61,18 @@ type splunkConnectionVerifier func(context.Context, string, string) error
 // source after another local client saves a connection.
 type SplunkExportConfigurationRefresher func() error
 
+// SplunkCloudConnected runs after a request leaves the observer holding a
+// usable credential or session for a Splunk Observability Cloud org: a
+// verified token connection or an established O11y OAuth session. Whether
+// export is enabled does not matter. A nil value is ignored.
+type SplunkCloudConnected func()
+
+func (f SplunkCloudConnected) notify() {
+	if f != nil {
+		f()
+	}
+}
+
 // registrationAndAuthProtocol selects which MCP client registration/auth
 // strategy the Cloud tab exposes. Exactly one of these -- or none -- is
 // active at a time; see docs/o11y-oauth-mcp-gateway-impact.md §5.
@@ -96,6 +108,7 @@ type splunkExportService struct {
 	storageManaged                SplunkCloudStorageManaged
 	cleanupPending                SplunkCloudCleanupPending
 	refresh                       SplunkExportConfigurationRefresher
+	connected                     SplunkCloudConnected
 	verifyConnection              splunkConnectionVerifier
 	resolveRealmClient            *http.Client
 	agentObservabilityProxyClient *http.Client
@@ -340,6 +353,13 @@ func (s *splunkExportService) applyCloudConnection(
 	initialEnabled *bool,
 	sessionOnly bool,
 ) {
+	// Deferred before the lock so it runs after the unlock.
+	held := false
+	defer func() {
+		if held {
+			s.connected.notify()
+		}
+	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	previousMetrics := s.metrics.Config()
@@ -376,6 +396,7 @@ func (s *splunkExportService) applyCloudConnection(
 	}
 	s.sessionOnly = sessionOnly
 	s.configurationChanged = true
+	held = true
 	status := s.snapshotLocked()
 	status.RollbackToken = rollbackToken
 	writeSameOriginJSON(w, status)

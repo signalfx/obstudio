@@ -2124,3 +2124,36 @@ func TestCloudSessionRollbackRestoresRuntimeWithoutSaving(t *testing.T) {
 		t.Fatal("session rollback lost prior runtime", response.Body.String())
 	}
 }
+
+func TestSplunkExportConnectReportsHeldCredentialOnly(t *testing.T) {
+	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	service := newTestSplunkExportService(metrics, traces, nil)
+	connects := 0
+	service.connected = func() { connects++ }
+	verifyErr := errSplunkAccessTokenRejected
+	service.verifyConnection = func(context.Context, string, string) error { return verifyErr }
+	mux := http.NewServeMux()
+	service.register(mux)
+
+	if response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
+		`{"realm":"us1","accessToken":"candidate-token"}`); response.Code != http.StatusUnauthorized {
+		t.Fatalf("rejected status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if connects != 0 {
+		t.Fatalf("rejected token reported %d connects", connects)
+	}
+
+	verifyErr = nil
+	// Export stays disabled: connecting and enabling are separate steps.
+	if response := splunkExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
+		`{"realm":"us1","accessToken":"candidate-token","enabled":false}`); response.Code != http.StatusOK {
+		t.Fatalf("connect status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if connects != 1 {
+		t.Fatalf("held credential reported %d connects, want 1", connects)
+	}
+	if metrics.Config().Enabled {
+		t.Fatal("connect enabled export")
+	}
+}
