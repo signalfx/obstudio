@@ -37,8 +37,13 @@ export function LogsConnection({
   const [endpoint, setEndpoint] = useState("");
   const [index, setIndex] = useState("");
   const [token, setToken] = useState("");
+  const [insecureSkipVerify, setInsecureSkipVerify] = useState(false);
   const [busy, setBusy] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectSnapshot, setDisconnectSnapshot] = useState<SplunkLogsStatus | null>(null);
+  const disconnectTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const disconnectCancelRef = useRef<HTMLButtonElement>(null);
+  const disconnectConfirmRef = useRef<HTMLButtonElement>(null);
   const [reloadNeeded, setReloadNeeded] = useState(false);
   const [outcomeUnknown, setOutcomeUnknown] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -71,7 +76,26 @@ export function LogsConnection({
   const rejected = isLogsRejected(status);
   const mutationsDisabled = disabled || outcomeUnknown;
 
-  useEffect(() => setSessionFallbackAvailable(false), [endpoint, token, index, status?.version]);
+  useEffect(() => setSessionFallbackAvailable(false), [endpoint, token, index, insecureSkipVerify, status?.version]);
+
+  useEffect(() => {
+    if (disconnectSnapshot) disconnectCancelRef.current?.focus();
+  }, [disconnectSnapshot]);
+
+  function closeDisconnectDialog() {
+    if (inFlight.current) return;
+    setDisconnectSnapshot(null);
+    window.requestAnimationFrame(() => {
+      const trigger = disconnectTriggerRef.current;
+      const target = trigger?.isConnected && !trigger.disabled ? trigger : cleanupRef.current ?? endpointRef.current ?? rootRef.current;
+      target?.focus();
+    });
+  }
+
+  function requestDisconnect(event: React.MouseEvent<HTMLButtonElement>) {
+    disconnectTriggerRef.current = event.currentTarget;
+    setDisconnectSnapshot(status);
+  }
 
   function finishMutation(next: SplunkLogsStatus, mutation: LogsMutation) {
     pendingMutation.current = null;
@@ -173,6 +197,7 @@ export function LogsConnection({
     const hasConnection = next.configured || next.connected || next.canDisconnect;
     setEndpoint(hasConnection ? next.endpoint ?? "" : "");
     setIndex(hasConnection ? next.index ?? "" : "");
+    setInsecureSkipVerify(Boolean(hasConnection && next.insecureSkipVerify));
   }
 
   async function refresh(signal?: AbortSignal) {
@@ -287,8 +312,7 @@ export function LogsConnection({
       token,
       index,
       source: status.source || "otel",
-      insecureSkipVerify:
-        endpoint.trim() === status.endpoint && status.insecureSkipVerify,
+      insecureSkipVerify,
     };
     const mutation: LogsMutation = { kind: "save", previousVersion: status.version, editing };
     inFlight.current = true;
@@ -379,8 +403,8 @@ export function LogsConnection({
 
   async function disconnect() {
     setSessionFallbackAvailable(false);
-    if (!status || outcomeUnknown || inFlight.current) return;
-    const mutation: LogsMutation = { kind: "disconnect", previousVersion: status.version, sessionOnly: status.sessionOnly };
+    if (!disconnectSnapshot || mutationsDisabled || statusUnavailable || inFlight.current) return;
+    const mutation: LogsMutation = { kind: "disconnect", previousVersion: disconnectSnapshot.version, sessionOnly: disconnectSnapshot.sessionOnly };
     inFlight.current = true;
     requestSequence.current += 1;
     setBusy(true);
@@ -389,7 +413,7 @@ export function LogsConnection({
     setFieldError(null);
     setNotice(null);
     try {
-      const next = await disconnectSplunkLogs(status.version);
+      const next = await disconnectSplunkLogs(disconnectSnapshot.version);
       if (!mounted.current) return;
       finishMutation(next, mutation);
     } catch (reason) {
@@ -407,6 +431,7 @@ export function LogsConnection({
       if (mounted.current) {
         setBusy(false);
         setDisconnecting(false);
+        closeDisconnectDialog();
       }
     }
   }
@@ -470,7 +495,7 @@ export function LogsConnection({
   }
 
   return (
-    <section ref={rootRef} aria-labelledby="cloud-logs-title" className={`cloud-panel cloud-logs cloud-destination cloud-destination--logs${connected ? " cloud-destination--connected" : ""}${editing ? " cloud-destination--editing" : ""}${rejected ? " cloud-destination--rejected" : ""}`}>
+    <section ref={rootRef} tabIndex={-1} aria-labelledby="cloud-logs-title" className={`cloud-panel cloud-logs cloud-destination cloud-destination--logs${connected ? " cloud-destination--connected" : ""}${editing ? " cloud-destination--editing" : ""}${rejected ? " cloud-destination--rejected" : ""}`}>
       <header className="cloud-panel__header">
         <h2 id="cloud-logs-title">Splunk Platform</h2>
         {connected ? <code className="destination-identifier" title={status?.endpoint}>{host} · {status?.index}</code> : <>
@@ -499,7 +524,7 @@ export function LogsConnection({
           <button className="cloud-button" disabled={busy || mutationsDisabled || statusUnavailable}
             aria-label="Edit token for Splunk Platform" onClick={() => beginEdit(rejected)} ref={editRef} type="button">Edit token</button>
           <button aria-label="Disconnect Splunk Platform" className="cloud-button cloud-button--danger" disabled={busy || mutationsDisabled || statusUnavailable}
-            onClick={() => void disconnect()} type="button">{disconnecting ? "Disconnecting..." : "Disconnect"}</button>
+            onClick={requestDisconnect} type="button">Disconnect</button>
           {searchURL && !rejected ? <a className="destination-open-link" href={bridge ? "#" : searchURL} target={bridge ? undefined : "_blank"} rel={bridge ? undefined : "noopener noreferrer"}
             onClick={(event) => openExternal(event, "open-splunk-search")}>Search index {status.index}</a> : null}
           {rejected ? <span className="destination-footnote">Update the token to resume exporting new logs.</span> : null}
@@ -520,7 +545,7 @@ export function LogsConnection({
               <input id="cloud-logs-endpoint" type="url" autoComplete="off" spellCheck={false}
                 aria-invalid={fieldError === "endpoint"} aria-describedby={fieldError === "endpoint" ? "cloud-logs-error" : undefined}
                 placeholder="HEC endpoint" value={endpoint} ref={endpointRef}
-                onChange={(event) => { edit(); setEndpoint(event.target.value); }} />
+                onChange={(event) => { edit(); if (event.target.value.trim() !== endpoint.trim()) setInsecureSkipVerify(false); setEndpoint(event.target.value); }} />
             </div>
             <div className="cloud-field destination-field">
               <div className="destination-label-row"><label className="cloud-field__label" htmlFor="cloud-logs-token">HEC token</label>
@@ -550,16 +575,59 @@ export function LogsConnection({
                 aria-invalid={fieldError === "index"} aria-describedby={fieldError === "index" ? "cloud-logs-error" : undefined} />
               <small>Must already accept events from this token.</small>
             </div>
+            <div className="destination-tls">
+              <label htmlFor="cloud-logs-insecure">
+                <input id="cloud-logs-insecure" type="checkbox" checked={insecureSkipVerify}
+                  aria-describedby="cloud-logs-insecure-help"
+                  onChange={(event) => { edit(); setInsecureSkipVerify(event.target.checked); }} />
+                Skip TLS certificate verification
+              </label>
+              <small id="cloud-logs-insecure-help">Enabling this skips server identity checks.</small>
+            </div>
             <div className="destination-actions destination-actions--form">
               <button aria-label={sessionFallbackAvailable ? editing ? "Save Splunk Platform for this session" : "Connect Splunk Platform for this session" : editing ? "Save Splunk Platform changes" : "Connect Splunk Platform"} ref={connectionSubmitRef} className="cloud-button cloud-button--primary" type="submit">
                 {busy ? editing ? "Saving..." : "Connecting..." : sessionFallbackAvailable ? editing ? "Save for this session" : "Connect for this session" : editing ? "Save changes" : "Connect"}
               </button>
               {editing ? <button className="cloud-button" onClick={cancelEdit} type="button">Cancel</button> : <span className="destination-inline-help">No Splunk instance yet? <a className="destination-text-button" href={bridge ? "#" : splunkPlatformTrialURL} target={bridge ? undefined : "_blank"} rel={bridge ? undefined : "noopener noreferrer"} onClick={(event) => openExternal(event, "open-splunk-platform-trial")}>Start a free trial</a></span>}
-              {editing || canDisconnect ? <button aria-label="Disconnect Splunk Platform" className="cloud-button cloud-button--danger destination-disconnect" disabled={statusUnavailable} onClick={() => void disconnect()} type="button">Disconnect</button> : null}
+              {editing || canDisconnect ? <button aria-label="Disconnect Splunk Platform" className="cloud-button cloud-button--danger destination-disconnect" disabled={statusUnavailable} onClick={requestDisconnect} type="button">Disconnect</button> : null}
             </div>
           </fieldset>
         </form> : null}
       </div>
+      {disconnectSnapshot ? <div className="cloud-dialog-backdrop" onMouseDown={(event) => {
+        if (event.currentTarget !== event.target) return;
+        event.preventDefault();
+        if (!disconnecting) closeDisconnectDialog();
+      }}>
+        <section className="cloud-dialog" role="dialog" aria-modal="true" tabIndex={-1}
+          aria-labelledby="cloud-logs-disconnect-title" aria-describedby="cloud-logs-disconnect-description"
+          aria-busy={disconnecting}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && !disconnecting) {
+              event.preventDefault();
+              closeDisconnectDialog();
+            }
+            if (event.key !== "Tab") return;
+            if (disconnecting) { event.preventDefault(); return; }
+            const first = disconnectCancelRef.current;
+            const last = disconnectConfirmRef.current;
+            const active = document.activeElement;
+            if (event.shiftKey && (active === first || active === event.currentTarget)) {
+              event.preventDefault(); last?.focus();
+            } else if (!event.shiftKey && (active === last || active === event.currentTarget)) {
+              event.preventDefault(); first?.focus();
+            }
+          }}>
+          <h2 id="cloud-logs-disconnect-title">Disconnect Splunk Platform?</h2>
+          <p id="cloud-logs-disconnect-description">{disconnectSnapshot.sessionOnly ? "This clears the token from this session and turns off logs export. Logs remain available locally." : "This removes the saved HEC token and turns off logs export. Logs remain available locally."}</p>
+          {!disconnecting && (mutationsDisabled || statusUnavailable) ? <p role="alert">Disconnect is unavailable. Cancel to review the connection status.</p> : null}
+          <div>
+            <button className="cloud-button" aria-disabled={disconnecting} ref={disconnectCancelRef} onClick={closeDisconnectDialog} type="button">Cancel</button>
+            <button className="cloud-button cloud-button--danger" aria-disabled={busy || mutationsDisabled || statusUnavailable}
+              aria-label="Disconnect Splunk Platform" ref={disconnectConfirmRef} onClick={() => void disconnect()} type="button">{disconnecting ? "Disconnecting..." : "Disconnect"}</button>
+          </div>
+        </section>
+      </div> : null}
     </section>
   );
 }
