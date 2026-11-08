@@ -1,0 +1,16 @@
+{
+  "name": "logging-contract",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "test": "node --test logging.test.cjs"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.10.0",
+    "@opentelemetry/sdk-logs": "3.1.0",
+    "@opentelemetry/resources": "3.1.0",
+    "@opentelemetry/context-async-hooks": "3.1.0",
+    "@opentelemetry/winston-transport": "0.35.0",
+    "winston": "3.19.0"
+  }
+}

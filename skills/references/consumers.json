@@ -25,6 +25,10 @@
     "otel-instrument",
     "otel-verify"
   ],
+  "logging-readiness.md": [
+    "otel-audit",
+    "otel-instrument"
+  ],
   "report-flow-contract.md": [
     "otel-audit",
     "otel-instrument",

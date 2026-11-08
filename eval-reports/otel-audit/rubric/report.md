@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-audit |
-| Run ID | 20261105T162044599867Z |
+| Run ID | 20261108T145455476696Z |
 | Agent model | gpt-6.1-sol |
 | Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
@@ -18,22 +18,28 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/ao-name-inputs-audit | python/ai-assistant-demo | 1 | 100% (6/6), avg score 100 | 1.1M | 7.5m | - | - | - |
-| with_skill | python/ai-assistant-demo/qual/finding-group-audit | python/ai-assistant-demo | 1 | 100% (7/7), avg score 100 | 823.1K | 5.4m | - | - | - |
+| with_skill | go/chi-basic/qual/logging-audit-contract | go/chi-basic | 3 | 100% (21/21), avg score 98 | 1.8M | 11.8m | - | - | - |
+| with_skill | java/springboot-basic/qual/logging-audit-contract | java/springboot-basic | 3 | 100% (21/21), avg score 98 | 1.7M | 10.8m | - | - | - |
+| with_skill | node/express-basic/qual/logging-audit-contract | node/express-basic | 3 | 100% (21/21), avg score 99 | 1.9M | 11.4m | - | - | - |
+| with_skill | python/flask-basic/qual/logging-audit-contract | python/flask-basic | 3 | 100% (21/21), avg score 100 | 2.0M | 11.2m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/ao-name-inputs-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1131270 | 1015808 | 0 | 13615 | 1282 | unknown | 1144885 |
-| with_skill | python/ai-assistant-demo/qual/finding-group-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 811617 | 740480 | 0 | 11487 | 1615 | unknown | 823104 |
+| with_skill | go/chi-basic/qual/logging-audit-contract | go/chi-basic | with_skill | codex | cumulative | measured | 3/3 recognized | 1810164 | 1630848 | 0 | 23714 | 7701 | unknown | 1833878 |
+| with_skill | java/springboot-basic/qual/logging-audit-contract | java/springboot-basic | with_skill | codex | cumulative | measured | 3/3 recognized | 1685463 | 1456000 | 0 | 20224 | 5868 | unknown | 1705687 |
+| with_skill | node/express-basic/qual/logging-audit-contract | node/express-basic | with_skill | codex | cumulative | measured | 3/3 recognized | 1905052 | 1722880 | 0 | 21178 | 5416 | unknown | 1926230 |
+| with_skill | python/flask-basic/qual/logging-audit-contract | python/flask-basic | with_skill | codex | cumulative | measured | 3/3 recognized | 1988974 | 1816960 | 0 | 22105 | 5241 | unknown | 2011079 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/ao-name-inputs-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 149029 | 107136 | 0 | 1670 | 207 | unknown | 150699 |
-| with_skill | python/ai-assistant-demo/qual/finding-group-audit | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 254214 | 199040 | 0 | 2577 | 291 | unknown | 256791 |
+| with_skill | go/chi-basic/qual/logging-audit-contract | go/chi-basic | with_skill | codex | cumulative | measured | 3/3 recognized | 991363 | 816128 | 0 | 7342 | 1857 | unknown | 998705 |
+| with_skill | java/springboot-basic/qual/logging-audit-contract | java/springboot-basic | with_skill | codex | cumulative | measured | 3/3 recognized | 1043980 | 855424 | 0 | 7288 | 1756 | unknown | 1051268 |
+| with_skill | node/express-basic/qual/logging-audit-contract | node/express-basic | with_skill | codex | cumulative | measured | 3/3 recognized | 972551 | 776960 | 0 | 6073 | 1401 | unknown | 978624 |
+| with_skill | python/flask-basic/qual/logging-audit-contract | python/flask-basic | with_skill | codex | cumulative | measured | 3/3 recognized | 972454 | 804864 | 0 | 6522 | 1365 | unknown | 978976 |
 
 ## Rubric Failures
 

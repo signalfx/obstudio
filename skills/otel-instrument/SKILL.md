@@ -1551,6 +1551,12 @@ active file path and added or changed variable names without exposing secrets.
 
 #### Default Local Application Log Export
 
+Read `../references/logging-readiness.md` before changing a logging path.
+Apply its LOG-* rules within selected scope using the existing provider and
+detected bridge, and include their applicable positive and fault scenarios in
+the verification handoff. Preserve supported SDK defaults and operator policy;
+do not add application code merely to duplicate SDK-owned behavior.
+
 - Classify application logs during preflight as `local-otlp-default`,
   `explicitly-disabled`, `operator-owned`, `correlation-only`, or
   `unsupported-stack`. Trace/MDC fields in stdout are correlation-only, not an

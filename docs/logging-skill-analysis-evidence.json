@@ -1,0 +1,143 @@
+{
+  "baseline_commit": "4e1e51f300510b26114fdc1b5ef528b3b6f09760",
+  "scope": "All tracked Markdown under the two requested skills and shared skills/references. A match outside application-log policy is not automatically coverage. Zero matches prove only absence of these explicit concepts/identifiers, not model inability.",
+  "files": [
+    {
+      "path": "skills/otel-audit/SKILL.md",
+      "sha256": "fef834d77d8d6d0230228a4d8f52f277850cb8e6e9b56fd0b46c156ee3c9fa40"
+    },
+    {
+      "path": "skills/otel-instrument/SKILL.md",
+      "sha256": "c9ab56d8b664de7310d825e3bd01aee9f53caffe929ff3e74f8454954862f495"
+    },
+    {
+      "path": "skills/otel-instrument/references/json-approval-handoff.md",
+      "sha256": "eaafa393d5eacd566522f926e814136408076539b2b000f964357e048f4e5fe8"
+    },
+    {
+      "path": "skills/otel-instrument/references/languages/go.md",
+      "sha256": "62ba4d47f1685230a1eec2ce6929c9b3c9f3b8228f62af729367a1db45fa4d5d"
+    },
+    {
+      "path": "skills/otel-instrument/references/languages/java.md",
+      "sha256": "01e27e16262c253e70d921a0c9f2a47286cdd97fb538fd9b192aeee27e62ebd2"
+    },
+    {
+      "path": "skills/otel-instrument/references/languages/node.md",
+      "sha256": "3e86dadec6b8ebf1e6c344c7528772e08d8ec25706bd6b6962edfa37f407c63c"
+    },
+    {
+      "path": "skills/otel-instrument/references/languages/python.md",
+      "sha256": "d8ffc96d962c1ddbe85acce44f1781de6bfe264adf9b4917479b7a2ac71e2f76"
+    },
+    {
+      "path": "skills/otel-instrument/references/project-runtime-validation.md",
+      "sha256": "cdbac8880d21bf8b47c7865c8ef21648e7701ca3c6dceb512d666281815ccc38"
+    },
+    {
+      "path": "skills/otel-instrument/references/signal-mapping-guide.md",
+      "sha256": "83a5e52a01a1c5b98530a3f7b320b410d364e2799a400b25a155ee1db780efed"
+    },
+    {
+      "path": "skills/references/coverage-decision-tree.md",
+      "sha256": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead"
+    },
+    {
+      "path": "skills/references/full-runtime-acceptance.md",
+      "sha256": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5"
+    },
+    {
+      "path": "skills/references/genai-readiness.md",
+      "sha256": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4"
+    },
+    {
+      "path": "skills/references/incident-readiness.md",
+      "sha256": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a"
+    },
+    {
+      "path": "skills/references/ledger-template.md",
+      "sha256": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc"
+    },
+    {
+      "path": "skills/references/local-otlp-receiver.md",
+      "sha256": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec"
+    },
+    {
+      "path": "skills/references/report-flow-contract.md",
+      "sha256": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f"
+    },
+    {
+      "path": "skills/references/signalflow-patterns.md",
+      "sha256": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7"
+    },
+    {
+      "path": "skills/references/splunk-agent-observability.md",
+      "sha256": "819faa9e9f27d2b1b41c13980809801fa242c9b6309eb4eae854688a538f4bf4"
+    },
+    {
+      "path": "skills/references/splunk-api.md",
+      "sha256": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb"
+    },
+    {
+      "path": "skills/references/terraform-normalization.md",
+      "sha256": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a"
+    }
+  ],
+  "searches": {
+    "occurrence_vs_observed_time": {
+      "pattern": "ObservedTimestamp|Observed.Timestamp",
+      "hits": []
+    },
+    "log_specific_limits": {
+      "pattern": "OTEL_LOGRECORD_ATTRIBUTE",
+      "hits": []
+    },
+    "log_specific_batching": {
+      "pattern": "OTEL_BLRP",
+      "hits": []
+    },
+    "unsampled_log_policy": {
+      "pattern": "unsampled|trace_based|traceBased",
+      "hits": []
+    },
+    "numeric_severity": {
+      "pattern": "SeverityNumber|severityNumber|severity.number",
+      "hits": [
+        {
+          "path": "skills/otel-instrument/references/languages/java.md",
+          "line": 718,
+          "text": "severityNumber: .[0].severityNumber,"
+        }
+      ]
+    },
+    "exception_fields": {
+      "pattern": "exception\\.(type|message|stacktrace)",
+      "hits": []
+    },
+    "recursion": {
+      "pattern": "recurs|re.entran",
+      "hits": [
+        {
+          "path": "skills/otel-instrument/references/languages/go.md",
+          "line": 544,
+          "text": "standard logger, so calling that captured default handler can recurse. For a"
+        },
+        {
+          "path": "skills/references/genai-readiness.md",
+          "line": 289,
+          "text": "Parsing JSON is not sanitization: recurse into decoded scalar strings as well"
+        },
+        {
+          "path": "skills/references/genai-readiness.md",
+          "line": 701,
+          "text": "recursion/depth guard, fanout, workflow name, workflow mode, feature flag,"
+        },
+        {
+          "path": "skills/references/report-flow-contract.md",
+          "line": 801,
+          "text": "2. Run `terraform fmt -check -recursive .observe/terraform` when Terraform is"
+        }
+      ]
+    }
+  }
+}

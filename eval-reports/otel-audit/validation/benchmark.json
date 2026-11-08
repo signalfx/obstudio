@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261105T170212990421Z",
+    "run_id": "20261108T145455263551Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -36,6 +36,24 @@
       "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
       "rubric_check_count": 12,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/chi-basic/qual/logging-audit-contract",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "definition_path": "evals/go/chi-basic/eval/qual/logging-audit-contract.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
       "runtime_check_count": 0
     },
     {
@@ -174,6 +192,24 @@
       "runtime_check_count": 0
     },
     {
+      "id": "java/springboot-basic/qual/logging-audit-contract",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "definition_path": "evals/java/springboot-basic/eval/qual/logging-audit-contract.json",
+      "eval_dir": "evals/java/springboot-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
       "id": "node/express-basic/qual/audit",
       "case": "node/express-basic",
       "language": "node",
@@ -188,6 +224,24 @@
       "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
       "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "node/express-basic/qual/logging-audit-contract",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "definition_path": "evals/node/express-basic/eval/qual/logging-audit-contract.json",
+      "eval_dir": "evals/node/express-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
       "runtime_check_count": 0
     },
     {
@@ -514,6 +568,24 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/flask-basic/qual/logging-audit-contract",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "definition_path": "evals/python/flask-basic/eval/qual/logging-audit-contract.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
       "id": "python/galileo-agent-demo/qual/audit",
       "case": "python/galileo-agent-demo",
       "language": "python",
@@ -646,16 +718,16 @@
     }
   ],
   "summary": {
-    "eval_count": 38,
-    "case_count": 53,
-    "prompt_count": 53,
+    "eval_count": 42,
+    "case_count": 65,
+    "prompt_count": 65,
     "sanity_check_count": 0,
-    "rubric_check_count": 326,
+    "rubric_check_count": 410,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 4,
-    "digest": "35968980996b2dc7a24d9a05317c7a578365db8f8c52dc46535654d64ff0ac29",
+    "digest": "9329fddcc0095f20e3c47aee4d73d3e8d832c7a7478fdbaa8152bdd282325bec",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -666,17 +738,18 @@
       "evals/go/chi-basic/eval/qual/audit.json": "e255cfa18954eeec98430cbba25f03b51be5622750a91bf50f5673023845a8aa",
       "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
-      "skills/otel-audit/SKILL.md": "fef834d77d8d6d0230228a4d8f52f277850cb8e6e9b56fd0b46c156ee3c9fa40",
+      "skills/otel-audit/SKILL.md": "f2a83084f338f8b9bc617bab9202e5fa5d1e06744590f2f741ce94347e2e6b63",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
       "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
       "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
-      "skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",
+      "skills/references/consumers.json": "688dae56b4f8ef661148295e193bcbfdf4ddac497ad55f748053ae46c1e4d72a",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
       "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
+      "skills/references/logging-readiness.md": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e",
       "skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
       "skills/references/scripts/observe_report.py": "3c1dc1386357e2cc9dc4f2d0f183cc8f4d0c7f45bb064de15196d071212be8cc",
       "skills/references/scripts/observe_report_core.py": "88419036c5c1a1096361b10da730dc5bbae931f2c890d6dba2c7791cd78b96c4",
@@ -690,6 +763,8 @@
       "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
       "skills/references/tests/test_observe_report_html.py": "32183996d90eb073b9ece7bcd05613ea3552512af7f6f8acfc7171d45eaf2382",
       "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
+      "evals/go/chi-basic/eval/inputs/logging-contract-evidence.json": "73f777ae0bc4ae531cb4ad040a00088bab02c743f150814335ff9b2785ab547b",
+      "evals/go/chi-basic/eval/qual/logging-audit-contract.json": "22216c74614a3f692ea65ffd8091c182c4013db5ff7135697887842d6816d9e2",
       "evals/go/chi-partial/eval/qual/audit.json": "f3ee529239047e5771c74fdf99feba0b1b3cdcc8a4a815bc8123dfd60b9476d9",
       "evals/go/chi-partial/go.mod": "244c715a3ba6df3d65f09d0d71775db17e551ee2a9f6a0de70cc9ee64d8626c6",
       "evals/go/chi-partial/go.sum": "4050499935ba75f7faef6e9ff6e29ab4bc1829376b1f9f38c5972ed63e78f916",
@@ -769,9 +844,13 @@
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "a32f9883586bd13b5ecf6f015f587b25ac696a55423398a01e3fe1619f9020fa",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "2aeefcee33840914b4118f0b6615205c37ae50ecf5cb774c32a6f5d9431f62c5",
       "evals/java/springboot-basic/src/main/resources/application.properties": "80bbb064ac6230150fdb6db61f2ce53248fbf798026e4828c3cb5d4c5f9998fd",
+      "evals/java/springboot-basic/eval/inputs/logging-contract-evidence.json": "c8717bdcc82a78934ddcd94b564ebfbff5a8e96a46ef22df1cc5b263c56362a1",
+      "evals/java/springboot-basic/eval/qual/logging-audit-contract.json": "296b5f93043dc75515b5a858ef10656155c48aca3e7a437287e86ec09f63774b",
       "evals/node/express-basic/app.js": "e21a658ea62dd0aba6890cb8514a37eb08d10282ae078165473371db042934b5",
       "evals/node/express-basic/eval/qual/audit.json": "11fd51385d462669745f57fe10f070186605ec6a498348b54813f92181c2c77e",
       "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
+      "evals/node/express-basic/eval/inputs/logging-contract-evidence.json": "41ba3873817dad6ede23b882928ddeaac591659f9cb2a2f3c0eb399d86554afb",
+      "evals/node/express-basic/eval/qual/logging-audit-contract.json": "f0420c0798c4c2e2155dd6f5b65b40089281cd46dcfe8bef3fe5a563300846c2",
       "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
       "evals/python/ai-assistant-demo/README.md": "eebd4711ef5b6d9325e15d0488b43da6b3fde8bc48ffff91fa44841fd1dfaf0e",
       "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
@@ -847,6 +926,8 @@
       "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
       "evals/python/flask-basic/eval/qual/audit.json": "0c0251332a39010a7b9231589ecfe6186700c030180212860b8798a2d3c25080",
       "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f",
+      "evals/python/flask-basic/eval/inputs/logging-contract-evidence.json": "da219bdeecb7ad72cc341c2aae9385356f95897b19e4d4a1d59482af923b6da7",
+      "evals/python/flask-basic/eval/qual/logging-audit-contract.json": "e675723fba19d8cf9dc45b1a1eb00f19f4481c9f091e945cc06d0711dc7866da",
       "evals/python/galileo-agent-demo/Makefile": "d73ee26d7e47fcf4fbfb25a6352c62aa50378c3f32ee7604860a4ac0c96dbe08",
       "evals/python/galileo-agent-demo/README.md": "c6188d7963a790b8bb9045297f9cb6e9021e2d5f3788a5b4ac21eab3b51a2f3e",
       "evals/python/galileo-agent-demo/agent.py": "4aaff22556af904048ceb3febb342184ea8c84ce6c88053f1352b93e7abf89ed",
@@ -897,6 +978,7 @@
       "skills/references/genai-readiness.md",
       "skills/references/incident-readiness.md",
       "skills/references/local-otlp-receiver.md",
+      "skills/references/logging-readiness.md",
       "skills/references/report-flow-contract.md",
       "skills/references/scripts/observe_report.py",
       "skills/references/scripts/observe_report_core.py",
@@ -917,6 +999,33 @@
         "prompt_id": "readiness-review",
         "eval_kind": "rubric",
         "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/go/chi-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/go/chi-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
       },
       {
         "definition_path": "evals/go/chi-partial/eval/qual/audit.json",
@@ -1031,6 +1140,33 @@
         "eval_inputs": []
       },
       {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
         "definition_path": "evals/node/express-basic/eval/qual/audit.json",
         "fixture_dir": "evals/node/express-basic",
         "prompt_id": "direct",
@@ -1043,6 +1179,33 @@
         "prompt_id": "readiness-review",
         "eval_kind": "rubric",
         "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
       },
       {
         "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-audit.json",
@@ -1245,6 +1408,33 @@
         "prompt_id": "readiness-review",
         "eval_kind": "rubric",
         "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
       },
       {
         "definition_path": "evals/python/galileo-agent-demo/eval/qual/audit.json",

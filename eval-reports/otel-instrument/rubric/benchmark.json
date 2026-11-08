@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "otel-instrument",
-    "run_id": "20261105T163341148979Z",
+    "run_id": "20261108T145455476696Z",
     "agent_model": "gpt-6.1-sol",
     "judge_model": "gpt-6.1-sol",
     "rubric_enabled": true,
@@ -16,83 +16,83 @@
     "config_path": "evals/codex-evals.toml"
   },
   "summary": {
-    "eval_count": 2,
-    "prompt_count": 2,
+    "eval_count": 4,
+    "prompt_count": 12,
     "failure_count": 0,
     "with_skill": {
-      "prompt_count": 2,
-      "command_count": 36,
-      "duration_seconds": 706.64,
-      "agent_duration_seconds": 557.72,
-      "tokens": 4017073,
-      "agent_tokens": 2651180,
+      "prompt_count": 12,
+      "command_count": 238,
+      "duration_seconds": 2667.613,
+      "agent_duration_seconds": 1975.484,
+      "tokens": 12264103,
+      "agent_tokens": 7777852,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
-        "usage_record_count": 2,
-        "selected_record_count": 2,
-        "input_tokens": 2627074,
-        "cached_input_tokens": 2410240,
+        "usage_record_count": 12,
+        "selected_record_count": 12,
+        "input_tokens": 7690505,
+        "cached_input_tokens": 6818816,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 24106,
-        "reasoning_output_tokens": 3270,
+        "output_tokens": 87347,
+        "reasoning_output_tokens": 25945,
         "provider_total_tokens": null,
-        "derived_total_tokens": 2651180,
-        "effective_total_tokens": 2651180,
+        "derived_total_tokens": 7777852,
+        "effective_total_tokens": 7777852,
         "coverage": {
-          "record_count": 2,
-          "modeled_count": 2,
-          "observed_count": 2,
-          "recognized_count": 2,
-          "preferred_total_count": 2,
+          "record_count": 12,
+          "modeled_count": 12,
+          "observed_count": 12,
+          "recognized_count": 12,
+          "preferred_total_count": 12,
           "field_counts": {
-            "input_tokens": 2,
-            "cached_input_tokens": 2,
-            "cache_creation_input_tokens": 2,
-            "output_tokens": 2,
-            "reasoning_output_tokens": 2,
+            "input_tokens": 12,
+            "cached_input_tokens": 12,
+            "cache_creation_input_tokens": 12,
+            "output_tokens": 12,
+            "reasoning_output_tokens": 12,
             "provider_total_tokens": 0,
-            "derived_total_tokens": 2
+            "derived_total_tokens": 12
           }
         }
       },
       "rubric": {
-        "passed": 13,
-        "total": 13,
-        "average_score": 100.0
+        "passed": 84,
+        "total": 84,
+        "average_score": 98.5
       },
-      "rubric_tokens": 1365893,
-      "rubric_duration_seconds": 148.843,
+      "rubric_tokens": 4486251,
+      "rubric_duration_seconds": 691.546,
       "rubric_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
-        "usage_record_count": 2,
-        "selected_record_count": 2,
-        "input_tokens": 1360659,
-        "cached_input_tokens": 1180672,
+        "usage_record_count": 12,
+        "selected_record_count": 12,
+        "input_tokens": 4459730,
+        "cached_input_tokens": 3639680,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 5234,
-        "reasoning_output_tokens": 741,
+        "output_tokens": 26521,
+        "reasoning_output_tokens": 6271,
         "provider_total_tokens": null,
-        "derived_total_tokens": 1365893,
-        "effective_total_tokens": 1365893,
+        "derived_total_tokens": 4486251,
+        "effective_total_tokens": 4486251,
         "coverage": {
-          "record_count": 2,
-          "modeled_count": 2,
-          "observed_count": 2,
-          "recognized_count": 2,
-          "preferred_total_count": 2,
+          "record_count": 12,
+          "modeled_count": 12,
+          "observed_count": 12,
+          "recognized_count": 12,
+          "preferred_total_count": 12,
           "field_counts": {
-            "input_tokens": 2,
-            "cached_input_tokens": 2,
-            "cache_creation_input_tokens": 2,
-            "output_tokens": 2,
-            "reasoning_output_tokens": 2,
+            "input_tokens": 12,
+            "cached_input_tokens": 12,
+            "cache_creation_input_tokens": 12,
+            "output_tokens": 12,
+            "reasoning_output_tokens": 12,
             "provider_total_tokens": 0,
-            "derived_total_tokens": 2
+            "derived_total_tokens": 12
           }
         }
       }
@@ -101,88 +101,90 @@
   },
   "evals": [
     {
-      "id": "python/ai-assistant-demo/qual/ao-name-inputs-instrument",
-      "case": "python/ai-assistant-demo",
-      "language": "python",
-      "service": "ai-assistant-demo",
-      "prompt_count": 1,
+      "id": "go/chi-basic/qual/logging-instrument-contract",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 3,
       "prompts": [
-        "ao-name-inputs-instrument"
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
       ],
       "with_skill": {
-        "prompt_count": 1,
-        "command_count": 20,
-        "duration_seconds": 392.484,
-        "agent_duration_seconds": 341.392,
-        "tokens": 1309120,
-        "agent_tokens": 1179911,
+        "prompt_count": 3,
+        "command_count": 55,
+        "duration_seconds": 679.178,
+        "agent_duration_seconds": 502.575,
+        "tokens": 3027801,
+        "agent_tokens": 1873601,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
-          "usage_record_count": 1,
-          "selected_record_count": 1,
-          "input_tokens": 1164601,
-          "cached_input_tokens": 1058688,
+          "usage_record_count": 3,
+          "selected_record_count": 3,
+          "input_tokens": 1851277,
+          "cached_input_tokens": 1594496,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 15310,
-          "reasoning_output_tokens": 1653,
+          "output_tokens": 22324,
+          "reasoning_output_tokens": 6741,
           "provider_total_tokens": null,
-          "derived_total_tokens": 1179911,
-          "effective_total_tokens": 1179911,
+          "derived_total_tokens": 1873601,
+          "effective_total_tokens": 1873601,
           "coverage": {
-            "record_count": 1,
-            "modeled_count": 1,
-            "observed_count": 1,
-            "recognized_count": 1,
-            "preferred_total_count": 1,
+            "record_count": 3,
+            "modeled_count": 3,
+            "observed_count": 3,
+            "recognized_count": 3,
+            "preferred_total_count": 3,
             "field_counts": {
-              "input_tokens": 1,
-              "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 1,
-              "output_tokens": 1,
-              "reasoning_output_tokens": 1,
+              "input_tokens": 3,
+              "cached_input_tokens": 3,
+              "cache_creation_input_tokens": 3,
+              "output_tokens": 3,
+              "reasoning_output_tokens": 3,
               "provider_total_tokens": 0,
-              "derived_total_tokens": 1
+              "derived_total_tokens": 3
             }
           }
         },
         "rubric": {
-          "passed": 6,
-          "total": 6,
-          "average_score": 100.0
+          "passed": 21,
+          "total": 21,
+          "average_score": 98.66666666666667
         },
-        "rubric_tokens": 129209,
-        "rubric_duration_seconds": 51.055,
+        "rubric_tokens": 1154200,
+        "rubric_duration_seconds": 176.448,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
-          "usage_record_count": 1,
-          "selected_record_count": 1,
-          "input_tokens": 127235,
-          "cached_input_tokens": 89088,
+          "usage_record_count": 3,
+          "selected_record_count": 3,
+          "input_tokens": 1147624,
+          "cached_input_tokens": 937984,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 1974,
-          "reasoning_output_tokens": 355,
+          "output_tokens": 6576,
+          "reasoning_output_tokens": 1220,
           "provider_total_tokens": null,
-          "derived_total_tokens": 129209,
-          "effective_total_tokens": 129209,
+          "derived_total_tokens": 1154200,
+          "effective_total_tokens": 1154200,
           "coverage": {
-            "record_count": 1,
-            "modeled_count": 1,
-            "observed_count": 1,
-            "recognized_count": 1,
-            "preferred_total_count": 1,
+            "record_count": 3,
+            "modeled_count": 3,
+            "observed_count": 3,
+            "recognized_count": 3,
+            "preferred_total_count": 3,
             "field_counts": {
-              "input_tokens": 1,
-              "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 1,
-              "output_tokens": 1,
-              "reasoning_output_tokens": 1,
+              "input_tokens": 3,
+              "cached_input_tokens": 3,
+              "cache_creation_input_tokens": 3,
+              "output_tokens": 3,
+              "reasoning_output_tokens": 3,
               "provider_total_tokens": 0,
-              "derived_total_tokens": 1
+              "derived_total_tokens": 3
             }
           }
         }
@@ -190,94 +192,96 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20261105T163341148979Z/results/python/ai-assistant-demo/qual-ao-name-inputs-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20261105T163341148979Z/results/python/ai-assistant-demo/qual-ao-name-inputs-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20261105T163341148979Z/results/python/ai-assistant-demo/qual-ao-name-inputs-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/results/go/chi-basic/qual-logging-instrument-contract/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/results/go/chi-basic/qual-logging-instrument-contract/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/results/go/chi-basic/qual-logging-instrument-contract/with_baseline.json"
       }
     },
     {
-      "id": "python/ai-assistant-demo/qual/finding-group-instrument",
-      "case": "python/ai-assistant-demo",
-      "language": "python",
-      "service": "ai-assistant-demo",
-      "prompt_count": 1,
+      "id": "java/springboot-basic/qual/logging-instrument-contract",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
+      "prompt_count": 3,
       "prompts": [
-        "finding-group-instrument"
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
       ],
       "with_skill": {
-        "prompt_count": 1,
-        "command_count": 16,
-        "duration_seconds": 314.156,
-        "agent_duration_seconds": 216.328,
-        "tokens": 2707953,
-        "agent_tokens": 1471269,
+        "prompt_count": 3,
+        "command_count": 68,
+        "duration_seconds": 782.429,
+        "agent_duration_seconds": 587.509,
+        "tokens": 3614830,
+        "agent_tokens": 2295434,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
-          "usage_record_count": 1,
-          "selected_record_count": 1,
-          "input_tokens": 1462473,
-          "cached_input_tokens": 1351552,
+          "usage_record_count": 3,
+          "selected_record_count": 3,
+          "input_tokens": 2268928,
+          "cached_input_tokens": 2059904,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 8796,
-          "reasoning_output_tokens": 1617,
+          "output_tokens": 26506,
+          "reasoning_output_tokens": 9572,
           "provider_total_tokens": null,
-          "derived_total_tokens": 1471269,
-          "effective_total_tokens": 1471269,
+          "derived_total_tokens": 2295434,
+          "effective_total_tokens": 2295434,
           "coverage": {
-            "record_count": 1,
-            "modeled_count": 1,
-            "observed_count": 1,
-            "recognized_count": 1,
-            "preferred_total_count": 1,
+            "record_count": 3,
+            "modeled_count": 3,
+            "observed_count": 3,
+            "recognized_count": 3,
+            "preferred_total_count": 3,
             "field_counts": {
-              "input_tokens": 1,
-              "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 1,
-              "output_tokens": 1,
-              "reasoning_output_tokens": 1,
+              "input_tokens": 3,
+              "cached_input_tokens": 3,
+              "cache_creation_input_tokens": 3,
+              "output_tokens": 3,
+              "reasoning_output_tokens": 3,
               "provider_total_tokens": 0,
-              "derived_total_tokens": 1
+              "derived_total_tokens": 3
             }
           }
         },
         "rubric": {
-          "passed": 7,
-          "total": 7,
-          "average_score": 100.0
+          "passed": 21,
+          "total": 21,
+          "average_score": 97.33333333333333
         },
-        "rubric_tokens": 1236684,
-        "rubric_duration_seconds": 97.788,
+        "rubric_tokens": 1319396,
+        "rubric_duration_seconds": 194.772,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
-          "usage_record_count": 1,
-          "selected_record_count": 1,
-          "input_tokens": 1233424,
-          "cached_input_tokens": 1091584,
+          "usage_record_count": 3,
+          "selected_record_count": 3,
+          "input_tokens": 1311914,
+          "cached_input_tokens": 1099264,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 3260,
-          "reasoning_output_tokens": 386,
+          "output_tokens": 7482,
+          "reasoning_output_tokens": 2117,
           "provider_total_tokens": null,
-          "derived_total_tokens": 1236684,
-          "effective_total_tokens": 1236684,
+          "derived_total_tokens": 1319396,
+          "effective_total_tokens": 1319396,
           "coverage": {
-            "record_count": 1,
-            "modeled_count": 1,
-            "observed_count": 1,
-            "recognized_count": 1,
-            "preferred_total_count": 1,
+            "record_count": 3,
+            "modeled_count": 3,
+            "observed_count": 3,
+            "recognized_count": 3,
+            "preferred_total_count": 3,
             "field_counts": {
-              "input_tokens": 1,
-              "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 1,
-              "output_tokens": 1,
-              "reasoning_output_tokens": 1,
+              "input_tokens": 3,
+              "cached_input_tokens": 3,
+              "cache_creation_input_tokens": 3,
+              "output_tokens": 3,
+              "reasoning_output_tokens": 3,
               "provider_total_tokens": 0,
-              "derived_total_tokens": 1
+              "derived_total_tokens": 3
             }
           }
         }
@@ -285,30 +289,221 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20261105T163341148979Z/results/python/ai-assistant-demo/qual-finding-group-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20261105T163341148979Z/results/python/ai-assistant-demo/qual-finding-group-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20261105T163341148979Z/results/python/ai-assistant-demo/qual-finding-group-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/results/java/springboot-basic/qual-logging-instrument-contract/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/results/java/springboot-basic/qual-logging-instrument-contract/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/results/java/springboot-basic/qual-logging-instrument-contract/with_baseline.json"
+      }
+    },
+    {
+      "id": "node/express-basic/qual/logging-instrument-contract",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "with_skill": {
+        "prompt_count": 3,
+        "command_count": 48,
+        "duration_seconds": 619.92,
+        "agent_duration_seconds": 446.161,
+        "tokens": 2810123,
+        "agent_tokens": 1637514,
+        "error_count": 0,
+        "agent_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 3,
+          "selected_record_count": 3,
+          "input_tokens": 1617785,
+          "cached_input_tokens": 1429120,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 19729,
+          "reasoning_output_tokens": 5180,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 1637514,
+          "effective_total_tokens": 1637514,
+          "coverage": {
+            "record_count": 3,
+            "modeled_count": 3,
+            "observed_count": 3,
+            "recognized_count": 3,
+            "preferred_total_count": 3,
+            "field_counts": {
+              "input_tokens": 3,
+              "cached_input_tokens": 3,
+              "cache_creation_input_tokens": 3,
+              "output_tokens": 3,
+              "reasoning_output_tokens": 3,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 3
+            }
+          }
+        },
+        "rubric": {
+          "passed": 21,
+          "total": 21,
+          "average_score": 98.0
+        },
+        "rubric_tokens": 1172609,
+        "rubric_duration_seconds": 173.609,
+        "rubric_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 3,
+          "selected_record_count": 3,
+          "input_tokens": 1165941,
+          "cached_input_tokens": 964096,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 6668,
+          "reasoning_output_tokens": 1453,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 1172609,
+          "effective_total_tokens": 1172609,
+          "coverage": {
+            "record_count": 3,
+            "modeled_count": 3,
+            "observed_count": 3,
+            "recognized_count": 3,
+            "preferred_total_count": 3,
+            "field_counts": {
+              "input_tokens": 3,
+              "cached_input_tokens": 3,
+              "cache_creation_input_tokens": 3,
+              "output_tokens": 3,
+              "reasoning_output_tokens": 3,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 3
+            }
+          }
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/results/node/express-basic/qual-logging-instrument-contract/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/results/node/express-basic/qual-logging-instrument-contract/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/results/node/express-basic/qual-logging-instrument-contract/with_baseline.json"
+      }
+    },
+    {
+      "id": "python/flask-basic/qual/logging-instrument-contract",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "with_skill": {
+        "prompt_count": 3,
+        "command_count": 67,
+        "duration_seconds": 586.086,
+        "agent_duration_seconds": 439.239,
+        "tokens": 2811349,
+        "agent_tokens": 1971303,
+        "error_count": 0,
+        "agent_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 3,
+          "selected_record_count": 3,
+          "input_tokens": 1952515,
+          "cached_input_tokens": 1735296,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 18788,
+          "reasoning_output_tokens": 4452,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 1971303,
+          "effective_total_tokens": 1971303,
+          "coverage": {
+            "record_count": 3,
+            "modeled_count": 3,
+            "observed_count": 3,
+            "recognized_count": 3,
+            "preferred_total_count": 3,
+            "field_counts": {
+              "input_tokens": 3,
+              "cached_input_tokens": 3,
+              "cache_creation_input_tokens": 3,
+              "output_tokens": 3,
+              "reasoning_output_tokens": 3,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 3
+            }
+          }
+        },
+        "rubric": {
+          "passed": 21,
+          "total": 21,
+          "average_score": 100.0
+        },
+        "rubric_tokens": 840046,
+        "rubric_duration_seconds": 146.717,
+        "rubric_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 3,
+          "selected_record_count": 3,
+          "input_tokens": 834251,
+          "cached_input_tokens": 638336,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 5795,
+          "reasoning_output_tokens": 1481,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 840046,
+          "effective_total_tokens": 840046,
+          "coverage": {
+            "record_count": 3,
+            "modeled_count": 3,
+            "observed_count": 3,
+            "recognized_count": 3,
+            "preferred_total_count": 3,
+            "field_counts": {
+              "input_tokens": 3,
+              "cached_input_tokens": 3,
+              "cache_creation_input_tokens": 3,
+              "output_tokens": 3,
+              "reasoning_output_tokens": 3,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 3
+            }
+          }
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/results/python/flask-basic/qual-logging-instrument-contract/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/results/python/flask-basic/qual-logging-instrument-contract/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/results/python/flask-basic/qual-logging-instrument-contract/with_baseline.json"
       }
     }
   ],
   "failures": [],
   "source": {
     "digest_version": 4,
-    "digest": "727ea86152a8c0812613234cd50a06537d5ada631922924249a317601f9f2b76",
+    "digest": "b56b1de27b53d2e90a3a9d60cb2d5bff4ac659b9b772181c044601492d245616",
     "eval_kinds": [
       "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
       "evals/codex-evals.toml": "d89dac81794f47361a312db0b9e303f37a0e5ff60a075e2924ff3c9589ee472b",
-      "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
-      "evals/python/ai-assistant-demo/README.md": "eebd4711ef5b6d9325e15d0488b43da6b3fde8bc48ffff91fa44841fd1dfaf0e",
-      "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
-      "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-instrument.json": "c1c2aa25b51768aa2b9bc850c90d3bb2dd0ee907668d134d477c04b87164d1b6",
-      "evals/python/ai-assistant-demo/eval_runner.py": "6b685cf5472871a9b227e652e47fd23a68b5ffe38021d4b6f3802236be65e2c8",
-      "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
-      "evals/python/ai-assistant-demo/pyproject.toml": "90be0bda1c6147fc324325b0f8a65a82499d65840df190a76b633c992e511f00",
-      "skills/otel-instrument/SKILL.md": "c9ab56d8b664de7310d825e3bd01aee9f53caffe929ff3e74f8454954862f495",
+      "evals/go/chi-basic/eval/inputs/logging-contract-evidence.json": "73f777ae0bc4ae531cb4ad040a00088bab02c743f150814335ff9b2785ab547b",
+      "evals/go/chi-basic/eval/qual/logging-instrument-contract.json": "b07c1883343a63b6db4b4bf927b5d6931128875dae36a19bf3a973a69475c5bb",
+      "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
+      "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
+      "skills/otel-instrument/SKILL.md": "d833530e116b19cf2cfe352e35d44b84503532a493618cbf6d3facee706b5c47",
       "skills/otel-instrument/references/json-approval-handoff.md": "eaafa393d5eacd566522f926e814136408076539b2b000f964357e048f4e5fe8",
       "skills/otel-instrument/references/languages/go.md": "62ba4d47f1685230a1eec2ce6929c9b3c9f3b8228f62af729367a1db45fa4d5d",
       "skills/otel-instrument/references/languages/java.md": "01e27e16262c253e70d921a0c9f2a47286cdd97fb538fd9b192aeee27e62ebd2",
@@ -322,13 +517,14 @@
       "skills/otel-instrument/tests/test_json_approval_flow.py": "bf1c8eef2055a0c1fb579dbb21f6f2b3aa2edf1cd78d083966eb90ecfa7e4aa0",
       "skills/otel-instrument/tests/test_resolve_ao_resources.py": "8a69aca1164ff064c11cc32715549479079f784fdf9333b6c4d44b98de55c6be",
       "skills/otel-instrument/tests/test_validate_gap_closure.py": "750f196fe279ed05c95e53d45f8b2d773ff996ee86468541688b586df7dede18",
-      "skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",
+      "skills/references/consumers.json": "688dae56b4f8ef661148295e193bcbfdf4ddac497ad55f748053ae46c1e4d72a",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
       "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
+      "skills/references/logging-readiness.md": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e",
       "skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
       "skills/references/scripts/observe_report.py": "3c1dc1386357e2cc9dc4f2d0f183cc8f4d0c7f45bb064de15196d071212be8cc",
       "skills/references/scripts/observe_report_core.py": "88419036c5c1a1096361b10da730dc5bbae931f2c890d6dba2c7791cd78b96c4",
@@ -342,8 +538,22 @@
       "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
       "skills/references/tests/test_observe_report_html.py": "32183996d90eb073b9ece7bcd05613ea3552512af7f6f8acfc7171d45eaf2382",
       "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
-      "evals/python/ai-assistant-demo/eval/inputs/finding-group-snapshot.json": "4d8ecff766c242dac8b4e48409681b6aa0b87487b62740128afe39ed2f41e5d6",
-      "evals/python/ai-assistant-demo/eval/qual/finding-group-instrument.json": "52338df15961f6943cf7f58fda8f1664d080b395a91e391947ade9221cfaeaa7"
+      "evals/java/springboot-basic/eval/inputs/logging-contract-evidence.json": "c8717bdcc82a78934ddcd94b564ebfbff5a8e96a46ef22df1cc5b263c56362a1",
+      "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json": "097139e505421a6faf2eaf5d8bdade21c79b97cc657d37029ec88bc196a328ab",
+      "evals/java/springboot-basic/pom.xml": "2b6e5f88faf91bf8891d728bd51bc6737ca8919bd657caaaa416ff3c6550f625",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/Task.java": "97437951adcb1592b1f4e48af10f799501858ed40949575f8278d9a644f80cfc",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "a32f9883586bd13b5ecf6f015f587b25ac696a55423398a01e3fe1619f9020fa",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "2aeefcee33840914b4118f0b6615205c37ae50ecf5cb774c32a6f5d9431f62c5",
+      "evals/java/springboot-basic/src/main/resources/application.properties": "80bbb064ac6230150fdb6db61f2ce53248fbf798026e4828c3cb5d4c5f9998fd",
+      "evals/node/express-basic/app.js": "e21a658ea62dd0aba6890cb8514a37eb08d10282ae078165473371db042934b5",
+      "evals/node/express-basic/eval/inputs/logging-contract-evidence.json": "41ba3873817dad6ede23b882928ddeaac591659f9cb2a2f3c0eb399d86554afb",
+      "evals/node/express-basic/eval/qual/logging-instrument-contract.json": "318896094d8f97f9ad124304b3f536b4ff1558cdb343d26cd458e27f79739955",
+      "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
+      "evals/python/flask-basic/Makefile": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe",
+      "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
+      "evals/python/flask-basic/eval/inputs/logging-contract-evidence.json": "da219bdeecb7ad72cc341c2aae9385356f95897b19e4d4a1d59482af923b6da7",
+      "evals/python/flask-basic/eval/qual/logging-instrument-contract.json": "57de74aa3e2706d5a6a0d6b30ab338588b3357fa028d1a65a47f9aeeda015f85",
+      "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f"
     },
     "skill_path": "skills/otel-instrument",
     "shared_reference_consumers": [
@@ -351,6 +561,7 @@
       "skills/references/genai-readiness.md",
       "skills/references/incident-readiness.md",
       "skills/references/local-otlp-receiver.md",
+      "skills/references/logging-readiness.md",
       "skills/references/report-flow-contract.md",
       "skills/references/scripts/observe_report.py",
       "skills/references/scripts/observe_report_core.py",
@@ -359,19 +570,111 @@
     ],
     "selections": [
       {
-        "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-instrument.json",
-        "fixture_dir": "evals/python/ai-assistant-demo",
-        "prompt_id": "ao-name-inputs-instrument",
-        "eval_kind": "rubric",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/python/ai-assistant-demo/eval/qual/finding-group-instrument.json",
-        "fixture_dir": "evals/python/ai-assistant-demo",
-        "prompt_id": "finding-group-instrument",
+        "definition_path": "evals/go/chi-basic/eval/qual/logging-instrument-contract.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "logging-trial-1",
         "eval_kind": "rubric",
         "eval_inputs": [
-          "eval/inputs/finding-group-snapshot.json"
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/go/chi-basic/eval/qual/logging-instrument-contract.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/go/chi-basic/eval/qual/logging-instrument-contract.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/logging-instrument-contract.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/logging-instrument-contract.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/logging-instrument-contract.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/logging-instrument-contract.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/logging-instrument-contract.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/logging-instrument-contract.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/logging-contract-evidence.json"
         ]
       }
     ],

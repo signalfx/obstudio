@@ -1,0 +1,1038 @@
+{
+  "baseline_commit": "4e1e51f300510b26114fdc1b5ef528b3b6f09760",
+  "date": "2026-11-08",
+  "semantic_scope": "Plan-only audit/repair decisions against synthetic observations and independent valid controls, not implementation or receiver proof.",
+  "native_scope": "Real SDK/bridge probes with in-memory exporters and a synthetic failed exporter; bridge omission opt-out; not full application/cloud/OTLP-wire proof.",
+  "model": {
+    "agent": "gpt-6.1-sol",
+    "judge": "gpt-6.1-sol"
+  },
+  "runs": {
+    "exploratory_baseline": {
+      "otel-audit": "20261108T143553967113Z"
+    },
+    "iteration_1": {
+      "otel-audit": "20261108T144216403474Z",
+      "otel-instrument": "20261108T144216403486Z"
+    },
+    "final": {
+      "otel-audit": "20261108T145455476696Z",
+      "otel-instrument": "20261108T145455476696Z"
+    }
+  },
+  "notes": {
+    "exploratory_baseline": "Ambiguous control policy corrected before main repeated trials; excluded from controlled skill-lift claims.",
+    "iteration_1": "Handoff omissions retained as failures. Ambiguous exported timestamp evidence clarified to exact OTLP fields before final round; output allowance raised to 1600 words.",
+    "final": "Frozen revised skills and fixtures; all graders and actual reference-load/hash checks recorded."
+  },
+  "semantic": {
+    "exploratory_baseline": [
+      {
+        "skill": "otel-audit",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 98,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T143553967113Z/cases/go/chi-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": false,
+        "score": 90,
+        "passed_criteria": 5,
+        "criteria": 7,
+        "failed_checks": [
+          {
+            "id": "rubric-5",
+            "pass": false,
+            "notes": "Correctly handles the limits observation, but incorrectly converts the SDK-owned control into required configuration work. The rubric requires that control to remain covered by defaults/tests.",
+            "evidence": "control_cases[id=sdk-owned] is classified partial and attached to LOG-006. log.control.sdk_defaults explicitly requires an override from 128 to 8. Otherwise LOG-006 correctly separates log limits, span limits and the Body policy."
+          },
+          {
+            "id": "rubric-7",
+            "pass": false,
+            "notes": "Correctly addresses recursion, application progress, original sink preservation, existing ownership and local-only routing. The outage scenario omits an explicit assertion that other configured signals remain usable.",
+            "evidence": "LOG-009 and log.diagnostics.failure test bounded diagnostics/export work, continued progress and original sink output. Other signals are mentioned as preservation guardrails, but their operation during the exporter outage is not tested."
+          }
+        ],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T143553967113Z/cases/java/springboot-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": false,
+        "score": 94,
+        "passed_criteria": 6,
+        "criteria": 7,
+        "failed_checks": [
+          {
+            "id": "rubric-5",
+            "pass": false,
+            "notes": "Correctly diagnoses the main limits observation and plans supported log limits, independent Body enforcement and accounting. However, it incorrectly attaches a remediation finding to the SDK-owned control instead of treating its defaults as covered and retaining future verification.",
+            "evidence": "logging-audit.json control_cases[id=sdk-owned] has status=partial and finding_ids=[LOG-006]. Its reasoning imports the eight-attribute policy into the control, and logging.control.sdk-owned requires effective cap<=8. The rubric explicitly requires this control to remain covered by defaults/tests."
+          }
+        ],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T143553967113Z/cases/node/express-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T143553967113Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      }
+    ],
+    "iteration_1": [
+      {
+        "skill": "otel-audit",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 96,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T144216403474Z/cases/go/chi-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 96,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T144216403474Z/cases/go/chi-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 94,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T144216403474Z/cases/go/chi-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 95,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T144216403474Z/cases/java/springboot-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 95,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T144216403474Z/cases/java/springboot-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": false,
+        "score": 92,
+        "passed_criteria": 4,
+        "criteria": 7,
+        "failed_checks": [
+          {
+            "id": "rubric-3",
+            "pass": false,
+            "notes": "Correctly addresses unsampled retention, stale detached IDs, exact fixture IDs/flags, concurrent isolation and the supported explicit-filter control. The future scenario omits explicit asynchronous context-handoff/isolation testing.",
+            "evidence": "logging-audit.json: future_tests.T2 specifies sampled/unsampled flags, detach and interleaved concurrent requests, but no async handoff case."
+          },
+          {
+            "id": "rubric-6",
+            "pass": false,
+            "notes": "Finds unbounded buffering, irrelevant BSP settings, unbounded shutdown and false completion. Correctly counts 3 attempted, 1 accepted and 2 rejected, with overload and final-log tests. The batching plan omits the explicit batch-size <= queue-size constraint and concrete supported queue/batch/schedule/timeout configuration requirements.",
+            "evidence": "logging-audit.json: observations[delivery], capability, future_tests.T5 and T6; BLRP support is mentioned, but the required configuration relationship is absent."
+          },
+          {
+            "id": "rubric-7",
+            "pass": false,
+            "notes": "Correctly identifies recursive diagnostics and stalled application progress, preserves the provider/bridge and local-only destination, and plans suppression/separate routing. The outage acceptance omits an explicit bound on diagnostic volume and proof that other configured signals remain unaffected.",
+            "evidence": "logging-audit.json: observations[diagnostics], future_tests.T6 and shared_acceptance require bounded attempts and continued progress, but contain no unrelated-signal assertion."
+          }
+        ],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T144216403474Z/cases/java/springboot-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 95,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T144216403474Z/cases/node/express-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": false,
+        "score": 93,
+        "passed_criteria": 6,
+        "criteria": 7,
+        "failed_checks": [
+          {
+            "id": "rubric-7",
+            "pass": false,
+            "notes": "Correctly diagnoses recursion and stalled progress, proposes suppression/separate routing, preserves the original sink and local-only destination, and avoids duplicate provider/bridge proposals. However, the outage acceptance never explicitly verifies that other configured signals remain usable; shared resource identity does not establish fault isolation.",
+            "evidence": "service/.observe/logging-audit.json:59-60 tests bounded retries and application/original-sink progress. Shared acceptance at :91 checks resource identity across signals but omits their continued operation during exporter failure."
+          }
+        ],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T144216403474Z/cases/node/express-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 98,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T144216403474Z/cases/node/express-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 95,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T144216403474Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 96,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T144216403474Z/cases/python/flask-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 94,
+        "passed_criteria": 6,
+        "criteria": 7,
+        "failed_checks": [
+          {
+            "id": "rubric-7",
+            "pass": false,
+            "notes": "Correctly diagnoses recursion and halted progress, preserves the existing provider/sink and local-only destination, and proposes suppression or separate diagnostics. However, outage acceptance omits explicit checks that other configured signals remain usable and that diagnostic volume and total export attempts stay bounded.",
+            "evidence": "logging-audit.json:68-73 requires zero recursive exports, continued requests and original-sink writes; shared acceptance preserves local-only routing but adds no cross-signal outage assertion or diagnostic-volume bound."
+          }
+        ],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T144216403474Z/cases/python/flask-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": false,
+        "score": 92,
+        "passed_criteria": 6,
+        "criteria": 7,
+        "failed_checks": [
+          {
+            "id": "rubric-6",
+            "pass": false,
+            "notes": "Correctly identifies buffering, shutdown, and partial-success faults, but the batching acceptance contract omits batch size <= queue capacity and leaves effective log batching settings unspecified.",
+            "evidence": "observations.delivery and T5 correctly distinguish attempted3/accepted1/rejected2 and reject full-success claims. T6 covers final-log drain and a fresh1s shutdown deadline. Repair/T5 only request bounded defaults/public options and bounded queue/batch/timeout, without the required batch-to-queue assertion."
+          }
+        ],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T144216403486Z/cases/go/chi-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": false,
+        "score": 91,
+        "passed_criteria": 6,
+        "criteria": 7,
+        "failed_checks": [
+          {
+            "id": "rubric-2",
+            "pass": false,
+            "notes": "Correctly repairs ERROR=8 through otelslog and proposes exact occurrence-time preservation, but explicitly declines to identify the supplied timestamp overwrite. That misses a required concrete fault. Node precision requirements are inapplicable.",
+            "evidence": "Fixture record has source time 1730000000000000001 and exported time 1730000000200000000 matching observation time. JSON record decision says 'Export-time equality alone cannot prove Timestamp replacement'; Markdown repeats this dismissal. T1 nevertheless specifies the correct timestamp and ERROR=17."
+          }
+        ],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T144216403486Z/cases/go/chi-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": false,
+        "score": 93,
+        "passed_criteria": 6,
+        "criteria": 7,
+        "failed_checks": [
+          {
+            "id": "rubric-7",
+            "pass": false,
+            "notes": "The repair direction is sound, but outage acceptance does not explicitly assert that configured unrelated signals remain usable. This leaves one requested acceptance condition incomplete.",
+            "evidence": "diagnostics repair says to preserve unrelated signals, but T5/T6 assert only bounded diagnostics/export behavior, application/original-sink continuity and shutdown. Existing-provider reuse, healthy-path duplicate checks and local-only routing are otherwise addressed."
+          }
+        ],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T144216403486Z/cases/go/chi-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 94,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T144216403486Z/cases/java/springboot-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 96,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T144216403486Z/cases/java/springboot-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 95,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T144216403486Z/cases/java/springboot-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 95,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T144216403486Z/cases/node/express-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 98,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T144216403486Z/cases/node/express-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 93,
+        "passed_criteria": 6,
+        "criteria": 7,
+        "failed_checks": [
+          {
+            "id": "rubric-7",
+            "pass": false,
+            "notes": "Findings and routing repairs are sound, but the outage acceptance test does not explicitly assert that configured unrelated signals continue exporting.",
+            "evidence": "diagnostics/T6 tests bounded nonrecursive diagnostics and continued application/original-sink progress. Shared acceptance preserves one local console bridge/provider path and unrelated signals during configuration conflicts, but lacks an explicit trace/metric assertion during exporter outage."
+          }
+        ],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T144216403486Z/cases/node/express-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 96,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T144216403486Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 95,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T144216403486Z/cases/python/flask-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 98,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T144216403486Z/cases/python/flask-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "c3f0d2a036c28ef0599e79753a4917696f779ceb19ae63c55e5e3c5983d3c77a"
+      }
+    ],
+    "final": [
+      {
+        "skill": "otel-audit",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T145455476696Z/cases/go/chi-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 95,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T145455476696Z/cases/go/chi-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T145455476696Z/cases/go/chi-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 99,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T145455476696Z/cases/java/springboot-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 98,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T145455476696Z/cases/java/springboot-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 98,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T145455476696Z/cases/java/springboot-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T145455476696Z/cases/node/express-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T145455476696Z/cases/node/express-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 98,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T145455476696Z/cases/node/express-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T145455476696Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T145455476696Z/cases/python/flask-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-audit",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-audit/20261108T145455476696Z/cases/python/flask-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/cases/go/chi-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 98,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/cases/go/chi-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "go",
+        "service": "chi-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 98,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/cases/go/chi-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 96,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/cases/java/springboot-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 98,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/cases/java/springboot-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "java",
+        "service": "springboot-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 98,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/cases/java/springboot-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 98,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/cases/node/express-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/cases/node/express-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "node",
+        "service": "express-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 96,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/cases/node/express-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-1",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-2",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/cases/python/flask-basic/logging-trial-2/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      },
+      {
+        "skill": "otel-instrument",
+        "language": "python",
+        "service": "flask-basic",
+        "trial": "logging-trial-3",
+        "overall_pass": true,
+        "score": 100,
+        "passed_criteria": 7,
+        "criteria": 7,
+        "failed_checks": [],
+        "logging_reference_read": true,
+        "artifact": ".workspace/codex-evals/otel-instrument/20261108T145455476696Z/cases/python/flask-basic/logging-trial-3/with_skill/rubric_grade.json",
+        "logging_reference_sha256": "9152c4220770b25fda619d4eb831350153b380768208124fa7f30e6cca7ebb1e"
+      }
+    ]
+  },
+  "native": [
+    {
+      "language": "python",
+      "trial": 1,
+      "command": [
+        "${REPO}/evals/.venv/bin/python3",
+        "test_logging_contract.py"
+      ],
+      "cwd": "${REPO}/evals/python/logging-contract",
+      "exit_code": 0,
+      "passed_tests": 6,
+      "seconds": 0.23,
+      "log": "${REPO}/.workspace/logging-analysis/runtime-results/python-1.log",
+      "passed": true
+    },
+    {
+      "language": "python",
+      "trial": 2,
+      "command": [
+        "${REPO}/evals/.venv/bin/python3",
+        "test_logging_contract.py"
+      ],
+      "cwd": "${REPO}/evals/python/logging-contract",
+      "exit_code": 0,
+      "passed_tests": 6,
+      "seconds": 0.1,
+      "log": "${REPO}/.workspace/logging-analysis/runtime-results/python-2.log",
+      "passed": true
+    },
+    {
+      "language": "python",
+      "trial": 3,
+      "command": [
+        "${REPO}/evals/.venv/bin/python3",
+        "test_logging_contract.py"
+      ],
+      "cwd": "${REPO}/evals/python/logging-contract",
+      "exit_code": 0,
+      "passed_tests": 6,
+      "seconds": 0.108,
+      "log": "${REPO}/.workspace/logging-analysis/runtime-results/python-3.log",
+      "passed": true
+    },
+    {
+      "language": "go",
+      "trial": 1,
+      "command": [
+        "${HOME}/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.darwin-arm64/bin/go",
+        "test",
+        "-count=1",
+        "-json",
+        "./..."
+      ],
+      "cwd": "${REPO}/evals/go/logging-contract",
+      "exit_code": 0,
+      "passed_tests": 6,
+      "seconds": 2.155,
+      "log": "${REPO}/.workspace/logging-analysis/runtime-results/go-1.log",
+      "passed": true
+    },
+    {
+      "language": "go",
+      "trial": 2,
+      "command": [
+        "${HOME}/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.darwin-arm64/bin/go",
+        "test",
+        "-count=1",
+        "-json",
+        "./..."
+      ],
+      "cwd": "${REPO}/evals/go/logging-contract",
+      "exit_code": 0,
+      "passed_tests": 6,
+      "seconds": 0.359,
+      "log": "${REPO}/.workspace/logging-analysis/runtime-results/go-2.log",
+      "passed": true
+    },
+    {
+      "language": "go",
+      "trial": 3,
+      "command": [
+        "${HOME}/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.darwin-arm64/bin/go",
+        "test",
+        "-count=1",
+        "-json",
+        "./..."
+      ],
+      "cwd": "${REPO}/evals/go/logging-contract",
+      "exit_code": 0,
+      "passed_tests": 6,
+      "seconds": 0.378,
+      "log": "${REPO}/.workspace/logging-analysis/runtime-results/go-3.log",
+      "passed": true
+    },
+    {
+      "language": "node",
+      "trial": 1,
+      "command": [
+        "npm",
+        "test"
+      ],
+      "cwd": "${REPO}/evals/node/logging-contract",
+      "exit_code": 0,
+      "passed_tests": 6,
+      "seconds": 0.381,
+      "log": "${REPO}/.workspace/logging-analysis/runtime-results/node-1.log",
+      "passed": true
+    },
+    {
+      "language": "node",
+      "trial": 2,
+      "command": [
+        "npm",
+        "test"
+      ],
+      "cwd": "${REPO}/evals/node/logging-contract",
+      "exit_code": 0,
+      "passed_tests": 6,
+      "seconds": 0.191,
+      "log": "${REPO}/.workspace/logging-analysis/runtime-results/node-2.log",
+      "passed": true
+    },
+    {
+      "language": "node",
+      "trial": 3,
+      "command": [
+        "npm",
+        "test"
+      ],
+      "cwd": "${REPO}/evals/node/logging-contract",
+      "exit_code": 0,
+      "passed_tests": 6,
+      "seconds": 0.187,
+      "log": "${REPO}/.workspace/logging-analysis/runtime-results/node-3.log",
+      "passed": true
+    },
+    {
+      "language": "java",
+      "trial": 1,
+      "command": [
+        "${REPO}/.workspace/logging-analysis/toolchains/maven/apache-maven-3.9.11/bin/mvn",
+        "-s",
+        "${REPO}/.workspace/logging-analysis/public-maven-settings.xml",
+        "test"
+      ],
+      "cwd": "${REPO}/evals/java/logging-contract",
+      "exit_code": 0,
+      "passed_tests": 6,
+      "seconds": 1.981,
+      "log": "${REPO}/.workspace/logging-analysis/runtime-results/java-1.log",
+      "passed": true
+    },
+    {
+      "language": "java",
+      "trial": 2,
+      "command": [
+        "${REPO}/.workspace/logging-analysis/toolchains/maven/apache-maven-3.9.11/bin/mvn",
+        "-s",
+        "${REPO}/.workspace/logging-analysis/public-maven-settings.xml",
+        "test"
+      ],
+      "cwd": "${REPO}/evals/java/logging-contract",
+      "exit_code": 0,
+      "passed_tests": 6,
+      "seconds": 1.117,
+      "log": "${REPO}/.workspace/logging-analysis/runtime-results/java-2.log",
+      "passed": true
+    },
+    {
+      "language": "java",
+      "trial": 3,
+      "command": [
+        "${REPO}/.workspace/logging-analysis/toolchains/maven/apache-maven-3.9.11/bin/mvn",
+        "-s",
+        "${REPO}/.workspace/logging-analysis/public-maven-settings.xml",
+        "test"
+      ],
+      "cwd": "${REPO}/evals/java/logging-contract",
+      "exit_code": 0,
+      "passed_tests": 6,
+      "seconds": 1.072,
+      "log": "${REPO}/.workspace/logging-analysis/runtime-results/java-3.log",
+      "passed": true
+    }
+  ],
+  "final_summary": {
+    "cases": 24,
+    "overall_passes": 24,
+    "passed_criteria": 168,
+    "criteria": 168,
+    "runtime_processes": 12,
+    "runtime_test_executions": 72
+  }
+}

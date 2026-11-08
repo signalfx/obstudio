@@ -1,0 +1,135 @@
+{
+  "provenance": "Synthetic candidate overlay and OTLP fixture observations for this evaluation, not receipts from the baseline service or live cloud. Treat baseline files separately. No installed SDK version is supplied; capability verification remains required.",
+  "baseline_source": "src/main/java/com/example/tasks/TaskController.java",
+  "candidate_logging_stack": "Logback/SLF4J",
+  "candidate_overlay_source": "MDC.put(\"trace_id\", lastTraceId); logger.error(\"request failed\", error); // MDC is not cleared",
+  "operator_policy": {
+    "trace_based": false,
+    "sensitive_message_and_stack_capture": false,
+    "allowed_exception_fields": [
+      "exception.type"
+    ],
+    "max_body_utf8_bytes": 256,
+    "max_log_attributes": 8,
+    "max_attribute_value_length": 32,
+    "original_sink": "preserve",
+    "log_export_destination": "local only"
+  },
+  "observations": [
+    {
+      "id": "record",
+      "source_event_time_unix_nano": "1730000000000000001",
+      "observed_time_unix_nano": "1730000000200000000",
+      "exported_time_unix_nano": "1730000000200000000",
+      "source_severity": "ERROR",
+      "exported_severity_number": 8,
+      "exported_body": "request failed",
+      "otlp_log_record": {
+        "time_unix_nano": "1730000000200000000",
+        "observed_time_unix_nano": "1730000000200000000",
+        "severity_number": 8,
+        "body": "request failed"
+      }
+    },
+    {
+      "id": "context",
+      "sampled_call": {
+        "trace_id": "11111111111111111111111111111111",
+        "span_id": "2222222222222222",
+        "trace_flags": 1,
+        "exported_count": 1
+      },
+      "unsampled_call": {
+        "trace_id": "33333333333333333333333333333333",
+        "span_id": "4444444444444444",
+        "trace_flags": 0,
+        "exported_count": 0
+      },
+      "after_detach_call": {
+        "active_context": null,
+        "exported_trace_id": "11111111111111111111111111111111",
+        "exported_span_id": "2222222222222222"
+      }
+    },
+    {
+      "id": "exception",
+      "exported_attributes": {
+        "error.kind": "ValueError",
+        "error.dump": "ValueError: password=synthetic-canary",
+        "exception.stacktrace": "/private/path?token=synthetic-canary"
+      },
+      "exported_body": "password=synthetic-canary"
+    },
+    {
+      "id": "limits",
+      "sdk_log_attribute_count_limit": 128,
+      "span_attribute_count_limit": 8,
+      "exported_attribute_count": 20,
+      "exported_attribute_value_length": 400,
+      "exported_body_utf8_bytes": 4096
+    },
+    {
+      "id": "delivery",
+      "config": {
+        "OTEL_BSP_MAX_QUEUE_SIZE": 8,
+        "OTEL_BSP_EXPORT_TIMEOUT": 100,
+        "custom_log_queue": "unbounded"
+      },
+      "http_status": 200,
+      "response": {
+        "partialSuccess": {
+          "rejectedLogRecords": "2",
+          "errorMessage": "fixture capacity"
+        }
+      },
+      "attempted_records": 3,
+      "receiver_accepted_records": 1,
+      "reported_complete": true
+    },
+    {
+      "id": "diagnostics",
+      "exporter_failure_handler": "application logger.error routed to the same OTel bridge",
+      "consecutive_export_attempts_after_one_failure": 200,
+      "original_sink_available": true,
+      "application_progress_after_failure": false,
+      "shutdown_deadline_ms": null
+    }
+  ],
+  "control_cases": [
+    {
+      "id": "sdk-owned",
+      "official_bridge_in_use": true,
+      "level_mapping_and_timestamp_test": "pass",
+      "log_attribute_limit": "SDK default 128",
+      "body": "short fixed category",
+      "queue": "bounded SDK default",
+      "application_override": null,
+      "operator_policy": {
+        "max_log_attributes": 128,
+        "max_body_utf8_bytes": 256,
+        "attribute_value_limit": "SDK default with short fixed values"
+      }
+    },
+    {
+      "id": "explicit-filter",
+      "operator_trace_based": true,
+      "installed_sdk_support": "fixture-supported",
+      "unsampled_exported_count": 0,
+      "outside_span_exported_count": 1
+    },
+    {
+      "id": "ordinary-message",
+      "body": "request completed",
+      "event_name": null,
+      "exception": null
+    },
+    {
+      "id": "bridge-exception",
+      "producer": "existing logging bridge",
+      "event_name": null,
+      "exception_type": "ValueError",
+      "message_and_stack_capture": false
+    }
+  ],
+  "control_case_scope": "Each control is independent. The root operator policy applies to observations only; control-specific policy overrides it."
+}
