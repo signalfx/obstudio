@@ -4,6 +4,13 @@
 A startup log has no request context. Existing task routes retain their behavior.
 `PORT` selects an isolated test listener; its normal default remains 8000.
 
+The live interop fixture uses Go 1.25 so an official compatible propagator can
+accept the current Python SDK driver's trace flags, including its random-ID
+bit. This fixture floor is explicit test setup. Skills must still preserve an
+existing application's runtime constraints and report unsupported peer features
+when no compatible dependency exists; silently upgrading that application or
+stripping flags is not a repair.
+
 When `LOGGING_WORKFLOW_VERIFIER` is provided, run the existing host smoke check
 through the normal configured project test target:
 

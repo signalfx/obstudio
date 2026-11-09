@@ -136,6 +136,8 @@ def traced_requests(app_url: str, trace_endpoint: str) -> list[dict]:
             return {"slot": slot, "trace_id": format(context.trace_id, "032x"),
                     "client_span_id": format(context.span_id, "016x"),
                     "parent_span_id": format(parent.get_span_context().span_id, "016x"),
+                    "traceparent": headers.get("traceparent"),
+                    "sdk_trace_flags": int(context.trace_flags),
                     "seconds": time.monotonic() - started}
 
     try:
@@ -192,6 +194,36 @@ def interrupt_owned_run(*_args) -> None:
     raise KeyboardInterrupt
 
 
+def capture_live_receipts(process, studio, requests, service_name, started, output):
+    deadline = time.monotonic() + 15
+    while True:
+        if process.poll() is not None:
+            raise RuntimeError("Application exited before live explorer receipt capture")
+        logs = get_json(studio + "/api/query/logs?limit=10000")
+        selected = []
+        for record in logs:
+            if record.get("resource", {}).get("serviceName") != service_name:
+                continue
+            timestamp = dt.datetime.fromisoformat(record["timeUnixNano"].replace("Z", "+00:00"))
+            if timestamp >= started:
+                selected.append(record)
+        details = {request["trace_id"]: get_json(studio + "/api/query/traces/" + request["trace_id"])
+                   for request in requests}
+        (output / "receiver-logs.json").write_text(json.dumps(selected, indent=2) + "\n")
+        (output / "receiver-traces.json").write_text(json.dumps(details, indent=2) + "\n")
+        native = (output / "native-output.log").read_text()
+        try:
+            joins = validate_receipts(requests, selected, details, service_name, native)
+            if process.poll() is not None:
+                raise RuntimeError("Application exited during live explorer receipt capture")
+            (output / "native-output-at-receipt.log").write_text(native)
+            return joins
+        except (AssertionError, KeyError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(.25)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start-command-json", required=True)
@@ -212,7 +244,7 @@ def main() -> int:
               "started": started.isoformat(), "studio": studio, "app_url": app_url,
               "verifier_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               "source_before": source_hashes(service), "proof_directory": str(output),
-              "scope": "Real app startup and two concurrent sync/async worker logs joined to SDK spans; REST does not expose all trace flag bits. Not production/cloud or arbitrary payload proof."}
+              "scope": "Real app startup and two concurrent sync/async worker logs joined to SDK spans; REST does not expose all trace flag bits. Live explorer capture; bounded cleanup does not prove SDK shutdown drain. Not production/cloud or arbitrary payload proof."}
     process = None
     drained = threading.Event()
     pump = None
@@ -245,6 +277,11 @@ def main() -> int:
                 requests = traced_requests(app_url, trace_endpoint)
                 (output / "requests.json").write_text(json.dumps(requests, indent=2) + "\n")
                 time.sleep(1)
+                result["joins"] = capture_live_receipts(
+                    process, studio, requests, expected_service_name, started, output,
+                )
+                result["capture_phase"] = "source_alive"
+                result["shutdown_drain_proven"] = False
                 result["graceful_stop"] = stop_owned(process, drained=drained)
                 pump.join(timeout=1)
                 result["application_exit_code"] = process.returncode
@@ -254,27 +291,6 @@ def main() -> int:
                 if pump is not None:
                     pump.join(timeout=1)
         assert result["graceful_stop"], "Owned application shutdown exceeded10seconds"
-        deadline = time.monotonic() + 15
-        while True:
-            logs = get_json(studio + "/api/query/logs?limit=10000")
-            selected = []
-            for record in logs:
-                if record.get("resource", {}).get("serviceName") != expected_service_name:
-                    continue
-                timestamp = dt.datetime.fromisoformat(record["timeUnixNano"].replace("Z", "+00:00"))
-                if timestamp >= started:
-                    selected.append(record)
-            details = {r["trace_id"]: get_json(studio + "/api/query/traces/" + r["trace_id"]) for r in requests}
-            (output / "receiver-logs.json").write_text(json.dumps(selected, indent=2) + "\n")
-            (output / "receiver-traces.json").write_text(json.dumps(details, indent=2) + "\n")
-            try:
-                result["joins"] = validate_receipts(requests, selected, details, expected_service_name,
-                                                     (output / "native-output.log").read_text())
-                break
-            except (AssertionError, KeyError):
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(.25)
         result["source_after"] = source_hashes(service)
         assert result["source_before"] == result["source_after"], "Runtime source changed during verification"
         result["status"] = "passed"

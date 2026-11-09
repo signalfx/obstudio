@@ -544,6 +544,13 @@ it is not invoked by the default SIGTERM action. When no lifecycle owner
 exists, install one signal owner that requests the service to stop, wait for
 the serving loop to return, and then call `shutdown`. Do not create a second
 provider or signal handler during reloads or per worker request.
+Make repeated stop requests idempotent while final logging and provider drain
+run outside the signal handler. A handler that raises `SystemExit` on every
+signal can interrupt cleanup already in progress; do not count that as a
+successful drain. Use the server's supported stop mechanism and test repeated
+signals against the actual launcher, retaining final-record receipts separately
+from live explorer visibility. This is Python lifecycle guidance, not an OTel
+signal-handler API requirement; see Python's [signal handler exceptions](https://docs.python.org/3/library/signal.html#note-on-signal-handlers-and-exceptions).
 
 `LoggingInstrumentor` is the current stdlib-to-OTel bridge. Its handler is an
 additional path, and its guarded configuration wrappers let later application

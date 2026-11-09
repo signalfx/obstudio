@@ -57,6 +57,72 @@ def test_joins_exact_internal_handler_and_worker_to_its_real_request_tree():
     assert len(validate_receipts(*receipts())) == 4
 
 
+def test_live_receipts_are_saved_before_producer_exit_eviction(tmp_path, monkeypatch):
+    """Model explorer lifetime, not SDK emission; real SDK proof is separate."""
+    import datetime as dt
+    import socket
+    import logging_workflow_check as workflow
+
+    requests, logs, details, name, native = receipts()
+    for record in logs:
+        record["timeUnixNano"] = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)).isoformat()
+    state = {"running": True, "live_queries": 0}
+    native_ready = threading.Event()
+
+    class NativeOutput(io.StringIO):
+        def close(self):
+            super().close()
+            native_ready.set()
+
+    class Process:
+        pid = 999999
+        returncode = None
+
+        def __init__(self, *args, **kwargs):
+            self.stdout = NativeOutput(native + "\n")
+
+        def poll(self):
+            return self.returncode
+
+    def stop(process, *, drained=None, **kwargs):
+        state["running"] = False
+        process.returncode = -15
+        return drained.wait(timeout=1)
+
+    def query(url):
+        if url.endswith("/health"):
+            return {"status": "ok"}
+        assert native_ready.wait(timeout=1)
+        if state["running"]:
+            state["live_queries"] += 1
+            return logs if "/api/query/logs" in url else details["trace"]
+        return [] if "/api/query/logs" in url else {"spans": details["trace"]["spans"][:1]}
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    monkeypatch.chdir(tmp_path)
+    for key, value in {"PORT": str(port), "OTEL_SERVICE_NAME": name,
+                       "LOGGING_WORKFLOW_STUDIO_URL": "http://127.0.0.1:1",
+                       "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://127.0.0.1:1/v1/traces"}.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(sys, "argv", ["checker", "--start-command-json", '["fixture","dev"]'])
+    monkeypatch.setattr(workflow.subprocess, "Popen", Process)
+    monkeypatch.setattr(workflow, "stop_owned", stop)
+    monkeypatch.setattr(workflow, "traced_requests", lambda *_: requests)
+    monkeypatch.setattr(workflow, "get_json", query)
+    clock = iter(range(1000))
+    monkeypatch.setattr(workflow.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(workflow.time, "sleep", lambda _: None)
+    assert workflow.main() == 0
+    proof = next((tmp_path / ".observe/logging-workflow-proof").glob("*/result.json"))
+    result = json.loads(proof.read_text())
+    assert state["live_queries"] and not state["running"]
+    assert result["status"] == "passed" and len(result["joins"]) == 4
+    assert (proof.parent / "receiver-logs.json").is_file()
+    assert (proof.parent / "receiver-traces.json").is_file()
+
+
 @pytest.mark.parametrize("fault", ["wrong-request", "missing-span", "duplicate", "resource", "severity", "native-duplicate", "outside-leak"])
 def test_rejects_consequential_correlation_and_sink_failures(fault):
     values = list(copy.deepcopy(receipts()))

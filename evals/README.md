@@ -85,10 +85,18 @@ Repeat for `java`, `go`, and `node` and trials 1 through 3. The runner requires
 the normal language toolchains on `PATH` (Java 21 for Spring Boot), creates a
 separate local receiver with no cloud credentials, and retains the generated
 service workspace plus per-stage source, report, task and rubric evidence.
+The Go live interop fixture explicitly requires Go 1.25, allowing an official
+propagator compatible with the driver's emitted trace flags. This test setup
+does not authorize a skill to raise another application's runtime requirement.
 It independently starts the generated service after instrumentation and
 verification and proves concurrent sync/async logs against real SDK span
 ancestry and the original sink. Runtime failure, incomplete rubric evidence,
 or a task/grader model other than the configured Sol high fails the workflow.
+It saves explorer receipts and the matching native-output snapshot while the
+producer is alive, before bounded process cleanup. Studio intentionally evicts
+a producer's telemetry when it exits. The live joins and cleanup do not prove
+post-exit persistence or final-record SDK drain; those need separate owned
+receipt tests. A regression models eviction on exit to enforce this ordering.
 The checker resolves expected service identity with the SDK environment detector:
 resource-only `service.name` is supported, an explicit `OTEL_SERVICE_NAME` takes
 its normal precedence, and missing expected identity fails clearly before launch.

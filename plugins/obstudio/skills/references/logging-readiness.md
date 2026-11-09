@@ -205,6 +205,19 @@ and concurrent/asynchronous work. Restore/detach context after a request;
 outside-span logs must not inherit the preceding request's IDs. An unsampled
 span can still supply valid correlation even when no span is exported.
 
+For a cross-process join, also check the installed propagator against the actual
+peer carrier. A locally correct logger cannot repair a rejected incoming
+`traceparent`. Record the peer's emitted flags and extracted context through
+supported APIs; distinguish a propagator capability limit from missing logger
+wiring. Resolve compatible official dependencies within the existing runtime
+constraints, or leave the affected join explicitly unsupported/unproven. Do not
+strip peer flags, copy IDs manually, replace the provider or silently raise the
+runtime floor to make the test pass. This is a compatibility verification
+workflow grounded in the [Propagators API](https://opentelemetry.io/docs/specs/otel/context/api-propagators/).
+Its W3C parsing/validation requirements bind the propagator implementation.
+Rejecting a valid peer carrier is a dependency conformance gap to resolve or
+report, not optional covered behavior or a repair to application logger wiring.
+
 Do not introduce sampled-only filtering as a log baseline. Inspect explicit
 operator filtering first: newer SDKs can offer development `trace_based`
 filtering, defaulting to false. Preserve an explicitly selected supported

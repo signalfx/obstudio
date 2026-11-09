@@ -19,11 +19,30 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
+
+func TestPeerTraceFlagsDoNotBreakContextExtraction(t *testing.T) {
+	const traceID = "0af7651916cd43dd8448eb211c80319c"
+	const spanID = "b7ad6b7169203331"
+	for _, flags := range []string{"00", "01", "02", "03"} {
+		carrier := propagation.MapCarrier{"traceparent": "00-" + traceID + "-" + spanID + "-" + flags}
+		ctx := propagation.TraceContext{}.Extract(context.Background(), carrier)
+		sc := trace.SpanContextFromContext(ctx)
+		if !sc.IsValid() || !sc.IsRemote() || sc.TraceID().String() != traceID || sc.SpanID().String() != spanID || sc.TraceFlags().String() != flags {
+			t.Fatalf("peer flags %s were rejected or changed: %v", flags, sc)
+		}
+		injected := propagation.MapCarrier{}
+		propagation.TraceContext{}.Inject(ctx, injected)
+		if injected.Get("traceparent") != carrier.Get("traceparent") {
+			t.Fatalf("peer flags %s changed during injection: %s", flags, injected.Get("traceparent"))
+		}
+	}
+}
 
 func TestRealSpansJoinCallerAndAsyncLogsAtReceiver(t *testing.T) {
 	base := os.Getenv("LOGGING_CONTRACT_RECEIVER_URL")

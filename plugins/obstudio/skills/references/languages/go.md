@@ -853,6 +853,15 @@ IDs/flags, caller return, worker reuse and cancellation/error paths. Preserve
 intentional operation lifetime and cancellation policy rather than detaching
 work merely to keep a log test alive.
 
+For incoming HTTP context, probe the installed `propagation.TraceContext`
+extractor with the actual peer's `traceparent`, including emitted flag bits.
+Check valid extracted IDs and supported flags before blaming a goroutine for a
+new root trace. A runtime-compatible release can still have an upstream parsing
+defect; rejecting a valid peer carrier remains a dependency conformance gap.
+Follow the dependency compatibility procedure above;
+report the exact unsupported join when no compatible official release exists,
+without changing `go`/`toolchain` directives or masking the peer's flags.
+
 Go slog ERROR is numeric level 8, not OTel SeverityNumber 8. Verify the official
 bridge's mapping to the ERROR range, occurrence timestamp and permitted
 structured values. Use real SDK spans and exact received log/span joins from
