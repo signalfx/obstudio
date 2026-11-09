@@ -31,6 +31,10 @@ Apply its applicable acceptance obligations, including caller-to-worker context
 handoff and fresh per-trial evidence. Preserve this skill's read-only application
 boundary; missing wiring is a failed or unproven check, not authorization to
 repair instrumentation or turn fixture results into application proof.
+In the normal verification report, reconcile the shared LOG-SPEC-CLOSURE fields,
+including requirement strength and feature maturity; citations alone do not
+classify upstream requirements, recommendations, optional capabilities and local
+policy or establish executed coverage.
 Independently reconcile each selected GenAI orchestration role with the source
 control flow before accepting the audit or test expectations. A custom
 model-directed tool/result feedback loop is an agent invocation; an existing

@@ -1557,6 +1557,12 @@ Apply its LOG-* rules within selected scope using the existing provider and
 detected bridge, and include their applicable positive and fault scenarios in
 the verification handoff. Preserve supported SDK defaults and operator policy;
 do not add application code merely to duplicate SDK-owned behavior.
+Before finalizing, include the shared LOG-SPEC-CLOSURE matrix in the normal
+instrumentation report: source/version, requirement strength, feature maturity
+and applicability, owner, implemented/default/unsupported disposition and actual
+proof boundary for each applicable clause. A source list and LOG-* summaries
+alone do not distinguish normative requirements, recommendations, optional or
+Development features and local destination/privacy policy.
 
 - Resolve effective configuration and any existing Collector forwarding route
   using the shared logging reference before applying the environment-based

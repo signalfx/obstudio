@@ -5,7 +5,9 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.classic.spi.LoggingEvent;
+import ch.qos.logback.classic.turbo.TurboFilter;
 import ch.qos.logback.core.read.ListAppender;
+import ch.qos.logback.core.spi.FilterReply;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.logs.Severity;
@@ -36,6 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Marker;
 
 class LoggingContractTest {
   InMemoryLogRecordExporter exporter;
@@ -149,6 +152,52 @@ class LoggingContractTest {
     assertEquals(20, limited.getTotalAttributeCount());
     limited.getAttributes().forEach((k, v) -> assertEquals(32, ((String) v).length()));
     assertEquals(400, limited.getBody().asString().length());
+  }
+
+  @Test void redactsFrameworkArgumentsBeforeBothSinksWithoutEmittingOnEnablement() {
+    Logger framework = context.getLogger("framework.validation");
+    framework.setLevel(Level.WARN);
+    framework.setAdditive(false);
+    framework.addAppender(sink);
+    framework.addAppender(bridge);
+    framework.warn("Invalid input [{}]", "PRIVATE_BEFORE");
+    assertTrue(sink.list.get(0).getFormattedMessage().contains("PRIVATE_BEFORE"));
+    assertTrue(exporter.getFinishedLogRecordItems().get(0).getBody().asString().contains("PRIVATE_BEFORE"));
+
+    TurboFilter policy = new TurboFilter() {
+      final ThreadLocal<Boolean> replacing = new ThreadLocal<>();
+      @Override public FilterReply decide(Marker marker, Logger source, Level level,
+          String format, Object[] arguments, Throwable error) {
+        if (format == null || Boolean.TRUE.equals(replacing.get())
+            || source != framework || level != Level.WARN) { return FilterReply.NEUTRAL; }
+        if (!level.isGreaterOrEqual(source.getEffectiveLevel())) { return FilterReply.DENY; }
+        replacing.set(true);
+        try { source.warn("Framework validation rejected"); }
+        finally { replacing.remove(); }
+        return FilterReply.DENY;
+      }
+    };
+    policy.setContext(context);
+    policy.start();
+    context.addTurboFilter(policy);
+    assertTrue(framework.isWarnEnabled());
+    assertEquals(1, sink.list.size(), "An enablement query must not emit a replacement record");
+    assertEquals(1, exporter.getFinishedLogRecordItems().size());
+    framework.warn("Invalid input [{}]", "PRIVATE_AFTER");
+    assertEquals(2, sink.list.size());
+    assertEquals("Framework validation rejected", sink.list.get(1).getFormattedMessage());
+    var safe = exporter.getFinishedLogRecordItems().get(1);
+    assertEquals("Framework validation rejected", safe.getBody().asString());
+    assertEquals(Severity.WARN, safe.getSeverity());
+    assertFalse(safe.toString().contains("PRIVATE_AFTER"));
+    framework.setLevel(Level.ERROR);
+    assertFalse(framework.isWarnEnabled());
+    framework.warn("Invalid input [{}]", "PRIVATE_DISABLED");
+    assertEquals(2, sink.list.size(), "Preserve the effective native level");
+    assertEquals(2, exporter.getFinishedLogRecordItems().size());
+    logger.warn("Unrelated safe diagnostic");
+    assertEquals("Unrelated safe diagnostic", sink.list.get(2).getFormattedMessage());
+    assertEquals(3, exporter.getFinishedLogRecordItems().size());
   }
 
   @Test void exportFailureIsBoundedWithSinkPreserved() {

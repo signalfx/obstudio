@@ -8120,5 +8120,244 @@
       "repair_status": "Rule/evals classify selected required bridge field uncovered; upstream bridge not modified. Do not claim full meaningful-field bridge support from SDK test."
     },
     "expected_result": "Exit1,one assertion failure:typedSDKemptyarray andnativeapprovedscalar preserved,butselectedbridgeemptyarrayabsent. This is the actual observed outcome."
+  },
+  "claude_bare_workflow_clause_verification": {
+    "report": {
+      "report": "clause-bare-workflow-verification",
+      "pr": "PR352 / B117",
+      "report_kind": "bounded independent verification of B1, B2 and B3 only, against primary OpenTelemetry guidance",
+      "not_a": "combined PR review; whole-PR review; runtime verification or any runtime claim; repository execution",
+      "combined_review_status": "Awaits three clean execution passes. Nothing in this report advances or substitutes for that review.",
+      "continues": [
+        "final-clause-verification.(md|json)",
+        "final-clause-verification-sources-complete.(md|json)",
+        "clause-delta-verification.(md|json)",
+        "clause-null-verification.(md|json)"
+      ],
+      "generated": "2026-11-09",
+      "identity": {
+        "prior_verified_d9": "d9ae570062149fe9aa3831fb027c5b901e6af3395ee2dde6c7d2909da40bad60",
+        "prior_matches_my_d9_reconstruction": true,
+        "current_declared": "b117b9959784994311645676afef4c4161c860203b636d493f89c569d458b652",
+        "current_recomputed_from_my_reconstruction": "b117b9959784994311645676afef4c4161c860203b636d493f89c569d458b652",
+        "bound": true,
+        "recipe": "sha256(json.dumps(files, sort_keys=True).encode('utf-8')) - prior recipe, unchanged",
+        "manifest_entries": 13,
+        "reverified_after_metadata_correction": true
+      },
+      "reconstruction": {
+        "method": "Carried my byte-exact D9 reconstruction forward and overwrote the three paths the packet supplies in full, then verified every one of the 13 files against the packet's declared digest, line count and byte count.",
+        "all_13_sha256_match": true,
+        "all_13_line_counts_match": true,
+        "all_13_byte_counts_match": true,
+        "changed_vs_d9": [
+          "skills/references/logging-readiness.md",
+          "skills/otel-audit/SKILL.md",
+          "skills/references/languages/java.md"
+        ],
+        "changed_count": 3,
+        "unchanged_vs_d9_count": 10,
+        "declared_changed": 3,
+        "declared_unchanged": 10,
+        "counts_agree": true,
+        "changed_hunks": {
+          "skills/otel-audit/SKILL.md": "single hunk, +10 lines at :306-315",
+          "skills/references/logging-readiness.md": "single hunk, 1 line replaced by 4 at :302-305 (net +3)",
+          "skills/references/languages/java.md": "single hunk, 5 lines replaced by 9 at :787-795 (net +4)"
+        },
+        "limit": "None for reconstruction. All three changed files were supplied in full and every one of the 13 digests, line counts and byte counts matches; the aggregate identity recomputed from my own reconstruction equals b117b995.",
+        "line_count_ledger": {
+          "skills/otel-audit/SKILL.md": {
+            "d9_lines": 1888,
+            "b117_lines": 1898,
+            "net": 10,
+            "removed": 0,
+            "added": 10
+          },
+          "skills/references/logging-readiness.md": {
+            "d9_lines": 529,
+            "b117_lines": 532,
+            "net": 3,
+            "removed": 1,
+            "added": 4
+          },
+          "skills/references/languages/java.md": {
+            "d9_lines": 879,
+            "b117_lines": 883,
+            "net": 4,
+            "removed": 5,
+            "added": 9
+          }
+        },
+        "arithmetic_reverified": true,
+        "metadata_correction": {
+          "field": "reconstruction.changed_hunks['skills/references/logging-readiness.md']",
+          "was": "single hunk, 1 line replaced by 3 at :302-305 (net +2)",
+          "now": "single hunk, 1 line replaced by 4 at :302-305 (net +3)",
+          "basis": "Recomputed against the bound files. The common guide is 529 lines at D9 and 532 at B117, a net of +3, and the single hunk header is '@@ -299,7 +299,10 @@' with 1 removed line and 4 added lines occupying :302-305. The earlier entry said 1 replaced by 3 with net +2, which contradicted the bound line counts.",
+          "scope": "Metadata only. No file digest, line count, byte count, identity, anchor or verdict changes; the :302-305 anchor and the B2 verdict were already correct.",
+          "other_two_entries": "Re-verified and correct as written: otel-audit 0 removed / 10 added net +10 at :306-315; java.md 5 removed / 9 added net +4 at :787-795."
+        }
+      },
+      "carried_by_reference": {
+        "note": "The 183-row primary-source ledger and all previously settled checks are carried forward by hash and were not replayed.",
+        "unchanged_paths_carried": 10,
+        "ledger_rows": 183,
+        "ledger_rows_replayed": 0,
+        "settled_items_not_replayed": [
+          "F1-F5 resolutions (clause-delta-verification)",
+          "NC-1..NC-5 delta clause checks",
+          "V2 operation.duration closure",
+          "D1 meaningful-empty-value closure (clause-null-verification)"
+        ]
+      },
+      "verdict": {
+        "headline": "B1, B2 and B3 are all supported. Each is either a repository evidence-workflow decision, correctly and explicitly labelled non-normative, or a scoping correction that declines to invent a requirement upstream does not impose. No unsupported OTel requirement, no requirement-strength error and no ownership error was found in the three clauses.",
+        "b1": "supported",
+        "b2": "supported",
+        "b3": "supported; resolves the upstream-main provenance caveat recorded in the prior delta review",
+        "unsupported_requirements_found": 0,
+        "strength_errors_found": 0,
+        "ownership_errors_found": 0,
+        "verified_mismatches": 0,
+        "runtime_claims_made": false,
+        "repository_executed": false,
+        "subagents_used": false
+      },
+      "separations": {
+        "repository_workflow_versus_otel_requirement": "Cleanly maintained across all three clauses. The matrix, its field set, the completeness standard, the oversized-input tests and the omission-recording procedure are repository evidence workflow; B1 states that in terms ('not an additional OTel requirement'). The only upstream-facing assertions in the three clauses are negative - that no Body cap and no GenAI threshold is imposed on ordinary application logs - and both are accurate.",
+        "installed_capability_versus_upstream_main": "Cleanly established by B3, which is the point of the change. The clause now requires inspection of the resolved dependency's documentation and matching source plus actual appender tests, and states that another release or upstream main cannot establish installed behavior. My own prior main-branch LoggingEventMapper read is accordingly release-specific test evidence only and is not carried forward as a statement about installed capability."
+      },
+      "clauses": [
+        {
+          "id": "B1",
+          "path": "skills/otel-audit/SKILL.md",
+          "anchor": "skills/otel-audit/SKILL.md:306-315",
+          "summary": "Require the already-declared per-clause LOG-SPEC-CLOSURE matrix in canonical evidence rows; label it a repository audit-evidence contract rather than an OTel requirement; decline an arbitrary ordinary-log Body cap drawn from example or GenAI thresholds.",
+          "verdict": "supported",
+          "components": [
+            {
+              "part": "matrix requirement",
+              "text": "Before finalizing a logging audit, check the shared guide's LOG-SPEC-CLOSURE matrix in the canonical `evidence` rows. Each applicable clause needs its source/version, requirement strength, owner, disposition, source/config/default evidence, finding/scenario mapping when needed and proof boundary. A source list followed by LOG-* summaries without those decisions is incomplete.",
+              "classification": "repository evidence workflow",
+              "basis": "Not an OTel obligation and not claimed as one. The field set maps one-to-one onto fields the shared guide already declares: skills/references/logging-readiness.md:88-93 requires source URL, version/date or supplied snapshot, requirement level, applicability and owner; the LOG-SPEC-CLOSURE acceptance row at skills/references/logging-readiness.md:504 already requires requirement level, owner, source/config/default evidence, classification, selected finding/scenario mapping and explicit proof boundary. B1 restates that set as a pre-finalization check rather than adding a new obligation.",
+              "otel_requirement": false
+            },
+            {
+              "part": "explicit non-normative label",
+              "text": "This matrix is the repository's audit evidence contract, not an additional OTel requirement.",
+              "classification": "repository evidence workflow, explicitly self-labelled",
+              "basis": "Correct. No OpenTelemetry specification requires an audit evidence matrix, a report schema or any per-clause disposition record. The label is the distinction this review was asked to police, and the clause draws it itself rather than leaving it to the reader.",
+              "otel_requirement": false
+            },
+            {
+              "part": "no arbitrary ordinary-log Body cap",
+              "text": "For bounded fixed messages without an existing Body policy or a source-backed size problem, record no new Body cap is needed; do not turn an arbitrary example threshold or the separate GenAI capture defaults into a mandatory application-log repair.",
+              "classification": "consistent with upstream: declines to invent a requirement that upstream does not impose",
+              "basis": "No upstream Body size cap exists to be satisfied. Common specification concepts (Stable) states that attribute limits apply only to attribute collections and that value length and depth limits 'do not apply to values within other data structures such as LogRecord.Body'. The Logs Data Model (Stable) defines Body as an optional AnyValue with no size constraint. The 16 message / 64 part / 8192 byte figures are repository-proposed GenAI capture policy, visible in this same file at skills/otel-audit/SKILL.md:826-828 as 'propose redacted capture with ...', not an OTel requirement. Declining to import them into ordinary application logs removes an over-requirement rather than relaxing an upstream one.",
+              "otel_requirement": false
+            }
+          ],
+          "strength_owner": "No requirement level or owner is asserted upstream by B1. The only upstream-facing statement is the negative one about Body caps, which is accurate. Ownership of the matrix is the repository's audit process.",
+          "unsupported_requirement_found": false
+        },
+        {
+          "id": "B2",
+          "path": "skills/references/logging-readiness.md",
+          "anchor": "skills/references/logging-readiness.md:302-307 (changed lines :302-305)",
+          "summary": "Clarify LOG-LIMITS: bounded messages with no Body policy and no source-backed size need do not justify a new cap; no ordinary-log reuse of GenAI capture thresholds; oversized tests are per selected limit.",
+          "verdict": "supported",
+          "components": [
+            {
+              "part": "no new Body cap absent an established need",
+              "text": "When current messages are bounded and no Body policy or size problem is established, preserve them and record that a new Body cap is not applicable;",
+              "classification": "consistent with upstream",
+              "basis": "Reinforces the retained sentence at skills/references/logging-readiness.md:301-302 ('Avoid arbitrary new limits without a source-backed need') and matches the Stable position that no attribute limit reaches Body. Recording not-applicable is a disposition, not a relaxation: nothing upstream is left unsatisfied because nothing upstream caps Body.",
+              "otel_requirement": false
+            },
+            {
+              "part": "no GenAI threshold reuse",
+              "text": "do not import GenAI capture thresholds into ordinary logs.",
+              "classification": "consistent with upstream; scoping correction",
+              "basis": "The thresholds originate as repository-proposed GenAI capture policy, not as a logs-specification requirement. GenAI semantic conventions are also a separate, relocated convention set rather than part of the logs specification - see the disclosed limit below. Preventing their reuse on ordinary application logs asserts nothing about upstream and removes a potential over-requirement.",
+              "otel_requirement": false
+            },
+            {
+              "part": "selected oversized tests",
+              "text": "Exercise selected oversized attributes/body, retained identity/context, dropped-attribute accounting where supported, and privacy after processing.",
+              "classification": "repository evidence workflow, narrowed",
+              "basis": "Inserting 'selected' aligns this sentence with the LOG-LIMITS acceptance row, which already frames boundary inputs per selected limit ('For each selected limit, specify below-limit, exactly-at-limit and above-limit inputs'). Testing obligations are entirely repository workflow; upstream imposes none, so the narrowing cannot weaken an OTel requirement.",
+              "otel_requirement": false
+            }
+          ],
+          "strength_owner": "The clause makes no upstream strength claim. The adjacent Resource exemption at skills/references/logging-readiness.md:308-310 retains SHOULD and its SDK owner, and the Body exclusion at :299-301 is unchanged.",
+          "unsupported_requirement_found": false
+        },
+        {
+          "id": "B3",
+          "path": "skills/references/languages/java.md",
+          "anchor": "skills/references/languages/java.md:786-795",
+          "summary": "Replace the upstream-main Logback mapper link with version-neutral capability inspection of the resolved dependency's documentation, matching source and actual appender tests; another release or upstream main cannot establish installed behavior; release-specific findings remain test evidence only.",
+          "verdict": "supported; resolves the caveat recorded in the prior delta review",
+          "components": [
+            {
+              "part": "version-neutral capability inspection",
+              "text": "Inspect the resolved agent/bridge's public documentation and value conversion, then exercise selected values through the actual appender. Use source matching that resolved dependency when documentation is insufficient;",
+              "classification": "installed bridge capability (instrumentation-owned)",
+              "basis": "Correctly scoped to the resolved dependency. This is a capability question about an instrumentation library, not an SDK duty and not an application defect. Nothing upstream requires a logging bridge to map every source value: the Common specification MUST to store and pass meaningful values on binds the SDK once a value has been set, and the Logs Supplementary Guidelines that describe appender construction are explicitly not a specification and add no requirements.",
+              "otel_requirement": false
+            },
+            {
+              "part": "upstream main cannot establish installed behavior",
+              "text": "another release or the upstream main branch cannot establish installed behavior.",
+              "classification": "epistemic scoping - correct",
+              "basis": "This is the distinction this review was asked to enforce, and it is right. It also correctly reclassifies my own earlier reading: in the prior delta review I read the main-branch LoggingEventMapper and observed that it skips null values and omits empty lists. Under B3 that observation is release-specific test evidence about main on 2026-11-09 and is explicitly not evidence of whatever version a project resolves. The class is additionally marked internal and unstable in its own header, which supports the clause rather than contradicting it. Removing the main-branch hyperlink resolves the provenance caveat I recorded against the prior wording.",
+              "otel_requirement": false
+            },
+            {
+              "part": "omission recording and proof boundary",
+              "text": "If a selected required value, including an empty collection, is omitted, record the observed limitation; a direct typed-SDK pass does not close it. Resolve an authorized supported mapping or report it unverified/uncovered, preserving the sink and provider. Recheck capabilities after a dependency change rather than assuming either preservation or omission from a previous release.",
+              "classification": "repository evidence workflow plus retained SDK/bridge proof boundary and local policy",
+              "basis": "The SDK-versus-bridge proof boundary is retained verbatim in substance, so the clause still refuses to let a direct typed-SDK test stand in for bridge behaviour. Generalising from empty collections to 'a selected required value, including an empty collection' widens coverage but stays bounded by 'selected required', so it is not an open-ended obligation. Gaps remain recordable as unverified or uncovered, so nothing is suppressed. 'preserving the sink and provider' is unchanged local policy. The recheck-after-dependency-change instruction is consistent with the guide's standing rule to record checked library versions in task evidence rather than pinning release recipes.",
+              "otel_requirement": false
+            }
+          ],
+          "strength_owner": "Ownership is correct throughout: bridge and instrumentation capability, distinct from the SDK's storage duty and from any application defect. No upstream requirement is asserted against the appender.",
+          "unsupported_requirement_found": false
+        }
+      ],
+      "verified_mismatches": [],
+      "limits_and_observations": [
+        {
+          "id": "L1",
+          "kind": "scope limit outside the verified inventory",
+          "detail": "B1 directs the matrix into 'the canonical `evidence` rows'. Whether `evidence` is an existing canonical JSON key is owned by skills/references/report-flow-contract.md and skills/otel-verify/references/json-approval-handoff.md, which the changed files reference but which are not among the 13 manifest paths. I therefore cannot confirm from this inventory that B1 complies with the shared guide's own instruction at skills/references/logging-readiness.md:98-99 to use the existing report/evidence fields and 'not invent JSON keys'. This is a repository-schema question, not an OTel one, and it is recorded as a limit rather than a finding.",
+          "affects": "B1"
+        },
+        {
+          "id": "L2",
+          "kind": "relocated upstream source",
+          "detail": "The GenAI semantic conventions page on opentelemetry.io is now a moved stub: the conventions have relocated to a separate OpenTelemetry GenAI semantic conventions repository and that page is no longer maintained there. I did not audit the relocated repository, and did not need to: the 16/64/8192 figures are demonstrably repository-proposed policy at skills/otel-audit/SKILL.md:826-828, and the B1/B2 claims about them are negative (do not import into ordinary logs), so they do not depend on the content of the relocated conventions. The relocation is disclosed because it means GenAI conventions are a separate, independently versioned convention set rather than part of the logs specification.",
+          "affects": "B1, B2"
+        },
+        {
+          "id": "L3",
+          "kind": "vocabulary observation, not a defect",
+          "detail": "B1 lists 'requirement strength' where the shared guide says 'requirement level' at skills/references/logging-readiness.md:90 and :504. The two denote the same thing and the obligation is unchanged, so this is noted for consistency only and no correction is proposed.",
+          "affects": "B1"
+        }
+      ],
+      "limitations": [
+        "Bounded to B1, B2 and B3. No other clause in the three changed files was re-verified, and the ten unchanged files were carried by hash.",
+        "No repository execution, probe, install, edit, push, comment, credential or settings change. No subagents. No runtime claim: this is a source and convention check of instruction text only.",
+        "This is not the combined PR review, which awaits three clean execution passes.",
+        "Upstream positions relied on here (Common specification concepts attribute limits and Body exclusion, Logs Data Model Body field, Logs Supplementary Guidelines non-normative status, Attribute requirement levels ownership) were established in earlier passes of this engagement and are cited rather than re-fetched, except where noted.",
+        "Scope limits L1 and L2 are disclosed above: the canonical evidence-key question lies outside the 13-path inventory, and the GenAI conventions have relocated to a separate repository that I did not audit.",
+        "No access or authentication failure occurred."
+      ]
+    },
+    "sha256": "643630c36fb17612014fa41eac7580491692da207a6be0f506eeb7636c71b067",
+    "runtime_claim": false,
+    "whole_pr_review": false
   }
 }

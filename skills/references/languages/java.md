@@ -794,6 +794,19 @@ authorized supported mapping or report it unverified/uncovered, preserving the
 sink and provider. Recheck capabilities after a dependency change rather than
 assuming either preservation or omission from a previous release.
 
+For selected framework-log privacy failures, inspect a public native hook in
+the resolved dependency, such as a supported [Logback filter](https://logback.qos.ch/manual/filters.html).
+Establish whether it rewrites content or only decides accept/deny; a decision-only
+filter cannot redact. Where the diagnostic category is permitted, suppressing
+its record alone does not preserve it. A supported bounded replacement must
+retain that category, effective level and original sinks, and remove forbidden
+values at the selected policy boundary. Check the actual logging call style,
+including fluent calls if used. Prove enablement queries emit nothing, replacement
+does not recurse, temporary state is restored in `finally`, unrelated diagnostics
+remain, and the original failed probe is safe in both native and OTLP output.
+If the installed stack cannot meet that boundary, leave it uncovered rather
+than forcing an upgrade or claiming an unsupported hook works.
+
 Capture the caller's OTel `Context` before submitting executor work and use its
 supported wrapping/scope mechanism unless agent/framework propagation is
 already verified. Context propagation alone does not carry arbitrary MDC.

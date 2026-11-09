@@ -1882,46 +1882,46 @@
     ]
   },
   "current_followup": {
-    "status": "Source verification complete atd9ae5700;allF1-F5andD1resolved,current three-pass gate running",
+    "status": "Exact final clauses submitted to Claude; current source three-pass gate 0/3; real development failures retained",
     "native_focused": {
       "counts": {
-        "java": 24,
+        "java": 25,
         "python": 23,
         "go": 20,
         "node": 20
       },
-      "passed": 87,
+      "passed": 88,
       "skipped": 0,
       "failed": 0,
       "errors": 0,
       "scope": "Actual native SDK/bridge and owned HTTP receiver; Java zero/false/emptystring through selected bridge plus emptyarray through typed SDK only; no claim that pinned Java bridge preserves emptycollections.",
-      "results": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-values-focused-a7wcdef0/results.json"
+      "results": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-final-privacy-check/results.json"
     },
-    "focused_guidance_runner_receiver": 185,
+    "focused_guidance_runner_receiver": 203,
     "deterministic_validation": {
       "otel-audit": {
-        "passed": 725,
+        "command": "PATH=\"$PWD/evals/.venv/bin:$PATH\" UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-audit",
+        "passed": 743,
         "skipped": 5,
         "exit_code": 0,
-        "command": "UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-audit",
-        "run_id": "20261109T170601929230Z",
-        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/null-final-validation-audit.log"
+        "run_id": "20261109T195217053687Z",
+        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/final-audit-validation.log"
       },
       "otel-instrument": {
-        "passed": 756,
+        "command": "PATH=\"$PWD/evals/.venv/bin:$PATH\" UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-instrument",
+        "passed": 774,
         "skipped": 5,
         "exit_code": 0,
-        "command": "UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-instrument",
-        "run_id": "20261109T170601929236Z",
-        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/null-final-validation-instrument.log"
+        "run_id": "20261109T195217058380Z",
+        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/final-instrument-validation.log"
       },
       "otel-verify": {
-        "passed": 691,
+        "command": "PATH=\"$PWD/evals/.venv/bin:$PATH\" UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-verify",
+        "passed": 709,
         "skipped": 5,
         "exit_code": 0,
-        "command": "UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-verify",
-        "run_id": "20261109T170601929242Z",
-        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/null-final-validation-verify.log"
+        "run_id": "20261109T195217053682Z",
+        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/final-verify-validation.log"
       }
     },
     "policy": "49unit+8contract passed",
@@ -2224,8 +2224,8 @@
       "status": "Running;no result claimed"
     },
     "reusable_pytest_plugin": {
-      "command": "UV_NO_CONFIG=1 make test-pytest-plugin",
-      "passed": 214,
+      "command": "PATH=\"$PWD/evals/.venv/bin:$PATH\" UV_NO_CONFIG=1 make test-pytest-plugin",
+      "passed": 228,
       "exit_code": 0
     },
     "clause_source_verification": {
@@ -2295,7 +2295,7 @@
     },
     "null_value_scope": "Plan-only negative/positive decisions across all4languages/3skills;not runtime proof of installed null API/exporter support. No SDK rewrite/newprovider/forcedupgrade.",
     "minimal_task_workflow": {
-      "status": "running",
+      "status": "Development incomplete; final-source clean streak0/3",
       "definitions": 12,
       "prompt_variants": 36,
       "tasks": [
@@ -2360,7 +2360,7 @@
         ],
         "correction": "Audit finalization explicitly checks existing clause matrix; common limits and audit reject arbitrary GenAI-derived Body thresholds.",
         "instruction_identity": "7a4b6e3fcfa0d6ed9e1c77e7cf7b64572ed852df1ea754738affdb2f2f193b8b",
-        "claude_delta_status": "B1173clause delta submitted in actualDesktop task local_e428c157-fd0d-47c7-9164-80533899b19f;awaiting result"
+        "claude_delta_status": "B117 all3clauses supported, exact13file identity bound; zero strength/ownership errors"
       },
       "version_neutral_java_guidance": {
         "status": "implemented",
@@ -2368,14 +2368,80 @@
         "behavior": "Resolve installed dependency capability; inspect matchingdocs/source and test actual appender, without main-branch or older-release behavior assumptions. No forcedrelease/providerupgrade.",
         "semantic_coverage": "All3Java role rubrics now reject directSDK or other-release evidence as proof of bridge preservation.",
         "native_test_pins": "Kept solely for reproducibility; their scoped observations do not become general version requirements.",
-        "claude_status": "Submitted for primary-source verification"
+        "claude_status": "Verified by actual Claude Desktop B117 review; source scope only, no runtime inference"
       },
       "development_followup_audit": {
         "criteria_met": 56,
         "total": 56,
         "languages": 4,
         "status": "All4auditstages passed native loading guards and14rubriccriteria. This developmentattempt is superseded by later source/user changes,not aclean fullworkflow pass."
-      }
+      },
+      "development_full_workflow": {
+        "source_status": "superseded; no clean credit",
+        "output": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/real-workflow-pass-1-70yho8nq",
+        "stages_executed": 10,
+        "stages_required": 12,
+        "criteria_met": 137,
+        "criteria_executed": 140,
+        "criteria_required": 168,
+        "per_language": {
+          "python": {
+            "stage_counts": [
+              14,
+              14,
+              14
+            ],
+            "core_runtime": true
+          },
+          "go": {
+            "stage_counts": [
+              14,
+              14,
+              14
+            ],
+            "core_runtime": true
+          },
+          "java": {
+            "stage_counts": [
+              14,
+              12,
+              null
+            ],
+            "core_runtime": true,
+            "fault": "Selected Spring validation WARN leaks forbidden input in both sinks"
+          },
+          "node": {
+            "stage_counts": [
+              14,
+              13,
+              null
+            ],
+            "core_runtime": true,
+            "fault": "Completed negative response mislabeled; partial acknowledged acceptance omitted"
+          }
+        }
+      },
+      "current_instruction_identity": "07a6809ad77e9d1d7243e11ec6f47be5593134775c75e802dfb6734e574ac1f3"
+    },
+    "privacy_delivery_corrections": {
+      "claude_proposal": {
+        "headline": "Both proposals are sound in substance and correctly labelled as repository workflow or as upstream-normative where each applies. Neither invents an OTel requirement. I found four missing qualifiers worth fixing before adoption - three in P1 and one in P2 - and no overstatement of upstream strength or misassignment of ownership.",
+        "p1": "supported, with three missing qualifiers (C1, C2, C3)",
+        "p2": "supported, with one missing qualifier (C4)",
+        "overstatements_of_upstream_strength": 0,
+        "ownership_errors": 0,
+        "missing_qualifiers": 4,
+        "elements_assessed": 11
+      },
+      "qualifiers": "C1selectedboundary;C2unsupportedhookescape;C3decisionfilterdoesnotredact;C4protocolunspecifiedacceptance",
+      "paired_java_prototype": {
+        "output": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-framework-privacy-proof-ivv8c26_",
+        "results": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-framework-privacy-proof-ivv8c26_/results.json",
+        "original_generated_service": "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/logging-workflow-java-trial-1-w4jmu9qw/service",
+        "scope": "Targeted observed Spring WARN emitter only,not arbitrary framework sanitization; same agent/POM/HTTP business contract and4real SDK sync/async joins."
+      },
+      "native_regression": "LoggingContractTest.redactsFrameworkArgumentsBeforeBothSinksWithoutEmittingOnEnablement",
+      "scope": "Prototype uses owned transparentloopbackrelay intoStudio,notdirectproducertransportproof;nativeappenderregressionisnotSpringruntimeproof;allfailedattemptsretained"
     }
   }
 }

@@ -7,23 +7,24 @@ concrete logging defects, implement selected repairs through existing owners,
 and prove behavior at the claimed boundary. They do not certify every application
 or require optional SDK features to be implemented in application code.
 
-**Current state:** Claude completed the 183-row primary-source verification of
-the preceding instruction snapshot. Its five verified wording corrections are
-applied and verified. Claude found one further empty/null-value omission; its
-correction is applied and independently verified. A bare-prompt development audit then
-exposed incomplete Go reconciliation and an arbitrary Node Body cap. Those two
-clarifications plus version-neutral Java guidance are applied and submitted to
-Claude for source verification. All four follow-up audits passed14/14 criteria;
-the development workflows are now exercising implementation. A fresh strict
-three-pass gate is required after the source and upstream baseline updates. The earlier three clean passes at `62e0391` are historical. Current
-source changes reset the streak to **0/3**. A fresh whole-PR combined review
-starts after three consecutive complete clean passes. Publication and current-head
-CI status are tracked in [PR 352](https://github.com/signalfx/obstudio/pull/352).
+**Current state:** Claude independently verified the 183-row primary-source
+inventory and subsequent source corrections, including the version-neutral
+Java guidance. Real bare-skill development workflows then exposed a selected
+Java framework-log privacy failure and incomplete Node delivery accounting.
+Their source-backed clarifications and a Java native regression are applied;
+Claude is checking the exact changed clauses. All 88 native cases and 203
+focused checks pass. The strict complete three-run gate has **0/3** clean passes.
+Prior clean runs and partial development workflows are historical; the final
+whole-PR combined review follows three complete unchanged-source clean passes.
+Publication and current-head CI status are tracked in
+[PR 352](https://github.com/signalfx/obstudio/pull/352).
 
 ## What was missing and why
 
 The [baseline evidence](logging-skill-analysis-evidence.json) binds the first findings
-to merge base `4e1e51f3`, with source paths, hashes and surrounding policy.
+to original merge base `4e1e51f3`, with source paths, hashes and surrounding policy.
+The branch now includes upstream `e2c31a57`; that update changed fixture
+dependencies and generated metadata, not these logging skill instructions.
 Search absence alone was not treated as runtime failure. Existing instructions
 already required trace correlation and preserving application sinks; the missing
 parts were explicit record/context/loss policies and proof strong enough to
@@ -243,8 +244,8 @@ typed SDK empty-array assertion passes; it is
 not presented as a bridge repair. A required empty-array bridge field stays
 uncovered until an authorized supported mapping is proven. The new rule/evals
 require that honest classification rather than a second provider, duplicate
-bridge or mandatory dependency upgrade. Current focused totals are **87/87**:
-Java24, Python23, Go20 and Node20, zero failures/errors/skips. Null-array rules
+bridge or mandatory dependency upgrade. Current focused totals are **88/88**:
+Java25, Python23, Go20 and Node20, zero failures/errors/skips. Null-array rules
 have plan/decision coverage; installed SDK/bridge null acceptance and actual
 exporter fallback stay unverified until a selected capability test runs.
 
@@ -256,20 +257,41 @@ its partial evidence is retained. No timeout or interrupted run is reported as c
 
 ## Current validation and three-run gate
 
-The current 13-file instruction snapshot for changed-clause verification is
-`b117b9959784994311645676afef4c4161c860203b636d493f89c569d458b652`.
-Claude verification is complete through the preceding D9 identity; B1/B2/B3
-are pending its bounded source check. Development snapshot
-`e3d88ddc9cb9f9e5a3a0da11d1ccf8054f59a6dceffbb40cbfa1e7e838a5056f`
-is superseded by native-loading provenance, sandbox-compatible cleanup and
-version-neutral Java changes. No complete current real-workflow pass is credited.
-The preceding development attempt is retained with all raw failures: Java and
-Python met 14/14 audit criteria each; Go and Node met 13/14 each. The old loading
-guard also rejected all four despite byte-bound native full-skill injection. The
-new direct-invocation path fixes that mismatch and preserves legacy task behavior.
+The current 13-file instruction snapshot is
+`07a6809ad77e9d1d7243e11ec6f47be5593134775c75e802dfb6734e574ac1f3`.
+Claude verified B1/B2/B3 at `b117b995`; four subsequent changed files are pending
+its exact-source check. The previous full-workflow development attempt executed
+10 of 12 stages: all four audits passed 14/14, Python and Go passed their full
+42/42 criteria, Java instrumentation passed 12/14 and Node 13/14. That is
+137/140 executed criteria, with two verify stages not run; it is not a complete
+168-criterion pass. All four actual framework core sync/async correlation
+checks passed. The failed privacy/accounting criteria remain failures.
+
+Java's Spring validation WARN exposed an invalid-path sentinel in native and
+OTLP output. The implementation wrongly treated preserving original formatting
+as requiring that forbidden content remain. A paired real Spring/agent prototype
+kept the same agent/POM and HTTP behavior: baseline leaked three native and three
+OTLP records; the supported native hook produced three bounded WARN replacements,
+zero sentinel leaks in either sink, and retained all four real SDK log/span joins.
+It used an owned transparent loopback HTTP relay into Studio; it does not prove
+the prototype's direct producer-to-Studio transport, whose earlier failed attempts
+are retained. The maintained native Java regression separately proves safe
+replacement, unchanged effective levels and unrelated diagnostics, and no emission
+on enablement queries through the actual appender. Neither result certifies
+arbitrary framework sanitization.
+
+Node's implementation labeled completed 429/502/503/504 responses as still
+awaiting a stalled-server response and omitted four acknowledged accepted records
+from a five-record/one-rejected partial response. The shared delivery rule now
+separates completed protocol failure, unacknowledged timeout, acknowledged counts
+and backend persistence, retaining protocol-unspecified acceptance. All twelve
+role/language rubrics semantically check both corrections. Claude's pre-adoption
+review supplied four boundary/capability qualifiers, all incorporated. These
+clarifications preserve conditional privacy policy and SDK ownership.
+
 Each complete pass requires all four languages and all three skills:
 **12 bare-skill stages / 168 individual criteria, eight independent real-app
-startup checks, 87 native cases, 55 runner/receiver/workflow checks and plugin
+startup checks, 88 native cases, 55 runner/receiver/workflow checks and plugin
 parity**. Pass 2 starts only after pass 1 is clean; pass 3
 starts only after pass 2 is clean. Any source fix, failed obligation or stale
 receipt resets the streak. Expected faults in deliberately bad fixtures must
@@ -277,12 +299,12 @@ still be found; they are not hidden to obtain a clean result.
 
 | Current native language | Cases per pass | Three-pass result |
 |---|---:|---|
-| Java | 24 | Pending |
+| Java | 25 | Pending |
 | Python | 23 | Pending |
 | Go, race enabled | 20 | Pending |
 | Node.js | 20 | Pending |
 
-The separate focused development run and interrupted setup attempts passed **87/87**, with zero skips, errors
+The separate focused development run and interrupted setup attempts passed **88/88**, with zero skips, errors
 or failures. It does not count as three complete passes. Each native pass also
 contains **80 actual sampled async log/span joins**, four valid unsampled
 non-export controls and four outside-span controls. Healthy receipts, partial
@@ -328,7 +350,10 @@ UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-instrument CASE=go/chi-basic E
 UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-verify CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-verify-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
 ```
 
-These commands are pending for the new task definitions. A standalone verify
+Fresh commands are running for the final task definitions and post-upstream fixture.
+Their actual rubric decisions, not pytest exit status alone, determine semantic
+success. A preceding standalone instrumentation run passed 13/14; the missing
+requirement-strength/maturity classification is now explicit at finalization. A standalone verify
 on a fresh uninstrumented fixture exercises its missing-precondition behavior;
 positive verification is supplied only by the same-workspace workflow above.
 
@@ -352,7 +377,7 @@ paths are execution evidence, not portable required repository locations.
 source-bound outcomes, failed/interrupted attempts, dependency versions,
 correlation examples and historical datasets. The original 72-case assessment,
 disposable 75-case async assessment and previous maintained 237-case matrix
-are separate datasets; they are not added to the current 261-case native target.
+are separate datasets; they are not added to the current 264-case native target.
 Raw `.workspace/logging-analysis/` artifacts are local untracked receipts,
 explicitly distinct from portable report links and committed test sources.
 
@@ -366,8 +391,8 @@ fixes; no further code simplification was needed. No review or current-head CI
 success is claimed before its actual result.
 
 The native fixtures prove selected SDK/bridge and owned loopback OTLP receiver
-behavior. Full Spring/Flask/chi/Express and Java-agent startup is pending in the
-new real-workflow gate. The host checker does not expose every trace flag bit;
+behavior. All four actual basic framework startups and core joins passed in development;
+three complete final-source workflows remain pending. The host checker does not expose every trace flag bit;
 the native fixtures separately check those flags. Neither suite proves
 distributed queues, arbitrary payload sanitization, configured cross-signal
 outage continuity, production Collector/cloud delivery, or every optional

@@ -82,6 +82,18 @@ but cannot close a policy requiring sanitization before SDK or writer capture.
 Name the boundary and prove the values at it; local storage before a later
 redactor still counts as capture.
 
+For a selected privacy policy, include framework/access/error renderers captured
+by that path, not only application logger calls. Preserving sinks, levels,
+permitted diagnostic categories and safe formatting does not require retaining
+policy-forbidden content. If a selected probe exposes it, inspect a supported
+native hook at the boundary the policy requires and rerun the probe; dependency
+ownership alone does not make that captured path unselected. Preserve application
+behavior and permitted diagnostics instead of disabling all framework logging
+or replacing the provider. If no supported hook exists at that boundary, record
+the exact limitation and leave coverage unresolved. These are selected privacy
+workflow rules supported by the non-normative sensitive-data guidance, not a
+universal OTel payload prohibition.
+
 ## LOG-SPEC-CLOSURE -- Reconcile sources, implementation and proof
 
 Begin with the applicable official source sections, not only this guide's rule
@@ -394,6 +406,18 @@ unknown until receipt evidence resolves it. When an OTLP response has populated
 rejected subset; this also covers warning-only responses with zero rejections.
 Keep request-attempt counts, received/accepted/rejected record counts and local
 drops distinct; receiver rejection is not evidence of a local queue drop.
+
+A completed negative OTLP response is a known protocol failure, not a request
+still awaiting a response from a stalled server. Record the response and any
+observed retry exhaustion. Keep acceptance uncertainty where the protocol leaves
+it unspecified or evidence does not resolve it: after an oversized partial-success
+response fails, OTLP explicitly leaves acceptance unspecified. Backend persistence
+is a separate boundary. For a valid partial-success response with known request
+count N and rejected count R (0 <= R <= N), report acknowledged accepted N-R and
+rejected R separately from SDK emissions, attempts and received copies. Controlled
+receiver rejection policy or observed late acceptance can resolve more counts;
+neither a client failure result nor received bytes alone proves persisted loss
+or success.
 
 The standard OTLP exporter timeout covers a whole batch export, including all
 attempts and retry waits; it must not restart for each attempt, and an earlier
