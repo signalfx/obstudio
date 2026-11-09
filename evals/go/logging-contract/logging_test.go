@@ -84,16 +84,29 @@ func TestConcurrentContextIsolation(t *testing.T) {
 	_, l := setup(t, e)
 	var wg sync.WaitGroup
 	for _, id := range []byte{1, 2} {
+		sc := trace.NewSpanContext(trace.SpanContextConfig{TraceID: trace.TraceID{id}, SpanID: trace.SpanID{id}})
+		ctx := trace.ContextWithSpanContext(context.Background(), sc)
 		wg.Add(1)
-		go func(id byte) {
+		go func(ctx context.Context, id byte) {
 			defer wg.Done()
-			sc := trace.NewSpanContext(trace.SpanContextConfig{TraceID: trace.TraceID{id}, SpanID: trace.SpanID{id}})
-			l.InfoContext(trace.ContextWithSpanContext(context.Background(), sc), "parallel", "id", int(id))
-		}(id)
+			l.InfoContext(ctx, "parallel", "id", int(id))
+		}(ctx, id)
 	}
 	wg.Wait()
 	if len(e.records) != 2 || e.records[0].TraceID() == e.records[1].TraceID() {
 		t.Fatal("concurrent contexts mixed")
+	}
+	for _, record := range e.records {
+		var id byte
+		record.WalkAttributes(func(kv log.KeyValue) bool {
+			if kv.Key == "id" {
+				id = byte(kv.Value.AsInt64())
+			}
+			return true
+		})
+		if id == 0 || record.TraceID() != (trace.TraceID{id}) || record.SpanID() != (trace.SpanID{id}) {
+			t.Fatal("record was associated with the wrong request")
+		}
 	}
 }
 
@@ -117,12 +130,19 @@ func TestLimitsAndPolicy(t *testing.T) {
 		}
 		return true
 	})
+	typePresent := false
 	e.records[0].WalkAttributes(func(kv log.KeyValue) bool {
+		if kv.Key == "exception.type" && kv.Value.AsString() == "ValueError" {
+			typePresent = true
+		}
 		if kv.Key == "exception.message" || kv.Key == "exception.stacktrace" {
 			t.Error("unexpected sensitive capture")
 		}
 		return true
 	})
+	if !typePresent {
+		t.Error("permitted exception.type was not retained")
+	}
 }
 
 func TestFailureBoundedWithOriginalSink(t *testing.T) {

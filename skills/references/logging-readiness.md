@@ -1,9 +1,22 @@
 # Application logging readiness
 
 Read this reference when auditing or changing an application logging path.
-Use the existing language guide for bridge and provider ownership. These rules
-extend the local-log contract; they do not authorize new sinks, sensitive-data
-capture, a custom SDK, or changes outside the selected scope.
+These rules extend the local-log contract; they do not authorize new sinks,
+sensitive-data capture, a custom SDK, or changes outside the selected scope.
+
+For audit, instrumentation and verification, read only the detected stack's
+**Logging Readiness Checks** section in the existing language guide, following
+its bridge/provider ownership references as needed. Those guides own the SDK
+options, numeric conversions, async mechanisms and diagnostic-routing recipes;
+the common rules and acceptance obligations below still apply. A guide's setup
+examples do not authorize application changes in an audit or verification task.
+
+| Detected stack | Existing language reference |
+|---|---|
+| Java | [Java logging checks](languages/java.md#logging-readiness-checks) |
+| Python | [Python logging checks](languages/python.md#logging-readiness-checks) |
+| Go | [Go logging checks](languages/go.md#logging-readiness-checks) |
+| Node.js | [Node.js logging checks](languages/node.md#logging-readiness-checks) |
 
 ## Source and applicability
 
@@ -16,25 +29,70 @@ rule. Do not reimplement SDK behavior merely to make it visible in source.
 The [log data model](https://opentelemetry.io/docs/specs/otel/logs/data-model/),
 [Logs SDK](https://opentelemetry.io/docs/specs/otel/logs/sdk/),
 [SDK configuration](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/),
+[common attribute limits](https://opentelemetry.io/docs/specs/otel/common/#attribute-limits),
 [exception log conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/),
+[trace context in non-OTLP formats](https://opentelemetry.io/docs/specs/otel/compatibility/logging_trace_context/),
+[logging context guidance](https://opentelemetry.io/docs/specs/otel/logs/supplementary-guidelines/),
+[OTLP delivery](https://opentelemetry.io/docs/specs/otlp/),
+[OTLP exporter retries](https://opentelemetry.io/docs/specs/otel/protocol/exporter/#retry),
 [error handling](https://opentelemetry.io/docs/specs/otel/error-handling/), and
 [sensitive-data guidance](https://opentelemetry.io/docs/security/handling-sensitive-data/)
 are the primary sources. Check individual development features rather than
 describing an entire language or exception convention as stable.
+
+## LOG-SPEC-CLOSURE -- Reconcile sources, implementation and proof
+
+Begin with the applicable official source sections, not only this guide's rule
+names or a keyword search. Record source URL, version/date or supplied snapshot,
+requirement level, applicability and owner (SDK, bridge, application, collector
+or operator). Supplementary guidance does not add normative SDK requirements.
+Separate upstream requirements, optional/development capabilities and the
+repository's local destination/privacy policy. If current sources are unavailable,
+name the snapshot and leave unsupported conclusions unverified.
+
+Keep a compact source-to-evidence matrix in the existing report/evidence fields;
+follow the canonical report schemas and do not invent JSON keys or new artifact
+types. Cover record/time/severity/structured values, trace context and propagation,
+resource/scope identity, bridge/provider initialization and duplicate prevention,
+filtering/opt-out, exception/privacy, limits, batching/delivery, diagnostics and
+flush/shutdown. Reconcile other applicable clauses found in the sources even
+when they have no LOG-* name here. For each row, record source/config/default
+evidence, covered/partial/missing/unverified/not-applicable, finding/scenario
+IDs where needed, and the actual proof boundary. An SDK-owned default can be
+covered without an application override; absence of an installed capability is
+not proof that an application has implemented it.
+
+For audit, emit concrete application-owned gaps through the normal findings and
+acceptance flow. For instrumentation, implement the authorized ones and retain
+unselected gaps. For verification, independently reconcile the matrix with real
+call sites and the selected contract; report omitted obligations and unproven
+wiring without editing the app or rebinding prior evidence. Source review,
+SDK/bridge probes, application startup, receiver receipt and backend joins are
+different proof boundaries. Passing one cannot close the others. A rule mention,
+schema check, total test count or supplied ID strings cannot establish full
+guideline coverage. Any omitted applicable row leaves that claim incomplete.
+
+For a claim combining properties, bind its evidence to the same owned path and
+operation. Separate passing unit tests for context copying and synchronous
+real-span receipt do not prove an asynchronous log-to-span join. Mark that
+combined claim partial until one scenario traverses the owned handoff and
+joins that worker/callback log to its actual SDK span at the claimed receiver.
+Apply the same reasoning to other combined claims: do not assemble end-to-end
+coverage from unrelated paths or independent probes.
 
 ## LOG-RECORD -- Preserve record meaning
 
 Check the real bridge's numeric severity mapping, source severity text, body,
 logger/scope and timestamps. Common single-level mappings are DEBUG=5, INFO=9,
 WARN=13 and ERROR=17; finer source levels can use their documented range.
-Never copy Python level 40 or Go slog level 8 directly into SeverityNumber.
+Never copy a source logger's numeric level directly into SeverityNumber.
 Unknown severity may remain 0/absent; do not invent an ERROR classification.
 
 Preserve the event's occurrence Timestamp when available; ObservedTimestamp
 represents collection time. Do not replace an older event time with export
 time or assert that the two clocks must be equal. Treat nanoseconds/seconds
-conversion explicitly and avoid unsafe JavaScript Number round trips for
-64-bit nanoseconds. Optional absent fields alone are not defects. Preserve
+conversion explicitly and preserve 64-bit nanosecond precision. Optional
+absent fields alone are not defects. Preserve
 structured values rather than turning an entire structured record into an
 opaque string. EventName is an event classification when applicable, not a
 mandatory field on ordinary application messages.
@@ -54,6 +112,58 @@ policy and test its intended drops separately. Do not fabricate or force-sample
 a span to make correlation pass. Test both sampled and unsampled contexts and
 a no-context call, checking exact IDs and flags rather than nonempty strings.
 
+Trace the actual tracer/context manager, provider initialization, log bridge and
+record call site. When tracing is configured, prove correlation with SDK-created
+spans: emit through the application's logger inside a real parent and child
+span, including owned asynchronous handoff. At the claimed receiver/backend
+boundary, join each sampled log's canonical top-level TraceId and SpanId to the
+exact received span and check parentage plus source-backed resource identity.
+Compare TraceFlags with the actual SDK context, preserving its defined bits;
+do not assume a sampled SDK context has only a single flag bit. Injected
+non-recording contexts remain useful unit controls, but cannot prove tracer
+startup, span export or an end-to-end join. Do not manufacture IDs, add a second
+provider or invent spans for unowned operations merely to satisfy a test.
+
+Where the application owns an async boundary, require at least one combined
+scenario: capture a real SDK parent/child context, traverse that boundary,
+emit through the worker/callback's application logger and join that record to
+the exact received SDK span, checking flags, parentage and resource. A child
+may start before dispatch or inside the worker according to the actual path.
+Reuse existing spans/propagation; controlled test spans stay within the existing
+provider and do not justify new production instrumentation or unowned work.
+Label the joint scenario explicitly in the handoff. A known-ID async test plus
+a separate synchronous real-span test cannot replace it.
+
+Keep the valid unsampled case separate: logs can retain SDK-generated context
+even when sampling intentionally prevents the span from being exported. Missing
+that span is then expected, not proof of broken correlation. Outside-span logs
+may legitimately have no context. Ordinary attributes or strings named
+`trace_id`/`span_id` are not the OTLP record's canonical context fields. If the
+selected collection path is a non-OTLP JSON/text sink, check its supported
+context injection and customary top-level `trace_id`, `span_id`, `trace_flags`
+representation separately; OTLP receipt alone cannot prove formatted stdout
+correlation. Preserve existing sinks and explicit format policy.
+
+## LOG-ASYNC-HANDOFF -- Capture before scheduling and restore after work
+
+For each owned asynchronous boundary, identify where the log record and its
+OTel context are captured relative to executor, callback and logging queues.
+Capture the caller's context per work item before scheduling. Reuse verified
+framework/agent propagation; do not add a second wrapper merely by language.
+Use the detected language guide's supported handoff and cleanup mechanism,
+including separate handling for approved application context fields.
+
+A standalone bridge after a logging queue can observe the queue worker's
+context instead of the caller's. Preserve a supported context-capturing queue
+path, or keep the existing bridge on the caller side beside the original
+asynchronous sink and use the SDK batch processor. Never duplicate bridges.
+Test caller-created sampled/unsampled context, exact record-to-request pairing
+under concurrency, caller detach, worker reuse and error/cancellation cleanup.
+Include a missing-propagation control where feasible; its expected context loss
+is evidence of an unsafe path, not an acceptable production configuration.
+Link the combined real-span async scenario required by LOG-CONTEXT; independent
+handoff and join scenarios alone leave that combined obligation unproven.
+
 ## LOG-EXCEPTION -- Preserve exception semantics within privacy policy
 
 Where exception details are already collected or explicitly selected, use
@@ -72,6 +182,14 @@ and stability, associate the actual operation context, and choose severity
 from impact. No policy permission to collect a message/stack means omit it
 and retain permitted type/category evidence, not enable capture for a test.
 
+Apply a selected exception-field allowlist exactly. Compatibility is not
+permission to retain an excluded alias such as `error.kind` or `error.dump`.
+When only `exception.type` is allowed, omit those aliases as well as message
+and stack, and assert their absence. Do not pass the raw exception to a bridge
+and rely on truncation to hide its contents. Preserve an alias only when the
+applicable policy explicitly permits it; do not remove unrelated application
+metadata merely because it is not an exception attribute.
+
 ## LOG-LIMITS -- Bound record cost
 
 Inspect effective log attribute count/value limits and existing operator
@@ -84,6 +202,33 @@ processor policy for these surfaces when required. Avoid arbitrary new limits
 without a source-backed need. Exercise oversized attributes/body, retained
 identity/context, dropped-attribute accounting where supported, and privacy
 after processing. Do not promise lossless export after truncation/drops.
+
+Name the setting or public option that implements the selected count/value
+policy; a promise such as "supported log limits" followed by numbers is not a
+repair mechanism. Resolve the installed/project-compatible API first and apply
+it to the existing provider owner. Use the public count/value options in the
+detected language guide as capability leads, not new-provider or
+dependency-upgrade requirements. Do not copy another language's configuration
+shape into this provider. Preserve its resource, scope and existing processors.
+
+Keep the Body/privacy policy separate from these options. For each selected
+limit, specify below-limit, exactly-at-limit and above-limit inputs with units
+and expected preservation/truncation/drop behavior. Include non-ASCII input
+when the policy measures UTF-8 bytes. Preserve an adequate verified default;
+do not force the observation's stricter policy onto an independent control.
+
+State boundary outcomes, not only test sizes: below/at the selected limit
+preserves permitted input; above a count limit retains at most that count and
+accounts for discarded attributes; above a string-value limit truncates to at
+most that length. Use explicit ASCII-character inputs for an unambiguous
+string-length boundary, then check the installed SDK's Unicode behavior before
+claiming broader character handling. Body overflow follows the separately
+selected application policy, such as valid UTF-8 truncation or dropping, with
+its own expected outcome and loss accounting. Common attribute rules also
+cover byte-array units and recursive array/map value/depth handling where
+implemented; inspect that capability instead of assuming every SDK/version
+enforces the same arbitrary nested payload policy. These limits still do not
+cap Body. Do not reimplement SDK internals to satisfy an unsupported feature.
 
 ## LOG-DELIVERY -- Bound buffering and make loss visible
 
@@ -104,6 +249,49 @@ with OTLP partial-success rejected records is not full acceptance. Report
 attempted, received, rejected and dropped evidence separately; never infer
 receipt from a successful enqueue or flush call alone.
 
+Compose the complete export/retry deadline rather than assuming a per-request
+timeout bounds the entire operation. Test a receiver that stalls as well as one
+that fails immediately. Use the existing SDK processor/caller deadline or a
+supported public option to satisfy the selected overall budget; preserve a
+verified adequate default. A client timeout does not prove zero receiver
+acceptance: a receiver can accept after the caller stops waiting. Keep delivery
+unknown until receipt evidence resolves it, and do not retry an entire
+partial-success batch as if all its records were rejected.
+
+The standard OTLP exporter timeout covers a whole batch export, including all
+attempts and retry waits; it must not restart for each attempt, and an earlier
+caller deadline takes precedence. Keep that specification contract separate
+from an arbitrary SDK option named timeout. If the installed path only bounds
+one request, report its SDK/capability limitation and verify a supported whole
+deadline through the existing owner rather than claiming the standard contract
+is satisfied or reimplementing the SDK.
+
+A maximum attempt count is a ceiling, not a requirement to reach that many
+attempts during every failure. An earlier deadline can end retries first.
+Receiver request counts prove received requests, not every client connection
+or interrupted attempt. Resolve whether the SDK option covers one attempt or
+the whole export, including retry waits and jitter; do not infer its scope
+from its name or add a separate full timeout for each retry without evidence.
+
+Record the observed per-attempt timeout, retry/backoff duration and enclosing
+caller/processor deadline with units and source evidence, including an absent
+deadline. Then state the proposed or retained mechanism and composed budget
+separately. A generic instruction to "bound retries" or a new timeout number
+does not explain the current failure or establish which wait it bounds.
+
+### Concrete deadline mechanisms
+
+A concrete plan must name a public mechanism, not defer it as an unspecified
+"overall deadline option". Resolve the installed/project-compatible SDK first;
+the detected language guide supplies concrete proposals to verify, not upgrade
+or override mandates. Keep
+unsupported/installed capability unverified. Record checked library versions in
+the task's evidence artifacts rather than pinning a release recipe in this guide.
+Leave time for encoding/draining within the selected whole-operation budget
+and verify it against a stalled receiver rather than assuming a timeout knob
+proves the bound. Keep exporter attempts, processor waits and caller lifecycle
+deadlines distinct; a caller that stops waiting may not cancel delivery.
+
 ## LOG-DIAGNOSTICS -- Keep diagnostics outside their own bridge
 
 Trace SDK/exporter diagnostic routing through handlers, appenders, transports
@@ -113,6 +301,25 @@ separate diagnostic mechanism; preserve the ordinary application sink.
 Prove bounded diagnostics, no recursive export storm and continued application
 work under an exporter fault. Existing safe routing is coverage, not a reason
 to add another error handler.
+Name the actual routing/suppression mechanism in the repair and handoff, not
+only a desired zero-recursion outcome.
+
+## LOG-VERIFY-FRESH -- Bind each verdict to its own execution evidence
+
+This is a repository verification rule, not an upstream SDK requirement.
+Give each repetition fresh report storage and bind it to the tested fixture or
+application revision, dependency versions and command. Count actual successful,
+failed, errored and skipped cases; a zero exit status or an old XML `tests`
+total is insufficient. Missing reports, skipped cases, unexpected counts,
+source changes during a run and missing runtime dependencies cannot pass.
+Prepare dependencies using the project's supported manifests and lockfiles.
+
+Persist per-trial results as they finish. On timeout, preserve available output,
+mark the trial failed, clean up owned processes and retain the partial matrix;
+continue independent trials where safe. Mark interruption separately. Keep
+negative-control assertions distinct from safe configurations. Do not upgrade
+SDK/in-memory results to application, agent, receiver or cloud proof. For
+plan-only tasks, save acceptance requirements and leave execution Not run.
 
 ## Audit and instrumentation evidence
 
@@ -124,15 +331,8 @@ Promote only concrete app-owned gaps into selectable findings and map their
 acceptance scenarios. Instrument only authorized gaps using the existing
 bridge and provider; retain supported operator settings and scope exclusions.
 
-For Java, test Logback/Log4j mapping and MDC isolation through the selected
-agent/appender without adding a second SDK. For Python, check the selected
-logging bridge's level mapping and contextvars across async tasks, detach
-tokens, and avoid routing exporter diagnostic loggers into a root OTel handler.
-For Go, use the matching bridge and pass the actual context to `InfoContext` /
-`ErrorContext` or the detected logger equivalent; slog numeric levels are not
-OTel severity numbers. For Node.js, initialize the detected bridge before
-logger imports, check async context isolation and preserve timestamp precision.
-In every language, test normal operation, explicit opt-out and a fault case;
+Use the detected language guide for bridge mapping, propagation, log limits,
+deadline APIs and diagnostic routing. Test normal operation, explicit opt-out and a fault case;
 distinguish focused SDK/bridge proof from full application/receiver proof.
 
 ## Acceptance handoff completeness
@@ -146,13 +346,32 @@ across the applicable rules.
 
 | Rule | Required acceptance detail |
 |---|---|
-| LOG-RECORD | Source occurrence value/precision, observation time separately, source level to numeric severity, and actual body/category. |
-| LOG-CONTEXT | Exact sampled/unsampled/outside IDs and flags; concurrent and asynchronous handoff/isolation checks for owned paths, or an explicit source-backed absence of those paths. |
+| LOG-SPEC-CLOSURE | Applicable source clauses with requirement level, owner, source/config/default evidence, classification, selected finding/scenario mapping and explicit proof boundary. Combined claims need evidence from the same owned path; unrelated passing probes cannot be combined into end-to-end coverage. Unmapped clauses or missing evidence keep the relevant completeness claim partial. |
+| LOG-RECORD | Name the detected/proposed bridge and verified version or unverified capability; specify source occurrence value/precision, observation time separately, source level to numeric severity, and actual body/category. |
+| LOG-CONTEXT | Exact sampled/unsampled/outside IDs and SDK flags; real SDK-created sampled parent/child spans joined to their logs at the claimed boundary, with parentage/resource checks. Explicitly name one joint scenario traversing an owned async handoff and joining that worker/callback log to its received real span; separate known-ID async and synchronous join tests are insufficient. Separate unsampled non-export and outside-span controls, canonical OTLP fields from ordinary attributes, and non-OTLP formatter proof where selected. |
+| LOG-ASYNC-HANDOFF | Caller capture before scheduling; exact request pairing, permitted MDC handling where applicable, worker cleanup and bridge placement relative to queues. Link the joint real-span async scenario, supported propagation and expected-loss controls. |
 | LOG-EXCEPTION | Allowed exception fields and excluded sensitive fields, with bridge/event convention applicability and optional-field decisions. |
-| LOG-LIMITS | Log attribute count/value settings versus the separate Body policy, oversize boundaries and supported drop accounting. |
-| LOG-DELIVERY | Effective or concrete proposed queue capacity, batch ceiling, schedule/export/shutdown deadlines via supported settings/public options; explicitly assert batch size <= queue capacity. Record attempted/accepted/rejected/dropped counts independently. |
-| LOG-DIAGNOSTICS | One exporter-fault scenario asserting bounded diagnostic volume and export attempts, application progress, original sink output, and continued operation of each other configured signal. Explicitly mark absent signals not configured; preserving configuration alone is not operation proof. |
+| LOG-LIMITS | Name the effective/proposed log attribute count/value settings or public API fields, separately from Body policy. Specify below/at/above-limit inputs, units, expected outcomes and supported drop accounting; generic limits plus numbers are insufficient. |
+| LOG-DELIVERY | Record observed attempt/retry/caller deadlines and missing bounds with units/source separately from proposed queue/batch/schedule/export/shutdown settings and the composed budget. Assert batch <= queue. Include a stalled receiver/caller deadline and a final log immediately before shutdown, with healthy receipt and bounded fault behavior checked independently. Record attempted/accepted/rejected/dropped separately, retaining unknown acceptance after a client timeout until a receipt resolves it. |
+| LOG-DIAGNOSTICS | Name the supported separate routing or suppression mechanism. One exporter-fault scenario asserts bounded diagnostic volume and export attempts, application progress, original sink output, and continued operation of each other configured signal. Explicitly mark absent signals not configured; preserving configuration alone is not operation proof. |
+| LOG-VERIFY-FRESH | Unique report storage for each trial; planned manifest/lockfile dependency preparation; binding to source, command and dependency versions; actual success/failure/error/skip counts; preserved timeout console output, failed timeout verdict, owned-process cleanup and incremental structured partial results; explicit evidence scope. |
 
 Before finalizing, compare the saved scenarios against these obligations and
 the selected source/policy. An omitted obligation leaves that handoff partial;
 unexecuted acceptance never becomes a passing runtime result.
+Preserve the concrete obligations when shortening a report. Share scenarios by
+ID and let the authoritative structured report own their detail, with a compact
+Markdown summary where that artifact is permitted; do not duplicate the full
+plan in both formats or delete settings, expected outcomes, dependency setup,
+evidence bindings or fault assertions to meet a prose budget. Read back the
+saved handoff and reconcile every applicable acceptance row before claiming
+completeness. For unknown/optional SDK capabilities, give a concrete future
+source/API-resolution step and conditional test, preserving the unverified
+state; do not force an unselected development feature into application code.
+Readback must check the conjunction: the owned async log itself joins its
+received real SDK span in one scenario. Finding "async" and "real span" in
+different scenarios is not that proof.
+Plan-only restrictions prohibit executing setup, not specifying it: retain the
+future dependency-preparation and unique-storage steps explicitly in the saved
+handoff. Do not replace a named setting/public option or bridge with outcome
+assertions alone.

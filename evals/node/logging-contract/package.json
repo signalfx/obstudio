@@ -3,13 +3,16 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "test": "node --test logging.test.cjs"
+    "test": "node --test --test-reporter=tap logging.test.cjs async.test.cjs faults.test.cjs wire.test.cjs correlation.test.cjs"
   },
   "dependencies": {
     "@opentelemetry/api": "1.10.0",
-    "@opentelemetry/sdk-logs": "3.1.0",
-    "@opentelemetry/resources": "3.1.0",
     "@opentelemetry/context-async-hooks": "3.1.0",
+    "@opentelemetry/exporter-logs-otlp-proto": "0.301.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "0.301.0",
+    "@opentelemetry/resources": "3.1.0",
+    "@opentelemetry/sdk-logs": "3.1.0",
+    "@opentelemetry/sdk-trace": "3.1.0",
     "@opentelemetry/winston-transport": "0.35.0",
     "winston": "3.19.0"
   }

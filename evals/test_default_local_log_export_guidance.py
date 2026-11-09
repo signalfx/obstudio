@@ -18,7 +18,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
-LANGUAGES = SKILLS / "otel-instrument" / "references" / "languages"
+LANGUAGES = SKILLS / "references" / "languages"
 
 
 def _read(path: Path) -> str:
@@ -28,6 +28,52 @@ def _read(path: Path) -> str:
 
 def _normalized(path: Path) -> str:
     return " ".join(_read(path).split())
+
+
+@pytest.mark.parametrize("skill", ["otel-audit", "otel-instrument", "otel-verify"])
+def test_logging_language_references_reachable_in_isolated_skill_workspace(
+    tmp_path: Path, skill: str,
+) -> None:
+    from pytest_codex_evals.definitions import SanityEvalCase
+    from pytest_codex_evals.runner import prepare_side_workspace
+
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    (fixture / "app.txt").write_text("logging fixture\n", encoding="utf-8")
+    case = SanityEvalCase(
+        id=f"sample/service/{skill}/logging",
+        base_id=f"sample/service/{skill}",
+        prompt_id="logging",
+        skill=skill,
+        language="sample",
+        service="service",
+        task="Assess the existing logging path.",
+        fixture_dir=fixture,
+        checks=[],
+    )
+    side = tmp_path / "with_skill"
+    prepare_side_workspace(ROOT, case, "with_skill", side)
+    staged = side / ".agents" / "skills" / "references"
+    common = _read(staged / "logging-readiness.md")
+    consumers = json.loads(_read(staged / "consumers.json"))
+    targets = re.findall(r"\]\((languages/[^)]+)#logging-readiness-checks\)", common)
+    expected = {f"languages/{lang}.md" for lang in ("java", "python", "go", "node")}
+    assert set(targets) == expected
+    for target in targets:
+        canonical = SKILLS / "references" / target
+        assert (staged / target).read_bytes() == canonical.read_bytes()
+        assert "## Logging Readiness Checks" in _read(staged / target)
+        assert skill in consumers[target]
+    assert "read only the detected stack's" in common
+
+
+@pytest.mark.parametrize("language", ["java", "python", "go", "node"])
+def test_previous_language_reference_path_forwards_to_canonical_guide(language: str) -> None:
+    previous = SKILLS / "otel-instrument" / "references" / "languages" / f"{language}.md"
+    target = re.search(r"\]\(([^)]+)\)", _read(previous))
+    assert target is not None
+    canonical = LANGUAGES / f"{language}.md"
+    assert (previous.parent / target.group(1)).resolve() == canonical.resolve()
 
 
 def _fenced_code_after(path: Path, marker: str, language: str) -> str:

@@ -7,33 +7,39 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-verify |
-| Run ID | 20261103T220736897205Z |
+| Run ID | 20261109T045620782348Z |
 | Agent model | gpt-6.1-sol |
 | Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
-| Workers | 1 |
+| Workers | 4 |
 | Config | evals/codex-evals.toml |
 
 ## Rubric Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/ao-name-inputs-verify | python/ai-assistant-demo | 1 | 100% (6/6), avg score 100 | 1.2M | 6.8m | - | - | - |
-| with_skill | python/ai-assistant-demo/qual/finding-group-verify | python/ai-assistant-demo | 1 | 100% (7/7), avg score 100 | 459.4K | 5.2m | - | - | - |
+| with_skill | go/chi-basic/qual/logging-verify-contract | go/chi-basic | 1 | 100% (11/11), avg score 100 | 2.0M | 10.9m | - | - | - |
+| with_skill | java/springboot-basic/qual/logging-verify-contract | java/springboot-basic | 1 | 100% (11/11), avg score 100 | 1.4M | 10.9m | - | - | - |
+| with_skill | node/express-basic/qual/logging-verify-contract | node/express-basic | 1 | 100% (11/11), avg score 100 | 1.1M | 10.0m | - | - | - |
+| with_skill | python/flask-basic/qual/logging-verify-contract | python/flask-basic | 1 | 100% (11/11), avg score 100 | 1.5M | 11.2m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/ao-name-inputs-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 1197780 | 1107968 | 0 | 15906 | 2128 | unknown | 1213686 |
-| with_skill | python/ai-assistant-demo/qual/finding-group-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 449114 | 379648 | 0 | 10301 | 1915 | unknown | 459415 |
+| with_skill | go/chi-basic/qual/logging-verify-contract | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1992086 | 1892224 | 0 | 26528 | 5167 | unknown | 2018614 |
+| with_skill | java/springboot-basic/qual/logging-verify-contract | java/springboot-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1417704 | 1315200 | 0 | 26638 | 3955 | unknown | 1444342 |
+| with_skill | node/express-basic/qual/logging-verify-contract | node/express-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1114605 | 1025536 | 0 | 24200 | 3360 | unknown | 1138805 |
+| with_skill | python/flask-basic/qual/logging-verify-contract | python/flask-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1499483 | 1398784 | 0 | 27461 | 4082 | unknown | 1526944 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/ai-assistant-demo/qual/ao-name-inputs-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 186511 | 133632 | 0 | 1952 | 228 | unknown | 188463 |
-| with_skill | python/ai-assistant-demo/qual/finding-group-verify | python/ai-assistant-demo | with_skill | codex | cumulative | measured | 1/1 recognized | 469917 | 401152 | 0 | 2950 | 170 | unknown | 472867 |
+| with_skill | go/chi-basic/qual/logging-verify-contract | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 742990 | 665344 | 0 | 3212 | 528 | unknown | 746202 |
+| with_skill | java/springboot-basic/qual/logging-verify-contract | java/springboot-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 864177 | 775808 | 0 | 3603 | 669 | unknown | 867780 |
+| with_skill | node/express-basic/qual/logging-verify-contract | node/express-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 836195 | 752384 | 0 | 3350 | 452 | unknown | 839545 |
+| with_skill | python/flask-basic/qual/logging-verify-contract | python/flask-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 712065 | 634496 | 0 | 3271 | 419 | unknown | 715336 |
 
 ## Rubric Failures
 

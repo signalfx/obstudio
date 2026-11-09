@@ -1773,11 +1773,11 @@ def test_rubric_prompt_can_be_overridden_without_service_assumptions():
     prompt = " ".join(rubric_prompt(case).split())
 
     assert "Read ./answer.md." in prompt
-    assert "Must cite evidence." in prompt
+    assert "Rubric: - Must cite evidence." in prompt
     assert "./service" not in prompt
 
 
-def test_default_rubric_prompt_requires_percentage_style_score():
+def test_default_rubric_prompt_maps_compound_items_without_splitting_checks():
     case = RubricEvalCase(
         id="sample/service/rubric/direct",
         base_id="sample/service/rubric",
@@ -1786,13 +1786,18 @@ def test_default_rubric_prompt_requires_percentage_style_score():
         language="sample",
         service="service",
         task="Evaluate the answer.",
-        rubric=["Must cite evidence."],
+        rubric=["Must cite evidence.", "Check source ownership and real-span correlation."],
     )
 
     prompt = " ".join(rubric_prompt(case).split())
 
     assert "0-100 percentage-style quality score" in prompt
     assert "Do not put the number of passed checks" in prompt
+    assert "rubric-1: Must cite evidence." in prompt
+    assert "rubric-2: Check source ownership and real-span correlation." in prompt
+    assert "Return exactly 2 checks" in prompt
+    assert "Do not split, merge, omit, or add rubric items" in prompt
+    assert "all applicable obligations in that item" in prompt
 
 
 def test_report_normalizes_count_shaped_rubric_score():

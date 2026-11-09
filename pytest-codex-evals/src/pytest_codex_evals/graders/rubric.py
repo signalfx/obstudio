@@ -59,6 +59,9 @@ def rubric_prompt(case: RubricEvalCase) -> str:
         )
     inputs = judge_inputs_text(case)
     input_section = f"\nSuggested inputs:\n{inputs}\n" if inputs else ""
+    numbered_rubric = "\n".join(
+        f"rubric-{index}: {item}" for index, item in enumerate(case.rubric, 1)
+    )
     return f"""Evaluate the completed eval run in this directory.
 
 Case: {case.base_id}
@@ -66,11 +69,14 @@ Prompt variant: {case.prompt_id}
 Task: {case.task}
 {input_section}
 Return only JSON matching the provided schema. Grade against this rubric:
-{rubric_text(case)}
+{numbered_rubric}
 
 Set `score` to a 0-100 percentage-style quality score. Do not put the number
 of passed checks in `score`.
-Use check ids derived from the rubric order, such as rubric-1, rubric-2, etc.
+Return exactly {len(case.rubric)} checks, one per labeled rubric item, in that order,
+using the item's rubric-N label as its check id. Do not split, merge, omit, or add rubric items.
+An item may contain multiple obligations: grade them together in its one check.
+Mark that check passed only when all applicable obligations in that item are met.
 """
 
 

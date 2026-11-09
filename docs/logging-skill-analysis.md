@@ -4,6 +4,11 @@ Analysis date: 2026-11-08. Repository: https://github.com/signalfx/obstudio.
 Baseline commit: `4e1e51f300510b26114fdc1b5ef528b3b6f09760`.
 Working branch: `codex/otel-logging-rules` in a separate fresh clone.
 
+This document preserves the original six-rule assessment and its test results.
+The [current remediation report](logging-rules-and-remediation-report.md)
+records the additional async and verification rules, review fixes and latest
+three-trial results for all four languages.
+
 ## Assessment
 
 The audit and instrumentation skills already cover the core application-log
@@ -186,17 +191,21 @@ UV_NO_CONFIG=1 uv run --directory evals python run_logging_contract.py \
 
 Maven settings for this task point only to public Maven Central, bypassing the
 expired private mirror for public dependencies without modifying user settings.
-All nine repository skills were installed from the baseline revision, then the two revised entrypoints and shared logging rules were synchronized. All 65 installed skill/reference files match the final clone. Prior
+All nine repository skills were installed from the baseline revision, then the two revised entrypoints and shared logging rules were synchronized. At this initial assessment, all 65 installed skill/reference files matched that source snapshot. The current remediation report records the later 70-file installation verification. Prior
 installation content is retained under
 `~/.codex/skill-backups/obstudio-before-logging-analysis-20261108`.
 
 ## Limits and remaining proof
 
+This section describes the initial assessment. The current remediation report
+adds local OTLP wire, partial-success, outage, overload and real-span correlation
+evidence, with its own explicit limits.
+
 No full Spring Boot/Java-agent, Flask, chi or Express application was launched
-for the new rules. No collector, cloud delivery, OTLP wire partial-success,
+for the initial rules. No collector, cloud delivery, OTLP wire partial-success,
 real receiver outage, queue-overload durability, framework startup or
 end-to-end trace/metric continuity claim follows from the focused suites.
-Those remain explicit full-runtime acceptance work for an application where
+Application-specific full-runtime acceptance remains required where
 the rules select such a change. Go/Java/Node/collector product builds and UI
 tests are outside the skill-only change; the new native fixtures are compiled
 or executed separately. Three repetitions measure this test corpus, not all

@@ -26,6 +26,11 @@ Before writing verification artifacts, read
 Contract plus Reader-First Report Order. When `.observe/otel-audit.json` exists,
 also read `./references/json-approval-handoff.md`; it owns canonical scope,
 schema, digest binding, status rollup, and the HTML refresh.
+When verifying application logs, also read `../references/logging-readiness.md`.
+Apply its applicable acceptance obligations, including caller-to-worker context
+handoff and fresh per-trial evidence. Preserve this skill's read-only application
+boundary; missing wiring is a failed or unproven check, not authorization to
+repair instrumentation or turn fixture results into application proof.
 Independently reconcile each selected GenAI orchestration role with the source
 control flow before accepting the audit or test expectations. A custom
 model-directed tool/result feedback loop is an agent invocation; an existing

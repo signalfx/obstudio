@@ -3,8 +3,10 @@
 import asyncio
 import io
 import logging
+import os
 import time
 import unittest
+from unittest.mock import patch
 
 from opentelemetry import trace
 from opentelemetry.instrumentation.logging.handler import LoggingHandler
@@ -39,7 +41,9 @@ class LoggingContract(unittest.TestCase):
         self.exporter = InMemoryLogRecordExporter()
         self.provider = LoggerProvider(
             resource=Resource.create({"service.name": "python-logging-contract"}),
-            log_record_limits=LogRecordLimits(max_attributes=8, max_attribute_length=32),
+            log_record_limits=LogRecordLimits(
+                max_log_record_attributes=8, max_log_record_attribute_length=32,
+            ),
         )
         self.provider.add_log_record_processor(SimpleLogRecordProcessor(self.exporter))
         self.logger = logging.getLogger(self.id())
@@ -104,6 +108,39 @@ class LoggingContract(unittest.TestCase):
         self.assertTrue(all(len(v) == 32 for v in result.attributes.values()))
         self.assertEqual(self.exporter.get_finished_logs()[-1].dropped_attributes, 12)
         self.assertEqual(len(result.body), 400, "attribute limits must not be mistaken for a Body bound")
+
+    def test_log_specific_environment_precedence(self):
+        environment = {
+            "OTEL_LOGRECORD_ATTRIBUTE_COUNT_LIMIT": "128",
+            "OTEL_LOGRECORD_ATTRIBUTE_VALUE_LENGTH_LIMIT": "64",
+        }
+        with patch.dict(os.environ, environment):
+            configurations = (
+                ("generic_fallback", LogRecordLimits(max_attributes=8, max_attribute_length=32), 20, 64, 0),
+                ("selected_log_specific", LogRecordLimits(
+                    max_log_record_attributes=8, max_log_record_attribute_length=32,
+                ), 8, 32, 12),
+            )
+            for name, limits, count, length, dropped in configurations:
+                with self.subTest(configuration=name):
+                    exporter = InMemoryLogRecordExporter()
+                    provider = LoggerProvider(
+                        resource=self.provider.resource, log_record_limits=limits,
+                        shutdown_on_exit=False,
+                    )
+                    provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
+                    try:
+                        provider.get_logger("precedence").emit(
+                            body="limit-probe",
+                            attributes={f"a{i}": "x" * 80 for i in range(20)},
+                        )
+                        record = exporter.get_finished_logs()[0]
+                        self.assertEqual(len(record.log_record.attributes), count)
+                        self.assertEqual({len(v) for v in record.log_record.attributes.values()}, {length})
+                        self.assertEqual(record.dropped_attributes, dropped)
+                        self.assertEqual(record.resource, self.provider.resource)
+                    finally:
+                        provider.shutdown()
 
     def test_export_failure_is_bounded_and_keeps_original_sink(self):
         failed = FailedExporter()

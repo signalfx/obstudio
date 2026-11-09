@@ -350,7 +350,7 @@ Markdown reports.
   AI-owned session/stream including MCP when present, retrieval/RAG, streaming,
   token/context, prompt/response parser, safety/policy, AI-derived data,
   model/config rollout, or AI-owned state surface before editing.
-- For Java projects, build a trace wiring inventory per `./references/languages/java.md` (Preflight section) and classify as `auto-only`, `custom-with-provider`, `custom-provider-external`, or `missing` before editing.
+- For Java projects, build a trace wiring inventory per `../references/languages/java.md` (Preflight section) and classify as `auto-only`, `custom-with-provider`, `custom-provider-external`, or `missing` before editing.
 - Confirm the planned `service.name`, `service.version`, and environment source.
   Also record available low-cardinality region, platform, image/artifact,
   config, and rollout sources. Prefer existing OTel semantic-convention or
@@ -379,7 +379,7 @@ Do not proceed until you can state all of these clearly:
 - canonical audit ID and SHA-256, dependency-closed selected finding IDs
   (`approved_ids`) in audit order, and the validated selection path when
   `.observe/otel-audit.json` exists
-- for Java, trace source of truth (see `./references/languages/java.md` Preflight section)
+- for Java, trace source of truth (see `../references/languages/java.md` Preflight section)
 - incident-readiness surfaces and the workflow, dependency, input complexity,
   freshness, backpressure, synthetic/canary, auth/edge, capacity, and
   release/config signals to add or prove when the repo owns those surfaces
@@ -1031,10 +1031,10 @@ Add the OpenTelemetry SDK and auto-instrumentation packages for the detected lan
 
 | Language | Reference | Key packages |
 |----------|-----------|-------------|
-| Python   | `./references/languages/python.md` | `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, the stdlib logging bridge, framework instrumentation packages |
-| Node.js  | `./references/languages/node.md` | `@opentelemetry/sdk-node`, trace/metric/log OTLP exporters, `@opentelemetry/sdk-logs`, the detected logging bridge, framework instrumentation packages |
-| Java     | `./references/languages/java.md` | OTel Java agent (javaagent JAR) |
-| Go       | `./references/languages/go.md` | `go.opentelemetry.io/otel`, the log SDK and OTLP log exporter, and the detected `go.opentelemetry.io/contrib/bridges` package |
+| Python   | `../references/languages/python.md` | `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, the stdlib logging bridge, framework instrumentation packages |
+| Node.js  | `../references/languages/node.md` | `@opentelemetry/sdk-node`, trace/metric/log OTLP exporters, `@opentelemetry/sdk-logs`, the detected logging bridge, framework instrumentation packages |
+| Java     | `../references/languages/java.md` | OTel Java agent (javaagent JAR) |
+| Go       | `../references/languages/go.md` | `go.opentelemetry.io/otel`, the log SDK and OTLP log exporter, and the detected `go.opentelemetry.io/contrib/bridges` package |
 
 ### 3. Instrument
 
@@ -1109,7 +1109,7 @@ active file path and added or changed variable names without exposing secrets.
   Splunk Observability Studio-owned local log path even when
   `OTEL_EXPORTER_OTLP_LOGS_HEADERS` is also set, because SDKs may merge generic
   and signal-specific headers.
-- For Java trace wiring, DI binding, and provider rules, follow `./references/languages/java.md` (Implementation Rules section).
+- For Java trace wiring, DI binding, and provider rules, follow `../references/languages/java.md` (Implementation Rules section).
 - Place OTel initialization code in a separate file.
 - Minimize changes to existing code. Do not move functions between files.
 - Do not create spans for trivial helpers. Only span real diagnostic boundaries.
@@ -1745,7 +1745,7 @@ Go:
 Java:
 - Use the Java agent for Spring Boot unless custom business spans are explicitly requested.
 - Avoid adding SDK dependencies to `pom.xml` for basic Spring Boot coverage.
-- Follow `./references/languages/java.md` Implementation Rules for DI binding, provider reuse, and dependency checks.
+- Follow `../references/languages/java.md` Implementation Rules for DI binding, provider reuse, and dependency checks.
 - Wire the agent through the existing startup surface, `JAVA_TOOL_OPTIONS`, or a documented run command.
 - Default the Java agent's application log exporter to `otlp` only when
   `OTEL_LOGS_EXPORTER` is absent and the logs endpoint is absent or matches the
