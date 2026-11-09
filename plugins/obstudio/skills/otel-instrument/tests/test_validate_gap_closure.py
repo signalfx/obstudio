@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 VALIDATOR = Path(__file__).parents[1] / "scripts" / "validate_gap_closure.py"
-SHARED_TESTS = Path(__file__).parents[2] / "references" / "tests" / "test_observe_report.py"
+SHARED_TESTS = Path(__file__).parents[2] / "references" / "tests" / "observe_report_fixtures.py"
 SHARED_SPEC = importlib.util.spec_from_file_location(
     "observe_report_test_helpers_for_gap_closure", SHARED_TESTS
 )

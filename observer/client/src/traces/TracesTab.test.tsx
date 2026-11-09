@@ -36,6 +36,45 @@ function selectFilterField(label: string): void {
 }
 
 describe("TracesTab", () => {
+  it("shows each trace's start time, a short trace ID, and readable durations", () => {
+    const { container } = render(
+      <TracesTab
+        traces={[
+          { traceId: "0123456789abcdef0123456789abcdef", rootSpanName: "GET /orders", serviceName: "api", spanCount: 3, durationMs: 1008.3, status: "ok", startTime: "2026-10-27T14:03:21.500Z" },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
+      />,
+    );
+
+    expect(screen.getByText("Start")).toBeTruthy();
+    const start = container.querySelector(".data-table__td--start .explorer-row__secondary");
+    expect(start?.textContent).toBe("Oct 27 14:03:21");
+    expect(start?.getAttribute("title")).toBe("2026-10-27T14:03:21.500Z");
+    const traceId = container.querySelector(".trace-row__trace-id");
+    expect(traceId?.textContent).toBe("01234567");
+    expect(traceId?.getAttribute("title")).toBe("0123456789abcdef0123456789abcdef");
+    expect(container.querySelector(".data-table__td--duration")?.textContent).toBe("1.01 s");
+    // The row stays a single button; copying the full ID lives in the trace panel.
+    const row = screen.getByRole("button", { name: /GET \/orders/ });
+    expect(row.querySelector("button")).toBeNull();
+  });
+
+  it("shows dashes in Start when a trace has no start time", () => {
+    const { container } = render(
+      <TracesTab
+        traces={[{ traceId: "trace-1", rootSpanName: "GET /", serviceName: "api", spanCount: 1, durationMs: 5, status: "ok" }]}
+        telemetryError={null}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
+      />,
+    );
+
+    expect(container.querySelector(".data-table__td--start")?.textContent).toBe("--");
+  });
+
   it("renders unfiltered traces from the live websocket snapshot without a REST query", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -100,9 +139,9 @@ describe("TracesTab", () => {
     expect(count.textContent).toBe("8+");
     expect(count.title).toBe("at least 8 retained spans");
 
-    const duration = screen.getByLabelText("at least 120.0ms retained duration");
-    expect(duration.textContent).toBe("120.0ms+");
-    expect(duration.title).toBe("at least 120.0ms retained duration");
+    const duration = screen.getByLabelText("at least 120.0 ms retained duration");
+    expect(duration.textContent).toBe("120.0 ms+");
+    expect(duration.title).toBe("at least 120.0 ms retained duration");
   });
 
   it("uses a singular retained-span label for a compact one-span trace", () => {
@@ -152,7 +191,7 @@ describe("TracesTab", () => {
     );
 
     expect(screen.getByLabelText("1 retained span; full count unknown").textContent).toBe("1?");
-    expect(screen.getByLabelText("10.0ms retained duration; full duration unknown").textContent).toBe("10.0ms?");
+    expect(screen.getByLabelText("10.0 ms retained duration; full duration unknown").textContent).toBe("10.0 ms?");
   });
 
   it("refreshes filtered traces from REST when live telemetry changes", async () => {
@@ -245,8 +284,8 @@ describe("TracesTab", () => {
     expect(screen.queryByText("GET /orders")).toBeNull();
   });
 
-  it("renders zero-duration traces as 0.0ms instead of dashes", () => {
-    render(
+  it("renders zero-duration traces as 0.0 ms instead of dashes", () => {
+    const { container } = render(
       <TracesTab
         traces={[
           { traceId: "trace-0", rootSpanName: "GET /health", serviceName: "api", spanCount: 1, durationMs: 0, status: "ok" },
@@ -259,8 +298,9 @@ describe("TracesTab", () => {
       />,
     );
 
-    expect(screen.getAllByText("0.0ms")).toHaveLength(2);
-    expect(screen.queryByText("--")).toBeNull();
+    expect(screen.getAllByText("0.0 ms")).toHaveLength(2);
+    const durations = Array.from(container.querySelectorAll(".data-table__td--duration"), (cell) => cell.textContent);
+    expect(durations).toEqual(["0.0 ms", "0.0 ms"]);
   });
 
   it("opens selected trace details at the widest usable panel width", async () => {
@@ -370,7 +410,7 @@ describe("TracesTab", () => {
 
     fireEvent.click((await screen.findByText("claude_code.interaction")).closest("button") as HTMLButtonElement);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByText(/at least 42\.0ms retained duration/)).toBeTruthy();
+    expect(screen.getByText(/at least 42\.0 ms retained duration/)).toBeTruthy();
 
     view.rerender(<TracesTab {...props} traces={[summary("span-new")]} />);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));

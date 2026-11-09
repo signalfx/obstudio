@@ -7,7 +7,7 @@ description: >-
   asks to connect, configure, or provide credentials for Splunk Observability
   Cloud, Splunk O11y, or SignalFx outside the Splunk Observability Studio IDE extension. Do not use
   this skill to create a Free Edition account.
-allowed-tools: mcp__obstudio__observer_status, mcp__obstudio__observer_splunk_connection_realm
+allowed-tools: mcp__plugin_obstudio_obstudio__observer_status, mcp__plugin_obstudio_obstudio__observer_splunk_connection_realm
 ---
 
 # Connect Splunk Observability Cloud
