@@ -395,7 +395,7 @@ func (e *SplunkMetricsExporter) ExportMetrics(ctx context.Context, md pmetric.Me
 	if e == nil {
 		return nil
 	}
-	attempt := &splunkOTLPExportAttempt{decode: func(body []byte, contentType string) (int64, error) {
+	attempt := &splunkOTLPExportAttempt{allowJSONOK: true, decode: func(body []byte, contentType string) (int64, error) {
 		response := pmetricotlp.NewExportResponse()
 		var err error
 		switch contentType {
